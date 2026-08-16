@@ -16,7 +16,6 @@ import 'package:omi/pages/speech_profile/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/photos_grid.dart';
@@ -212,6 +211,15 @@ getTranscriptWidget(
   VoidCallback? onTapWhenSearchEmpty,
   Function(TranscriptSegment)? onSegmentTap,
   Function(int)? onEditSegmentText,
+  Key? transcriptKey,
+  bool followLatest = false,
+  TranscriptScrollState? scrollState,
+  double jumpToLatestButtonBottom = 16,
+  int contentVersion = 0,
+  String layoutIdentity = 'transcript',
+  List<Widget> leadingItems = const [],
+  List<String> leadingItemIds = const [],
+  TranscriptSegmentBuilder? segmentBuilder,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -229,6 +237,7 @@ getTranscriptWidget(
 
   Widget buildTranscriptSegments() {
     return TranscriptWidget(
+      key: transcriptKey,
       segments: segments,
       horizontalMargin: horizontalMargin,
       topMargin: topMargin,
@@ -244,6 +253,14 @@ getTranscriptWidget(
       onTapWhenSearchEmpty: onTapWhenSearchEmpty,
       onSegmentTap: onSegmentTap,
       onEditSegmentText: onEditSegmentText,
+      followLatest: followLatest,
+      scrollState: scrollState,
+      jumpToLatestButtonBottom: jumpToLatestButtonBottom,
+      contentVersion: contentVersion,
+      layoutIdentity: layoutIdentity,
+      leadingItems: leadingItems,
+      leadingItemIds: leadingItemIds,
+      segmentBuilder: segmentBuilder,
     );
   }
 

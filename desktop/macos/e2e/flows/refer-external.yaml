@@ -1,0 +1,31 @@
+version: 2
+name: refer-external
+tier: manual
+description: Refer a Friend — profile menu opens external affiliate URL (Live P2; not qualification tier)
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Open profile menu
+    do: "On the Dashboard, click the profile avatar/button at the bottom of the sidebar to open the profile popover menu. Verify menu items include Refer a Friend (when eligible), Discord, and Settings."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S2
+    name: Open affiliate URL
+    do: "Click 'Refer a Friend' in the profile menu. Verify the default browser opens https://affiliate.omi.me (external tab). Note the browser window or URL bar; return focus to Omi."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Return to Dashboard
+    do: "Confirm Omi is still on the Dashboard with the conversations list visible."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard

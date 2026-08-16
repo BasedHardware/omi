@@ -40,6 +40,88 @@ def test_forwards_prompt_cache_key():
     assert validated.forwarded_params['prompt_cache_key'] == 'omi-extract-actions'
 
 
+def test_forwards_explicit_gpt56_cache_contract_on_a_text_content_block():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        prompt_cache_key='omi-extract-actions-v1-b0',
+        prompt_cache_options={'mode': 'explicit', 'ttl': '30m'},
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'explicit'},
+                    }
+                ],
+            },
+            {'role': 'user', 'content': 'Dynamic content.'},
+        ],
+    )
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages == tuple(request['messages'])
+    assert validated.forwarded_params['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
+
+
+@pytest.mark.parametrize(
+    'prompt_cache_options',
+    [None, {}, {'mode': 'implicit', 'ttl': '30m'}, {'mode': 'explicit'}, {'mode': 'explicit', 'ttl': '24h'}],
+)
+def test_rejects_invalid_gpt56_cache_options(prompt_cache_options):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='prompt_cache_options'):
+        validate_chat_completion_request(valid_request(prompt_cache_options=prompt_cache_options), lane)
+
+
+def test_rejects_invalid_cache_breakpoint_shape():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        messages=[
+            {
+                'role': 'system',
+                'content': [
+                    {
+                        'type': 'text',
+                        'text': 'Stable instructions.',
+                        'prompt_cache_breakpoint': {'mode': 'implicit'},
+                    }
+                ],
+            }
+        ]
+    )
+
+    with pytest.raises(GatewayInvalidRequestError, match='prompt_cache_breakpoint'):
+        validate_chat_completion_request(request, lane)
+
+
+def test_accepts_matching_output_limit_aliases():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    validated = validate_chat_completion_request(valid_request(max_tokens=128, max_completion_tokens=128), lane)
+
+    assert validated.forwarded_params['max_tokens'] == 128
+    assert validated.forwarded_params['max_completion_tokens'] == 128
+
+
+def test_rejects_conflicting_output_limit_aliases():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='must match'):
+        validate_chat_completion_request(valid_request(max_tokens=64, max_completion_tokens=128), lane)
+
+
+@pytest.mark.parametrize('key', ['max_tokens', 'max_completion_tokens'])
+def test_rejects_invalid_output_limits(key):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='positive integer'):
+        validate_chat_completion_request(valid_request(**{key: 0}), lane)
+
+
 def test_rejects_streaming():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(stream=True)
@@ -73,15 +155,70 @@ def test_rejects_invalid_messages():
         validate_chat_completion_request(request, lane)
 
 
-def test_rejects_non_text_message_content():
+def test_accepts_image_url_message_content():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(
         messages=[
-            {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}}]}
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'text', 'text': 'describe'},
+                    {'type': 'image_url', 'image_url': {'url': 'https://example.com/image.png'}},
+                ],
+            }
         ]
     )
 
-    with pytest.raises(GatewayCapabilityMismatchError, match='text message content'):
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages[0]['content'][1]['type'] == 'image_url'
+
+
+def test_accepts_assistant_tool_call_history_without_content():
+    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:chat-agent']
+    request = {
+        'model': 'omi:auto:chat-agent',
+        'messages': [
+            {
+                'role': 'assistant',
+                'tool_calls': [
+                    {
+                        'id': 'call_1',
+                        'type': 'function',
+                        'function': {'name': 'weather', 'arguments': '{"city":"NYC"}'},
+                    }
+                ],
+            },
+            {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'sunny'},
+            {'role': 'assistant', 'content': None},
+        ],
+        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
+    }
+
+    validated = validate_chat_completion_request(request, lane)
+
+    assert validated.messages[0]['content'] == ''
+    assert validated.messages[0]['tool_calls'][0]['id'] == 'call_1'
+    assert validated.messages[1]['content'] == 'sunny'
+    assert validated.messages[2]['content'] == ''
+
+
+@pytest.mark.parametrize('role', ['developer', 'system', 'tool', 'user'])
+def test_rejects_null_content_outside_assistant_tool_history(role):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(messages=[{'role': role, 'content': None}])
+
+    with pytest.raises(GatewayInvalidRequestError, match='message content is required'):
+        validate_chat_completion_request(request, lane)
+
+
+def test_rejects_unsupported_message_content_parts():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        messages=[{'role': 'user', 'content': [{'type': 'input_audio', 'input_audio': {'data': 'abc'}}]}]
+    )
+
+    with pytest.raises(GatewayCapabilityMismatchError, match='text or image_url message content'):
         validate_chat_completion_request(request, lane)
 
 

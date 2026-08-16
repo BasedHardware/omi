@@ -20,6 +20,8 @@ import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
 
+pytestmark = pytest.mark.slow
+
 _PARAKEET_DIR = Path(__file__).resolve().parents[2] / "parakeet"
 
 GPU_DELAY_SEC = 0.3

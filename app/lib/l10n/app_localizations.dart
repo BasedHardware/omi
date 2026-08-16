@@ -189,6 +189,12 @@ abstract class AppLocalizations {
     Locale('zh')
   ];
 
+  /// Message shown after an expired authenticated session returns the user to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Session expired — sign in again.'**
+  String get sessionExpiredSignInAgain;
+
   /// The app title displayed in various places
   ///
   /// In en, this message translates to:
@@ -1611,12 +1617,6 @@ abstract class AppLocalizations {
   /// **'Your plan will cancel on {date}.'**
   String cancelAtPeriodEnd(String date);
 
-  /// Renewal message
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan renews on {date}.'**
-  String renewsOn(String date);
-
   /// Basic plan name
   ///
   /// In en, this message translates to:
@@ -2892,7 +2892,7 @@ abstract class AppLocalizations {
   /// No description provided for @freeMinutesMonth.
   ///
   /// In en, this message translates to:
-  /// **'600 free minutes/month included. Unlimited with '**
+  /// **'300 free minutes/month included. Unlimited with '**
   String get freeMinutesMonth;
 
   /// No description provided for @omiUnlimited.
@@ -3494,30 +3494,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Loving Omi?'**
   String get lovingOmi;
-
-  /// App review prompt text for iOS users
-  ///
-  /// In en, this message translates to:
-  /// **'Help us reach more people by leaving a review in the App Store. Your feedback means the world to us!'**
-  String get leaveReviewIos;
-
-  /// App review prompt text for Android users
-  ///
-  /// In en, this message translates to:
-  /// **'Help us reach more people by leaving a review in the Google Play Store. Your feedback means the world to us!'**
-  String get leaveReviewAndroid;
-
-  /// Button text to rate on Apple App Store
-  ///
-  /// In en, this message translates to:
-  /// **'Rate on App Store'**
-  String get rateOnAppStore;
-
-  /// Button text to rate on Google Play Store
-  ///
-  /// In en, this message translates to:
-  /// **'Rate on Google Play'**
-  String get rateOnGooglePlay;
 
   /// Button text to defer action
   ///
@@ -4142,6 +4118,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'✏️ Edit Memory'**
   String get editMemory;
+
+  /// Label for pinning a memory as baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Pin as Baseline'**
+  String get pinAsBaseline;
+
+  /// Label for unpinning a memory from baseline
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from Baseline'**
+  String get unpinAsBaseline;
+
+  /// Label for baseline memory
+  ///
+  /// In en, this message translates to:
+  /// **'Baseline Memory'**
+  String get baselineMemory;
+
+  /// Description for baseline memory being always in context
+  ///
+  /// In en, this message translates to:
+  /// **'Always in context'**
+  String get alwaysInContext;
 
   /// Input hint
   ///
@@ -8946,7 +8946,7 @@ abstract class AppLocalizations {
   /// Description of basic plan features in usage page
   ///
   /// In en, this message translates to:
-  /// **'600 premium mins + unlimited on-device'**
+  /// **'300 premium mins + unlimited on-device'**
   String get basicPlanDescription;
 
   /// Unit label for minutes
@@ -11364,7 +11364,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'600 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11508,7 +11508,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'600 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'300 premium minutes/month. On-Device tab offers unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -16788,8 +16788,8 @@ abstract class AppLocalizations {
   /// No description provided for @savePercent.
   ///
   /// In en, this message translates to:
-  /// **'Save ~17%'**
-  String get savePercent;
+  /// **'Save ~{percent}%'**
+  String savePercent(int percent);
 
   /// No description provided for @popular.
   ///
@@ -17406,7 +17406,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17732,6 +17732,606 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant storage is almost full — keep the app open to sync.'**
   String get pendantStorageAlmostFull;
+
+  /// No description provided for @connectRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Ray-Ban Meta'**
+  String get connectRayBanMeta;
+
+  /// No description provided for @raybanMetaSetupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.'**
+  String get raybanMetaSetupDescription;
+
+  /// No description provided for @raybanMetaOpenMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect through Meta AI'**
+  String get raybanMetaOpenMetaAI;
+
+  /// No description provided for @raybanMetaWaitingForMetaAI.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish connecting in the Meta AI app, then come back here.'**
+  String get raybanMetaWaitingForMetaAI;
+
+  /// No description provided for @raybanMetaCheckAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Check Again'**
+  String get raybanMetaCheckAgain;
+
+  /// No description provided for @raybanMetaAllowCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Camera on Glasses'**
+  String get raybanMetaAllowCamera;
+
+  /// No description provided for @raybanMetaCameraExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.'**
+  String get raybanMetaCameraExplanation;
+
+  /// No description provided for @raybanMetaSkipForNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get raybanMetaSkipForNow;
+
+  /// No description provided for @raybanMetaAudioOnlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ray-Ban Meta audio-only mode'**
+  String get raybanMetaAudioOnlyTitle;
+
+  /// No description provided for @raybanMetaAudioOnlyExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.'**
+  String get raybanMetaAudioOnlyExplanation;
+
+  /// No description provided for @raybanMetaMusicPauseNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Music on your phone pauses while the glasses microphone is in use.'**
+  String get raybanMetaMusicPauseNote;
+
+  /// No description provided for @raybanMetaContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get raybanMetaContinue;
+
+  /// No description provided for @raybanMetaCapturePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Capture Photo'**
+  String get raybanMetaCapturePhoto;
+
+  /// No description provided for @raybanMetaPhotoRequested.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo requested — it will appear in your conversation.'**
+  String get raybanMetaPhotoRequested;
+
+  /// No description provided for @raybanMetaMicrophoneReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone ready'**
+  String get raybanMetaMicrophoneReady;
+
+  /// No description provided for @raybanMetaImageCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Image capture ready'**
+  String get raybanMetaImageCaptureReady;
+
+  /// No description provided for @raybanMetaImageCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable in audio-only mode'**
+  String get raybanMetaImageCaptureUnavailable;
+
+  /// No description provided for @raybanMetaCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera'**
+  String get raybanMetaCamera;
+
+  /// No description provided for @errorConnectingRayBanMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to Ray-Ban Meta: {error}'**
+  String errorConnectingRayBanMeta(String error);
+
+  /// Title of the on-device storage usage card on the Auto Sync page
+  ///
+  /// In en, this message translates to:
+  /// **'Device Storage'**
+  String get deviceStorageTitle;
+
+  /// Percentage of on-device storage used
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% full'**
+  String deviceStoragePercentFull(int percent);
+
+  /// Used vs total on-device storage, e.g. 338 MB of 469 MB used
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {total} used'**
+  String deviceStorageUsedOfTotal(String used, String total);
+
+  /// Amount of free on-device storage, e.g. 131 MB free
+  ///
+  /// In en, this message translates to:
+  /// **'{free} free'**
+  String deviceStorageFree(String free);
+
+  /// Warning shown when on-device storage is 95% or more full
+  ///
+  /// In en, this message translates to:
+  /// **'Device nearly full — sync to free space.'**
+  String get deviceStorageNearlyFull;
+
+  /// Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline
+  ///
+  /// In en, this message translates to:
+  /// **'No connection — recording locally. It will be transcribed when you\'re back online.'**
+  String get phoneMicOfflineFallbackMessage;
+
+  /// Data privacy page banner summarizing encryption and user control
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.'**
+  String get dataEncryptedBanner;
+
+  /// Label for accuracy metric of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Accuracy'**
+  String get sttModelAccuracy;
+
+  /// Whisper model size: base
+  ///
+  /// In en, this message translates to:
+  /// **'Base'**
+  String get whisperModelSizeBase;
+
+  /// Section title for cloud-based transcription providers
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Transcription'**
+  String get cloudTranscription;
+
+  /// Brand name for the Deepgram speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Deepgram'**
+  String get sttProviderDeepgram;
+
+  /// Action label to delete a downloaded on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Model'**
+  String get deleteOnDeviceModel;
+
+  /// Confirmation prompt shown before deleting a downloaded model
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this model?'**
+  String get deleteOnDeviceModelConfirm;
+
+  /// Status label indicating an on-device model has been downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get onDeviceModelDownloaded;
+
+  /// Relative speed indicator: faster
+  ///
+  /// In en, this message translates to:
+  /// **'Faster'**
+  String get sttModelFaster;
+
+  /// Filter option label meaning "automatic"
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get sttFilterAuto;
+
+  /// Relative quality/accuracy indicator: higher
+  ///
+  /// In en, this message translates to:
+  /// **'Higher'**
+  String get sttModelHigher;
+
+  /// Whisper model size: large
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get whisperModelSizeLarge;
+
+  /// Relative quality/accuracy indicator: lower
+  ///
+  /// In en, this message translates to:
+  /// **'Lower'**
+  String get sttModelLower;
+
+  /// Whisper model size: medium
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get whisperModelSizeMedium;
+
+  /// Toast shown after an on-device model is deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Model deleted'**
+  String get onDeviceModelDeleted;
+
+  /// Toast title when a model download fails
+  ///
+  /// In en, this message translates to:
+  /// **'Model download failed'**
+  String get onDeviceModelDownloadFailed;
+
+  /// Toast body when a Whisper model download fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download Whisper model. Please try again.'**
+  String get onDeviceModelDownloadFailedDesc;
+
+  /// Toast shown after an on-device model is downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Model downloaded'**
+  String get onDeviceModelDownloadSuccess;
+
+  /// Toast body when a Whisper model is downloaded successfully
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper model downloaded successfully'**
+  String get onDeviceModelDownloadSuccessDesc;
+
+  /// Label for the size of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Model Size'**
+  String get onDeviceModelSize;
+
+  /// Generic "none" option label
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get sttNone;
+
+  /// Section title for on-device transcription settings
+  ///
+  /// In en, this message translates to:
+  /// **'On-Device Transcription'**
+  String get onDeviceTranscription;
+
+  /// Description of on-device transcription behavior
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is processed locally on your device'**
+  String get onDeviceTranscriptionDesc;
+
+  /// Relative speed indicator: slower
+  ///
+  /// In en, this message translates to:
+  /// **'Slower'**
+  String get sttModelSlower;
+
+  /// Whisper model size: small
+  ///
+  /// In en, this message translates to:
+  /// **'Small'**
+  String get whisperModelSizeSmall;
+
+  /// Brand name for the Soniox speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Soniox'**
+  String get sttProviderSoniox;
+
+  /// Label for the speech-to-text provider selector
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-to-Text Provider'**
+  String get speechToTextProvider;
+
+  /// Description for the speech-to-text provider selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the service used for transcription'**
+  String get speechToTextProviderDesc;
+
+  /// Brand name for the Speechmatics speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Speechmatics'**
+  String get sttProviderSpeechmatics;
+
+  /// Label for speed metric of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get sttModelSpeed;
+
+  /// Whisper model size: tiny
+  ///
+  /// In en, this message translates to:
+  /// **'Tiny'**
+  String get whisperModelSizeTiny;
+
+  /// Label for the transcription language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription Language'**
+  String get transcriptionLanguage;
+
+  /// Description for the transcription language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the language for speech transcription'**
+  String get transcriptionLanguageDesc;
+
+  /// Label for the Whisper on-device transcription model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper Model'**
+  String get whisperModel;
+
+  /// Description for the Whisper on-device transcription model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the model for on-device transcription'**
+  String get whisperModelDesc;
+
+  /// Title of the confirmation dialog before downgrading to the free plan
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium?'**
+  String get downgradeToFreemiumTitle;
+
+  /// Heading shown above the list of free-plan limitations in the downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'You will experience these limitations:'**
+  String get downgradeLimitationsHeading;
+
+  /// Free-plan limitation: 7x battery consumption
+  ///
+  /// In en, this message translates to:
+  /// **'7x battery consumption'**
+  String get downgradeLimitBattery;
+
+  /// Free-plan limitation: lower transcription quality
+  ///
+  /// In en, this message translates to:
+  /// **'30% less transcription quality'**
+  String get downgradeLimitQuality;
+
+  /// Free-plan limitation: noticeable transcription delay
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay'**
+  String get downgradeLimitDelay;
+
+  /// Free-plan limitation: speaker identification disabled
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot identify speakers'**
+  String get downgradeLimitSpeakers;
+
+  /// Destructive confirm button on the downgrade dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade Anyway'**
+  String get downgradeAnyway;
+
+  /// Dialog title shown when trying to link a conversation to a calendar event without Google Calendar connected
+  ///
+  /// In en, this message translates to:
+  /// **'Google Calendar Not Connected'**
+  String get googleCalendarNotConnected;
+
+  /// Dialog body for the Google-Calendar-not-connected dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Connect your Google Calendar to link conversations to calendar events.'**
+  String get googleCalendarConnectPrompt;
+
+  /// Snackbar shown after a conversation is linked to a calendar event
+  ///
+  /// In en, this message translates to:
+  /// **'Linked to \"{title}\"'**
+  String linkedToEvent(String title);
+
+  /// Snackbar shown when linking a conversation to a calendar event fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to link calendar event'**
+  String get failedToLinkCalendarEvent;
+
+  /// Snackbar shown after the user gives feedback on an AI chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for your feedback!'**
+  String get thanksForYourFeedback;
+
+  /// Label of the copy-message action on an AI chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Copy message'**
+  String get copyMessage;
+
+  /// Placeholder of the search input in the settings drawer
+  ///
+  /// In en, this message translates to:
+  /// **'Search settings…'**
+  String get searchSettings;
+
+  /// Title shown when an audio recording fails to load in the conversation player
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading audio'**
+  String get errorLoadingAudio;
+
+  /// Title for the Bluetooth microphone picker used to connect Ray-Ban Meta glasses
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your Ray-Ban Meta microphone'**
+  String get rayBanMetaMicPickerTitle;
+
+  /// Explains how to choose the glasses microphone and the Bluetooth HFP music tradeoff
+  ///
+  /// In en, this message translates to:
+  /// **'Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.'**
+  String get rayBanMetaMicPickerDescription;
+
+  /// Empty state when iOS reports no Bluetooth HFP microphone inputs
+  ///
+  /// In en, this message translates to:
+  /// **'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.'**
+  String get rayBanMetaMicPickerEmpty;
+
+  /// Error state when available Bluetooth HFP inputs cannot be read
+  ///
+  /// In en, this message translates to:
+  /// **'Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.'**
+  String get rayBanMetaMicPickerLoadError;
+
+  /// Error shown when the selected Bluetooth HFP microphone cannot connect
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to that microphone. Make sure it is connected in iPhone Settings.'**
+  String get rayBanMetaMicPickerConnectError;
+
+  /// No description provided for @syncStatusTooOld.
+  ///
+  /// In en, this message translates to:
+  /// **'Too old to sync — Omi can\'t accept it'**
+  String get syncStatusTooOld;
+
+  /// Plans sheet subtitle prompting a free user to pick a paid plan
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your plan to unlock unlimited Omi.'**
+  String get planSheetChooseYourPlan;
+
+  /// Plans sheet highlight: which platforms Omi runs on
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Mac, mobile, and web'**
+  String get availableOnMacMobileWeb;
+
+  /// Badge shown on the most popular plan card
+  ///
+  /// In en, this message translates to:
+  /// **'POPULAR'**
+  String get popularBadge;
+
+  /// Plan card row: this tier includes the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Works on Desktop'**
+  String get worksOnDesktop;
+
+  /// Plan card row: this tier does not include the desktop app
+  ///
+  /// In en, this message translates to:
+  /// **'Doesn\'t work on Desktop'**
+  String get noDesktopAccess;
+
+  /// Annual plan card subtitle showing the billing term and total price
+  ///
+  /// In en, this message translates to:
+  /// **'{months} months / {price}'**
+  String annualBillingSummary(int months, String price);
+
+  /// Badge on an annual plan card showing how many months the annual price saves
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 Month Free} other{{count} Months Free}}'**
+  String monthsFreeBadge(int count);
+
+  /// Intro line above the list of free-tier limitations
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is free, but freemium has limits that affect your experience:'**
+  String get freemiumLimitsIntro;
+
+  /// Free-tier limitation: transcription is delayed rather than live
+  ///
+  /// In en, this message translates to:
+  /// **'5-7 second delay (not real-time)'**
+  String get downgradeLimitDelayNotRealTime;
+
+  /// Button that moves the user from a paid plan to the free tier
+  ///
+  /// In en, this message translates to:
+  /// **'Downgrade to Freemium'**
+  String get downgradeToFreemiumAction;
+
+  /// Title of the training-data opt-in card offering free unlimited access
+  ///
+  /// In en, this message translates to:
+  /// **'Get Free Unlimited Access'**
+  String get getFreeUnlimitedAccess;
+
+  /// Subtitle of the training-data opt-in card
+  ///
+  /// In en, this message translates to:
+  /// **'Share data for training'**
+  String get shareDataForTraining;
+
+  /// Subtitle shown while a training-data access request is pending
+  ///
+  /// In en, this message translates to:
+  /// **'Your request is under review'**
+  String get yourRequestUnderReview;
+
+  /// Title for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Update Required'**
+  String get accountCutoverUpdateRequiredTitle;
+
+  /// Body for account cutover force-upgrade blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Install the latest Omi app to continue after account migration.'**
+  String get accountCutoverUpdateRequiredMessage;
+
+  /// Title for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Migration in Progress'**
+  String get accountCutoverMigrationInProgressTitle;
+
+  /// Body for account cutover migration-maintenance blocking screen
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is migrating. Product features are paused until migration finishes.'**
+  String get accountCutoverMigrationInProgressMessage;
+
+  /// Body when cutover rollback stranded newer data
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is in maintenance after a migration rollback. Some newer data may be stranded.'**
+  String get accountCutoverMigrationRollbackMessage;
+
+  /// Button that opens the app store for a required cutover upgrade
+  ///
+  /// In en, this message translates to:
+  /// **'Open store'**
+  String get accountCutoverOpenStore;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

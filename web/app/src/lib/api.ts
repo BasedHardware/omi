@@ -1,4 +1,5 @@
 import { getIdToken } from './firebase';
+import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
   invalidationPatterns,
@@ -21,6 +22,18 @@ import type {
   MessageFile,
   AudioFileUrlInfo,
 } from '@/types/conversation';
+// Generated REST response envelopes (backend OpenAPI authority).
+import type {
+  MergeConversationsResponse,
+  CreateConversationResponse,
+  ActionItemsResponse,
+  FairUseStatusResponse,
+} from './omiApi.generated';
+export type {
+  MergeConversationsResponse,
+  CreateConversationResponse,
+  ActionItemsResponse,
+};
 import type {
   App,
   AppCategory,
@@ -57,16 +70,21 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers = new Headers({
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  });
+  new Headers(options.headers).forEach((value, name) => headers.set(name, value));
+  headers.set('X-App-Platform', 'web');
+  if (deviceIdHash) {
+    headers.set('X-Device-Id-Hash', deviceIdHash);
+  }
 
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-App-Platform': 'web',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -211,13 +229,6 @@ export async function deleteConversation(id: string): Promise<void> {
  * @param reprocess - Whether to reprocess the merged conversation (default: true)
  * @returns Response with status and merged conversation IDs
  */
-export interface MergeConversationsResponse {
-  status: string;
-  message: string;
-  warning?: string;
-  conversation_ids: string[];
-}
-
 export async function mergeConversations(
   conversationIds: string[],
   reprocess: boolean = true,
@@ -229,14 +240,6 @@ export async function mergeConversations(
       reprocess,
     }),
   });
-}
-
-/**
- * Response from processing an in-progress conversation
- */
-export interface CreateConversationResponse {
-  conversation: Conversation;
-  messages: ServerMessage[];
 }
 
 /**
@@ -263,6 +266,33 @@ export async function processInProgressConversation(): Promise<CreateConversatio
   }
 }
 
+/**
+ * Finalize exactly one conversation by ID (desktop-style).
+ * Prefer this over processInProgressConversation when a socket owns a
+ * conversation_id — the Redis in_progress pointer is shared across device +
+ * web and must not steal a pendant session (#5388).
+ */
+export async function finalizeConversationById(
+  conversationId: string,
+): Promise<CreateConversationResponse | null> {
+  try {
+    const result = await fetchWithAuth<CreateConversationResponse>(
+      `/v1/conversations/${encodeURIComponent(conversationId)}/finalize`,
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+    );
+    invalidateCache(invalidationPatterns.conversations);
+    return result;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('404')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 // ============================================================================
 // Action Items (Tasks) API
 // ============================================================================
@@ -274,11 +304,6 @@ export interface GetActionItemsParams {
   limit?: number;
   offset?: number;
   completed?: boolean;
-}
-
-interface ActionItemsResponse {
-  action_items: ActionItem[];
-  has_more: boolean;
 }
 
 export async function getActionItems(
@@ -450,6 +475,18 @@ export async function updateMemoryVisibility(
 export async function deleteMemory(id: string): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}`, {
     method: 'DELETE',
+  });
+  invalidateCache(invalidationPatterns.memories);
+}
+
+/**
+ * Delete multiple memories in a single batch request (up to 100 per call).
+ * Replaces N concurrent DELETE /v3/memories/{id} calls that triggered 429 rate limits.
+ */
+export async function deleteMemoriesBatch(ids: string[]): Promise<void> {
+  await fetchWithAuth(`/v3/memories/batch`, {
+    method: 'DELETE',
+    body: JSON.stringify({ memory_ids: ids }),
   });
   invalidateCache(invalidationPatterns.memories);
 }
@@ -744,6 +781,15 @@ export async function uploadChatFiles(
 /**
  * Transcribe voice message to text
  */
+function getAudioFileExtension(mimeType: string): string {
+  const normalizedMimeType = mimeType.split(';', 1)[0].toLowerCase();
+  if (normalizedMimeType === 'audio/webm' || normalizedMimeType === 'video/webm')
+    return 'webm';
+  if (normalizedMimeType === 'audio/mp4' || normalizedMimeType === 'video/mp4')
+    return 'mp4';
+  return 'wav';
+}
+
 export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   let token: string | null = null;
 
@@ -761,14 +807,20 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   const url = `${API_BASE_URL}/v2/voice-message/transcribe`;
 
   const formData = new FormData();
-  // API expects field name 'files' (matching mobile app)
-  formData.append('files', audioBlob, 'audio.wav');
+  // The backend uses the filename extension when it uploads audio for STT.
+  formData.append('files', audioBlob, `audio.${getAudioFileExtension(audioBlob.type)}`);
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'web',
+  };
+  if (deviceIdHash) {
+    headers['X-Device-Id-Hash'] = deviceIdHash;
+  }
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: formData,
   });
 
@@ -1257,10 +1309,7 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
 
 // Webhook type enum matching backend API
 type WebhookType =
-  | 'memory_created'
-  | 'realtime_transcript'
-  | 'audio_bytes'
-  | 'day_summary';
+  'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
 
 /**
  * Get developer webhook URL
@@ -1387,11 +1436,16 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       '/v1/users/me/subscription',
     );
 
+    // Any paid tier counts as premium for UI gating (Manage vs Choose Plan).
+    // Plus / Unlimited arrive wired as 'unlimited'; Operator / Architect arrive
+    // as their real plan id now that web renders the full new catalog.
+    const paidPlans = ['unlimited', 'plus', 'unlimited_v2', 'operator', 'architect'];
     const result: UserSubscription = {
       plan: response.subscription?.plan || 'basic',
       status: response.subscription?.status || 'active',
-      is_unlimited: response.subscription?.plan === 'unlimited',
+      is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
       current_period_end: response.subscription?.current_period_end,
+      stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,
       features: response.subscription?.features || [],
@@ -1565,6 +1619,49 @@ export async function assignBulkTranscriptSegments(
       value,
     }),
   });
+}
+
+/**
+ * Error thrown when editing a transcript segment requires a paid plan
+ * (backend returns HTTP 402 for `/segments/text` on gated accounts).
+ */
+export class SegmentEditPlanRequiredError extends Error {
+  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+    super(message);
+    this.name = 'SegmentEditPlanRequiredError';
+  }
+}
+
+/**
+ * Update the text of a single transcript segment.
+ *
+ * Mirrors the backend `PATCH /v1/conversations/{id}/segments/text`
+ * (`UpdateSegmentTextRequest`), which identifies the segment by its `id` and
+ * rewrites just that segment's text. The response is a bare `{status}`, so
+ * callers must optimistically patch their local `transcript_segments`.
+ *
+ * @param conversationId - The conversation ID
+ * @param segmentId - The `id` of the segment to edit (non-empty)
+ * @param text - New segment text (1–10000 chars, enforced by the backend)
+ * @throws SegmentEditPlanRequiredError when the account is plan-gated (402)
+ */
+export async function updateSegmentText(
+  conversationId: string,
+  segmentId: string,
+  text: string,
+): Promise<void> {
+  try {
+    await fetchWithAuth(`/v1/conversations/${conversationId}/segments/text`, {
+      method: 'PATCH',
+      body: JSON.stringify({ segment_id: segmentId, text }),
+    });
+  } catch (error) {
+    // fetchWithAuth surfaces the status in the thrown message (`API error: 402 ...`).
+    if (error instanceof Error && error.message.includes('402')) {
+      throw new SegmentEditPlanRequiredError();
+    }
+    throw error;
+  }
 }
 
 /**
@@ -1792,7 +1889,6 @@ const INTEGRATION_DEFINITIONS: Array<{
     name: 'Gmail',
     description: 'Email integrations',
     logo: '/integrations/gmail-logo.jpeg',
-    coming_soon: true,
   },
 ];
 
@@ -2139,32 +2235,6 @@ export async function bulkMoveConversationsToFolder(
 // FCM Token Registration API
 // ============================================================================
 
-const WEB_DEVICE_ID_KEY = 'omi-web-device-id';
-
-/**
- * Get or generate a unique device ID for this browser
- * This is used to identify the device when registering FCM tokens
- */
-function getWebDeviceIdHash(): string {
-  if (typeof window === 'undefined') return 'server';
-
-  let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
-  if (!deviceId) {
-    // Generate a unique ID for this browser
-    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
-  }
-
-  // Create a simple hash of the device ID
-  let hash = 0;
-  for (let i = 0; i < deviceId.length; i++) {
-    const char = deviceId.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString(16);
-}
-
 /**
  * Register FCM token for push notifications
  * This is the same endpoint used by the mobile app
@@ -2172,7 +2242,8 @@ function getWebDeviceIdHash(): string {
  */
 export async function registerFCMToken(fcmToken: string): Promise<void> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const deviceIdHash = getWebDeviceIdHash();
+  const deviceIdHash = await getWebDeviceIdHash();
+  if (!deviceIdHash) return;
 
   await fetchWithAuth('/v1/users/fcm-token', {
     method: 'POST',
@@ -2193,7 +2264,8 @@ export async function registerFCMToken(fcmToken: string): Promise<void> {
  */
 export async function unregisterFCMToken(fcmToken: string): Promise<void> {
   try {
-    const deviceIdHash = getWebDeviceIdHash();
+    const deviceIdHash = await getWebDeviceIdHash();
+    if (!deviceIdHash) return;
 
     await fetchWithAuth('/v1/users/fcm-token', {
       method: 'DELETE',
@@ -2215,31 +2287,14 @@ export async function unregisterFCMToken(fcmToken: string): Promise<void> {
 // Fair Use Status
 // ============================================================================
 
-export interface FairUseStatus {
+/**
+ * Client-narrowed view of the generated `FairUseStatusResponse` (backend
+ * OpenAPI authority for `/v1/fair-use/status`). The backend types `stage` as a
+ * plain string; this adapter narrows it to the union the UI renders.
+ */
+export type FairUseStatus = Omit<FairUseStatusResponse, 'stage'> & {
   stage: 'none' | 'warning' | 'throttle' | 'restrict';
-  case_ref: string;
-  speech_hours_today: number;
-  speech_hours_3day: number;
-  speech_hours_weekly: number;
-  limits: {
-    daily_hours: number;
-    three_day_hours: number;
-    weekly_hours: number;
-  };
-  usage_pct: {
-    daily: number;
-    three_day: number;
-    weekly: number;
-  };
-  message: string;
-  dg_budget?: {
-    daily_limit_ms: number;
-    used_ms: number;
-    remaining_ms: number;
-    exhausted: boolean;
-    resets_at: string;
-  };
-}
+};
 
 export async function getFairUseStatus(): Promise<FairUseStatus | null> {
   try {

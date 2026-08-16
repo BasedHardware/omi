@@ -31,7 +31,7 @@ import sys
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, cast
 from unittest.mock import patch
 
 from dotenv import load_dotenv
@@ -52,7 +52,7 @@ def normalize_for_wer(text: str) -> str:
     return PUNCT_RE.sub('', text).lower().strip()
 
 
-def load_manifest() -> List[dict]:
+def load_manifest() -> List[Dict[str, Any]]:
     manifest_path = AUDIO_DIR / 'manifest.json'
     if not manifest_path.exists():
         print('ERROR: Samples not prepared. Run first:')
@@ -71,19 +71,22 @@ def read_wav_bytes(wav_path: Path) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def run_direct_deepgram(wav_bytes: bytes, language: str) -> dict:
+def run_direct_deepgram(wav_bytes: bytes, language: str) -> Dict[str, Any]:
     from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
 
     start = time.monotonic()
-    words, detected_lang = deepgram_prerecorded_from_bytes(
-        wav_bytes,
-        sample_rate=16000,
-        diarize=True,
-        return_language=True,
-        language=language,
+    words, detected_lang = cast(
+        'tuple[list[dict[str, Any]], str]',
+        deepgram_prerecorded_from_bytes(
+            wav_bytes,
+            sample_rate=16000,
+            diarize=True,
+            return_language=True,
+            language=language,
+        ),
     )
     elapsed = time.monotonic() - start
-    text = ' '.join(w['text'] for w in words)
+    text = ' '.join(str(w['text']) for w in words)
     return {
         'provider': 'deepgram',
         'text': text,
@@ -93,18 +96,21 @@ def run_direct_deepgram(wav_bytes: bytes, language: str) -> dict:
     }
 
 
-def run_direct_modulate(wav_bytes: bytes, language: str) -> dict:
+def run_direct_modulate(wav_bytes: bytes, language: str) -> Dict[str, Any]:
     from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
     start = time.monotonic()
-    words, detected_lang = modulate_prerecorded_from_bytes(
-        wav_bytes,
-        sample_rate=16000,
-        diarize=True,
-        return_language=True,
+    words, detected_lang = cast(
+        'tuple[list[dict[str, Any]], str]',
+        modulate_prerecorded_from_bytes(
+            wav_bytes,
+            sample_rate=16000,
+            diarize=True,
+            return_language=True,
+        ),
     )
     elapsed = time.monotonic() - start
-    text = ' '.join(w['text'] for w in words)
+    text = ' '.join(str(w['text']) for w in words)
     return {
         'provider': 'modulate',
         'text': text,
@@ -114,7 +120,7 @@ def run_direct_modulate(wav_bytes: bytes, language: str) -> dict:
     }
 
 
-def run_direct_routed(wav_bytes: bytes, language: str, model_env: str) -> dict:
+def run_direct_routed(wav_bytes: bytes, language: str, model_env: str) -> Dict[str, Any]:
     """Test get_prerecorded_service routing with a specific STT_PRERECORDED_MODEL value."""
     from utils.stt.pre_recorded import (
         PrerecordedSTTService,
@@ -128,23 +134,29 @@ def run_direct_routed(wav_bytes: bytes, language: str, model_env: str) -> dict:
 
     start = time.monotonic()
     if svc == PrerecordedSTTService.MODULATE:
-        words, detected_lang = modulate_prerecorded_from_bytes(
-            wav_bytes,
-            sample_rate=16000,
-            diarize=True,
-            return_language=True,
+        words, detected_lang = cast(
+            'tuple[list[dict[str, Any]], str]',
+            modulate_prerecorded_from_bytes(
+                wav_bytes,
+                sample_rate=16000,
+                diarize=True,
+                return_language=True,
+            ),
         )
     else:
-        words, detected_lang = deepgram_prerecorded_from_bytes(
-            wav_bytes,
-            sample_rate=16000,
-            diarize=True,
-            return_language=True,
-            language=stt_lang,
-            model=stt_model,
+        words, detected_lang = cast(
+            'tuple[list[dict[str, Any]], str]',
+            deepgram_prerecorded_from_bytes(
+                wav_bytes,
+                sample_rate=16000,
+                diarize=True,
+                return_language=True,
+                language=stt_lang,
+                model=stt_model,
+            ),
         )
     elapsed = time.monotonic() - start
-    text = ' '.join(w['text'] for w in words)
+    text = ' '.join(str(w['text']) for w in words)
     return {
         'provider': f'{svc} (routed via {model_env})',
         'text': text,
@@ -162,7 +174,7 @@ def run_direct_routed(wav_bytes: bytes, language: str, model_env: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def run_api_voice_transcribe(wav_bytes: bytes, host: str, port: int, token: str) -> dict:
+def run_api_voice_transcribe(wav_bytes: bytes, host: str, port: int, token: str) -> Dict[str, Any]:
     import httpx
 
     url = f'http://{host}:{port}/v2/voice-message/transcribe'
@@ -186,7 +198,7 @@ def run_api_voice_transcribe(wav_bytes: bytes, host: str, port: int, token: str)
     }
 
 
-def run_api_sync_local_files(wav_bytes: bytes, host: str, port: int, token: str) -> dict:
+def run_api_sync_local_files(wav_bytes: bytes, host: str, port: int, token: str) -> Dict[str, Any]:
     import httpx
 
     url = f'http://{host}:{port}/v1/sync-local-files'
@@ -214,11 +226,11 @@ def run_api_sync_local_files(wav_bytes: bytes, host: str, port: int, token: str)
 # ---------------------------------------------------------------------------
 
 
-def run_direct_benchmark(manifest: List[dict], compare: bool, max_samples: int):
+def run_direct_benchmark(manifest: List[Dict[str, Any]], compare: bool, max_samples: int) -> None:
     print(f'\n=== Pre-recorded STT Benchmark (direct function calls) ===')
     print(f'Samples: {len(manifest[:max_samples])} (LibriSpeech test-clean)\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in manifest[:max_samples]:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         wav_bytes = read_wav_bytes(wav_path)
@@ -271,7 +283,7 @@ def run_direct_benchmark(manifest: List[dict], compare: bool, max_samples: int):
         valid_dg = [r for r in results if 'dg_wer' in r and r.get('dg_wer', 1) < 1]
         valid_mod = [r for r in results if 'mod_wer' in r and r.get('mod_wer', 1) < 1]
 
-        table = []
+        table: List[List[Any]] = []
         for r in results:
             table.append(
                 [
@@ -320,7 +332,7 @@ def run_direct_benchmark(manifest: List[dict], compare: bool, max_samples: int):
     print(f'\nResults saved to: {output_path}')
 
 
-def run_api_benchmark(manifest: List[dict], host: str, port: int, token: str, max_samples: int):
+def run_api_benchmark(manifest: List[Dict[str, Any]], host: str, port: int, token: str, max_samples: int) -> None:
     print(f'\n=== Pre-recorded STT Benchmark (HTTP API endpoints) ===')
     print(f'Server: http://{host}:{port}')
     print(f'Samples: {len(manifest[:max_samples])}\n')
@@ -330,7 +342,7 @@ def run_api_benchmark(manifest: List[dict], host: str, port: int, token: str, ma
         print('  Get one via: beast omi dev auth-token')
         sys.exit(1)
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in manifest[:max_samples]:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         wav_bytes = read_wav_bytes(wav_path)

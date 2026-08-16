@@ -1,0 +1,49 @@
+version: 2
+name: logout
+tier: manual
+description: Exercise accepted account-deletion cleanup and sign-out via the local Auth emulator bridge (Live P2)
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/Auth/AuthOwnerTransition.swift
+  - desktop/macos/Desktop/Sources/Auth/FirebaseAuthAvailability.swift
+  - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase+AccountDeletion.swift
+  - desktop/macos/Desktop/Sources/SignInView.swift
+preconditions:
+  - auth_ready
+  - local_auth_emulator
+
+steps:
+  - id: S1
+    name: Baseline signed-in snapshot
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.is_signed_in: "true"
+
+  - id: S2
+    name: Apply accepted deletion cleanup and sign out (local Auth emulator)
+    bridge.action:
+      name: sign_out
+      params:
+        accepted_account_deletion: "true"
+    expect:
+      result.detail.accepted_account_deletion: "true"
+      result.detail.signed_out: "true"
+      result.detail.is_signed_in: "false"
+
+  - id: S3
+    name: Verify signed-out state
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.is_signed_in: "false"
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

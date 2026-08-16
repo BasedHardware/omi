@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import useSWR from 'swr';
-import { useAuthToken, authenticatedFetcher } from '@/hooks/useAuthToken';
+import useSWR from "swr";
+import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
 
 export interface TeamMember {
   id: string;
@@ -14,15 +14,16 @@ export interface TeamMember {
 export function useTeamMembers() {
   const { token, loading: tokenLoading } = useAuthToken();
 
-  const { data, error, isLoading } = useSWR<{ teamMembers: TeamMember[] }>(
-    token ? ['/api/omi/team-members', token] : null,
-    authenticatedFetcher,
-    { revalidateOnFocus: false }
-  );
+  const { data, error, isLoading, mutate } = useSWR<{
+    teamMembers: TeamMember[];
+  }>(token ? ["/api/omi/team-members", token] : null, authenticatedFetcher, {
+    revalidateOnFocus: false,
+  });
 
   return {
     teamMembers: data?.teamMembers ?? [],
     isLoading: tokenLoading || isLoading,
     error: error ?? null,
+    mutate,
   };
 }

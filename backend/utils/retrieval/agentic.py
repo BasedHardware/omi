@@ -1,18 +1,21 @@
 """
-Agentic chat system using Anthropic native tool use.
+Agentic chat system with provider-specific streaming tool use.
 
 This module implements a tool-calling agent that autonomously decides which tools
-to use to gather context and answer user questions. Uses Anthropic's native
-tool use API with streaming for real-time responses.
+to use to gather context and answer user questions. Managed gateway traffic uses
+the OpenAI-compatible chat-completions contract; direct specialist traffic keeps
+Anthropic's native streaming contract.
 """
 
+import json
 import uuid
 import asyncio
 import contextvars
-import traceback
+import os
 from typing import List, Optional, AsyncGenerator, Any, Tuple
 
 from langchain_core.runnables import RunnableConfig
+from langchain_core.callbacks import BaseCallbackHandler
 
 # Context variable to store config for tools
 agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
@@ -49,13 +52,36 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
-from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.retrieval.safety import (
+    AgentSafetyGuard,
+    SafetyGuardError,
+    fit_within_budget,
+    provider_fallback_reason,
+    should_retry_provider_error,
+    INPUT_TOO_LONG_MESSAGE,
+)
+from utils.observability.fallback import record_fallback
+from utils.llm.byok_errors import handle_llm_error_async
+from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
+from utils.llm.usage_tracker import reset_usage_context, set_usage_context
+from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
+from utils.executors import run_blocking, db_executor
+from database.redis_db import get_cached_user_geolocation
+from database.users import get_user_location_context_consent
+from models.geolocation import Geolocation
+from utils.conversations.location import async_get_google_maps_city
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
+
+try:
+    from utils.llm.gateway_client import should_route_chat_agent_through_gateway
+except ImportError:
+
+    def should_route_chat_agent_through_gateway() -> bool:
+        return False
+
 
 # Import langsmith traceable if available
 try:
@@ -70,6 +96,109 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+
+class _PerplexityWebSearchToolProxy:
+    """Lazy adapter for the gateway-only web-search function tool.
+
+    Agentic unit tests intentionally load this module with a minimal LangChain
+    stub. Avoid importing the optional Perplexity tool module at import time,
+    while retaining the real LangChain tool and gateway implementation when a
+    managed request actually executes it.
+    """
+
+    name = 'perplexity_web_search_tool'
+    description = 'Search the web for current information using Perplexity AI.'
+
+    @property
+    def args_schema(self):
+        try:
+            from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
+
+            return perplexity_web_search_tool.args_schema
+        except ModuleNotFoundError as error:
+            if error.name != 'langchain_core.tools':
+                raise
+
+            class _FallbackArgsSchema:
+                @classmethod
+                def schema(cls):
+                    return {
+                        'properties': {'query': {'type': 'string'}},
+                        'required': ['query'],
+                    }
+
+            return _FallbackArgsSchema
+
+    async def ainvoke(self, tool_input, config=None):
+        from utils.retrieval.tools.perplexity_tools import perplexity_web_search_tool
+
+        return await perplexity_web_search_tool.ainvoke(tool_input, config=config)
+
+
+perplexity_web_search_tool = _PerplexityWebSearchToolProxy()
+
+
+def _positive_timeout_from_env(name: str, default: float) -> float:
+    """Read a positive stream deadline at import time so invalid deploy config fails fast."""
+    raw_value = os.environ.get(name, str(default))
+    try:
+        timeout = float(raw_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'{name} must be a number') from error
+    if timeout <= 0:
+        raise ValueError(f'{name} must be greater than zero')
+    return timeout
+
+
+def _positive_int_from_env(name: str, default: int) -> int:
+    """Read a positive attempt count at import time so invalid deploy config fails fast."""
+    raw_value = os.environ.get(name, str(default))
+    try:
+        attempts = int(raw_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'{name} must be an integer') from error
+    if attempts <= 0:
+        raise ValueError(f'{name} must be greater than zero')
+    return attempts
+
+
+# Setup (timezone / prompt / app tools) has its own budget so multi-second Firestore
+# work cannot silently consume the post-setup first-stream-event (TTFT) window.
+# After setup, the first event must arrive before the client/proxy deadline; afterwards a
+# heartbeat keeps a known-long tool call observable while the total deadline
+# still prevents an agent task from running without bound.
+AGENT_STREAM_SETUP_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 25.0)
+AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 25.0)
+AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS = _positive_timeout_from_env('AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS', 20.0)
+AGENT_STREAM_MAX_DURATION_SECONDS = _positive_timeout_from_env('AGENT_STREAM_MAX_DURATION_SECONDS', 150.0)
+AGENT_STREAM_CANCEL_GRACE_SECONDS = _positive_timeout_from_env('AGENT_STREAM_CANCEL_GRACE_SECONDS', 2.0)
+
+# How much of the turn budget a retry needs to be worth starting. The silent-interval bound on
+# the call itself belongs to the transport (the gateway client, or the shared Anthropic client
+# when features are not routed through it) and is deliberately not overridden per request.
+AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS = _positive_timeout_from_env(
+    'AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS', 45.0
+)
+AGENT_STREAM_PROVIDER_MAX_ATTEMPTS = _positive_int_from_env('AGENT_STREAM_PROVIDER_MAX_ATTEMPTS', 3)
+AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
+    'AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS', 1.0
+)
+AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
+AGENT_STREAM_SETUP_PROGRESS = 'Preparing response…'
+AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
+AGENT_STREAM_FAILURE_MESSAGE = 'Unable to complete the response. Please try again.'
+# File chat still uses direct OpenAI Assistants/vision while gateway feature mode is on;
+# until that surface is migrated, fail with a typed user-safe copy instead of the generic canned reply.
+FILE_CHAT_GATEWAY_BLOCKED_MESSAGE = (
+    "File chat isn't available right now. Try again without attachments, or try again later."
+)
+# Delivered when a provider safety classifier declines the turn. Retrying the same prompt would
+# be declined again, so this says the request cannot be answered rather than inviting a retry.
+AGENT_REFUSAL_MESSAGE = "I can't help with that one. Try asking me something else."
+# Delivered when a loop runs to completion without the model ever emitting text. Unlike a
+# refusal this is not a policy decision, so it does invite a retry.
+AGENT_EMPTY_ANSWER_MESSAGE = "I wasn't able to put a response together for that. Please try again."
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -160,11 +289,26 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
     return tool_name.replace('_', ' ').title()
 
 
-class AsyncStreamingCallback:
+class AsyncStreamingCallback(BaseCallbackHandler):
     """Callback for streaming LLM responses with data and thought prefixes."""
 
     def __init__(self):
         self.queue = asyncio.Queue()
+        # Sync providers can invoke the nowait methods from an executor worker.
+        # asyncio.Queue is bound to this request loop, so its mutation must always
+        # be marshalled back to that loop instead of happening from the worker.
+        self._loop = asyncio.get_running_loop()
+
+    def _put_nowait_threadsafe(self, value: str | None) -> None:
+        """Queue a synchronous callback value on the loop that owns the response."""
+        if self._loop.is_closed():
+            return
+        try:
+            self._loop.call_soon_threadsafe(self.queue.put_nowait, value)
+        except RuntimeError:
+            # The request loop can close after a bounded stream is cancelled while
+            # a non-cooperative sync provider is still unwinding in its worker.
+            return
 
     async def put_data(self, text):
         await self.queue.put(f"data: {text}")
@@ -177,18 +321,30 @@ class AsyncStreamingCallback:
 
     def put_thought_nowait(self, text, app_id: Optional[str] = None):
         if app_id:
-            self.queue.put_nowait(f"think: {text}|app_id:{app_id}")
+            self._put_nowait_threadsafe(f"think: {text}|app_id:{app_id}")
         else:
-            self.queue.put_nowait(f"think: {text}")
+            self._put_nowait_threadsafe(f"think: {text}")
 
     def put_data_nowait(self, text):
-        self.queue.put_nowait(f"data: {text}")
+        self._put_nowait_threadsafe(f"data: {text}")
 
     async def end(self):
         await self.queue.put(None)
 
     def end_nowait(self):
-        self.queue.put_nowait(None)
+        self._put_nowait_threadsafe(None)
+
+    async def on_llm_new_token(self, token: str, **_kwargs) -> None:
+        """Bridge LangChain streaming callbacks for persona chat."""
+        await self.put_data(token)
+
+    async def on_llm_end(self, _response, **_kwargs) -> None:
+        """Always terminate the persona callback queue on normal completion."""
+        await self.end()
+
+    async def on_llm_error(self, _error: Exception, **_kwargs) -> None:
+        """Terminate the persona callback queue without exposing provider details."""
+        await self.end()
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +424,33 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     all_tools = list(core_tools) + list(app_tools or [])
     registry = {t.name: t for t in all_tools}
     return schemas, registry
+
+
+def _convert_anthropic_tools_to_openai(tool_schemas: list[dict]) -> list[dict]:
+    """Convert function-shaped Anthropic tools to the chat-completions shape.
+
+    Anthropic's server-side ``web_search`` and ``tool_search_tool_regex`` entries
+    intentionally have no ``input_schema``. They are not part of the OpenAI
+    contract, so filtering them here keeps the managed lane from receiving an
+    invalid tool definition. App tools are already present in ``tool_schemas``
+    and are exposed directly instead of relying on Anthropic tool discovery.
+    """
+    openai_tools = []
+    for tool in tool_schemas:
+        input_schema = tool.get('input_schema')
+        if not isinstance(input_schema, dict):
+            continue
+        openai_tools.append(
+            {
+                'type': 'function',
+                'function': {
+                    'name': tool['name'],
+                    'description': tool.get('description', ''),
+                    'parameters': input_schema,
+                },
+            }
+        )
+    return openai_tools
 
 
 @_traceable(name="chat.tool_execution", run_type="tool")
@@ -372,9 +555,80 @@ def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> l
     return anthropic_messages
 
 
+async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
+    if platform is None or platform.strip().lower() not in {'ios', 'android'}:
+        return None
+    try:
+        consent = await run_blocking(db_executor, get_user_location_context_consent, uid)
+        if consent is None or not consent.is_active():
+            return None
+        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
+        if not geolocation:
+            return None
+        validated_geolocation = Geolocation.model_validate(geolocation)
+        return await async_get_google_maps_city(validated_geolocation.latitude, validated_geolocation.longitude)
+    except (KeyError, TypeError, ValueError):
+        return None
+    except Exception as error:
+        logger.warning('Mobile city context unavailable error_type=%s', type(error).__name__)
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Core Anthropic agent streaming loop
 # ---------------------------------------------------------------------------
+
+
+async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+    """Stream text to the client and record it as part of the answer.
+
+    ``put_data`` alone reaches only the live stream; the persisted reply and the terminal
+    ``done:`` frame are built from ``full_response``, so text that skips it is overwritten by
+    the router's canned error when the turn ends.
+    """
+    full_response.append(text)
+    await callback.put_data(text)
+
+
+def _has_answer(full_response: list) -> bool:
+    """Whether anything the router would render as an answer has been delivered.
+
+    List truthiness is not the same question. A stream can emit the inter-iteration separator or
+    a whitespace-only delta and then fail, which leaves ``full_response`` non-empty while the
+    persisted reply is still blank to the reader.
+    """
+    return bool(''.join(full_response).strip())
+
+
+async def _end_with_answer_guarantee(
+    callback: AsyncStreamingCallback, full_response: list, provider: str
+) -> Optional[str]:
+    """Close the stream, guaranteeing the turn left the user something to read.
+
+    Either loop can run to completion without the model emitting any text: a content filter, an
+    empty completion, or a tool-only iteration with nothing to say. ``full_response`` is what the
+    router persists and renders, so returning here silently hands the user a blank answer and
+    records the turn as a success. Report it as the failure it is instead.
+    """
+    if _has_answer(full_response):
+        await callback.end()
+        return None
+    logger.warning('Chat agent loop finished with no answer provider=%s', provider)
+    await _put_answer_text(callback, full_response, AGENT_EMPTY_ANSWER_MESSAGE)
+    await callback.end()
+    return 'empty_answer'
+
+
+def _refusal_category(response: Any) -> str:
+    """Name the policy category behind a refusal, for logs only.
+
+    ``stop_details`` is populated only alongside ``stop_reason == "refusal"`` and is absent on
+    older provider versions, so every level is optional. The category is a fixed provider enum
+    and carries none of the request content.
+    """
+    details = getattr(response, 'stop_details', None)
+    category = getattr(details, 'category', None) if details is not None else None
+    return category if isinstance(category, str) and category else 'unspecified'
 
 
 async def _run_anthropic_agent_stream(
@@ -386,81 +640,139 @@ async def _run_anthropic_agent_stream(
     full_response: list,
     safety_guard: AgentSafetyGuard,
     configurable: dict,
-):
+) -> Optional[str]:
     """Run the Anthropic tool-use loop with streaming.
 
     This replaces LangGraph's create_react_agent + astream_events with a simple
     while loop that calls Anthropic's messages API, executes any tool calls,
     and feeds results back until the model stops requesting tools.
+
+    Returns ``None`` when the loop finished on its own terms, or a short failure reason when it
+    gave up on the provider.
     """
     # System prompt with cache_control for Anthropic prompt caching
     # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
     # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
     system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
+    producer_started_at = asyncio.get_running_loop().time()
     loop_iteration = 0
 
     while True:
         loop_iteration += 1
-        first_text_in_iteration = True
 
-        try:
-            async with anthropic_client.messages.stream(
-                model=ANTHROPIC_AGENT_MODEL,
-                system=system_blocks,
-                messages=messages,
-                tools=tool_schemas,
-                max_tokens=8192,
-            ) as stream:
-                async for event in stream:
-                    # Stream text tokens
-                    if event.type == "content_block_delta" and hasattr(event.delta, 'type'):
-                        if event.delta.type == "text_delta":
-                            # Add separator between loop iterations so text doesn't run together
-                            if first_text_in_iteration and loop_iteration > 1 and full_response:
-                                last_char = full_response[-1][-1] if full_response[-1] else ''
-                                first_char = event.delta.text[0] if event.delta.text else ''
-                                if (
-                                    last_char
-                                    and first_char
-                                    and last_char not in (' ', '\n')
-                                    and first_char not in (' ', '\n')
-                                ):
-                                    full_response.append('\n\n')
-                                    await callback.put_data('\n\n')
-                            first_text_in_iteration = False
-                            full_response.append(event.delta.text)
-                            await callback.put_data(event.delta.text)
-                        elif event.delta.type == "thinking_delta":
-                            pass  # Don't stream thinking to client
+        attempts_made = 0
+        retried_reason: Optional[str] = None
 
-                    # Emit status when tool call starts
-                    elif event.type == "content_block_start":
-                        if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
-                            server_tool_name = getattr(event.content_block, 'name', '')
-                            if server_tool_name == 'web_search':
-                                await callback.put_thought('Searching the web')
-                            logger.info(f"Server tool invoked: {server_tool_name}")
-                        elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
-                            tool_name = event.content_block.name
-                            # Skip tool_search_tool — handled server-side by Anthropic
-                            if 'tool_search' in tool_name:
-                                logger.info(f"Tool search invoked (server-side)")
-                                continue
-                            app_id = _extract_app_id(tool_name)
-                            tool_obj = tool_registry.get(tool_name)
-                            display_name = get_tool_display_name(tool_name, tool_obj)
-                            await callback.put_thought(display_name, app_id=app_id)
-                            logger.info(f"Tool started: {tool_name}")
+        while True:
+            attempts_made += 1
+            first_text_in_iteration = True
+            text_before_attempt = len(full_response)
 
-                # Get final message while stream is still open
-                response = await stream.get_final_message()
+            try:
+                async with anthropic_client.messages.stream(
+                    model=ANTHROPIC_AGENT_MODEL,
+                    system=system_blocks,
+                    messages=messages,
+                    tools=tool_schemas,
+                    max_tokens=8192,
+                    # Anthropic moves this breakpoint to the last cacheable message
+                    # block on every request. That incrementally caches both the
+                    # append-only inter-turn history epoch and each agentic tool-loop
+                    # iteration while the explicit system breakpoint remains stable.
+                    cache_control={"type": "ephemeral", "ttl": "1h"},
+                ) as stream:
+                    async for event in stream:
+                        # Stream text tokens
+                        if event.type == "content_block_delta" and hasattr(event.delta, 'type'):
+                            if event.delta.type == "text_delta":
+                                # Add separator between loop iterations so text doesn't run together
+                                if first_text_in_iteration and loop_iteration > 1 and full_response:
+                                    last_char = full_response[-1][-1] if full_response[-1] else ''
+                                    first_char = event.delta.text[0] if event.delta.text else ''
+                                    if (
+                                        last_char
+                                        and first_char
+                                        and last_char not in (' ', '\n')
+                                        and first_char not in (' ', '\n')
+                                    ):
+                                        full_response.append('\n\n')
+                                        await callback.put_data('\n\n')
+                                first_text_in_iteration = False
+                                full_response.append(event.delta.text)
+                                await callback.put_data(event.delta.text)
+                            elif event.delta.type == "thinking_delta":
+                                pass  # Don't stream thinking to client
 
-        except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
-            await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
+                        # Emit status when tool call starts
+                        elif event.type == "content_block_start":
+                            if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
+                                server_tool_name = getattr(event.content_block, 'name', '')
+                                if server_tool_name == 'web_search':
+                                    await callback.put_thought('Searching the web')
+                                logger.info(f"Server tool invoked: {server_tool_name}")
+                            elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
+                                tool_name = event.content_block.name
+                                # Skip tool_search_tool — handled server-side by Anthropic
+                                if 'tool_search' in tool_name:
+                                    logger.info(f"Tool search invoked (server-side)")
+                                    continue
+                                app_id = _extract_app_id(tool_name)
+                                tool_obj = tool_registry.get(tool_name)
+                                display_name = get_tool_display_name(tool_name, tool_obj)
+                                await callback.put_thought(display_name, app_id=app_id)
+                                logger.info(f"Tool started: {tool_name}")
+
+                    # Get final message while stream is still open
+                    response = await stream.get_final_message()
+                break
+
+            except Exception as e:
+                elapsed = asyncio.get_running_loop().time() - producer_started_at
+                if should_retry_provider_error(
+                    e,
+                    attempts_made=attempts_made,
+                    max_attempts=AGENT_STREAM_PROVIDER_MAX_ATTEMPTS,
+                    text_already_streamed=len(full_response) > text_before_attempt,
+                    seconds_remaining=AGENT_STREAM_MAX_DURATION_SECONDS - elapsed,
+                    min_headroom_seconds=AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS,
+                ):
+                    retried_reason = provider_fallback_reason(e)
+                    logger.warning(
+                        'Agent stream provider call failed, retrying attempt=%d error_type=%s',
+                        attempts_made + 1,
+                        type(e).__name__,
+                    )
+                    await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
+                    continue
+
+                await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
+                # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+                # router would overwrite this apology with its own canned error.
+                await _put_answer_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
+                await callback.end()
+                return f'provider_{type(e).__name__}'
+
+        if retried_reason is not None:
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='llm_answer_retried',
+                reason=retried_reason,
+                outcome='recovered',
+            )
+
+        # A safety classifier can decline the turn. The response is a normal success with an
+        # empty (or partial) content list, so the loop would otherwise exit as if the model had
+        # simply answered nothing: the router sees a blank answer, emits its generic error, and
+        # records no error at all. Say so through the normal streamed/persisted contract and
+        # report the turn as failed instead.
+        if response.stop_reason == "refusal":
+            logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
+            if not _has_answer(full_response):
+                await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
             await callback.end()
-            return
+            return 'provider_refusal'
 
         # If no tool_use, we're done
         if response.stop_reason != "tool_use":
@@ -479,10 +791,10 @@ async def _run_anthropic_agent_stream(
                 if warning:
                     await callback.put_thought(warning)
             except SafetyGuardError as e:
-                await callback.put_data(f"\n\n{str(e)}")
+                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
                 logger.error(f"Safety Guard blocked tool call: {e}")
                 await callback.end()
-                return
+                return None
 
             # Execute tool
             try:
@@ -500,10 +812,10 @@ async def _run_anthropic_agent_stream(
             try:
                 safety_guard.check_context_size(result)
             except SafetyGuardError as e:
-                await callback.put_data(f"\n\n{str(e)}")
+                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
                 logger.error(f"Safety Guard blocked due to context size: {e}")
                 await callback.end()
-                return
+                return None
 
             tool_results.append(
                 {
@@ -536,12 +848,328 @@ async def _run_anthropic_agent_stream(
     stats = safety_guard.get_stats()
     logger.info(f"Safety Guard final stats: {stats}")
 
-    await callback.end()
+    return await _end_with_answer_guarantee(callback, full_response, 'anthropic')
+
+
+def _openai_content_text(content: Any) -> str:
+    """Extract text from an OpenAI-compatible message or message chunk."""
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ''
+
+    text_parts = []
+    for part in content:
+        if isinstance(part, dict):
+            text = part.get('text')
+        else:
+            text = getattr(part, 'text', None)
+        if isinstance(text, str):
+            text_parts.append(text)
+    return ''.join(text_parts)
+
+
+def _normalize_openai_tool_call(raw_call: dict, index: int) -> dict:
+    """Normalize LangChain/OpenAI tool-call variants to one internal shape."""
+    function = raw_call.get('function') if isinstance(raw_call.get('function'), dict) else {}
+    name = raw_call.get('name') or function.get('name')
+    if not isinstance(name, str) or not name:
+        raise ValueError('OpenAI tool call omitted a function name')
+
+    arguments = raw_call.get('args')
+    if arguments is None:
+        arguments = function.get('arguments')
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments) if arguments.strip() else {}
+        except json.JSONDecodeError as error:
+            raise ValueError('OpenAI tool call contained invalid arguments') from error
+    if not isinstance(arguments, dict):
+        arguments = {}
+
+    call_id = raw_call.get('id') or f'call_{index}'
+    return {'id': call_id, 'name': name, 'input': arguments}
+
+
+def _openai_tool_calls(chunks: list[Any]) -> list[dict]:
+    """Collect complete tool calls from streamed OpenAI-compatible chunks."""
+    tool_call_chunks = []
+    for chunk in chunks:
+        raw_chunks = getattr(chunk, 'tool_call_chunks', None) or []
+        if isinstance(raw_chunks, list):
+            tool_call_chunks.extend(raw_chunks)
+
+    if tool_call_chunks:
+        aggregated: dict[str, dict[str, Any]] = {}
+        by_index: dict[str, str] = {}
+        by_id: dict[str, str] = {}
+        for position, raw_call in enumerate(tool_call_chunks):
+            if not isinstance(raw_call, dict):
+                continue
+            raw_index = raw_call.get('index')
+            raw_id = raw_call.get('id')
+            if raw_index is not None and str(raw_index) in by_index:
+                key = by_index[str(raw_index)]
+            elif raw_id and str(raw_id) in by_id:
+                key = by_id[str(raw_id)]
+            else:
+                if raw_id:
+                    key = str(raw_id)
+                elif raw_index is not None:
+                    key = str(raw_index)
+                else:
+                    key = str(position)
+            if raw_index is not None:
+                by_index[str(raw_index)] = key
+            if raw_id:
+                by_id[str(raw_id)] = key
+            entry = aggregated.setdefault(key, {'id': raw_call.get('id'), 'name': '', 'args': ''})
+            if raw_call.get('id'):
+                entry['id'] = raw_call['id']
+            if raw_call.get('name'):
+                entry['name'] += raw_call['name']
+            arguments = raw_call.get('args')
+            if isinstance(arguments, str):
+                if isinstance(entry['args'], str):
+                    entry['args'] += arguments
+                else:
+                    entry['args'] = arguments
+            elif isinstance(arguments, dict):
+                entry['args'] = arguments
+        return [_normalize_openai_tool_call(call, index) for index, call in enumerate(aggregated.values())]
+
+    for chunk in reversed(chunks):
+        raw_tool_calls = getattr(chunk, 'tool_calls', None) or []
+        if not raw_tool_calls:
+            additional_kwargs = getattr(chunk, 'additional_kwargs', {})
+            if isinstance(additional_kwargs, dict):
+                raw_tool_calls = additional_kwargs.get('tool_calls') or []
+        if raw_tool_calls:
+            return [_normalize_openai_tool_call(call, index) for index, call in enumerate(raw_tool_calls)]
+    return []
+
+
+async def _run_openai_agent_stream(
+    system_prompt: str,
+    messages: list,
+    tool_schemas: list,
+    tool_registry: dict,
+    callback: AsyncStreamingCallback,
+    full_response: list,
+    safety_guard: AgentSafetyGuard,
+    configurable: dict,
+) -> Optional[str]:
+    """Run the managed agent loop through the OpenAI chat-completions contract."""
+    try:
+        chat_model = get_llm('chat_agent', streaming=True)
+        chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
+    except Exception as error:
+        await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+        # ``put_data`` alone reaches the live stream but not the persisted answer, so the
+        # router would overwrite this apology with its own canned error.
+        await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+        await callback.end()
+        return f'provider_{type(error).__name__}'
+
+    producer_started_at = asyncio.get_running_loop().time()
+    loop_iteration = 0
+
+    while True:
+        loop_iteration += 1
+        attempts_made = 0
+        retried_reason: Optional[str] = None
+
+        while True:
+            attempts_made += 1
+            first_text_in_iteration = True
+            text_before_attempt = len(full_response)
+            iteration_text: list[str] = []
+            chunks: list[Any] = []
+
+            try:
+                usage_token = None
+                user_id = configurable.get('user_id') if isinstance(configurable, dict) else None
+                if isinstance(user_id, str) and user_id:
+                    usage_token = set_usage_context(user_id, 'chat_agent')
+                try:
+                    async for chunk in chat_model.astream([{'role': 'system', 'content': system_prompt}, *messages]):
+                        chunks.append(chunk)
+                        text = _openai_content_text(getattr(chunk, 'content', ''))
+                        if not text:
+                            continue
+                        if first_text_in_iteration and loop_iteration > 1 and full_response:
+                            last_char = full_response[-1][-1] if full_response[-1] else ''
+                            first_char = text[0]
+                            if (
+                                last_char
+                                and first_char
+                                and last_char not in (' ', '\n')
+                                and first_char not in (' ', '\n')
+                            ):
+                                await _put_answer_text(callback, full_response, '\n\n')
+                        first_text_in_iteration = False
+                        iteration_text.append(text)
+                        await _put_answer_text(callback, full_response, text)
+                finally:
+                    if usage_token is not None:
+                        reset_usage_context(usage_token)
+                tool_calls = _openai_tool_calls(chunks)
+                break
+            except Exception as error:
+                elapsed = asyncio.get_running_loop().time() - producer_started_at
+                if should_retry_provider_error(
+                    error,
+                    attempts_made=attempts_made,
+                    max_attempts=AGENT_STREAM_PROVIDER_MAX_ATTEMPTS,
+                    text_already_streamed=len(full_response) > text_before_attempt,
+                    seconds_remaining=AGENT_STREAM_MAX_DURATION_SECONDS - elapsed,
+                    min_headroom_seconds=AGENT_STREAM_PROVIDER_MIN_RETRY_HEADROOM_SECONDS,
+                ):
+                    retried_reason = provider_fallback_reason(error)
+                    logger.warning(
+                        'Agent stream provider call failed, retrying attempt=%d error_type=%s',
+                        attempts_made + 1,
+                        type(error).__name__,
+                    )
+                    await asyncio.sleep(AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS)
+                    continue
+
+                await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
+                await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+                await callback.end()
+                return f'provider_{type(error).__name__}'
+
+        if retried_reason is not None:
+            record_fallback(
+                component='other',
+                from_mode='llm_answer',
+                to_mode='llm_answer_retried',
+                reason=retried_reason,
+                outcome='recovered',
+            )
+
+        if not tool_calls:
+            break
+
+        tool_results = []
+        for tool_call in tool_calls:
+            try:
+                safety_guard.validate_tool_call(tool_call['name'], tool_call['input'])
+                warning = safety_guard.should_warn_user()
+                if warning:
+                    await callback.put_thought(warning)
+            except SafetyGuardError as error:
+                await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
+                logger.error('Safety Guard blocked tool call: %s', error)
+                await callback.end()
+                return None
+
+            tool_name = tool_call['name']
+            tool_obj = tool_registry.get(tool_name)
+            await callback.put_thought(get_tool_display_name(tool_name, tool_obj), app_id=_extract_app_id(tool_name))
+            try:
+                result = await _execute_tool(tool_name, tool_call['input'], tool_registry, configurable)
+            except Exception as error:
+                logger.error('Tool execution error (%s): %s', tool_name, error)
+                result = f'Error executing tool: {str(error)}'
+
+            logger.info('Tool ended: %s', tool_name)
+            await _emit_calendar_status(callback, tool_name, result)
+            try:
+                safety_guard.check_context_size(result)
+            except SafetyGuardError as error:
+                await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
+                logger.error('Safety Guard blocked due to context size: %s', error)
+                await callback.end()
+                return None
+            tool_results.append({'role': 'tool', 'tool_call_id': tool_call['id'], 'content': result})
+
+        assistant_message = {
+            'role': 'assistant',
+            'content': ''.join(iteration_text),
+            'tool_calls': [
+                {
+                    'id': tool_call['id'],
+                    'type': 'function',
+                    'function': {
+                        'name': tool_call['name'],
+                        'arguments': json.dumps(tool_call['input'], separators=(',', ':')),
+                    },
+                }
+                for tool_call in tool_calls
+            ],
+        }
+        messages.append(assistant_message)
+        messages.extend(tool_results)
+
+    logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
+    return await _end_with_answer_guarantee(callback, full_response, 'openai')
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+async def next_stream_chunk(callback: AsyncStreamingCallback, task: asyncio.Task, timeout_seconds: float) -> str | None:
+    """Return the next callback chunk while supervising the producer task.
+
+    The callback queue is not a completion primitive: an uncaught producer
+    error can leave it empty forever. Race the queue receive against the
+    producer so unexpected completion is surfaced immediately, and bound an
+    otherwise silent dependency stall below the client/proxy deadline.
+    """
+    queue_get_task = asyncio.create_task(callback.queue.get())
+    try:
+        completed, _pending = await asyncio.wait(
+            {queue_get_task, task},
+            timeout=timeout_seconds,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if queue_get_task in completed:
+            return queue_get_task.result()
+
+        if task in completed:
+            try:
+                task.result()
+            except asyncio.CancelledError as error:
+                raise RuntimeError('agent producer was cancelled') from error
+            raise RuntimeError('agent producer exited without an end-of-stream callback')
+
+        raise asyncio.TimeoutError
+    finally:
+        if not queue_get_task.done():
+            queue_get_task.cancel()
+            try:
+                await queue_get_task
+            except asyncio.CancelledError:
+                pass
+
+
+async def cancel_stream_task(task: asyncio.Task) -> None:
+    """Request cancellation without letting a non-cooperative dependency hold the SSE open."""
+    if task.done():
+        return
+
+    task.cancel()
+    completed, _pending = await asyncio.wait({task}, timeout=AGENT_STREAM_CANCEL_GRACE_SECONDS)
+    if task not in completed:
+        # A dependency that suppresses cancellation must not keep a client
+        # request alive. Retain a done callback solely to consume any eventual
+        # exception rather than leaking an unhandled-task warning.
+        task.cancel()
+        task.add_done_callback(_consume_agent_task_exception)
+        logger.error('Agent stream producer ignored cancellation within %.1fs', AGENT_STREAM_CANCEL_GRACE_SECONDS)
+
+
+def _consume_agent_task_exception(task: asyncio.Task) -> None:
+    """Consume a detached task result without logging raw provider data."""
+    try:
+        task.result()
+    except asyncio.CancelledError:
+        pass
+    except Exception as error:
+        logger.error('Detached agent stream producer failed error_type=%s', type(error).__name__)
 
 
 @_traceable(name="chat.anthropic.stream", run_type="chain")
@@ -552,47 +1180,132 @@ async def execute_agentic_chat_stream(
     callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    platform: Optional[str] = None,
+    current_datetime_block: Optional[str] = None,
+    tz: Optional[str] = None,
+    setup_deadline_at: Optional[float] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
     Yields formatted chunks with "data: " or "think: " prefixes.
+    ``setup_deadline_at`` is an absolute loop-clock deadline shared with the
+    chat router so metadata + prompt/tool load use one setup budget.
     """
-    # Resolve the user's timezone once and reuse it for both the system prompt and the
-    # injected datetime block, avoiding a duplicate notification_db lookup per request.
-    tz = get_user_timezone(uid)
+    # Guard against oversized input before any setup or model call. An extremely long message (or
+    # a long history) would exceed the chat model's context window; the Anthropic call then raises
+    # input-too-long, the agent loop swallows it, and the client is left without a finalized reply
+    # ("no response"). Trim the oldest turns to fit the budget; if the newest message alone is too
+    # large, return a clear, persisted reply through the normal done: contract instead of calling
+    # the model with input that cannot fit.
+    messages, input_too_long = fit_within_budget(messages, lambda m: m.text or "", num_tokens_from_string)
+    if input_too_long:
+        logger.warning('Chat input exceeds token budget uid=%s; returning too-long reply', uid)
+        if callback_data is not None:
+            callback_data['answer'] = INPUT_TOO_LONG_MESSAGE
+            callback_data['memories_found'] = []
+            callback_data['ask_for_nps'] = False
+        yield None
+        return
 
-    # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context, tz=tz)
+    if callback_data is not None:
+        callback_data.setdefault('route', 'agentic')
 
-    # Get prompt metadata for tracing/versioning
-    prompt_name, prompt_commit, prompt_source = None, None, None
+    # Setup and post-setup TTFT use separate clocks so multi-second prompt/tool
+    # loading cannot silently consume the first-stream-event window.
+    gateway_feature_mode = False
     try:
-        from utils.observability.langsmith_prompts import get_prompt_metadata
+        # Resolve the user's timezone once and reuse it for both the system prompt and the
+        # injected datetime block, avoiding a duplicate notification_db lookup per request.
+        # These helpers perform Firestore and LangSmith I/O before the producer task exists,
+        # so they use the remaining shared setup budget instead of a second full window.
+        if setup_deadline_at is None:
+            setup_deadline_at = asyncio.get_running_loop().time() + AGENT_STREAM_SETUP_TIMEOUT_SECONDS
+        setup_remaining = setup_deadline_at - asyncio.get_running_loop().time()
+        if setup_remaining <= 0:
+            raise asyncio.TimeoutError()
+        async with asyncio.timeout(setup_remaining):
+            # BYOK Anthropic and CHAT_AGENT_ROUTE=direct stay off the managed OpenAI lane.
+            gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
+            tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
+            city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
+            system_prompt = await run_blocking(
+                db_executor, _get_agentic_qa_prompt, uid, app, messages, context=context, tz=tz, platform=platform
+            )
 
-        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
-    except Exception as e:
-        logger.error(f"Could not get prompt metadata: {e}")
+            # Get prompt metadata for tracing/versioning
+            prompt_name, prompt_commit, prompt_source = None, None, None
+            try:
+                from utils.observability.langsmith_prompts import get_prompt_metadata
 
-    # Core tools (fixed order) — always visible to Claude
-    core_tools = list(CORE_TOOLS)
+                prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
+            except Exception as error:
+                logger.error('Could not get prompt metadata error_type=%s', type(error).__name__)
 
-    # Dynamic app tools — deferred, discovered on-demand via tool search
-    app_tools = []
-    try:
-        app_tools = load_app_tools(uid)
-        if app_tools:
-            logger.info(f"Loaded {len(app_tools)} app tools (deferred via tool search)")
-    except Exception as e:
-        logger.error(f"Error loading app tools: {e}")
+            # Core tools (fixed order) — always available to the agent
+            core_tools = list(CORE_TOOLS)
 
-    # Append app tool awareness to system prompt so Claude knows to search for them
+            # Dynamic app tools — deferred for Anthropic; exposed directly in managed mode
+            app_tools = []
+            try:
+                app_tools = await run_blocking(db_executor, load_app_tools, uid)
+                if app_tools:
+                    logger.info(f"Loaded {len(app_tools)} app tools (deferred via tool search)")
+            except Exception as error:
+                logger.error('Error loading app tools error_type=%s', type(error).__name__)
+    except asyncio.TimeoutError:
+        logger.warning(
+            'Agent stream timed out before the producer started uid=%s reason=setup_timeout route=agentic', uid
+        )
+        if callback_data is not None:
+            callback_data['error'] = 'setup_timeout'
+            # Persist the typed timeout through the normal done: contract so the
+            # router does not overwrite it with the generic canned fallback.
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+        yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
+        return
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:
+        logger.error(
+            'Agent stream setup failed uid=%s reason=setup_failure route=agentic error_type=%s',
+            uid,
+            type(error).__name__,
+        )
+        if callback_data is not None:
+            callback_data['error'] = type(error).__name__
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
+        yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
+        return
+
+    # Emit a client-visible progress event immediately after setup so the SSE
+    # body is never silent while waiting for the first model token. This also
+    # starts the post-setup first-event clock with a fresh budget.
+    first_event_deadline = asyncio.get_running_loop().time() + AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+    yield f'think: {AGENT_STREAM_SETUP_PROGRESS}'
+
+    # Append app tool awareness to the system prompt. Anthropic discovers deferred app tools
+    # through its server-side search tool; the OpenAI-compatible gateway receives those tools
+    # directly and must be told to call them by name.
     if app_tools:
         app_names = set()
         for t in app_tools:
             # Tool names are prefixed with app_id; extract the human-readable app name from description
             app_names.add(t.name)
         app_tool_names = ", ".join(sorted(app_names))
-        system_prompt += f"""
+        if gateway_feature_mode:
+            system_prompt += f"""
+
+<available_app_tools>
+You have access to additional tools from the user's connected apps. Call the relevant tool directly when the user asks about an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.).
+
+Available app tool names: {app_tool_names}
+
+IMPORTANT: Always call a matching integration tool when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
+</available_app_tools>"""
+        else:
+            system_prompt += f"""
 
 <available_app_tools>
 You have access to additional tools from the user's connected apps. These tools are discoverable via the tool_search_tool_regex tool. When the user asks you to do something related to an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.), search for the relevant tool using tool_search_tool_regex with a keyword like "github", "issue", "tweet", etc.
@@ -610,15 +1323,28 @@ IMPORTANT: Always search for and use these tools when relevant. Never tell the u
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
-    # Convert tools to Anthropic format (core = visible, app = defer_loading)
+    # Build the canonical tool schemas once. Direct mode keeps Anthropic's shape;
+    # managed mode converts function tools to the OpenAI-compatible shape below.
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
+    if gateway_feature_mode:
+        # Anthropic's native web_search server tool is not understood by the
+        # OpenAI-compatible gateway. Expose the existing Perplexity-backed
+        # function tool in the managed lane and register the same object for
+        # execution; direct Anthropic mode keeps the native server tool above.
+        tool_registry = dict(tool_registry)
+        tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
+        tool_schemas = [
+            *tool_schemas,
+            _langchain_tool_to_anthropic(perplexity_web_search_tool, defer_loading=False),
+        ]
+        tool_schemas = _convert_anthropic_tools_to_openai(tool_schemas)
 
-    # Convert messages to Anthropic format. The current datetime is injected into the user
-    # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
+    # Build the provider-neutral role/content message shape. The current datetime is injected
+    # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
     anthropic_messages = _messages_to_anthropic(messages)
-    anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
-
-    raise_if_gateway_feature_mode_blocks_direct_model_surface('chat_agent.anthropic_stream')
+    anthropic_messages = _inject_current_datetime(
+        anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
+    )
 
     callback = AsyncStreamingCallback()
 
@@ -653,9 +1379,12 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     full_response = []
     tool_usage_count = 0
 
-    # Start agent task
+    # Start the provider-specific agent task. Direct mode retains the native Anthropic
+    # Messages contract for BYOK/specialist callers; managed feature mode uses the gateway's
+    # OpenAI-compatible chat-completions contract.
+    agent_runner = _run_openai_agent_stream if gateway_feature_mode else _run_anthropic_agent_stream
     task = asyncio.create_task(
-        _run_anthropic_agent_stream(
+        agent_runner(
             system_prompt,
             anthropic_messages,
             tool_schemas,
@@ -667,23 +1396,73 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         )
     )
 
-    # Stream from callback queue
+    def keep_streamed_answer() -> bool:
+        """Preserve what already reached the user when the stream stops early.
+
+        The bounded deadline and failure paths cancel the producer, but the
+        tokens yielded before that are a real answer the user watched arrive.
+        Returns whether there was anything to keep.
+        """
+        if callback_data is None:
+            return False
+        streamed = ''.join(full_response)
+        if not streamed:
+            return False
+        callback_data['answer'] = streamed
+        callback_data['memories_found'] = conversations_collected if conversations_collected else []
+        callback_data['ask_for_nps'] = tool_usage_count > 0
+        chart_data_from_config = configurable.get('chart_data')
+        if chart_data_from_config:
+            callback_data['chart_data'] = chart_data_from_config
+        return True
+
+    # Stream from callback queue. Setup already emitted a think: progress event for the
+    # client, but the first-event clock below still bounds silence from the producer
+    # (post-setup TTFT) separately from that setup progress.
     try:
+        started_at = asyncio.get_running_loop().time()
+        received_first_event = False
         while True:
-            chunk = await callback.queue.get()
+            remaining_seconds = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - started_at)
+            if remaining_seconds <= 0:
+                raise asyncio.TimeoutError
+
+            wait_timeout = min(
+                (
+                    max(0, first_event_deadline - asyncio.get_running_loop().time())
+                    if not received_first_event
+                    else AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS
+                ),
+                remaining_seconds,
+            )
+            try:
+                chunk = await next_stream_chunk(callback, task, wait_timeout)
+            except asyncio.TimeoutError:
+                # A successful first status/token means the agent can be in a
+                # deliberately long tool call (some app tools allow 120s).
+                # Keep the proxy/client stream alive until the hard task cap.
+                if received_first_event and remaining_seconds > wait_timeout:
+                    yield f'think: {AGENT_STREAM_PROGRESS_HEARTBEAT}'
+                    continue
+                raise
             if chunk is None:
                 break
 
-            if chunk.startswith("think: "):
+            received_first_event = True
+            if chunk.startswith("think: ") and chunk != f'think: {AGENT_STREAM_PROGRESS_HEARTBEAT}':
                 tool_usage_count += 1
 
             yield chunk
 
-        await task
+        producer_failure = await task
 
         # Store results in callback_data
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)
+            # Reported even though the stream ended cleanly, so the router can tell a failed
+            # turn from one the model ended empty on its own.
+            if producer_failure:
+                callback_data['error'] = producer_failure
             callback_data['memories_found'] = conversations_collected if conversations_collected else []
             callback_data['ask_for_nps'] = tool_usage_count > 0
             chart_data_from_config = configurable.get('chart_data')
@@ -691,13 +1470,43 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
                 callback_data['chart_data'] = chart_data_from_config
             logger.info(f"Collected {len(callback_data['memories_found'])} conversations for citation")
 
-    except asyncio.CancelledError:
-        task.cancel()
-        raise
-    except Exception as e:
-        logger.error(f"Error in execute_agentic_chat_stream: {e}")
-        traceback.print_exc()
+    except asyncio.TimeoutError:
+        logger.warning('Agent stream reached its bounded deadline uid=%s reason=idle_timeout route=agentic', uid)
+        await cancel_stream_task(task)
         if callback_data is not None:
-            callback_data['error'] = str(e)
+            callback_data['error'] = 'idle_timeout'
+        if keep_streamed_answer():
+            yield None
+            return
+        if callback_data is not None:
+            # Persist the typed timeout so the router emits one coherent done: frame
+            # instead of a second generic canned sorry bubble.
+            callback_data['answer'] = AGENT_STREAM_TIMEOUT_MESSAGE
+        yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+        yield None
+        return
+    except asyncio.CancelledError:
+        await cancel_stream_task(task)
+        raise
+    except Exception as error:
+        logger.error(
+            'Agent stream failed uid=%s reason=stream_failure route=agentic error_type=%s',
+            uid,
+            type(error).__name__,
+        )
+        await cancel_stream_task(task)
+        if callback_data is not None:
+            callback_data['error'] = type(error).__name__
+        if keep_streamed_answer():
+            yield None
+            return
+        if callback_data is not None:
+            callback_data['answer'] = AGENT_STREAM_FAILURE_MESSAGE
+        yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+        yield None
+        return
+    finally:
+        if not task.done():
+            task.cancel()
 
     yield None  # Signal completion

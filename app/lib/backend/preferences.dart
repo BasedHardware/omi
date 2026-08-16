@@ -49,16 +49,62 @@ class SharedPreferencesUtil {
 
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
+    if (value.id.isNotEmpty) {
+      final devices = _upsertBtDevice(value);
+      saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    }
   }
 
   Future<void> btDeviceSet(BtDevice value) async {
     await saveString('btDevice', jsonEncode(value.toJson()));
+    await btDeviceAdd(value);
   }
 
   BtDevice get btDevice {
-    final String device = getString('btDevice') ?? '';
+    final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
+  }
+
+  List<BtDevice> get btDevices {
+    final devices = <BtDevice>[];
+    for (final encodedDevice in getStringList('btDevices')) {
+      try {
+        final decoded = jsonDecode(encodedDevice);
+        if (decoded is Map<String, dynamic>) {
+          final device = BtDevice.fromJson(decoded);
+          if (device.id.isNotEmpty && !devices.any((savedDevice) => savedDevice.id == device.id)) {
+            devices.add(device);
+          }
+        }
+      } catch (e) {
+        Logger.debug('Error decoding saved device: $e');
+      }
+    }
+
+    final legacyDevice = btDevice;
+    if (devices.isEmpty && legacyDevice.id.isNotEmpty) {
+      devices.add(legacyDevice);
+    }
+    return devices;
+  }
+
+  Future<void> btDeviceAdd(BtDevice value) async {
+    if (value.id.isEmpty) return;
+    final devices = _upsertBtDevice(value);
+    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    await saveString('btDevice', jsonEncode(value.toJson()));
+  }
+
+  List<BtDevice> _upsertBtDevice(BtDevice value) {
+    final devices = btDevices;
+    final index = devices.indexWhere((device) => device.id == value.id);
+    if (index >= 0) {
+      devices[index] = value;
+    } else {
+      devices.add(value);
+    }
+    return devices;
   }
 
   set deviceName(String value) => saveString('deviceName', value);
@@ -83,6 +129,13 @@ class SharedPreferencesUtil {
   bool get batchModeEnabled => getBool('batchModeEnabled');
 
   set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
+  // Phone-mic batch capture marker. false = explicit Transcribe Later (files
+  // named audio_omibatchphone_...), true = automatic offline fallback (files
+  // named audio_omibatchphoneauto_...). Read natively as flutter.phoneBatchAuto.
+  bool get phoneBatchAuto => getBool('phoneBatchAuto');
+
+  set phoneBatchAuto(bool value) => saveBool('phoneBatchAuto', value);
 
   // Transcribe Later: pause capture (native writer drops packets, keeps the file
   // open) so the user can mute a sensitive moment and resume the same recording.
@@ -421,6 +474,11 @@ class SharedPreferencesUtil {
 
   set userPrimaryLanguage(String value) => saveString('userPrimaryLanguage', value);
 
+  // Last served picker options, JSON name -> code.
+  String get cachedAvailableLanguages => getString('cachedAvailableLanguages');
+
+  set cachedAvailableLanguages(String value) => saveString('cachedAvailableLanguages', value);
+
   bool get hasSetPrimaryLanguage => getBool('hasSetPrimaryLanguage');
 
   set hasSetPrimaryLanguage(bool value) => saveBool('hasSetPrimaryLanguage', value);
@@ -527,13 +585,18 @@ class SharedPreferencesUtil {
 
   // Pending memories - memories created offline that need to be synced
   List<Memory> get pendingMemories {
-    final memories = getStringList('pendingMemories');
-    return memories.map((e) => Memory.fromJson(jsonDecode(e))).toList();
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return [];
+    _scopeLegacyUserData(ownerUid);
+    final memories = getStringList(_userScopedKey('pendingMemories', ownerUid));
+    return memories.map((e) => Memory.fromJson(jsonDecode(e))).where((memory) => memory.uid == ownerUid).toList();
   }
 
   set pendingMemories(List<Memory> value) {
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
     final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
-    saveStringList('pendingMemories', memories);
+    saveStringList(_userScopedKey('pendingMemories', ownerUid), memories);
   }
 
   void addPendingMemory(Memory memory) {
@@ -542,14 +605,22 @@ class SharedPreferencesUtil {
     pendingMemories = memories;
   }
 
-  void removePendingMemory(String memoryId) {
-    final List<Memory> memories = pendingMemories;
+  void removePendingMemory(String memoryId, {String? ownerUid}) {
+    final owner = ownerUid ?? uid;
+    if (owner.isEmpty) return;
+    final encoded = getStringList(_userScopedKey('pendingMemories', owner));
+    final memories = encoded.map((e) => Memory.fromJson(jsonDecode(e))).toList();
     memories.removeWhere((m) => m.id == memoryId);
-    pendingMemories = memories;
+    saveStringList(
+      _userScopedKey('pendingMemories', owner),
+      memories.map((memory) => jsonEncode(memory.toJson())).toList(),
+    );
   }
 
   void clearPendingMemories() {
-    saveStringList('pendingMemories', []);
+    final ownerUid = uid;
+    if (ownerUid.isEmpty) return;
+    saveStringList(_userScopedKey('pendingMemories', ownerUid), []);
   }
 
   List<Person> get cachedPeople {
@@ -633,6 +704,76 @@ class SharedPreferencesUtil {
 
   String get fullName => '$givenName $familyName'.trim();
 
+  /// Clears persisted user identity and server-backed display caches while
+  /// preserving device, onboarding, permissions, and offline recording state.
+  void clearUserDisplayCache() {
+    final ownerUid = uid;
+    if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
+    authToken = '';
+    tokenExpirationTime = 0;
+    uid = '';
+    email = '';
+    givenName = '';
+    familyName = '';
+    cachedConversations = <ServerConversation>[];
+    cachedMessages = <ServerMessage>[];
+    cachedPeople = <Person>[];
+    appsList = <App>[];
+    modifiedConversationDetails = null;
+    cachedSingleLanguageMode = false;
+    cachedTranscriptionVocabulary = <String>[];
+    userPrimaryLanguage = '';
+    hasSetPrimaryLanguage = false;
+    hasSpeakerProfile = false;
+    selectedChatAppId = 'no_selected';
+    lastUsedSummarizationAppId = '';
+    preferredSummarizationAppId = '';
+    calendarEnabled = false;
+    _preferences?.remove('cachedMemories');
+  }
+
+  String _userScopedKey(String baseKey, String ownerUid) => '$baseKey:$ownerUid';
+
+  void scopeLegacyUserDataForCurrentUser() {
+    final ownerUid = uid;
+    if (ownerUid.isNotEmpty) _scopeLegacyUserData(ownerUid);
+  }
+
+  void _scopeLegacyUserData(String ownerUid) {
+    final preferences = _preferences;
+    if (preferences == null || ownerUid.isEmpty) return;
+
+    final pendingKey = _userScopedKey('pendingMemories', ownerUid);
+    final legacyPending = preferences.getStringList('pendingMemories');
+    if (legacyPending != null) {
+      final scopedPending = preferences.getStringList(pendingKey) ?? const <String>[];
+      preferences.setStringList(pendingKey, {...scopedPending, ...legacyPending}.toList());
+    }
+    preferences.remove('pendingMemories');
+
+    final goalsKey = _userScopedKey('goals_tracker_local_goals', ownerUid);
+    final legacyGoals = preferences.getString('goals_tracker_local_goals');
+    if (legacyGoals != null) {
+      final scopedGoals = preferences.getString(goalsKey);
+      preferences.setString(goalsKey, _mergeJsonLists(scopedGoals, legacyGoals));
+    }
+    preferences.remove('goals_tracker_local_goals');
+  }
+
+  String _mergeJsonLists(String? existing, String legacy) {
+    try {
+      final existingItems = existing == null ? <dynamic>[] : jsonDecode(existing) as List<dynamic>;
+      final legacyItems = jsonDecode(legacy) as List<dynamic>;
+      final merged = <String, dynamic>{};
+      for (final item in [...existingItems, ...legacyItems]) {
+        merged[jsonEncode(item)] = item;
+      }
+      return jsonEncode(merged.values.toList());
+    } catch (_) {
+      return existing ?? legacy;
+    }
+  }
+
   String get foundOmiSource => getString('foundOmiSource');
 
   set foundOmiSource(String value) => saveString('foundOmiSource', value);
@@ -644,16 +785,6 @@ class SharedPreferencesUtil {
   set companionAssociationPrompted(bool value) => saveBool('companionAssociationPrompted', value);
 
   bool get companionAssociationPrompted => getBool('companionAssociationPrompted');
-
-  //------------------------ TestFlight API Environment ----------------------//
-
-  /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
-  /// Default is 'production' so new TestFlight installs hit prod by default.
-  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'production');
-
-  set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
-
-  bool get testFlightUseStagingApi => testFlightApiEnvironment == 'staging';
 
   //--------------------------- Announcements ---------------------------------//
 

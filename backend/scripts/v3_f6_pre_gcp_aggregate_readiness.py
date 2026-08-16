@@ -7,7 +7,11 @@ PRE_GCP_READY result means the branch is locally ready to move to a host with
 GCP access; it does not approve dev/prod evidence execution or any rollout.
 """
 
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
+from typing import Any, Dict
 
 import json
 import sys
@@ -20,7 +24,7 @@ if str(BACKEND_DIR) not in sys.path:
 from testing.memory.v3_f6.local_smoke import build_report_from_current_local_contracts
 
 
-def main() -> dict:
+def main() -> Dict[str, Any]:
     report = build_report_from_current_local_contracts()
     print(json.dumps(report, sort_keys=True, indent=2))
     return report

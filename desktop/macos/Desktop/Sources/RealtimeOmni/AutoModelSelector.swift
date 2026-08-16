@@ -19,73 +19,74 @@ import Foundation
 
 @MainActor
 final class AutoModelSelector {
-    static let shared = AutoModelSelector()
+  static let shared = AutoModelSelector()
 
-    private let pickKey = "realtimeOmniAutoPick"
-    private let pickDateKey = "realtimeOmniAutoPickDate"
-    private let refreshInterval: TimeInterval = 24 * 60 * 60
+  private let pickKey = "realtimeOmniAutoPick"
+  private let pickDateKey = "realtimeOmniAutoPickDate"
+  private let refreshInterval: TimeInterval = 24 * 60 * 60
 
-    private init() {}
+  private init() {}
 
-    /// The current cached pick, if any.
-    var currentPick: RealtimeOmniProvider? {
-        UserDefaults.standard.string(forKey: pickKey).flatMap(RealtimeOmniProvider.init(rawValue:))
+  /// The current cached pick, if any.
+  var currentPick: RealtimeOmniProvider? {
+    UserDefaults.standard.string(forKey: pickKey).flatMap(RealtimeOmniProvider.init(rawValue:))
+  }
+
+  private var lastRefresh: Date? {
+    UserDefaults.standard.object(forKey: pickDateKey) as? Date
+  }
+
+  /// Call at launch and once a day. No-op if a fresh pick already exists.
+  func refreshIfStale() {
+    if let last = lastRefresh, Date().timeIntervalSince(last) < refreshInterval, currentPick != nil {
+      return
     }
+    Task { await refresh() }
+  }
 
-    private var lastRefresh: Date? {
-        UserDefaults.standard.object(forKey: pickDateKey) as? Date
-    }
+  /// Lets a backend-provided pick win over the local computation.
+  func applyServerPick(_ provider: RealtimeOmniProvider) {
+    store(provider)
+  }
 
-    /// Call at launch and once a day. No-op if a fresh pick already exists.
-    func refreshIfStale() {
-        if let last = lastRefresh, Date().timeIntervalSince(last) < refreshInterval, currentPick != nil {
-            return
-        }
-        Task { await refresh() }
+  /// Read the daily pick from the omi backend (which runs the Artificial
+  /// Analysis quality/speed scoring server-side, keeping the AA key off the
+  /// client). Falls back to Gemini only if we've never had a pick.
+  func refresh() async {
+    let httpBase = DesktopBackendEnvironment.pythonBaseURL()
+      .replacingOccurrences(of: "wss://", with: "https://")
+      .replacingOccurrences(of: "ws://", with: "http://")
+    let base = httpBase.hasSuffix("/") ? String(httpBase.dropLast()) : httpBase
+    guard let url = URL(string: "\(base)/v1/auto/model-pick") else {
+      if currentPick == nil { store(.geminiFlashLive) }
+      return
     }
+    do {
+      var req = URLRequest(url: url)
+      req.timeoutInterval = 15
+      if let auth = try? await AuthService.shared.getAuthHeader() {
+        req.setValue(auth, forHTTPHeaderField: "Authorization")
+      }
+      let (data, resp) = try await URLSession.shared.data(for: req)
+      guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+        let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let raw = obj["provider"] as? String,
+        let provider = RealtimeOmniProvider(rawValue: raw)
+      else {
+        if currentPick == nil { store(.geminiFlashLive) }
+        return
+      }
+      store(provider)
+    } catch {
+      if currentPick == nil { store(.geminiFlashLive) }
+    }
+  }
 
-    /// Lets a backend-provided pick win over the local computation.
-    func applyServerPick(_ provider: RealtimeOmniProvider) {
-        store(provider)
-    }
-
-    /// Read the daily pick from the omi backend (which runs the Artificial
-    /// Analysis quality/speed scoring server-side, keeping the AA key off the
-    /// client). Falls back to Gemini only if we've never had a pick.
-    func refresh() async {
-        let httpBase = DesktopBackendEnvironment.pythonBaseURL()
-            .replacingOccurrences(of: "wss://", with: "https://")
-            .replacingOccurrences(of: "ws://", with: "http://")
-        let base = httpBase.hasSuffix("/") ? String(httpBase.dropLast()) : httpBase
-        guard let url = URL(string: "\(base)/v1/auto/model-pick") else {
-            if currentPick == nil { store(.geminiFlashLive) }
-            return
-        }
-        do {
-            var req = URLRequest(url: url)
-            req.timeoutInterval = 15
-            if let auth = try? await AuthService.shared.getAuthHeader() {
-                req.setValue(auth, forHTTPHeaderField: "Authorization")
-            }
-            let (data, resp) = try await URLSession.shared.data(for: req)
-            guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let raw = obj["provider"] as? String,
-                  let provider = RealtimeOmniProvider(rawValue: raw) else {
-                if currentPick == nil { store(.geminiFlashLive) }
-                return
-            }
-            store(provider)
-        } catch {
-            if currentPick == nil { store(.geminiFlashLive) }
-        }
-    }
-
-    private func store(_ provider: RealtimeOmniProvider) {
-        UserDefaults.standard.set(provider.rawValue, forKey: pickKey)
-        UserDefaults.standard.set(Date(), forKey: pickDateKey)
-        NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
-        log("AutoModelSelector: picked \(provider.displayName)")
-    }
+  private func store(_ provider: RealtimeOmniProvider) {
+    UserDefaults.standard.set(provider.rawValue, forKey: pickKey)
+    UserDefaults.standard.set(Date(), forKey: pickDateKey)
+    NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
+    log("AutoModelSelector: picked \(provider.displayName)")
+  }
 
 }

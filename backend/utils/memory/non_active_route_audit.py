@@ -16,6 +16,10 @@ from database.memory_collections import MemoryCollections
 from database.memory_non_active_routes import NonActiveRoute, PersistedNonActiveRouteOutcome
 
 
+def _empty_audit_evidence() -> List["NonActiveRouteAuditEvidence"]:
+    return []
+
+
 class NonActiveRouteAuditEvidence(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
@@ -41,7 +45,7 @@ class NonActiveRouteAuditReport(BaseModel):
     status: str
     total_accounted_outcomes: int
     counts_by_route: Dict[str, int]
-    evidence: List[NonActiveRouteAuditEvidence] = Field(default_factory=list)
+    evidence: List[NonActiveRouteAuditEvidence] = Field(default_factory=_empty_audit_evidence)
     missing_source_ids: List[str] = Field(default_factory=list)
     red_reasons: List[str] = Field(default_factory=list)
 
@@ -156,7 +160,7 @@ def fetch_non_active_route_audit_report(
     *,
     run_id: Optional[str] = None,
     expected_source_ids: Optional[Iterable[str]] = None,
-    db_client=db,
+    db_client: Any = db,
 ) -> NonActiveRouteAuditReport:
     """Fetch route-store docs and build the memory non-active no-silent-loss audit report."""
 
@@ -164,7 +168,7 @@ def fetch_non_active_route_audit_report(
     return build_non_active_route_audit_report(uid, route_docs, expected_source_ids=expected_source_ids)
 
 
-def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client):
+def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client: Any) -> List[Dict[str, Any]]:
     collection_path = MemoryCollections(uid=uid).non_active_memory_routes
     query = db_client.collection(collection_path)
     if run_id:

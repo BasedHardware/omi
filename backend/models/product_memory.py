@@ -4,9 +4,23 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from models.memory_evidence import MemoryEvidence, SourceState
+
+RESTRICTED_SENSITIVITY_LABELS = frozenset(
+    {
+        "credential",
+        "secret",
+        "financial",
+        "health",
+        "intimate",
+        "minor",
+        "minors",
+        "workplace_confidential",
+        "identity_authentication",
+    }
+)
 
 
 class MemoryLayer(str, Enum):
@@ -127,6 +141,9 @@ class MemoryItem(BaseModel):
     predicate: Optional[str] = None
     arguments: Dict[str, Any] = Field(default_factory=dict)
     kg_extracted: bool = False
+    graph_ready: bool = False
+    graph_assertion_id: Optional[str] = None
+    graph_plan_hash: Optional[str] = None
 
     @field_validator("memory_id", "uid", "visibility")
     @classmethod
@@ -154,6 +171,19 @@ class MemoryItem(BaseModel):
     def normalize_sensitivity(cls, value: List[str]) -> List[str]:
         return sorted({label.strip().lower() for label in value if label and label.strip()})
 
+    @computed_field(return_type=List[str])
+    @property
+    def source_ids(self) -> List[str]:
+        """Exact query projection of the current embedded evidence identities."""
+        return sorted(
+            {
+                source_id
+                for evidence in self.evidence
+                for source_id in (evidence.source_id, evidence.conversation_id)
+                if source_id
+            }
+        )
+
     @model_validator(mode="after")
     def validate_tier_invariants(self):
         if self.updated_at < self.captured_at:
@@ -172,6 +202,11 @@ class MemoryItem(BaseModel):
                 raise ValueError("active long_term memory requires ledger_sequence")
             if self.processing_state != ProcessingState.processed:
                 raise ValueError("active long_term memory requires processing_state=processed")
+            admission = (self.promotion or {}).get("admission_receipt")
+            if admission is not None and (
+                not self.graph_ready or not self.graph_assertion_id or not self.graph_plan_hash
+            ):
+                raise ValueError("admitted long_term memory requires an atomic graph assertion")
         if self.source_state == SourceState.active and not self.user_asserted:
             if not any(e.source_state == SourceState.active for e in self.evidence):
                 raise ValueError("active source memory requires at least one active evidence record")
@@ -204,18 +239,7 @@ def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datet
 
 
 def _has_restricted_sensitivity(item: MemoryItem) -> bool:
-    restricted = {
-        "credential",
-        "secret",
-        "financial",
-        "health",
-        "intimate",
-        "minor",
-        "minors",
-        "workplace_confidential",
-        "identity_authentication",
-    }
-    return bool(set(item.sensitivity_labels).intersection(restricted))
+    return bool(set(item.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS))
 
 
 def is_default_access_eligible(

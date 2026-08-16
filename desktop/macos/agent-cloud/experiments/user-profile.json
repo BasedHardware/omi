@@ -1,0 +1,62 @@
+{
+  "_source": "PostHog project 302298 (Omi), HogQL over trailing 30 days, pulled 2026-07-22 via Composio",
+  "_purpose": "Ground agent experiments in the real average omi user instead of synthetic uniform distributions. Two profiles: the light median user and the heavy churn-tail user.",
+  "platform_mix_users": { "iOS": 6801, "macOS": 4793, "Android": 3812, "iPadOS": 182, "Windows": 80 },
+  "chat": {
+    "note": "Chat is mobile-dominated; chat ERRORS are desktop-dominated (bridge/pi-mono/acp).",
+    "messages_per_user_30d": { "p50": 3, "p90": 23, "p99": 103, "max": 3627 },
+    "voice_input_per_user_30d": { "p50": 5, "p90": 36, "p99": 141 },
+    "tools_per_message_per_user": { "p50": 0, "p90": 2.3, "p99": 43 },
+    "channel_events_30d": { "Chat Message Sent": 25720, "Chat Voice Input Used": 25137 },
+    "channel_users_30d": { "Chat Message Sent": 2211, "Chat Voice Input Used": 1681 }
+  },
+  "data_volume_per_user_30d": {
+    "Task Extracted": { "p50": 37, "p90": 578, "p99": 1633 },
+    "Memory Created": { "p50": 7, "p90": 182, "p99": 787 },
+    "Action Item Completed": { "p50": 7, "p90": 94, "p99": 237 },
+    "Phone Mic Recording Started": { "p50": 3, "p90": 32, "p99": 119 }
+  },
+  "tool_mix_30d": {
+    "_note": "chat_tool_call_completed by tool_name; calls / distinct users. search_memories has the widest reach; ToolSearch is the visible SDK schema-defer tax.",
+    "bash": { "calls": 13004, "users": 390 },
+    "read": { "calls": 3258, "users": 377 },
+    "capture_screen": { "calls": 2620, "users": 368 },
+    "execute_sql": { "calls": 2228, "users": 332 },
+    "search_memories": { "calls": 1298, "users": 597 },
+    "spawn_agent": { "calls": 832, "users": 154 },
+    "semantic_search": { "calls": 490, "users": 226 },
+    "search_conversations": { "calls": 429, "users": 179 },
+    "get_action_items": { "calls": 383, "users": 281 },
+    "get_daily_recap": { "calls": 361, "users": 242 },
+    "ToolSearch": { "calls": 355, "users": 44 },
+    "get_memories": { "calls": 268, "users": 209 }
+  },
+  "chat_agent_error_corpus_30d": {
+    "_note": "error_code is NULL on all prod events (taxonomy from #10256 not yet shipped); these are raw strings. Drives AgentErrorClassifierTests.",
+    "Response stopped. (user stop, not a failure)": { "events": 616, "users": 296 },
+    "AI not available: bridge failed to start": { "events": 448, "users": 197 },
+    "Something went wrong. Please try again. (opaque)": { "events": 290, "users": 66 },
+    "AI service is temporarily unavailable.": { "events": 71, "users": 28 },
+    "Free plan limit (all variants)": { "events": 79, "users": 41 },
+    "Agent mode/provider misconfig (Local Claude / Managed / pinned acp / Hermes / OpenClaw)": { "events": 121, "users": 32 },
+    "Authentication required": { "events": 35, "users": 17 },
+    "Tool schema (web_search tool_choice + tool names must be unique)": { "events": 40, "users": 14 },
+    "A response is already running": { "events": 25, "users": 9 },
+    "credit balance too low": { "events": 9, "users": 4 },
+    "local data (no column named)": { "events": 6, "users": 1 },
+    "byok_validation_failed": { "events": 6, "users": 2 }
+  },
+  "simulation_profiles": {
+    "median_mobile_user": {
+      "screenshots": 0,
+      "tasks": 37, "task_dup_rate": 0.63,
+      "memories": 7, "conversations": 12,
+      "chat_style": "3 short queries / 30d, voice-first, median 0 tool calls per message"
+    },
+    "churn_tail_desktop_user": {
+      "screenshots": 600000,
+      "tasks": 1600, "memories": 787,
+      "chat_style": "100+ queries, up to 43 tool calls/message (runaway loops), bash/read/execute_sql/spawn_agent"
+    }
+  }
+}

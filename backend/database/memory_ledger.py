@@ -2,17 +2,49 @@ import copy
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
-from google.cloud.firestore_v1 import transactional
+from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import projection_repair
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from models.memories import confidence_fields_for_evidence
+from models.memory_state_head import (
+    trusted_memory_state_head_fields_from_control,
+    trusted_memory_state_head_fields_from_state,
+)
 from ._client import db
+
+T = TypeVar("T")
+
+
+def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
+    """Create an isolated SDK transaction wrapper for every invocation.
+
+    Firestore's ``_Transactional`` wrapper stores mutable retry IDs. Reusing one
+    module-level instance across request threads can cross-contaminate retries,
+    so defer constructing it until each call while preserving the typed surface.
+    """
+
+    @wraps(func)
+    def invoke(transaction: Any, *args: Any, **kwargs: Any) -> T:
+        wrapped = cast(Callable[..., T], transactional(func))
+        return wrapped(transaction, *args, **kwargs)
+
+    return invoke
+
+
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    """Typed adapter for Firestore DocumentSnapshot.to_dict() (SDK stub gap)."""
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
 
 users_collection = 'users'
 memory_state_collection = 'memory_state'
 memory_state_document = 'head'
+memory_apply_control_document = 'apply_control'
 memory_commits_collection = 'memory_commits'
 
 
@@ -23,7 +55,40 @@ class HeadConflict(Exception):
         self.current_head = current_head
 
 
-def mutation(mutation_type: str, **payload) -> Dict[str, Any]:
+def _state_head_write_payload(
+    *,
+    transaction: Any,
+    user_ref: Any,
+    uid: str,
+    state: Dict[str, Any],
+    commit: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Keep canonical trusted fields when the legacy ledger advances its own head.
+
+    The legacy ledger's ``current_head_commit_id`` is independent from the
+    canonical apply stream's ``head_commit_id``.  Older ledger writes replaced
+    the shared document and erased the canonical fields.  If an old write has
+    already clobbered them, repair only from the transactional canonical control
+    record; do not fabricate a trusted generation.
+    """
+    trusted_fields = trusted_memory_state_head_fields_from_state(state, uid=uid)
+    if trusted_fields is None:
+        control_ref = user_ref.collection(memory_state_collection).document(memory_apply_control_document)
+        control_snapshot = control_ref.get(transaction=transaction)
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        trusted_fields = trusted_memory_state_head_fields_from_control(control, uid=uid)
+
+    payload = {
+        'current_head_commit_id': commit['commit_id'],
+        'projection_version': 1,
+        'updated_at': commit['commit_time'],
+    }
+    if trusted_fields is not None:
+        payload.update(trusted_fields)
+    return payload
+
+
+def mutation(mutation_type: str, **payload: Any) -> Dict[str, Any]:
     return {'type': mutation_type, **payload}
 
 
@@ -104,7 +169,7 @@ def reassign_fact_subject(fact_id: str, old: Optional[str], new: Optional[str]) 
     return mutation('reassign_fact_subject', fact_id=fact_id, old=old, new=new)
 
 
-def _json_default(value: Any):
+def _json_default(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.astimezone(timezone.utc).isoformat()
     return str(value)
@@ -173,20 +238,23 @@ def append_commit(
     commit_time: Optional[datetime] = None,
     projection_writer: Optional[Callable[[Any], None]] = None,
     use_current_head: bool = False,
-    firestore_client=None,
+    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    database = firestore_client or db
-    transaction = database.transaction()
-    result = _append_commit_transaction(
-        transaction,
-        database,
-        uid,
-        parent_commit_id,
-        mutations,
-        run_id,
-        commit_time,
-        projection_writer,
-        use_current_head,
+    database: Any = firestore_client or db
+    result = run_with_transaction_contention_retry(
+        database.transaction,
+        lambda transaction: _append_commit_transaction(
+            transaction,
+            database,
+            uid,
+            parent_commit_id,
+            mutations,
+            run_id,
+            commit_time,
+            projection_writer,
+            use_current_head,
+        ),
+        operation_name="memory_ledger_append",
     )
     if result.get('applied'):
         projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
@@ -201,29 +269,32 @@ def append_commit_with_builder(
     run_id: Optional[str] = None,
     commit_time: Optional[datetime] = None,
     use_current_head: bool = False,
-    firestore_client=None,
+    firestore_client: Any = None,
 ) -> Dict[str, Any]:
-    database = firestore_client or db
-    transaction = database.transaction()
-    result = _append_commit_with_builder_transaction(
-        transaction,
-        database,
-        uid,
-        parent_commit_id,
-        mutation_builder,
-        run_id,
-        commit_time,
-        use_current_head,
+    database: Any = firestore_client or db
+    result = run_with_transaction_contention_retry(
+        database.transaction,
+        lambda transaction: _append_commit_with_builder_transaction(
+            transaction,
+            database,
+            uid,
+            parent_commit_id,
+            mutation_builder,
+            run_id,
+            commit_time,
+            use_current_head,
+        ),
+        operation_name="memory_ledger_append_with_builder",
     )
     if result.get('applied'):
         projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 
-@transactional
+@_typed_transactional
 def _append_commit_transaction(
-    transaction,
-    database,
+    transaction: Any,
+    database: Any,
     uid: str,
     parent_commit_id: Optional[str],
     mutations: List[Dict[str, Any]],
@@ -235,7 +306,7 @@ def _append_commit_transaction(
     user_ref = database.collection(users_collection).document(uid)
     state_ref = user_ref.collection(memory_state_collection).document(memory_state_document)
     state_snapshot = state_ref.get(transaction=transaction)
-    state = state_snapshot.to_dict() if state_snapshot.exists else {}
+    state: Dict[str, Any] = _typed_doc(state_snapshot) if state_snapshot.exists else {}
     current_head = state.get('current_head_commit_id')
     expected_parent = current_head if use_current_head else parent_commit_id
 
@@ -244,30 +315,34 @@ def _append_commit_transaction(
     commit_snapshot = commit_ref.get(transaction=transaction)
 
     if commit_snapshot.exists:
-        return {'commit': commit_snapshot.to_dict(), 'applied': False}
+        return {'commit': _typed_doc(commit_snapshot), 'applied': False}
 
     if current_head != expected_parent:
         raise HeadConflict(expected_parent, current_head)
+
+    # Build the state-head payload (including any apply_control fallback read)
+    # before staging any writes: Firestore forbids a transactional read after a
+    # write and raises ReadAfterWriteError otherwise.
+    state_head_payload = _state_head_write_payload(
+        transaction=transaction,
+        user_ref=user_ref,
+        uid=uid,
+        state=state,
+        commit=commit,
+    )
 
     if projection_writer:
         projection_writer(transaction)
 
     transaction.set(commit_ref, commit)
-    transaction.set(
-        state_ref,
-        {
-            'current_head_commit_id': commit['commit_id'],
-            'projection_version': 1,
-            'updated_at': commit['commit_time'],
-        },
-    )
+    transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
 
-@transactional
+@_typed_transactional
 def _append_commit_with_builder_transaction(
-    transaction,
-    database,
+    transaction: Any,
+    database: Any,
     uid: str,
     parent_commit_id: Optional[str],
     mutation_builder: Callable[[Any], Dict[str, Any]],
@@ -278,7 +353,7 @@ def _append_commit_with_builder_transaction(
     user_ref = database.collection(users_collection).document(uid)
     state_ref = user_ref.collection(memory_state_collection).document(memory_state_document)
     state_snapshot = state_ref.get(transaction=transaction)
-    state = state_snapshot.to_dict() if state_snapshot.exists else {}
+    state: Dict[str, Any] = _typed_doc(state_snapshot) if state_snapshot.exists else {}
     current_head = state.get('current_head_commit_id')
     expected_parent = current_head if use_current_head else parent_commit_id
 
@@ -286,27 +361,31 @@ def _append_commit_with_builder_transaction(
         raise HeadConflict(expected_parent, current_head)
 
     built = mutation_builder(transaction)
-    mutations = built.get('mutations') or []
+    mutations: List[Dict[str, Any]] = cast(List[Dict[str, Any]], built.get('mutations') or [])
     projection_writer = built.get('projection_writer')
     commit = build_commit(expected_parent, mutations, run_id=run_id, commit_time=commit_time)
     commit_ref = user_ref.collection(memory_commits_collection).document(commit['commit_id'])
     commit_snapshot = commit_ref.get(transaction=transaction)
 
     if commit_snapshot.exists:
-        return {'commit': commit_snapshot.to_dict(), 'applied': False}
+        return {'commit': _typed_doc(commit_snapshot), 'applied': False}
+
+    # Build the state-head payload (including any apply_control fallback read)
+    # before staging any writes: Firestore forbids a transactional read after a
+    # write and raises ReadAfterWriteError otherwise.
+    state_head_payload = _state_head_write_payload(
+        transaction=transaction,
+        user_ref=user_ref,
+        uid=uid,
+        state=state,
+        commit=commit,
+    )
 
     if projection_writer:
         projection_writer(transaction)
 
     transaction.set(commit_ref, commit)
-    transaction.set(
-        state_ref,
-        {
-            'current_head_commit_id': commit['commit_id'],
-            'projection_version': 1,
-            'updated_at': commit['commit_time'],
-        },
-    )
+    transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
 
@@ -320,7 +399,8 @@ def read_head(uid: str) -> Optional[str]:
     state_snapshot = state_ref.get()
     if not state_snapshot.exists:
         return None
-    return (state_snapshot.to_dict() or {}).get('current_head_commit_id')
+    state: Dict[str, Any] = _typed_doc(state_snapshot)
+    return state.get('current_head_commit_id')
 
 
 def fold_commits(commits: List[Dict[str, Any]], valid_time: Optional[datetime] = None) -> Dict[str, Dict[str, Any]]:
@@ -328,17 +408,24 @@ def fold_commits(commits: List[Dict[str, Any]], valid_time: Optional[datetime] =
     for commit in sorted(
         commits, key=lambda item: item.get('commit_time') or datetime.min.replace(tzinfo=timezone.utc)
     ):
-        for item in commit.get('mutations') or []:
+        mutations: List[Dict[str, Any]] = cast(List[Dict[str, Any]], commit.get('mutations') or [])
+        for item in mutations:
             _apply_mutation(facts, item, commit.get('commit_time'))
     if valid_time is None:
         return {fact_id: fact for fact_id, fact in facts.items() if fact.get('invalid_at') is None}
     return {fact_id: fact for fact_id, fact in facts.items() if _fact_valid_at(fact, valid_time)}
 
 
-def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], commit_time: Optional[datetime]):
+def _resolve_arg_change(value: Any) -> Any:
+    if isinstance(value, dict) and "to" in value:
+        return cast(Dict[str, Any], value).get("to")
+    return cast(Any, value)
+
+
+def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], commit_time: Optional[datetime]) -> None:
     mutation_type = item.get('type')
     if mutation_type == 'add_fact':
-        fact = copy.deepcopy(item.get('fact') or {})
+        fact: Dict[str, Any] = cast(Dict[str, Any], copy.deepcopy(item.get('fact') or {}))
         fact_id = fact.get('id')
         if fact_id:
             facts[fact_id] = fact
@@ -350,8 +437,8 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
 
     if mutation_type == 'supersede_fact':
         facts[fact_id]['superseded_by'] = item.get('by')
-        valid_interval = item.get('valid_interval') or {}
-        invalid_at = valid_interval.get('valid_to') or commit_time
+        valid_interval: Dict[str, Any] = cast(Dict[str, Any], item.get('valid_interval') or {})
+        invalid_at: Any = valid_interval.get('valid_to') or commit_time
         facts[fact_id]['invalid_at'] = invalid_at
         facts[fact_id].setdefault('qualifiers', {})['valid_to'] = invalid_at
         return
@@ -365,11 +452,11 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
         return
 
     if mutation_type == 'refine_fact':
-        _apply_arg_changes(facts[fact_id], item.get('arg_changes') or {})
+        _apply_arg_changes(facts[fact_id], cast(Dict[str, Any], item.get('arg_changes') or {}))
         return
 
     if mutation_type == 'add_evidence':
-        evidence = facts[fact_id].setdefault('evidence', [])
+        evidence: Any = facts[fact_id].setdefault('evidence', [])
         new_evidence = item.get('evidence')
         if new_evidence and new_evidence not in evidence:
             evidence.append(copy.deepcopy(new_evidence))
@@ -377,24 +464,28 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
 
     if mutation_type == 'remove_evidence':
         evidence_id = item.get('evidence_id')
+        evidence_items: Any = facts[fact_id].get('evidence') or []
         facts[fact_id]['evidence'] = [
             evidence
-            for evidence in facts[fact_id].get('evidence', [])
-            if not isinstance(evidence, dict) or evidence.get('evidence_id') != evidence_id
+            for evidence in evidence_items
+            if not isinstance(evidence, dict) or cast(Dict[str, Any], evidence).get('evidence_id') != evidence_id
         ]
         return
 
     if mutation_type == 'tombstone_evidence':
         evidence_id = item.get('evidence_id')
-        for evidence in facts[fact_id].get('evidence', []):
-            if isinstance(evidence, dict) and evidence.get('evidence_id') == evidence_id:
-                evidence['redaction_status'] = 'tombstoned'
-                evidence['tombstoned_at'] = item.get('tombstoned_at') or commit_time
-                evidence['tombstone_reason'] = item.get('reason')
-        active_evidence = [
-            evidence
-            for evidence in facts[fact_id].get('evidence', [])
-            if isinstance(evidence, dict) and evidence.get('redaction_status', 'active') != 'tombstoned'
+        current_evidence: Any = facts[fact_id].get('evidence') or []
+        for evidence in current_evidence:
+            if isinstance(evidence, dict) and cast(Dict[str, Any], evidence).get('evidence_id') == evidence_id:
+                evidence_dict: Dict[str, Any] = cast(Dict[str, Any], evidence)
+                evidence_dict['redaction_status'] = 'tombstoned'
+                evidence_dict['tombstoned_at'] = item.get('tombstoned_at') or commit_time
+                evidence_dict['tombstone_reason'] = item.get('reason')
+        active_evidence: List[Dict[str, Any]] = [
+            cast(Dict[str, Any], evidence)
+            for evidence in current_evidence
+            if isinstance(evidence, dict)
+            and cast(Dict[str, Any], evidence).get('redaction_status', 'active') != 'tombstoned'
         ]
         facts[fact_id].update(
             confidence_fields_for_evidence(
@@ -409,19 +500,20 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
         facts[fact_id]['subject_entity_id'] = item.get('new')
 
 
-def _apply_arg_changes(fact: Dict[str, Any], arg_changes: Dict[str, Any]):
-    arguments = fact.setdefault('arguments', {})
+def _apply_arg_changes(fact: Dict[str, Any], arg_changes: Dict[str, Any]) -> None:
+    arguments: Any = fact.setdefault('arguments', {})
     for key, value in arg_changes.items():
+        resolved: Any = _resolve_arg_change(value)
         if key == 'content':
-            fact['content'] = value.get('to') if isinstance(value, dict) and 'to' in value else value
+            fact['content'] = resolved
             continue
-        arguments[key] = value.get('to') if isinstance(value, dict) and 'to' in value else value
+        arguments[key] = resolved
 
 
 def _fact_valid_at(fact: Dict[str, Any], valid_time: datetime) -> bool:
-    qualifiers = fact.get('qualifiers') or {}
-    valid_from = qualifiers.get('valid_from') or fact.get('valid_at')
-    valid_to = qualifiers.get('valid_to') or fact.get('invalid_at')
+    qualifiers: Dict[str, Any] = cast(Dict[str, Any], fact.get('qualifiers') or {})
+    valid_from: Any = qualifiers.get('valid_from') or fact.get('valid_at')
+    valid_to: Any = qualifiers.get('valid_to') or fact.get('invalid_at')
     if isinstance(valid_from, datetime) and valid_time < valid_from:
         return False
     if isinstance(valid_to, datetime) and valid_time > valid_to:
@@ -435,10 +527,11 @@ def replay_to(
     valid_time: Optional[datetime] = None,
 ) -> Dict[str, Dict[str, Any]]:
     commits_ref = db.collection(users_collection).document(uid).collection(memory_commits_collection)
-    commits = []
+    commits: List[Dict[str, Any]] = []
     for doc in commits_ref.order_by('commit_time').stream():
-        commit = doc.to_dict()
-        if commit_time is None or commit.get('commit_time') <= commit_time:
+        commit: Dict[str, Any] = _typed_doc(doc)
+        commit_time_value: Any = commit.get('commit_time')
+        if commit_time is None or commit_time_value <= commit_time:
             commits.append(commit)
     return fold_commits(commits, valid_time=valid_time)
 

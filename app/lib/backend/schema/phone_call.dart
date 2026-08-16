@@ -1,32 +1,15 @@
+import 'package:omi/backend/schema/gen/phone_calls_wire.g.dart' as wire;
+
 enum PhoneCallDirection { incoming, outgoing }
 
 enum PhoneCallState { idle, connecting, ringing, active, ended, failed }
 
-class VerifiedPhoneNumber {
-  final String id;
-  final String phoneNumber;
-  final String? friendlyName;
-  final String verifiedAt;
-  final bool isPrimary;
-
-  VerifiedPhoneNumber({
-    required this.id,
-    required this.phoneNumber,
-    this.friendlyName,
-    required this.verifiedAt,
-    required this.isPrimary,
-  });
-
-  factory VerifiedPhoneNumber.fromJson(Map<String, dynamic> json) {
-    return VerifiedPhoneNumber(
-      id: json['id'] as String,
-      phoneNumber: json['phone_number'] as String,
-      friendlyName: json['friendly_name'] as String?,
-      verifiedAt: json['verified_at'] as String,
-      isPrimary: (json['is_primary'] ?? false) as bool,
-    );
-  }
-}
+// Phase 4 SSOT: VerifiedPhoneNumber was a pure 1:1 field-mapping wrapper around
+// GeneratedPhoneNumberResponse (identical fields + fromJson + toJson). Replaced
+// with a typedef. PhoneCallToken and PhoneCallError stay hand-written: PhoneCallToken
+// derives a computed expiresAt, PhoneCallError parses a Twilio event map — neither is
+// a thin wrapper.
+typedef VerifiedPhoneNumber = wire.GeneratedPhoneNumberResponse;
 
 class PhoneCallToken {
   final String accessToken;
@@ -38,11 +21,15 @@ class PhoneCallToken {
       : expiresAt = DateTime.now().add(Duration(seconds: ttl));
 
   factory PhoneCallToken.fromJson(Map<String, dynamic> json) {
-    return PhoneCallToken(
-      accessToken: json['access_token'] as String,
-      ttl: json['ttl'] as int,
-      identity: json['identity'] as String,
-    );
+    return PhoneCallToken.fromGenerated(wire.GeneratedTokenResponse.fromJson(json));
+  }
+
+  factory PhoneCallToken.fromGenerated(wire.GeneratedTokenResponse generated) {
+    return PhoneCallToken(accessToken: generated.accessToken, ttl: generated.ttl, identity: generated.identity);
+  }
+
+  wire.GeneratedTokenResponse toGenerated() {
+    return wire.GeneratedTokenResponse(accessToken: accessToken, ttl: ttl, identity: identity);
   }
 }
 

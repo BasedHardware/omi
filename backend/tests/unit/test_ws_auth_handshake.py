@@ -94,6 +94,7 @@ def _build_fakes():
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()
     users_stub.record_client_device = MagicMock()
+    users_stub.get_user_deletion_wipe_status = MagicMock(return_value=None)
 
     fakes = {
         "database": database_pkg,
@@ -461,7 +462,7 @@ class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
         import re
 
         listen_match = re.search(
-            r'@router\.websocket\("/v4/listen"\)\s*\nasync def listen_handler\([^)]+\)',
+            r"@router\.websocket\(['\"]/v4/listen['\"]\)\s*\nasync def listen_handler\([^)]+\)",
             source,
             re.DOTALL,
         )
@@ -477,7 +478,7 @@ class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
         import re
 
         web_match = re.search(
-            r'@router\.websocket\("/v4/web/listen"\)\s*\nasync def web_listen_handler\([^)]+\)',
+            r"@router\.websocket\(['\"]/v4/web/listen['\"]\)\s*\nasync def web_listen_handler\([^)]+\)",
             source,
             re.DOTALL,
         )

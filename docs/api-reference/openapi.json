@@ -192,6 +192,7 @@
           "sdcard",
           "external_integration",
           "limitless",
+          "rayban_meta",
           "onboarding",
           "unknown"
         ],
@@ -273,6 +274,35 @@
             "description": "Stable client-generated session ID. When provided, retries return the same conversation ID.",
             "title": "Client Session Id"
           },
+          "conversation_finalization_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user_stop",
+                  "finish_and_continue",
+                  "meeting_started",
+                  "meeting_ended",
+                  "max_duration_rotation",
+                  "crash_recovery",
+                  "retry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Finalization Reason"
+          },
+          "conversation_role": {
+            "default": "ambient",
+            "enum": [
+              "ambient",
+              "meeting"
+            ],
+            "title": "Conversation Role",
+            "type": "string"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -289,7 +319,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -370,7 +400,7 @@
           "geolocation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Geolocation"
+                "$ref": "#/components/schemas/GeolocationInput"
               },
               {
                 "type": "null"
@@ -507,32 +537,95 @@
       "CreateGoalRequest": {
         "properties": {
           "current_value": {
-            "default": 0,
-            "description": "Current progress value",
-            "title": "Current Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional current progress",
+            "title": "Current Value"
+          },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
           },
           "goal_type": {
-            "$ref": "#/components/schemas/GoalType",
-            "default": "scale",
-            "description": "Type of goal metric: boolean, scale, or numeric"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalType"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional metric type"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "max_value": {
-            "default": 10,
-            "description": "Maximum value of the scale",
-            "title": "Max Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional maximum scale value",
+            "title": "Max Value"
           },
           "min_value": {
-            "default": 0,
-            "description": "Minimum value of the scale",
-            "title": "Min Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional minimum scale value",
+            "title": "Min Value"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
-            "description": "Target value to achieve",
-            "title": "Target Value",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional target value",
+            "title": "Target Value"
           },
           "title": {
             "description": "The goal title/description",
@@ -552,11 +645,22 @@
             ],
             "description": "Unit label (e.g., 'users', 'points')",
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
-          "title",
-          "target_value"
+          "title"
         ],
         "title": "CreateGoalRequest",
         "type": "object"
@@ -1180,9 +1284,40 @@
             "title": "Current Value",
             "type": "number"
           },
+          "desired_outcome": {
+            "title": "Desired Outcome",
+            "type": "string"
+          },
+          "focus_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus Rank"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "string"
+          },
           "goal_type": {
             "title": "Goal Type",
             "type": "string"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
           },
           "id": {
             "title": "Id",
@@ -1196,9 +1331,34 @@
             "title": "Max Value",
             "type": "number"
           },
+          "metric": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoalMetric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "min_value": {
             "title": "Min Value",
             "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
           },
           "target_value": {
             "title": "Target Value",
@@ -1223,11 +1383,26 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "required": [
           "id",
+          "goal_id",
           "title",
+          "desired_outcome",
+          "status",
+          "source",
           "goal_type",
           "target_value",
           "current_value",
@@ -1340,6 +1515,117 @@
           "id"
         ],
         "title": "DeveloperMemory",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorItem": {
+        "additionalProperties": true,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "relevance_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Score"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DeveloperMemoryVectorItem",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorPolicy": {
+        "properties": {
+          "app_has_default_memory_grant": {
+            "title": "App Has Default Memory Grant",
+            "type": "boolean"
+          },
+          "archive_capability": {
+            "title": "Archive Capability",
+            "type": "boolean"
+          },
+          "consumer": {
+            "title": "Consumer",
+            "type": "string"
+          },
+          "raw_provenance_capability": {
+            "title": "Raw Provenance Capability",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consumer",
+          "app_has_default_memory_grant",
+          "archive_capability",
+          "raw_provenance_capability"
+        ],
+        "title": "DeveloperMemoryVectorPolicy",
+        "type": "object"
+      },
+      "DeveloperMemoryVectorSearchResponse": {
+        "properties": {
+          "archive_default_visible": {
+            "title": "Archive Default Visible",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeveloperMemoryVectorItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/DeveloperMemoryVectorPolicy"
+          },
+          "returned_count": {
+            "title": "Returned Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "returned_count",
+          "archive_default_visible",
+          "policy"
+        ],
+        "title": "DeveloperMemoryVectorSearchResponse",
+        "type": "object"
+      },
+      "DeveloperSuccessResponse": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "DeveloperSuccessResponse",
         "type": "object"
       },
       "DeveloperTranscriptSegment": {
@@ -1455,6 +1741,62 @@
             "title": "Google Place Id"
           },
           "latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Geolocation",
+        "type": "object"
+      },
+      "GeolocationInput": {
+        "description": "Released wire contract for coordinates accepted at legacy API boundaries.\n\nBounds are enforced before any value is cached, geocoded, or persisted. Keeping\nthis transport shape broad preserves clients released before the bound contract\nexisted, while ``Geolocation`` remains the only usable server-side value.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
             "title": "Latitude",
             "type": "number"
           },
@@ -1478,7 +1820,88 @@
           "latitude",
           "longitude"
         ],
-        "title": "Geolocation",
+        "title": "GeolocationInput",
+        "type": "object"
+      },
+      "GoalHistoryEntryResponse": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "value",
+          "recorded_at"
+        ],
+        "title": "GoalHistoryEntryResponse",
+        "type": "object"
+      },
+      "GoalMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "target": {
+            "title": "Target",
+            "type": "number"
+          },
+          "type": {
+            "$ref": "#/components/schemas/GoalType"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "type",
+          "current",
+          "target"
+        ],
+        "title": "GoalMetric",
         "type": "object"
       },
       "GoalType": {
@@ -1614,6 +2037,30 @@
             "description": "New progress value",
             "title": "Current Value"
           },
+          "desired_outcome": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Outcome"
+          },
+          "horizon_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon At"
+          },
           "max_value": {
             "anyOf": [
               {
@@ -1637,6 +2084,21 @@
             ],
             "description": "New minimum value",
             "title": "Min Value"
+          },
+          "success_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Criteria"
           },
           "target_value": {
             "anyOf": [
@@ -1675,6 +2137,18 @@
             ],
             "description": "New unit label",
             "title": "Unit"
+          },
+          "why_it_matters": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why It Matters"
           }
         },
         "title": "UpdateGoalRequest",
@@ -2187,7 +2661,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -2573,7 +3049,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -2845,7 +3323,7 @@
         ]
       },
       "post": {
-        "description": "Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Type of goal metric: boolean, scale, or numeric (default: scale)\n- **target_value**: Target value to achieve\n- **current_value**: Current progress (default: 0)\n- **min_value**: Minimum scale value (default: 0)\n- **max_value**: Maximum scale value (default: 10)\n- **unit**: Optional unit label (e.g., 'users', 'points')",
+        "description": "Create a durable goal. Metrics are optional and other goals are never changed implicitly.\n\n- **title**: The goal title/description (1-500 characters)\n- **goal_type**: Optional metric type: boolean, scale, or numeric\n- **target_value**: Optional target value\n- **current_value**: Optional current progress\n- **min_value**: Optional minimum scale value\n- **max_value**: Optional maximum scale value\n- **unit**: Optional unit label (e.g., 'users', 'points')\n\nOmit all metric fields to create a qualitative goal.",
         "operationId": "createGoal",
         "requestBody": {
           "content": {
@@ -2915,7 +3393,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -3104,8 +3584,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/GoalHistoryEntryResponse"
                   },
                   "title": "Response Listgoalhistory",
                   "type": "array"
@@ -3403,7 +3882,7 @@
     },
     "/v1/dev/user/memories/vector/search": {
       "get": {
-        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope, a persisted app/key\ndefault-read grant, and the server-owned rollout state enables developer_api\nmemory default-memory reads. Vector hits are hydrated from authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
+        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope and a persisted app/key\ndefault-read grant. Vector hits are hydrated through the universal repository\nagainst authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
         "operationId": "search_memories_vector_v1_dev_user_memories_vector_search_get",
         "parameters": [
           {
@@ -3433,7 +3912,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperMemoryVectorSearchResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -3485,7 +3966,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperSuccessResponse"
+                }
               }
             },
             "description": "Successful Response"

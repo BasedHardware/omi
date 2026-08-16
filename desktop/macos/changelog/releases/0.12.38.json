@@ -1,0 +1,9 @@
+{
+  "version": "0.12.38",
+  "date": "2026-07-06",
+  "changes": [
+    "Fixed a rare case where a stale/mismatched saved session could leave the app showing signed-in with no working credentials, instead of returning you to sign-in",
+    "Improved desktop auth continuity when macOS Keychain token storage is unavailable",
+    "Fixed beta sign-in failing with \"Could not securely store sign-in tokens\" — credentials now save to the login keychain reliably on signed builds"
+  ]
+}

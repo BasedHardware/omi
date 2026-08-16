@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 
 /// Which edge of the target window this glow window represents
@@ -31,10 +32,9 @@ class GlowEdgeWindow: NSWindow {
       defer: false
     )
 
-    // Make window transparent and floating
-    self.isOpaque = false
-    self.backgroundColor = .clear
-    self.hasShadow = false
+    // Transparent, and shadowless because AppKit's window shadow traces the *frame* — which here is
+    // a rectangle around another app's window with nothing drawn in the middle of it.
+    WindowGlass.wear(self, as: .floating)
 
     // Float above other windows
     self.level = .popUpMenu
@@ -221,12 +221,12 @@ struct GlowEdgeView: View {
   /// Start the glow animation sequence
   private func startAnimation() {
     // Fade in
-    withAnimation(.easeIn(duration: 0.3)) {
+    OmiMotion.withGated(.easeIn(duration: 0.3)) {
       opacity = 1.0
     }
 
     // Animate the mesh movement
-    withAnimation(
+    OmiMotion.withGated(
       .easeInOut(duration: 1.5)
         .repeatCount(3, autoreverses: true)
     ) {
@@ -235,7 +235,7 @@ struct GlowEdgeView: View {
 
     // Schedule fade out
     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-      withAnimation(.easeOut(duration: 0.5)) {
+      OmiMotion.withGated(.easeOut(duration: 0.5)) {
         opacity = 0.0
       }
     }

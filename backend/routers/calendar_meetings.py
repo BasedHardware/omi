@@ -62,7 +62,7 @@ def store_calendar_meeting(
         calendar_source=request.calendar_source,
     )
 
-    meeting_dict = meeting_context.dict()
+    meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = request.end_time
 
     # Check if meeting already exists (by calendar_event_id + calendar_source)

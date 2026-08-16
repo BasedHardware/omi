@@ -16,18 +16,12 @@ class DeviceOnboardingWrapper extends StatefulWidget {
 
 class _DeviceOnboardingWrapperState extends State<DeviceOnboardingWrapper> with TickerProviderStateMixin {
   late TabController _controller;
-  int _currentSlide = 0;
   static const int _totalSlides = 5;
 
   @override
   void initState() {
     super.initState();
     _controller = TabController(length: _totalSlides, vsync: this);
-    _controller.addListener(() {
-      setState(() {
-        _currentSlide = _controller.index;
-      });
-    });
   }
 
   @override

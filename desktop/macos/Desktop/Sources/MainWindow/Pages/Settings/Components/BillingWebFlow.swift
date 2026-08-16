@@ -1,3 +1,4 @@
+import OmiTheme
 import SwiftUI
 import WebKit
 
@@ -20,29 +21,28 @@ struct BillingWebFlowSheet: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         Text(flow.title)
-          .scaledFont(size: 18, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(Ink.primary)
 
         Spacer()
 
         Button("Close") {
           onComplete(.dismissed)
         }
-        .buttonStyle(.plain)
-        .foregroundColor(OmiColors.textSecondary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
-      .background(OmiColors.backgroundTertiary)
+      .padding(.horizontal, OmiSpacing.xl)
+      .padding(.vertical, OmiSpacing.lg)
+      .background(Ink.rowFill)
 
-      Divider()
+      GlassSeparator()
 
       BillingWebView(flow: flow, onComplete: onComplete)
         .frame(minWidth: 860, minHeight: 680)
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(Ink.surface)
   }
 }
 
@@ -78,10 +78,11 @@ struct BillingWebView: NSViewRepresentable {
       self.onComplete = onComplete
     }
 
+    @MainActor
     func webView(
       _ webView: WKWebView,
       decidePolicyFor navigationAction: WKNavigationAction,
-      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+      decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
       guard let url = navigationAction.request.url else {
         decisionHandler(.allow)

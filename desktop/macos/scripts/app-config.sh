@@ -28,6 +28,13 @@ derive_omi_app_config() {
             echo "ERROR: OMI_APP_NAME must contain at least one letter or number" >&2
             return 1
         fi
+        case "$app_slug" in
+            omi-*) ;;
+            *)
+                echo "ERROR: named OMI_APP_NAME values must use the omi- prefix (got '$app_name' -> '$app_slug')" >&2
+                return 1
+                ;;
+        esac
         expected_bundle_id="com.omi.$app_slug"
         expected_url_scheme="omi-$app_slug"
     fi
@@ -52,4 +59,27 @@ derive_omi_app_config() {
     EXPECTED_URL_SCHEME="$expected_url_scheme"
     BUNDLE_ID="$bundle_id"
     URL_SCHEME="$url_scheme"
+}
+
+derive_omi_automation_ui_mode() {
+    local is_named_bundle="${1:-false}"
+    local requested_mode="${2:-}"
+
+    if [ -z "$requested_mode" ]; then
+        if [ "$is_named_bundle" = "true" ]; then
+            requested_mode="quiet"
+        else
+            requested_mode="normal"
+        fi
+    fi
+
+    case "$requested_mode" in
+        normal|quiet|interactive)
+            printf '%s\n' "$requested_mode"
+            ;;
+        *)
+            echo "ERROR: OMI_AUTOMATION_UI_MODE must be normal, quiet, or interactive" >&2
+            return 1
+            ;;
+    esac
 }

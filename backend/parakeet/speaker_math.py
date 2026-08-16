@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def cosine_distance(a, b) -> float:
+def cosine_distance(a: object, b: object) -> float:
     a_vec = np.asarray(a, dtype=np.float32).reshape(-1)
     b_vec = np.asarray(b, dtype=np.float32).reshape(-1)
     denom = float(np.linalg.norm(a_vec) * np.linalg.norm(b_vec))

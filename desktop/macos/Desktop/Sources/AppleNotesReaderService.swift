@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 struct AppleNoteRecord: Identifiable, Sendable {
   let id: Int64
@@ -9,6 +9,7 @@ struct AppleNoteRecord: Identifiable, Sendable {
 }
 
 enum AppleNotesReaderError: LocalizedError {
+  case userInitiatedReadRequired
   case storeNotFound
   case authorizationDenied(path: String)
   case invalidSelectedFolder(path: String)
@@ -17,10 +18,13 @@ enum AppleNotesReaderError: LocalizedError {
 
   var errorDescription: String? {
     switch self {
+    case .userInitiatedReadRequired:
+      return "Apple Notes stays disconnected until you choose Connect or Import."
     case .storeNotFound:
       return "Apple Notes data store not found."
     case .authorizationDenied:
-      return "Omi needs permission to read Apple Notes. Select the Apple Notes folder or grant Full Disk Access, then try again."
+      return
+        "Omi needs permission to read Apple Notes. Select the Apple Notes folder or grant Full Disk Access, then try again."
     case .invalidSelectedFolder:
       return "Choose the Apple Notes folder named group.com.apple.notes."
     case .schemaUnavailable:
@@ -32,6 +36,8 @@ enum AppleNotesReaderError: LocalizedError {
 
   var reasonCode: String {
     switch self {
+    case .userInitiatedReadRequired:
+      return "user_initiated_read_required"
     case .storeNotFound:
       return "store_not_found"
     case .authorizationDenied:
@@ -47,6 +53,8 @@ enum AppleNotesReaderError: LocalizedError {
 
   var shouldPromptForFolderSelection: Bool {
     switch self {
+    case .userInitiatedReadRequired:
+      return false
     case .storeNotFound, .authorizationDenied, .invalidSelectedFolder:
       return true
     case .schemaUnavailable, .storeReadFailed:
@@ -88,6 +96,23 @@ enum AppleNotesReadOutcome: Equatable {
   }
 }
 
+enum AppleNotesReadProbe {
+  nonisolated static func resolveRequestedFolder(
+    path: String?,
+    fileManager: FileManager = .default,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) throws -> URL? {
+    guard let path = path?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else {
+      return nil
+    }
+    return try AppleNotesReaderService.resolveSelectedFolder(
+      URL(fileURLWithPath: path),
+      fileManager: fileManager,
+      homeDirectory: homeDirectory
+    )
+  }
+}
+
 actor AppleNotesReaderService {
   static let shared = AppleNotesReaderService()
   private static let classifierNoise = [
@@ -101,7 +126,14 @@ actor AppleNotesReaderService {
 
   private let selectedFolderDefaultsKey = "onboardingAppleNotesFolderPath"
 
-  func readRecentNotes(maxResults: Int = 40, selectedFolderPath: String? = nil) async throws -> [AppleNoteRecord] {
+  func readRecentNotes(
+    maxResults: Int = 40,
+    selectedFolderPath: String? = nil,
+    userInitiated: Bool = false
+  ) async throws -> [AppleNoteRecord] {
+    guard userInitiated else {
+      throw AppleNotesReaderError.userInitiatedReadRequired
+    }
     let boundedMaxResults = min(max(maxResults, 0), 1_000)
     let storeURL = try locateNotesStoreURL(selectedFolderPath: selectedFolderPath)
 
@@ -118,9 +150,23 @@ actor AppleNotesReaderService {
     }
   }
 
-  func connectionStatus(maxResults: Int = 1, selectedFolderPath: String? = nil) async -> AppleNotesConnectionStatus {
+  func connectionStatus(
+    maxResults: Int = 1,
+    selectedFolderPath: String? = nil,
+    userInitiated: Bool = false
+  ) async -> AppleNotesConnectionStatus {
+    guard userInitiated else {
+      return .needsAccess(
+        message: "Choose Connect or Import to check Apple Notes access.",
+        reasonCode: "user_initiated_read_required"
+      )
+    }
     do {
-      let notes = try await readRecentNotes(maxResults: maxResults, selectedFolderPath: selectedFolderPath)
+      let notes = try await readRecentNotes(
+        maxResults: maxResults,
+        selectedFolderPath: selectedFolderPath,
+        userInitiated: true
+      )
       return .connected(noteCount: notes.count, verifiedAt: Date())
     } catch let error as AppleNotesReaderError {
       let outcome = Self.classifyReadOutcome(noteCount: nil, error: error)
@@ -156,7 +202,9 @@ actor AppleNotesReaderService {
       throw error
     } catch {
       let classified = Self.classifyReadError(error, path: storeURL.path)
-      log("AppleNotesReaderService: Selected folder validation failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)")
+      log(
+        "AppleNotesReaderService: Selected folder validation failed code=\(classified.reasonCode) path=\(storeURL.path): \(error)"
+      )
       throw classified
     }
   }
@@ -166,7 +214,8 @@ actor AppleNotesReaderService {
     fileManager: FileManager = .default,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) throws -> URL {
-    let groupContainersURL = homeDirectory
+    let groupContainersURL =
+      homeDirectory
       .appendingPathComponent("Library/Group Containers", isDirectory: true)
 
     if selectedURL.path == groupContainersURL.path {
@@ -234,18 +283,18 @@ actor AppleNotesReaderService {
       let rows = try Row.fetchAll(
         db,
         sql: """
-              SELECT
-                Z_PK,
-                ZTITLE,
-                ZSUMMARY,
-                ZMODIFICATIONDATE
-              FROM ZICCLOUDSYNCINGOBJECT
-              WHERE ZNOTE IS NOT NULL
-                AND ZMARKEDFORDELETION = 0
-                AND ZTITLE IS NOT NULL
-              ORDER BY ZMODIFICATIONDATE DESC
-              LIMIT ?
-            """,
+            SELECT
+              Z_PK,
+              ZTITLE,
+              ZSUMMARY,
+              ZMODIFICATIONDATE
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE ZNOTE IS NOT NULL
+              AND ZMARKEDFORDELETION = 0
+              AND ZTITLE IS NOT NULL
+            ORDER BY ZMODIFICATIONDATE DESC
+            LIMIT ?
+          """,
         arguments: [maxResults * 3]
       )
 
@@ -283,16 +332,18 @@ actor AppleNotesReaderService {
       try Int.fetchOne(
         db,
         sql: """
-          SELECT COUNT(*)
-          FROM ZICCLOUDSYNCINGOBJECT
-          WHERE ZNOTE IS NOT NULL
-            AND ZMARKEDFORDELETION = 0
-            AND ZTITLE IS NOT NULL
-        """
+            SELECT COUNT(*)
+            FROM ZICCLOUDSYNCINGOBJECT
+            WHERE ZNOTE IS NOT NULL
+              AND ZMARKEDFORDELETION = 0
+              AND ZTITLE IS NOT NULL
+          """
       ) ?? 0
     }
   }
 
+  /// The prompt and the model live in the backend behind POST /v1/connectors/synthesize;
+  /// this only formats the note rows and persists what comes back.
   func synthesizeFromNotes(notes: [AppleNoteRecord]) async -> (
     memories: Int, profileSummary: String
   ) {
@@ -305,100 +356,60 @@ actor AppleNotesReaderService {
       let detail = note.summary.isEmpty ? "" : " | \(note.summary)"
       return "[\(date)] \(note.title)\(detail)"
     }
-    let noteText = noteLines.joined(separator: "\n")
 
-    let synthesisPrompt = """
-      Analyze these \(notes.count) recent Apple Notes entries and extract profile information about the user.
-
-      APPLE NOTES:
-      \(noteText)
-
-      Respond ONLY with valid JSON (no markdown, no code fences):
-      {
-        "memories": [
-          "clear factual statement about the user"
-        ],
-        "profile": "2-3 sentence summary of what these notes say about the user"
-      }
-
-      RULES:
-      - Extract 8-12 memories grounded in the note titles and summaries
-      - Focus on plans, projects, interests, shopping intent, relationships, routines, and recurring ideas
-      - Ignore screenshot noise, OCR garbage, duplicate lines, and generic UI text
-      - Each memory should be one concise third-person factual statement
-      - Do not invent details not supported by the notes
-      """
-
-    // Retry the synthesis (bridge/LLM call) on transient failure instead of silently
-    // dropping the whole import. Each attempt uses a fresh bridge.
+    // Retry the synthesis on transient failure instead of silently dropping the whole import.
     let maxAttempts = 2
     for attempt in 1...maxAttempts {
-    do {
-      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
-        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
-      }
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
+      do {
+        if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+        {
+          throw NSError(
+            domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
+        }
+        let synthesis = try await APIClient.shared.synthesizeConnectorItems(
+          source: "notes",
+          items: noteLines
+        )
 
-      let result = try await bridge.query(
-        prompt: synthesisPrompt,
-        systemPrompt:
-          "You extract high-signal user facts from Apple Notes. Output only valid JSON.",
-        model: ModelQoS.Claude.synthesis,
-        onTextDelta: { @Sendable _ in },
-        onToolCall: { @Sendable _, _, _ in "" },
-        onToolActivity: { @Sendable _, _, _, _ in }
-      )
+        let memoryStrings = synthesis.memories.filter {
+          !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        let profileSummary = synthesis.profile
 
-      let responseText = Self.extractJSONObject(from: result.text)
-      guard
-        let jsonData = responseText.data(using: .utf8),
-        let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-      else {
-        log("AppleNotesReaderService: Failed to parse synthesis response")
-        return (0, "")
-      }
-
-      let memoryStrings = (parsed["memories"] as? [String] ?? []).filter {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
-      let profileSummary = parsed["profile"] as? String ?? ""
-
-      let artifacts = memoryStrings.map { memory in
-        ImportEvidenceBatchItem(
+        let artifacts = memoryStrings.map { memory in
+          ImportEvidenceBatchItem(
             title: "Apple Notes Insight",
             snippet: memory,
             content: memory,
             metadata: ["import_kind": "profile"]
+          )
+        }
+        let legacyMemories = memoryStrings.map { memory in
+          MemoryBatchItem(
+            content: memory,
+            tags: ["apple_notes", "onboarding"],
+            headline: "Apple Notes Insight",
+            source: "apple_notes"
+          )
+        }
+        let saveResult = await OnboardingImportEvidenceService.save(
+          artifacts,
+          sourceType: "apple_notes",
+          logPrefix: "AppleNotesReaderService",
+          legacyMemories: legacyMemories
         )
-      }
-      let legacyMemories = memoryStrings.map { memory in
-        MemoryBatchItem(
-          content: memory,
-          tags: ["apple_notes", "onboarding"],
-          headline: "Apple Notes Insight",
-          source: "apple_notes"
-        )
-      }
-      let saveResult = await OnboardingImportEvidenceService.save(
-        artifacts,
-        sourceType: "apple_notes",
-        logPrefix: "AppleNotesReaderService",
-        legacyMemories: legacyMemories
-      )
 
-      return (saveResult.saved, profileSummary)
-    } catch {
-      if attempt < maxAttempts {
-        log("AppleNotesReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        continue
+        return (saveResult.saved, profileSummary)
+      } catch {
+        if attempt < maxAttempts {
+          log("AppleNotesReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+          try? await Task.sleep(nanoseconds: 800_000_000)
+          continue
+        }
+        log("AppleNotesReaderService: Synthesis failed after \(attempt) attempts: \(error)")
+        return (0, "")
       }
-      log("AppleNotesReaderService: Synthesis failed after \(attempt) attempts: \(error)")
-      return (0, "")
-    }
     }
     return (0, "")
   }
@@ -467,7 +478,9 @@ actor AppleNotesReaderService {
       let selectedFolderURL = URL(fileURLWithPath: selectedFolderPath)
       if selectedFolderURL.lastPathComponent == "NoteStore.sqlite" {
         candidates.append(selectedFolderURL)
-      } else if let resolvedFolder = try? Self.resolveSelectedFolder(selectedFolderURL, fileManager: fm, homeDirectory: home) {
+      } else if let resolvedFolder = try? Self.resolveSelectedFolder(
+        selectedFolderURL, fileManager: fm, homeDirectory: home)
+      {
         candidates.append(
           resolvedFolder.appendingPathComponent("NoteStore.sqlite", isDirectory: false)
         )
@@ -530,11 +543,16 @@ actor AppleNotesReaderService {
     return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private static func isLikelyAttachment(title: String, summary: String) -> Bool {
+  nonisolated static func isLikelyAttachment(title: String, summary: String) -> Bool {
     let combined = "\(title) \(summary)".trimmingCharacters(in: .whitespacesAndNewlines)
     guard !combined.isEmpty else { return true }
 
-    if combined.contains("SOLITE") || combined.contains("exec") || combined.contains("kMDItem") {
+    // "SOLITE" / "kMDItem" are distinctive metadata/artifact tokens safe to match as
+    // substrings. "exec" must match only as a whole word — as a raw substring it wrongly
+    // dropped ordinary notes whose title/summary merely *contained* it ("Q3 execution
+    // plan", "Executive summary", "executed tasks").
+    let hasExecToken = combined.range(of: #"\bexec\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    if combined.contains("SOLITE") || combined.contains("kMDItem") || hasExecToken {
       return true
     }
 
@@ -553,26 +571,6 @@ actor AppleNotesReaderService {
     }
 
     return title.count < 3 && summary.count < 12
-  }
-
-  private static func extractJSONObject(from text: String) -> String {
-    var responseText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-    if responseText.hasPrefix("```") {
-      if let firstNewline = responseText.firstIndex(of: "\n") {
-        responseText = String(responseText[responseText.index(after: firstNewline)...])
-      }
-      if responseText.hasSuffix("```") {
-        responseText = String(responseText.dropLast(3)).trimmingCharacters(
-          in: .whitespacesAndNewlines)
-      }
-    }
-
-    if let braceIndex = responseText.firstIndex(of: "{") {
-      responseText = String(responseText[braceIndex...])
-    }
-
-    return responseText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
 }

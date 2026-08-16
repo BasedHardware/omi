@@ -1,9 +1,7 @@
 """Pydantic shapes for omi-cli requests/responses.
 
-Mirrors the subset of `backend/routers/developer.py` that the CLI exercises. We
-hand-write these instead of codegen-from-OpenAPI because the spec at
-``docs/api-reference/openapi.json`` is stale (last touched 2025-03-28, missing
-goals entirely).
+Mirrors the subset of the generated public Developer API OpenAPI contract that
+the CLI exercises.
 
 Where the backend has stricter validation (e.g. content min/max length), we
 mirror the constraints so the CLI fails fast before hitting the API.
@@ -25,6 +23,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class MemoryCategory(str, Enum):
     """Mirrors backend ``MemoryCategory`` — the universe of valid category values."""
 
+    interesting = "interesting"
+    system = "system"
+    manual = "manual"
+    workflow = "workflow"
     core = "core"
     hobbies = "hobbies"
     lifestyle = "lifestyle"
@@ -34,7 +36,7 @@ class MemoryCategory(str, Enum):
     skills = "skills"
     learnings = "learnings"
     other = "other"
-    system = "system"
+    auto = "auto"
 
 
 class MemoryVisibility(str, Enum):

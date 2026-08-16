@@ -1,0 +1,463 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omi.me/contracts/task-intelligence/v1",
+  "schema_version": 1,
+  "issue": 9352,
+  "compatibility_policy": {
+    "unknown_optional_fields": "ignore",
+    "unknown_enum_values": "preserve_or_fail_closed",
+    "breaking_changes": "new_schema_version",
+    "optional_values": "omitted_or_null"
+  },
+  "domain_owners": {
+    "task": "backend product domain",
+    "candidate": "backend product domain",
+    "goal": "backend product domain",
+    "workstream": "backend product domain",
+    "workstream_event": "backend product domain",
+    "evidence_ref": "shared contract",
+    "feedback": "backend product domain",
+    "recommendation": "derived evaluation projection",
+    "decision_record": "backend evaluation debug domain",
+    "kernel_workstream_bridge": "TypeScript runtime kernel",
+    "attribution_event": "privacy-safe analytics contract"
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "nullableStableId": {
+      "oneOf": [{"$ref": "#/$defs/stableId"}, {"type": "null"}]
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"enum": ["conversation", "memory_item", "workstream_event", "artifact", "chat_message", "local_screen", "external"]},
+        "id": {"$ref": "#/$defs/stableId"},
+        "version": {"type": ["string", "null"], "maxLength": 128},
+        "scope": {"enum": ["canonical", "device_local"]},
+        "device_id": {"$ref": "#/$defs/nullableStableId"},
+        "excerpt_hash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      },
+      "required": ["kind", "id", "scope"],
+      "allOf": [
+        {
+          "if": {"properties": {"scope": {"const": "device_local"}}, "required": ["scope"]},
+          "then": {"required": ["device_id"], "properties": {"device_id": {"$ref": "#/$defs/stableId"}}},
+          "else": {"properties": {"device_id": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "local_screen"}}, "required": ["kind"]},
+          "then": {"properties": {"scope": {"const": "device_local"}}}
+        }
+      ]
+    },
+    "taskCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "owner": {"enum": ["user", "other", "unknown"]},
+        "due_at": {"type": ["string", "null"], "format": "date-time"},
+        "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
+        "recurrence_rule": {"type": ["string", "null"], "maxLength": 128},
+        "recurrence_parent_id": {"$ref": "#/$defs/nullableStableId"}
+      },
+      "required": ["description"]
+    },
+    "taskChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "description": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "status": {"enum": ["active", "completed", "cancelled", "superseded"]},
+        "owner": {"enum": ["user", "other", "unknown"]},
+        "due_at": {"type": ["string", "null"], "format": "date-time"},
+        "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
+        "recurrence_rule": {"type": ["string", "null"], "maxLength": 128},
+        "recurrence_parent_id": {"$ref": "#/$defs/nullableStableId"},
+        "superseded_by": {"$ref": "#/$defs/nullableStableId"}
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {"$ref": "#/$defs/stableId"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "status": {"enum": ["active", "completed", "cancelled", "superseded"]},
+        "goal_id": {"$ref": "#/$defs/nullableStableId"},
+        "workstream_id": {"$ref": "#/$defs/nullableStableId"},
+        "owner": {"enum": ["user", "other", "unknown"]},
+        "due_at": {"type": ["string", "null"], "format": "date-time"},
+        "due_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "source": {"type": "string", "minLength": 1, "maxLength": 64},
+        "provenance": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
+        "priority": {"type": ["string", "null"], "enum": ["high", "medium", "low", null]},
+        "sort_order": {"type": ["number", "null"]},
+        "indent_level": {"type": "integer", "minimum": 0},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": ["string", "null"], "format": "date-time"},
+        "superseded_by": {"$ref": "#/$defs/nullableStableId"}
+      },
+      "required": ["task_id", "description", "status", "owner", "source", "provenance", "indent_level", "created_at", "updated_at"]
+    },
+    "workstreamProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 256},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "anchor_task": {"$ref": "#/$defs/taskCreate"}
+      },
+      "required": ["title", "objective", "anchor_task"]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {"$ref": "#/$defs/stableId"},
+        "subject_kind": {"enum": ["task", "workstream"]},
+        "proposed_action": {"enum": ["create", "update", "complete", "cancel", "supersede"]},
+        "task_id": {"$ref": "#/$defs/nullableStableId"},
+        "task_change": {"anyOf": [{"$ref": "#/$defs/taskCreate"}, {"$ref": "#/$defs/taskChange"}, {"type": "null"}]},
+        "workstream_proposal": {"oneOf": [{"$ref": "#/$defs/workstreamProposal"}, {"type": "null"}]},
+        "capture_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "ownership_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "goal_id": {"$ref": "#/$defs/nullableStableId"},
+        "workstream_id": {"$ref": "#/$defs/nullableStableId"},
+        "evidence_refs": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidence_ref"}},
+        "source_surface": {"type": "string", "minLength": 1, "maxLength": 64},
+        "status": {"enum": ["pending", "accepted", "rejected", "expired"]},
+        "resolution_reason": {"type": ["string", "null"], "maxLength": 64},
+        "created_at": {"type": "string", "format": "date-time"},
+        "resolved_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "required": ["candidate_id", "subject_kind", "proposed_action", "capture_confidence", "ownership_confidence", "evidence_refs", "source_surface", "status", "created_at"],
+      "oneOf": [
+        {
+          "properties": {"subject_kind": {"const": "task"}, "proposed_action": {"const": "create"}, "task_change": {"$ref": "#/$defs/taskCreate"}},
+          "required": ["task_change"],
+          "not": {"required": ["workstream_proposal"]}
+        },
+        {
+          "properties": {"subject_kind": {"const": "task"}, "proposed_action": {"enum": ["update", "complete", "cancel", "supersede"]}, "task_change": {"$ref": "#/$defs/taskChange"}},
+          "required": ["task_id", "task_change"],
+          "not": {"required": ["workstream_proposal"]}
+        },
+        {
+          "properties": {"subject_kind": {"const": "workstream"}, "proposed_action": {"const": "create"}, "workstream_proposal": {"$ref": "#/$defs/workstreamProposal"}},
+          "required": ["workstream_proposal"],
+          "not": {"anyOf": [{"required": ["task_id"]}, {"required": ["task_change"]}]}
+        }
+      ]
+    },
+    "goalMetric": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {"enum": ["boolean", "scale", "numeric"]},
+        "current": {"type": "number"},
+        "target": {"type": "number"},
+        "min": {"type": ["number", "null"]},
+        "max": {"type": ["number", "null"]},
+        "unit": {"type": ["string", "null"], "minLength": 1, "maxLength": 64}
+      },
+      "required": ["type", "current", "target"]
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "goal_id": {"$ref": "#/$defs/stableId"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 256},
+        "desired_outcome": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "why_it_matters": {"type": "string", "maxLength": 2048},
+        "success_criteria": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+        "horizon_at": {"type": ["string", "null"], "format": "date-time"},
+        "status": {"enum": ["background", "focused", "paused", "achieved", "abandoned"]},
+        "focus_rank": {"type": ["integer", "null"], "minimum": 0},
+        "metric": {"oneOf": [{"$ref": "#/$defs/goalMetric"}, {"type": "null"}]},
+        "source": {"enum": ["user", "ai_suggested", "imported"]},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"},
+        "ended_at": {"type": ["string", "null"], "format": "date-time"}
+      },
+      "required": ["goal_id", "title", "desired_outcome", "why_it_matters", "success_criteria", "status", "source", "created_at", "updated_at"]
+    },
+    "workstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workstream_id": {"$ref": "#/$defs/stableId"},
+        "goal_id": {"$ref": "#/$defs/nullableStableId"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 256},
+        "objective": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "status": {"enum": ["open", "paused", "completed", "archived"]},
+        "current_state_summary": {"type": "string", "maxLength": 8192},
+        "next_review_at": {"type": ["string", "null"], "format": "date-time"},
+        "last_meaningful_progress_at": {"type": ["string", "null"], "format": "date-time"},
+        "latest_event_sequence": {"type": "integer", "minimum": 0},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["workstream_id", "title", "objective", "status", "current_state_summary", "latest_event_sequence", "created_at", "updated_at"]
+    },
+    "workstream_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {"$ref": "#/$defs/stableId"},
+        "sequence": {"type": "integer", "minimum": 1},
+        "kind": {"enum": ["user_note", "conversation", "message", "screen_observation", "task_change", "decision", "agent_update", "artifact_version", "external_update", "system"]},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
+        "sensitivity": {"enum": ["normal", "sensitive", "restricted"]},
+        "created_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["event_id", "sequence", "kind", "summary", "evidence_refs", "sensitivity", "created_at"]
+    },
+    "feedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "feedback_id": {"$ref": "#/$defs/stableId"},
+        "subject_kind": {"enum": ["candidate", "task", "workstream", "artifact", "decision"]},
+        "subject_id": {"$ref": "#/$defs/stableId"},
+        "intervention_id": {"$ref": "#/$defs/nullableStableId"},
+        "action": {"enum": ["do_now", "later", "dismiss", "accept_candidate", "edit", "complete"]},
+        "reason": {"type": ["string", "null"], "enum": ["already_handled", "not_mine", "not_useful", null]},
+        "context_snapshot_hash": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+        "created_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["feedback_id", "subject_kind", "subject_id", "action", "created_at"]
+    },
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subject_kind": {"enum": ["candidate", "task", "workstream", "artifact", "decision", "agent_open_loop"]},
+        "subject_id": {"$ref": "#/$defs/stableId"},
+        "headline": {"type": "string", "minLength": 1, "maxLength": 256},
+        "why_now": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "goal_or_workstream_label": {"type": ["string", "null"], "maxLength": 256},
+        "recommended_action": {"type": "string", "minLength": 1, "maxLength": 128},
+        "alternative_action": {"type": ["string", "null"], "maxLength": 128},
+        "evidence_preview": {"type": "string", "maxLength": 512},
+        "dedupe_key": {"$ref": "#/$defs/stableId"},
+        "expires_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["subject_kind", "subject_id", "headline", "why_now", "recommended_action", "evidence_preview", "dedupe_key", "expires_at"]
+    },
+    "deterministicFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "days_to_due": {"type": ["number", "null"]},
+        "someone_blocked": {"type": "boolean"},
+        "has_concrete_next_action": {"type": "boolean"},
+        "focused_goal_linked": {"type": "boolean"},
+        "context_match_signals": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 4,
+          "items": {"enum": ["app", "person", "document", "meeting"]}
+        },
+        "capture_confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      },
+      "required": ["someone_blocked", "has_concrete_next_action", "focused_goal_linked", "context_match_signals", "capture_confidence"]
+    },
+    "shortlistEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "open": {"type": "boolean"},
+        "unexpired": {"type": "boolean"},
+        "passes_recommendation_gates": {"type": "boolean"},
+        "recent_material_activity": {"type": "boolean"},
+        "inside_due_window": {"type": "boolean"}
+      },
+      "required": ["open", "unexpired", "passes_recommendation_gates", "recent_material_activity", "inside_due_window"]
+    },
+    "decision_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evaluation_id": {"$ref": "#/$defs/stableId"},
+        "subject_kind": {"type": "string", "minLength": 1, "maxLength": 32},
+        "subject_id": {"$ref": "#/$defs/stableId"},
+        "shortlist_ids": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/stableId"}},
+        "facts_snapshot": {"$ref": "#/$defs/deterministicFacts"},
+        "prompt_version": {"$ref": "#/$defs/stableId"},
+        "policy_version": {"$ref": "#/$defs/stableId"},
+        "fact_definition_version": {"$ref": "#/$defs/stableId"},
+        "model_version": {"$ref": "#/$defs/stableId"},
+        "decision_summary": {"type": "string", "maxLength": 1024},
+        "reason_codes": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 64}},
+        "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/evidence_ref"}},
+        "final_output_ref": {"$ref": "#/$defs/stableId"},
+        "evaluated_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["evaluation_id", "subject_kind", "subject_id", "shortlist_ids", "facts_snapshot", "prompt_version", "policy_version", "fact_definition_version", "model_version", "decision_summary", "reason_codes", "evidence_refs", "final_output_ref", "evaluated_at", "expires_at"]
+    },
+    "openLoopDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "loop_id": {"$ref": "#/$defs/stableId"},
+        "kind": {"enum": ["task", "artifact", "decision", "approval", "external_wait"]},
+        "subject_id": {"$ref": "#/$defs/stableId"},
+        "status": {"enum": ["open", "blocked", "awaiting_user", "awaiting_external"]},
+        "next_action_code": {"$ref": "#/$defs/stableId"},
+        "blocking_on_id": {"$ref": "#/$defs/nullableStableId"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["loop_id", "kind", "subject_id", "status", "next_action_code", "updated_at"]
+    },
+    "kernel_workstream_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "owner": {"$ref": "#/$defs/stableId"},
+        "runtime_id": {"$ref": "#/$defs/stableId"},
+        "workstream_id": {"$ref": "#/$defs/stableId"},
+        "conversation_id": {"$ref": "#/$defs/stableId"},
+        "context_packet_version": {"$ref": "#/$defs/stableId"},
+        "checkpoint_ref": {"$ref": "#/$defs/nullableStableId"},
+        "open_loop_snapshot": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/openLoopDescriptor"}},
+        "expires_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["owner", "runtime_id", "workstream_id", "conversation_id", "context_packet_version", "open_loop_snapshot", "expires_at"]
+    },
+    "attribution_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": 1},
+        "event_id": {"$ref": "#/$defs/stableId"},
+        "event_type": {"enum": ["candidate_captured", "candidate_resolved", "intervention_presented", "feedback_recorded", "outcome_recorded"]},
+        "source_class": {"enum": ["manual", "conversation", "screen", "agent", "integration", "import_share", "recurrence"]},
+        "confidence_band": {"type": ["string", "null"], "enum": ["low", "medium", "high", "explicit", null]},
+        "attribution_chain_id": {"$ref": "#/$defs/nullableStableId"},
+        "intervention_id": {"$ref": "#/$defs/nullableStableId"},
+        "candidate_id": {"$ref": "#/$defs/nullableStableId"},
+        "task_id": {"$ref": "#/$defs/nullableStableId"},
+        "workstream_id": {"$ref": "#/$defs/nullableStableId"},
+        "artifact_id": {"$ref": "#/$defs/nullableStableId"},
+        "decision_id": {"$ref": "#/$defs/nullableStableId"},
+        "resolution_code": {"type": ["string", "null"], "enum": ["accepted", "rejected", "expired", null]},
+        "feedback_action": {"type": ["string", "null"], "enum": ["do_now", "later", "dismiss", "accept_candidate", "edit", "complete", null]},
+        "feedback_reason": {"type": ["string", "null"], "enum": ["already_handled", "not_mine", "not_useful", null]},
+        "outcome_code": {"type": ["string", "null"], "enum": ["task_completed", "artifact_approved", "artifact_delivered", "decision_resolved", "agent_output_applied", "workstream_advanced", null]},
+        "occurred_at": {"type": "string", "format": "date-time"}
+      },
+      "required": ["schema_version", "event_id", "event_type", "source_class", "occurred_at"],
+      "oneOf": [
+        {
+          "properties": {"event_type": {"const": "candidate_captured"}, "candidate_id": {"$ref": "#/$defs/stableId"}},
+          "required": ["candidate_id"]
+        },
+        {
+          "properties": {
+            "event_type": {"const": "candidate_resolved"},
+            "candidate_id": {"$ref": "#/$defs/stableId"},
+            "resolution_code": {"enum": ["accepted", "rejected", "expired"]}
+          },
+          "required": ["candidate_id", "resolution_code"],
+          "allOf": [
+            {
+              "if": {"properties": {"resolution_code": {"const": "accepted"}}, "required": ["resolution_code"]},
+              "then": {
+                "anyOf": [
+                  {"properties": {"task_id": {"$ref": "#/$defs/stableId"}}, "required": ["task_id"]},
+                  {"properties": {"workstream_id": {"$ref": "#/$defs/stableId"}}, "required": ["workstream_id"]}
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "properties": {"event_type": {"const": "intervention_presented"}, "intervention_id": {"$ref": "#/$defs/stableId"}},
+          "required": ["intervention_id"],
+          "anyOf": [
+            {"properties": {"candidate_id": {"$ref": "#/$defs/stableId"}}, "required": ["candidate_id"]},
+            {"properties": {"task_id": {"$ref": "#/$defs/stableId"}}, "required": ["task_id"]},
+            {"properties": {"workstream_id": {"$ref": "#/$defs/stableId"}}, "required": ["workstream_id"]},
+            {"properties": {"artifact_id": {"$ref": "#/$defs/stableId"}}, "required": ["artifact_id"]},
+            {"properties": {"decision_id": {"$ref": "#/$defs/stableId"}}, "required": ["decision_id"]}
+          ]
+        },
+        {
+          "properties": {
+            "event_type": {"const": "feedback_recorded"},
+            "intervention_id": {"$ref": "#/$defs/stableId"},
+            "feedback_action": {"enum": ["do_now", "later", "dismiss", "accept_candidate", "edit", "complete"]}
+          },
+          "required": ["intervention_id", "feedback_action"],
+          "anyOf": [
+            {"properties": {"candidate_id": {"$ref": "#/$defs/stableId"}}, "required": ["candidate_id"]},
+            {"properties": {"task_id": {"$ref": "#/$defs/stableId"}}, "required": ["task_id"]},
+            {"properties": {"workstream_id": {"$ref": "#/$defs/stableId"}}, "required": ["workstream_id"]},
+            {"properties": {"artifact_id": {"$ref": "#/$defs/stableId"}}, "required": ["artifact_id"]},
+            {"properties": {"decision_id": {"$ref": "#/$defs/stableId"}}, "required": ["decision_id"]}
+          ],
+          "allOf": [
+            {
+              "if": {"required": ["feedback_reason"], "properties": {"feedback_reason": {"type": "string"}}},
+              "then": {"properties": {"feedback_action": {"const": "dismiss"}}}
+            }
+          ]
+        },
+        {
+          "properties": {
+            "event_type": {"const": "outcome_recorded"},
+            "attribution_chain_id": {"$ref": "#/$defs/stableId"},
+            "outcome_code": {"enum": ["task_completed", "artifact_approved", "artifact_delivered", "decision_resolved", "agent_output_applied", "workstream_advanced"]}
+          },
+          "required": ["attribution_chain_id", "outcome_code"],
+          "anyOf": [
+            {"properties": {"candidate_id": {"$ref": "#/$defs/stableId"}}, "required": ["candidate_id"]},
+            {"properties": {"task_id": {"$ref": "#/$defs/stableId"}}, "required": ["task_id"]},
+            {"properties": {"workstream_id": {"$ref": "#/$defs/stableId"}}, "required": ["workstream_id"]},
+            {"properties": {"artifact_id": {"$ref": "#/$defs/stableId"}}, "required": ["artifact_id"]},
+            {"properties": {"decision_id": {"$ref": "#/$defs/stableId"}}, "required": ["decision_id"]}
+          ]
+        }
+      ]
+    }
+  },
+  "examples": {
+    "task": [{"task_id": "task-1", "description": "Send Sarah the budget", "status": "active", "goal_id": "goal-1", "workstream_id": "ws-1", "owner": "user", "due_at": "2026-07-10T17:00:00Z", "due_confidence": 1, "source": "conversation", "provenance": [{"kind": "conversation", "id": "conv-1", "scope": "canonical"}], "priority": "high", "sort_order": 1, "indent_level": 0, "created_at": "2026-07-09T12:00:00Z", "updated_at": "2026-07-09T12:00:00Z", "completed_at": null, "superseded_by": null}],
+    "candidate": [
+      {"candidate_id": "cand-task-create", "subject_kind": "task", "proposed_action": "create", "task_change": {"description": "Send Sarah the budget", "owner": "user"}, "capture_confidence": 0.95, "ownership_confidence": 1, "goal_id": "goal-1", "workstream_id": "ws-1", "evidence_refs": [{"kind": "conversation", "id": "conv-1", "scope": "canonical"}], "source_surface": "conversation", "status": "pending", "resolution_reason": null, "created_at": "2026-07-09T12:00:00Z", "resolved_at": null},
+      {"candidate_id": "cand-task-update", "subject_kind": "task", "proposed_action": "update", "task_id": "task-1", "task_change": {"due_at": "2026-07-11T17:00:00Z", "due_confidence": 1}, "capture_confidence": 0.9, "ownership_confidence": 1, "goal_id": "goal-1", "workstream_id": "ws-1", "evidence_refs": [{"kind": "conversation", "id": "conv-2", "scope": "canonical"}], "source_surface": "conversation", "status": "pending", "resolution_reason": null, "created_at": "2026-07-09T12:05:00Z", "resolved_at": null},
+      {"candidate_id": "cand-workstream-create", "subject_kind": "workstream", "proposed_action": "create", "workstream_proposal": {"title": "Investor outreach", "objective": "Send Sarah an updated investor note", "anchor_task": {"description": "Draft Sarah investor note", "owner": "user"}}, "capture_confidence": 0.8, "ownership_confidence": 1, "goal_id": "goal-1", "workstream_id": null, "evidence_refs": [{"kind": "conversation", "id": "conv-1", "scope": "canonical"}], "source_surface": "conversation", "status": "pending", "resolution_reason": null, "created_at": "2026-07-09T12:00:00Z", "resolved_at": null}
+    ],
+    "goal": [{"goal_id": "goal-1", "title": "Build investor pipeline", "desired_outcome": "Maintain a reliable investor pipeline", "why_it_matters": "Fund the next stage", "success_criteria": ["Ten active conversations"], "horizon_at": null, "status": "focused", "focus_rank": 1, "metric": {"type": "numeric", "current": 4, "target": 10, "min": 0, "max": null, "unit": "users"}, "source": "user", "created_at": "2026-07-09T12:00:00Z", "updated_at": "2026-07-09T12:00:00Z", "ended_at": null}],
+    "workstream": [{"workstream_id": "ws-1", "goal_id": "goal-1", "title": "Investor outreach to Sarah", "objective": "Send Sarah a current investor note", "status": "open", "current_state_summary": "Draft requires pricing update", "next_review_at": null, "last_meaningful_progress_at": "2026-07-09T12:00:00Z", "latest_event_sequence": 1, "created_at": "2026-07-09T12:00:00Z", "updated_at": "2026-07-09T12:00:00Z"}],
+    "workstream_event": [{"event_id": "event-1", "sequence": 1, "kind": "conversation", "summary": "Sarah raised a pricing objection", "evidence_refs": [{"kind": "conversation", "id": "conv-1", "scope": "canonical"}], "sensitivity": "normal", "created_at": "2026-07-09T12:00:00Z"}],
+    "evidence_ref": [{"kind": "local_screen", "id": "screen-1", "scope": "device_local", "device_id": "device-1", "excerpt_hash": null}],
+    "feedback": [{"feedback_id": "feedback-1", "subject_kind": "candidate", "subject_id": "cand-1", "intervention_id": "intervention-1", "action": "dismiss", "reason": "not_mine", "context_snapshot_hash": null, "created_at": "2026-07-09T12:00:00Z"}],
+    "recommendation": [{"subject_kind": "artifact", "subject_id": "artifact-2", "headline": "Update Sarah's investor email", "why_now": "The pricing context changed", "goal_or_workstream_label": "Build investor pipeline", "recommended_action": "Update draft", "alternative_action": "Later", "evidence_preview": "Pricing objection changed", "dedupe_key": "rec-artifact-2-v2", "expires_at": "2026-07-10T12:00:00Z"}],
+    "decision_record": [{"evaluation_id": "eval-1", "subject_kind": "artifact", "subject_id": "artifact-2", "shortlist_ids": ["artifact-2"], "facts_snapshot": {"days_to_due": 2, "someone_blocked": false, "has_concrete_next_action": true, "focused_goal_linked": true, "context_match_signals": ["person", "document"], "capture_confidence": 0.9}, "prompt_version": "prompt-v1", "policy_version": "policy-v1", "fact_definition_version": "facts-v1", "model_version": "model-v1", "decision_summary": "Stale draft is actionable", "reason_codes": ["stale_draft"], "evidence_refs": [{"kind": "workstream_event", "id": "event-1", "scope": "canonical"}], "final_output_ref": "recommendation-1", "evaluated_at": "2026-07-09T12:00:00Z", "expires_at": "2026-07-10T12:00:00Z"}],
+    "kernel_workstream_bridge": [{"owner": "user-1", "runtime_id": "runtime-1", "workstream_id": "ws-1", "conversation_id": "kernel-conv-1", "context_packet_version": "packet-v1", "checkpoint_ref": null, "open_loop_snapshot": [{"loop_id": "loop-1", "kind": "approval", "subject_id": "artifact-2", "status": "awaiting_user", "next_action_code": "approve-artifact", "blocking_on_id": null, "updated_at": "2026-07-09T12:00:00Z"}], "expires_at": "2026-07-09T12:15:00Z"}],
+    "attribution_event": [
+      {"schema_version": 1, "event_id": "attr-captured", "event_type": "candidate_captured", "source_class": "conversation", "confidence_band": "high", "candidate_id": "candidate-1", "occurred_at": "2026-07-09T12:00:00Z"},
+      {"schema_version": 1, "event_id": "attr-accepted", "event_type": "candidate_resolved", "source_class": "conversation", "candidate_id": "candidate-1", "task_id": "task-1", "resolution_code": "accepted", "occurred_at": "2026-07-09T12:01:00Z"},
+      {"schema_version": 1, "event_id": "attr-rejected", "event_type": "candidate_resolved", "source_class": "conversation", "candidate_id": "candidate-2", "resolution_code": "rejected", "occurred_at": "2026-07-09T12:02:00Z"},
+      {"schema_version": 1, "event_id": "attr-expired", "event_type": "candidate_resolved", "source_class": "screen", "candidate_id": "candidate-3", "resolution_code": "expired", "occurred_at": "2026-07-09T12:03:00Z"},
+      {"schema_version": 1, "event_id": "attr-presented", "event_type": "intervention_presented", "source_class": "screen", "confidence_band": "high", "attribution_chain_id": "chain-1", "intervention_id": "intervention-1", "candidate_id": "candidate-1", "occurred_at": "2026-07-09T12:04:00Z"},
+      {"schema_version": 1, "event_id": "attr-feedback", "event_type": "feedback_recorded", "source_class": "screen", "intervention_id": "intervention-1", "task_id": "task-1", "feedback_action": "dismiss", "feedback_reason": "already_handled", "occurred_at": "2026-07-09T12:05:00Z"},
+      {"schema_version": 1, "event_id": "attr-outcome", "event_type": "outcome_recorded", "source_class": "agent", "attribution_chain_id": "chain-1", "artifact_id": "artifact-2", "outcome_code": "artifact_approved", "occurred_at": "2026-07-09T12:06:00Z"}
+    ]
+  }
+}

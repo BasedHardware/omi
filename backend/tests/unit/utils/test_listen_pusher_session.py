@@ -13,13 +13,18 @@ from utils.listen_pusher_session import (
 
 
 class FakePusherWebSocket:
-    def __init__(self, incoming=None):
+    def __init__(self, incoming=None, send_errors=None):
         self.sent = []
         self.incoming = list(incoming or [])
+        self.send_errors = list(send_errors or [])
         self.closed_codes = []
         self.on_recv = None
 
     async def send(self, data):
+        if self.send_errors:
+            error = self.send_errors.pop(0)
+            if error:
+                raise error
         self.sent.append(bytes(data))
 
     async def recv(self):
@@ -43,6 +48,18 @@ def frame_json(frame: bytes):
 
 def response_201(conversation_id: str, success=True):
     payload = json.dumps({"conversation_id": conversation_id, "success": success}).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
+def error_response_201(conversation_id: str, terminal: bool = False):
+    payload = json.dumps(
+        {"conversation_id": conversation_id, "error": "processing_failed", "terminal": terminal}
+    ).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
+def fenced_response_201(conversation_id: str):
+    payload = json.dumps({"conversation_id": conversation_id, "fenced": True}).encode("utf-8")
     return struct.pack("<I", 201) + payload
 
 
@@ -150,6 +167,35 @@ async def test_frame_payloads_and_order():
 
 
 @pytest.mark.anyio
+async def test_finalization_job_identity_survives_pusher_reconnect():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+
+    await session.request_conversation_processing('conv-1', 'job-1', 3)
+    session.pusher_connected = False
+    await session.connect()
+
+    finalization_frames = [frame_json(frame) for frame in ws.sent if frame_type(frame) == 104]
+    assert finalization_frames == [
+        {
+            'conversation_id': 'conv-1',
+            'language': 'en',
+            'byok_keys': {'openai': 'key'},
+            'finalization_job_id': 'job-1',
+            'dispatch_generation': 3,
+        },
+        {
+            'conversation_id': 'conv-1',
+            'language': 'en',
+            'byok_keys': {'openai': 'key'},
+            'finalization_job_id': 'job-1',
+            'dispatch_generation': 3,
+        },
+    ]
+
+
+@pytest.mark.anyio
 async def test_pending_conversation_and_speaker_sample_replay_uses_target_rate_for_multi_channel():
     ws = FakePusherWebSocket()
     connect_calls = []
@@ -204,6 +250,101 @@ def test_bounded_audio_and_transcript_buffers():
 
 
 @pytest.mark.anyio
+async def test_failed_transcript_send_retains_buffer_for_retry():
+    ws = FakePusherWebSocket(send_errors=[RuntimeError("send failed"), None])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.transcript_send([{"id": "seg-1"}])
+
+    await session._transcript_flush()
+    assert list(session.segment_buffers) == [{"id": "seg-1"}]
+
+    await session._transcript_flush()
+    assert list(session.segment_buffers) == []
+    transcript_frames = [frame for frame in ws.sent if frame_type(frame) == 102]
+    assert frame_json(transcript_frames[0])["segments"] == [{"id": "seg-1"}]
+
+
+@pytest.mark.anyio
+async def test_failed_audio_send_retains_buffer_for_retry():
+    ws = FakePusherWebSocket(send_errors=[None, RuntimeError("send failed"), None])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.audio_bytes_send(b"abcd", received_at=100.0)
+
+    await session._audio_bytes_flush()
+    assert b"".join(session.audio_chunks) == b"abcd"
+    assert session.audio_total_size == 4
+
+    await session._audio_bytes_flush()
+    assert list(session.audio_chunks) == []
+    assert session.audio_total_size == 0
+    assert ws.sent[-1][12:] == b"abcd"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("flush", ["transcript", "audio"])
+async def test_cancelled_send_retains_buffer(flush):
+    ws = FakePusherWebSocket(send_errors=[asyncio.CancelledError()])
+    session = make_session(ws=ws, current_conversation_id=None)
+    await session.connect()
+    if flush == "transcript":
+        session.transcript_send([{"id": "seg-1"}])
+        with pytest.raises(asyncio.CancelledError):
+            await session._transcript_flush()
+        assert list(session.segment_buffers) == [{"id": "seg-1"}]
+    else:
+        session.audio_bytes_send(b"abcd", received_at=100.0)
+        with pytest.raises(asyncio.CancelledError):
+            await session._audio_bytes_flush()
+        assert b"".join(session.audio_chunks) == b"abcd"
+        assert session.audio_total_size == 4
+
+
+@pytest.mark.anyio
+async def test_close_waits_for_failed_transcript_flush_and_retries_before_closing():
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingPusherWebSocket(FakePusherWebSocket):
+        async def send(self, data):
+            if not started.is_set():
+                started.set()
+                await release.wait()
+                raise RuntimeError("send failed")
+            await super().send(data)
+
+    ws = BlockingPusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    session.transcript_send([{"id": "seg-1"}])
+
+    flush = asyncio.create_task(session._transcript_flush())
+    await started.wait()
+    close = asyncio.create_task(session.close())
+    await asyncio.sleep(0)
+    assert not close.done()
+    release.set()
+    await flush
+    await close
+
+    transcript_frames = [frame for frame in ws.sent if frame_type(frame) == 102]
+    assert frame_json(transcript_frames[0])["segments"] == [{"id": "seg-1"}]
+    assert ws.closed_codes == [1000]
+
+
+@pytest.mark.anyio
+async def test_failed_speaker_sample_replay_stays_buffered():
+    ws = FakePusherWebSocket(send_errors=[RuntimeError("send failed")])
+    session = make_session(ws=ws)
+    await session.send_speaker_sample_request("person-1", "conv-1", ["seg-1"])
+
+    await session.connect()
+
+    assert list(session.pending_speaker_sample_requests) == [("person-1", "conv-1", ["seg-1"])]
+
+
+@pytest.mark.anyio
 async def test_incoming_201_invokes_callback_and_removes_pending_request():
     active_ref = {"active": True}
     ws = FakePusherWebSocket(incoming=[response_201("conv-1")])
@@ -216,6 +357,55 @@ async def test_incoming_201_invokes_callback_and_removes_pending_request():
 
     assert session.pending_conversation_requests == {}
     assert session.callbacks == ["conv-1"]
+
+
+@pytest.mark.anyio
+async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 2
+    assert session.pending_conversation_requests['conv-1']['retries'] == 1
+
+
+@pytest.mark.anyio
+async def test_incoming_terminal_finalization_error_stops_retrying():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    # A dead-lettered job can never succeed: re-requesting it would retry the
+    # same failing finalization for the whole life of the session.
+    assert session.pending_conversation_requests == {}
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_incoming_fenced_finalization_consumes_request_without_completed_callback():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[fenced_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    assert session.pending_conversation_requests == {}
+    assert session.callbacks == []
 
 
 @pytest.mark.anyio

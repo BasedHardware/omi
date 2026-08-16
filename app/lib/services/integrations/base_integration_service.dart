@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/integrations.dart';
@@ -10,10 +8,15 @@ abstract class BaseIntegrationService {
   final String appKey;
   final String prefKey;
 
-  BaseIntegrationService({required this.appKey, required this.prefKey});
+  /// Key whose OAuth flow grants this integration. Defaults to [appKey]; differs
+  /// only when several integrations share one grant (Gmail rides Google Calendar).
+  final String oauthAppKey;
+
+  BaseIntegrationService({required this.appKey, required this.prefKey, String? oauthAppKey})
+      : oauthAppKey = oauthAppKey ?? appKey;
 
   bool get isAuthenticated {
-    return SharedPreferencesUtil().getBool(prefKey) ?? false;
+    return SharedPreferencesUtil().getBool(prefKey);
   }
 
   Future<void> refreshConnectionStatus() async {
@@ -22,9 +25,9 @@ abstract class BaseIntegrationService {
 
   Future<bool> authenticate() async {
     try {
-      final authUrl = await getIntegrationOAuthUrl(appKey);
+      final authUrl = await getIntegrationOAuthUrl(oauthAppKey);
       if (authUrl == null) {
-        Logger.debug('Failed to get OAuth URL for $appKey');
+        Logger.debug('Failed to get OAuth URL for $oauthAppKey');
         return false;
       }
 

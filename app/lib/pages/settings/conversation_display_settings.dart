@@ -50,7 +50,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
   Widget _buildToggleItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) {

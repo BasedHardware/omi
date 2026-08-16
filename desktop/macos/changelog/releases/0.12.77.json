@@ -1,0 +1,20 @@
+{
+  "version": "0.12.77",
+  "date": "2026-07-18",
+  "changes": [
+    "Added end-to-end test coverage for desktop audio recording finalization.",
+    "Restored artifact pills for explicitly delivered files created on your Desktop by delegated agents.",
+    "OpenClaw and Hermes requests now stay in the primary agent's model-driven tool loop instead of being parsed into deterministic UI handoffs.",
+    "Restores automatic Rewind capture in named development bundles after Screen Recording is granted, including smooth recovery from lock-screen transitions.",
+    "Keeps the notch centered and clear of hover controls throughout push-to-talk and voice responses",
+    "Fixed the first push-to-talk turns after launch or a completed Gemini response being delayed by redundant realtime-session reconnects",
+    "Restored artifact pills when a delegated agent explicitly reports a verified temporary deliverable, such as an HTML page.",
+    "Keeps the user's screen-capture preference enabled when transient Rewind monitoring stops, so capture can recover instead of silently staying disabled.",
+    "Sign in with Apple now shows your real name during onboarding instead of \"there\"",
+    "Fixed generated artifact cards across main and notch chat, and kept Screen Recording prompts on the normal voice path",
+    "Improved reliability when finalizing recordings after reconnecting",
+    "Omi Beta and other named desktop builds now show their installed version in the window title",
+    "Fixed Rewind pausing silently when macOS cannot capture the current window",
+    "Fixed Mac task views disagreeing after a task was cancelled or superseded"
+  ]
+}

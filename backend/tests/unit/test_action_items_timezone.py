@@ -154,7 +154,14 @@ def _real_resolve_display_tz(tz):
     return timezone.utc, "UTC"
 
 
+def _real_format_local_time(dt, display_tz, tz_label):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
 _render_stub.resolve_display_tz = _real_resolve_display_tz
+_render_stub.format_local_time = _real_format_local_time
 
 # Stub utils.retrieval.agentic (agent_config_context)
 import contextvars
@@ -213,20 +220,20 @@ def _run(items, tz):
 
 
 # ===========================================================================
-# _format_local helper
+# format_local_time helper (shared, from utils.conversations.render)
 # ===========================================================================
 class TestFormatLocalHelper:
     def test_aware_utc_converted_to_user_tz_with_label(self):
-        out = action_item_tools._format_local(_UTC_INSTANT, ZoneInfo("America/Los_Angeles"), "America/Los_Angeles")
+        out = action_item_tools.format_local_time(_UTC_INSTANT, ZoneInfo("America/Los_Angeles"), "America/Los_Angeles")
         assert out == "2026-06-26 15:00:00 America/Los_Angeles"
 
     def test_naive_value_treated_as_utc(self):
         naive = datetime(2026, 6, 26, 22, 0, 0)  # no tzinfo
-        out = action_item_tools._format_local(naive, ZoneInfo("America/Los_Angeles"), "America/Los_Angeles")
+        out = action_item_tools.format_local_time(naive, ZoneInfo("America/Los_Angeles"), "America/Los_Angeles")
         assert out == "2026-06-26 15:00:00 America/Los_Angeles"
 
     def test_utc_label_unchanged(self):
-        out = action_item_tools._format_local(_UTC_INSTANT, timezone.utc, "UTC")
+        out = action_item_tools.format_local_time(_UTC_INSTANT, timezone.utc, "UTC")
         assert out == "2026-06-26 22:00:00 UTC"
 
 

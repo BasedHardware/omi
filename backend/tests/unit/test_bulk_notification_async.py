@@ -1,7 +1,7 @@
 """Structural test: the bulk notification offloads its blocking Firestore call.
 
 send_bulk_notification in utils/notifications.py is an async helper. After fanning the FCM sends out
-to db_executor, it pruned permanently-invalid tokens through the synchronous remove_bulk_tokens
+to postprocess_executor, it pruned permanently-invalid tokens through the synchronous remove_bulk_tokens
 (a Firestore write in database/notifications.py), called directly on the event loop. A sync Firestore
 call on the loop blocks it for the duration of the call, stalling health checks and every other
 connection sharing the loop. This test parses the source (no import) and asserts remove_bulk_tokens

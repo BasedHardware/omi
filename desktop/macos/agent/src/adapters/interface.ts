@@ -3,7 +3,7 @@
 // Issue #6592: Support multiple AI harnesses via common interface.
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
-import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
+import type { OutboundMessageDraft } from "../protocol.js";
 import type { RuntimeFailure } from "../runtime/failures.js";
 import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
@@ -25,6 +25,14 @@ export interface SessionOpts {
   model?: string;
   systemPrompt?: string;
   mcpServers?: Record<string, unknown>[];
+  executionRole?: "coordinator" | "leaf";
+}
+
+/** Adapter-internal preload shape. It is never accepted from the Swift wire. */
+export interface WarmupSessionConfig {
+  key: string;
+  model?: string;
+  systemPrompt?: string;
 }
 
 /**
@@ -67,7 +75,7 @@ export type ToolExecutor = (
 /**
  * Event callback for streaming updates.
  */
-export type EventCallback = (event: OutboundMessage) => void;
+export type EventCallback = (event: OutboundMessageDraft) => void;
 
 /**
  * Features that a harness may or may not support.
@@ -163,8 +171,11 @@ export interface AdapterCapabilityExpectation {
 export interface AdapterCapabilityMatrixEntry {
   readonly adapterId: string;
   readonly productionAdapter: boolean;
+  readonly credentialScope: AdapterCredentialScope;
   readonly expectations: Record<AdapterCapabilityKey, AdapterCapabilityExpectation>;
 }
+
+export type AdapterCredentialScope = "managed_cloud" | "local_user";
 
 const required = (reason: string): AdapterCapabilityExpectation => ({ status: "required", reason });
 const unsupported = (reason: string): AdapterCapabilityExpectation => ({ status: "unsupported", reason });
@@ -195,6 +206,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   acp: {
     adapterId: "acp",
     productionAdapter: true,
+    credentialScope: "local_user",
     // Production ACP: native session ids survive adapter process restarts.
     expectations: {
       nativeResume: required("ACP exposes native session ids and session/resume."),
@@ -210,6 +222,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   "pi-mono": {
     adapterId: "pi-mono",
     productionAdapter: true,
+    credentialScope: "managed_cloud",
     // Production pi-mono: native ids are process-local and require worker pinning.
     expectations: {
       nativeResume: unsupported("pi-mono session ids are process-local and are stale after daemon restart."),
@@ -225,6 +238,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   hermes: {
     adapterId: "hermes",
     productionAdapter: true,
+    credentialScope: "local_user",
     expectations: {
       // Hermes ACP sessions are tracked by the running server's in-memory
       // session manager and are only valid for that process. After a restart
@@ -243,6 +257,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   openclaw: {
     adapterId: "openclaw",
     productionAdapter: true,
+    credentialScope: "local_user",
     expectations: {
       nativeResume: required("OpenClaw ACP exposes native sessions through the Gateway-backed ACP bridge."),
       cancellationDispatch: required("OpenClaw ACP accepts cancellation through the shared ACP interrupt path."),
@@ -257,6 +272,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   a2a: {
     adapterId: "a2a",
     productionAdapter: false,
+    credentialScope: "managed_cloud",
     expectations: placeholderExpectations("A2A", "TICKET-a2a-adapter"),
   },
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
@@ -301,6 +317,10 @@ export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterC
   };
 }
 
+export function adapterCredentialScopeFor(adapterId: ProductionAdapterId): AdapterCredentialScope {
+  return ADAPTER_CAPABILITY_MATRIX[adapterId].credentialScope;
+}
+
 export interface OpenBindingInput {
   /** Omi-owned correlation id. Adapters must not treat this as their native session id. */
   sessionId: string;
@@ -336,11 +356,13 @@ export interface AdapterAttemptContext {
   sessionId: string;
   /** Omi/Firebase owner from the active Omi request context. Adapter payloads must not override this. */
   ownerId: string;
-  /** Compatibility transport correlation for request-scoped tool relays. */
+  /** Transport correlation for request-scoped tool relays. */
   requestId: string;
   clientId: string;
   runId: string;
   attemptId: string;
+  /** Opaque, attempt-bounded authority for Omi/Swift-backed tools. */
+  toolCapabilityRef: string;
   binding: AdapterBindingHandle;
   prompt: PromptBlock[];
   mode: RunMode;
@@ -349,7 +371,7 @@ export interface AdapterAttemptContext {
   metadata?: Record<string, unknown>;
 }
 
-export type AdapterEventSink = (event: OutboundMessage) => void;
+export type AdapterEventSink = (event: OutboundMessageDraft) => void;
 
 export interface AdapterArtifactReference {
   kind: string;
@@ -369,7 +391,7 @@ export interface AdapterAttemptResult {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
+  /** Adapter-owned native session id for request-scoped tool relays. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
   failure?: RuntimeFailure;
@@ -416,7 +438,7 @@ export interface RuntimeAdapter {
    * Return the MCP server configuration this adapter actually passes to its
    * underlying session. Adapters that strip per-session MCP servers (e.g.
    * OpenClaw with {@code sessionMcpServersMode: "empty"}) should return an
-   * empty array so the kernel's binding-compatibility hash reflects what the
+   * empty array so the kernel's binding hash reflects what the
    * adapter truly saw, not the raw input. Adapters that pass MCP servers
    * through unchanged can omit this method; the kernel treats absent
    * implementations as identity (passthrough).

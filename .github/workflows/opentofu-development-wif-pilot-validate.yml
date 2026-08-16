@@ -1,0 +1,73 @@
+name: OpenTofu Development WIF Pilot Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/scripts/check_opentofu_development_wif_pilot.py"
+      - ".github/scripts/test_check_opentofu_development_wif_pilot.py"
+      - ".github/workflows/opentofu-development-wif-pilot.yml"
+      - ".github/workflows/opentofu-development-wif-pilot-validate.yml"
+      - "infrastructure/opentofu/pilots/development-wif-plan/**"
+      - "infrastructure/opentofu/probes/development-project-read/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/scripts/check_opentofu_development_wif_pilot.py"
+      - ".github/scripts/test_check_opentofu_development_wif_pilot.py"
+      - ".github/workflows/opentofu-development-wif-pilot.yml"
+      - ".github/workflows/opentofu-development-wif-pilot-validate.yml"
+      - "infrastructure/opentofu/pilots/development-wif-plan/**"
+      - "infrastructure/opentofu/probes/development-project-read/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-development-pilot:
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: 1.12.4
+          tofu_wrapper: false
+
+      - name: Test development pilot guard
+        run: python3 .github/scripts/test_check_opentofu_development_wif_pilot.py
+
+      - name: Check development pilot boundary
+        run: python3 .github/scripts/check_opentofu_development_wif_pilot.py
+
+      - name: Validate bootstrap source without a remote backend
+        env:
+          # This invalid literal satisfies provider initialization only. The
+          # backend-free, no-refresh plan has no API path and cannot mutate GCP.
+          GOOGLE_OAUTH_ACCESS_TOKEN: offline-validation-only
+        run: |
+          export TF_DATA_DIR="${RUNNER_TEMP}/opentofu-development-wif-bootstrap"
+          python3 .github/scripts/check_opentofu_foundation.py \
+            --module-dir infrastructure/opentofu/pilots/development-wif-plan \
+            --prepare-offline-plan-module "${RUNNER_TEMP}/opentofu-development-wif-bootstrap-copy"
+          tofu -chdir="${RUNNER_TEMP}/opentofu-development-wif-bootstrap-copy" init -backend=false -input=false -no-color
+          tofu -chdir="${RUNNER_TEMP}/opentofu-development-wif-bootstrap-copy" validate -no-color
+          tofu -chdir="${RUNNER_TEMP}/opentofu-development-wif-bootstrap-copy" plan \
+            -input=false \
+            -lock=false \
+            -refresh=false \
+            -out="${RUNNER_TEMP}/opentofu-development-wif-bootstrap.tfplan" \
+            -no-color
+          tofu -chdir="${RUNNER_TEMP}/opentofu-development-wif-bootstrap-copy" show -json \
+            "${RUNNER_TEMP}/opentofu-development-wif-bootstrap.tfplan" \
+            > "${RUNNER_TEMP}/opentofu-development-wif-bootstrap.json"
+          python3 .github/scripts/check_opentofu_development_wif_pilot.py \
+            --plan-json "${RUNNER_TEMP}/opentofu-development-wif-bootstrap.json"
+
+      - name: Validate read-only probe source
+        run: |
+          export TF_DATA_DIR="${RUNNER_TEMP}/opentofu-development-wif-probe"
+          tofu -chdir=infrastructure/opentofu/probes/development-project-read init -backend=false -input=false -no-color
+          tofu -chdir=infrastructure/opentofu/probes/development-project-read validate -no-color

@@ -29,6 +29,109 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
+  // MARK: - Tool activity timeline
+
+  func testTimelinePreservesEveryToolInOrderAndConnectsAdjacentRows() {
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text", text: "hidden from the tool rail"),
+      .toolCall(id: "same", name: "WebSearch", status: .completed, output: "first"),
+      .toolCall(id: "same", name: "WebFetch", status: .running, output: nil),
+      .toolCall(id: "failed", name: "Bash", status: .failed, output: "boom"),
+    ]
+
+    let items = ToolActivityTimelinePresentation.items(from: blocks)
+
+    XCTAssertEqual(
+      items.map(\.id),
+      ["same:WebSearch:0", "same:WebFetch:0", "failed:Bash:0"]
+    )
+    XCTAssertEqual(items.map(\.connectsToNext), [true, true, false])
+    XCTAssertEqual(items.map(\.block.id), ["same", "same", "failed"])
+  }
+
+  func testTimelineHandlesNoToolRowsAndStatusChangesInvalidateAnimation() {
+    XCTAssertTrue(
+      ToolActivityTimelinePresentation.items(from: [.text(id: "text", text: "answer")]).isEmpty
+    )
+
+    let running = ToolActivityTimelinePresentation.items(from: [
+      .toolCall(id: "tool", name: "WebSearch", status: .running, output: nil)
+    ])
+    let failed = ToolActivityTimelinePresentation.items(from: [
+      .toolCall(id: "tool", name: "WebSearch", status: .failed, output: nil)
+    ])
+    XCTAssertNotEqual(
+      ToolActivityTimelinePresentation.animationToken(for: running),
+      ToolActivityTimelinePresentation.animationToken(for: failed)
+    )
+  }
+
+  func testTimelineIdentitySurvivesFilteringAnEarlierTool() {
+    let spawn = ChatContentBlock.toolCall(
+      id: "spawn", name: "spawn_agent", status: .completed, output: "done")
+    let search = ChatContentBlock.toolCall(
+      id: "search", name: "search_conversations", status: .running, output: nil)
+
+    let before = ToolActivityTimelinePresentation.items(from: [spawn, search])
+    let after = ToolActivityTimelinePresentation.items(from: [search])
+
+    XCTAssertEqual(before[1].id, after[0].id)
+  }
+
+  func testTimelineIdentitySurvivesLateToolUseIdAttachment() {
+    var blocks: [ChatContentBlock] = []
+    ToolCallBlockUpdater.applyToolActivity(
+      to: &blocks,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: nil,
+      input: nil
+    )
+    let initialId = ToolActivityTimelinePresentation.items(from: blocks).first?.id
+
+    ToolCallBlockUpdater.applyToolActivity(
+      to: &blocks,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: "tool-2",
+      input: ["command": "pwd"]
+    )
+
+    XCTAssertEqual(ToolActivityTimelinePresentation.items(from: blocks).first?.id, initialId)
+  }
+
+  func testTimelineDoesNotOfferDisclosureForWhitespaceOnlyDetails() {
+    let whitespaceInput = ToolCallInput(summary: "", details: " \n ")
+
+    XCTAssertFalse(
+      ToolActivityTimelinePresentation.hasExpandableContent(
+        input: whitespaceInput,
+        output: "\t"
+      )
+    )
+    XCTAssertTrue(
+      ToolActivityTimelinePresentation.hasExpandableContent(
+        input: whitespaceInput,
+        output: "result"
+      )
+    )
+  }
+
+  func testTimelineNormalizesExpectedSlowStallsAndNamesEveryStatusForAccessibility() {
+    XCTAssertEqual(
+      ToolActivityTimelinePresentation.displayStatus(toolName: "Bash", status: .stalled),
+      .slow
+    )
+    XCTAssertEqual(
+      ToolActivityTimelinePresentation.displayStatus(toolName: "search_conversations", status: .stalled),
+      .stalled
+    )
+    XCTAssertEqual(
+      ToolCallStatus.allCases.map(ToolActivityTimelinePresentation.accessibilityValue),
+      ["Running", "Still working", "Taking longer than usual", "Completed", "Failed"]
+    )
+  }
+
   // MARK: - Stall tracking-id derivation
 
   /// The `StallDetector` registration site and the `applyStallTransitions`
@@ -55,11 +158,16 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("failed"), .failed)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("cancelled"), .failed)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("interrupted"), .failed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("failed"), .failed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("cancelled"), .failed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("interrupted"), .failed)
   }
 
   func testBridgeStartedAndCompletedStatusesMapToExpectedStates() {
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("started"), .running)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("completed"), .completed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("started"), .running)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("completed"), .completed)
   }
 
   func testIntentionalStoppedErrorCompletesRemainingToolsWithoutFailureUI() {
@@ -76,7 +184,197 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
+  func testSystemStopsAndFailedPreconditionsMarkRemainingToolsFailed() {
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        watchdogFired: true
+      ),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        toolStallAbortFired: true
+      ),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        stopReason: .browserExtensionMissing
+      ),
+      .failed
+    )
+  }
+
+  func testLateResultToolStatusPreservesTerminalTruth() {
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: false, toolStallAbortFired: false),
+      .completed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: true, toolStallAbortFired: false),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: false, toolStallAbortFired: true),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(
+        watchdogFired: false,
+        toolStallAbortFired: false,
+        stopReason: .browserExtensionMissing
+      ),
+      .failed
+    )
+  }
+
+  @MainActor
+  func testReleasedSendLockTerminalizesEveryOrphanedStreamingAssistantRow() {
+    var messages = [
+      ChatMessage(
+        id: "orphaned-assistant",
+        text: "",
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [
+          .toolCall(
+            id: "web-search",
+            name: "web_search",
+            status: .running,
+            toolUseId: "tool-web-search",
+            input: nil,
+            output: nil
+          )
+        ]
+      ),
+      ChatMessage(id: "stable-user", text: "next", sender: .user),
+    ]
+
+    let terminalized = ChatProvider.terminalizeOrphanedStreamingMessages(
+      &messages,
+      hasActiveSendLock: false
+    )
+
+    XCTAssertEqual(terminalized, ["orphaned-assistant"])
+    XCTAssertFalse(messages[0].isStreaming)
+    guard case .toolCall(_, _, let status, _, _, _) = messages[0].contentBlocks[0] else {
+      return XCTFail("Expected tool call content block")
+    }
+    XCTAssertEqual(status, .failed)
+    XCTAssertFalse(messages[1].isStreaming)
+  }
+
+  @MainActor
+  func testActiveSendLockDoesNotTerminalizeCurrentStreamingAssistantRow() {
+    var messages = [ChatMessage(id: "current-assistant", text: "", sender: .ai, isStreaming: true)]
+
+    let terminalized = ChatProvider.terminalizeOrphanedStreamingMessages(
+      &messages,
+      hasActiveSendLock: true
+    )
+
+    XCTAssertTrue(terminalized.isEmpty)
+    XCTAssertTrue(messages[0].isStreaming)
+  }
+
   // MARK: - Tool-call content block lifecycle
+
+  func testStreamingBufferPreservesTextBeforeToolOrder() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {})
+    buffer.applyToolActivity(
+      messageId: messageId,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: "tool-1",
+      input: ["command": "pwd"],
+      messages: &messages
+    )
+
+    XCTAssertEqual(messages[0].contentBlocks.count, 2)
+    guard case .text(_, "Before tool.") = messages[0].contentBlocks[0],
+      case .toolCall(_, "Bash", .running, "tool-1", _, _) = messages[0].contentBlocks[1]
+    else {
+      return XCTFail("Expected text before the tool call")
+    }
+  }
+
+  func testStreamingBufferPreservesThinkingBeforeTextOrder() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendThinking(messageId: messageId, text: "Thinking.", scheduleFlush: {})
+    buffer.appendText(messageId: messageId, text: "Answer.", scheduleFlush: {})
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].contentBlocks.count, 2)
+    guard case .thinking(_, "Thinking.") = messages[0].contentBlocks[0],
+      case .text(_, "Answer.") = messages[0].contentBlocks[1]
+    else {
+      return XCTFail("Expected thinking before answer text")
+    }
+  }
+
+  func testStreamingBufferPreservesTextThinkingTextOrder() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendText(messageId: messageId, text: "A", scheduleFlush: {})
+    buffer.appendThinking(messageId: messageId, text: "B", scheduleFlush: {})
+    buffer.appendText(messageId: messageId, text: "C", scheduleFlush: {})
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].text, "AC")
+    XCTAssertEqual(messages[0].contentBlocks.count, 3)
+    guard case .text(_, "A") = messages[0].contentBlocks[0],
+      case .thinking(_, "B") = messages[0].contentBlocks[1],
+      case .text(_, "C") = messages[0].contentBlocks[2]
+    else {
+      return XCTFail("Expected text, thinking, text block order")
+    }
+  }
+
+  func testDiscardingRevokedTurnPreservesNewerTurnSegments() {
+    var messages = [
+      ChatMessage(id: "revoked", text: "", sender: .ai, isStreaming: true),
+      ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true),
+    ]
+    let buffer = ChatStreamingBuffer(flushInterval: 10)
+
+    buffer.appendText(messageId: "revoked", text: "late output", scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "current output", scheduleFlush: {})
+    buffer.discardPendingSegments(messageId: "revoked")
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].text, "")
+    XCTAssertEqual(messages[1].text, "current output")
+  }
+
+  func testManualFlushCancelsScheduledFlush() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.01)
+    let staleFlush = expectation(description: "scheduled flush should be cancelled by manual flush")
+    staleFlush.isInverted = true
+
+    buffer.appendText(
+      messageId: messageId, text: "Before tool.",
+      scheduleFlush: {
+        staleFlush.fulfill()
+      })
+    buffer.flush(messages: &messages)
+
+    wait(for: [staleFlush], timeout: 0.05)
+    XCTAssertEqual(messages[0].text, "Before tool.")
+  }
 
   func testDuplicateStartForSameToolUseIdUpdatesExistingBlock() {
     var blocks: [ChatContentBlock] = []

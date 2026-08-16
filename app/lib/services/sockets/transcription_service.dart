@@ -9,7 +9,6 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/services/notifications.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -186,6 +185,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   Future sendText(String message) async {
     _socket.send(message);
     return;
+  }
+
+  Future requestFirstOnboardingQuestion() async {
+    await sendText(jsonEncode({'type': 'start_onboarding'}));
   }
 
   @override

@@ -1,14 +1,71 @@
 route_artifacts:
+  - route_artifact_id: route.public_shared_conversation_chat.2026_07_19.001
+    artifact_digest: sha256:f9900baf225db6fc1386b668d008d9fe9de391f1ea8c1b1b3de15e6486800df4
+    lane_id: omi:auto:public-shared-conversation-chat
+    surface: openai.chat_completions
+    primary:
+      provider: openai
+      model: gpt-5-nano
+    fallbacks: []
+    provider_options:
+      reasoning_effort: minimal
+    output_budget:
+      experiment: public_shared_conversation_chat
+      max_completion_tokens: 600
+    timeouts:
+      request_ms: 20000
+    retry:
+      max_attempts: 1
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: none
+      tools: false
+    evidence:
+      benchmark_snapshot: contract.public_shared_conversation_chat.2026_07_19
+      eval_report: backend.tests.unit.test_public_shared_conversation_chat
+      benchmark_source: omi_eval
+      dev_only: false
+    rollout:
+      stage: active
+      percent: 100
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes: []
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - provider_invalid_request
+        - invalid_config
+    fallback_policy:
+      fallback_on: []
+      never_fallback_on:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - provider_invalid_request
+        - invalid_config
+
   - route_artifact_id: route.chat_structured.2026_06_27.001
-    artifact_digest: sha256:271229622698025cd7f496f3d0cb3cb505306c2e7b5d6ce32a35d059b1908094
+    artifact_digest: sha256:2ef9eea0738cd58dfdf9a70b89f8fc5aaf6ae1b2278e67987fe1d3d6a17c0c2e
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
     primary:
       provider: openai
-      model: gpt-4.1-mini
+      model: gpt-5.6-luna
     fallbacks:
       - provider: openai
-        model: gpt-4.1-mini
+        model: gpt-5.6-luna
+    provider_options:
+      reasoning_effort: low
     timeouts:
       request_ms: 30000
     retry:
@@ -40,6 +97,7 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     fallback_policy:
       fallback_on:
@@ -53,20 +111,21 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:70492be577ce8833273a58f04802aafa251d7981c0ad4c7a818a895fb5d1d9fc
+    artifact_digest: sha256:13b7df3652fd6015ef5578deda43bd0e97f914c6cf66deb60e296c167a497507
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
-    # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
-    # that while the pilot's active route is shadow-only, serving this route is a
-    # no-user-visible behavior match instead of silently swapping gpt-4.1-mini
-    # for gpt-4o-mini and changing classifier behavior for 100% of pilot calls.
+    # The gateway LKG mirrors the active model so shadow serving and fallback use
+    # the same gateway-only model policy without changing legacy chat extraction.
     primary:
       provider: openai
-      model: gpt-4.1-mini
+      model: gpt-5.6-luna
     fallbacks: []
+    provider_options:
+      reasoning_effort: low
     timeouts:
       request_ms: 30000
     retry:
@@ -98,6 +157,7 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config
     fallback_policy:
       fallback_on:
@@ -111,4 +171,5 @@ route_artifacts:
         - byok_unsupported_provider
         - missing_byok_key
         - capability_mismatch
+        - provider_invalid_request
         - invalid_config

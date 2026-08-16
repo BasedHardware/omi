@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from database import user_usage as user_usage_db
@@ -30,9 +30,10 @@ def record_usage(
     insights_gained: int = 0,
     memories_created: int = 0,
     speech_seconds: int = 0,
+    idempotency_key: Optional[str] = None,
 ):
     """Records hourly usage stats for a user."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     updates = {
         'transcription_seconds': transcription_seconds,
         'words_transcribed': words_transcribed,
@@ -40,4 +41,7 @@ def record_usage(
         'memories_created': memories_created,
         'speech_seconds': speech_seconds,
     }
-    user_usage_db.update_hourly_usage(uid, now, updates)
+    if idempotency_key:
+        user_usage_db.update_hourly_usage_once(uid, now, updates, idempotency_key)
+    else:
+        user_usage_db.update_hourly_usage(uid, now, updates)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from llm_gateway.gateway import auth
 from llm_gateway.gateway.auth import ServiceAuthDependency, ServiceCaller, require_service_auth
 from llm_gateway.main import app as gateway_app
 
@@ -55,6 +56,23 @@ def test_wrong_token_is_rejected(monkeypatch):
     )
 
     assert response.status_code == 401
+
+
+def test_auth_rejection_uses_bounded_reason_without_caller_or_token_labels(monkeypatch):
+    recorded: list[str] = []
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setattr(auth, 'observe_auth_rejection', lambda reason: recorded.append(reason))
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer attacker-controlled-value',
+            'x-omi-service-caller': 'attacker-controlled-caller',
+        },
+    )
+
+    assert response.status_code == 401
+    assert recorded == ['invalid_token']
 
 
 def test_unknown_caller_is_rejected(monkeypatch):
@@ -116,6 +134,23 @@ def test_auth_dependency_returns_service_caller_model():
     assert caller.name == 'backend'
     assert caller.user_uid == 'user-123'
     assert caller.tenant_id == 'tenant-abc'
+
+
+def test_authenticated_usage_feature_is_available_but_not_response_serialized(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    request = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'backend',
+            'x-omi-llm-feature': 'conversation_processing',
+        },
+    )
+
+    assert request.status_code == 200
+    assert 'usage_feature' not in request.json()
+    caller = ServiceCaller(name='backend', usage_feature=' conversation_processing ')
+    assert caller.usage_feature == 'conversation_processing'
 
 
 def test_primary_service_token_env_var_is_accepted(monkeypatch):

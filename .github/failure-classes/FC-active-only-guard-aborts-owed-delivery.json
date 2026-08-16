@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-active-only-guard-aborts-owed-delivery",
+  "violated_contract": "An in-flight proactive evaluation that has settled and reserved budget owes the user its outcome. A staleness guard on that pipeline may abort it only when the outcome is no longer safely deliverable \u2014 a discarded or interrupted visit, or a departure older than the delivery validity window \u2014 never merely because the visit's outcome flipped from 'active' to 'completed'. Requiring 'active' at every stage conflates the user's continued presence with the work still being owed, so any fast context switch silently spends quota and delivers nothing.",
+  "canonical_prevention": "Guard every stage of an in-flight director evaluation with ContextBucketStore.visitFreshness, which stays fresh for a completed visit within ContextDeliveryBudget.deliveryValidityWindowSeconds of departure and fails closed for discarded/interrupted outcomes, and bound evidence lookups to the visit's own window (AssistantCoordinator.trackedFrameForDirector notAfter:) so a departed visit can never ground on the next context's screen. Regression tests replay the settle-then-depart timeline.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ContextDeliveryLifecycleTests.swift",
+    "desktop/macos/Desktop/Tests/ContextProactivityEngineTests.swift"
+  ],
+  "evidence_prs": [
+    11616
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
+  ],
+  "status": "open"
+}

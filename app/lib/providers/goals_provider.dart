@@ -6,15 +6,17 @@ import 'package:flutter/scheduler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/preferences.dart';
 
 class GoalsProvider extends ChangeNotifier {
-  static const String _goalsStorageKey = 'goals_tracker_local_goals';
+  static const String _legacyGoalsStorageKey = 'goals_tracker_local_goals';
 
   List<Goal> _goals = [];
   bool _isLoading = true;
 
   // Track last goal deletion to prevent API sync from resurrecting deleted goals
   DateTime? _lastGoalDeletion;
+  int _sessionGeneration = 0;
 
   List<Goal> get goals => _goals;
   bool get isLoading => _isLoading;
@@ -26,14 +28,17 @@ class GoalsProvider extends ChangeNotifier {
 
   /// Load goals from local storage first, then sync with API
   Future<void> loadGoals() async {
+    final generation = _sessionGeneration;
     _isLoading = true;
     notifyListeners();
 
     // Load from local storage first (most up-to-date with recent deletions/changes)
-    await _loadFromLocalStorage();
+    await _loadFromLocalStorage(generation);
+    if (generation != _sessionGeneration) return;
 
     // Then sync with API in the background
-    await _syncWithApi();
+    await _syncWithApi(generation);
+    if (generation != _sessionGeneration) return;
 
     _isLoading = false;
     _notifyAfterFrame();
@@ -43,10 +48,14 @@ class GoalsProvider extends ChangeNotifier {
     SchedulerBinding.instance.addPostFrameCallback((_) => notifyListeners());
   }
 
-  Future<void> _loadFromLocalStorage() async {
+  Future<void> _loadFromLocalStorage(int generation) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final goalsJson = prefs.getString(_goalsStorageKey);
+      if (generation != _sessionGeneration) return;
+      SharedPreferencesUtil().scopeLegacyUserDataForCurrentUser();
+      final storageKey = _goalsStorageKey;
+      if (storageKey == null) return;
+      final goalsJson = prefs.getString(storageKey);
       if (goalsJson != null) {
         final List<dynamic> decoded = jsonDecode(goalsJson);
         _goals = decoded.map((e) => Goal.fromJson(e)).toList();
@@ -55,7 +64,7 @@ class GoalsProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> _syncWithApi() async {
+  Future<void> _syncWithApi(int generation) async {
     // Skip if we just deleted a goal to prevent resurrecting it
     final now = DateTime.now();
     final skipApiSync = _lastGoalDeletion != null && now.difference(_lastGoalDeletion!) < const Duration(seconds: 3);
@@ -64,6 +73,7 @@ class GoalsProvider extends ChangeNotifier {
 
     try {
       final goals = await getAllGoals();
+      if (generation != _sessionGeneration) return;
       if (goals.isNotEmpty) {
         _goals = goals;
         await _saveToLocalStorage();
@@ -74,10 +84,25 @@ class GoalsProvider extends ChangeNotifier {
 
   Future<void> _saveToLocalStorage() async {
     try {
+      final storageKey = _goalsStorageKey;
+      if (storageKey == null) return;
       final prefs = await SharedPreferences.getInstance();
       final goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
-      await prefs.setString(_goalsStorageKey, goalsJson);
+      await prefs.setString(storageKey, goalsJson);
     } catch (_) {}
+  }
+
+  String? get _goalsStorageKey {
+    final ownerUid = SharedPreferencesUtil().uid;
+    return ownerUid.isEmpty ? null : '$_legacyGoalsStorageKey:$ownerUid';
+  }
+
+  void clearUserData() {
+    _sessionGeneration++;
+    _goals = [];
+    _isLoading = false;
+    _lastGoalDeletion = null;
+    notifyListeners();
   }
 
   /// Create a new goal
@@ -90,6 +115,7 @@ class GoalsProvider extends ChangeNotifier {
     double maxValue = 10,
     String? unit,
   }) async {
+    final generation = _sessionGeneration;
     final goal = await createGoalApi(
       title: title,
       goalType: goalType,
@@ -99,6 +125,7 @@ class GoalsProvider extends ChangeNotifier {
       maxValue: maxValue,
       unit: unit,
     );
+    if (generation != _sessionGeneration) return null;
 
     if (goal != null) {
       _goals.add(goal);
@@ -119,6 +146,7 @@ class GoalsProvider extends ChangeNotifier {
     double? maxValue,
     String? unit,
   }) async {
+    final generation = _sessionGeneration;
     final updatedGoal = await updateGoalApi(
       goalId,
       title: title,
@@ -128,6 +156,7 @@ class GoalsProvider extends ChangeNotifier {
       maxValue: maxValue,
       unit: unit,
     );
+    if (generation != _sessionGeneration) return null;
 
     if (updatedGoal != null) {
       final index = _goals.indexWhere((g) => g.id == goalId);
@@ -143,7 +172,9 @@ class GoalsProvider extends ChangeNotifier {
 
   /// Update goal progress only
   Future<Goal?> updateGoalProgress(String goalId, double currentValue) async {
+    final generation = _sessionGeneration;
     final updatedGoal = await updateGoalProgressApi(goalId, currentValue);
+    if (generation != _sessionGeneration) return null;
 
     if (updatedGoal != null) {
       final index = _goals.indexWhere((g) => g.id == goalId);

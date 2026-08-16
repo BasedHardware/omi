@@ -215,6 +215,46 @@ class TestSerializationRoundTrip:
         assert eic2.text == "test content"
         assert eic2.text_source == ExternalIntegrationConversationSource.message
 
+    def test_legacy_transcript_segment_ids_are_deterministic_per_conversation(self):
+        from models.conversation import Conversation
+        from models.structured import Structured
+
+        now = datetime.now(timezone.utc)
+        raw_segments = [
+            {
+                "text": "legacy",
+                "speaker": "SPEAKER_00",
+                "is_user": False,
+                "start": 0.0,
+                "end": 1.0,
+            },
+            {
+                "id": "explicit-segment-id",
+                "text": "explicit",
+                "speaker": "SPEAKER_01",
+                "is_user": False,
+                "start": 1.0,
+                "end": 2.0,
+            },
+        ]
+        fields = {
+            "id": "conversation-with-legacy-segments",
+            "created_at": now,
+            "started_at": now,
+            "finished_at": now,
+            "structured": Structured(),
+            "transcript_segments": raw_segments,
+        }
+
+        first = Conversation(**fields)
+        second = Conversation(**fields)
+
+        assert first.transcript_segments[0].id == second.transcript_segments[0].id
+        assert first.transcript_segments[0].id
+        assert first.transcript_segments[0].id != first.transcript_segments[1].id
+        assert first.transcript_segments[1].id == "explicit-segment-id"
+        assert "id" not in raw_segments[0]
+
 
 class TestHelperMethods:
     """Helper methods on moved models must work correctly."""
@@ -707,6 +747,7 @@ class TestPhase4RuntimeBehavior:
     def test_trends_extractor_signature_callable(self):
         """trends_extractor can be called with the new signature shape."""
         import sys
+        from contextlib import nullcontext
         from unittest.mock import patch, MagicMock
         from models.transcript_segment import TranscriptSegment
 
@@ -733,11 +774,15 @@ class TestPhase4RuntimeBehavior:
             trends_mod.users_db = MagicMock()
             trends_mod.users_db.get_people_by_ids.return_value = []
             trends_mod.get_user_name = MagicMock(return_value='TestUser')
-            trends_mod.llm_mini = MagicMock()
-            trends_mod.llm_mini.with_structured_output.return_value.invoke.return_value = MagicMock(items=[])
+            trends_mod.get_llm = MagicMock()
+            trends_mod.get_llm.return_value.with_structured_output.return_value.invoke.return_value = MagicMock(
+                items=[]
+            )
+            trends_mod.track_usage = MagicMock(side_effect=lambda _uid, _feature: nullcontext())
 
             result = trends_mod.trends_extractor('test-uid', segments, person_ids)
             assert result == []
+            trends_mod.track_usage.assert_called_once_with('test-uid', trends_mod.Features.TRENDS)
         finally:
             for mod_name, saved in saved_modules.items():
                 if saved is None:

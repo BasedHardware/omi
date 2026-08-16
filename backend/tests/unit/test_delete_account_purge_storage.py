@@ -38,15 +38,23 @@ def users_service():
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
         "database.vector_db": AutoMockModule("database.vector_db"),
+        "database.dev_api_key": AutoMockModule("database.dev_api_key"),
+        "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
+        "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
+        "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
+        "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
+        "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
@@ -61,7 +69,7 @@ def _purge_patches(users_service, **overrides):
     """Patch every purge collaborator on the users service. overrides set return_value/side_effect."""
     enumerators = {
         "get_conversation_ids": ["c1", "c2"],
-        "get_memory_ids": ["m1"],
+        "_historical_memory_ids": ["m1"],
         "get_action_item_ids": ["a1", "a2"],
         "get_screen_activity_ids": ["s1"],
     }
@@ -140,7 +148,7 @@ def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_serv
     m["delete_user_data"].assert_not_called()
 
 
-def test_gcs_failure_does_not_block_firestore_wipe(users_service):
+def test_gcs_failure_blocks_firestore_wipe(users_service):
     patchers, m = _purge_patches(
         users_service, delete_all_conversation_recordings={"side_effect": Exception("gcs down")}
     )
@@ -149,7 +157,7 @@ def test_gcs_failure_does_not_block_firestore_wipe(users_service):
     finally:
         _stop(patchers)
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")  # purge was wired + attempted
-    m["delete_user_data"].assert_called_once_with("uid1")  # and the failure didn't block the wipe
+    m["delete_user_data"].assert_not_called()
 
 
 def test_enumeration_failure_is_isolated(users_service):

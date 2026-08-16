@@ -8,13 +8,14 @@ patterns (audiobook transcription, podcast transcription, pre-recorded content).
 import json
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, cast
 
 import database.conversations as conversations_db
 from utils.executors import db_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.model_config import get_model, get_provider
+from utils.llm.usage_tracker import Features, track_usage
 
 logger = logging.getLogger(__name__)
 
@@ -115,15 +116,14 @@ Look specifically for:
 """
 
 
-def _select_recipes(conversation_summaries: list) -> str:
+def _select_recipes(conversation_summaries: List[Dict[str, Any]]) -> str:
     """Select which additional detection recipes to apply based on conversation patterns."""
-    recipes = []
+    recipes: List[str] = []
 
     if not conversation_summaries:
         return ""
 
     # Check for signs that suggest specific recipes
-    titles = [c.get('title', '') for c in conversation_summaries]
     durations = [c.get('duration_minutes', 0) for c in conversation_summaries]
     categories = [c.get('category', '') for c in conversation_summaries]
 
@@ -155,9 +155,9 @@ def _select_recipes(conversation_summaries: list) -> str:
     return '\n'.join(recipes)
 
 
-def _prepare_conversation_summaries(uid: str) -> list:
+def _prepare_conversation_summaries(uid: str) -> List[Dict[str, Any]]:
     """Fetch recent conversations and extract metadata for classification."""
-    start_date = datetime.utcnow() - timedelta(days=CLASSIFIER_LOOKBACK_DAYS)
+    start_date = datetime.now(timezone.utc) - timedelta(days=CLASSIFIER_LOOKBACK_DAYS)
 
     conversations = conversations_db.get_conversations(
         uid,
@@ -165,9 +165,9 @@ def _prepare_conversation_summaries(uid: str) -> list:
         start_date=start_date,
     )
 
-    summaries = []
+    summaries: List[Dict[str, Any]] = []
     for conv in conversations:
-        structured = conv.get('structured', {}) or {}
+        structured = cast(Dict[str, Any], conv.get('structured') or {})
         started = conv.get('started_at')
         ended = conv.get('finished_at') or conv.get('ended_at')
 
@@ -194,13 +194,13 @@ def _prepare_conversation_summaries(uid: str) -> list:
     return summaries
 
 
-async def classify_user_purpose(uid: str) -> dict:
+async def classify_user_purpose(uid: str) -> Dict[str, Any]:
     """Run LLM classification on a user's recent conversations.
 
     Returns a dict matching the ClassifierResult model:
       {misuse_score, usage_type, confidence, evidence, model, prompt_version}
     """
-    default_result = {
+    default_result: Dict[str, Any] = {
         'misuse_score': 0.0,
         'usage_type': 'none',
         'confidence': 0.0,
@@ -226,15 +226,16 @@ CONVERSATIONS:
 
 Respond with ONLY the JSON output, no other text."""
 
-        classifier_llm = _classifier_llm or get_llm('fair_use')
-        response = await classifier_llm.ainvoke(
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ]
-        )
+        with track_usage(uid, Features.OTHER):
+            classifier_llm = _classifier_llm or get_llm('fair_use')
+            response = await classifier_llm.ainvoke(
+                [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_message},
+                ]
+            )
 
-        content = response.content if hasattr(response, 'content') else str(response)
+        content = cast(str, cast(Any, response).content) if hasattr(response, 'content') else str(response)
 
         # Parse JSON from response
         # Handle potential markdown code blocks
@@ -246,10 +247,14 @@ Respond with ONLY the JSON output, no other text."""
         result = json.loads(content.strip())
 
         # Validate and clamp
-        result['misuse_score'] = max(0.0, min(1.0, float(result.get('misuse_score', 0.0))))
-        result['confidence'] = max(0.0, min(1.0, float(result.get('confidence', 0.0))))
-        result['usage_type'] = result.get('usage_type', 'none')
-        result['evidence'] = result.get('evidence', [])[:10]  # Cap evidence entries
+        # get(k, default) only defaults an ABSENT key, so a present-but-null field (the LLM emitting
+        # misuse_score / confidence / evidence: null) would slip through and raise (float(None),
+        # None[:10]); the broad except below then swallows it and returns default_result
+        # (misuse_score 0.0 = "not abuse"), silently disabling abuse detection for that run.
+        result['misuse_score'] = max(0.0, min(1.0, float(result.get('misuse_score') or 0.0)))
+        result['confidence'] = max(0.0, min(1.0, float(result.get('confidence') or 0.0)))
+        result['usage_type'] = result.get('usage_type') or 'none'
+        result['evidence'] = (result.get('evidence') or [])[:10]  # Cap evidence entries
         result['model'] = CLASSIFIER_ROUTE
         result['prompt_version'] = 'v2'
 

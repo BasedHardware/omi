@@ -9,7 +9,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 class _SourceOption {
   final String label;
-  final IconData icon;
+  final FaIconData icon;
 
   const _SourceOption(this.label, this.icon);
 }

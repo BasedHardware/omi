@@ -7,7 +7,7 @@ Canonical vector search telemetry.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, cast
 
 VECTOR_SEARCH_COMPONENT = 'vector_search'
 _ALLOWED_LABEL_KEYS = {'component', 'consumer', 'surface', 'mode', 'status', 'reason', 'event_type'}
@@ -41,8 +41,6 @@ def emit_memory_vector_search_telemetry(
     Emitter failures are returned in a deterministic summary and never raised, so
     telemetry outages do not mask a successfully fail-closed/filtered search result.
     """
-    if not isinstance(config, VectorSearchTelemetryConfig):
-        raise ValueError('telemetry config is required')
     if not config.enabled:
         return _telemetry_result(enabled=False)
 
@@ -219,7 +217,12 @@ def _event(name: str, labels: Dict[str, str], fields: Dict[str, Any]) -> Dict[st
 
 
 def _sanitize_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
-    labels = payload.get('labels') or {}
+    raw_labels = payload.get('labels')
+    labels: Mapping[str, Any]
+    if isinstance(raw_labels, Mapping):
+        labels = cast(Mapping[str, Any], raw_labels)
+    else:
+        labels = {}
     payload['labels'] = {key: _bounded_label(value) for key, value in labels.items() if key in _ALLOWED_LABEL_KEYS}
     return payload
 

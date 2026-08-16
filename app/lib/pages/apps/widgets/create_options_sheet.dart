@@ -41,10 +41,6 @@ class CreateOptionsSheet extends StatelessWidget {
                 context.l10n.createAnApp,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
               ),
-              subtitle: Text(
-                context.l10n.createAndShareYourApp,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-              ),
               onTap: () {
                 Navigator.pop(context);
                 PlatformManager.instance.analytics.pageOpened('Submit App');
@@ -64,10 +60,6 @@ class CreateOptionsSheet extends StatelessWidget {
               title: Text(
                 context.l10n.addMcpServer,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white),
-              ),
-              subtitle: Text(
-                context.l10n.connectExternalAiTools,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               ),
               onTap: () {
                 Navigator.pop(context);

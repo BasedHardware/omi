@@ -145,7 +145,7 @@ export default function AppsPage() {
       if (priceFilter === 'paid' && app.is_paid === false) return false;
 
       // Date Filter
-      if (!filterByDate(app.created_at, dateFilter)) return false;
+      if (!filterByDate(app.created_at ?? '', dateFilter)) return false;
 
       // Search Term Filter (checking name and author)
       if (searchTerm) {
@@ -187,8 +187,8 @@ export default function AppsPage() {
           bValue = b.rating_avg || 0;
           break;
         case 'created':
-          aValue = new Date(a.created_at).getTime();
-          bValue = new Date(b.created_at).getTime();
+          aValue = new Date(a.created_at ?? 0).getTime();
+          bValue = new Date(b.created_at ?? 0).getTime();
           break;
         default:
           return 0;

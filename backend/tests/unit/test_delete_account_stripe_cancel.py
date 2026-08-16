@@ -2,7 +2,8 @@
 
 Before the fix, DELETE /v1/users/delete-account revoked Firebase auth and wiped Firestore but never
 canceled the user's Stripe subscription, so a paying user kept getting billed with no way to log back
-in and cancel. The handler now cancels the subscription (best-effort) before the wipe.
+in and cancel. The handler now cancels the subscription before Firebase auth deletion and blocks the
+deletion if billing cancellation cannot be confirmed.
 
 ``services.users.account_deletion`` binds its collaborators at import (``from database import users as
 users_db``, ``from utils import stripe as stripe_utils``, …) and those packages pull heavy chains with
@@ -39,22 +40,36 @@ def users_service():
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
         "database.vector_db": AutoMockModule("database.vector_db"),
+        "database.dev_api_key": AutoMockModule("database.dev_api_key"),
+        "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
+        "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
+        "services.users.agent_vm_account_cleanup": AutoMockModule("services.users.agent_vm_account_cleanup"),
         "utils": _pkg("utils"),
+        "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
+        "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
+        "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
-        yield load_module_fresh(
+        service = load_module_fresh(
             "services.users.account_deletion",
             os.path.join(str(_BACKEND), "services", "users", "account_deletion.py"),
         )
+        service.users_db.mark_user_deletion_wipe_intent.return_value = {
+            'wipe_job_id': 'job-1',
+            'dispatch_claimed': True,
+        }
+        service.users_db.mark_user_deletion_wipe_started.return_value = True
+        yield service
 
 
 def _sub(stripe_subscription_id):
@@ -63,7 +78,7 @@ def _sub(stripe_subscription_id):
     return s
 
 
-def test_paid_user_subscription_is_canceled_before_wipe(users_service):
+def test_paid_user_subscription_is_left_for_the_claimed_wipe_worker(users_service):
     with patch.object(
         users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')
     ) as get_sub, patch.object(
@@ -74,9 +89,9 @@ def test_paid_user_subscription_is_canceled_before_wipe(users_service):
         users_service, 'submit_with_context'
     ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
-    get_sub.assert_called_once_with('uid1')
-    cancel.assert_called_once_with('sub_123')
-    fb_delete.assert_called_once()  # deletion still proceeds
+    get_sub.assert_not_called()
+    cancel.assert_not_called()
+    fb_delete.assert_not_called()
     submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
@@ -93,13 +108,16 @@ def test_free_user_does_not_call_stripe(users_service):
     assert resp['status'] == 'ok'
 
 
-def test_stripe_error_does_not_block_deletion(users_service):
+def test_request_does_not_observe_stripe_errors_before_claimed_wipe(users_service):
     with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')), patch.object(
         users_service.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')
-    ), patch.object(users_service.auth, 'delete_account') as fb_delete, patch.object(
+    ), patch.object(users_service.users_db, 'mark_user_deletion_billing_failed') as mark_billing_failed, patch.object(
+        users_service.auth, 'delete_account'
+    ) as fb_delete, patch.object(
         users_service, 'submit_with_context'
     ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
-    fb_delete.assert_called_once()  # best-effort: Stripe failure must not abort deletion
+    mark_billing_failed.assert_not_called()
+    fb_delete.assert_not_called()
     submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'

@@ -4,16 +4,19 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import database.action_items as action_items_db
+import database.notifications as notification_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
     sync_action_item_reminder,
 )
+from utils.conversations.render import format_local_time, resolve_display_tz
 from utils.retrieval.tool_services.conversations import parse_iso_date
+from utils.retrieval.safety import safe_isoformat
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,7 @@ def get_action_items_text(
     end_date: Optional[str] = None,
     due_start_date: Optional[str] = None,
     due_end_date: Optional[str] = None,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Fetch action items and format as LLM-ready text."""
     logger.info(f"get_action_items_text - uid: {uid}, limit: {limit}, offset: {offset}, completed: {completed}")
@@ -106,18 +110,37 @@ def get_action_items_text(
             status_info = " pending"
         return f"No{status_info} action items found{date_info}."
 
-    # Format
+    # Render timestamps in the user's local timezone with an explicit label, matching
+    # get_action_items_tool: an unlabelled UTC wall clock makes the agent state the wrong
+    # time of day (issue #6214). A timezone lookup failure must never abort retrieval.
+    try:
+        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"get_action_items_text - timezone lookup failed, formatting in UTC: {tz_error}")
+        display_tz, tz_label = timezone.utc, "UTC"
+
     result = f"User Action Items ({len(action_items)} total):\n\n"
+    if source_sink is not None:
+        for item in action_items[:128]:
+            source_sink.append(
+                {
+                    'kind': 'task',
+                    'source_id': str(item.get('id') or ''),
+                    'title': str(item.get('description') or 'Task')[:160],
+                    'preview': str(item.get('description') or '')[:600],
+                    'created_at': safe_isoformat(item.get('created_at')),
+                }
+            )
     for i, item in enumerate(action_items, 1):
         status = "✅ Completed" if item.get('completed', False) else "⬜ Pending"
         result += f"{i}. [{status}] {item.get('description', 'No description')}\n"
         result += f"   ID: {item.get('id')}\n"
         if item.get('created_at'):
-            result += f"   Created: {item['created_at'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Created: {format_local_time(item['created_at'], display_tz, tz_label)}\n"
         if item.get('due_at'):
-            result += f"   Due: {item['due_at'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Due: {format_local_time(item['due_at'], display_tz, tz_label)}\n"
         if item.get('completed_at'):
-            result += f"   Completed: {item['completed_at'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Completed: {format_local_time(item['completed_at'], display_tz, tz_label)}\n"
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"
         result += "\n"
@@ -136,7 +159,7 @@ def create_action_item_text(
     if not description or not description.strip():
         return "Error: Description is required."
 
-    action_item_data = {
+    action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
         'conversation_id': conversation_id,
@@ -215,8 +238,8 @@ def update_action_item_text(
     if existing.get('is_locked', False):
         return "Error: A paid plan is required to modify this action item."
 
-    update_data = {}
-    changes = []
+    update_data: Dict[str, Any] = {}
+    changes: List[str] = []
 
     if completed is not None:
         update_data['completed'] = completed

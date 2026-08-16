@@ -1,5 +1,6 @@
 {
     "@@locale": "sr",
+    "sessionExpiredSignInAgain": "Сесија је истекла — пријавите се поново.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -965,16 +966,6 @@
             }
         }
     },
-    "renewsOn": "Твој план се обнавља {date}.",
-    "@renewsOn": {
-        "description": "Renewal message",
-        "placeholders": {
-            "date": {
-                "type": "String",
-                "example": "Jan 1, 2026"
-            }
-        }
-    },
     "basicPlan": "Бесплатан план",
     "@basicPlan": {
         "description": "Basic plan name"
@@ -1482,7 +1473,7 @@
     "exportConfiguration": "Извоз конфигурације",
     "bringYourOwn": "Донесите своју",
     "payYourSttProvider": "Слободно користите omi. Плаћате само добављачу STT директно.",
-    "freeMinutesMonth": "1.200 слободних минута/месец укључено. Неограничено са ",
+    "freeMinutesMonth": "300 слободних минута/месец укључено. Неограничено са ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Хост је обавезан",
     "validPortRequired": "Важећи порт је обавезан",
@@ -1697,22 +1688,6 @@
     "lovingOmi": "Волиш ли Omi?",
     "@lovingOmi": {
         "description": "Title for the app review prompt"
-    },
-    "leaveReviewIos": "Помози нам да дође до више људи остављањем рецензије у App Store-у. Твој повратни информације значи много нам!",
-    "@leaveReviewIos": {
-        "description": "App review prompt text for iOS users"
-    },
-    "leaveReviewAndroid": "Помози нам да дође до више људи остављањем рецензије у Google Play Store-у. Твој повратни информације значи много нам!",
-    "@leaveReviewAndroid": {
-        "description": "App review prompt text for Android users"
-    },
-    "rateOnAppStore": "Оцени на App Store-у",
-    "@rateOnAppStore": {
-        "description": "Button text to rate on Apple App Store"
-    },
-    "rateOnGooglePlay": "Оцени на Google Play",
-    "@rateOnGooglePlay": {
-        "description": "Button text to rate on Google Play Store"
     },
     "maybeLater": "Можда касније",
     "@maybeLater": {
@@ -5505,7 +5480,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1.200 премиум минута + без ограничења на уређају",
+    "basicPlanDescription": "300 премиум минута + без ограничења на уређају",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7280,7 +7255,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.",
+    "premiumMinutesInfo": "300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7391,7 +7366,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1.200 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ",
+    "premiumMinutesMonth": "300 премиум минута/месец. Картица \"На уређају\" нуди неограничену бесплатну транскрипцију. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10520,7 +10495,7 @@
     "upgradePlan": "Надогради план",
     "billingMonthly": "Месечно",
     "billingYearly": "Годишње",
-    "savePercent": "Уштедите ~17%",
+    "savePercent": "Уштедите ~{percent}%",
     "popular": "Популарно",
     "currentPlan": "Тренутни",
     "neoSubtitle": "{count} питања месечно",
@@ -10582,6 +10557,7 @@
     "syncStatusWaiting": "Чека синхронизацију",
     "syncStatusRetrying": "Обрада није успела — нови покушај",
     "syncStatusFailed": "Неуспело — додирните Покушај поново",
+    "syncStatusTooOld": "Превише стара за синхронизацију — Omi не може да је прихвати",
     "syncStatusFileUnavailable": "Датотека није доступна",
     "syncStatusUploaded": "Отпремљено · обрада на Omi",
     "noRecordingsYet": "Још нема снимака",
@@ -10632,7 +10608,7 @@
     "syncCustomSttWarningMessage": "Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.",
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kada vam zatreba, umesto uživo. Snimci se čuvaju na telefonu, a zatim ih otpremate da biste kreirali razgovore.",
-    "transcribeLaterNote": "Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
+    "transcribeLaterNote": "Radi sa mikrofonom telefona i sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
     "transcribeLaterStorageFull": "Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
@@ -10694,5 +10670,115 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije."
+    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije.",
+    "connectRayBanMeta": "Повежи Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Користите Ray-Ban Meta наочаре као Omi уређај за снимање разговора и визуелног контекста. Omi ће отворити Meta AI апликацију да повеже ваше наочаре.",
+    "raybanMetaOpenMetaAI": "Повежи преко Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завршите повезивање у Meta AI апликацији, а затим се вратите овде.",
+    "raybanMetaCheckAgain": "Провери поново",
+    "raybanMetaAllowCamera": "Дозволи камеру на наочарима",
+    "raybanMetaCameraExplanation": "Omi користи камеру ваших наочара да дода фотографије вашим разговорима. Ово можете прескочити и користити само звук.",
+    "raybanMetaSkipForNow": "Прескочи за сада",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta режим само за звук",
+    "raybanMetaAudioOnlyExplanation": "Ова верзија Omi може да користи микрофон ваших наочара преко Bluetooth. Снимање фотографија захтева Meta програмерску верзију Omi.",
+    "raybanMetaMusicPauseNote": "Музика на вашем телефону се паузира док се микрофон наочара користи.",
+    "raybanMetaContinue": "Настави",
+    "raybanMetaCapturePhoto": "Направи фотографију",
+    "raybanMetaPhotoRequested": "Фотографија је затражена — појавиће се у вашем разговору.",
+    "raybanMetaMicrophoneReady": "Микрофон спреман",
+    "raybanMetaImageCaptureReady": "Снимање слике спремно",
+    "raybanMetaImageCaptureUnavailable": "Није доступно у режиму само за звук",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Грешка при повезивању са Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Меморија уређаја",
+    "deviceStoragePercentFull": "{percent}% попуњено",
+    "deviceStorageUsedOfTotal": "{used} од {total} искоришћено",
+    "deviceStorageFree": "{free} слободно",
+    "deviceStorageNearlyFull": "Уређај је скоро пун — синхронизујте да ослободите простор.",
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži.",
+    "dataEncryptedBanner": "Ваши подаци су подразумевано заштићени јаким шифровањем, а ви контролишете како се чувају и користе.",
+    "rayBanMetaMicPickerTitle": "Изаберите микрофон Ray-Ban Meta",
+    "rayBanMetaMicPickerDescription": "Изаберите Bluetooth микрофон наочара. Музика се паузира док га Omi користи.",
+    "rayBanMetaMicPickerEmpty": "Није пронађен ниједан Bluetooth микрофон. Повежите наочаре у подешавањима iPhone-а и покушајте поново.",
+    "rayBanMetaMicPickerLoadError": "Bluetooth микрофони нису могли да се учитају. Проверите да ли је Bluetooth укључен и покушајте поново.",
+    "rayBanMetaMicPickerConnectError": "Повезивање са тим микрофоном није успело. Проверите да ли је повезан у подешавањима iPhone-а.",
+    "cloudTranscription": "Препис у облаку",
+    "copyMessage": "Копирај поруку",
+    "deleteOnDeviceModel": "Обриши модел",
+    "deleteOnDeviceModelConfirm": "Да ли сте сигурни да желите да обришете овај модел?",
+    "downgradeAnyway": "Ипак пређи",
+    "downgradeLimitBattery": "7 пута већа потрошња батерије",
+    "downgradeLimitDelay": "Кашњење од 5–7 секунди",
+    "downgradeLimitQuality": "30% лошији квалитет преписа",
+    "downgradeLimitSpeakers": "Говорници се не могу препознати",
+    "downgradeLimitationsHeading": "Наићи ћете на следећа ограничења:",
+    "downgradeToFreemiumTitle": "Прелазак на бесплатни план?",
+    "errorLoadingAudio": "Грешка при учитавању звука",
+    "failedToLinkCalendarEvent": "Повезивање догађаја из календара није успело",
+    "googleCalendarConnectPrompt": "Повежите Google календар да бисте разговоре повезали са догађајима у календару.",
+    "googleCalendarNotConnected": "Google календар није повезан",
+    "linkedToEvent": "Повезано са „{title}“",
+    "onDeviceModelDeleted": "Модел је обрисан",
+    "onDeviceModelDownloadFailed": "Преузимање модела није успело",
+    "onDeviceModelDownloadFailedDesc": "Преузимање Whisper модела није успело. Покушајте поново.",
+    "onDeviceModelDownloadSuccess": "Модел је преузет",
+    "onDeviceModelDownloadSuccessDesc": "Whisper модел је успешно преузет",
+    "onDeviceModelDownloaded": "Преузето",
+    "onDeviceModelSize": "Величина модела",
+    "onDeviceTranscription": "Препис на уређају",
+    "onDeviceTranscriptionDesc": "Препис се обрађује локално на вашем уређају",
+    "searchSettings": "Претражи подешавања…",
+    "speechToTextProvider": "Добављач говора у текст",
+    "speechToTextProviderDesc": "Изаберите услугу која се користи за препис",
+    "sttFilterAuto": "Аутоматски",
+    "sttModelAccuracy": "Тачност",
+    "sttModelFaster": "Брже",
+    "sttModelHigher": "Већа",
+    "sttModelLower": "Мања",
+    "sttModelSlower": "Спорије",
+    "sttModelSpeed": "Брзина",
+    "sttNone": "Ништа",
+    "sttProviderDeepgram": "Deepgram",
+    "sttProviderSoniox": "Soniox",
+    "sttProviderSpeechmatics": "Speechmatics",
+    "thanksForYourFeedback": "Хвала на повратној информацији!",
+    "transcriptionLanguage": "Језик преписа",
+    "transcriptionLanguageDesc": "Изаберите језик за препис говора",
+    "whisperModel": "Whisper модел",
+    "whisperModelDesc": "Изаберите модел за препис на уређају",
+    "whisperModelSizeBase": "Основни",
+    "whisperModelSizeLarge": "Велики",
+    "whisperModelSizeMedium": "Средњи",
+    "whisperModelSizeSmall": "Мали",
+    "whisperModelSizeTiny": "Најмањи",
+    "planSheetChooseYourPlan": "Изаберите свој план да откључате неограничени Omi.",
+    "availableOnMacMobileWeb": "Доступно на Mac-у, мобилном и вебу",
+    "popularBadge": "ПОПУЛАРНО",
+    "worksOnDesktop": "Ради на рачунару",
+    "noDesktopAccess": "Не ради на рачунару",
+    "annualBillingSummary": "{months} месеци / {price}",
+    "monthsFreeBadge": "{count, plural, one{{count} месец бесплатно} few{{count} месеца бесплатно} other{{count} месеци бесплатно}}",
+    "freemiumLimitsIntro": "Omi је бесплатан, али бесплатна верзија има ограничења која утичу на ваше искуство:",
+    "downgradeLimitDelayNotRealTime": "Кашњење од 5-7 секунди (није у реалном времену)",
+    "downgradeToFreemiumAction": "Пређите на бесплатну верзију",
+    "getFreeUnlimitedAccess": "Остварите бесплатан неограничен приступ",
+    "shareDataForTraining": "Делите податке за обуку",
+    "yourRequestUnderReview": "Ваш захтев је на прегледу",
+    "pinAsBaseline": "Закачи као основу",
+    "unpinAsBaseline": "Откачи са основе",
+    "baselineMemory": "Основна меморија",
+    "alwaysInContext": "Увек у контексту",
+    "accountCutoverUpdateRequiredTitle": "Je vyžadována aktualizace",
+    "accountCutoverUpdateRequiredMessage": "Nainstalujte nejnovější aplikaci Omi, abyste mohli pokračovat po migraci účtu.",
+    "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
+    "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
+    "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
+    "accountCutoverOpenStore": "Otevřít obchod"
 }

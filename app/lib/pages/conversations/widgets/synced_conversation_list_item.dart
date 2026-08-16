@@ -100,7 +100,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                         onTap: () async {
                           setReprocessing(true);
                           var mem = await reProcessConversationServer(conversation.id);
-                          if (!mounted) return;
+                          if (!context.mounted) return;
                           if (mem != null) {
                             setState(() {
                               conversation = mem;

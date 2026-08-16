@@ -183,23 +183,38 @@ struct GeminiResponse: Decodable {
 actor GeminiClient {
   private let model: String
 
-  /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
-  private static var proxyBaseURL: String {
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
-      return url.hasSuffix("/") ? url : url + "/"
-    }
-    return "https://api.omi.me/"
+  /// Backend proxy base URL resolved through the identity-bound endpoint policy.
+  /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
+  /// development serving endpoint even when an inherited environment is stale.
+  static var proxyBaseURL: String {
+    proxyBaseURL(bundleIdentifier: AppBuild.bundleIdentifier)
   }
 
-  enum GeminiClientError: LocalizedError {
+  static func proxyBaseURL(
+    bundleIdentifier: String,
+    environmentValue: String? = nil,
+    launchEnvironmentValue: String? = nil
+  ) -> String {
+    DesktopBackendEnvironment.rustBackendURL(
+      useDevelopmentBackends: DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        bundleIdentifier: bundleIdentifier,
+        updateChannel: AppBuild.currentUpdateChannel
+      ),
+      bundleIdentifier: bundleIdentifier,
+      environmentValue: environmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"],
+      launchEnvironmentValue: launchEnvironmentValue ?? ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+    )
+  }
+
+  nonisolated enum GeminiClientError: LocalizedError {
     case missingAPIKey
     case networkError(Error)
     case invalidResponse
-    case apiError(String)
+    case apiError(String, retryable: Bool? = nil)
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
-      if case .apiError(let msg) = self { return msg }
+      if case .apiError(let msg, _) = self { return msg }
       return nil
     }
 
@@ -208,7 +223,7 @@ actor GeminiClient {
     /// decisions and Sentry noise suppression (these flood without being actionable).
     var isTransient: Bool {
       switch self {
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         return Self.isTimeoutLike(lower)
           || lower.contains("service unavailable")
@@ -231,12 +246,12 @@ actor GeminiClient {
     /// the user waiting through several multi-minute attempts.
     var shouldAutoRetry: Bool {
       switch self {
-      case .apiError(let message):
-        let lower = message.lowercased()
-        return isTransient && !Self.isTimeoutLike(lower)
-      case .networkError(let error):
-        let nsError = error as NSError
-        return !(nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut)
+      case .apiError(_, let retryable):
+        return retryable == true
+      case .networkError:
+        // A transport error after dispatch is ambiguous. Only a typed backend
+        // response may authorize replay.
+        return false
       case .invalidResponse, .missingAPIKey:
         return false
       }
@@ -246,7 +261,7 @@ actor GeminiClient {
     /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
     var isExpectedProductState: Bool {
       switch self {
-      case .apiError(let message):
+      case .apiError(let message, _):
         let lower = message.lowercased()
         return lower.contains("trial_expired")
           || lower.contains("trial expired")
@@ -271,7 +286,7 @@ actor GeminiClient {
         return "Could not reach AI service. Check your internet connection and try again."
       case .invalidResponse:
         return "AI service returned an unexpected response. Please try again."
-      case .apiError(let message):
+      case .apiError(let message, _):
         return Self.userFacingMessage(for: message)
       }
     }
@@ -342,6 +357,11 @@ actor GeminiClient {
     }
     self.model = model
     self.fallbackModel = fallbackModel
+    // Which model a proactive assistant actually runs on is a product decision with a
+    // measurable click-through cost, and until now it was invisible at runtime — the model
+    // appears only inside the request URL, so a tier change could not be confirmed on a
+    // real machine. Model IDs are non-sensitive and low-cardinality.
+    log("GeminiClient: model=\(model) fallback=\(fallbackModel ?? "none")")
   }
 
   /// Get Firebase auth header for proxy requests
@@ -355,7 +375,6 @@ actor GeminiClient {
   private func proxyURL(action: String, modelOverride: String? = nil) -> URL {
     URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelOverride ?? model):\(action)")!
   }
-
 
   /// Log the raw API error message for debugging and throw a sanitized error.
   /// The `errorDescription` on GeminiClientError is user-friendly; this log preserves the raw detail.
@@ -379,33 +398,109 @@ actor GeminiClient {
     throw GeminiClientError.invalidResponse
   }
 
-  /// Check HTTP status code before attempting JSON decode.
-  /// Throws GeminiClientError.apiError for non-2xx responses so the error flows
-  /// through isTransientError() and userFacingMessage() instead of crashing JSONDecoder.
-  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
-    guard let httpResponse = response as? HTTPURLResponse else { return }
+  /// Convert a non-2xx response into a typed error while preserving the backend's
+  /// replay authorization. Missing or malformed retryability remains fail-closed.
+  static func httpError(response: URLResponse, data: Data) -> GeminiClientError? {
+    guard let httpResponse = response as? HTTPURLResponse else { return nil }
     let status = httpResponse.statusCode
-    guard (200..<300).contains(status) else {
-      let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
-      throw GeminiClientError.apiError("HTTP \(status): \(body)")
+    guard !(200..<300).contains(status) else { return nil }
+
+    let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
+    let retryable: Bool?
+    switch httpResponse.value(forHTTPHeaderField: "X-Omi-Retryable")?.lowercased() {
+    case "true":
+      retryable = true
+    case "false":
+      retryable = false
+    default:
+      retryable = nil
+    }
+    return .apiError("HTTP \(status): \(body)", retryable: retryable)
+  }
+
+  /// Check HTTP status code before attempting JSON decode.
+  private func checkHTTPStatus(_ response: URLResponse, data: Data) throws {
+    if let error = Self.httpError(response: response, data: data) {
+      throw error
     }
   }
 
-  /// Check if an error is transient and worth retrying
-  private func isTransientError(_ error: Error) -> Bool {
+  /// Replay only outcomes whose typed backend contract says they are safe.
+  static func shouldAutoRetry(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
       return geminiError.shouldAutoRetry
     }
-    // URLSession network errors are transient
-    let nsError = error as NSError
-    return nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorTimedOut
+    // Raw URLSession errors are ambiguous after dispatch and must not be replayed.
+    return false
+  }
+
+  /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
+  private static func bucketGeminiModel(_ model: String) -> String {
+    let lower = model.lowercased()
+    if lower.contains("pro") { return "pro" }
+    if lower.contains("flash") { return "flash" }
+    return "other"
+  }
+
+  /// Map transient failures to shared fallback reason buckets.
+  private static func fallbackReason(for error: Error) -> String {
+    if let geminiError = error as? GeminiClientError {
+      switch geminiError {
+      case .networkError(let underlying):
+        let nsError = underlying as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut {
+          return "timeout"
+        }
+        return "other"
+      case .apiError(let message, _):
+        let lower = message.lowercased()
+        if lower.contains("upstream_timeout")
+          || lower.contains("timed out")
+          || lower.contains("timeout")
+          || lower.contains("deadline")
+          || lower.contains("http 504")
+          || lower.contains(" 504")
+          || lower.contains("http 408")
+          || lower.contains(" 408")
+        {
+          return "timeout"
+        }
+        if lower.contains("429")
+          || lower.contains("rate limit")
+          || lower.contains("too many requests")
+        {
+          return "provider_429"
+        }
+        if lower.contains("quota")
+          || lower.contains("resource exhausted")
+        {
+          return "quota"
+        }
+        if lower.contains("503")
+          || lower.contains("502")
+          || lower.contains("500")
+          || lower.contains("service unavailable")
+          || lower.contains("internal error")
+          || lower.contains("overloaded")
+          || lower.contains("high demand")
+        {
+          return "provider_5xx"
+        }
+        return "other"
+      case .invalidResponse, .missingAPIKey:
+        return "other"
+      }
+    }
+    return "other"
   }
 
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
-  private func retryBackoff(attempt: Int, error: Error) async {
+  private func retryBackoff(attempt: Int, error: Error) async throws {
     let delaySec = [2, 8][min(attempt, 1)]
-    log("GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)")
-    try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+    log(
+      "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
+    )
+    try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
   }
 
   /// Send a request to the Gemini API with an image
@@ -447,7 +542,8 @@ actor GeminiClient {
             generationConfig: GeminiRequest.GenerationConfig(
               responseMimeType: "application/json",
               responseSchema: responseSchema,
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+              thinkingConfig: ThinkingConfig(
+                thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
             )
           )
 
@@ -483,12 +579,12 @@ actor GeminiClient {
         lastError = error
 
         // Don't retry non-transient errors (e.g. safety filter / invalidResponse)
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
 
         // Backoff: 1s after first failure, 2s after second
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -524,7 +620,8 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: nil,
             responseSchema: nil,
-            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -555,10 +652,10 @@ actor GeminiClient {
         return text
       } catch {
         lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -595,7 +692,8 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: "application/json",
             responseSchema: responseSchema,
-            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -626,10 +724,10 @@ actor GeminiClient {
         return text
       } catch {
         lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
+        guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
           throw error
         }
-        await retryBackoff(attempt: attempt, error: error)
+        try await retryBackoff(attempt: attempt, error: error)
       }
     }
 
@@ -637,7 +735,6 @@ actor GeminiClient {
   }
 
 }
-
 
 // MARK: - Tool Calling Support
 
@@ -714,7 +811,6 @@ struct GeminiTool: Encodable {
   }
 }
 
-
 /// Result of a tool-enabled chat (may include tool calls)
 struct ToolChatResult {
   let text: String
@@ -723,7 +819,7 @@ struct ToolChatResult {
 }
 
 /// A function call from the model
-struct ToolCall {
+struct ToolCall: @unchecked Sendable {
   let name: String
   let arguments: [String: Any]
   let thoughtSignature: String?
@@ -879,92 +975,100 @@ extension GeminiClient {
     var lastError: Error?
 
     for (modelIndex, activeModel) in models.enumerated() {
-    for attempt in 0...maxRetries {
-      do {
-        // Wrap JSON serialization in autoreleasepool (contents may include
-        // large base64 image data that creates bridged Obj-C intermediaries).
-        let requestBody: Data = try autoreleasepool {
-          let toolConfig =
-            forceToolCall
-            ? GeminiImageToolRequest.ToolConfig(
-              functionCallingConfig: .init(mode: "ANY")
-            ) : nil
+      for attempt in 0...maxRetries {
+        do {
+          // Wrap JSON serialization in autoreleasepool (contents may include
+          // large base64 image data that creates bridged Obj-C intermediaries).
+          let requestBody: Data = try autoreleasepool {
+            let toolConfig =
+              forceToolCall
+              ? GeminiImageToolRequest.ToolConfig(
+                functionCallingConfig: .init(mode: "ANY")
+              ) : nil
 
-          let request = GeminiImageToolRequest(
-            contents: contents,
-            systemInstruction: GeminiImageToolRequest.SystemInstruction(
-              parts: [.init(text: systemPrompt)]
-            ),
-            generationConfig: GeminiImageToolRequest.GenerationConfig(
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: activeModel)))
-            ),
-            tools: tools,
-            toolConfig: toolConfig
+            let request = GeminiImageToolRequest(
+              contents: contents,
+              systemInstruction: GeminiImageToolRequest.SystemInstruction(
+                parts: [.init(text: systemPrompt)]
+              ),
+              generationConfig: GeminiImageToolRequest.GenerationConfig(
+                thinkingConfig: ThinkingConfig(
+                  thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: activeModel)))
+              ),
+              tools: tools,
+              toolConfig: toolConfig
+            )
+
+            return try JSONEncoder().encode(request)
+          }
+
+          let url = proxyURL(action: "generateContent", modelOverride: activeModel)
+          var urlRequest = URLRequest(url: url)
+          urlRequest.httpMethod = "POST"
+          urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+          urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          urlRequest.timeoutInterval = 300
+          urlRequest.httpBody = requestBody
+
+          let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+          try checkHTTPStatus(urlResponse, data: data)
+
+          let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
+
+          if let error = response.error {
+            try throwAPIError(error.message)
+          }
+
+          guard let candidate = response.candidates?.first,
+            let parts = candidate.content?.parts
+          else {
+            try throwBlockedOrInvalidResponse(
+              blockReason: response.promptFeedback?.blockReason,
+              finishReason: response.candidates?.first?.finishReason
+            )
+          }
+
+          var toolCalls: [ToolCall] = []
+          var textResponse = ""
+
+          for part in parts {
+            if let functionCall = part.functionCall {
+              let args = functionCall.args?.mapValues { $0.value } ?? [:]
+              toolCalls.append(
+                ToolCall(
+                  name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
+            }
+            if let text = part.text {
+              textResponse += text
+            }
+          }
+
+          return ToolChatResult(
+            text: textResponse,
+            toolCalls: toolCalls,
+            requiresToolExecution: !toolCalls.isEmpty
           )
-
-          return try JSONEncoder().encode(request)
-        }
-
-        let url = proxyURL(action: "generateContent", modelOverride: activeModel)
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.timeoutInterval = 300
-        urlRequest.httpBody = requestBody
-
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-        try checkHTTPStatus(urlResponse, data: data)
-
-        let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
-
-        if let error = response.error {
-          try throwAPIError(error.message)
-        }
-
-        guard let candidate = response.candidates?.first,
-          let parts = candidate.content?.parts
-        else {
-          try throwBlockedOrInvalidResponse(
-            blockReason: response.promptFeedback?.blockReason,
-            finishReason: response.candidates?.first?.finishReason
-          )
-        }
-
-        var toolCalls: [ToolCall] = []
-        var textResponse = ""
-
-        for part in parts {
-          if let functionCall = part.functionCall {
-            let args = functionCall.args?.mapValues { $0.value } ?? [:]
-            toolCalls.append(
-              ToolCall(
-                name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
+        } catch {
+          lastError = error
+          guard attempt < maxRetries && Self.shouldAutoRetry(error) else {
+            // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
+            // if the failure is transient and a fallback model remains.
+            if modelIndex < models.count - 1 && Self.shouldAutoRetry(error) {
+              DesktopDiagnosticsManager.shared.recordFallback(
+                area: "gemini_model",
+                from: Self.bucketGeminiModel(activeModel),
+                to: Self.bucketGeminiModel(models[modelIndex + 1]),
+                reason: Self.fallbackReason(for: error),
+                outcome: .degraded,
+                extra: ["user_visible": false])
+              log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
+              break
+            }
+            throw error
           }
-          if let text = part.text {
-            textResponse += text
-          }
+          try await retryBackoff(attempt: attempt, error: error)
         }
-
-        return ToolChatResult(
-          text: textResponse,
-          toolCalls: toolCalls,
-          requiresToolExecution: !toolCalls.isEmpty
-        )
-      } catch {
-        lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
-          // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
-          // if the failure is transient and a fallback model remains.
-          if modelIndex < models.count - 1 && isTransientError(error) {
-            log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
-            break
-          }
-          throw error
-        }
-        await retryBackoff(attempt: attempt, error: error)
       }
-    }
     }
 
     throw lastError!

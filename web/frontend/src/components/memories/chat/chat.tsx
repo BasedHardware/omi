@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { TranscriptSegment, Person } from '@/src/types/memory.types';
+import { useState, useRef, useEffect } from 'react';
+import { TranscriptSegment } from '@/src/types/memory.types';
 import chatWithMemory from '@/src/actions/memories/chat-with-memory';
 import { Send, UserCircle, Message, ArrowDown } from 'iconoir-react';
 import Markdown from 'markdown-to-jsx';
 
 interface ChatProps {
+  conversationId: string;
   transcript: TranscriptSegment[];
-  people?: Person[];
   onClearChatRef?: (clearFn: () => void) => void;
   onMessagesChange?: (hasMessages: boolean) => void;
 }
@@ -19,8 +19,8 @@ interface ChatMessage {
 }
 
 export default function Chat({
+  conversationId,
   transcript,
-  people,
   onClearChatRef,
   onMessagesChange,
 }: ChatProps) {
@@ -55,26 +55,6 @@ export default function Chat({
       document.head.removeChild(style);
     };
   }, []);
-
-  // Convert transcript segments to a readable string, resolving person names
-  const transcriptText = useMemo(
-    () =>
-      transcript
-        .map((segment) => {
-          let speaker: string;
-          if (segment.is_user) {
-            speaker = 'Owner';
-          } else if (segment.person_id && people) {
-            const person = people.find((p) => p.id === segment.person_id);
-            speaker = person ? person.name : `Speaker ${segment.speaker_id}`;
-          } else {
-            speaker = `Speaker ${segment.speaker_id}`;
-          }
-          return `${speaker}: ${segment.text}`;
-        })
-        .join('\n\n'),
-    [transcript, people],
-  );
 
   const scrollToBottom = (smooth = true) => {
     if (messagesContainerRef.current) {
@@ -121,8 +101,9 @@ export default function Chat({
 
     try {
       const response = await chatWithMemory({
-        messages: [...messages, userMessage],
-        transcript: transcriptText,
+        conversationId,
+        history: messages.slice(-8),
+        question: userMessage.content,
       });
 
       if (response) {
@@ -252,8 +233,9 @@ export default function Chat({
 
                         try {
                           const response = await chatWithMemory({
-                            messages: [...messages, userMessage],
-                            transcript: transcriptText,
+                            conversationId,
+                            history: messages.slice(-8),
+                            question: userMessage.content,
                           });
 
                           if (response) {

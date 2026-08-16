@@ -61,6 +61,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   /// Non-throwing variant of [conversation]. Build paths must use this so a
   /// transient miss (conversation deleted under us, day-group emptied) returns
   /// null instead of throwing from inside a Consumer's builder.
+  ///
+  /// Once a conversation is selected this only ever resolves to that same id.
+  /// Substituting another conversation would silently retarget the page, and
+  /// destructive actions (delete, visibility, rename) act on whatever this
+  /// returns.
   ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
@@ -70,17 +75,26 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (list != null && list.isNotEmpty) {
       if (id != null) {
         result = list.firstWhereOrNull((c) => c.id == id);
+      } else {
+        result = list.first;
+        _cachedConversationId = result.id;
       }
-      result ??= list.first;
-      _cachedConversationId = result.id;
     }
 
     result ??= _cachedConversation;
-    if (result != null &&
-        result.createdAt.year == selectedDate.year &&
-        result.createdAt.month == selectedDate.month &&
-        result.createdAt.day == selectedDate.day) {
-      return _cachedConversation = result;
+    if (result != null && id != null && result.id != id) return null;
+    if (result != null) {
+      // Validate with the *same* key function the list groups by
+      // (`conversationLocalDayKey` over startedAt ?? createdAt). Comparing the
+      // raw UTC year/month/day instead made this getter reject a conversation
+      // that is actually present in the selected day-group whenever the
+      // viewer's local day differs from the UTC day — an evening conversation
+      // for any UTC+ viewer, a post-UTC-midnight one for any UTC- viewer —
+      // blanking the detail page it was opened from (#10976).
+      final effectiveDate = result.startedAt ?? result.createdAt;
+      if (conversationLocalDayKey(effectiveDate) == conversationLocalDayKey(selectedDate)) {
+        return _cachedConversation = result;
+      }
     }
 
     return null;

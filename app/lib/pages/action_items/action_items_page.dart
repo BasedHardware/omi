@@ -15,6 +15,7 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/action_item_shimmer_widget.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -80,7 +81,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
-        provider.fetchActionItems(showShimmer: true);
+        provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
       if (!taskIntegrationProvider.hasLoaded && !taskIntegrationProvider.isLoading) {
@@ -313,8 +314,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           showMenu();
         },
         child: Container(
-          width: 36,
-          height: 36,
+          width: 48,
+          height: 48,
           decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
           child: const Center(child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20)),
         ),
@@ -589,7 +590,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: const [
+        SliverPadding(padding: EdgeInsets.only(top: 16)),
+        ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
   }
 
   Widget _buildEmptyTasksList() {

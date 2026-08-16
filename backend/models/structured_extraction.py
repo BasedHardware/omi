@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -10,15 +10,42 @@ from models.structured import ActionItem, Event, Structured
 class ExtractedActionItem(BaseModel):
     description: str = Field(description="The action item to be completed")
     due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
+    capture_kind: Optional[Literal['explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step']] = (
+        None
+    )
+    capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    concrete_deliverable: Optional[bool] = Field(
+        default=None,
+        description='True only when the commitment names a concrete deliverable or outcome',
+    )
+    candidate_action: Optional[Literal['create', 'update', 'complete']] = None
+    target_task_id: Optional[str] = None
+    source_segment_ids: List[str] = Field(
+        default_factory=list,
+        description='Transcript segment IDs that directly support this action item',
+    )
 
     def to_action_item(self) -> ActionItem:
-        return ActionItem(description=self.description, due_at=self.due_at)
+        return ActionItem(
+            description=self.description,
+            due_at=self.due_at,
+            capture_kind=self.capture_kind,
+            capture_confidence=self.capture_confidence,
+            ownership_confidence=self.ownership_confidence,
+            capture_owner=self.capture_owner,
+            concrete_deliverable=self.concrete_deliverable,
+            candidate_action=self.candidate_action,
+            target_task_id=self.target_task_id,
+            source_segment_ids=self.source_segment_ids,
+        )
 
 
 class ActionItemsExtraction(BaseModel):
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
-        default=[],
+        default_factory=list,
     )
 
     def to_action_items(self) -> List[ActionItem]:
@@ -36,7 +63,7 @@ class ConversationStructureExtraction(BaseModel):
 
     @field_validator('category', mode='before')
     @classmethod
-    def set_category_default_on_error(cls, v: any) -> 'CategoryEnum':
+    def set_category_default_on_error(cls, v: Any) -> CategoryEnum:
         if isinstance(v, CategoryEnum):
             return v
         try:
@@ -78,16 +105,16 @@ class StructuredExtraction(BaseModel):
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
-        default=[],
+        default_factory=list,
     )
     events: List[ExtractedEvent] = Field(
         description="A list of events extracted from the conversation, that the user must have on his calendar.",
-        default=[],
+        default_factory=list,
     )
 
     @field_validator('category', mode='before')
     @classmethod
-    def set_category_default_on_error(cls, v: any) -> 'CategoryEnum':
+    def set_category_default_on_error(cls, v: Any) -> CategoryEnum:
         if isinstance(v, CategoryEnum):
             return v
         try:

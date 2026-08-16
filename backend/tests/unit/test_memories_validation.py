@@ -301,6 +301,7 @@ class TestExtractedMemoryValidation:
             sys.modules['utils.llms.memory'] = llms_memory
             llms.memory = llms_memory
 
+    @pytest.mark.slow
     def test_unknown_llm_category_defaults_to_interesting(self):
         self._ensure_memory_model_dependencies()
         from models.memories import MemoryCategory

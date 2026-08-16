@@ -83,7 +83,9 @@ export function StepScaffold({
       </div>
 
       {eyebrow && (
-        <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-white/40">{eyebrow}</p>
+        <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-white/40">
+          {eyebrow}
+        </p>
       )}
       <h1 className="font-display text-3xl font-semibold text-white/95">{title}</h1>
       {subtitle && (
@@ -99,12 +101,17 @@ export function StepScaffold({
       )}
 
       {(onContinue || onBack) && (
-        <div className={'mt-8 flex items-center gap-3 ' + (left ? 'justify-start' : 'justify-center')}>
+        <div
+          className={'mt-8 flex items-center gap-3 ' + (left ? 'justify-start' : 'justify-center')}
+        >
           {onBack && (
+            // Secondary treatment: Back must sit BELOW Continue in the hierarchy,
+            // never a second solid-white primary beside it. Matches TrustStep's
+            // inline Back and the unselected-chip pattern used across onboarding.
             <button
               type="button"
               onClick={onBack}
-              className="rounded-xl bg-white px-6 py-3 font-medium text-black transition-opacity hover:opacity-90"
+              className="rounded-xl bg-white/[0.06] px-6 py-3 font-medium text-white/80 transition-colors hover:bg-white/[0.1]"
             >
               Back
             </button>

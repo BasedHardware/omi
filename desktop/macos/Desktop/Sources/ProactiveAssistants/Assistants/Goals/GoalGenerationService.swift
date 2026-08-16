@@ -4,138 +4,160 @@ import Foundation
 /// and removes stale goals with no progress for 3+ days
 @MainActor
 class GoalGenerationService {
-    static let shared = GoalGenerationService()
+  static let shared = GoalGenerationService()
 
-    private static let kLastGenerationDate = "goalGeneration_lastDate"
-    static let kAutoGenerationEnabled = "goalGeneration_autoEnabled"
-    private let maxActiveGoals = 3
-    private let staleGoalDays: TimeInterval = 3 * 86400 // 3 days
+  private static let kLastGenerationDate = "goalGeneration_lastDate"
+  static let kAutoGenerationEnabled = "goalGeneration_autoEnabled"
+  private let maxActiveGoals = 3
+  private let staleGoalDays: TimeInterval = 3 * 86400  // 3 days
 
-    /// Whether automatic goal generation is enabled. Defaults to false (off).
-    var isAutoGenerationEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kAutoGenerationEnabled) }
-        set { UserDefaults.standard.set(newValue, forKey: Self.kAutoGenerationEnabled) }
+  /// Whether automatic goal generation is enabled. Defaults to false (off).
+  var isAutoGenerationEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: Self.kAutoGenerationEnabled) }
+    set { UserDefaults.standard.set(newValue, forKey: Self.kAutoGenerationEnabled) }
+  }
+
+  private init() {}
+
+  // MARK: - Conversation Hook
+
+  /// Called after each conversation is saved.
+  /// Removes stale goals and checks if a day has passed since last generation.
+  func onConversationCreated() {
+    guard isAutoGenerationEnabled else {
+      log("GoalGenerationService: Auto-generation disabled, skipping")
+      return
+    }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+    Task { [ownerID] in
+      await removeStaleGoals(ownerID: ownerID)
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      await checkDailyGeneration(ownerID: ownerID)
+    }
+  }
+
+  // MARK: - Stale Goal Removal
+
+  /// Complete (deactivate) AI-generated goals that haven't had any progress update in 3+ days.
+  /// User-created goals are never auto-removed.
+  private func removeStaleGoals(ownerID: String) async {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    do {
+      let goals = try await APIClient.shared.getGoals()
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      let now = Date()
+
+      for goal in goals where goal.isActive && Self.isAIGeneratedSource(goal.source) {
+        let daysSinceUpdate = now.timeIntervalSince(goal.updatedAt)
+        if daysSinceUpdate >= staleGoalDays {
+          log(
+            "GoalGenerationService: Completing stale AI goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days"
+          )
+          _ = try await APIClient.shared.completeGoal(id: goal.id)
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+          try? await GoalStorage.shared.markCompleted(backendId: goal.id)
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+          NotificationCenter.default.post(name: .goalAutoCreated, object: nil)
+        }
+      }
+    } catch {
+      log("GoalGenerationService: Failed to check/complete stale goals: \(error.localizedDescription)")
+    }
+  }
+
+  /// Match the canonical source while retaining compatibility with goals returned by older servers.
+  static func isAIGeneratedSource(_ source: String?) -> Bool {
+    source == "ai_suggested" || source == "ai"
+  }
+
+  // MARK: - Daily Generation Check
+
+  /// Check if a new calendar day has started since last goal generation
+  private func checkDailyGeneration(ownerID: String) async {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    let lastDate = UserDefaults.standard.object(forKey: Self.kLastGenerationDate) as? Date
+
+    if lastDate == nil {
+      log("GoalGenerationService: First run, generating immediately")
+      _ = await generateGoalIfNeeded(ownerID: ownerID)
+      return
     }
 
-    private init() {}
-
-    // MARK: - Conversation Hook
-
-    /// Called after each conversation is saved.
-    /// Removes stale goals and checks if a day has passed since last generation.
-    func onConversationCreated() {
-        guard isAutoGenerationEnabled else {
-            log("GoalGenerationService: Auto-generation disabled, skipping")
-            return
-        }
-        Task {
-            await removeStaleGoals()
-            await checkDailyGeneration()
-        }
+    let calendar = Calendar.current
+    guard let lastDate = lastDate, !calendar.isDateInToday(lastDate) else {
+      log("GoalGenerationService: Already generated today (lastDate: \(lastDate!)), skipping")
+      return
     }
 
-    // MARK: - Stale Goal Removal
+    log("GoalGenerationService: New day — last generation was \(lastDate), triggering generation")
+    _ = await generateGoalIfNeeded(ownerID: ownerID)
+  }
 
-    /// Complete (deactivate) AI-generated goals that haven't had any progress update in 3+ days.
-    /// Only applies to goals with source == "ai". User-created goals (source == "user" or no source) are never auto-removed.
-    private func removeStaleGoals() async {
-        do {
-            let goals = try await APIClient.shared.getGoals()
-            let now = Date()
+  /// Generate a goal if the user has room for more
+  private func generateGoalIfNeeded(ownerID: String) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+    do {
+      let goals = try await APIClient.shared.getGoals()
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+      let activeGoals = goals.filter { $0.isActive }
 
-            for goal in goals where goal.isActive && goal.source == "ai" {
-                let daysSinceUpdate = now.timeIntervalSince(goal.updatedAt)
-                if daysSinceUpdate >= staleGoalDays {
-                    log("GoalGenerationService: Completing stale AI goal '\(goal.title)' — no update for \(Int(daysSinceUpdate / 86400)) days")
-                    _ = try await APIClient.shared.completeGoal(id: goal.id)
-                    try? await GoalStorage.shared.markCompleted(backendId: goal.id)
-                    NotificationCenter.default.post(name: .goalAutoCreated, object: nil)
-                }
-            }
-        } catch {
-            log("GoalGenerationService: Failed to check/complete stale goals: \(error.localizedDescription)")
-        }
+      if activeGoals.count >= maxActiveGoals {
+        log(
+          "GoalGenerationService: User already has \(activeGoals.count) active goals (max \(maxActiveGoals)), skipping")
+        UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
+        return true
+      }
+
+      log("GoalGenerationService: User has \(activeGoals.count)/\(maxActiveGoals) goals, generating one...")
+
+      let goal = try await GoalsAIService.shared.generateGoal()
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
+
+      UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
+      log("GoalGenerationService: Successfully created goal '\(goal.title)'")
+
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: "New Goal",
+        message: goal.title,
+        assistantId: "goals"
+      )
+
+      NotificationCenter.default.post(name: .goalAutoCreated, object: goal)
+      return true
+
+    } catch {
+      log("GoalGenerationService: Failed to generate goal: \(error.localizedDescription)")
+      return false
     }
+  }
 
-    // MARK: - Daily Generation Check
-
-    /// Check if a new calendar day has started since last goal generation
-    private func checkDailyGeneration() async {
-        let lastDate = UserDefaults.standard.object(forKey: Self.kLastGenerationDate) as? Date
-
-        if lastDate == nil {
-            log("GoalGenerationService: First run, generating immediately")
-            _ = await generateGoalIfNeeded()
-            return
-        }
-
-        let calendar = Calendar.current
-        guard let lastDate = lastDate, !calendar.isDateInToday(lastDate) else {
-            log("GoalGenerationService: Already generated today (lastDate: \(lastDate!)), skipping")
-            return
-        }
-
-        log("GoalGenerationService: New day — last generation was \(lastDate), triggering generation")
-        _ = await generateGoalIfNeeded()
+  /// Manual trigger that bypasses the daily check
+  func generateNow() async {
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+    log("GoalGenerationService: Manual generation triggered")
+    await waitForPrerequisites()
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    await removeStaleGoals(ownerID: ownerID)
+    for attempt in 0..<3 {
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      if await generateGoalIfNeeded(ownerID: ownerID) {
+        return
+      }
+      guard attempt < 2 else { return }
+      try? await Task.sleep(nanoseconds: 5_000_000_000)
     }
+  }
 
-    /// Generate a goal if the user has room for more
-    private func generateGoalIfNeeded() async -> Bool {
-        do {
-            let goals = try await APIClient.shared.getGoals()
-            let activeGoals = goals.filter { $0.isActive }
-
-            if activeGoals.count >= maxActiveGoals {
-                log("GoalGenerationService: User already has \(activeGoals.count) active goals (max \(maxActiveGoals)), skipping")
-                UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
-                return true
-            }
-
-            log("GoalGenerationService: User has \(activeGoals.count)/\(maxActiveGoals) goals, generating one...")
-
-            let goal = try await GoalsAIService.shared.generateGoal()
-
-            UserDefaults.standard.set(Date(), forKey: Self.kLastGenerationDate)
-            log("GoalGenerationService: Successfully created goal '\(goal.title)'")
-
-            NotificationService.shared.sendNotification(
-                title: "New Goal",
-                message: goal.title,
-                assistantId: "goals"
-            )
-
-            NotificationCenter.default.post(name: .goalAutoCreated, object: goal)
-            return true
-
-        } catch {
-            log("GoalGenerationService: Failed to generate goal: \(error.localizedDescription)")
-            return false
-        }
+  private func waitForPrerequisites() async {
+    for _ in 0..<20 {
+      let authReady = await MainActor.run {
+        AuthState.shared.isSignedIn && !AuthState.shared.isRestoringAuth
+      }
+      if authReady && APIKeyService.keysAvailable {
+        return
+      }
+      try? await Task.sleep(nanoseconds: 500_000_000)
     }
-
-    /// Manual trigger that bypasses the daily check
-    func generateNow() async {
-        log("GoalGenerationService: Manual generation triggered")
-        await waitForPrerequisites()
-        await removeStaleGoals()
-        for attempt in 0..<3 {
-            if await generateGoalIfNeeded() {
-                return
-            }
-            guard attempt < 2 else { return }
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-        }
-    }
-
-    private func waitForPrerequisites() async {
-        for _ in 0..<20 {
-            let authReady = await MainActor.run {
-                AuthState.shared.isSignedIn && !AuthState.shared.isRestoringAuth
-            }
-            if authReady && APIKeyService.keysAvailable {
-                return
-            }
-            try? await Task.sleep(nanoseconds: 500_000_000)
-        }
-    }
+  }
 }

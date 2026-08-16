@@ -1,7 +1,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { migrateSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { probeNodeSqliteRuntime, SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -19,10 +21,28 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(9);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(33);
+    expect(store.allRows("SELECT version FROM schema_migrations ORDER BY version")).toEqual(
+      Array.from({ length: 33 }, (_, index) => ({ version: index + 1 })),
+    );
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
+      "backend_conversation_delete_outbox",
+      "backend_reconcile_state",
+      "backend_turn_outbox",
+      "chat_first_cold_start_sequence_receipts",
+      "chat_first_deferral_outbox",
+      "chat_first_materialization_receipts",
+      "cleared_backend_turn_claims",
+      "completion_delta_checkpoints",
+      "context_owner_snapshot_state",
+      "context_snapshot_state",
+      "context_source_state",
+      "conversation_journal_state",
+      "conversation_turn_revisions",
+      "conversation_turns",
+      "default_execution_profile_preferences",
       "delegations",
       "desktop_artifact_deliveries",
       "desktop_attention_overrides",
@@ -36,10 +56,98 @@ describe("SqliteAgentStore", () => {
       "run_attempts",
       "runs",
       "schema_migrations",
+      "session_execution_profiles",
       "sessions",
+      "surface_conversations",
+      "tool_invocation_ledger",
+      "workstream_artifact_heads",
+      "workstream_artifact_versions",
+      "workstream_continuation_checkpoints",
     ]);
     expect(tableNames(store)).not.toContain("desktop_action_queue");
 
+    store.close();
+  });
+
+  it("scopes cold-start terminal receipts by owner", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const insert = `INSERT INTO chat_first_cold_start_sequence_receipts(
+      sequence_id, owner_id, conversation_id, control_generation,
+      receipt_id, terminal_state, created_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    store.execute(insert, ["cold-start:1", "owner-a", "conversation-a", 1, "receipt-a", "completed", 1]);
+    store.execute(insert, ["cold-start:1", "owner-b", "conversation-b", 1, "receipt-b", "completed", 2]);
+
+    expect(store.getRow("SELECT COUNT(*) AS count FROM chat_first_cold_start_sequence_receipts").count).toBe(2);
+    store.close();
+  });
+
+  it("upgrades an origin/main v28 local-only database without skipping Chat-first migrations", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "onboarding",
+      defaultAdapterId: "acp",
+    });
+    store.insertSurfaceConversation({
+      ownerId: "owner",
+      surfaceKind: "onboarding",
+      externalRefKind: "onboarding",
+      externalRefId: "legacy-local-only",
+      conversationId: "conv-legacy-local-only",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    store.execute(`
+      INSERT INTO conversation_turns(
+        turn_id, conversation_id, role, surface_kind, origin, status,
+        content, content_blocks_json, resources_json, metadata_json, created_at_ms,
+        updated_at_ms, turn_seq
+      ) VALUES (
+        'turn-legacy-local-only', 'conv-legacy-local-only', 'user',
+        'onboarding', 'typed_chat', 'completed', 'legacy transcript', '[]', '[]',
+        '{}', 2, 2, 1
+      )
+    `);
+    store.execute(`
+      INSERT INTO backend_turn_outbox(
+        turn_id, conversation_id, owner_id, client_message_id, status, attempt_count,
+        delivery_generation, conversation_generation, payload_hash,
+        available_at_ms, created_at_ms, updated_at_ms
+      ) VALUES (
+        'turn-legacy-local-only', 'conv-legacy-local-only', 'owner',
+        'turn-legacy-local-only', 'pending',
+        0, 0, 1, 'sha256:legacy-local-only', 2, 2, 2
+      )
+    `);
+
+    // Origin/main used migration v28 for local-only delivery and did not have
+    // any Chat-first tables or the later migration rows.
+    store.execute("DROP TABLE chat_first_deferral_outbox");
+    store.execute("DROP TABLE chat_first_materialization_receipts");
+    store.execute("DROP TABLE chat_first_cold_start_sequence_receipts");
+    store.execute("DELETE FROM schema_migrations WHERE version IN (28, 29, 30, 31)");
+    store.execute("INSERT INTO schema_migrations(version, applied_at_ms) VALUES (28, 4_000)");
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    expect(tableNames(store)).toEqual(expect.arrayContaining([
+      "chat_first_deferral_outbox",
+      "chat_first_materialization_receipts",
+      "chat_first_cold_start_sequence_receipts",
+    ]));
+    expect(store.allRows("SELECT version FROM schema_migrations WHERE version BETWEEN 28 AND 32 ORDER BY version")).toEqual([
+      { version: 28 },
+      { version: 29 },
+      { version: 30 },
+      { version: 31 },
+      { version: 32 },
+    ]);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM backend_turn_outbox WHERE conversation_id = 'conv-legacy-local-only'",
+    ).count).toBe(0);
     store.close();
   });
 
@@ -84,6 +192,30 @@ describe("SqliteAgentStore", () => {
       expect.objectContaining({ attempt_no: 1, status: "running" }),
       expect.objectContaining({ attempt_no: 3, status: "failed" }),
     ]);
+    store.close();
+  });
+
+  it("persists execution role and provider boundary on sessions", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const managedLeaf = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "background_agent",
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+      defaultAdapterId: "pi-mono",
+    });
+
+    expect(managedLeaf).toMatchObject({
+      executionRole: "leaf",
+      providerBoundary: "managed_cloud",
+    });
+    expect(store.getRow(
+      "SELECT execution_role, provider_boundary FROM sessions WHERE session_id = ?",
+      [managedLeaf.sessionId],
+    )).toMatchObject({
+      execution_role: "leaf",
+      provider_boundary: "managed_cloud",
+    });
     store.close();
   });
 
@@ -161,6 +293,67 @@ describe("SqliteAgentStore", () => {
     })).toThrow();
 
     store.close();
+  });
+
+  it("drops queued backend delivery when an upgraded conversation is canonically local-only", () => {
+    const databasePath = newDatabasePath();
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+    });
+    store.insertSurfaceConversation({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "upgrade-local-only",
+      conversationId: "conv-upgrade-local-only",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    store.execute(
+      `INSERT INTO conversation_turns(
+         turn_id, conversation_id, role, surface_kind, origin, status,
+         content, content_blocks_json, resources_json, metadata_json, created_at_ms,
+         updated_at_ms, turn_seq
+       ) VALUES (
+         'turn-upgrade-local-only', 'conv-upgrade-local-only', 'user',
+         'main_chat', 'typed_chat', 'completed', 'setup transcript', '[]', '[]',
+         '{}', 2, 2, 1
+       )`,
+    );
+    store.execute(
+      `INSERT INTO backend_turn_outbox(
+         turn_id, conversation_id, owner_id, client_message_id, status, attempt_count,
+         delivery_generation, conversation_generation, payload_hash,
+         available_at_ms, created_at_ms, updated_at_ms
+       ) VALUES (
+         'turn-upgrade-local-only', 'conv-upgrade-local-only', 'owner',
+         'turn-upgrade-local-only', 'pending',
+         0, 0, 1, 'sha256:upgrade-local-only', 2, 2, 2
+       )`,
+    );
+    store.execute(
+      `UPDATE surface_conversations
+       SET surface_kind = 'onboarding'
+       WHERE conversation_id = 'conv-upgrade-local-only' AND owner_id = 'owner'`,
+    );
+    store.execute("DELETE FROM schema_migrations WHERE version = 31");
+    store.close();
+
+    const upgraded = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    expect(upgraded.getRow(
+      "SELECT COUNT(*) AS count FROM backend_turn_outbox WHERE conversation_id = 'conv-upgrade-local-only'",
+    ).count).toBe(0);
+    expect(upgraded.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turns WHERE conversation_id = 'conv-upgrade-local-only'",
+    ).count).toBe(1);
+    expect(upgraded.getRow(
+      "SELECT COUNT(*) AS count FROM schema_migrations WHERE version = 31",
+    ).count).toBe(1);
+    upgraded.close();
   });
 
   it("persists desktop coordinator records and rejects invalid JSON", () => {
@@ -1159,6 +1352,287 @@ describe("SqliteAgentStore", () => {
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_memory_candidates"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_context_access_log"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_attention_overrides"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_deferral_outbox"))).toBe(
+      true,
+    );
+    expect(
+      execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_materialization_receipts")),
+    ).toBe(true);
+    expect(
+      execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_cold_start_sequence_receipts")),
+    ).toBe(true);
+  });
+
+  it("stores no legacy_default grant rows in a fresh database", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const count = Number(
+      store.getRow("SELECT COUNT(*) AS count FROM grants WHERE source = 'legacy_default'").count,
+    );
+    expect(count).toBe(0);
+    store.close();
+  });
+
+  it("repairs downgrade-window profile and legacy journal inserts on every daemon open idempotently", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 100 });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      defaultAdapterId: "acp",
+    });
+    store.insertSurfaceConversation({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId: "conv_downgrade",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    store.execute("DELETE FROM session_execution_profiles WHERE session_id = ?", [session.sessionId]);
+    store.execute(
+      `INSERT INTO conversation_turns(
+         conversation_id, turn_id, role, surface_kind, content, created_at_ms,
+         metadata_json, origin, status, content_blocks_json, resources_json, updated_at_ms
+       ) VALUES (?, ?, 'user', 'main_chat', ?, ?, '{}', 'typed_chat', 'completed', '[]', '[]', ?)`,
+      ["conv_downgrade", "turn_old_writer", "Old writer row", 2, 2],
+    );
+
+    const repaired = store.reconcileStartup();
+    expect(repaired.repairedSessionProfileIds).toEqual([session.sessionId]);
+    expect(repaired.repairedLegacyJournalTurnIds).toEqual(["turn_old_writer"]);
+    const profile = store.getRow(
+      "SELECT source, audit_json FROM session_execution_profiles WHERE session_id = ?",
+      [session.sessionId],
+    );
+    expect(profile.source).toBe("legacy_backfill");
+    expect(JSON.parse(String(profile.audit_json))).toMatchObject({
+      legacyProjection: {
+        owner: "desktop-kernel",
+        removalCondition: expect.any(String),
+        removeBy: "2026-10-01",
+      },
+    });
+    const turn = store.getRow(
+      `SELECT turn_seq, producer_id, payload_hash, metadata_json
+       FROM conversation_turns WHERE turn_id = 'turn_old_writer'`,
+    );
+    expect(turn).toMatchObject({
+      producer_id: "legacy:turn_old_writer",
+      payload_hash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    });
+    expect(Number(turn.turn_seq)).toBeGreaterThan(0);
+    expect(JSON.parse(String(turn.metadata_json))).toMatchObject({
+      startupRepair: {
+        code: "downgrade_window_journal_repair",
+        owner: "desktop-kernel",
+        removalCondition: expect.any(String),
+        removeBy: "2026-10-01",
+      },
+    });
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE turn_id = 'turn_old_writer'",
+    ).count).toBe(1);
+    const stable = JSON.stringify({ profile, turn, revisions: store.allRows("SELECT * FROM conversation_turn_revisions") });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedSessionProfileIds: [],
+      repairedLegacyJournalTurnIds: [],
+    });
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: true, nowMs: () => 300 });
+    expect(JSON.stringify({
+      profile: store.getRow(
+        "SELECT source, audit_json FROM session_execution_profiles WHERE session_id = ?",
+        [session.sessionId],
+      ),
+      turn: store.getRow(
+        `SELECT turn_seq, producer_id, payload_hash, metadata_json
+         FROM conversation_turns WHERE turn_id = 'turn_old_writer'`,
+      ),
+      revisions: store.allRows("SELECT * FROM conversation_turn_revisions"),
+    })).toBe(stable);
+    store.close();
+  });
+
+  it("repairs old-writer profile references by the immutable profile active at each row timestamp", () => {
+    const databasePath = newDatabasePath();
+    let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 100 });
+    const session = store.insertSession({
+      sessionId: "ses_profile_downgrade",
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "acp",
+      providerBoundary: "local_user:acp",
+      createdAtMs: 100,
+      updatedAtMs: 100,
+      lastActivityAtMs: 100,
+    });
+    store.insertRun({
+      runId: "run_genuine_gen1",
+      sessionId: session.sessionId,
+      clientId: "legacy",
+      requestId: "genuine-gen1",
+      status: "succeeded",
+      mode: "ask",
+      profileGeneration: 1,
+      createdAtMs: 150,
+      completedAtMs: 150,
+      updatedAtMs: 150,
+    });
+    store.insertAttempt({
+      attemptId: "att_genuine_gen1",
+      runId: "run_genuine_gen1",
+      attemptNo: 1,
+      status: "succeeded",
+      adapterId: "acp",
+      adapterInstanceId: "",
+      profileGeneration: 1,
+      createdAtMs: 151,
+      completedAtMs: 151,
+      updatedAtMs: 151,
+    });
+    store.insertAdapterBinding({
+      bindingId: "bind_genuine_gen1",
+      sessionId: session.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      profileGeneration: 1,
+      resumeFidelity: "none",
+      status: "closed",
+      createdAtMs: 152,
+      updatedAtMs: 152,
+    });
+    migrateSessionExecutionProfile(store, {
+      sessionId: session.sessionId,
+      ownerId: "owner",
+      expectedProfileGeneration: 1,
+      adapterId: "pi-mono",
+      reason: "generation_two",
+    }, 200);
+    store.close();
+
+    insertRowsAsDowngradedWriter(databasePath, {
+      sessionId: session.sessionId,
+      suffix: "gen2",
+      adapterId: "pi-mono",
+      bindingGeneration: 2,
+      createdAtMs: 250,
+    });
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 275 });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedRunProfileReferenceIds: ["run_gen2"],
+      repairedAttemptProfileReferenceIds: ["att_gen2"],
+      repairedBindingProfileReferenceIds: ["bind_gen2"],
+    });
+    expect(profileReferences(store)).toMatchObject({
+      run_genuine_gen1: 1,
+      att_genuine_gen1: 1,
+      bind_genuine_gen1: 1,
+      run_gen2: 2,
+      att_gen2: 2,
+      bind_gen2: 2,
+    });
+    migrateSessionExecutionProfile(store, {
+      sessionId: session.sessionId,
+      ownerId: "owner",
+      expectedProfileGeneration: 2,
+      adapterId: "acp",
+      reason: "generation_three",
+    }, 300);
+    store.close();
+
+    insertRowsAsDowngradedWriter(databasePath, {
+      sessionId: session.sessionId,
+      suffix: "gen3",
+      adapterId: "acp",
+      bindingGeneration: 3,
+      createdAtMs: 300,
+    });
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 400 });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedRunProfileReferenceIds: ["run_gen3"],
+      repairedAttemptProfileReferenceIds: ["att_gen3"],
+      repairedBindingProfileReferenceIds: ["bind_gen3"],
+    });
+    const repaired = profileReferences(store);
+    expect(repaired).toEqual({
+      att_gen2: 2,
+      att_gen3: 3,
+      att_genuine_gen1: 1,
+      bind_gen2: 2,
+      bind_gen3: 3,
+      bind_genuine_gen1: 1,
+      run_gen2: 2,
+      run_gen3: 3,
+      run_genuine_gen1: 1,
+    });
+    store.close();
+
+    store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 500 });
+    expect(store.reconcileStartup()).toMatchObject({
+      repairedRunProfileReferenceIds: [],
+      repairedAttemptProfileReferenceIds: [],
+      repairedBindingProfileReferenceIds: [],
+    });
+    expect(profileReferences(store)).toEqual(repaired);
+    store.close();
+  });
+
+  it("terminalizes orphaned nonterminal journal rows once without a backend empty placeholder", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false, nowMs: () => 500 });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      defaultAdapterId: "acp",
+    });
+    store.insertSurfaceConversation({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      conversationId: "conv_pending_restart",
+      agentSessionId: session.sessionId,
+      createdAtMs: 1,
+      lastActiveAtMs: 1,
+    });
+    store.execute(
+      `INSERT INTO conversation_turns(
+         conversation_id, turn_id, role, surface_kind, content, created_at_ms,
+         metadata_json, origin, status, content_blocks_json, resources_json, updated_at_ms
+       ) VALUES (?, ?, 'assistant', 'main_chat', '', ?, '{}', 'agent_runtime', 'streaming', '[]', '[]', ?)`,
+      ["conv_pending_restart", "turn_orphan_stream", 2, 2],
+    );
+
+    const result = store.reconcileStartup();
+    expect(result.reconciledJournalTurnIds).toEqual(["turn_orphan_stream"]);
+    const repaired = store.getRow(
+      "SELECT status, completed_at_ms, metadata_json FROM conversation_turns WHERE turn_id = ?",
+      ["turn_orphan_stream"],
+    );
+    expect(repaired).toMatchObject({ status: "failed", completed_at_ms: 500 });
+    expect(JSON.parse(String(repaired.metadata_json))).toMatchObject({
+      startupRepair: { code: "daemon_restart_orphaned_turn", owner: "desktop-kernel" },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM backend_turn_outbox").count).toBe(0);
+    const revisionCount = store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE turn_id = ?",
+      ["turn_orphan_stream"],
+    ).count;
+    expect(store.reconcileStartup().reconciledJournalTurnIds).toEqual([]);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM conversation_turn_revisions WHERE turn_id = ?",
+      ["turn_orphan_stream"],
+    ).count).toBe(revisionCount);
+    expect(store.getRow(
+      "SELECT COUNT(*) AS count FROM events WHERE type = 'journal.turn_reconciled'",
+    ).count).toBe(1);
+    store.close();
   });
 });
 
@@ -1170,6 +1644,73 @@ function newDatabasePath(): string {
   const dir = mkdtempSync(join(tmpdir(), "omi-agent-store-"));
   createdDirs.push(dir);
   return join(dir, "omi-agentd.sqlite3");
+}
+
+function insertRowsAsDowngradedWriter(
+  databasePath: string,
+  input: {
+    sessionId: string;
+    suffix: string;
+    adapterId: string;
+    bindingGeneration: number;
+    createdAtMs: number;
+  },
+): void {
+  const db = new DatabaseSync(databasePath);
+  db.exec("PRAGMA foreign_keys = ON");
+  db.prepare(
+    `INSERT INTO runs(
+       run_id, session_id, client_id, request_id, status, mode, input_json,
+       created_at_ms, completed_at_ms, updated_at_ms
+     ) VALUES (?, ?, 'old-writer', ?, 'succeeded', 'ask', '{}', ?, ?, ?)`,
+  ).run(
+    `run_${input.suffix}`,
+    input.sessionId,
+    input.suffix,
+    input.createdAtMs,
+    input.createdAtMs,
+    input.createdAtMs,
+  );
+  db.prepare(
+    `INSERT INTO run_attempts(
+       attempt_id, run_id, attempt_no, status, adapter_id, adapter_instance_id,
+       created_at_ms, completed_at_ms, updated_at_ms
+     ) VALUES (?, ?, 1, 'succeeded', ?, '', ?, ?, ?)`,
+  ).run(
+    `att_${input.suffix}`,
+    `run_${input.suffix}`,
+    input.adapterId,
+    input.createdAtMs,
+    input.createdAtMs,
+    input.createdAtMs,
+  );
+  db.prepare(
+    `INSERT INTO adapter_bindings(
+       binding_id, session_id, adapter_id, binding_generation, resume_fidelity,
+       status, created_at_ms, updated_at_ms
+     ) VALUES (?, ?, ?, ?, 'none', 'closed', ?, ?)`,
+  ).run(
+    `bind_${input.suffix}`,
+    input.sessionId,
+    input.adapterId,
+    input.bindingGeneration,
+    input.createdAtMs,
+    input.createdAtMs,
+  );
+  db.close();
+}
+
+function profileReferences(store: SqliteAgentStore): Record<string, number> {
+  const references: Record<string, number> = {};
+  for (const row of store.allRows(
+    `SELECT run_id AS id, profile_generation FROM runs
+     UNION ALL SELECT attempt_id AS id, profile_generation FROM run_attempts
+     UNION ALL SELECT binding_id AS id, profile_generation FROM adapter_bindings
+     ORDER BY id ASC`,
+  )) {
+    references[String(row.id)] = Number(row.profile_generation);
+  }
+  return references;
 }
 
 function tableNames(store: SqliteAgentStore): string[] {

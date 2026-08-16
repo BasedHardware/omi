@@ -16,7 +16,7 @@ class ConversationPhoto(BaseModel):
     def photos_as_string(photos: List['ConversationPhoto'], include_timestamps: bool = False) -> str:
         if not photos:
             return 'None'
-        descriptions = []
+        descriptions: list[str] = []
         for p in photos:
             if p.description and p.description.strip():
                 timestamp_str = ''

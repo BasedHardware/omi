@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import re
 from enum import Enum
-from typing import Mapping
+from typing import Any, Mapping
 
 from pydantic import Field, field_validator
 
@@ -43,13 +44,21 @@ class CredentialContext(StrictBaseModel):
     source: CredentialSource
     caller: ServiceCaller
     provider_keys: dict[str, ProviderKeyPresence] = Field(default_factory=dict)
+    forwarded_provider_keys: dict[str, str] = Field(default_factory=dict, exclude=True, repr=False)
 
     def has_provider_key(self, provider: str) -> bool:
         key_presence = self.provider_keys.get(provider.strip().lower())
         return key_presence.present if key_presence is not None else False
 
-    def safe_model_dump(self) -> dict:
-        return self.model_dump(mode='json')
+    def forwarded_key_for(self, provider: str) -> str | None:
+        key = self.forwarded_provider_keys.get(provider.strip().lower())
+        if key is None:
+            return None
+        stripped = key.strip()
+        return stripped or None
+
+    def safe_model_dump(self) -> dict[str, Any]:
+        return self.model_dump(mode='json', exclude={'forwarded_provider_keys'})
 
 
 def build_omi_managed_credential_context(caller: ServiceCaller) -> CredentialContext:
@@ -63,6 +72,7 @@ def build_byok_credential_context(
     key_refs: Mapping[str, str | None] | None = None,
 ) -> CredentialContext:
     presences: dict[str, ProviderKeyPresence] = {}
+    forwarded_keys: dict[str, str] = {}
     normalized_key_refs = _normalize_optional_mapping(key_refs)
     for provider, raw_key in provider_keys.items():
         normalized_provider = provider.strip().lower()
@@ -72,13 +82,37 @@ def build_byok_credential_context(
             present=bool(raw_key.strip()) if raw_key is not None else False,
             key_ref=key_ref,
         )
+        if raw_key is not None and raw_key.strip():
+            forwarded_keys[normalized_provider] = raw_key.strip()
 
     return CredentialContext(
         mode=CredentialMode.BYOK,
         source=CredentialSource.SERVICE_FORWARDED_BYOK,
         caller=caller,
         provider_keys=presences,
+        forwarded_provider_keys=forwarded_keys,
     )
+
+
+_BYOK_PROVIDER_NAME_RE = re.compile(r'^[a-z][a-z0-9_-]*$')
+
+
+def parse_forwarded_byok_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    """Parse service-forwarded BYOK keys from internal gateway envelope headers."""
+    envelope_prefix = 'x-omi-byok-'
+    envelope_suffix = '-key'
+    forwarded: dict[str, str] = {}
+    for header_name, raw_value in headers.items():
+        normalized_name = header_name.strip().casefold()
+        if not normalized_name.startswith(envelope_prefix) or not normalized_name.endswith(envelope_suffix):
+            continue
+        provider = normalized_name.removeprefix(envelope_prefix).removesuffix(envelope_suffix).strip().lower()
+        if not provider or not _BYOK_PROVIDER_NAME_RE.fullmatch(provider):
+            continue
+        stripped = raw_value.strip()
+        if stripped:
+            forwarded[provider] = stripped
+    return forwarded
 
 
 def build_key_reference_credential_context(

@@ -1,80 +1,184 @@
-# E2E Flow: Memories — browse, filter, search, and manage extracted memories
-# Tests: Memories list, tag filtering, search, visibility toggle, memory graph
-# Core feature: AI-extracted memories from conversations and screen activity
-
 version: 2
 name: memories
-description: Memories flow — navigate to Memories page, browse memory list, filter by tags (focus, tips, system, etc.), search memories, toggle visibility, open memory graph
+tier: manual
+description: Memory menu — navigate full-width Activity, Memories, Conversations, and Brain Map destinations
 app: com.omi.computer-macos
 covers:
-  - desktop/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
-  - desktop/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  # The hub page itself: it mounts the switcher S1/S3/S5/S6 press, branches to the three views, and
+  # resolves the Brain Map cohort S5 lands on. Extracted from `DesktopHomeView` — these steps walked
+  # it before it had its own file.
+  - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  # The Activity destination: the chronological spine that was Home's landing surface, first in the
+  # switcher row, with its own search bar and filter chips.
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+  # The Add/Edit forms, exercised by S2c. `memory-crud` writes straight to the view model, so these
+  # two sheets have no other flow that opens them.
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryEditorSheets.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryVisibilityGuardrails.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryProvenance.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasPresentationPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasTerritoryLabels.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasIslands.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasRenderPlanCache.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasForceLayout.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasCatalogLayout.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasGeometry.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasOwnerIdentity.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
 preconditions:
-  - auth_ready  # User signed in and onboarding completed. App shows main window.
+  - auth_ready
 
 steps:
   - id: S1
-    name: Navigate to Memories page
-    do: "Click Memories in sidebar: agent-swift find key sidebar_memories click. Verify the Memories page opens showing a search bar at top, tag filter chips, and a list of memory items."
-    verify: true
+    name: Open the Memory hub and read its own switcher
+    # There is no `Memory` pill and no hover menu any more. The bar carries one `Library` pill, and
+    # the hub's three views are a switcher on the page itself — see `MemoryHubPage` /
+    # `MemoryHubSwitcher` and the note at the top of `TopNavigationDestinations`.
+    do: "Click the Library pill in the top bar (accessibility identifier top-navigation-1). Verify the hub page opens with its own switcher above the content, reading Conversations, Memories, Brain Map — on the page, not hanging off the bar, and with no hover needed to see them."
     expect:
-      - kind: interactive_count
-        min: 5
-    evidence:
-      - screenshot: step-S1.webp
-    note: "Memories is index 3 in sidebar (SidebarNavItem.memories). MemoriesPage has 12 filter tags: focus, focused, distracted, tips, system, interesting, manual, productivity, health, communication, learning, other."
+      text_visible:
+        - Memories
+        - Conversations
+        - Brain Map
 
   - id: S2
-    name: Filter memories by tag
-    do: "Click the 'Tips' tag chip to filter memories. Verify the list updates to show only memories tagged as tips. The active tag chip should appear highlighted/selected."
-    verify: true
+    name: Select and verify Memories
+    do: "Choose Memories in the hub's switcher. Verify the full-width page shows the shared search field ('Search memories'), filter buttons ('This device', 'All'), Add button, and memory rows with timestamps."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S2.webp
-    note: "Tag filtering uses MemoryTag enum matches() method. Tips tag shows advice-system generated tips. Click again to deselect filter."
+      interactive_count: { min: 4 }
+
+  - id: S2b
+    name: A memory says where it came from
+    do: "Open a synced memory's detail panel. Verify the provenance row names the capture device and, when the memory carries an app tag, the app — not a bare timestamp. A memory added by hand says so."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S2c
+    name: The two memory text sheets open, gate Save, and dismiss
+    # `memory-crud` creates and edits straight through the view model, so the sheets themselves
+    # (`MemoryEditorSheets`) are only ever opened here. Deliberately no Save: what has no other
+    # coverage is the form — that it is presented over a bounded dim, that Save refuses an empty
+    # editor, that Edit arrives pre-filled, and that both ways out work. Persistence is
+    # `memory-crud`'s to prove, and this flow runs against a real account.
+    do: "Press Add on the Memories page. Verify the 'Add Memory' sheet appears centred over a dimmed page, that Save is disabled while the editor is empty, and that typing a character enables it. Press Escape and verify the sheet closes. Open a memory's detail panel, press Edit, and verify the 'Edit Memory' sheet opens pre-filled with that memory's exact text. Press Cancel and verify the memory is unchanged in the list."
+    expect:
+      interactive_count: { min: 3 }
 
   - id: S3
-    name: Search memories
-    do: "Click the search bar and type a search term (e.g., 'meeting' or 'focus'). Verify the memory list filters to show matching results. Clear the search field."
-    verify: true
+    name: Select Conversations
+    do: "Choose Conversations in the hub's switcher. Verify the full-width Conversations page loads with the shared search field, filters, and a list grouped by date."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S3.webp
-    note: "Search bar is a textfield element at the top of MemoriesPage. Search filters client-side on memory content/title."
+      text_visible:
+        - Conversations
 
   - id: S4
-    name: Toggle memory visibility
-    do: "Find a memory item in the list. Click the visibility toggle (public/private eye icon) to change its visibility. Verify the icon state changes."
-    verify: true
+    name: Verify conversation list features
+    do: "Check for Select and Quick Note buttons at the top. Verify conversation entries show title, date, duration, and star icon. Check for 'Load older conversations' at the bottom if scrolled down."
     expect:
-      - kind: interactive_count
-        min: 3
-    evidence:
-      - screenshot: step-S4.webp
-    note: "Visibility toggle calls API to update memory. Silent try? on failure — may not show error to user if API call fails. This is a known friction pattern."
+      interactive_count: { min: 3 }
 
   - id: S5
-    name: Open memory graph
-    do: "Click the graph button (node/network icon) near the top of the Memories page. Verify the Memory Graph page opens showing a force-directed graph visualization of connected memories."
-    verify: true
+    name: Select Brain Map
+    # The hub resolves which of the two Brain Map surfaces this account gets, and must mount neither
+    # until it knows: a one-frame appearance of the legacy graph latches the shared view model and
+    # leaves the atlas permanently blank. Watch for the placeholder, not just the end state.
+    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_capability), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
     expect:
-      - kind: interactive_count
-        min: 2
-    evidence:
-      - screenshot: step-S5.webp
-    note: "MemoryGraphPage uses force-directed graph visualization. May take a moment to load and layout nodes. Graph shows memory connections and categories."
+      text_visible:
+        - Brain Map
 
   - id: S6
-    name: Return to memory list
-    do: "Navigate back from memory graph to the main Memories list. Click the back button or re-click Memories in sidebar. Verify the memory list is displayed."
-    verify: true
+    name: Return to Memories
+    do: "Choose Memories in the hub's switcher. Verify the memory list is visible with the shared search and filter controls."
     expect:
-      - kind: interactive_count
-        min: 5
-    evidence:
-      - screenshot: step-S6.webp
-    note: "Back navigation from MemoryGraphPage. Verify tag filters and search state persist."
+      text_visible:
+        - Memories
+
+  - id: S7
+    name: Activate memory search without assuming account-specific content
+    bridge.action:
+      name: memories_search
+      params:
+        query: "connector-import"
+    expect:
+      result.detail.search_active: "true"
+
+  - id: S8
+    name: Open Atlas exploration page
+    bridge.action:
+      name: open_memory_atlas
+    expect:
+      result.detail.opened: "true"
+      result.detail.target: "page"
+
+  - id: S9
+    name: Scrub Atlas replay
+    bridge.action:
+      name: memory_atlas_set_time
+      params:
+        target: "page"
+        fraction: "0.45"
+    expect:
+      result.detail.posted: "true"
+      result.detail.target: "page"
+      result.detail.fraction: "0.45"
+
+  - id: S10
+    name: Zoom and pan Atlas
+    bridge.action:
+      name: memory_atlas_set_viewport
+      params:
+        target: "page"
+        zoom: "2.2"
+        pan_x: "140"
+        pan_y: "-80"
+    expect:
+      result.detail.posted: "true"
+      result.detail.target: "page"
+      result.detail.zoom: "2.2"
+
+  - id: S11
+    name: Go into a neighbourhood and read its name
+    do: "Note a territory caption printed on the map (an all-caps name inside an outlined island), then run the enter action below with that caption. Verify the camera frames that island, its coastline is the only one still drawn, and the entities on it are named."
+    bridge.action:
+      name: memory_atlas_enter_region
+      params:
+        target: "page"
+        caption: "a"
+    expect:
+      result.detail.posted: "true"
+      result.detail.target: "page"
+
+  - id: S12
+    name: The island survives selecting something on it
+    do: "With a neighbourhood entered, select an entity standing on it by name. Verify the island keeps its outline, its shading, and its caption while the inspector is open — the frame the user is reading in must not disappear because they picked something inside it."
+    bridge.action:
+      name: memory_atlas_select
+      params:
+        target: "page"
+        label: "a"
+    expect:
+      result.detail.posted: "true"
+
+  - id: S13
+    name: Escape backs out one layer per press
+    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
+    expect:
+      text_visible:
+        - Memories
+
+  - id: S14
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

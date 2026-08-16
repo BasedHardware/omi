@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused, self-driving harness for spatial overlay anchoring and Claude guidance.
+# Focused, self-driving harness for spatial overlay anchoring and connector guidance.
 #
 # Usage:
 #   cd desktop/macos && ./scripts/spatial-overlay-harness.sh
@@ -28,7 +28,7 @@ Runs:
   1. Swift dogfood/unit tests:
      SpatialOverlayDogfoodHarnessTests, SpatialOverlay*, BrowserAutomationTargetTests
   2. Optional visual dogfood flow through the local automation bridge:
-     e2e/flows/claude-guidance-overlay.yaml
+     e2e/flows/claude-guidance-overlay.yaml (Claude + Screen Recording)
 
 Options:
   --visual       Also run the app-side visual flow against the automation bridge
@@ -161,20 +161,32 @@ run_swift_focus() {
 }
 
 ensure_bridge_ready() {
-  python3 - "$PORT" <<'PY'
+  python3 - "$PORT" "$SCRIPT_DIR" <<'PY'
 import json
 import sys
 import urllib.request
 
 port = sys.argv[1]
+sys.path.insert(0, sys.argv[2])
+from automation_token_lib import automation_token
+
+token = automation_token(int(port))
 try:
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
+    # Health is intentionally unauthenticated so callers see launch diagnostics.
+    request = urllib.request.Request(f"http://127.0.0.1:{port}/health")
+    with urllib.request.urlopen(request, timeout=5) as response:
         payload = json.loads(response.read().decode("utf-8"))
 except Exception as exc:
     raise SystemExit(f"automation bridge unavailable on port {port}: {exc}")
 
 if not payload.get("ok"):
     raise SystemExit(f"automation bridge unhealthy on port {port}: {payload}")
+
+if not token:
+    raise SystemExit(
+        f"automation bridge token missing on port {port}; "
+        "app writes NSTemporaryDirectory()/omi-automation-{port}.token"
+    )
 PY
 }
 

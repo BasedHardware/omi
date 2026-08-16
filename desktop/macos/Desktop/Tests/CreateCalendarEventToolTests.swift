@@ -1,36 +1,51 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class CreateCalendarEventToolTests: XCTestCase {
-    func testCreateCalendarEventIsHandledByExecutor() async {
-        let toolCall = ToolCall(
-            name: "create_calendar_event",
-            arguments: [
-                "title": "Design review",
-                "start_time": "2026-06-28T14:00:00-04:00"
-            ],
-            thoughtSignature: nil
-        )
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
-        let result = await ChatToolExecutor.execute(toolCall)
+  override func setUp() async throws {
+    try await super.setUp()
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "calendar-tool-test-owner")
+  }
 
-        XCTAssertFalse(result.hasPrefix("Unknown tool"), "create_calendar_event must be handled directly")
-        XCTAssertEqual(result, "Error: end_time is required")
-    }
+  override func tearDown() async throws {
+    await ownerFixture.restore()
+    ownerFixture = nil
+    try await super.tearDown()
+  }
 
-    func testCreateCalendarEventRequiresTimezoneDates() async {
-        let toolCall = ToolCall(
-            name: "create_calendar_event",
-            arguments: [
-                "title": "Design review",
-                "start_time": "2026-06-28T14:00:00",
-                "end_time": "2026-06-28T15:00:00-04:00"
-            ],
-            thoughtSignature: nil
-        )
+  func testCreateCalendarEventIsHandledByExecutor() async {
+    let toolCall = ToolCall(
+      name: "create_calendar_event",
+      arguments: [
+        "title": "Design review",
+        "start_time": "2026-06-28T14:00:00-04:00",
+      ],
+      thoughtSignature: nil
+    )
 
-        let result = await ChatToolExecutor.execute(toolCall)
+    let result = await ChatToolExecutor.execute(toolCall)
 
-        XCTAssertTrue(result.contains("start_time must be ISO format with timezone offset"))
-    }
+    XCTAssertFalse(result.hasPrefix("Unknown tool"), "create_calendar_event must be handled directly")
+    XCTAssertEqual(result, "Error: end_time is required")
+  }
+
+  func testCreateCalendarEventRequiresTimezoneDates() async {
+    let toolCall = ToolCall(
+      name: "create_calendar_event",
+      arguments: [
+        "title": "Design review",
+        "start_time": "2026-06-28T14:00:00",
+        "end_time": "2026-06-28T15:00:00-04:00",
+      ],
+      thoughtSignature: nil
+    )
+
+    let result = await ChatToolExecutor.execute(toolCall)
+
+    XCTAssertTrue(result.contains("start_time must be ISO format with timezone offset"))
+  }
 }

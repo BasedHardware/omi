@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
+from fastapi.websockets import WebSocketDisconnect
 from unittest.mock import patch
 
 import utils.async_tasks as async_tasks_mod
@@ -224,6 +225,7 @@ class TestWebSocketTaskSupervisor:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasks:
     def test_drain_empty_list(self):
         async def _run():
@@ -291,6 +293,7 @@ class TestDrainTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestSuperviseTasks:
     def test_disconnect_exit(self):
         async def _run():
@@ -388,6 +391,39 @@ class TestSuperviseTasks:
 
         asyncio.run(_run())
 
+    def test_same_round_disconnect_wins_over_bg_task_observing_it(self):
+        """A bg writer that sees the same client disconnect must not report a crash.
+
+        `asyncio.wait` returns a set, so scanning it in iteration order made the
+        classification depend on hash order alone; repeat the round so a pre-fix
+        supervisor cannot pass on luck.
+        """
+
+        async def _run():
+            for _ in range(25):
+
+                async def receive():
+                    return None
+
+                async def bg():
+                    raise WebSocketDisconnect()
+
+                recv = asyncio.create_task(receive(), name="receive")
+                bg_task = asyncio.create_task(bg(), name="heartbeat")
+                # Both land in the same asyncio.wait round.
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+                assert recv.done() and bg_task.done()
+
+                result = await supervise_tasks(
+                    receive_task=recv,
+                    bg_tasks=[bg_task],
+                    label="test",
+                )
+                assert result.reason == "disconnect", result
+
+        asyncio.run(_run())
+
     def test_empty_bg_tasks(self):
         async def _run():
             async def receive():
@@ -410,6 +446,7 @@ class TestSuperviseTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestGatherWithLogging:
     def test_all_succeed(self):
         async def _run():
@@ -609,6 +646,7 @@ class TestGatherChunked:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasksEdgeCases:
     def test_drain_force_cancel_reports_count(self):
         """After timeout, force-cancelled tasks are counted correctly."""
@@ -712,10 +750,10 @@ class TestStructuralUsage:
         assert 'drain_tasks' in imports
         assert 'create_named_task' in imports
 
-    def test_transcribe_imports_async_tasks(self):
+    def test_listen_runtime_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/transcribe.py', encoding='utf-8') as f:
+        with open(self.BACKEND_DIR / 'routers/listen/runtime.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -729,7 +767,7 @@ class TestStructuralUsage:
 
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""
-        for filename in ['routers/pusher.py', 'routers/transcribe.py']:
+        for filename in ['routers/pusher.py', 'routers/listen/runtime.py']:
             with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             assert (
@@ -743,7 +781,7 @@ class TestStructuralUsage:
         """Metric labels must be static — no uid/session_id to prevent cardinality explosion."""
         import re
 
-        for filename in ['routers/pusher.py', 'routers/transcribe.py']:
+        for filename in ['routers/pusher.py', 'routers/listen/runtime.py']:
             with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             for match in re.finditer(r'label=f"[^"]*\{uid\}', source):

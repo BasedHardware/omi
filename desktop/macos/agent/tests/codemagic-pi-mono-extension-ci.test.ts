@@ -2,33 +2,40 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("macOS release CI", () => {
-  it("runs the shared desktop tool-surface guardrail before packaging", () => {
-    const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
-    const stepStart = codemagic.indexOf("name: Test desktop tool surfaces");
-    expect(stepStart).toBeGreaterThanOrEqual(0);
+  it("runs the complete agent runtime suite instead of a hand-picked test list", () => {
+    const toolSurfaceScript = readFileSync(
+      new URL("../../scripts/test-tool-surfaces.sh", import.meta.url),
+      "utf8"
+    );
 
-    const step = codemagic.slice(stepStart, codemagic.indexOf("- name:", stepStart + 1));
-    expect(step).toContain("scripts/test-tool-surfaces.sh");
-    expect(stepStart).toBeLessThan(codemagic.indexOf("name: Prepare universal ffmpeg"));
+    expect(toolSurfaceScript).toContain('"$NODE22" node_modules/vitest/vitest.mjs run');
+    expect(toolSurfaceScript).not.toContain("tests/control-tools.test.ts");
+    expect(toolSurfaceScript).not.toContain("tests/runtime-adapter.test.ts");
+  });
+
+  it("keeps the shared tool-surface guardrail on PR CI instead of the signed release runner", () => {
+    const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
+    const desktopChecks = readFileSync(
+      new URL("../../../../.github/workflows/desktop-checks.yml", import.meta.url),
+      "utf8"
+    );
+
+    expect(desktopChecks).toContain("desktop/macos/scripts/test-tool-surfaces.sh");
+    expect(codemagic).not.toContain("name: Test desktop tool surfaces");
+    expect(codemagic).not.toContain("scripts/test-tool-surfaces.sh");
   });
 
   it("bundles pi-mono-extension dependencies into release and local app resources", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
 
-    for (const manifestFile of [
-      "control-tool-manifest.js",
-      "control-tool-manifest.ts",
-      "node-tools.ts",
-      "omi-tool-manifest.ts",
-    ]) {
-      expect(codemagic).toContain(
-        `cp -f agent/src/runtime/${manifestFile} "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
-      );
-      expect(runScript).toContain(
-        `cp -f "$AGENT_DIR/src/runtime/${manifestFile}" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
-      );
-    }
+    const extension = readFileSync(new URL("../../pi-mono-extension/index.ts", import.meta.url), "utf8");
+    expect(extension).toContain('../agent/dist/runtime/omi-tool-manifest.js');
+    expect(extension).toContain('../agent/dist/runtime/node-tools.js');
+    expect(codemagic).toContain('cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"');
+    expect(runScript).toContain('macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"');
+    expect(codemagic).not.toContain("agent/src/runtime/");
+    expect(runScript).not.toContain('$AGENT_DIR/src/runtime/');
     expect(codemagic).toContain(
       'cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"'
     );
@@ -63,6 +70,39 @@ describe("macOS release CI", () => {
     expect(prepareRuntimeScript).toContain('return `../../../agent/node_modules/${packageName}`');
     expect(prepareRuntimeScript).toContain("npm ci --omit=dev --no-fund --no-audit");
     expect(prepareRuntimeScript).toContain('prune_non_macos_node_packages "$temp_dir"');
+  });
+
+  it("enforces the bundled Node runtime floor required by maintained pi packages", () => {
+    const prepareRuntimeScript = readFileSync(
+      new URL("../../scripts/prepare-agent-runtime.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(prepareRuntimeScript).toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"');
+    expect(prepareRuntimeScript).toContain('NODE_MIN_VERSION="v22.19.0"');
+    expect(prepareRuntimeScript).toContain("node_version_at_least()");
+    expect(prepareRuntimeScript).toContain('node_version_at_least "$staged_version" "$NODE_MIN_VERSION"');
+    expect(prepareRuntimeScript).not.toContain('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"');
+  });
+
+  it("runs the pi-mono package harness under the maintained Node runtime", () => {
+    const harness = readFileSync(new URL("../../scripts/agent-logic-harness.sh", import.meta.url), "utf8");
+
+    expect(harness).toContain('"$DESKTOP_DIR/Desktop/Sources/Resources/node"');
+    expect(harness).toContain('node_supports_strip_types "$node_bin"');
+    expect(harness).toContain('PATH="$(dirname "$node22"):$PATH" npx --yes tsx --test index.test.ts');
+  });
+
+  it("runs spawn-receipt fixtures under the maintained Node runtime", () => {
+    const fixtureCheck = readFileSync(
+      new URL("../../scripts/check-spawn-receipt-fixtures.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(fixtureCheck).toContain('"$DESKTOP_DIR/Desktop/Sources/Resources/node"');
+    expect(fixtureCheck).toContain('node_supports_strip_types "$node_bin"');
+    expect(fixtureCheck).toContain('export PATH="$(dirname "$NODE22"):$PATH"');
+    expect(fixtureCheck).toContain('"$NODE22" node_modules/vitest/vitest.mjs run tests/spawn-receipt-fixtures.test.ts');
   });
 
   it("signs bundled pi-mono-extension native dependencies before app signing", () => {

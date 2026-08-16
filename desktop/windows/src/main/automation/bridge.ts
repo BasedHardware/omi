@@ -14,11 +14,20 @@ class AutomationBridge {
   private child: ChildProcessWithoutNullStreams | null = null
   private readonly queue: Pending[] = []
   private backoff = 500
+  // Set once the helper binary is confirmed missing (spawn ENOENT). Without it,
+  // every snapshot/step request re-spawns the missing exe — failing forever,
+  // flooding the log and stalling the planner. Once unavailable, fail fast.
+  // (Mirrors the OCR HelperProcess.) A rebuild + app restart clears it.
+  private unavailable = false
 
   private ensureStarted(): void {
-    if (this.child) return
+    if (this.child || this.unavailable) return
     const exe = resolveHelperPath()
-    const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+    // windowsHide: the helper is a console-subsystem .NET exe (OutputType=Exe).
+    // Electron main is a GUI process with no console, so without CREATE_NO_WINDOW
+    // the child allocates a NEW visible console — a stray taskbar window. Its
+    // stdio is piped, so hiding the console loses nothing.
+    const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.child = child
 
     const decoder = new FrameDecoder((json) => {
@@ -36,7 +45,18 @@ class AutomationBridge {
       this.handleExit()
     })
     child.on('error', (e) => {
-      console.error('[win-automation-helper] spawn error:', e.message)
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (!this.unavailable) {
+          console.error(
+            '[win-automation-helper] binary not found — UI automation is DISABLED. ' +
+              'Build it once with: pwsh scripts/build-automation-helper.ps1  (needs .NET SDK). ' +
+              `(${e.message})`
+          )
+        }
+        this.unavailable = true
+      } else {
+        console.error('[win-automation-helper] spawn error:', e.message)
+      }
       this.handleExit()
     })
     setTimeout(() => {
@@ -86,6 +106,7 @@ class AutomationBridge {
   }
 
   private request(opcode: number, payloadJson: string): Promise<string> {
+    if (this.unavailable) return Promise.reject(new Error('helper unavailable (binary missing)'))
     this.ensureStarted()
     const child = this.child
     if (!child) return Promise.reject(new Error('helper not available'))

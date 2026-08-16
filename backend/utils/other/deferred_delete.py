@@ -15,7 +15,7 @@ import heapq
 import logging
 import threading
 import time
-from typing import Callable
+from typing import Callable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +25,9 @@ class DeferredDeleter:
         self._delete_fn = delete_fn
         self._name = name
         self._cond = threading.Condition()
-        self._heap = []  # (due_monotonic, seq, path)
+        self._heap: List[Tuple[float, int, str]] = []
         self._seq = 0
-        self._thread = None
+        self._thread: Optional[threading.Thread] = None
 
     def schedule(self, path: str, delay_seconds: float) -> None:
         """Schedule path for deletion after delay_seconds. O(log n), never blocks."""
@@ -46,7 +46,7 @@ class DeferredDeleter:
         with self._cond:
             return len(self._heap)
 
-    def _run(self):
+    def _run(self) -> None:
         while True:
             with self._cond:
                 while not self._heap:

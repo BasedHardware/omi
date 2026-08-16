@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+import pytest
 
-from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config
+from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
+from llm_gateway.gateway.schemas import Surface
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -46,12 +48,20 @@ class DirectUse:
 
 
 DIRECT_PROVIDER_ALLOWLIST = {
+    DirectUse('agent_vm/main.py', 'GEMINI_API_KEY'),
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
-    DirectUse('utils/llm/app_generator.py', 'OpenAI'),
+    DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
+    DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
+    DirectUse('routers/desktop_tts_updates.py', 'OPENAI_API_KEY'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
+    DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
@@ -60,13 +70,12 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/other/chat_file.py', 'openai.beta'),
     DirectUse('utils/other/chat_file.py', 'openai.files'),
     DirectUse('utils/retrieval/agentic.py', 'anthropic_client.messages'),
-    DirectUse('utils/retrieval/tools/perplexity_tools.py', 'PERPLEXITY_API_KEY'),
     DirectUse('routers/omni_relay.py', 'GEMINI_API_KEY'),
     DirectUse('routers/omni_relay.py', 'OPENAI_API_KEY'),
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
+    'routers/desktop_proactivity.py',
     'utils/other/chat_file.py',
-    'utils/retrieval/agentic.py',
     'routers/omni_relay.py',
 }
 
@@ -85,24 +94,47 @@ def test_every_model_config_feature_has_inventory_and_gateway_lane():
     assert missing_lanes == []
 
 
-def test_generated_gateway_lanes_preserve_model_config_route_options():
+def test_generated_gateway_lanes_apply_only_declared_gateway_route_overrides():
     config = load_gateway_config(prod_mode=True)
+    overrides = load_generated_route_overrides()
 
     for feature in get_all_configured_features():
-        model = get_model(feature)
-        provider = get_provider(feature)
+        override = overrides.get(feature)
+        model = override.primary.model if override is not None else get_model(feature)
+        provider = override.primary.provider if override is not None else get_provider(feature)
         route = config.route_artifacts[f'route.{feature}.model_config.001']
 
-        assert route.provider_options == get_route_options(feature, model, provider)
+        expected_options = get_route_options(feature, model, provider)
+        if override is not None:
+            expected_options.update(override.provider_options)
+        expected_provider_model = (
+            f'google/{model}' if provider == 'openrouter' and model.startswith('gemini') else model
+        )
+        assert route.primary.model == expected_provider_model
+        assert route.primary.provider == provider
+        assert route.provider_options == expected_options
+
+
+def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
+    overrides = load_generated_route_overrides()
+
+    assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
+    assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
     config = load_gateway_config(prod_mode=True)
 
     for feature in get_all_configured_features():
-        if get_provider(feature) == 'anthropic':
+        if get_provider(feature) == 'anthropic' and feature != 'chat_agent':
             lane = config.lanes[feature_lane_id(feature)]
+            assert lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
             assert lane.capabilities.streaming is False
+
+    chat_agent = config.lanes[feature_lane_id('chat_agent')]
+    assert chat_agent.surface == Surface.OPENAI_CHAT_COMPLETIONS
+    assert chat_agent.capabilities.streaming is True
+    assert chat_agent.capabilities.tools is True
 
 
 def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
@@ -121,6 +153,7 @@ def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
         assert _inventory_file_exists(surface['code_path']), surface['code_path']
 
 
+@pytest.mark.slow
 def test_direct_provider_usage_stays_inside_approved_boundaries():
     detected = set()
     for path in BACKEND_DIR.rglob('*.py'):
@@ -141,14 +174,45 @@ def test_direct_provider_usage_stays_inside_approved_boundaries():
     assert stale_allowlist == []
 
 
-def test_direct_exception_files_are_inventoried_and_fail_closed_for_gateway_flip():
+def test_direct_exception_files_follow_their_declared_gateway_policy():
     inventory = _load_inventory()
     inventory_paths = {_code_path_file(surface['code_path']) for surface in inventory['surfaces']}
 
     assert INVENTORIED_DIRECT_EXCEPTION_FILES <= inventory_paths
-    for rel_path in INVENTORIED_DIRECT_EXCEPTION_FILES:
+    policies_by_file: dict[str, set[str]] = {path: set() for path in INVENTORIED_DIRECT_EXCEPTION_FILES}
+    for surface in inventory['surfaces']:
+        rel_path = _code_path_file(surface['code_path'])
+        if rel_path in policies_by_file:
+            policies_by_file[rel_path].add(_direct_exception_policy(surface['migration_status']))
+
+    assert all(len(policies) == 1 for policies in policies_by_file.values())
+    policy_by_file = {rel_path: next(iter(policies)) for rel_path, policies in policies_by_file.items()}
+    assert policy_by_file['utils/other/chat_file.py'] == 'acknowledged'
+    assert policy_by_file['routers/desktop_proactivity.py'] == 'acknowledged'
+    assert policy_by_file['routers/omni_relay.py'] == 'blocked'
+
+    for rel_path, policy in policy_by_file.items():
         source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
-        assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' in source
+        if policy == 'acknowledged':
+            assert 'record_direct_exception_surface' in source
+            assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' not in source
+        elif policy == 'blocked':
+            assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' in source
+            assert 'record_direct_exception_surface' not in source
+        else:
+            raise AssertionError(f'unknown direct gateway policy {policy!r} for {rel_path}')
+
+
+def test_acknowledged_file_chat_surface_is_observed_without_a_gateway_block():
+    """Static regression guard for PR #11419's acknowledged file-chat direct surface.
+
+    Behavioral upload coverage lives in test_chat_file_gateway_surface.py; this tripwire
+    keeps the acknowledged implementation from regressing to the fail-closed gate.
+    """
+    source = (BACKEND_DIR / 'utils/other/chat_file.py').read_text(encoding='utf-8')
+
+    assert 'record_direct_exception_surface(surface=\'file_chat.openai_files_assistants_vision\')' in source
+    assert 'raise_if_gateway_feature_mode_blocks_direct_model_surface' not in source
 
 
 def _load_inventory() -> dict:
@@ -167,6 +231,7 @@ def _is_skipped_path(rel: str) -> bool:
             'testing/',
             'pusher/',
             '.venv/',
+            'venv/',
             '.openapi-venv/',
         )
     )
@@ -251,3 +316,11 @@ def _inventory_file_exists(code_path: str) -> bool:
 def _code_path_file(code_path: str) -> str:
     normalized = code_path.removeprefix('backend/')
     return normalized.split(':', 1)[0]
+
+
+def _direct_exception_policy(migration_status: str) -> str:
+    if migration_status.startswith('acknowledged_direct_'):
+        return 'acknowledged'
+    if 'blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway' in migration_status:
+        return 'blocked'
+    raise AssertionError(f'direct exception surface has no declared gateway policy: {migration_status!r}')

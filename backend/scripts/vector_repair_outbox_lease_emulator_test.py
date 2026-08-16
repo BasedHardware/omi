@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Barrier
+from typing import Any
 
 PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
@@ -21,7 +22,7 @@ from database.memory_vector_repair_outbox import build_vector_repair_purge_outbo
 from database.memory_vector_repair_outbox_worker import lease_vector_repair_purge_outbox_records
 
 
-def _candidate() -> dict:
+def _candidate() -> dict[str, Any]:
     return {
         "vector_id": "u1:short_term:mem-lease-stale:rev1",
         "memory_id": "mem-lease-stale",
@@ -41,7 +42,7 @@ def _candidate() -> dict:
     }
 
 
-def _claim_once(uid: str, worker_id: str, now: datetime, barrier: Barrier) -> list[dict]:
+def _claim_once(uid: str, worker_id: str, now: datetime, barrier: Barrier) -> list[dict[str, Any]]:
     db_client = firestore.Client(project=PROJECT_ID)
     barrier.wait(timeout=15)
     return lease_vector_repair_purge_outbox_records(
@@ -61,7 +62,7 @@ def main() -> int:
 
     uid = "memory-vector-repair-outbox-lease-emulator-user"
     now = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
-    db_client = firestore.Client(project=PROJECT_ID)
+    db_client: Any = firestore.Client(project=PROJECT_ID)
     records = build_vector_repair_purge_outbox_records(uid=uid, candidates=[_candidate()], queued_at=now)
     if len(records) != 1:
         raise AssertionError(f"expected one outbox record, got {len(records)}")
@@ -87,7 +88,7 @@ def main() -> int:
     if claimed_records[0].get("status") != "pending":
         raise AssertionError("leased worker payload must preserve original pending status")
 
-    stored = db_client.document(record["outbox_path"]).get().to_dict() or {}
+    stored: dict[str, Any] = db_client.document(record["outbox_path"]).get().to_dict() or {}
     if stored.get("status") != "in_progress":
         raise AssertionError(f"expected stored record status in_progress after lease, got {stored.get('status')}")
     lease_owner = stored.get("lease_owner")

@@ -47,12 +47,24 @@ final class UpdateRelaunchWindowPolicyTests: XCTestCase {
     let defaults = UserDefaults(suiteName: suiteName)!
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
-    UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: false, defaults: defaults)
-
-    XCTAssertEqual(
-      UpdateRelaunchWindowPolicy.consumePendingRelaunch(defaults: defaults),
-      false
+    let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let attempt = UpdateRelaunchWindowPolicy.markPendingRelaunch(
+      restoreMainWindow: false,
+      sourceVersion: "0.12.0",
+      sourceBuild: "12000",
+      targetVersion: "0.12.64",
+      targetBuild: "12064",
+      channel: "beta",
+      attemptID: "attempt-123",
+      startedAt: startedAt,
+      defaults: defaults
     )
+
+    XCTAssertEqual(attempt.id, "attempt-123")
+    XCTAssertEqual(attempt.targetBuild, "12064")
+    let pending = UpdateRelaunchWindowPolicy.consumePendingRelaunch(defaults: defaults)
+    XCTAssertEqual(pending?.restoreMainWindow, false)
+    XCTAssertEqual(pending?.attempt, attempt)
     XCTAssertNil(UpdateRelaunchWindowPolicy.consumePendingRelaunch(defaults: defaults))
   }
 }

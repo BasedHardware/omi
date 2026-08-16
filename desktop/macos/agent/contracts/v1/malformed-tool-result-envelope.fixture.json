@@ -1,0 +1,12 @@
+{
+  "toolResultEnvelope": {
+    "version": 1,
+    "status": "succeeded",
+    "truncated": true,
+    "originalBytes": 100,
+    "projectedBytes": 10,
+    "fullOutputRef": null,
+    "provenance": {"invocationId": "invocation-1", "runId": "run-1", "attemptId": "attempt-1", "toolName": "list_agent_sessions"}
+  },
+  "expectedError": "$.toolResultEnvelope.fullOutputRef: truncated output requires an artifact reference"
+}

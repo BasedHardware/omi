@@ -46,12 +46,13 @@ fastapi_stub.Depends = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
 fastapi_stub.Request = type("Request", (), {})
+fastapi_stub.Response = type("Response", (), {})
 auth_stub = types.ModuleType("utils.other.endpoints")
 auth_stub.get_current_user_uid = lambda: "u1"
 
-import pytest
+import pytest  # noqa: E402
 
-from tests.unit.memory_import_isolation import (
+from tests.unit.memory_import_isolation import (  # noqa: E402
     install_memory_product_router_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
@@ -60,7 +61,9 @@ from tests.unit.memory_import_isolation import (
 _ROUTER_STUB_NAMES = (
     "fastapi",
     "database._client",
+    "database.memories",
     "database.vector_db",
+    "utils.memory.memory_service",
     "utils.other.endpoints",
     "routers.memory_product",
 )
@@ -69,31 +72,25 @@ _ROUTER_STUB_NAMES = (
 @pytest.fixture(scope="module", autouse=True)
 def _memory_product_router_import_isolation():
     saved = snapshot_sys_modules(_ROUTER_STUB_NAMES)
-    for name in ("routers.memory_product", "routers.memory_product"):
-        sys.modules.pop(name, None)
+    sys.modules.pop("routers.memory_product", None)
     existing_fastapi = sys.modules.get("fastapi")
     if existing_fastapi is not None and getattr(existing_fastapi, "APIRouter", None) is not fastapi_stub.APIRouter:
         sys.modules.pop("fastapi", None)
     install_memory_product_router_stubs(fastapi_stub, auth_stub)
     import routers.memory_product as memory_product
-    import routers.memory_product as memory_product
 
-    globals()["memory_product"] = memory_product
     globals()["memory_product"] = memory_product
     yield
     restore_sys_modules(saved)
-    for name in ("routers.memory_product", "routers.memory_product"):
-        sys.modules.pop(name, None)
-    globals()["memory_product"] = None
+    sys.modules.pop("routers.memory_product", None)
     globals()["memory_product"] = None
 
 
-from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState  # noqa: E402
+from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState  # noqa: E402
+from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS  # noqa: E402
 
 memory_product = None  # populated by _memory_product_router_import_isolation
-memory_product = None  # canonical implementation module for monkeypatch targets
 
 
 class _Snapshot:
@@ -175,7 +172,7 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         'version': 1,
         'tier': tier,
         'status': MemoryItemStatus.active,
-        'processing_state': ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        'processing_state': ProcessingState.processed,
         'content': content or f'{memory_id} coffee preference',
         'evidence': [_evidence(f'{memory_id}-source')],
         'source_state': SourceState.active,
@@ -255,7 +252,7 @@ def _global_read_gate_path():
 
 
 def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -365,36 +362,36 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
     memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
-def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
+def test_product_search_endpoint_rejects_explicit_opt_out_and_malformed_control_before_memory_items(monkeypatch):
     cases = [
-        ({}, 'missing_rollout_state'),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'mode': 'off',
-                    'grants': {'omi_chat': {'default_memory': True}},
-                }
-            },
-            'memory_reads_disabled',
-        ),
-        (
-            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
-            'malformed_rollout_state',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'mode': 'read',
-                    'fallback_projection_ready': True,
-                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
-                    'grants': {'omi_chat': {}},
+                    'grants': {'omi_chat': {'default_memory': False}},
                 }
             },
             'missing_chat_default_memory_grant',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'grants': {'omi_chat': {'default_memory': 'yes'}},
+                }
+            },
+            'malformed_memory_control_state',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'other-user',
+                }
+            },
+            'uid_mismatch',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
@@ -415,6 +412,29 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         assert db_client.collection_paths == []
 
     memory_product.fetch_default_product_memory_search.assert_not_called()
+
+
+def test_product_search_endpoint_uses_universal_defaults_without_control_backfill(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
+    search = MagicMock(
+        return_value={
+            'uid': 'u1',
+            'query': 'coffee',
+            'items': [],
+            'total_count': 0,
+            'returned_count': 0,
+            'limit': 25,
+            'offset': 0,
+        }
+    )
+    monkeypatch.setattr(memory_product, 'db', db_client)
+    monkeypatch.setattr(memory_product, 'fetch_default_product_memory_search', search)
+
+    response = memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+
+    assert response['rollout']['read_decision'] == 'USE_MEMORY'
+    assert response['policy']['app_has_default_memory_grant'] is True
+    search.assert_called_once()
 
 
 def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
@@ -449,7 +469,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
     monkeypatch,
 ):
     cases = [
-        ({}, 'missing_rollout_state'),
+        ({}, 'missing_chat_archive_capability'),
         (
             {
                 'users/u1/memory_control/state': {
@@ -474,31 +494,27 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
                     'grants': {'omi_chat': {'default_memory': True, 'archive': 'yes'}},
                 }
             },
-            'malformed_archive_capability',
+            'malformed_memory_control_state',
         ),
         (
             {
                 'users/u1/memory_control/state': {
                     'schema_version': 1,
                     'uid': 'u1',
-                    'mode': 'off',
-                    'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
-                }
-            },
-            'memory_reads_disabled',
-        ),
-        (
-            {
-                'users/u1/memory_control/state': {
-                    'schema_version': 1,
-                    'uid': 'u1',
-                    'mode': 'read',
-                    'fallback_projection_ready': True,
-                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
-                    'grants': {'omi_chat': {'archive': True}},
+                    'grants': {'omi_chat': {'default_memory': False, 'archive': True}},
                 }
             },
             'missing_chat_default_memory_grant',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'schema_version': 1,
+                    'uid': 'u1',
+                    'grants': {'omi_chat': {'default_memory': 'yes', 'archive': True}},
+                }
+            },
+            'malformed_memory_control_state',
         ),
     ]
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
@@ -523,7 +539,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
 
 
 def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_and_only_returns_archive(monkeypatch):
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
@@ -560,7 +576,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
     assert response['archive_default_visible'] is False
 
 
-def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
+def test_vector_search_endpoint_requires_vector_projection_commit_before_vector_or_memory_item_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
     monkeypatch.setattr(memory_product, "db", db_client)
@@ -569,9 +585,9 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
         memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
     except _HTTPException as exc:
         assert exc.status_code == 403
-        assert exc.detail['fallback_reason'] == 'missing_rollout_state'
+        assert exc.detail['fallback_reason'] == 'missing_vector_projection_commit_id'
     else:
-        raise AssertionError('expected disabled persisted rollout to fail closed')
+        raise AssertionError('expected missing vector projection commit to fail closed')
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == []
@@ -581,7 +597,7 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
 def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -608,12 +624,13 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
         }
     )
     monkeypatch.setattr(memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     def hit(item, score):
         return SearchVectorHit(
             memory_id=item.memory_id,
             score=score,
-            projection_commit_id='projection-1',
+            projection_commit_id=item.ledger_commit_id or 'projection-1',
             vector_updated_at=item.updated_at + timedelta(minutes=1),
             uid=item.uid,
             account_generation=item.account_generation,
@@ -657,7 +674,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
 def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_flag(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake(
         {
@@ -707,7 +724,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
 def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
     db_client = _FirestoreFake(
         {

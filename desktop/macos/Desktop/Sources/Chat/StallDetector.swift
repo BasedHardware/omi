@@ -7,8 +7,8 @@ import Foundation
 /// Two timers track independently:
 ///   - **Inter-event gap** — ms since the last event of any kind.
 ///     Captures "the bridge stopped streaming."
-///   - **Per-tool duration** — ms since each in-flight tool started.
-///     Captures "this specific tool is hanging."
+///   - **Per-tool no-progress gap** — ms since each in-flight tool last
+///     reported progress. Captures "this specific tool stopped moving."
 ///
 /// The detector is pure logic: time is passed in as a parameter on
 /// every operation, so tests can drive it instantly without wall-clock
@@ -43,6 +43,11 @@ actor StallDetector {
     /// per-tool timer for `id` (typically the `toolUseId`).
     case toolStarted(id: String)
 
+    /// A `tool_activity` progress update for an in-flight tool. This refreshes
+    /// only the tool's no-progress clock; it never changes the tool's original
+    /// start time used by duration diagnostics.
+    case toolProgress(id: String)
+
     /// A `tool_activity` with status `completed` (or `failed` /
     /// `cancelled`) arrived. Clears the per-tool timer for `id` and
     /// emits a transition back to `.running` if the tool was promoted.
@@ -71,6 +76,7 @@ actor StallDetector {
 
   /// In-flight tools keyed by `toolUseId`. Removed on completion.
   private var toolStartedAtMs: [String: Int] = [:]
+  private var toolLastProgressAtMs: [String: Int] = [:]
   private var toolStates: [String: State] = [:]
 
   // MARK: - Init
@@ -95,6 +101,21 @@ actor StallDetector {
   /// tool stalled?" check that gates the message-level banner.
   func snapshotToolStates() -> [String: State] {
     toolStates
+  }
+
+  /// IDs of tools that have gone too long without a progress update. The caller
+  /// owns the recovery action (for example, interrupting the bridge); the
+  /// detector remains pure and does not perform side effects itself.
+  func toolIdsWithoutProgress(durationMs: Int, atMs: Int) -> [String] {
+    toolLastProgressAtMs.compactMap { id, lastProgressAt in
+      atMs - lastProgressAt >= durationMs ? id : nil
+    }
+  }
+
+  /// A generic bridge timeout may fire only after a full quiet interval with
+  /// no tool in flight. Active tools have their own no-progress watchdog.
+  func isSilentWithoutActiveTools(durationMs: Int, atMs: Int) -> Bool {
+    toolStartedAtMs.isEmpty && atMs - lastEventAtMs >= durationMs
   }
 
   // MARK: - Observation
@@ -144,11 +165,18 @@ actor StallDetector {
     case .toolStarted(let id):
       if toolStartedAtMs[id] == nil {
         toolStartedAtMs[id] = atMs
+        toolLastProgressAtMs[id] = atMs
         toolStates[id] = .running
+      }
+
+    case .toolProgress(let id):
+      if toolStartedAtMs[id] != nil {
+        toolLastProgressAtMs[id] = atMs
       }
 
     case .toolCompleted(let id):
       toolStartedAtMs.removeValue(forKey: id)
+      toolLastProgressAtMs.removeValue(forKey: id)
       let old = toolStates.removeValue(forKey: id) ?? .running
       if old != .running {
         // Tool completed while promoted (slow/stalled → done) — UI
@@ -172,9 +200,9 @@ actor StallDetector {
     }
 
     // Per-tool timers.
-    for (toolId, startedAt) in toolStartedAtMs {
-      let duration = atMs - startedAt
-      let newToolState = promotedState(forElapsedMs: duration)
+    for (toolId, lastProgressAt) in toolLastProgressAtMs {
+      let noProgressGap = atMs - lastProgressAt
+      let newToolState = promotedState(forElapsedMs: noProgressGap)
       let oldToolState = toolStates[toolId] ?? .running
       if newToolState != oldToolState {
         transitions.append(.tool(id: toolId, from: oldToolState, to: newToolState))

@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class WebhookType(str, Enum):
@@ -12,14 +13,82 @@ class WebhookType(str, Enum):
     day_summary = 'day_summary'
 
 
+def webhook_url_from_setting(wtype: WebhookType | str, value: Optional[str]) -> str:
+    """The endpoint a stored webhook setting points at, or '' when none is configured.
+
+    audio_bytes stores '<url>,<seconds>', so clearing only the URL leaves a ',5' setting
+    that is not an empty string yet has nowhere to deliver to. Every caller deciding
+    whether a webhook is configured must read the setting through here.
+    """
+    if not value:
+        return ''
+    # WebhookType is a str enum, so this holds for the raw wire value too.
+    if wtype == WebhookType.audio_bytes:
+        value = value.split(',')[0]
+    return value.strip()
+
+
+LOCATION_CONTEXT_PURPOSE = 'chat_city_context'
+LOCATION_CONTEXT_DISCLOSED_PROVIDERS = ('Google Maps', 'the configured AI chat provider')
+
+
+class LocationContextConsentStatus(str, Enum):
+    granted = 'granted'
+    revoked = 'revoked'
+
+
+class LocationContextConsent(BaseModel):
+    """Server-owned authorization for city-only context in interactive chat."""
+
+    status: LocationContextConsentStatus
+    purpose: str
+    disclosed_providers: tuple[str, str]
+    granted_at: datetime
+    expires_at: datetime
+    revoked_at: Optional[datetime] = None
+
+    def is_active(self, now: Optional[datetime] = None) -> bool:
+        current_time = now or datetime.now(timezone.utc)
+        if current_time.tzinfo is None or self.granted_at.tzinfo is None or self.expires_at.tzinfo is None:
+            return False
+        return (
+            self.status is LocationContextConsentStatus.granted
+            and self.revoked_at is None
+            and self.purpose == LOCATION_CONTEXT_PURPOSE
+            and self.disclosed_providers == LOCATION_CONTEXT_DISCLOSED_PROVIDERS
+            and self.granted_at <= current_time
+            and self.expires_at > current_time
+        )
+
+
+class LocationContextConsentUpdate(BaseModel):
+    enabled: bool
+    disclosure_accepted: bool = Field(
+        default=False,
+        description=(
+            'Required to enable city context: Google Maps reverse-geocodes the device location and the configured '
+            'AI chat provider receives city, region, and country only.'
+        ),
+    )
+
+
+class LocationContextConsentResponse(BaseModel):
+    enabled: bool
+    purpose: str = LOCATION_CONTEXT_PURPOSE
+    disclosed_providers: tuple[str, str] = LOCATION_CONTEXT_DISCLOSED_PROVIDERS
+    expires_at: Optional[datetime] = None
+
+
 class PlanType(str, Enum):
     basic = 'basic'  # display "Free"
-    unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
-    architect = 'architect'  # display "Architect"
-    operator = 'operator'  # display "Operator"
+    unlimited = 'unlimited'  # LEGACY — display "Neo"; hidden from new users
+    architect = 'architect'  # display "Architect" (desktop)
+    operator = 'operator'  # display "Operator" (desktop)
+    plus = 'plus'  # display "Plus" (mobile)
+    unlimited_v2 = 'unlimited_v2'  # display "Unlimited" (mobile); distinct from legacy `unlimited` (Neo)
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object):
         # Backward compat: 'pro' was renamed to 'architect'
         if value == 'pro':
             return cls.architect
@@ -58,7 +127,10 @@ class ChatUsageQuota(BaseModel):
 
 
 class Subscription(BaseModel):
-    plan: PlanType = PlanType.basic
+    plan: PlanType = Field(
+        default=PlanType.basic,
+        json_schema_extra={"enum": ["basic", "unlimited", "architect", "operator"]},
+    )
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
     # Period start is used by the Neo desktop-grandfather check. Populated by the
@@ -142,3 +214,19 @@ class UserSubscriptionResponse(BaseModel):
     # — value is `subscription.current_period_end`. Null otherwise. The desktop client
     # uses this to render a "Neo desktop access ends on <date>" notice.
     desktop_grandfather_until: Optional[int] = None
+
+    @field_validator("subscription", mode="before")
+    @classmethod
+    def _reject_unshipped_mobile_plan_values(cls, value: Subscription) -> Subscription:
+        if value.plan in {PlanType.plus, PlanType.unlimited_v2}:
+            raise ValueError("mobile plan IDs require a versioned app-client subscription contract")
+        return value
+
+
+class AvailableLanguage(BaseModel):
+    code: str
+    name: str
+
+
+class AvailableLanguagesResponse(BaseModel):
+    languages: List[AvailableLanguage]

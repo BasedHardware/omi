@@ -7,7 +7,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class FirmwareUpdateStep {
   final String title;
   final String description;
-  final IconData icon;
+  final FaIconData icon;
   final bool isLastStep;
 
   FirmwareUpdateStep({required this.title, required this.description, required this.icon, this.isLastStep = false});

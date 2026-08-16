@@ -210,3 +210,17 @@ def test_pagination_is_clamped_before_firestore():
     assert high[1] == 100 and high[2] == 0  # limit 99999 -> 100, offset -1 -> 0
     assert m.call_args_list[1].args[1] == 25  # transcript reads cap tighter
     assert m.call_args_list[2].args[1] == 1  # limit 0 -> 1
+
+
+def test_goals_limit_is_clamped_before_firestore():
+    # Sibling of the conversations clamp above: GET /v1/dev/user/goals passed the request `limit`
+    # straight to get_user_goals -> Firestore .limit(), so ?limit=-1 raised (HTTP 500) and an
+    # oversized limit could stream the whole collection. Reuses this file's developer-router
+    # harness (database.goals is already stubbed); call the handler directly.
+    with patch.object(developer_module.goals_db, 'get_user_goals', return_value=[]) as m:
+        developer_module.get_goals(uid='uid1', limit=-1)
+        developer_module.get_goals(uid='uid1', limit=99999)
+        developer_module.get_goals(uid='uid1', limit=0)
+    assert m.call_args_list[0].kwargs['limit'] == 1  # -1 -> 1
+    assert m.call_args_list[1].kwargs['limit'] == 1000  # 99999 -> 1000
+    assert m.call_args_list[2].kwargs['limit'] == 1  # 0 -> 1

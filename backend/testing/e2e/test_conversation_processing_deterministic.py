@@ -62,7 +62,7 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
                 ],
             }
         )
-        update = {"structured": structured, "status": "completed"}
+        update = {"structured": structured}
         conversations_db.update_conversation(uid, conversation.id, update)
         seed_action_item(
             uid,

@@ -19,7 +19,12 @@ const secondsPerFlashPage = 1.4;
 ///                  resolves the job_id to [synced] / [miss] / [corrupted].
 /// - [synced]     — server job confirmed success; conversation created. Safe to clean up.
 /// - [corrupted]  — the underlying local file is missing/unreadable.
-enum WalStatus { inProgress, miss, uploaded, synced, corrupted }
+/// - [outsideRecoveryWindow] — the server permanently refused this recording
+///                  because it is older than the automatic-recovery window
+///                  (HTTP 422 `backfill_lookback_exceeded`). The local file is
+///                  intact, but re-uploading it can never succeed, so it is
+///                  terminal for sync rather than pending work.
+enum WalStatus { inProgress, miss, uploaded, synced, corrupted, outsideRecoveryWindow }
 
 enum WalStorage { mem, disk, sdcard, flashPage }
 
@@ -36,7 +41,10 @@ enum SyncMethod { ble }
 /// - [retrying]   — a sync attempt failed; will be retried automatically
 /// - [failed]     — auto-retries exhausted; needs a manual retry
 /// - [corrupted]  — the underlying file is missing/unreadable
-enum WalSyncDisplayState { syncing, uploaded, synced, waiting, retrying, failed, corrupted }
+/// - [outsideRecoveryWindow] — too old for the server to accept; retrying
+///                  cannot help, so the row explains that instead of offering
+///                  a Retry the user would spend forever
+enum WalSyncDisplayState { syncing, uploaded, synced, waiting, retrying, failed, corrupted, outsideRecoveryWindow }
 
 /// Max automatic sync attempts before a recording is considered [WalSyncDisplayState.failed].
 /// Mirrors the `maxRetries` used by the auto-sync loop in capture_provider.
@@ -95,7 +103,7 @@ class Wal {
   WalStorage storage;
 
   String? filePath;
-  List<List<int>> data = [];
+  List<List<int>> data;
   int storageOffset = 0;
   int storageTotalBytes = 0;
   int fileNum = 1;
@@ -137,6 +145,11 @@ class Wal {
   /// user. The sync page renders an explicit label + icon for every value so a
   /// not-yet-synced recording is never visually identical to a failed one.
   WalSyncDisplayState get syncDisplayState {
+    // Corruption and a server lookback rejection are terminal. Neither must be
+    // visually downgraded to an active upload if a transient flag was left
+    // behind by an interrupted attempt.
+    if (status == WalStatus.corrupted) return WalSyncDisplayState.corrupted;
+    if (status == WalStatus.outsideRecoveryWindow) return WalSyncDisplayState.outsideRecoveryWindow;
     if (isSyncing) return WalSyncDisplayState.syncing;
     switch (status) {
       case WalStatus.uploaded:
@@ -145,6 +158,8 @@ class Wal {
         return WalSyncDisplayState.synced;
       case WalStatus.corrupted:
         return WalSyncDisplayState.corrupted;
+      case WalStatus.outsideRecoveryWindow:
+        return WalSyncDisplayState.outsideRecoveryWindow;
       case WalStatus.miss:
         if (retryCount >= walMaxAutoRetries) return WalSyncDisplayState.failed;
         if (retryCount > 0) return WalSyncDisplayState.retrying;
@@ -152,6 +167,27 @@ class Wal {
       case WalStatus.inProgress:
         return WalSyncDisplayState.waiting;
     }
+  }
+
+  /// Marks this recording as terminally unavailable and clears any transient
+  /// upload presentation left by an interrupted attempt.
+  void markCorrupted() {
+    status = WalStatus.corrupted;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
+  }
+
+  /// Marks this recording as permanently refused by the server for being older
+  /// than the automatic-recovery window. The local file is deliberately kept —
+  /// only the sync attempt is terminal.
+  void markOutsideRecoveryWindow() {
+    status = WalStatus.outsideRecoveryWindow;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
   }
 
   Wal({
@@ -168,7 +204,7 @@ class Wal {
     this.storageOffset = 0,
     this.storageTotalBytes = 0,
     this.fileNum = 1,
-    this.data = const [],
+    List<List<int>>? data,
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
@@ -177,7 +213,7 @@ class Wal {
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
-  }) {
+  }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
 

@@ -18,10 +18,12 @@ from dataclasses import dataclass
 from typing import Any
 
 BASE_URL = os.getenv("OMI_MCP_REVIEW_BASE_URL", "https://api.omi.me").rstrip("/")
-CLIENT_ID = os.getenv("OMI_MCP_REVIEW_CLIENT_ID", "omi-chatgpt-prod")
+CHATGPT_CLIENT_ID = os.getenv("OMI_MCP_REVIEW_CLIENT_ID", "omi-chatgpt-prod")
+CLAUDE_CLIENT_ID = os.getenv("OMI_MCP_REVIEW_CLAUDE_CLIENT_ID", "omi-claude-prod")
 RESOURCE = os.getenv("OMI_MCP_REVIEW_RESOURCE", f"{BASE_URL}/v1/mcp/sse")
-STATIC_REDIRECT_URI = "https://chatgpt.com/connector_platform_oauth_redirect"
-DYNAMIC_REDIRECT_URI = "https://chatgpt.com/connector/oauth/omi-review-smoke/callback"
+CHATGPT_STATIC_REDIRECT_URI = "https://chatgpt.com/connector_platform_oauth_redirect"
+CHATGPT_DYNAMIC_REDIRECT_URI = "https://chatgpt.com/connector/oauth/omi-review-smoke/callback"
+CLAUDE_STATIC_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 FIREBASE_SIGNIN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 SCOPES = (
     "memories.read memories.write conversations.read action_items.read action_items.write "
@@ -89,11 +91,11 @@ def _pkce_challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
-def _authorize_url(redirect_uri: str, verifier: str, state: str) -> str:
+def _authorize_url(client_id: str, redirect_uri: str, verifier: str, state: str) -> str:
     query = urllib.parse.urlencode(
         {
             "response_type": "code",
-            "client_id": CLIENT_ID,
+            "client_id": client_id,
             "redirect_uri": redirect_uri,
             "resource": RESOURCE,
             "scope": SCOPES,
@@ -103,6 +105,27 @@ def _authorize_url(redirect_uri: str, verifier: str, state: str) -> str:
         }
     )
     return f"{BASE_URL}/authorize?{query}"
+
+
+def _assert_authorize_get_registered(
+    *,
+    client_id: str,
+    redirect_uri: str,
+    state: str,
+    label: str,
+) -> dict[str, Any]:
+    verifier = _pkce_verifier()
+    response = _request("GET", _authorize_url(client_id, redirect_uri, verifier, state))
+    summary = {
+        "client_id": client_id,
+        "status": response.status,
+        "has_password_input": "password" in response.body.lower(),
+    }
+    if response.status != 200:
+        raise SmokeFailure(f"{label} authorize returned HTTP {response.status}: {_head(response.body)}")
+    if "unknown oauth client" in response.body.lower():
+        raise SmokeFailure(f"{label} authorize returned Unknown OAuth client for {client_id!r}")
+    return summary
 
 
 def _extract_firebase_api_key(authorize_html: str) -> str:
@@ -137,12 +160,18 @@ def _firebase_password_signin(api_key: str, email: str, password: str) -> str:
     return id_token
 
 
-def _authorize_consent(redirect_uri: str, verifier: str, firebase_id_token: str, state: str) -> str:
+def _authorize_consent(
+    client_id: str,
+    redirect_uri: str,
+    verifier: str,
+    firebase_id_token: str,
+    state: str,
+) -> str:
     response = _form_request(
         f"{BASE_URL}/authorize",
         {
             "response_type": "code",
-            "client_id": CLIENT_ID,
+            "client_id": client_id,
             "redirect_uri": redirect_uri,
             "resource": RESOURCE,
             "scope": SCOPES,
@@ -163,13 +192,13 @@ def _authorize_consent(redirect_uri: str, verifier: str, firebase_id_token: str,
     return code
 
 
-def _exchange_token(code: str, redirect_uri: str, verifier: str) -> str:
+def _exchange_token(client_id: str, code: str, redirect_uri: str, verifier: str) -> str:
     response = _request(
         "POST",
         f"{BASE_URL}/token",
         data={
             "grant_type": "authorization_code",
-            "client_id": CLIENT_ID,
+            "client_id": client_id,
             "redirect_uri": redirect_uri,
             "resource": RESOURCE,
             "code": code,
@@ -215,8 +244,23 @@ def _head(value: str, max_len: int = 120) -> str:
 def main() -> int:
     summary: dict[str, Any] = {}
     try:
+        summary["claude_authorize_get"] = _assert_authorize_get_registered(
+            client_id=CLAUDE_CLIENT_ID,
+            redirect_uri=CLAUDE_STATIC_REDIRECT_URI,
+            state="claude-smoke",
+            label="Claude",
+        )
+        summary["chatgpt_authorize_get"] = _assert_authorize_get_registered(
+            client_id=CHATGPT_CLIENT_ID,
+            redirect_uri=CHATGPT_STATIC_REDIRECT_URI,
+            state="chatgpt-smoke",
+            label="ChatGPT",
+        )
+
         verifier = _pkce_verifier()
-        static_authorize = _request("GET", _authorize_url(STATIC_REDIRECT_URI, verifier, "static-smoke"))
+        static_authorize = _request(
+            "GET", _authorize_url(CHATGPT_CLIENT_ID, CHATGPT_STATIC_REDIRECT_URI, verifier, "static-smoke")
+        )
         summary["static_authorize_get"] = {
             "status": static_authorize.status,
             "has_password_input": "password" in static_authorize.body.lower(),
@@ -226,7 +270,9 @@ def main() -> int:
                 f"Static authorize returned HTTP {static_authorize.status}: {_head(static_authorize.body)}"
             )
 
-        dynamic_authorize = _request("GET", _authorize_url(DYNAMIC_REDIRECT_URI, verifier, "dynamic-smoke"))
+        dynamic_authorize = _request(
+            "GET", _authorize_url(CHATGPT_CLIENT_ID, CHATGPT_DYNAMIC_REDIRECT_URI, verifier, "dynamic-smoke")
+        )
         summary["dynamic_authorize_get"] = {"status": dynamic_authorize.status}
         if dynamic_authorize.status != 200:
             raise SmokeFailure(
@@ -239,22 +285,25 @@ def main() -> int:
         firebase_id_token = _firebase_password_signin(firebase_api_key, email, password)
         summary["firebase_password_signin"] = {"status": 200, "ok": True}
 
-        static_code = _authorize_consent(STATIC_REDIRECT_URI, verifier, firebase_id_token, "static-smoke")
+        static_code = _authorize_consent(
+            CHATGPT_CLIENT_ID, CHATGPT_STATIC_REDIRECT_URI, verifier, firebase_id_token, "static-smoke"
+        )
         summary["static_authorize_post"] = {"status": 200, "code_returned": True}
 
-        static_access_token = _exchange_token(static_code, STATIC_REDIRECT_URI, verifier)
+        static_access_token = _exchange_token(CHATGPT_CLIENT_ID, static_code, CHATGPT_STATIC_REDIRECT_URI, verifier)
         summary["static_token_exchange"] = {"status": 200, "access_token_returned": bool(static_access_token)}
 
         dynamic_verifier = _pkce_verifier()
         dynamic_code = _authorize_consent(
-            DYNAMIC_REDIRECT_URI,
+            CHATGPT_CLIENT_ID,
+            CHATGPT_DYNAMIC_REDIRECT_URI,
             dynamic_verifier,
             firebase_id_token,
             "dynamic-smoke",
         )
         summary["dynamic_authorize_post"] = {"status": 200, "code_returned": True}
 
-        access_token = _exchange_token(dynamic_code, DYNAMIC_REDIRECT_URI, dynamic_verifier)
+        access_token = _exchange_token(CHATGPT_CLIENT_ID, dynamic_code, CHATGPT_DYNAMIC_REDIRECT_URI, dynamic_verifier)
         summary["dynamic_token_exchange"] = {"status": 200, "access_token_returned": True}
 
         initialize = _mcp_call(access_token, "initialize", msg_id=1)

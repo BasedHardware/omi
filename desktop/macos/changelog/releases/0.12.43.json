@@ -1,0 +1,9 @@
+{
+  "version": "0.12.43",
+  "date": "2026-07-07",
+  "changes": [
+    "Reduced noisy Sentry session heartbeat issues by switching to breadcrumb telemetry",
+    "Device offline audio now uploads to the cloud via POST /v2/sync-local-files instead of being marked synced locally without a server call",
+    "Fixed on-device desktop conversations staying untitled after backend processing completes."
+  ]
+}

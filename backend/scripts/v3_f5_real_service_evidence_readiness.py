@@ -6,10 +6,12 @@ performs no network/provider/Firestore calls, imports no production app/router,
 and leaves all readiness decisions BLOCKED/NO_GO.
 """
 
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any, Callable

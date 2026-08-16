@@ -6,7 +6,19 @@ import json
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Sequence
+
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from readiness_gate_common import (
+    add_require_go_arg,
+    collect_gates_from_artifact,
+    evaluate_gates,
+    exit_code_for_status,
+)
 
 DEFAULT_SHARED_NAMESPACE = "ns2"
 MIN_SAFE_PREFIX_LEN = 12
@@ -60,6 +72,7 @@ class PineconeRepairValidationConfig:
     throwaway_prefix: str
     confirm_throwaway_prefix: str
     shared_ns2_readonly: bool
+    require_go: bool = False
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -87,12 +100,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--api-key", default=os.getenv("PINECONE_API_KEY", ""))
     parser.add_argument("--index-name", default=os.getenv("PINECONE_INDEX_NAME", ""))
     parser.add_argument("--index-host", default=os.getenv("PINECONE_INDEX_HOST", ""))
+    add_require_go_arg(parser)
     return parser.parse_args(argv)
 
 
 def config_from_args(args: argparse.Namespace) -> PineconeRepairValidationConfig:
     return PineconeRepairValidationConfig(
         execute=bool(args.execute),
+        require_go=bool(args.require_go),
         allow_throwaway_mutation=bool(args.allow_throwaway_mutation),
         api_key=str(args.api_key or ""),
         index_name=str(args.index_name or ""),
@@ -176,6 +191,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(json.dumps(artifact, indent=2, sort_keys=True))
     if config.execute and artifact["prerequisites"]:
         return 2
+    if config.require_go:
+        overall_status, _ = evaluate_gates(collect_gates_from_artifact(artifact))
+        return exit_code_for_status(overall_status, require_go=True)
     return 0
 
 

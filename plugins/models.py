@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -16,14 +15,6 @@ from omi_plugin_sdk.models import (
     Structured,
     TranscriptSegment,
 )
-
-
-class ConversationSource(str, Enum):
-    friend = 'friend'
-    omi = 'omi'
-    openglass = 'openglass'
-    screenpipe = 'screenpipe'
-    workflow = 'workflow'
 
 
 class RealtimePluginRequest(BaseModel):

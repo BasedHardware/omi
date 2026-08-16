@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -206,6 +207,101 @@ export OPENAI_API_KEY="$OPENAI_API_KEY"
                 os.environ["OPENAI_API_KEY"] = old_value
 
         self.assertIn("current CI value for OPENAI_API_KEY appears in build.log", "\n".join(errors))
+
+    def test_artifact_scanner_skips_name_heuristics_for_compiled_ios_binaries(self) -> None:
+        artifact = self.root / "ios.ipa"
+        with zipfile.ZipFile(artifact, "w") as archive:
+            archive.writestr(
+                "Payload/Runner.app/Runner",
+                "CLIENT_EARLY_TRAFFIC_SECRET\nPRIVATE_KEY_ENCODE_ERROR\nSERVER_HANDSHAKE_TRAFFIC_SECRET\n",
+            )
+            archive.writestr(
+                "Payload/Runner.app/BatteryWidget.appex/BatteryWidget",
+                "CREDENTIAL_MISMATCH\nAPI_KEY\nPROJECT_TOKEN\n",
+            )
+            archive.writestr(
+                "Payload/Runner.app/Frameworks/TwilioVoice.framework/TwilioVoice",
+                "CLIENT_EARLY_TRAFFIC_SECRET\nPRIVATE_KEY_ENCODE_ERROR\n",
+            )
+
+        errors = ARTIFACT_SCANNER.scan_artifact(artifact, ARTIFACT_SCANNER.load_policy())
+
+        self.assertEqual(errors, [])
+
+    def test_artifact_scanner_keeps_name_heuristics_for_text_files(self) -> None:
+        artifact = self.root / "public.zip"
+        with zipfile.ZipFile(artifact, "w") as archive:
+            archive.writestr("config.json", '{"OPENAI_API_KEY":"placeholder"}')
+            archive.writestr("notes.txt", "-----BEGIN PRIVATE KEY-----\nnot-real\n-----END PRIVATE KEY-----\n")
+
+        errors = ARTIFACT_SCANNER.scan_artifact(artifact, ARTIFACT_SCANNER.load_policy())
+
+        joined = "\n".join(errors)
+        self.assertIn("server-only variable name OPENAI_API_KEY appears in config.json", joined)
+        self.assertIn("private key material appears in notes.txt", joined)
+
+    def test_artifact_scanner_detects_server_secret_in_plist(self) -> None:
+        artifact = self.root / "ios-leak.plist.zip"
+        with zipfile.ZipFile(artifact, "w") as archive:
+            archive.writestr(
+                "Payload/Runner.app/Info.plist",
+                """<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>GOOGLE_CLIENT_SECRET</key><string>not-a-real-secret</string>
+</dict></plist>""",
+            )
+
+        errors = ARTIFACT_SCANNER.scan_artifact(artifact, ARTIFACT_SCANNER.load_policy())
+
+        joined = "\n".join(errors)
+        self.assertIn("server-only variable name GOOGLE_CLIENT_SECRET appears in", joined)
+        self.assertIn("Info.plist", joined)
+
+    def test_artifact_scanner_allows_public_firebase_plist(self) -> None:
+        artifact = self.root / "ios-firebase.plist.zip"
+        with zipfile.ZipFile(artifact, "w") as archive:
+            archive.writestr(
+                "Payload/Runner.app/GoogleService-Info.plist",
+                """<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>API_KEY</key><string>AIzaFakePublicFirebaseKeyForReleaseGuard</string>
+  <key>CLIENT_ID</key><string>1031333818730-example.apps.googleusercontent.com</string>
+</dict></plist>""",
+            )
+
+        errors = ARTIFACT_SCANNER.scan_artifact(artifact, ARTIFACT_SCANNER.load_policy())
+
+        self.assertEqual(errors, [])
+
+    def test_artifact_scanner_allows_realistic_info_plist(self) -> None:
+        artifact = self.root / "ios-info.plist.zip"
+        with zipfile.ZipFile(artifact, "w") as archive:
+            archive.writestr(
+                "Payload/Runner.app/Info.plist",
+                """<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLSchemes</key><array><string>$(GOOGLE_REVERSE_CLIENT_ID)</string></array>
+  </dict></array>
+  <key>UIBackgroundModes</key><array><string>audio</string><string>voip</string></array>
+</dict></plist>""",
+            )
+
+        errors = ARTIFACT_SCANNER.scan_artifact(artifact, ARTIFACT_SCANNER.load_policy())
+
+        self.assertEqual(errors, [])
+
+    def test_artifact_scanner_empty_artifact_args_are_a_warning_not_failure(self) -> None:
+        old_argv = sys.argv
+        sys.argv = ["scan-public-artifact-secrets.py"]
+        try:
+            result = ARTIFACT_SCANNER.main()
+        finally:
+            sys.argv = old_argv
+
+        self.assertEqual(result, 0)
 
 
 if __name__ == "__main__":

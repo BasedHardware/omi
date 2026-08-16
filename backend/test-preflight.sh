@@ -63,6 +63,12 @@ else
   bad "pytest not installed (${PYTHON_BIN:-python} -m pip install pytest)"
 fi
 
+if [[ -n "$PYTHON_BIN" ]] && PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 "$PYTHON_BIN" -m pyright --version &>/dev/null 2>&1; then
+  ok "pyright $(PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 "$PYTHON_BIN" -m pyright --version 2>&1 | head -n 1 | awk '{print $2}')"
+else
+  bad "pyright not installed (${PYTHON_BIN:-python} -m pip install pyright)"
+fi
+
 if command -v black &>/dev/null; then
   ok "black (formatter)"
 else

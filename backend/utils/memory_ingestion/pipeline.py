@@ -4,7 +4,7 @@ import copy
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Any, Dict, Literal, Protocol, cast
 
 from pydantic import ValidationError
 
@@ -22,6 +22,7 @@ from utils.memory_ingestion.models import (
     DroppedArtifactRecord,
     EntityOperation,
     EntityRef,
+    ExistingMemorySnapshot,
     EvidenceLinkMutation,
     EvidenceSpan,
     ExtractionMetadata,
@@ -51,6 +52,7 @@ from utils.memory_ingestion.models import (
     TemporalScope,
     UserStateSnapshot,
     VectorDelete,
+    RoutingConfig,
     VectorMutationPlan,
     VectorUpsert,
 )
@@ -59,8 +61,7 @@ from utils.memory_ingestion.stages.verify_output import verify_output
 
 
 class Clock(Protocol):
-    def now(self) -> datetime:
-        pass
+    def now(self) -> datetime: ...
 
 
 class UtcClock:
@@ -76,11 +77,9 @@ class MemoryModelClient(Protocol):
         events: list[RawContextEvent],
         input_fingerprint: str,
         id_factory: StableIdFactory,
-    ) -> list[MemoryEventFrame]:
-        pass
+    ) -> list[MemoryEventFrame]: ...
 
-    def manifest(self, pipeline_input: MemoryPipelineInput) -> ModelManifest:
-        pass
+    def manifest(self, pipeline_input: MemoryPipelineInput) -> ModelManifest: ...
 
 
 class StubMemoryModelClient:
@@ -498,7 +497,10 @@ def _compute_signal_density(pipeline_input: MemoryPipelineInput) -> float:
 
     total_substantive = 0
     for event in text_events:
-        words = re.findall(r"[A-Za-z']+", event.text.lower())
+        text = event.text
+        if not text:
+            continue
+        words = re.findall(r"[A-Za-z']+", text.lower())
         substantive = [w for w in words if w not in _FILLER_WORDS]
         total_substantive += len(substantive)
 
@@ -605,9 +607,7 @@ def _candidates_from_frames(
 ) -> list[CandidateClaim]:
     candidates: list[CandidateClaim] = []
     route_id = None
-    route_meta = (
-        pipeline_input.source.metadata.get("route_id") if isinstance(pipeline_input.source.metadata, dict) else None
-    )
+    route_meta = pipeline_input.source.metadata.get("route_id")
     if route_meta:
         route_id = str(route_meta)
     for frame in frames:
@@ -709,21 +709,24 @@ def _stage_trace(
 
 
 def _frames_from_structured_payload(event: RawContextEvent, actor: ActorDescriptor | None) -> list[MemoryEventFrame]:
-    raw_frames = event.structured_payload.get("memory_frames") or event.structured_payload.get("candidate_frames") or []
+    raw_frames: object = (
+        event.structured_payload.get("memory_frames") or event.structured_payload.get("candidate_frames") or []
+    )
     frames: list[MemoryEventFrame] = []
     if not isinstance(raw_frames, list):
         return frames
-    for index, raw_frame in enumerate(raw_frames):
+    typed_frames: list[Any] = cast(list[Any], raw_frames)
+    for index, raw_frame in enumerate(typed_frames):
         if not isinstance(raw_frame, dict):
             continue
-        frame_payload = dict(raw_frame)
-        frame_payload.setdefault("subject", _actor_subject(actor).model_dump())
-        frame_payload.setdefault("temporal", TemporalScope().model_dump())
-        frame_payload.setdefault("modality", Modality().model_dump())
-        frame_payload.setdefault("sensitivity", SensitivityClassification().model_dump())
-        frame_payload.setdefault("evidence", [_evidence_for_event(event, index).model_dump()])
+        frame_payload: Dict[str, Any] = dict(cast(Dict[str, Any], raw_frame))
+        frame_payload.setdefault("subject", _actor_subject(actor).dict())
+        frame_payload.setdefault("temporal", TemporalScope().dict())
+        frame_payload.setdefault("modality", Modality().dict())
+        frame_payload.setdefault("sensitivity", SensitivityClassification().dict())
+        frame_payload.setdefault("evidence", [_evidence_for_event(event, index).dict()])
         frame_payload.setdefault("source_event_ids", [event.event_id])
-        frame_payload.setdefault("extraction", ExtractionMetadata(source_block_id=event.event_id).model_dump())
+        frame_payload.setdefault("extraction", ExtractionMetadata(source_block_id=event.event_id).dict())
         try:
             frames.append(MemoryEventFrame.model_validate(frame_payload))
         except ValidationError:
@@ -763,7 +766,7 @@ def _heuristic_frames_from_text(event: RawContextEvent, actor: ActorDescriptor |
                 durability="short_term" if frame_type in {"task", "task_candidate"} else "medium_term",
                 evidence=[_evidence_for_event(event, index, quote=match.group(0))],
                 source_event_ids=[event.event_id],
-                confidence=confidence,  # type: ignore[arg-type]
+                confidence=confidence,
                 uncertainty_reasons=uncertainty_reasons,  # type: ignore[arg-type]
                 extraction=ExtractionMetadata(source_block_id=event.event_id, notes=["heuristic_stub"]),
                 scope="conversation" if event.source_ref.conversation_id else "unknown",
@@ -915,7 +918,7 @@ def _decide_frames(
     existing_decisions: list[MemoryDecision],
     existing_resolutions: list[FrameResolution],
     user_state: UserStateSnapshot,
-    routing,
+    routing: RoutingConfig,
     id_factory: StableIdFactory,
 ) -> tuple[list[MemoryDecision], list[FrameResolution]]:
     decisions_by_frame = {decision.frame_id: decision for decision in existing_decisions}
@@ -955,13 +958,13 @@ def _decide_frames(
 
 def _decision_for_frame(
     frame: MemoryEventFrame,
-    active_memories,
-    rejected_memories,
-    routing,
+    active_memories: list[ExistingMemorySnapshot],
+    rejected_memories: list[ExistingMemorySnapshot],
+    routing: RoutingConfig,
     id_factory: StableIdFactory,
 ) -> MemoryDecision:
     frame_id = frame.frame_id or ""
-    matching_active = None
+    matching_active: ExistingMemorySnapshot | None = None
     if frame.frame_type == "sensitive_candidate" or frame.sensitivity.level == "blocked":
         action = "reject_secret"
         rationale = "Credential or secret material is blocked."
@@ -1030,8 +1033,8 @@ def _decision_for_frame(
             action = "route_to_review"
             rationale = "Frame is not eligible for automatic memory creation."
     target = matching_active or _find_matching_memory(frame, active_memories)
-    preconditions = []
-    target_ids = []
+    preconditions: list[MutationPrecondition] = []
+    target_ids: list[str] = []
     if target:
         target_ids = [target.memory_id]
         preconditions.append(
@@ -1052,7 +1055,7 @@ def _decision_for_frame(
     return MemoryDecision(
         decision_id=id_factory.new_id("decision", frame_id, action, target_ids),
         frame_id=frame_id,
-        action=action,  # type: ignore[arg-type]
+        action=action,
         target_memory_ids=target_ids,
         final_memory_text=final_memory_text,
         rationale=rationale,
@@ -1062,7 +1065,9 @@ def _decision_for_frame(
     )
 
 
-def _find_matching_memory(frame: MemoryEventFrame, memories):
+def _find_matching_memory(
+    frame: MemoryEventFrame, memories: list[ExistingMemorySnapshot]
+) -> ExistingMemorySnapshot | None:
     frame_text = _normalized_text(frame.canonical_text)
     for memory in memories:
         memory_text = _normalized_text(memory.normalized_text or memory.text)
@@ -1087,7 +1092,9 @@ def _memory_texts_match(left: str, right: str) -> bool:
     return overlap >= 3 and overlap / min(len(left_tokens), len(right_tokens)) >= 0.8
 
 
-def _find_conflicting_memory(frame: MemoryEventFrame, memories):
+def _find_conflicting_memory(
+    frame: MemoryEventFrame, memories: list[ExistingMemorySnapshot]
+) -> ExistingMemorySnapshot | None:
     if not (
         frame.predicate.startswith("no_longer_")
         or frame.predicate == "is_no_longer_true"
@@ -1176,23 +1183,28 @@ def _is_idle_speculation_frame(frame: MemoryEventFrame) -> bool:
     # Only applies to consideration/plan predicates
     speculative_predicates = {"considering_using", "plans_travel_to", "committed_to_do"}
     # Get predicate from frame slots or type
-    frame_type = getattr(frame, "type", None) or getattr(frame, "frame_type", None)
-    slots = getattr(frame, "slots", None) or {}
-    predicate = slots.get("predicate") or frame_type
+    frame_type_attr: object = getattr(frame, "type", None) or getattr(frame, "frame_type", None)
+    frame_type: str | None = frame_type_attr if isinstance(frame_type_attr, str) else None
+    slots_attr: object = getattr(frame, "slots", None)
+    slots: Dict[str, Any] = cast(Dict[str, Any], slots_attr) if isinstance(slots_attr, dict) else {}
+    predicate_obj: object = slots.get("predicate") or frame_type
+    predicate: str | None = predicate_obj if isinstance(predicate_obj, str) else None
 
     if predicate not in speculative_predicates:
         return False
 
     # Gather text from content + evidence quotes for analysis
-    texts = []
-    content = getattr(frame, "content", None) or ""
+    texts: list[str] = []
+    content_attr: object = getattr(frame, "content", None)
+    content = content_attr if isinstance(content_attr, str) else ""
     if content:
         texts.append(content.lower())
-    for ev in getattr(frame, "evidence", []):
-        quote = getattr(ev, "quote", None)
-        if quote:
-            texts.append(quote.lower())
-
+    evidence_attr: object = getattr(frame, "evidence", [])
+    evidence_items: list[Any] = cast(list[Any], evidence_attr) if isinstance(evidence_attr, list) else []
+    for ev in evidence_items:
+        quote_attr: object = getattr(ev, "quote", None)
+        if isinstance(quote_attr, str):
+            texts.append(quote_attr.lower())
     combined = " ".join(texts)
 
     # Speculation markers (idle patterns)
@@ -1579,7 +1591,7 @@ def _compile_mutations(
 
 
 def _source_refs_for_frame(frame: MemoryEventFrame) -> list[SourceRef]:
-    refs = []
+    refs: list[SourceRef] = []
     for evidence in frame.evidence:
         if evidence.source_ref not in refs:
             refs.append(evidence.source_ref)
@@ -1613,7 +1625,17 @@ def _memory_kind(frame_type: str) -> str:
     return "other"
 
 
-def _review_reason(frame: MemoryEventFrame, decision: MemoryDecision) -> str:
+def _review_reason(frame: MemoryEventFrame, decision: MemoryDecision) -> Literal[
+    "low_confidence",
+    "subject_ambiguous",
+    "speaker_uncertain",
+    "sensitive_requires_review",
+    "conflicts_with_locked_memory",
+    "conflicts_with_reviewed_memory",
+    "entity_ambiguous",
+    "high_impact_update",
+    "other",
+]:
     if "speaker_uncertain" in decision.uncertainty_reasons:
         return "speaker_uncertain"
     if "subject_ambiguous" in decision.uncertainty_reasons:
@@ -1629,8 +1651,33 @@ def _review_reason(frame: MemoryEventFrame, decision: MemoryDecision) -> str:
     return "other"
 
 
-def _rejected_reason(action: str) -> str:
-    return {
+def _rejected_reason(action: str) -> Literal[
+    "not_memory_worthy",
+    "ephemeral",
+    "duplicate",
+    "matches_rejected_memory",
+    "secret_or_credential",
+    "policy_blocked",
+    "unsupported_inference",
+    "low_quality_source",
+    "task_not_memory",
+    "other",
+]:
+    table: dict[
+        str,
+        Literal[
+            "not_memory_worthy",
+            "ephemeral",
+            "duplicate",
+            "matches_rejected_memory",
+            "secret_or_credential",
+            "policy_blocked",
+            "unsupported_inference",
+            "low_quality_source",
+            "task_not_memory",
+            "other",
+        ],
+    ] = {
         "reject_secret": "secret_or_credential",
         "reject_ephemeral": "ephemeral",
         "reject_duplicate": "duplicate",
@@ -1638,7 +1685,8 @@ def _rejected_reason(action: str) -> str:
         "reject_policy": "policy_blocked",
         "reject_unsupported_inference": "unsupported_inference",
         "reject_low_value": "not_memory_worthy",
-    }.get(action, "other")
+    }
+    return table.get(action, "other")
 
 
 def _compile_entity_ops(frames: list[MemoryEventFrame], id_factory: StableIdFactory) -> list[EntityOperation]:

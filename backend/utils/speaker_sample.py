@@ -7,7 +7,7 @@ Provides functions for:
 - Deleting samples from GCS
 """
 
-from typing import Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from utils.executors import sync_executor, run_blocking
 from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
@@ -43,15 +43,23 @@ async def verify_and_transcribe_sample(
         - other reasons indicate quality issues (sample may be dropped)
     """
     try:
-        words = await run_blocking(sync_executor, deepgram_prerecorded_from_bytes, audio_bytes, sample_rate, True)
+        raw_words = await run_blocking(
+            sync_executor, cast(Any, deepgram_prerecorded_from_bytes), audio_bytes, sample_rate, True
+        )
     except RuntimeError as e:
         # Transient transcription failure - distinguish from quality issues
         return None, False, f"transcription_failed: {e}"
 
+    # deepgram_prerecorded_from_bytes returns List[dict] or (when return_language=True) Tuple[List[dict], str].
+    # return_language defaults to False, so the runtime value is always the list; narrow for the type system.
+    if isinstance(raw_words, tuple):
+        raw_words = cast(Any, raw_words[0])
+    words: List[Dict[str, Any]] = cast(List[Dict[str, Any]], raw_words)
+
     if len(words) < MIN_WORDS:
         return None, False, f"insufficient_words: {len(words)}/{MIN_WORDS}"
 
-    speaker_counts = {}
+    speaker_counts: Dict[str, int] = {}
     for word in words:
         speaker = word.get('speaker', 'SPEAKER_00')
         speaker_counts[speaker] = speaker_counts.get(speaker, 0) + 1

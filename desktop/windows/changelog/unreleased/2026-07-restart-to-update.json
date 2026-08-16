@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "\"Restart to update\" now installs the update and reopens Omi on the new version, and it only appears once the update has actually downloaded."
+  ]
+}

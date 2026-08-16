@@ -1,5 +1,6 @@
 version: 1
 name: ask-omi-chat-power-benchmark
+tier: 3
 description: Cursor-free CPU/RSS sampling while the floating Ask Omi chat is open and idle.
 app: non-prod
 preconditions:

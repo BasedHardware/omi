@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixture_filename": "transcription-release-probe.wav",
+  "sha256": "1fb553adb5a6389eef5b7ebdbf9ed2a6082518a646ce9bf872bf33b964eedc14",
+  "expected_transcript": "He began a confused complaint against the wizard who had vanished behind the curtain on the left.",
+  "language": "en",
+  "source": {
+    "dataset": "LibriSpeech test-clean",
+    "sample_id": "61-70968-0000",
+    "license": "CC-BY-4.0",
+    "source_url": "https://www.openslr.org/12",
+    "attribution": "Panayotov, V., Chen, G., Povey, D. and Khudanpur, S. (2015). LibriSpeech: an ASR corpus based on public domain audio books. ICASSP.",
+    "derivation": "Converted from the source FLAC to mono 16 kHz PCM WAV with FFmpeg; no user or production audio is included."
+  }
+}

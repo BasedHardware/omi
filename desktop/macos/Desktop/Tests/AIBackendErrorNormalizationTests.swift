@@ -62,4 +62,39 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
     XCTAssertFalse(error.isTransient)
     XCTAssertEqual(error.localizedDescription, "AI features require an active plan or BYOK keys.")
   }
+
+  func testGeminiRetryRequiresTypedBackendAuthorization() throws {
+    let body = Data(#"{"error":"provider_unavailable"}"#.utf8)
+    let authorizedResponse = try XCTUnwrap(
+      HTTPURLResponse(
+        url: URL(string: "https://api.omi.me/v1/proxy/gemini")!,
+        statusCode: 503,
+        httpVersion: nil,
+        headerFields: ["X-Omi-Retryable": "true"]
+      ))
+    let deniedResponse = try XCTUnwrap(
+      HTTPURLResponse(
+        url: URL(string: "https://api.omi.me/v1/proxy/gemini")!,
+        statusCode: 503,
+        httpVersion: nil,
+        headerFields: ["X-Omi-Retryable": "false"]
+      ))
+    let absentResponse = try XCTUnwrap(
+      HTTPURLResponse(
+        url: URL(string: "https://api.omi.me/v1/proxy/gemini")!,
+        statusCode: 503,
+        httpVersion: nil,
+        headerFields: nil
+      ))
+
+    let authorized = try XCTUnwrap(GeminiClient.httpError(response: authorizedResponse, data: body))
+    let denied = try XCTUnwrap(GeminiClient.httpError(response: deniedResponse, data: body))
+    let absent = try XCTUnwrap(GeminiClient.httpError(response: absentResponse, data: body))
+
+    XCTAssertTrue(GeminiClient.shouldAutoRetry(authorized))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(denied))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(absent))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.networkConnectionLost)))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.timedOut)))
+  }
 }

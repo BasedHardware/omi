@@ -31,11 +31,23 @@ class AudioDownloadService {
       // they finish instead of giving up immediately.
       final deadline = DateTime.now().add(const Duration(seconds: 60));
       var urlsResponse = await getConversationAudioSignedUrls(conversation.id);
-      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+      while (urlsResponse.files.isEmpty || !urlsResponse.playbackReady) {
         if (DateTime.now().isAfter(deadline)) break;
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
         urlsResponse = await getConversationAudioSignedUrls(conversation.id);
       }
+
+      // Conversation-level dense MP3: one download, nothing to combine.
+      final conversationAudio = urlsResponse.conversationAudio;
+      if (conversationAudio != null && conversationAudio.isCached) {
+        onStageChange?.call(AudioDownloadStage.downloading);
+        final tempDir = await getTemporaryDirectory();
+        final filePath = '${tempDir.path}/${_generateSafeFilename(conversation, 'mp3')}';
+        final file = await _downloadFile(conversationAudio.signedUrl!, filePath, onProgress: onProgress);
+        _tempFiles.add(file);
+        return file;
+      }
+
       final audioFileInfos = urlsResponse.files;
 
       if (audioFileInfos.isEmpty) {

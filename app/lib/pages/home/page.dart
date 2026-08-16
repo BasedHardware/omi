@@ -60,7 +60,9 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
+import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -69,11 +71,11 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
-import 'widgets/capture_mode_chip.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -84,6 +86,26 @@ class HomePageWrapper extends StatefulWidget {
 }
 
 class _HomePageWrapperState extends State<HomePageWrapper> {
+  @override
+  Widget build(BuildContext context) {
+    // Self-gate so onboarding/pushAndRemoveUntil destinations cannot boot
+    // product traffic while cutover enforcement is blocking.
+    return AccountCutoverBlockingGate(
+      productBuilder: (context) => _HomePageProduct(navigateToRoute: widget.navigateToRoute),
+    );
+  }
+}
+
+class _HomePageProduct extends StatefulWidget {
+  const _HomePageProduct({this.navigateToRoute});
+
+  final String? navigateToRoute;
+
+  @override
+  State<_HomePageProduct> createState() => _HomePageProductState();
+}
+
+class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
 
   @override
@@ -121,7 +143,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
-  List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
@@ -131,7 +152,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
   final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
-  late final List<Widget> _pages;
+  // Keep the IndexedStack slots stable, but defer constructing non-selected
+  // tabs until the user visits them. Once created, a tab remains in the stack
+  // so its scroll position and other state are preserved.
+  final List<Widget?> _pages = List<Widget?>.filled(4, null);
+  final Set<int> _scheduledPageInitializations = <int>{};
 
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
@@ -140,9 +165,60 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
 
-  void _initiateApps() {
-    context.read<AppProvider>().getApps();
-    context.read<AppProvider>().getPopularApps();
+  void _ensurePageInitialized(int pageIndex) {
+    if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
+
+    switch (pageIndex) {
+      case 0:
+        _pages[pageIndex] = HomeContentPage(key: _homeContentPageKey);
+        break;
+      case 1:
+        _pages[pageIndex] = ConversationsPage(key: _conversationsPageKey);
+        break;
+      case 2:
+        _pages[pageIndex] = ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal);
+        break;
+      case 3:
+        _pages[pageIndex] = AppsPage(key: _appsPageKey);
+        break;
+    }
+  }
+
+  void _schedulePageInitialization(int pageIndex) {
+    if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
+    if (!_scheduledPageInitializations.add(pageIndex)) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduledPageInitializations.remove(pageIndex);
+      if (!mounted || _pages[pageIndex] != null) return;
+      setState(() => _ensurePageInitialized(pageIndex));
+    });
+    // addPostFrameCallback does not schedule a frame by itself. Background
+    // prewarming often runs while the UI is idle, so explicitly request one.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  void _prewarmRemainingTabs(int selectedIndex) {
+    var delay = const Duration(milliseconds: 350);
+    for (var index = 0; index < _pages.length; index++) {
+      if (index == selectedIndex) continue;
+      final pageIndex = index;
+      Timer(delay, () {
+        if (!mounted) return;
+        _schedulePageInitialization(pageIndex);
+      });
+      delay += const Duration(milliseconds: 180);
+    }
+  }
+
+  List<Widget> _buildPages(int selectedIndex) {
+    return [
+      for (var index = 0; index < _pages.length; index++)
+        TickerMode(
+          enabled: index == selectedIndex,
+          child: RepaintBoundary(child: _pages[index] ?? _TabLoadingSkeleton(tabIndex: index)),
+        ),
+    ];
   }
 
   void _scrollToTop(int pageIndex) {
@@ -169,11 +245,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _addGoal() {
+    _ensurePageInitialized(1);
     context.read<HomeProvider>().setIndex(1);
-    final conversationsState = _conversationsPageKey.currentState;
-    if (conversationsState != null) {
-      (conversationsState as dynamic).addGoal();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final conversationsState = _conversationsPageKey.currentState;
+      if (conversationsState != null) {
+        (conversationsState as dynamic).addGoal();
+      }
+    });
   }
 
   @override
@@ -194,6 +274,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.refreshInProgressConversations();
+        // Heal phone-mic sessions that went silent while another app played
+        // audio (Stage Manager / YouTube) without an AVAudioSession interrupt.
+        captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
@@ -246,12 +329,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
-    _pages = [
-      HomeContentPage(key: _homeContentPageKey),
-      ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
-      AppsPage(key: _appsPageKey),
-    ];
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
@@ -291,7 +368,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     // Home controller
     context.read<HomeProvider>().selectedIndex = homePageIdx;
+    _ensurePageInitialized(homePageIdx);
     WidgetsBinding.instance.addObserver(this);
+    _prewarmRemainingTabs(homePageIdx);
 
     // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
     if (SharedPreferencesUtil().claudeAgentEnabled) {
@@ -305,8 +384,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _initiateApps();
-
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         await ForegroundUtil.initializeForegroundService();
@@ -482,10 +559,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     if (device.type != DeviceType.omi) return;
     if (!mounted) return;
 
-    // Onboarding targets the consumer pendant; DevKit boards also enumerate as
-    // DeviceType.omi, so skip them. pairedDevice has the GATT model by now.
+    // Onboarding is the CV1 consumer-pendant button tutorial. DevKit/Glass/Neo/
+    // Friend all also enumerate as DeviceType.omi, so only proceed for a positively
+    // identified CV1. pairedDevice has the GATT model by now.
     final pairedModel = Provider.of<DeviceProvider>(context, listen: false).pairedDevice?.modelNumber;
-    if (DeviceUtils.isOmiDevKit(modelNumber: pairedModel, deviceName: device.name)) return;
+    if (!DeviceUtils.isOmiCv1(modelNumber: pairedModel, deviceName: device.name)) return;
 
     if (_deviceOnboardingShown) return;
     if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
@@ -521,7 +599,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
-          syncProvider.syncWals();
+          syncProvider.syncWals(trigger: WakeTrigger.deviceConnected);
         }
       };
     });
@@ -684,12 +762,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           return child!;
         },
-        child: Consumer<HomeProvider>(
-          builder: (context, homeProvider, _) {
+        child: Selector<HomeProvider, int>(
+          selector: (_, homeProvider) => homeProvider.selectedIndex,
+          builder: (context, selectedIndex, _) {
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
               resizeToAvoidBottomInset: false,
-              appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
+              appBar: selectedIndex == 5 ? null : _buildAppBar(context),
               body: GestureDetector(
                 onTap: () {
                   primaryFocus?.unfocus();
@@ -701,9 +780,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     Column(
                       children: [
                         // Show slim green call bar on non-home/conversations tabs when a call is active
-                        if (homeProvider.selectedIndex > 1) const ActiveCallTopBar(),
+                        if (selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
-                          child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
+                          child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
                         ),
                       ],
                     ),
@@ -718,6 +797,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         return Stack(
                           children: [
                             BottomNavBar(
+                              // Queue page construction after the current
+                              // gesture frame. Building a destination directly
+                              // in onTapDown makes the tap itself feel stuck.
+                              onTabWarmup: _schedulePageInitialization,
                               onTabTap: (index, isRepeat) {
                                 if (isRepeat) {
                                   _scrollToTop(index);
@@ -727,7 +810,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                     final cp = context.read<ConversationProvider>();
                                     if (cp.showDailySummaries) cp.toggleDailySummaries();
                                   }
+                                  // Change tabs immediately. If background
+                                  // prewarming has not completed yet, the
+                                  // destination paints a skeleton for one frame
+                                  // and mounts its real content afterwards.
                                   home.setIndex(index);
+                                  _schedulePageInitialization(index);
                                 }
                               },
                             ),
@@ -738,11 +826,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       },
                     ),
                     // Merge action bar - floats above bottom nav when in selection mode
-                    if (homeProvider.selectedIndex == 1)
-                      const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
+                    if (selectedIndex == 1) const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
                     // Task selection action bar - floats above bottom nav on the
                     // tasks tab when selection mode is active in ActionItemsProvider.
-                    if (homeProvider.selectedIndex == 2)
+                    if (selectedIndex == 2)
                       const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
                   ],
                 ),
@@ -786,10 +873,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Row(
           children: [
             const SizedBox(width: 18),
-            Expanded(
+            const Expanded(
               child: Text(
                 'Ask Omi anything about your life...',
-                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                style: TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -806,8 +893,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 width: 42,
                 height: 42,
                 margin: const EdgeInsets.only(right: 6),
+                alignment: Alignment.center,
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const Icon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
               ),
             ),
           ],
@@ -916,7 +1004,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
-                            icon: const Icon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
+                            icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
                               // Open date picker to change date, cancel clears filter
@@ -1034,7 +1122,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                         child: IconButton(
                           padding: EdgeInsets.zero,
-                          icon: const Icon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
+                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             PlatformManager.instance.analytics.exportTasksBannerClicked();
@@ -1055,7 +1143,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                         child: IconButton(
                           padding: EdgeInsets.zero,
-                          icon: Icon(
+                          icon: FaIcon(
                             FontAwesomeIcons.solidCircleCheck,
                             size: 16,
                             color: showCompleted ? Colors.white : Colors.white70,
@@ -1114,21 +1202,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Recording mode chip — home tab only, when a Transcribe-Later-capable device is connected
-              Consumer2<HomeProvider, DeviceProvider>(
-                builder: (context, homeProvider, deviceProvider, _) {
-                  final device = deviceProvider.connectedDevice;
-                  if (homeProvider.selectedIndex != 0 ||
-                      device == null ||
-                      !CaptureModeChip.supportsDevice(device.type)) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: CaptureModeChip(deviceType: device.type),
-                  );
-                },
-              ),
               // Settings button - always visible
               Container(
                 width: 36,
@@ -1136,7 +1209,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
+                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
                     PlatformManager.instance.analytics.pageOpened('Settings');
@@ -1195,5 +1268,35 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
     ForegroundUtil.stopForegroundTask();
     super.dispose();
+  }
+}
+
+class _TabLoadingSkeleton extends StatelessWidget {
+  const _TabLoadingSkeleton({required this.tabIndex});
+
+  final int tabIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount = tabIndex == 3 ? 6 : 5;
+    return IgnorePointer(
+      child: ListView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 120),
+        itemCount: itemCount,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: ShimmerWithTimeout(
+            baseColor: const Color(0xFF1F1F25),
+            highlightColor: const Color(0xFF303038),
+            child: Container(
+              height: index == 0 ? 34 : 76,
+              width: double.infinity,
+              decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

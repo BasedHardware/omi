@@ -5,6 +5,7 @@ import { CategoryBreadcrumb } from '../components/category-breadcrumb';
 import { AppActionButton } from '../components/app-action-button';
 import { Calendar, User, FolderOpen, Puzzle } from 'lucide-react';
 import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
@@ -176,7 +177,7 @@ export default async function PluginDetailView(props: {
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
-    throw new Error('App not found');
+    notFound();
   }
 
   const userAgent = (await headers()).get('user-agent') || '';
@@ -213,7 +214,7 @@ export default async function PluginDetailView(props: {
             <div className="lg:col-span-2">
               <div className="relative aspect-square overflow-hidden rounded-[1rem] bg-[#1A1F2E]">
                 <Image
-                  src={plugin.image}
+                  src={plugin.image || '/logo.webp'}
                   alt={plugin.name}
                   className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                   width={500}
@@ -346,7 +347,7 @@ export default async function PluginDetailView(props: {
                   <div className="text-sm font-medium text-gray-400">Capabilities</div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 pl-7">
-                  {Array.from(plugin.capabilities).map((cap) => (
+                  {Array.from(plugin.capabilities ?? []).map((cap) => (
                     <span
                       key={cap}
                       className="rounded-full bg-[#1A1F2E] px-3 py-1 text-sm text-white"

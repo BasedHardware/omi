@@ -10,6 +10,7 @@ from utils.memory_ingestion.models import (
     CandidateEvidenceSpan,
     CandidateEntityMention,
     MemoryPipelineInput,
+    MemoryPipelineOutput,
     RawContextEvent,
     SourceDescriptor,
     SourceRef,
@@ -54,6 +55,20 @@ def _patch_extractor(monkeypatch, content):
 
 def _run(pipeline_input):
     return asyncio.run(CoreMemoryPipeline(model_client=ProductionLikeMemoryModelClient()).run(pipeline_input))
+
+
+def test_memory_llm_omits_unsupported_luna_temperature_by_default(monkeypatch):
+    class FakeLlm:
+        def bind(self, **_kwargs):
+            raise AssertionError("default memories route must not bind a Luna temperature")
+
+    llm = FakeLlm()
+    monkeypatch.setattr(production_like_model, "get_llm", lambda _feature: llm)
+    monkeypatch.setattr(production_like_model, "get_provider", lambda _feature: "openai")
+    monkeypatch.setattr(production_like_model, "get_model", lambda _feature: "gpt-5.6-luna")
+    monkeypatch.setattr(production_like_model, "_memory_llm_logged", False)
+
+    assert production_like_model._memory_llm() is llm
 
 
 def test_prodlike_health_memories_route_to_review(monkeypatch):
@@ -516,7 +531,6 @@ def test_liberal_memory_candidate_schema_is_natural_language_and_source_grounded
 
 
 def test_pipeline_output_can_include_liberal_candidates_without_final_frame_decision():
-    output = _run(_input(_event("No memory should be emitted from this ordinary sentence.")))
     liberal = LiberalMemoryCandidate(
         candidate_id="raw_chat_x:msg:0:cand:0",
         candidate_text="The user may prefer terse benchmark reports.",
@@ -535,8 +549,8 @@ def test_pipeline_output_can_include_liberal_candidates_without_final_frame_deci
         raw_quotes=["prefer terse benchmark reports"],
         speaker_or_actor_attribution="user_stated",
     )
-    copied = output.model_copy(update={"liberal_candidates": [liberal]})
-    dumped = copied.model_dump(mode="json")
+    output = MemoryPipelineOutput.model_construct(liberal_candidates=[liberal])
+    dumped = output.model_dump(mode="json")
 
     assert dumped["liberal_candidates"][0]["candidate_text"] == liberal.candidate_text
     assert dumped["liberal_candidates"][0]["source_unit_ids"] == ["raw_chat_x:msg:0"]

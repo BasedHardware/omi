@@ -7,24 +7,25 @@ allowing clients to connect without running a local MCP server.
 Implements the MCP 2025-03-26 Streamable HTTP Transport specification.
 """
 
-import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
+from pydantic import BaseModel
+
 import firebase_admin.auth
+from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import critical_executor, db_executor, run_blocking
 
-import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
@@ -39,41 +40,58 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
+from utils.conversations.mcp_transcript_search import (
+    attach_match_snippets_to_conversations,
+    resolve_mcp_conversation_search_ids,
+)
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.default_read_rollout import (
-    MemoryReadDecision,
-    read_default_read_rollout,
-)
 from utils.memory.memory_service import (
     MemoryService,
-    raise_if_legacy_write_blocked,
-    resolve_external_memory_write_context,
 )
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.memory.surface_routing import pin_memory_system
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_person,
+    clean_screen_activity_row,
+    end_of_day_utc,
+    parse_date_only_utc,
+)
+from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
     collect_filtered_memories,
-    list_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    search_default_mcp_memories_vector,
 )
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_analytics import (
+    authorization_outcome_for_code,
+    error_category_for_code,
+    result_count_for_tool_result,
+    schedule_mcp_tool_call,
+)
+from utils.observability.api_keys import record_api_key_repairs
+from utils.other.endpoints import (
+    cutover_enforcement_enabled,
+    enforce_account_cutover_http_access,
+    enforce_account_deletion_http_access,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -86,6 +104,23 @@ OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
 MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+
+
+def _enforce_mcp_cutover_access(uid: str) -> None:
+    """Fence MCP product principals when cutover enforcement is enabled.
+
+    MCP auth helpers are Request-free; evaluate as a mutating product path so
+    positive-generation and migrating/new rules apply fail-closed.
+    """
+    if not cutover_enforcement_enabled():
+        return
+    enforce_account_cutover_http_access(
+        uid,
+        method='POST',
+        path='/v1/mcp/sse',
+        headers={},
+    )
+
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -129,7 +164,7 @@ class MCPAuthContext:
     memory_context: Optional[ProductAuthorizationContext] = None
 
 
-def _mcp_memory_context_from_api_key_user_data(user_data: dict) -> ProductAuthorizationContext:
+def _mcp_memory_context_from_api_key_user_data(user_data: Dict[str, Any]) -> ProductAuthorizationContext:
     verified_auth = McpVerifiedAuth(
         uid=user_data["user_id"],
         app_id=user_data.get("app_id"),
@@ -151,9 +186,13 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     if not token.startswith("omi_mcp_"):
         return None
 
-    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    auth_result = mcp_api_key_db.get_api_key_auth_result(token)
+    record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+    user_data = auth_result.context
     if not user_data or not user_data.get("user_id"):
         return None
+    enforce_account_deletion_http_access(user_data["user_id"])
+    _enforce_mcp_cutover_access(user_data["user_id"])
     return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
@@ -167,9 +206,13 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        auth_result = mcp_api_key_db.get_api_key_auth_result(token)
+        record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
+        user_data = auth_result.context
         if not user_data or not user_data.get("user_id"):
             return None
+        enforce_account_deletion_http_access(user_data["user_id"])
+        _enforce_mcp_cutover_access(user_data["user_id"])
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -182,6 +225,8 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
         return None
+    enforce_account_deletion_http_access(oauth_context["uid"])
+    _enforce_mcp_cutover_access(oauth_context["uid"])
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",
@@ -257,7 +302,7 @@ SCOPE_PERMISSION_TEXT = {
 }
 
 
-def _tools_for_scopes(scopes: list[str]) -> list[dict]:
+def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     scope_set = set(scopes)
     return [tool for tool in MCP_TOOLS if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set]
 
@@ -269,7 +314,7 @@ def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
 
 
 # MCP Tool Definitions
-MCP_TOOLS = [
+MCP_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "get_user_profile",
         "description": (
@@ -420,7 +465,11 @@ MCP_TOOLS = [
     },
     {
         "name": "search_conversations",
-        "description": "Semantic search across the user's conversations. Returns conversations ranked by relevance to the query.",
+        "description": (
+            "Search the user's conversations by relevance to the query. Matches both conversation "
+            "summaries and transcript content when available, and returns match_snippets from "
+            "transcript segments (grep-style context) alongside each hit."
+        ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
@@ -725,28 +774,56 @@ def openai_apps_challenge():
 class ToolExecutionError(Exception):
     """Exception raised when a tool execution fails."""
 
-    def __init__(self, message: str, code: int = -32000):
+    def __init__(self, message: str, code: int = -32000, *, analytics_authorization_denied: bool = False):
         self.message = message
         self.code = code
+        self.analytics_authorization_denied = analytics_authorization_denied
         super().__init__(self.message)
 
 
-def _raise_tool_error_from_http(exc: HTTPException) -> None:
+def _authorization_denied_error(message: str) -> ToolExecutionError:
+    """Preserve a product-authorization denial separately from its MCP code."""
+    return ToolExecutionError(message, code=-32009, analytics_authorization_denied=True)
+
+
+def _raise_tool_error_from_http(exc: HTTPException) -> NoReturn:
     if exc.status_code == 404:
         raise ToolExecutionError("Memory not found", code=-32001) from exc
     if exc.status_code == 402:
         raise ToolExecutionError("A paid plan is required to access this memory.", code=-32002) from exc
-    if exc.status_code in {403, 409, 503}:
+    if exc.status_code == 403:
+        raise _authorization_denied_error(str(exc.detail)) from exc
+    if exc.status_code in {409, 503}:
         raise ToolExecutionError(str(exc.detail), code=-32009) from exc
     raise ToolExecutionError(str(exc.detail)) from exc
 
 
+def _raise_screen_activity_index_error(exc: FailedPrecondition) -> NoReturn:
+    """Turn a missing-Firestore-index failure into a typed, actionable tool error.
+
+    The app-filtered screen activity query needs a composite index (appName +
+    timestamp). Without it Firestore raises FailedPrecondition, which otherwise
+    surfaces to the MCP client as an opaque 500 (see AGENTS.md gotcha #7).
+    """
+    raise ToolExecutionError(
+        "Screen activity isn't queryable right now — its search index is still being built. "
+        "Retry in a few minutes, or narrow the request by removing the app filter.",
+        code=-32009,
+    ) from exc
+
+
 def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
-    """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
+    """Parse a yyyy-mm-dd MCP argument into a UTC-anchored datetime, or None when absent.
+
+    Data stores (Firestore conversation ``created_at``/action-item ``due_at``, the vector
+    index, screen-activity timestamps) all operate in UTC. A naive parse would be
+    interpreted in the server's local timezone and shift the filter window by the UTC
+    offset, so anchor to UTC midnight (matching the integration-router convention).
+    """
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d")
+        return parse_date_only_utc(value)
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
@@ -754,12 +831,10 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
 def execute_tool(
     user_id: str,
     tool_name: str,
-    arguments: dict,
+    arguments: Dict[str, Any],
     auth_context: Optional[ProductAuthorizationContext] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
-    memory_system = pin_memory_system(user_id, db_client=db)
-
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
         if not profile or not profile.get("profile_text"):
@@ -771,7 +846,8 @@ def execute_tool(
         }
 
     elif tool_name == "get_memories":
-        categories = arguments.get("categories", [])
+        raw_categories: object = arguments.get("categories", [])
+        categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=100, minimum=1, maximum=500)
             offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
@@ -790,62 +866,24 @@ def execute_tool(
             )
 
         # Validate categories
-        valid_categories = []
-        for cat in categories:
+        valid_categories: List[str] = []
+        for cat in categories_list:
             try:
                 valid_categories.append(MemoryCategory(cat).value)
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
-
-        if memory_system == MemorySystem.CANONICAL:
-            filtered = collect_filtered_memories(
-                lambda batch_offset, batch_limit: [
-                    m.model_dump(mode='json')
-                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
-                ],
-                limit=limit,
-                offset=offset,
-                reviewed=reviewed,
-                manually_added=manually_added,
-                include_activity=include_activity,
-                include_sensitive=include_sensitive,
-                updated_after=updated_after,
-                sort=sort,
-                categories=valid_categories or None,
-            )
-            memories = filtered['memories']
-            for memory in memories:
-                if memory.get('is_locked', False):
-                    content = memory.get('content', '')
-                    memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-            return {"memories": memories}
-
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
-        memory_list_results = list_default_mcp_memories(
-            uid=user_id,
-            limit=limit,
-            offset=offset,
-            db_client=db,
-            rollout_decision=memory_rollout,
-            categories=valid_categories,
-            reviewed=reviewed,
-            manually_added=manually_added,
-        )
-        if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
-            return {"memories": memory_list_results.memories}
-        if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
-            return {"memories": []}
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
         result = collect_filtered_memories(
-            lambda batch_offset, batch_limit: memories_db.get_memories(
-                user_id, batch_limit, batch_offset, valid_categories, sort=sort
-            ),
+            lambda batch_offset, batch_limit: [
+                memory.model_dump(mode='json')
+                for memory in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+            ],
             limit=limit,
             offset=offset,
             reviewed=reviewed,
@@ -854,6 +892,7 @@ def execute_tool(
             include_sensitive=include_sensitive,
             updated_after=updated_after,
             sort=sort,
+            categories=valid_categories or None,
         )
         # Apply locked content truncation
         for memory in result["memories"]:
@@ -869,22 +908,10 @@ def execute_tool(
             raise ToolExecutionError("Content is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
-        try:
-            write_context = resolve_external_memory_write_context(
-                user_id,
-                db_client=db,
-                memory_system=memory_system,
-                consumer='mcp',
-                operation="mcp_tool_memory_create",
-            )
-            raise_if_legacy_write_blocked(write_context)
-        except HTTPException as exc:
-            _raise_tool_error_from_http(exc)
-
+            raise _authorization_denied_error(str(write_grant.observability))
         category = identify_category_for_memory(content)
         memory = Memory(content=content, category=category)
         memory_db = MemoryDB.from_memory(memory, user_id, None, True)
@@ -892,7 +919,7 @@ def execute_tool(
             memory_db = MemoryService(db_client=db).create_external_memory(
                 user_id,
                 memory_db,
-                memory_system=write_context.memory_system,
+                memory_system=MemorySystem.CANONICAL,
                 consumer='mcp',
                 operation="mcp_tool_memory_create",
                 upsert_vector=False,
@@ -901,12 +928,14 @@ def execute_tool(
         except HTTPException as exc:
             _raise_tool_error_from_http(exc)
 
-        exposure = (
-            MemoryApiExposure.CANONICAL
-            if write_context.memory_system == MemorySystem.CANONICAL
-            else MemoryApiExposure.LEGACY
+        capture_memory_write(
+            principal_id=user_id,
+            source="mcp_tool_memory_create",
+            session_id=memory_db.id,
+            memories=[memory_db],
         )
-        return {"success": True, "memory": memory_api_payload(memory_db, exposure)}
+
+        return {"success": True, "memory": memory_api_payload(memory_db, MemoryApiExposure.CANONICAL)}
 
     elif tool_name == "delete_memory":
         memory_id = arguments.get("memory_id")
@@ -914,16 +943,16 @@ def execute_tool(
             raise ToolExecutionError("memory_id is required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         try:
             MemoryService(db_client=db).delete_external_memory(
                 user_id,
                 memory_id,
-                memory_system=memory_system,
+                memory_system=MemorySystem.CANONICAL,
                 consumer='mcp',
                 operation="mcp_tool_memory_delete",
                 delete_vector=False,
@@ -939,10 +968,10 @@ def execute_tool(
             raise ToolExecutionError("memory_id and content are required")
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory write authorization")
         write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
-            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(write_grant.observability))
 
         if not content.strip():
             raise ToolExecutionError("content must not be empty", code=-32602)
@@ -951,7 +980,7 @@ def execute_tool(
                 user_id,
                 memory_id,
                 content,
-                memory_system=memory_system,
+                memory_system=MemorySystem.CANONICAL,
                 consumer='mcp',
                 operation="mcp_tool_memory_edit",
                 upsert_vector=False,
@@ -963,29 +992,24 @@ def execute_tool(
     elif tool_name == "get_conversations":
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
-        categories = arguments.get("categories", [])
-        limit = arguments.get("limit", 20)
-        offset = arguments.get("offset", 0)
+        raw_categories = arguments.get("categories", [])
+        categories_list: List[Any] = cast(List[Any], raw_categories) if isinstance(raw_categories, list) else []
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=1000)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
-        start_dt = None
-        end_dt = None
-        if start_date:
-            try:
-                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        if end_dt is not None:
+            # Include the entire end day, matching the integration-router convention.
+            end_dt = end_of_day_utc(end_dt)
 
         # Validate categories
-        valid_categories = []
-        for cat in categories:
+        valid_categories: List[str] = []
+        for cat in categories_list:
             try:
                 valid_categories.append(CategoryEnum(cat).value)
             except ValueError:
@@ -1003,7 +1027,7 @@ def execute_tool(
         )
 
         # Simplify conversation data
-        simple_conversations = []
+        simple_conversations: List[Dict[str, Any]] = []
         for conv in conversations:
             redact_conversation_for_list(conv)
             simple_conversations.append(
@@ -1041,94 +1065,62 @@ def execute_tool(
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=20)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        fetch_limit = min(limit * 3, 60)
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+            raise _authorization_denied_error("Missing MCP API app/key identity for memory read authorization")
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
-            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+            raise _authorization_denied_error(str(app_key_grant.observability))
 
-        if memory_system == MemorySystem.CANONICAL:
-            memory_service = MemoryService(db_client=db)
-            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
-
-        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
-        vector_search_results = search_default_mcp_memories_vector(
-            uid=user_id,
-            query=query,
-            limit=limit,
-            db_client=db,
-            rollout_decision=memory_rollout,
-        )
-        if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
-            return {"memories": vector_search_results.memories}
-        if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
-            return {"memories": []}
-
-        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
-        if not matches:
-            return {"memories": []}
-
-        memory_ids = [m.get('memory_id') for m in matches if m.get('memory_id')]
-        if not memory_ids:
-            return {"memories": []}
-        memories = memories_db.get_memories_by_ids(user_id, memory_ids)
-
-        # Mirror the REST MCP path so SSE search never surfaces rejected, locked,
-        # or superseded facts, while fetching extra candidates before filtering.
-        score_map = {m.get('memory_id'): m.get('score', 0) for m in matches if m.get('memory_id')}
-        results = []
-        for mem in memories:
-            if mem.get('user_review') is False or mem.get('is_locked', False) or mem.get('invalid_at') is not None:
-                continue
-            mem['relevance_score'] = round(score_map.get(mem.get('id'), 0), 4)
-            results.append(mem)
-
-        # Sort by relevance
-        results.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
-
-        return {"memories": results[:limit]}
+        return {"memories": MemoryService(db_client=db).search_mcp(user_id, query, limit=limit)}
 
     elif tool_name == "search_conversations":
         query = arguments.get("query")
         if not query:
             raise ToolExecutionError("query is required")
 
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=100)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
-        # Parse dates to epoch for vector search
-        starts_at = None
-        ends_at = None
-        if start_date:
-            try:
-                starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(
-                    f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.", code=-32602
-                )
-        if end_date:
-            try:
-                ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
-            except ValueError:
-                raise ToolExecutionError(f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.", code=-32602)
+        # Parse dates to epoch for vector search (UTC-anchored so the filter matches the
+        # vector index's UTC epoch created_at; end bound includes the full end day).
+        start_dt = _parse_mcp_date(start_date, "start_date")
+        end_dt = _parse_mcp_date(end_date, "end_date")
+        starts_at = int(start_dt.timestamp()) if start_dt is not None else None
+        if end_dt is not None:
+            end_dt = end_of_day_utc(end_dt)
+        ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
-        conversation_ids = vector_db.query_vectors(query, user_id, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = resolve_mcp_conversation_search_ids(
+            user_id,
+            query,
+            limit=limit,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            query_vectors=vector_db.query_vectors,
+            search_transcript_chunks=vector_db.search_transcript_chunks,
+            embed_query=vector_db.embeddings.embed_query,
+        )
         if not conversation_ids:
             return {"conversations": []}
 
         conversations = conversations_db.get_conversations_by_id(user_id, conversation_ids)
 
         # Simplify and handle locked content
-        results = []
+        results: List[Dict[str, Any]] = []
         for conv in conversations:
             structured = conv.get("structured")
             if conv.get("is_locked", False) and structured:
                 structured = dict(structured)
                 structured['action_items'] = []
                 structured['events'] = []
+            snippets: List[Dict[str, Any]] = []
+            if not conv.get("is_locked", False):
+                snippets = attach_match_snippets_to_conversations([conv], query)[0].get("match_snippets") or []
             results.append(
                 {
                     "id": conv.get("id"),
@@ -1136,6 +1128,7 @@ def execute_tool(
                     "finished_at": conv.get("finished_at"),
                     "structured": structured,
                     "language": conv.get("language"),
+                    "match_snippets": snippets,
                 }
             )
 
@@ -1145,7 +1138,10 @@ def execute_tool(
         query = arguments.get("query")
         if not query:
             raise ToolExecutionError("query is required")
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=100)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         matches = vector_db.find_similar_x_posts(user_id, query, limit=limit)
         if not matches:
@@ -1153,7 +1149,7 @@ def execute_tool(
 
         score_map = {str(m['post_id']): m.get('score', 0) for m in matches}
         posts = x_posts_db.get_x_posts_by_ids(user_id, [m['post_id'] for m in matches])
-        results = []
+        results: List[Dict[str, Any]] = []
         for p in posts:
             results.append(
                 {
@@ -1168,7 +1164,10 @@ def execute_tool(
         return {"posts": results}
 
     elif tool_name == "get_x_posts":
-        limit = arguments.get("limit", 50)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=200)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         kind = arguments.get("kind")
         posts = x_posts_db.get_x_posts(user_id, limit=limit, kind=kind)
         results = [
@@ -1186,6 +1185,9 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         due_start = _parse_mcp_date(arguments.get("due_start_date"), "due_start_date")
         due_end = _parse_mcp_date(arguments.get("due_end_date"), "due_end_date")
+        if due_end is not None:
+            # Include the entire end day, matching the integration-router convention.
+            due_end = end_of_day_utc(due_end)
         items = action_items_db.get_action_items(
             user_id,
             completed=completed,
@@ -1265,7 +1267,10 @@ def execute_tool(
         return {"success": True}
 
     elif tool_name == "get_goals":
-        include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        try:
+            include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         return {"goals": goals_db.get_all_goals(user_id, include_inactive=include_inactive)}
 
     elif tool_name == "get_chat_messages":
@@ -1283,17 +1288,32 @@ def execute_tool(
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        if end is not None:
+            # Include the entire end day, matching the integration-router
+            # convention. The DB layer formats the bound via strftime, so the
+            # end-of-day increment must be applied here (the parsed midnight
+            # would otherwise match only up to 00:00:00.999 of the end day).
+            end = end_of_day_utc(end)
         app = arguments.get("app")
-        summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        try:
+            summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         if summary:
-            return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            try:
+                return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            except FailedPrecondition as e:
+                _raise_screen_activity_index_error(e)
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=200, minimum=1, maximum=1000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        rows = screen_activity_db.get_screen_activity(
-            user_id, start_date=start, end_date=end, app_filter=app, limit=limit
-        )
+        try:
+            rows = screen_activity_db.get_screen_activity(
+                user_id, start_date=start, end_date=end, app_filter=app, limit=limit
+            )
+        except FailedPrecondition as e:
+            _raise_screen_activity_index_error(e)
         return {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
 
     elif tool_name == "get_daily_summaries":
@@ -1315,24 +1335,27 @@ def execute_tool(
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)
 
 
-def create_mcp_response(id: Any, result: dict) -> dict:
+def create_mcp_response(id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
     """Create a JSON-RPC 2.0 response."""
     return {"jsonrpc": "2.0", "id": id, "result": result}
 
 
-def create_mcp_error(id: Any, code: int, message: str) -> dict:
+def create_mcp_error(id: Any, code: int, message: str) -> Dict[str, Any]:
     """Create a JSON-RPC 2.0 error response."""
     return {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
 
 
-def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Optional[dict], Optional[str]]:
+def handle_mcp_message(
+    auth_context: MCPAuthContext, message: Dict[str, Any]
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.
     Returns (response, new_session_id) tuple.
     """
     msg_id = message.get("id")
     method = message.get("method")
-    params = message.get("params", {})
+    raw_params: object = message.get("params", {})
+    params: Dict[str, Any] = cast(Dict[str, Any], raw_params) if isinstance(raw_params, dict) else {}
 
     if method == "initialize":
         return (
@@ -1342,12 +1365,7 @@ def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Opt
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
-                    "instructions": (
-                        "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
-                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
-                        "task-specific evidence."
-                    ),
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             ),
             None,
@@ -1362,17 +1380,43 @@ def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Opt
 
     elif method == "tools/call":
         tool_name = params.get("name")
-        arguments = params.get("arguments", {})
+        raw_arguments: object = params.get("arguments", {})
+        arguments: Dict[str, Any] = cast(Dict[str, Any], raw_arguments) if isinstance(raw_arguments, dict) else {}
 
-        if not tool_name:
+        if not isinstance(tool_name, str) or not tool_name:
+            schedule_mcp_tool_call(
+                uid=auth_context.uid,
+                tool_name=tool_name,
+                auth_type=auth_context.auth_type,
+                client_id=auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="validation",
+                duration_ms=0,
+                result_count=0,
+            )
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
+        started_at = time.monotonic()
         try:
             mcp_auth_context = auth_context
             _require_tool_scope(mcp_auth_context, tool_name)
             auth_context = mcp_auth_context.memory_context
             result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome=authorization_outcome_for_code(
+                    e.code, authorization_denied=e.analytics_authorization_denied
+                ),
+                error_category=error_category_for_code(e.code, authorization_denied=e.analytics_authorization_denied),
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
                 required_scope = TOOL_REQUIRED_SCOPE.get(tool_name)
@@ -1385,6 +1429,31 @@ def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Opt
                     }
                 }
             return error, None
+        except Exception:
+            schedule_mcp_tool_call(
+                uid=mcp_auth_context.uid,
+                tool_name=tool_name,
+                auth_type=mcp_auth_context.auth_type,
+                client_id=mcp_auth_context.client_id,
+                outcome="error",
+                authorization_outcome="not_applicable",
+                error_category="internal",
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+                result_count=0,
+            )
+            raise
+
+        schedule_mcp_tool_call(
+            uid=mcp_auth_context.uid,
+            tool_name=tool_name,
+            auth_type=mcp_auth_context.auth_type,
+            client_id=mcp_auth_context.client_id,
+            outcome="success",
+            authorization_outcome="allowed",
+            error_category="none",
+            duration_ms=(time.monotonic() - started_at) * 1_000,
+            result_count=result_count_for_tool_result(tool_name, result),
+        )
 
         return (
             create_mcp_response(
@@ -1404,6 +1473,47 @@ def _oauth_error(error: str, description: str, status_code: int = 400) -> JSONRe
     return JSONResponse(status_code=status_code, content={"error": error, "error_description": description})
 
 
+class McpSseAuthMethodResponse(BaseModel):
+    header: Optional[str] = None
+    format: Optional[str] = None
+    authorization_endpoint: Optional[str] = None
+    token_endpoint: Optional[str] = None
+    resource: Optional[str] = None
+    scopes: list[str] = []
+
+
+class McpSseAuthenticationResponse(BaseModel):
+    methods: list[str]
+    api_key: McpSseAuthMethodResponse
+    oauth2: McpSseAuthMethodResponse
+
+
+class McpSseInstructionsResponse(BaseModel):
+    step1: str
+    step2: str
+    step3: str
+
+
+class McpSseInfoResponse(BaseModel):
+    endpoint: str
+    transport: str
+    protocol_version: str
+    authentication: McpSseAuthenticationResponse
+    instructions: McpSseInstructionsResponse
+
+
+class McpAuthorizeConsentResponse(BaseModel):
+    redirect_uri: str
+
+
+class McpTokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    scope: str
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1412,7 +1522,7 @@ def _validate_authorize_request(
     scope: Optional[str],
     code_challenge: Optional[str],
     code_challenge_method: Optional[str],
-) -> tuple[dict, list[str]]:
+) -> Tuple[Dict[str, Any], List[str]]:
     client = mcp_oauth_db.get_client(client_id)
     if response_type != "code":
         raise ValueError("response_type must be code")
@@ -1437,13 +1547,13 @@ def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> s
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
 
 
-async def _get_token_request_data(request: Request) -> dict:
+async def _get_token_request_data(request: Request) -> Dict[str, Any]:
     content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
     if content_type == "application/json":
-        body = await request.json()
+        body: object = await request.json()
         if not isinstance(body, dict):
             raise ValueError("Invalid request body")
-        return body
+        return cast(Dict[str, Any], body)
 
     form_data = await request.form()
     return dict(form_data)
@@ -1472,9 +1582,9 @@ def mcp_authorize(
     client_name = str(client.get("name") or client_id)
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
+        request,
         "mcp_oauth_authorize.html",
         {
-            "request": request,
             "client_name": client_name,
             "oauth_params": {
                 "response_type": response_type,
@@ -1496,8 +1606,8 @@ def mcp_authorize(
     )
 
 
-@router.post("/authorize", tags=["mcp"])
-def mcp_authorize_consent(
+@router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
+async def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -1509,11 +1619,21 @@ def mcp_authorize_consent(
     code_challenge_method: Optional[str] = Form(None),
 ):
     try:
-        _, scopes = _validate_authorize_request(
-            response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
+        _, scopes = await run_blocking(
+            db_executor,
+            _validate_authorize_request,
+            response_type,
+            client_id,
+            redirect_uri,
+            resource,
+            scope,
+            code_challenge,
+            code_challenge_method,
         )
-        decoded_token = firebase_admin.auth.verify_id_token(firebase_id_token)
-        uid = decoded_token["uid"]
+        decoded_token: Dict[str, Any] = await run_blocking(
+            critical_executor, firebase_admin.auth.verify_id_token, firebase_id_token
+        )  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
+        uid = cast(str, decoded_token["uid"])
     except firebase_admin.auth.InvalidIdTokenError:
         return _oauth_error("access_denied", "Invalid Omi sign-in token", status_code=401)
     except Exception as e:
@@ -1521,14 +1641,24 @@ def mcp_authorize_consent(
             return _oauth_error("invalid_request", str(e))
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
-    grant = mcp_oauth_db.create_or_update_grant(uid, client_id, resource, scopes)
-    code = mcp_oauth_db.issue_authorization_code(
-        uid, grant["id"], client_id, redirect_uri, resource, scopes, code_challenge
-    )
+    try:
+        _, code = await run_blocking(
+            db_executor,
+            mcp_oauth_db.create_grant_and_authorization_code_if_allowed,
+            uid,
+            client_id,
+            redirect_uri,
+            resource,
+            scopes,
+            cast(str, code_challenge),
+        )
+    except mcp_oauth_db.AccountDeletionAccessBlocked as exc:
+        detail = {"code": "account_deletion_in_progress", "status": str(exc), "retryable": False}
+        raise HTTPException(status_code=403, detail=detail) from exc
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 
-@router.post("/token", tags=["mcp"])
+@router.post("/token", tags=["mcp"], response_model=McpTokenResponse)
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     try:
@@ -1563,7 +1693,7 @@ async def mcp_token(request: Request):
             db_executor,
             mcp_oauth_db.exchange_authorization_code_for_tokens,
             code,
-            client_id,
+            cast(str, client_id),
             redirect_uri,
             resource,
             code_verifier,
@@ -1578,7 +1708,7 @@ async def mcp_token(request: Request):
         if not await run_blocking(db_executor, mcp_oauth_db.validate_resource, client, resource):
             return _oauth_error("invalid_target", "Invalid resource")
         token_pair = await run_blocking(
-            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, client_id, resource, scope
+            db_executor, mcp_oauth_db.rotate_refresh_token, refresh_token, cast(str, client_id), resource, scope
         )
         if not token_pair:
             return _oauth_error("invalid_grant", "Invalid refresh token")
@@ -1587,7 +1717,7 @@ async def mcp_token(request: Request):
     return _oauth_error("unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
 
 
-@router.post("/v1/mcp/sse", tags=["mcp"])
+@router.post("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 async def mcp_streamable_http(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1614,12 +1744,15 @@ async def mcp_streamable_http(
 
     # Parse request body
     try:
-        body = await request.json()
+        body: object = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     # Handle batch requests (array of messages)
-    messages = body if isinstance(body, list) else [body]
+    raw_messages: List[Dict[str, Any]] = (
+        cast(List[Dict[str, Any]], body) if isinstance(body, list) else [cast(Dict[str, Any], body)]
+    )
+    messages: List[Dict[str, Any]] = raw_messages
 
     # Check if all messages are notifications/responses (no id)
     all_notifications = all(msg.get("id") is None for msg in messages)
@@ -1631,8 +1764,8 @@ async def mcp_streamable_http(
         return Response(status_code=202)
 
     # Process messages and collect responses
-    responses = []
-    new_session_id = None
+    responses: List[Dict[str, Any]] = []
+    new_session_id: Optional[str] = None
 
     for msg in messages:
         response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
@@ -1642,7 +1775,7 @@ async def mcp_streamable_http(
             responses.append(response)
 
     # Prepare headers
-    headers = {}
+    headers: Dict[str, str] = {}
     if new_session_id:
         headers["Mcp-Session-Id"] = new_session_id
 
@@ -1668,55 +1801,41 @@ async def mcp_streamable_http(
             return JSONResponse(content=responses, headers=headers)
 
 
-@router.get("/v1/mcp/sse", tags=["mcp"])
-async def mcp_sse_get(
-    request: Request,
+@router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
+def mcp_sse_get(
     authorization: Optional[str] = Header(None, alias="Authorization"),
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
 ):
     """
-    SSE endpoint for server-initiated messages (optional).
+    GET on the Streamable HTTP endpoint: this server offers no server-initiated stream.
 
-    Clients can GET this endpoint to listen for server-initiated notifications.
-    This is optional per the MCP spec and mainly used for long-polling scenarios.
+    The two header parameters are accepted and ignored: released app-client OpenAPI
+    contracts describe them on this operation, and removing them reads as a breaking
+    request-shape change to the compatibility checker.
+
+    Per the MCP Streamable HTTP transport spec (2025-03-26), a server that does not
+    offer server-initiated messages MUST return 405 Method Not Allowed for GET, and
+    clients MUST NOT treat that as an error.
+
+    This used to return an infinite keepalive-ping SSE stream that carried no protocol
+    data (this transport is stateless; nothing is ever pushed, and the deprecated
+    HTTP+SSE transport's required ``endpoint`` event was never sent). Every connected
+    MCP client parked one such stream for the full Cloud Run request timeout (3600s),
+    which exhausted the service's concurrency slots while CPU sat idle and drove
+    tool-call tail latency to minutes ("no available instance" aborts). Do not
+    reintroduce a long-lived GET stream here without accounting for that capacity.
     """
-    # Authenticate
-    auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
-    if not auth_context:
-        raise invalid_mcp_auth_exception()
-
-    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
-
-    # For backwards compatibility, also support the old SSE flow
-    # Return an empty SSE stream that just sends keepalives
-    async def event_generator():
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                yield f"event: ping\ndata: {{}}\n\n"
-                await asyncio.sleep(30)
-        except asyncio.CancelledError:
-            # Normal cancellation when client disconnects
-            pass
-        except Exception as e:
-            logging.warning(f"MCP SSE event generator error: {e}")
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
 
-@router.head("/v1/mcp/sse", tags=["mcp"])
+@router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_sse_head(authorization: Optional[str] = Header(None, alias="Authorization")):
     if not authenticate_mcp_request(authorization):
         raise invalid_mcp_auth_exception()
     return Response(status_code=200)
 
 
-@router.delete("/v1/mcp/sse", tags=["mcp"])
+@router.delete("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_delete_session(
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1733,7 +1852,7 @@ def mcp_delete_session(
     return Response(status_code=204)
 
 
-@router.get("/v1/mcp/sse/info", tags=["mcp"])
+@router.get("/v1/mcp/sse/info", tags=["mcp"], response_model=McpSseInfoResponse)
 def mcp_sse_info(request: Request):
     """
     Get information about the pre-hosted MCP server.

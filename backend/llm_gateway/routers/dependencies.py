@@ -4,7 +4,11 @@ from functools import lru_cache
 
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
 from llm_gateway.gateway.executor import ProviderRegistry
-from llm_gateway.gateway.providers import AnthropicMessagesProvider, OpenAICompatibleChatCompletionProvider
+from llm_gateway.gateway.providers import (
+    AnthropicMessagesProvider,
+    OpenAICompatibleChatCompletionProvider,
+    VertexGeminiProvider,
+)
 
 
 @lru_cache(maxsize=1)
@@ -26,10 +30,7 @@ def get_provider_registry() -> ProviderRegistry:
                 api_key_env='PERPLEXITY_API_KEY',
                 base_url='https://api.perplexity.ai',
             ),
-            'gemini': OpenAICompatibleChatCompletionProvider(
-                api_key_env='GEMINI_API_KEY',
-                base_url='https://generativelanguage.googleapis.com/v1beta/openai',
-            ),
+            'gemini': VertexGeminiProvider(),
             'anthropic': AnthropicMessagesProvider(),
         }
     )

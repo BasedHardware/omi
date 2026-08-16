@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, TypeAlias, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict
 
-from llm_gateway.gateway.schemas import FeatureBundle, LaneConfig, RouteArtifact
+from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
     get_all_configured_features,
@@ -19,6 +20,8 @@ from utils.llm.model_config import (
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
+GENERATED_ROUTE_OVERRIDES_FILE = 'generated_route_overrides.yaml'
+ConfigItem: TypeAlias = dict[str, Any]
 
 
 class ConfigValidationError(ValueError):
@@ -41,7 +44,10 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     artifact_items = _load_config_list(resolved_config_dir / 'route_artifacts.yaml', 'route_artifacts')
     bundle_items = _load_config_list(resolved_config_dir / 'feature_bundles.yaml', 'feature_bundles')
 
-    generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items()
+    generated_route_overrides = load_generated_route_overrides(resolved_config_dir)
+    generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items(
+        generated_route_overrides
+    )
 
     lanes = _parse_lanes([*generated_lane_items, *lane_items])
     route_artifacts = _parse_route_artifacts([*generated_artifact_items, *artifact_items], prod_mode=resolved_prod_mode)
@@ -53,37 +59,66 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     return GatewayConfig(lanes=lanes, route_artifacts=route_artifacts, feature_bundles=feature_bundles)
 
 
+def load_generated_route_overrides(
+    config_dir: str | Path | None = None,
+) -> dict[str, GeneratedRouteOverride]:
+    resolved_config_dir = Path(config_dir) if config_dir is not None else DEFAULT_CONFIG_DIR
+    items = _load_optional_config_list(
+        resolved_config_dir / GENERATED_ROUTE_OVERRIDES_FILE,
+        'generated_route_overrides',
+    )
+    configured_features = get_all_configured_features()
+    overrides: dict[str, GeneratedRouteOverride] = {}
+    for item in items:
+        override = GeneratedRouteOverride.model_validate(item)
+        if override.feature not in configured_features:
+            raise ConfigValidationError(f'gateway route override references unknown feature: {override.feature}')
+        if override.feature in overrides:
+            raise ConfigValidationError(f'duplicate gateway route override: {override.feature}')
+        overrides[override.feature] = override
+    return overrides
+
+
 def _resolve_prod_mode(prod_mode: bool | None) -> bool:
     if prod_mode is not None:
         return prod_mode
     return os.getenv(PROD_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}
 
 
-def _load_config_list(path: Path, top_level_key: str) -> list[dict[str, Any]]:
+def _load_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
     if not path.exists():
         raise ConfigValidationError(f'missing gateway config file: {path}')
 
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.safe_load(handle)
+        loaded = cast(object, yaml.safe_load(handle))
 
+    raw_items: object
     if loaded is None:
         return []
     if isinstance(loaded, list):
-        items = loaded
+        raw_items = cast(list[object], loaded)
     elif isinstance(loaded, dict) and top_level_key in loaded:
-        items = loaded[top_level_key]
+        loaded_mapping = cast(Mapping[str, object], loaded)
+        raw_items = loaded_mapping[top_level_key]
     else:
         raise ConfigValidationError(f'{path} must contain a list or top-level {top_level_key} list')
 
-    if not isinstance(items, list):
+    if not isinstance(raw_items, list):
         raise ConfigValidationError(f'{path} {top_level_key} must be a list')
+    items = cast(list[object], raw_items)
     for item in items:
-        if not isinstance(item, dict):
+        if not isinstance(item, Mapping):
             raise ConfigValidationError(f'{path} {top_level_key} entries must be mappings')
-    return items
+    return [dict(cast(Mapping[str, Any], item)) for item in items]
 
 
-def _parse_lanes(items: list[dict[str, Any]]) -> dict[str, LaneConfig]:
+def _load_optional_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
+    if not path.exists():
+        return []
+    return _load_config_list(path, top_level_key)
+
+
+def _parse_lanes(items: list[ConfigItem]) -> dict[str, LaneConfig]:
     lanes: dict[str, LaneConfig] = {}
     for item in items:
         lane = LaneConfig.model_validate(item)
@@ -93,7 +128,7 @@ def _parse_lanes(items: list[dict[str, Any]]) -> dict[str, LaneConfig]:
     return lanes
 
 
-def _parse_route_artifacts(items: list[dict[str, Any]], *, prod_mode: bool) -> dict[str, RouteArtifact]:
+def _parse_route_artifacts(items: list[ConfigItem], *, prod_mode: bool) -> dict[str, RouteArtifact]:
     route_artifacts: dict[str, RouteArtifact] = {}
     for item in items:
         artifact = RouteArtifact.model_validate(item)
@@ -110,7 +145,7 @@ def _parse_route_artifacts(items: list[dict[str, Any]], *, prod_mode: bool) -> d
     return route_artifacts
 
 
-def _parse_feature_bundles(items: list[dict[str, Any]]) -> dict[str, FeatureBundle]:
+def _parse_feature_bundles(items: list[ConfigItem]) -> dict[str, FeatureBundle]:
     feature_bundles: dict[str, FeatureBundle] = {}
     for item in items:
         bundle = FeatureBundle.model_validate(item)
@@ -164,22 +199,28 @@ def feature_lane_id(feature: str) -> str:
     return feature_auto_lane_id(feature)
 
 
-def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def _generated_feature_route_items(
+    route_overrides: Mapping[str, GeneratedRouteOverride],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     lanes: list[dict[str, Any]] = []
     artifacts: list[dict[str, Any]] = []
     bundles: list[dict[str, Any]] = []
     for feature in sorted(get_all_configured_features()):
-        model = get_model(feature)
-        provider = get_provider(feature)
+        legacy_model = get_model(feature)
+        legacy_provider = get_provider(feature)
+        override = route_overrides.get(feature)
+        model = override.primary.model if override is not None else legacy_model
+        provider = override.primary.provider if override is not None else legacy_provider
         lane_id = feature_lane_id(feature)
         route_id = f"route.{feature}.model_config.001"
-        capabilities = _capabilities_for_feature(feature)
+        surface = _surface_for_feature(feature, provider)
+        capabilities = _capabilities_for_feature(feature, provider=provider, surface=surface)
         credential_policy = _credential_policy()
 
         lanes.append(
             {
                 'lane_id': lane_id,
-                'surface': 'openai.chat_completions',
+                'surface': surface,
                 'capabilities': capabilities,
                 'objective': {'quality': 0.6, 'latency': 0.2, 'cost': 0.2},
                 'credential_policy': credential_policy,
@@ -189,14 +230,17 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
         )
         primary = {'provider': provider, 'model': _provider_model_name(provider, model)}
         provider_options = get_route_options(feature, model, provider)
+        if override is not None:
+            provider_options.update(override.provider_options)
         artifacts.append(
             {
                 'route_artifact_id': route_id,
                 'lane_id': lane_id,
-                'surface': 'openai.chat_completions',
+                'surface': surface,
                 'primary': primary,
                 'fallbacks': [],
                 'provider_options': provider_options,
+                'output_budget': _output_budget_for_feature(feature, provider),
                 'timeouts': {'request_ms': 120000 if capabilities['streaming'] else 30000},
                 'retry': {'max_attempts': 1},
                 'capabilities': capabilities,
@@ -217,6 +261,7 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
                         'byok_unsupported_provider',
                         'missing_byok_key',
                         'capability_mismatch',
+                        'provider_invalid_request',
                         'invalid_config',
                     ],
                 },
@@ -235,14 +280,31 @@ def _generated_feature_route_items() -> tuple[list[dict[str, Any]], list[dict[st
     return lanes, artifacts, bundles
 
 
-def _capabilities_for_feature(feature: str) -> dict[str, Any]:
+def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:
+    """Keep pilot caps explicit and disabled until an operator enables the experiment."""
+    if feature == 'session_titles' and provider == 'gemini':
+        return {
+            'experiment': 'session_titles',
+            'max_completion_tokens': 128,
+        }
+    return None
+
+
+def _surface_for_feature(feature: str, provider: str) -> str:
+    if feature == 'chat_agent' and provider == 'anthropic':
+        return 'anthropic.messages'
+    return 'openai.chat_completions'
+
+
+def _capabilities_for_feature(feature: str, *, provider: str, surface: str) -> dict[str, Any]:
     structured_output = 'json_schema' if is_structured_output_feature(feature) else 'none'
-    provider = get_provider(feature)
+    anthropic_messages = surface == 'anthropic.messages'
     return {
         'text_input': True,
-        'streaming': provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
+        'streaming': anthropic_messages or provider in {'openai', 'openrouter', 'perplexity', 'gemini'},
         'structured_output': structured_output,
-        'tools': feature == 'memory_l2',
+        'tools': anthropic_messages or feature in {'chat_agent', 'memory_l2'},
+        'translation': feature == 'translation',
     }
 
 
@@ -262,6 +324,7 @@ def _credential_policy() -> dict[str, Any]:
             'byok_unsupported_provider',
             'missing_byok_key',
             'capability_mismatch',
+            'provider_invalid_request',
             'invalid_config',
         ],
     }

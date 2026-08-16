@@ -294,7 +294,7 @@ class OmiDeviceConnection extends DeviceConnection {
         );
         return result;
       } finally {
-        await sub?.cancel();
+        await sub.cancel();
       }
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error listing storage files: $e');
@@ -341,8 +341,8 @@ class OmiDeviceConnection extends DeviceConnection {
         final result = await completer.future;
         return result;
       } finally {
-        await subscription?.cancel();
-        timeout?.cancel();
+        await subscription.cancel();
+        timeout.cancel();
       }
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error deleting storage file: $e');

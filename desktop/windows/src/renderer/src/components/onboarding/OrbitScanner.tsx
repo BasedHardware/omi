@@ -46,11 +46,25 @@ export function OrbitScanner(): React.JSX.Element {
       <defs>
         {/* Trail fades from transparent (tail) to white (head). userSpaceOnUse
             resolves in each dot's rotated frame, so the fade tracks the arc. */}
-        <linearGradient id="orbitTrailCw" gradientUnits="userSpaceOnUse" x1="123.94" y1="34.22" x2="170" y2="100">
+        <linearGradient
+          id="orbitTrailCw"
+          gradientUnits="userSpaceOnUse"
+          x1="123.94"
+          y1="34.22"
+          x2="170"
+          y2="100"
+        >
           <stop offset="0%" stopColor="#fff" stopOpacity="0" />
           <stop offset="100%" stopColor="#fff" stopOpacity="0.9" />
         </linearGradient>
-        <linearGradient id="orbitTrailCcw" gradientUnits="userSpaceOnUse" x1="123.94" y1="165.78" x2="170" y2="100">
+        <linearGradient
+          id="orbitTrailCcw"
+          gradientUnits="userSpaceOnUse"
+          x1="123.94"
+          y1="165.78"
+          x2="170"
+          y2="100"
+        >
           <stop offset="0%" stopColor="#fff" stopOpacity="0" />
           <stop offset="100%" stopColor="#fff" stopOpacity="0.9" />
         </linearGradient>

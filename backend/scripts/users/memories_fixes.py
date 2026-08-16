@@ -6,36 +6,25 @@ from dotenv import load_dotenv
 from database._client import get_users_uid
 
 load_dotenv('../../.dev.env')
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
-firebase_admin.initialize_app()
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = '../' + os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
-# noinspection PyUnresolvedReferences
-from typing import List
+from typing import Any, Dict, List, cast
 
-# noinspection PyUnresolvedReferences
-import numpy as np
 
-# noinspection PyUnresolvedReferences
-import plotly.graph_objects as go
-
-# noinspection PyUnresolvedReferences
-import umap
-
-# noinspection PyUnresolvedReferences
-from plotly.subplots import make_subplots
-
-# noinspection PyUnresolvedReferences
-from models.conversation import Conversation
 import database.conversations as conversations_db
 
 import multiprocessing
 import matplotlib.pyplot as plt
 
+# matplotlib ships incomplete stubs; alias as Any to avoid cascading unknown-member warnings.
+_plt: Any = cast(Any, plt)
+
 # Assuming get_users_uid() and conversations_db.get_conversations() are already defined
 
 
-def process_memories(uid):
-    durations = []
+def process_memories(uid: str) -> List[float]:
+    durations: List[float] = []
     memories = conversations_db.get_conversations(uid, limit=1000)
 
     for memory in memories:
@@ -49,7 +38,7 @@ def process_memories(uid):
     return durations
 
 
-def execute():
+def execute() -> None:
     uids = get_users_uid()
 
     # Use multiprocessing to fetch and process conversations in parallel
@@ -63,27 +52,27 @@ def execute():
     total_memories = len(durations)
 
     # Plot the distribution of durations
-    plt.figure(figsize=(10, 6))
+    _plt.figure(figsize=(10, 6))
 
     # Use 'density=False' to show counts, normalize the height manually to percentage
-    counts, bins, patches = plt.hist(durations, bins=50, edgecolor='black')
+    counts, bins, _ = _plt.hist(durations, bins=50, edgecolor='black')
 
     # Convert counts to percentages
     percentages = (counts / total_memories) * 100
 
     # Clear the histogram to plot again with percentage values
-    plt.clf()
+    _plt.clf()
 
     # Plot the histogram with percentages
-    plt.bar(bins[:-1], percentages, width=(bins[1] - bins[0]), edgecolor='black')
+    _plt.bar(bins[:-1], percentages, width=(bins[1] - bins[0]), edgecolor='black')
 
     # Add labels and title
-    plt.title('Distribution of Conversation Durations')
-    plt.xlabel('Duration (minutes)')
-    plt.ylabel('Percentage of Total Memories (%)')
+    _plt.title('Distribution of Conversation Durations')
+    _plt.xlabel('Duration (minutes)')
+    _plt.ylabel('Percentage of Total Memories (%)')
 
     # Show the plot
-    plt.show()
+    _plt.show()
 
 
 def check():
@@ -95,11 +84,11 @@ def check():
         print(started_at, finished_at)
 
 
-def merge_wrongly_separated_memories():
+def merge_wrongly_separated_memories() -> None:
     uids = get_users_uid()
     for uid in uids:
         memories = conversations_db.get_conversations(uid, limit=50)
-        to_merge = []
+        to_merge: List[Dict[str, Any]] = []
         for memory in memories:
             segments = memory.get('transcript_segments', [])
             if not segments or not memory['finished_at'] or not memory['started_at']:

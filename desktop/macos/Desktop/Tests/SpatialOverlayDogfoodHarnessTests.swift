@@ -8,10 +8,11 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
     let fixture = SpatialOverlayDogfoodFixture.claudeAddExplicit
     let addButton = fixture.targetRect
 
-    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: fixture.windowFrame,
-      candidates: fixture.candidates
-    ))
+    let placement = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: fixture.windowFrame,
+        candidates: fixture.candidates
+      ))
 
     assertCallout(placement, pointsAt: addButton, doesNotCover: addButton)
     assertTopLeftCallout(placement, fixture: fixture)
@@ -21,10 +22,11 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
   func testClaudeAddGuidanceFixtureFallsBackWithoutCoveringEstimatedButton() throws {
     let fixture = SpatialOverlayDogfoodFixture.claudeAddHeuristic
 
-    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: fixture.windowFrame,
-      candidates: fixture.candidates
-    ))
+    let placement = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: fixture.windowFrame,
+        candidates: fixture.candidates
+      ))
 
     let estimatedButton = try XCTUnwrap(fixture.candidates.first?.targetRect)
     assertCallout(placement, pointsAt: estimatedButton, doesNotCover: estimatedButton)
@@ -35,10 +37,11 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
   func testClaudeAddGuidanceFixtureCanInferAddButtonFromCancel() throws {
     let fixture = SpatialOverlayDogfoodFixture.claudeAddInferredFromCancel
 
-    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: fixture.windowFrame,
-      candidates: fixture.candidates
-    ))
+    let placement = try XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: fixture.windowFrame,
+        candidates: fixture.candidates
+      ))
 
     assertCallout(placement, pointsAt: fixture.targetRect, doesNotCover: fixture.targetRect)
     assertTopLeftCallout(placement, fixture: fixture)
@@ -72,6 +75,39 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
         placement: badPlacement,
         targetRect: addButton
       ).contains(.panelCoversTarget)
+    )
+  }
+
+  @MainActor
+  func testScreenRecordingDragFixtureExposesDeterministicState() {
+    let fixture = SpatialOverlayDogfoodFixture.screenRecordingDrag
+    let state = CloudConnectorGuidanceOverlay.dragToGrantAutomationState(
+      appName: fixture.appName,
+      settingsFrame: fixture.windowFrame,
+      visibleFrame: fixture.visibleFrame
+    )
+    let fixtureState = CloudConnectorGuidanceOverlay.automationFixtureState(fixture, state: state)
+    let target = fixture.targetRect
+
+    XCTAssertEqual(fixture.rawValue, "screen-recording-drag")
+    XCTAssertEqual(fixtureState["fixture"], "screen-recording-drag")
+    XCTAssertEqual(fixtureState["action"], "screen recording")
+    XCTAssertEqual(fixtureState["kind"], "dragToGrant")
+    XCTAssertEqual(fixtureState["appName"], "Omi Fixture")
+    XCTAssertEqual(fixtureState["dropTargetPane"], "content")
+    XCTAssertEqual(fixtureState["dropTargetVertical"], "upper")
+    XCTAssertEqual(fixtureState["dragDirection"], "right")
+    XCTAssertEqual(target, CloudConnectorGuidanceOverlay.permissionListTargetFrame(in: fixture.windowFrame))
+    XCTAssertEqual(target, fixture.recordedTargetRect)
+    XCTAssertGreaterThan(target.midY, fixture.windowFrame.midY)
+    XCTAssertEqual(
+      fixture.topLeftTargetRect,
+      CGRect(
+        x: target.minX,
+        y: fixture.visibleFrame.maxY - target.maxY,
+        width: target.width,
+        height: target.height
+      )
     )
   }
 

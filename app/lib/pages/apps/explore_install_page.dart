@@ -15,6 +15,7 @@ import 'package:omi/pages/apps/widgets/category_apps_page.dart';
 import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/apps/widgets/popular_apps_section.dart';
+import 'package:omi/pages/apps/widgets/search_loading_sliver.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
@@ -22,7 +23,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:omi/pages/apps/widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -209,57 +209,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
-  Widget _buildShimmerCreateButton() {
-    return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-        decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(8)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 180,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    width: 120,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(4)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildShimmerSearchBar() {
     return ShimmerWithTimeout(
       baseColor: AppStyles.backgroundSecondary,
@@ -270,7 +219,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
           children: [
             Expanded(
               child: Container(
-                height: 44,
+                height: 48,
                 decoration: BoxDecoration(
                   color: AppStyles.backgroundSecondary,
                   borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -280,7 +229,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             const SizedBox(width: 8),
             Container(
               width: 44,
-              height: 44,
+              height: 48,
               decoration: BoxDecoration(
                 color: AppStyles.backgroundSecondary,
                 borderRadius: BorderRadius.circular(AppStyles.radiusLarge),
@@ -431,73 +380,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     );
   }
 
-  Widget _buildSearchLoadingSliver() {
-    return SliverPadding(
-      padding: const EdgeInsets.only(bottom: 64, left: 20, right: 20, top: 20),
-      sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) => _buildShimmerListItem(),
-          childCount: 5, // Show 5 shimmer items
-        ),
-      ),
-    );
-  }
-
-  Widget _buildShimmerListItem() {
-    return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          children: [
-            // App icon shimmer
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(12)),
-            ),
-            const SizedBox(width: 16),
-            // App info shimmer
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 150,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Button shimmer
-            Container(
-              width: 72,
-              height: 32,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(16)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Wrap with NotificationListener to catch SelectAppNotification
@@ -606,11 +488,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: const Icon(
-                                              FontAwesomeIcons.magnifyingGlass,
-                                              color: Colors.white70,
-                                              size: 14,
-                                            ),
+                                            icon: const Icon(Icons.search, color: Colors.white60, size: 20),
                                             padding: EdgeInsets.zero,
                                           ),
                                         ),
@@ -624,11 +502,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 hintText: context.l10n.searchAppsPlaceholder,
                                                 leading: const Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
-                                                  child: Icon(
-                                                    FontAwesomeIcons.magnifyingGlass,
-                                                    color: Colors.white70,
-                                                    size: 14,
-                                                  ),
+                                                  child: Icon(Icons.search, color: Colors.white60, size: 20),
                                                 ),
                                                 backgroundColor: WidgetStateProperty.all(
                                                   AppStyles.backgroundSecondary,
@@ -861,7 +735,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               builder: (context) => const FilterBottomSheet(),
                                             );
                                           },
-                                          icon: const Icon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.filter,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
                                           label: Text(
                                             context.l10n.filters,
                                             style: const TextStyle(
@@ -903,7 +781,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                   builder: (context) => const FilterBottomSheet(),
                                                 );
                                               },
-                                              icon: const Icon(
+                                              icon: const FaIcon(
                                                 FontAwesomeIcons.filter,
                                                 size: 16,
                                                 color: Colors.white,
@@ -952,7 +830,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 if (state.isLoading)
                   SliverToBoxAdapter(child: _buildShimmerAppsView())
                 else if (state.isSearching)
-                  _buildSearchLoadingSliver()
+                  const SearchLoadingSliver()
                 else if (state.isFilterActive || state.isSearchActive)
                   _buildFilteredAppsSlivers()
                 else

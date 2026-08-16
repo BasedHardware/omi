@@ -5,7 +5,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional, Set
 
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -15,10 +15,31 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
-from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
+from utils.conversations.search import (
+    conversation_matches_date_range,
+    keyword_search_conversation_ids,
+    merge_conversation_search_ids,
+    parse_exact_conversation_reference,
+)
+from utils.retrieval.safety import safe_isoformat
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _append_conversation_source(source_sink: Optional[List[dict[str, Any]]], conversation: Conversation) -> None:
+    if source_sink is None:
+        return
+    structured = getattr(conversation, 'structured', None)
+    source_sink.append(
+        {
+            'kind': 'conversation',
+            'source_id': conversation.id,
+            'title': str(getattr(structured, 'title', None) or 'Conversation')[:160],
+            'preview': str(getattr(structured, 'overview', None) or '')[:600],
+            'created_at': safe_isoformat(getattr(conversation, 'created_at', None)),
+        }
+    )
 
 
 def parse_iso_date(date_str: str, param_name: str) -> datetime:
@@ -45,6 +66,7 @@ def get_conversations_text(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Fetch conversations and format as LLM-ready text."""
     logger.info(f"get_conversations_text - uid: {uid}, limit: {limit}, offset: {offset}")
@@ -69,7 +91,7 @@ def get_conversations_text(
             return f"Error: Invalid end_date format: {e}"
 
     # Parse statuses
-    status_list = []
+    status_list: List[str] = []
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
@@ -103,18 +125,26 @@ def get_conversations_text(
         return f"No conversations found{date_info}."
 
     # Load people for speaker names
-    people = []
+    people: List[Person] = []
     if include_transcript:
-        all_person_ids = set()
+        all_person_ids: Set[str] = set()
         for conv_data in conversations_data:
             segments = conv_data.get('transcript_segments', [])
             all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
         if all_person_ids:
             people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-            people = [Person(**p) for p in people_data]
+            for p in people_data:
+                try:
+                    people.append(Person(**p))
+                except Exception as e:
+                    # A legacy/malformed person doc (e.g. missing the required name) must not 500 the
+                    # whole conversation list; skip it so that speaker's name just goes unresolved. Mirrors
+                    # the deserialize_conversation loop below and search_conversations_text's guard.
+                    logger.warning(f"get_conversations_text skipping malformed person {p.get('id')}: {e}")
+                    continue
 
     # Convert to objects
-    conversations = []
+    conversations: List[Conversation] = []
     for conv_data in conversations_data:
         try:
             conversation = deserialize_conversation(conv_data)
@@ -128,6 +158,9 @@ def get_conversations_text(
         except Exception as e:
             logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
             continue
+
+    for conversation in conversations[:128]:
+        _append_conversation_source(source_sink, conversation)
 
     return conversations_to_string(
         conversations,
@@ -147,9 +180,17 @@ def search_conversations_text(
     max_transcript_segments: int = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
+    source_sink: Optional[List[dict[str, Any]]] = None,
 ) -> str:
     """Hybrid keyword + semantic vector search for conversations, formatted as LLM-ready text."""
-    logger.info(f"search_conversations_text - uid: {uid}, query: {query}, limit: {limit}")
+    exact_conversation_id = parse_exact_conversation_reference(query)
+    logger.info(
+        "search_conversations_text - uid=%s query_mode=%s query_len=%s limit=%s",
+        uid,
+        'exact-reference' if exact_conversation_id else 'semantic',
+        len(query or ''),
+        limit,
+    )
 
     # Cap limits
     if max_transcript_segments != -1:
@@ -180,13 +221,16 @@ def search_conversations_text(
         starts_at = 0  # epoch
 
     try:
-        # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
-        # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
-        keyword_ids = keyword_search_conversation_ids(
-            uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
-        )
-        vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
-        conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
+        if exact_conversation_id:
+            conversation_ids = [exact_conversation_id]
+        else:
+            # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
+            # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
+            keyword_ids = keyword_search_conversation_ids(
+                uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
+            )
+            vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+            conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
 
         if not conversation_ids:
             date_info = ""
@@ -204,13 +248,17 @@ def search_conversations_text(
 
         # Filter locked
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+        if exact_conversation_id:
+            conversations_data = [
+                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
+            ]
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"
 
         # Load people
-        people = []
+        people: List[Person] = []
         if include_transcript:
-            all_person_ids = set()
+            all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -219,7 +267,7 @@ def search_conversations_text(
                 people = [Person(**p) for p in people_data]
 
         # Convert
-        conversations = []
+        conversations: List[Conversation] = []
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -231,10 +279,14 @@ def search_conversations_text(
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
                 conversations.append(conversation)
             except Exception as e:
-                logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
+                logger.error("Error parsing conversation search result: %s", type(e).__name__)
                 continue
 
-        result = f"Found {len(conversations)} conversations matching '{query}':\n\n"
+        for conversation in conversations[:128]:
+            _append_conversation_source(source_sink, conversation)
+
+        match_kind = 'matching exactly' if exact_conversation_id else 'matching'
+        result = f"Found {len(conversations)} conversations {match_kind} '{query}':\n\n"
         result += conversations_to_string(
             conversations,
             use_transcript=include_transcript,

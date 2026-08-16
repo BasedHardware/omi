@@ -62,20 +62,21 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
 
 (
   cd "$DESKTOP_DIR/agent"
-  npm run build --silent
+  "$NODE22" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
 )
 
 (
   cd "$DESKTOP_DIR/agent"
-  "$NODE22" node_modules/vitest/vitest.mjs run \
-    tests/omi-tool-manifest.test.ts \
-    tests/control-tools.test.ts \
-    tests/node-tools.test.ts \
-    tests/codemagic-pi-mono-extension-ci.test.ts
+  # The full runtime suite is the authoritative gate. A hand-picked list left
+  # new execution-policy, persistence, transport, and routing regressions
+  # compiled but never executed in CI.
+  "$NODE22" node_modules/vitest/vitest.mjs run
 )
 
 ensure_npm_deps "$DESKTOP_DIR/pi-mono-extension"
 (
   cd "$DESKTOP_DIR/pi-mono-extension"
-  "$NODE22" --experimental-strip-types --test index.test.ts
+  # tsx (not --experimental-strip-types): the manifest imports use ESM .js
+  # specifiers for .ts files, which strip-types cannot resolve (G8).
+  npx --yes tsx --test index.test.ts
 )

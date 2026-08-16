@@ -248,6 +248,84 @@ void main() {
     });
   });
 
+  group('upload batching', () {
+    test('newest first, one conversation per batch', () {
+      const now = 2000000000;
+      final oldNewest = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+      final liveOlder = Wal(
+        timerStart: now - 120,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        conversationId: 'server-conversation',
+      );
+      final oldOldest = Wal(timerStart: now - 8 * 24 * 60 * 60, codec: BleAudioCodec.opus, seconds: 60);
+      final liveNewest = Wal(
+        timerStart: now - 30,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        conversationId: 'server-conversation',
+      );
+
+      final batch = nextSyncUploadBatch([oldNewest, liveOlder, oldOldest, liveNewest], now);
+
+      expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
+    });
+
+    test('only a conversation-bound recent WAL counts as live capture', () {
+      const now = 2000000000;
+      Wal at(int ageSeconds, {String? conversationId}) =>
+          Wal(timerStart: now - ageSeconds, codec: BleAudioCodec.opus, seconds: 60, conversationId: conversationId);
+
+      expect(isLiveCaptureWal(at(60), now), isFalse);
+      expect(isLiveCaptureWal(at(60, conversationId: 'c'), now), isTrue);
+      expect(isLiveCaptureWal(at(7 * 60 * 60, conversationId: 'c'), now), isFalse);
+    });
+
+    test('a backlog smaller than the limit drains in one batch', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        3,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index, codec: BleAudioCodec.opus, seconds: 60),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch.length, 3);
+    });
+
+    test('a batch never exceeds the limit that keeps a job inside the backend stale guard', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        25,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index, codec: BleAudioCodec.opus, seconds: 60),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch.length, 5);
+      expect(batch.map((wal) => wal.timerStart), historical.take(5).map((wal) => wal.timerStart));
+    });
+
+    test('a conversation too large for one batch does not claim a manifest', () {
+      const now = 2000000000;
+      final oversized = List.generate(
+        6,
+        (index) => Wal(
+          timerStart: now - index,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          conversationId: 'oversized-conversation',
+        ),
+      );
+
+      final batch = nextSyncUploadBatch(oversized, now);
+
+      expect(batch.length, 5);
+      expect(canClaimLiveCapture(batch, oversized, now), isFalse);
+      expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
+    });
+  });
+
   group('audio_player_utils temp file serialization (no double-strip)', () {
     test('headerless payloads are serialized without extra sublist(3)', () {
       // Simulate a Wal with headerless payloads (as now stored by _chunk)
@@ -373,6 +451,52 @@ void main() {
       // No firmware header in stored data
       expect(chunk[0].length, 3);
       expect(chunk[0][0], 0xAA); // First byte is audio, not header
+    });
+  });
+
+  group('WAL lists are growable (regression: Cannot add to an unmodifiable list)', () {
+    // Crash: LocalWalSyncImpl._chunk called wal.data.addAll(chunk) on a WAL
+    // loaded from disk. Wal.fromJson never passed `data`, so the constructor
+    // default `const []` left an unmodifiable list that threw on addAll.
+    test('Wal.fromJson produces a growable data list that _chunk can append to', () {
+      final wal = Wal.fromJson({
+        'timer_start': 1700000000,
+        'codec': 'opus',
+        'seconds': 60,
+        'status': 'miss',
+        'storage': 'disk',
+      });
+
+      // The exact operation from _chunk that crashed in production:
+      wal.data.addAll([
+        [0xAA, 0xBB],
+        [0xCC, 0xDD],
+      ]);
+
+      expect(wal.data.length, 2);
+    });
+
+    test('Wal constructed without data has a growable data list', () {
+      final wal = Wal(timerStart: 1700000000, codec: BleAudioCodec.opus, seconds: 60);
+
+      wal.data.add([0x01]);
+
+      expect(wal.data, [
+        [0x01],
+      ]);
+    });
+
+    test('addExternalWal before _initializeWals completes does not throw on _wals', () async {
+      // Same failure class: `_wals = const []` was unmodifiable until
+      // _initializeWals replaced it, so an early addExternalWal crashed.
+      final freshListener = _MockListener();
+      final freshSync = LocalWalSyncImpl(freshListener);
+      // Old timerStart → backfill lane, so no fresh-upload network call runs.
+      final wal = Wal(timerStart: 1000, codec: BleAudioCodec.opus, seconds: 60);
+
+      await freshSync.addExternalWal(wal);
+
+      expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
     });
   });
 

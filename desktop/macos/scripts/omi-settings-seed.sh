@@ -56,7 +56,7 @@ KEYS = [
     "playwrightUseExtension",
     "disabledSkillsJSON",
     "screenAnalysisEnabled",
-    "transcriptionEnabled",
+    "audioRecordingMode",
     "dashboardWidgetsCollapsed",
     "tasksChatPanelWidth",
 
@@ -92,6 +92,23 @@ def defaults_export(domain):
     return plistlib.loads(proc.stdout)
 
 
+def source_audio_recording_mode(source):
+    mode = source.get("audioRecordingMode")
+    if mode in {"off", "always", "onlyMeetings"}:
+        return mode
+
+    # Preserve intent from bundles created before Audio Recording became the
+    # single preference. The old "never" value disabled only system audio, so
+    # "always" is the closest equivalent for its still-enabled microphone.
+    if source.get("transcriptionEnabled") is False:
+        return "off"
+    return {
+        "always": "always",
+        "onlyDuringMeetings": "onlyMeetings",
+        "never": "always",
+    }.get(source.get("systemAudioCaptureMode"), "onlyMeetings")
+
+
 source = defaults_export(src)
 if not source:
     print(f"No defaults found for {src}; applying target-only dev defaults")
@@ -101,42 +118,34 @@ selected = {key: source[key] for key in KEYS if key in source}
 
 if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
     # Named dev bundles reuse auth/onboarding from Omi Dev, but macOS treats
-    # each bundle ID as a fresh TCC identity. Keep startup quiet until the
-    # developer explicitly enables a feature that needs a permission.
+    # each bundle ID as a fresh TCC identity. Keep non-screen services quiet,
+    # while leaving screen capture enabled: the runtime checks TCC without
+    # requesting it, then starts capture automatically after permission exists.
     selected.update(
         {
             "devLazyPermissionsEnabled": True,
-            "screenAnalysisEnabled": False,
-            "transcriptionEnabled": False,
-            # Use systemAudioCaptureMode="never" (a user-visible setting) instead of
-            # disableSystemAudioCapture (a hidden kill switch). The hidden flag is
-            # checked by AppState.effectiveSystemAudioMode BEFORE the user-visible
-            # mode, so seeding it would trap system audio off even after the
-            # developer picks "Always" in Settings. systemAudioCaptureMode can be
-            # toggled freely from the Settings UI.
-            "systemAudioCaptureMode": "never",
-            # Prevent the main-window startup migration from re-enabling screen
-            # analysis immediately after the quiet default is seeded.
-            "screenAnalysisAutoStartFixed_v2": True,
+            "screenAnalysisEnabled": True,
+            "audioRecordingMode": "off",
         }
     )
     # Never carry over the hidden kill switch from a previous seed or the source.
     target_data.pop("disableSystemAudioCapture", None)
+    target_data.pop("screenAnalysisAutoStartFixed_v2", None)
+    target_data.pop("screenAnalysisAutoStartFixed_v3", None)
 else:
     # Eager mode: fully undo quiet-permission defaults so permission-flow
     # parity testing can exercise the normal startup paths.
     selected.update(
         {
             "devLazyPermissionsEnabled": False,
-            # Restore capture flags so a previously quiet-seeded bundle runs
-            # the full eager startup path. Fall back to True (normal default)
-            # when the source domain doesn't define them.
+            # Restore the one user-facing audio preference so a previously
+            # quiet-seeded bundle runs the normal startup path.
             "screenAnalysisEnabled": source.get("screenAnalysisEnabled", True),
-            "transcriptionEnabled": source.get("transcriptionEnabled", True),
-            "systemAudioCaptureMode": source.get("systemAudioCaptureMode", "always"),
+            "audioRecordingMode": source_audio_recording_mode(source),
         }
     )
     target_data.pop("screenAnalysisAutoStartFixed_v2", None)
+    target_data.pop("screenAnalysisAutoStartFixed_v3", None)
     target_data.pop("disableSystemAudioCapture", None)
 
 target_data.update(selected)
@@ -147,7 +156,13 @@ with tempfile.NamedTemporaryFile(suffix=".plist") as plist:
 
 # Keys removed from target_data above need to be explicitly deleted from the
 # target domain — `defaults import` merges and never removes keys.
-for key in ("disableSystemAudioCapture", "screenAnalysisAutoStartFixed_v2"):
+for key in (
+    "disableSystemAudioCapture",
+    "screenAnalysisAutoStartFixed_v2",
+    "screenAnalysisAutoStartFixed_v3",
+    "transcriptionEnabled",
+    "systemAudioCaptureMode",
+):
     if key not in target_data:
         subprocess.run(["defaults", "delete", target, key], check=False)
 

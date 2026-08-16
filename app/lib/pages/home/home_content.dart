@@ -2,15 +2,17 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
+import 'package:omi/pages/home/widgets/daily_summary_card.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
@@ -18,6 +20,7 @@ import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -112,6 +115,21 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               // big "get started" options so the home page doesn't feel
               // empty for new users.
               if (_nonDiscardedConversationCount(convoProvider) >= 3) ...[
+                SliverToBoxAdapter(
+                  child: _buildSectionHeader(
+                    context,
+                    context.l10n.conversations,
+                    onViewAll: () {
+                      // Reset the daily-summaries flag so the conversations tab
+                      // actually shows conversations (it persists from Daily
+                      // Recaps' View All otherwise).
+                      if (convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
+                      context.read<HomeProvider>().setIndex(1);
+                    },
+                  ),
+                ),
+                HomeConversationsPreview(conversationProvider: convoProvider),
+
                 // Mind Map section — only shown for users with enough activity.
                 SliverToBoxAdapter(
                   child: _buildSectionHeader(
@@ -171,6 +189,15 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     if (captureProvider.recordingState != RecordingState.record) {
       await captureProvider.streamRecording();
       PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    }
+    // A phone-mic Transcribe Later (batch) session has no live transcript — the
+    // conversations-list batch card is its surface, so skip the capturing page
+    // (same as BLE batch). Surface the auto offline fallback once.
+    if (captureProvider.isPhoneMicBatchRecording) {
+      if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
+        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
+      }
+      return;
     }
     if (!context.mounted) return;
     Navigator.push(
@@ -297,7 +324,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   Widget _buildDailyRecapsPreview(BuildContext context) {
-    const cardHeight = 130.0;
+    const cardHeight = DailySummaryCard.height;
     if (_loadingSummaries) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
@@ -313,7 +340,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 baseColor: AppStyles.backgroundSecondary,
                 highlightColor: AppStyles.backgroundTertiary,
                 child: Container(
-                  width: 260,
+                  width: DailySummaryCard.width,
                   decoration: BoxDecoration(
                     color: AppStyles.backgroundSecondary,
                     borderRadius: BorderRadius.circular(20),
@@ -336,19 +363,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.only(left: 16),
           itemCount: _recentSummaries.length,
-          itemBuilder: (context, index) => _buildSummaryCard(context, _recentSummaries[index], cardHeight),
+          itemBuilder: (context, index) => _buildSummaryCard(context, _recentSummaries[index]),
         ),
       ),
     );
   }
 
-  static const double _cardWidth = 260.0;
-  static const double _mapHeight = 60.0;
-
-  Widget _buildSummaryCard(BuildContext context, DailySummary summary, double cardHeight) {
-    final hasMap = summary.locations.isNotEmpty;
-
-    return GestureDetector(
+  Widget _buildSummaryCard(BuildContext context, DailySummary summary) {
+    return DailySummaryCard(
+      summary: summary,
+      dateLabel: _formatDate(context, summary.date),
       onTap: () async {
         PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
         // Detail page pops with ``{deleted: true, summaryId}`` when the user
@@ -368,97 +392,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           }
         }
       },
-      child: Container(
-        width: _cardWidth,
-        height: cardHeight,
-        margin: const EdgeInsets.only(right: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(20)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
-            children: [
-              // Map at bottom
-              if (hasMap) Positioned(bottom: 0, left: 0, right: 0, height: _mapHeight, child: _buildCardMap(summary)),
-              // Text content at top
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: hasMap ? _mapHeight : 0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                  child: Text(
-                    summary.headline,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              // Date chip overlaying the map at bottom-right
-              Positioned(
-                bottom: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: Text(
-                    _formatDate(context, summary.date),
-                    style: const TextStyle(color: Color(0xFFBBBCC2), fontSize: 11),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCardMap(DailySummary summary) {
-    final centerLat = summary.locations.map((l) => l.latitude).reduce((a, b) => a + b) / summary.locations.length;
-    final centerLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a + b) / summary.locations.length;
-
-    final markers = summary.locations
-        .map(
-          (loc) => Marker(
-            point: LatLng(loc.latitude, loc.longitude),
-            width: 22,
-            height: 22,
-            child: Container(
-              decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
-              child: const Icon(Icons.location_on, color: Colors.white, size: 13),
-            ),
-          ),
-        )
-        .toList();
-
-    return SizedBox(
-      width: _cardWidth,
-      height: _mapHeight,
-      child: IgnorePointer(
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: LatLng(centerLat, centerLng),
-            initialZoom: 13,
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'me.omi.app',
-              minNativeZoom: 0,
-              maxNativeZoom: 19,
-              retinaMode: true,
-            ),
-            MarkerLayer(markers: markers),
-          ],
-        ),
-      ),
     );
   }
 
@@ -506,6 +439,71 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The filtered recent-conversation preview shown on Home for established users.
+///
+/// This consumes [ConversationProvider.groupedConversations], which already
+/// carries the conversations page's discarded/short/starred/date filters.
+class HomeConversationsPreview extends StatelessWidget {
+  final ConversationProvider conversationProvider;
+
+  const HomeConversationsPreview({super.key, required this.conversationProvider});
+
+  @override
+  Widget build(BuildContext context) {
+    if (conversationProvider.isLoadingConversations && conversationProvider.conversations.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: List.generate(
+              2,
+              (_) => Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: ShimmerWithTimeout(
+                  baseColor: AppStyles.backgroundSecondary,
+                  highlightColor: AppStyles.backgroundTertiary,
+                  child: Container(
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: AppStyles.backgroundSecondary,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final sortedDates = conversationProvider.groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
+    final recent = <ServerConversation>[];
+    for (final date in sortedDates) {
+      final list = conversationProvider.groupedConversations[date] ?? const [];
+      for (final conversation in list) {
+        recent.add(conversation);
+        if (recent.length >= 3) break;
+      }
+      if (recent.length >= 3) break;
+    }
+    if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(childCount: recent.length, (context, index) {
+        final conversation = recent[index];
+        final date = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
+        return ConversationListItem(
+          key: ValueKey(conversation.id),
+          conversation: conversation,
+          date: date,
+          conversationIdx: index,
+        );
+      }),
     );
   }
 }

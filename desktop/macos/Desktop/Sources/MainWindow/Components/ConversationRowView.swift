@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 
 /// Row view for a conversation in the list
@@ -107,19 +108,7 @@ struct ConversationRowView: View {
     isStarring = true
     let newStarred = !conversation.starred
 
-    do {
-      try await APIClient.shared.setConversationStarred(id: conversation.id, starred: newStarred)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateStarredByBackendId(
-        conversation.id, starred: newStarred)
-
-      await MainActor.run {
-        appState.setConversationStarred(conversation.id, starred: newStarred)
-      }
-    } catch {
-      log("Failed to update starred status: \(error)")
-    }
+    await appState.setConversationStarred(conversation.id, starred: newStarred)
 
     isStarring = false
   }
@@ -136,50 +125,31 @@ struct ConversationRowView: View {
   private func copyLink() async {
     guard !isCopyingLink else { return }
     isCopyingLink = true
+    defer { isCopyingLink = false }
 
-    do {
-      // First, make the conversation public/shared so the link works
-      try await APIClient.shared.setConversationVisibility(
-        id: conversation.id, visibility: "shared")
-
-      // Then copy the link
-      let link = "https://h.omi.me/conversations/\(conversation.id)"
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-      pasteboard.setString(link, forType: .string)
-      log("Copied conversation link to clipboard (visibility set to shared)")
-    } catch {
-      log("Failed to set conversation visibility: \(error)")
-      // Still copy the link even if visibility fails - user might have shared it before
-      let link = "https://h.omi.me/conversations/\(conversation.id)"
-      let pasteboard = NSPasteboard.general
-      pasteboard.clearContents()
-      pasteboard.setString(link, forType: .string)
-      log("Copied conversation link to clipboard (visibility API failed)")
+    // Same contract as the detail view and the meeting-notes card: the
+    // visibility mutation is what makes the URL resolve, so a failed mint
+    // copies nothing instead of handing out a link that may 404.
+    let feedback = await ConversationShareLinkAction.run(
+      mintLink: { try await APIClient.shared.getConversationShareLink(id: conversation.id) },
+      copyToPasteboard: { link in
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        return pasteboard.setString(link, forType: .string)
+      },
+      onFailure: { log("Failed to get share link: \($0)") }
+    )
+    if feedback == .copied {
+      log("Copied conversation share link to clipboard (visibility set to shared)")
     }
-
-    isCopyingLink = false
   }
 
   private func deleteConversation() async {
     guard !isDeleting else { return }
     isDeleting = true
 
-    // Soft-delete in SQLite immediately so reload doesn't restore it
-    do {
-      try await TranscriptionStorage.shared.deleteByBackendId(conversation.id)
-    } catch {
-      log("Failed to soft-delete conversation locally: \(error)")
-    }
-
-    do {
-      try await APIClient.shared.deleteConversation(id: conversation.id)
-      await MainActor.run {
-        appState.deleteConversationLocally(conversation.id)
-      }
+    if await appState.deleteConversation(conversation.id) {
       log("Deleted conversation \(conversation.id)")
-    } catch {
-      log("Failed to delete conversation: \(error)")
     }
 
     isDeleting = false
@@ -189,20 +159,8 @@ struct ConversationRowView: View {
     guard !isUpdatingTitle, !editedTitle.isEmpty else { return }
     isUpdatingTitle = true
 
-    do {
-      try await APIClient.shared.updateConversationTitle(id: conversation.id, title: editedTitle)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateTitleByBackendId(
-        conversation.id, title: editedTitle)
-
-      await MainActor.run {
-        appState.updateConversationTitle(conversation.id, title: editedTitle)
-      }
-      log("Updated conversation title to: \(editedTitle)")
-    } catch {
-      log("Failed to update title: \(error)")
-    }
+    await appState.updateConversationTitle(conversation.id, title: editedTitle)
+    log("Updated conversation title to: \(editedTitle)")
 
     isUpdatingTitle = false
   }
@@ -210,17 +168,17 @@ struct ConversationRowView: View {
   // MARK: - Inline Action Buttons
 
   private var inlineActionButtons: some View {
-    HStack(spacing: 4) {
+    HStack(spacing: OmiSpacing.xxs) {
       // Edit title
       Button(action: {
         editedTitle = conversation.title
         showEditDialog = true
       }) {
         Image(systemName: "pencil")
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
           .frame(width: 22, height: 22)
-          .background(Circle().fill(OmiColors.backgroundRaised))
+          .background(Circle().fill(Ink.rowFill))
       }
       .buttonStyle(.plain)
       .help("Edit title")
@@ -228,14 +186,14 @@ struct ConversationRowView: View {
       // Copy link
       Button(action: { Task { await copyLink() } }) {
         Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
           .frame(width: 22, height: 22)
-          .background(Circle().fill(OmiColors.backgroundRaised))
+          .background(Circle().fill(Ink.rowFill))
       }
       .buttonStyle(.plain)
       .disabled(isCopyingLink)
-      .help("Copy link")
+      .help("Copy share link — anyone with the link can view")
 
       // Move to folder (if folders exist)
       if !folders.isEmpty {
@@ -259,11 +217,12 @@ struct ConversationRowView: View {
           }
         } label: {
           Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
-            .scaledFont(size: 11)
-            .foregroundColor(conversation.folderId != nil ? .white : OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(conversation.folderId != nil ? Ink.primary : Ink.secondary)
             .frame(width: 22, height: 22)
-            .background(Circle().fill(OmiColors.backgroundRaised))
+            .background(Circle().fill(Ink.rowFill))
         }
+        .tint(Ink.primary)
         .menuStyle(.borderlessButton)
         .frame(width: 22)
         .help("Move to folder")
@@ -272,10 +231,10 @@ struct ConversationRowView: View {
       // Delete
       Button(action: { showDeleteConfirmation = true }) {
         Image(systemName: "trash")
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.error.opacity(0.8))
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.errorRed)
           .frame(width: 22, height: 22)
-          .background(Circle().fill(OmiColors.backgroundRaised))
+          .background(Circle().fill(Ink.rowFill))
       }
       .buttonStyle(.plain)
       .help("Delete")
@@ -285,27 +244,28 @@ struct ConversationRowView: View {
   // MARK: - Compact Row (single line)
 
   private var compactRowContent: some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       // Checkbox for multi-select mode
       if isMultiSelectMode {
         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-          .scaledFont(size: 18)
-          .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       }
 
       // Emoji
       Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-        .scaledFont(size: 16)
+        .scaledFont(size: OmiType.subheading)
         .frame(width: 36, height: 36)
         .background(
-          RoundedRectangle(cornerRadius: 12, style: .continuous).fill(OmiColors.backgroundRaised))
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous).fill(
+            Ink.rowFill))
 
       // Title + metadata below
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        HStack(spacing: OmiSpacing.sm) {
           Text(conversation.title)
-            .scaledFont(size: 14, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           if isNewlyCreated {
@@ -319,18 +279,18 @@ struct ConversationRowView: View {
           }
         }
 
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           Text(formattedTimestamp)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           Text("·")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textQuaternary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           Text(conversation.formattedDuration)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -341,58 +301,46 @@ struct ConversationRowView: View {
         Task { await toggleStar() }
       }) {
         Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: 12)
-          .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
           .opacity(isStarring ? 0.5 : 1.0)
       }
       .buttonStyle(.plain)
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 14)
-    .background(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .fill(
-          isSelected
-            ? OmiColors.purplePrimary.opacity(0.22)
-            : (isHovering
-              ? OmiColors.backgroundRaised
-              : (isNewlyCreated
-                ? OmiColors.userBubble.opacity(0.18) : OmiColors.backgroundSecondary))
-        )
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .stroke(
-          isSelected ? OmiColors.purplePrimary.opacity(0.4) : OmiColors.border.opacity(0.14),
-          lineWidth: 1)
-    )
-    .contentShape(Rectangle())
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
+    // The shared row states: nothing at rest, a wash under the pointer, the heavier
+    // wash plus the one outline when selected. A `primary`-tinted fill would be a
+    // third opinion about selection and, at 22%, an opaque slab on a glass panel.
+    .glassRow(
+      isSelected ? .selected : (isHovering || isNewlyCreated ? .hover : .rest),
+      cornerRadius: OmiChrome.controlRadius)
   }
 
   // MARK: - Expanded Row (title + time/duration)
 
   private var expandedRowContent: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       // Checkbox for multi-select mode
       if isMultiSelectMode {
         Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-          .scaledFont(size: 20)
-          .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       }
 
       // Emoji
       Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-        .scaledFont(size: 18)
+        .scaledFont(size: OmiType.heading)
         .frame(width: 40, height: 40)
         .background(
-          RoundedRectangle(cornerRadius: 14, style: .continuous).fill(OmiColors.backgroundRaised))
+          RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous).fill(Ink.rowFill))
 
       // Title + time/duration below
-      VStack(alignment: .leading, spacing: 3) {
-        HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        HStack(spacing: OmiSpacing.sm) {
           Text(conversation.title)
-            .scaledFont(size: 15, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.subheading, weight: .medium)
+            .foregroundColor(Ink.primary)
             .lineLimit(1)
 
           if isNewlyCreated {
@@ -406,18 +354,18 @@ struct ConversationRowView: View {
           }
         }
 
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
           Text(formattedTimestamp)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           Text("·")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textQuaternary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
 
           Text(conversation.formattedDuration)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(Ink.secondary)
         }
       }
 
@@ -428,31 +376,19 @@ struct ConversationRowView: View {
         Task { await toggleStar() }
       }) {
         Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: 14)
-          .foregroundColor(conversation.starred ? OmiColors.amber : OmiColors.textTertiary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
           .opacity(isStarring ? 0.5 : 1.0)
       }
       .buttonStyle(.plain)
     }
-    .padding(16)
-    .background(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .fill(
-          isSelected
-            ? OmiColors.purplePrimary.opacity(0.22)
-            : (isHovering
-              ? OmiColors.backgroundRaised
-              : (isNewlyCreated
-                ? OmiColors.userBubble.opacity(0.18) : OmiColors.backgroundSecondary))
-        )
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .stroke(
-          isSelected ? OmiColors.purplePrimary.opacity(0.4) : OmiColors.border.opacity(0.14),
-          lineWidth: 1)
-    )
-    .contentShape(Rectangle())
+    .padding(OmiSpacing.lg)
+    // The shared row states: nothing at rest, a wash under the pointer, the heavier
+    // wash plus the one outline when selected. A `primary`-tinted fill would be a
+    // third opinion about selection and, at 22%, an opaque slab on a glass panel.
+    .glassRow(
+      isSelected ? .selected : (isHovering || isNewlyCreated ? .hover : .rest),
+      cornerRadius: PageGlass.cardRadius)
   }
 
   var body: some View {
@@ -463,13 +399,17 @@ struct ConversationRowView: View {
         onTap()
       }
     }) {
-      if isCompactView {
-        // Compact mode: single line with all info
-        compactRowContent
-      } else {
-        // Expanded mode: title + overview with metadata below
-        expandedRowContent
+      Group {
+        if isCompactView {
+          // Compact mode: single line with all info
+          compactRowContent
+        } else {
+          // Expanded mode: title + overview with metadata below
+          expandedRowContent
+        }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .onHover { hovering in
@@ -487,10 +427,11 @@ struct ConversationRowView: View {
 
       Button(action: { Task { await copyLink() } }) {
         Label(
-          isCopyingLink ? "Generating Link..." : "Copy Link",
+          isCopyingLink ? "Generating Link..." : "Copy Share Link",
           systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
       }
       .disabled(isCopyingLink)
+      .help("Anyone with the link can view")
 
       Divider()
 
@@ -574,13 +515,12 @@ struct ConversationRowView: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  VStack(spacing: 12) {
-    // Preview would require mock ServerConversation
-    Text("ConversationRowView Preview")
-      .foregroundColor(.white)
+  #Preview {
+    VStack(spacing: OmiSpacing.md) {
+      // Preview would require mock ServerConversation
+      Text("ConversationRowView Preview")
+        .foregroundColor(Ink.primary)
+    }
+    .padding()
   }
-  .padding()
-  .background(OmiColors.backgroundPrimary)
-}
 #endif
