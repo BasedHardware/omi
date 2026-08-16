@@ -71,8 +71,8 @@ corner radius; a different size was the one thing left making them read as diffe
 
 ### Controls this app deliberately does not offer
 
-Six of the reference's controls are gone. Each was removed on a report, and none was narrowed —
-a control the user cannot find is still a control that fires.
+**Seven rows are gone**, listed below. Each was removed on a report, and none was narrowed — a
+control the user cannot find is still a control that fires.
 
 | Removed | Where it went, and why |
 |---|---|
@@ -107,6 +107,16 @@ is replayed.) It clears exactly three defaults —
 again. It never signs out, never touches a TCC grant or the capture database, and never clears a
 `context.settings.*` key; the Settings window closes on the way, which the confirmation says first.
 Guard tests: `Tests/ContextAppTests/OnboardingResetTests.swift`.
+
+### Airgap Mode: the switch is gone, the enforcement is not
+
+Everything from here to the end of this section is about a **row that no longer exists in
+Settings** (see the table above). It is kept because the *enforcement* is unchanged and still has to
+be right: `ExclusionEngine` carries `airgapMode`, `NetworkEgress` refuses every client while it is
+set, and installs whose `exclusions.json` already says so keep exactly the behaviour they chose.
+What went is the toggle and its subtitle; `SettingsTests.testAirgapEnforcementSurvivesTheRemovalOfItsSwitch`
+replaced the copy assertion with one on the engine. Read the paragraphs below as the specification of
+what the flag does, not as a description of a row on screen.
 
 **Do not ship Coast's Airgap copy.** It was transcribed from their screenshot and describes *their*
 app; taken as our requirement it produced a switch that suppressed favicon requests and nothing else

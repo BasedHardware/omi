@@ -200,16 +200,31 @@ final class AccessibilityAskTests: XCTestCase {
         XCTAssertFalse(GlobalShortcuts.shouldAsk(alreadyAsked: false, hasFinishedOnboarding: false))
     }
 
-    /// **Per launch and not per install, deliberately.** macOS drops the grant when the app's
-    /// signature changes, which is every Sparkle update — the same way this Mac lost Screen Recording
-    /// and system audio. A flag persisted once and kept forever would leave the shortcut dead after
-    /// an update with nothing said about it, so nothing here reads or writes `UserDefaults`.
+    /// **Per launch and not per install, deliberately** — and this is **A STATIC CHECKER**, not
+    /// behavioural coverage. It reads the implementation's source text; it does not run it.
+    ///
+    /// The claim: macOS drops the grant when the app's signature changes, which is every Sparkle
+    /// update — the same way this Mac lost Screen Recording and system audio. A flag persisted once
+    /// and kept forever would leave the shortcut dead after an update with nothing said about it.
+    ///
+    /// Why it is a grep and not an assertion: `hasAskedForAccessibility` is private process state
+    /// with no persistence to observe, so there is nothing a second `GlobalShortcuts` could be
+    /// handed that would reveal a `UserDefaults` write of it. What this catches is somebody adding
+    /// one. It is skipped rather than failed when the source is not beside the test — a packaged or
+    /// copied test bundle is not evidence of anything either way — because a checker that reddens on
+    /// its own file layout teaches people to ignore it.
     func testTheAskIsNotPersistedAcrossLaunches() throws {
-        let source = try String(
-            contentsOf: URL(fileURLWithPath: #filePath)
-                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-                .appendingPathComponent("Sources/ContextApp/Shortcuts/GlobalShortcuts.swift"),
-            encoding: .utf8)
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/ContextApp/Shortcuts/GlobalShortcuts.swift")
+        guard let source = try? String(contentsOf: url, encoding: .utf8) else {
+            throw XCTSkip(
+                """
+                GlobalShortcuts.swift is not at \(url.path), so this static checker read nothing.
+
+                NOT VERIFIED BY THIS RUN: that the Accessibility ask is not persisted to UserDefaults.
+                """)
+        }
         XCTAssertFalse(
             source.contains("askedForAccessibility\""),
             "a persisted flag would silence the ask forever, including after an update drops the grant")

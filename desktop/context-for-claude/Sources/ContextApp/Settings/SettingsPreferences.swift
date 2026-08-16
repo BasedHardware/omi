@@ -305,7 +305,7 @@ final class SettingsStore: ObservableObject {
 
     static let shared = SettingsStore()
 
-    /// **Four retired keys are deliberately not listed and deliberately not migrated:**
+    /// **Three retired keys are deliberately not listed and deliberately not migrated:**
     /// `context.settings.appearance`, `context.settings.timelineControls` and
     /// `context.settings.captureQuality`. Nothing reads them any more, so a stored value from an
     /// older build is inert — which is the whole of the migration. Deleting them at launch would

@@ -31,9 +31,14 @@ import XCTest
 /// was invisible until the timeline stopped reading `SettingsStore` at all (the Appearance pane's
 /// timeline-control toggles went, and with them the view's only reason to hold the store): the
 /// process stayed `.accessory`, no window in it could take key status, and three of these four tests
-/// went from measuring to skipping — coverage deleted by a change nowhere near them. Installing
-/// `DockPresence.launchPolicy()` is what `applicationDidFinishLaunching` does, so what is measured is
-/// now the shipped configuration, stated rather than inherited.
+/// went from measuring to skipping — coverage deleted by a change nowhere near them.
+///
+/// So it is stated, and stated **without reading the machine**. `DockPresence.launchPolicy()` was
+/// the obvious spelling and is the wrong one here: it resolves through `UserDefaults.standard`, so a
+/// developer who had run the real app with Show Dock Icon *off* would put this process back to
+/// `.accessory` and silently lose the same three measurements to skips — the identical failure, now
+/// caused by ambient state instead of by a diff. The mapping is still production's
+/// (`DockPresence.activationPolicy`); only the input is pinned.
 @MainActor
 final class TimelineKeyStatusTests: XCTestCase {
 
@@ -41,7 +46,8 @@ final class TimelineKeyStatusTests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        NSApplication.shared.setActivationPolicy(DockPresence.launchPolicy())
+        NSApplication.shared.setActivationPolicy(
+            DockPresence.activationPolicy(showsDockIcon: true))
         root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("timeline-key-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

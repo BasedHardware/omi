@@ -107,11 +107,16 @@ final class SettingsRenderHarness: XCTestCase {
         return image
     }
 
+    /// **Fails rather than skips.** This threw `XCTSkip` on an encoding failure, which is exactly
+    /// the outcome the harness exists to catch: a pane whose draw path regressed would report
+    /// "skipped" while the summary below went on claiming every pane had rendered. The only skip in
+    /// this file is the opt-in gate at the top.
     private func write(_ image: NSImage, to directory: URL, named name: String) throws {
-        guard let tiff = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiff),
-            let png = bitmap.representation(using: .png, properties: [:])
-        else { throw XCTSkip("could not encode \(name)") }
+        let png = try XCTUnwrap(
+            image.tiffRepresentation
+                .flatMap(NSBitmapImageRep.init(data:))
+                .flatMap { $0.representation(using: .png, properties: [:]) },
+            "\(name) produced an image that could not be encoded — the pane did not draw")
         try png.write(to: directory.appendingPathComponent("\(name).png"))
     }
 }

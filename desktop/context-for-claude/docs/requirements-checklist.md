@@ -120,13 +120,14 @@ distrust.
 Sidebar: General, Agents, Capture, Storage, Exclusions. Every row is an icon tile, a title, a grey
 subtitle, and a right-hand control.
 
-**Seven of the reference's controls are deliberately not shipped**, each removed on a report on
-2026-08-16 and each marked DROPPED below with its reason: the Appearance pane entire (I14, I17–I22),
-the second shortcut recorder (I2), Airgap Mode's switch (I5), the agent survey (I13) and Capture
-Quality (I25, I26). `docs/rewind-and-settings.md` § Part 2 carries the same table in one place. The
-pattern in all seven is the same and is worth stating once: a control that only makes the product
-worse, or that duplicates another control, is removed rather than narrowed or hidden — a setting
-nobody can find still fires.
+**Seven settings rows are deliberately not shipped**, each removed on a report on 2026-08-16, and
+they account for **twelve** requirement IDs marked DROPPED below: the Appearance pane entire (I14 and
+I17–I22 — one pane, seven IDs), the second shortcut recorder (I2), Airgap Mode's switch (I5), the
+agent survey (I13) and Capture Quality with its footnote (I25, I26).
+`docs/rewind-and-settings.md` § Part 2 carries the same list as one table. The pattern in all of them
+is the same and is worth stating once: a control that only makes the product worse, or that
+duplicates another control, is removed rather than narrowed or hidden — a setting nobody can find
+still fires.
 
 ### I-General
 | # | Requirement | Status |

@@ -98,6 +98,68 @@ final class ClaudeMemoryTests: XCTestCase {
         XCTAssertTrue(merged.hasSuffix(ClaudeMemory.block + "\n"))
     }
 
+    /// **The regression cubic caught on the first version of `blockRange`, and the reason the
+    /// pairing rule exists.**
+    ///
+    /// The damaged file above survives one install — that is the test directly above this one. This
+    /// is the *second* install, which is where it used to go wrong: the old range ran from the first
+    /// opening marker to the **last** closing one, so once a real block had been appended after the
+    /// orphan, that span swallowed the orphan, the user's text between them, and the block. `merged`
+    /// replaced all of it and the instructions in the middle were gone, with nothing said.
+    func testASecondInstallOverADamagedFileStillKeepsWhatTheUserWroteInIt() {
+        let damaged = """
+            \(ClaudeMemory.beginMarker)
+
+            half of an old block
+
+            - A rule I wrote, after the damage.
+            """
+
+        let once = ClaudeMemory.merged(into: damaged)
+        let twice = ClaudeMemory.merged(into: once)
+
+        XCTAssertEqual(once, twice, "the second install must be a no-op on an already-correct file")
+        XCTAssertTrue(
+            twice.contains("- A rule I wrote, after the damage."),
+            "the user's instruction between the orphan marker and our block was deleted")
+        XCTAssertTrue(twice.contains("half of an old block"))
+        XCTAssertTrue(ClaudeMemory.isInstalled(in: twice))
+    }
+
+    /// …and disconnecting from that same file removes only our block.
+    func testDisconnectingFromADamagedFileRemovesOnlyOurBlock() {
+        let damaged = "\(ClaudeMemory.beginMarker)\n\nhalf of an old block\n\n- A rule I wrote.\n"
+        let installed = ClaudeMemory.merged(into: damaged)
+
+        let stripped = ClaudeMemory.stripped(from: installed)
+
+        XCTAssertTrue(stripped.contains("- A rule I wrote."))
+        XCTAssertTrue(stripped.contains("half of an old block"))
+        XCTAssertFalse(ClaudeMemory.isInstalled(in: stripped))
+        XCTAssertFalse(stripped.contains(ClaudeMemory.endMarker))
+    }
+
+    /// A file that somehow carries two complete blocks collapses to one, and the user's text between
+    /// them survives the collapse.
+    func testTwoCompleteBlocksCollapseToOneWithoutTakingTheTextBetweenThem() {
+        let doubled = "\(ClaudeMemory.block)\n\n- A rule between them.\n\n\(ClaudeMemory.block)\n"
+        XCTAssertFalse(ClaudeMemory.isInstalled(in: doubled), "two blocks is not the correct state")
+
+        let merged = ClaudeMemory.merged(into: doubled)
+
+        XCTAssertTrue(ClaudeMemory.isInstalled(in: merged))
+        XCTAssertEqual(occurrences(of: ClaudeMemory.beginMarker, in: merged), 1)
+        XCTAssertTrue(merged.contains("- A rule between them."))
+    }
+
+    /// The user's own whitespace is theirs. Trimming the whole file before appending discarded
+    /// leading indentation and trailing blank lines in a file this app does not own.
+    func testTheUsersLeadingAndTrailingWhitespaceIsPreserved() {
+        let mine = "   # Indented on purpose\n\n- A rule.\n"
+        let merged = ClaudeMemory.merged(into: mine)
+        XCTAssertTrue(merged.hasPrefix(mine), "the file was rewritten around our block")
+    }
+
     // MARK: - Taking it back out
 
     /// Disconnecting removes our paragraph and leaves theirs.

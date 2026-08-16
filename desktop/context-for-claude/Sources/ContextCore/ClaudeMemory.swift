@@ -90,18 +90,35 @@ public enum ClaudeMemory {
     /// would delete whatever they wrote after it, and losing their standing instructions is not a
     /// recoverable failure. See ``ClaudeConfig/merged(into:mcpBinaryPath:)`` for the same tie-break.
     public static func merged(into existing: String) -> String {
-        guard let range = blockRange(in: existing) else {
-            let trimmed = existing.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? "\(block)\n" : "\(trimmed)\n\n\(block)\n"
+        let ranges = blockRanges(in: existing)
+        guard let first = ranges.first else {
+            // **`existing` is appended to verbatim, never trimmed.** Trimming it discarded leading
+            // indentation and trailing whitespace the user may have meant — in a file this app does
+            // not own. Only an all-whitespace file is special-cased, because there is nothing there
+            // to preserve and a block preceded by three blank lines is our litter, not theirs.
+            guard !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return "\(block)\n"
+            }
+            let separator = existing.hasSuffix("\n") ? "\n" : "\n\n"
+            return "\(existing)\(separator)\(block)\n"
         }
-        return existing.replacingCharacters(in: range, with: block)
+        // Later duplicates removed back to front, so the earlier indices stay valid.
+        var out = existing
+        for range in ranges.dropFirst().reversed() {
+            out = out.replacingCharacters(in: range, with: "")
+        }
+        return out.replacingCharacters(in: first, with: block)
     }
 
     /// Takes the block back out, leaving the rest — including the user's own blank-line habits
     /// around it — as close to untouched as removing a paragraph allows.
     public static func stripped(from existing: String) -> String {
-        guard let range = blockRange(in: existing) else { return existing }
-        let without = existing.replacingCharacters(in: range, with: "")
+        let ranges = blockRanges(in: existing)
+        guard !ranges.isEmpty else { return existing }
+        var without = existing
+        for range in ranges.reversed() {
+            without = without.replacingCharacters(in: range, with: "")
+        }
         let trimmed = without.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "" : "\(trimmed)\n"
     }
@@ -110,20 +127,45 @@ public enum ClaudeMemory {
     /// presence, like ``ClaudeSkill/isInstalled``: a block from an older version names tools that may
     /// no longer exist, and reporting it as installed is what would make it permanent.
     public static func isInstalled(in existing: String) -> Bool {
-        guard let range = blockRange(in: existing) else { return false }
-        return String(existing[range]) == block
+        let ranges = blockRanges(in: existing)
+        // Exactly one, so a file that somehow ended up with two blocks is *not* reported as correct
+        // and the next install collapses it.
+        guard ranges.count == 1 else { return false }
+        return String(existing[ranges[0]]) == block
     }
 
-    /// The span from the opening marker through the closing one, or nil when there is not a
-    /// well-formed pair. Searched from the *first* opening marker and the *last* closing one, so a
-    /// file that somehow ended up with two blocks collapses to one on the next write rather than
-    /// keeping the duplicate forever.
-    private static func blockRange(in text: String) -> Range<String.Index>? {
-        guard let start = text.range(of: beginMarker),
-            let end = text.range(of: endMarker, options: .backwards),
-            start.lowerBound < end.lowerBound
-        else { return nil }
-        return start.lowerBound..<end.upperBound
+    /// Every well-formed block in the file, in order, with malformed regions skipped.
+    ///
+    /// **An opening marker is only ever paired with a closing one that arrives before the next
+    /// opening marker**, and that rule is the whole of this function. The first version took the
+    /// first opening marker and the *last* closing one, to collapse duplicates — which meant a file
+    /// carrying an orphaned opening marker (a half-finished hand edit) followed by a real block
+    /// reported one span running from the orphan straight through to the real block's close.
+    /// Everything between them, including whatever the user had written there, was inside the range
+    /// that `merged` replaces and `stripped` deletes. So the damaged file this type already refused
+    /// to slice on the *first* install lost text on the second.
+    ///
+    /// An orphan is stepped over rather than closed, and the caller preserves it: `merged` appends a
+    /// fresh block after it and never touches it again. Duplicates are still collapsed, but by
+    /// returning each pair separately and letting `merged` remove the extras.
+    private static func blockRanges(in text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var searchFrom = text.startIndex
+        while let begin = text.range(of: beginMarker, range: searchFrom..<text.endIndex) {
+            let rest = begin.upperBound..<text.endIndex
+            let nextBegin = text.range(of: beginMarker, range: rest)
+            guard let end = text.range(of: endMarker, range: rest),
+                nextBegin == nil || end.lowerBound < nextBegin!.lowerBound
+            else {
+                // Nothing closes this one before the next block opens: an orphan. Step past the
+                // marker itself and keep looking, so a later well-formed block is still found.
+                searchFrom = begin.upperBound
+                continue
+            }
+            ranges.append(begin.lowerBound..<end.upperBound)
+            searchFrom = end.upperBound
+        }
+        return ranges
     }
 
     // MARK: - Disk
@@ -140,7 +182,18 @@ public enum ClaudeMemory {
     ///   reach them would leave the only part that touches the user's disk unproven.
     @discardableResult
     public static func install(at url: URL = documentURL) throws -> Bool {
-        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        // **A file that exists and cannot be read is not an empty file.** `try?` collapsed the two,
+        // so a `CLAUDE.md` behind a permissions problem, a bad encoding or an I/O error was treated
+        // as absent and *overwritten* with our block alone — the user's standing instructions gone,
+        // silently, in the one file every session of theirs loads. Only "no such file" may become
+        // the empty string; anything else is rethrown before a single byte is written.
+        let existing: String
+        do {
+            existing = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            guard !FileManager.default.fileExists(atPath: url.path) else { throw error }
+            existing = ""
+        }
         guard !isInstalled(in: existing) else { return false }
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -154,7 +207,7 @@ public enum ClaudeMemory {
     @discardableResult
     public static func remove(at url: URL = documentURL) throws -> Bool {
         guard let existing = try? String(contentsOf: url, encoding: .utf8),
-            blockRange(in: existing) != nil
+            !blockRanges(in: existing).isEmpty
         else { return false }
         let remaining = stripped(from: existing)
         if remaining.isEmpty {
