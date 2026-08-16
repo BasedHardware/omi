@@ -1,0 +1,41 @@
+desktop/context-for-claude/Sources/ContextApp/Onboarding/OnboardingView.swift
+  s_fe9b5f58848810::t_1056c7d1243fdb 1330-1338
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsPreferences.swift
+  s_fe9b5f58848810::t_a363014e373e6a 308
+desktop/context-for-claude/Sources/ContextCore/ClaudeMemory.swift
+  s_fe9b5f58848810::t_d53837744a0e4a 93-103,105-110,116-121,130-134,137-168,185-196,210
+desktop/context-for-claude/Tests/ContextAppTests/SettingsRenderHarness.swift
+  s_fe9b5f58848810::t_26b3189245ba11 110-113,115-119
+desktop/context-for-claude/Tests/ContextAppTests/ShortcutsTests.swift
+  s_fe9b5f58848810::t_b917844af2f68f 203-215,217-227
+desktop/context-for-claude/Tests/ContextAppTests/TimelineKeyStatusTests.swift
+  s_fe9b5f58848810::t_9eb785c5b39c22 34-41,49-50
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeMemoryTests.swift
+  s_fe9b5f58848810::t_a5ba36e649746e 101-162
+desktop/context-for-claude/changelog/unreleased/20260816-accessibility-ask.json
+  s_fe9b5f58848810::t_39fcb927575da6 1-3
+desktop/context-for-claude/changelog/unreleased/20260816-claude-memory.json
+  s_fe9b5f58848810::t_53d6c9f8eee8f8 1-3
+desktop/context-for-claude/changelog/unreleased/20260816-settings-cleanup.json
+  s_fe9b5f58848810::t_c335c7f0f4c08c 2
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_fe9b5f58848810::t_9e08027c230a83 123-130
+desktop/context-for-claude/docs/rewind-and-settings.md
+  s_fe9b5f58848810::t_f28c3c6dbd0515 74-75,111-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5cfbdfd0aef6e4bdfbb6c10301fd5d6c682f68a2",
+  "prompts": {},
+  "sessions": {
+    "s_fe9b5f58848810": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "523f4649-d10d-476a-9e8e-831ac39269e9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
