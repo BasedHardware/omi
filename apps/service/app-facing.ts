@@ -286,6 +286,12 @@ export interface LocalServiceOptions {
   readonly actionItemId?: () => string;
   /** Override the JSONL request log directory. Tests isolate here; production uses OMI_DEV_STACK_RUNDIR. */
   readonly runtimeLogDir?: string;
+  /**
+   * Process-owned work after a total seed restore. The factory never admits
+   * the local owner; `bin/dev-server.ts` registers that here so in-process
+   * tests keep a missing projection to restage from revision 1.
+   */
+  readonly afterReset?: () => void;
 }
 
 /** The service stores and the tasks atomic write boundary, grouped at composition. */
@@ -599,6 +605,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     }
   };
 
+  let invokeAfterReset = false;
   const reseed = (): void => {
     nextFolderId = 1;
     resetServiceStores();
@@ -615,6 +622,10 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       accountTimezone: options.accountTimezone,
     });
     producerEvidence.reset();
+    // Initial composition leaves the projection absent so in-process tests
+    // can restage from revision 1. Subsequent reseeds (HTTP `/v1/qa/reset`)
+    // invoke the process-registered hook, never a factory-owned cutover.
+    if (invokeAfterReset) options.afterReset?.();
   };
 
   if (ownsStores) {
@@ -638,6 +649,7 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
       account_timezone: options.accountTimezone,
     });
   }
+  invokeAfterReset = true;
 
   const tasks = stores.tasks;
   const writeIdRegistry = stores.registry;
