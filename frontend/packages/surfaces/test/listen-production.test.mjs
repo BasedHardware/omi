@@ -76,6 +76,15 @@ function wireStore() {
     env,
     schema,
     reconnectDelayMs: 2_000,
+    preflight: {
+      snapshot: () => freezeListenPreflightSnapshot({
+        permission: "granted",
+        device: { state: "available", label: "Default microphone" },
+        recovery: null,
+      }),
+      subscribe: () => () => {},
+      async refresh() {},
+    },
     openSocket(path) {
       paths.push(path);
       const socket = new FakeSocket();
@@ -138,6 +147,7 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const cases = [
     [{ kind: "idle" }, "listen.stateIdle", false],
+    [{ kind: "connecting" }, "listen.stateConnecting", false],
     [{ kind: "capturing", elapsedSeconds: 10, untranscribedSeconds: 10 }, "listen.stateCapturing", false],
     [{ kind: "paused-for-entitlement", elapsedSeconds: 20, untranscribedSeconds: 30 }, "listen.statePausedEntitlement", false],
     [{ kind: "offline-buffering", elapsedSeconds: 40, bufferedSeconds: 10, untranscribedSeconds: 50 }, "listen.stateOfflineBuffering", false],
@@ -188,7 +198,7 @@ test("each capture state renders state-specific copy, glyph, and interpolated me
       await rendered.cleanup();
     }
   }
-  assert.equal(new Set(renderedTitles).size, 6);
+  assert.equal(new Set(renderedTitles).size, 7);
   // red-proof: remove any state-specific data-presentation/glyph/title branch;
   // the rendered DOM assertion for that arm fails, even if describeCapture remains correct.
 });
@@ -881,4 +891,200 @@ test("platform Listen client starts host capture on connect and reconnect, and s
   assert.ok(calls.includes("stop"));
   assert.equal(calls.at(-1), "close:1000");
   assert.ok(calls.lastIndexOf("stop") < calls.lastIndexOf("close:1000"));
+});
+
+test("Listen does not claim capturing while the transcript stream is still connecting", async () => {
+  // red-proof: leave connecting folded into capturing; data-presentation stays
+  // capturing, the title equals listen.stateCapturing, and privacy reads active.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const wire = wireStore();
+  await wire.store.start();
+  const rendered = await renderComponent(ListenProduction, { store: wire.store });
+  try {
+    const panel = rendered.container.querySelector(".listen-state-panel");
+    assert.equal(panel?.getAttribute("data-presentation"), "connecting");
+    assert.equal(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateConnecting"]);
+    assert.notEqual(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateCapturing"]);
+    assert.equal(panel?.getAttribute("data-capturing"), "false");
+    assert.equal(
+      rendered.container.querySelector("[data-capture-indicator]")?.getAttribute("data-capture-indicator"),
+      "idle",
+    );
+    assert.equal(
+      rendered.container.querySelector(".listen-privacy-note")?.textContent,
+      EN_MESSAGES["listen.privacyControl"],
+    );
+    assert.equal(rendered.container.querySelector(".listen-transcript-waiting"), null);
+    assert.ok(rendered.container.querySelector(".listen-stop-control"), "a hung start can still be cancelled");
+    assert.equal(rendered.container.querySelector('[data-consumer-action="start-listen"]'), null);
+    const notices = rendered.container.querySelector(".surface-notices")?.textContent ?? "";
+    assert.equal(notices.includes(EN_MESSAGES["lifecycle.refreshing"]), false);
+    await rendered.act(async () => {
+      wire.sockets[0].open();
+      wire.sockets[0].message(JSON.stringify(readyFrame));
+    });
+    assert.equal(rendered.container.querySelector(".listen-state-panel")?.getAttribute("data-presentation"), "capturing");
+    assert.equal(
+      rendered.container.querySelector(".listen-transcript-waiting .production-empty-state h2")?.textContent,
+      EN_MESSAGES["listen.transcriptWaiting"],
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Listen waiting copy does not claim to hear speech before a transcript exists", async () => {
+  // red-proof: restore "Listening for speech…" as the waiting heading.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const wire = wireStore();
+  await wire.store.start();
+  wire.sockets[0].open();
+  wire.sockets[0].message(JSON.stringify(readyFrame));
+  const rendered = await renderComponent(ListenProduction, { store: wire.store });
+  try {
+    const waiting = rendered.container.querySelector(".listen-transcript-waiting .production-empty-state h2");
+    assert.equal(waiting?.textContent, EN_MESSAGES["listen.transcriptWaiting"]);
+    assert.notEqual(waiting?.textContent, "Listening for speech…");
+    assert.notEqual(
+      rendered.container.querySelector(".listen-state-body")?.textContent,
+      "Audio is being captured and transcribed.",
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Listen idle does not say Ready when permission or the device is not actually ready", async () => {
+  // red-proof: keep listen.stateIdle as the panel title for denied / not-yet-asked /
+  // missing-device; the rendered heading stays Ready to capture.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const denied = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      preflight: {
+        permission: "denied", device: { state: "unavailable", label: null }, recovery: "open-settings",
+      },
+      openSettings: true,
+    }),
+  });
+  try {
+    assert.equal(
+      denied.container.querySelector(".listen-state-title")?.textContent,
+      EN_MESSAGES["listen.statePermissionDenied"],
+    );
+    assert.notEqual(
+      denied.container.querySelector(".listen-state-title")?.textContent,
+      EN_MESSAGES["listen.stateIdle"],
+    );
+    assert.equal(
+      denied.container.querySelector(".listen-state-body")?.textContent,
+      EN_MESSAGES["listen.statePermissionDeniedBody"],
+    );
+    assert.equal(denied.container.querySelector(".listen-state-panel")?.getAttribute("data-idle-reason"), "permission-denied");
+    assert.equal(denied.container.querySelector('[data-consumer-action="start-listen"]')?.getAttribute("disabled"), "");
+  } finally {
+    await denied.cleanup();
+  }
+
+  const needed = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      preflight: {
+        permission: "unknown", device: { state: "unknown", label: null }, recovery: "request-permission",
+      },
+      requestPermission: true,
+    }),
+  });
+  try {
+    assert.equal(
+      needed.container.querySelector(".listen-state-title")?.textContent,
+      EN_MESSAGES["listen.statePermissionNeeded"],
+    );
+    assert.notEqual(
+      needed.container.querySelector(".listen-state-title")?.textContent,
+      EN_MESSAGES["listen.stateIdle"],
+    );
+    assert.equal(needed.container.querySelector(".listen-state-panel")?.getAttribute("data-idle-reason"), "permission-needed");
+    const allow = [...needed.container.querySelectorAll("button")]
+      .find((button) => button.textContent === EN_MESSAGES["listen.requestPermission"]);
+    assert.ok(allow, "not-yet-asked permission still exposes Allow microphone");
+  } finally {
+    await needed.cleanup();
+  }
+
+  const missing = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      preflight: {
+        permission: "granted", device: { state: "unavailable", label: null }, recovery: null,
+      },
+    }),
+  });
+  try {
+    assert.equal(
+      missing.container.querySelector(".listen-state-title")?.textContent,
+      EN_MESSAGES["listen.stateDeviceUnavailable"],
+    );
+    assert.notEqual(
+      missing.container.querySelector(".listen-state-title")?.textContent,
+      EN_MESSAGES["listen.stateIdle"],
+    );
+    assert.equal(missing.container.querySelector(".listen-state-panel")?.getAttribute("data-idle-reason"), "device-unavailable");
+  } finally {
+    await missing.cleanup();
+  }
+});
+
+test("Listen stop with a transcript does not snap back to Ready and offers Conversations", async () => {
+  // red-proof: idle+segments keeps listen.stateIdle; Latest/Start remain but no
+  // conversations link and the heading says Ready to capture.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const wire = wireStore();
+  await wire.store.start();
+  wire.sockets[0].open();
+  wire.sockets[0].message(JSON.stringify(readyFrame));
+  wire.sockets[0].message(JSON.stringify([segment("kept", "Harborline closing notes", 0, 2)]));
+  const rendered = await renderComponent(ListenProduction, { store: wire.store });
+  try {
+    const stop = rendered.container.querySelector(".listen-stop-control");
+    assert.ok(stop);
+    await rendered.act(async () => stop.click());
+    const panel = rendered.container.querySelector(".listen-state-panel");
+    assert.equal(panel?.getAttribute("data-presentation"), "idle");
+    assert.equal(panel?.getAttribute("data-idle-reason"), "ended");
+    assert.equal(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateEnded"]);
+    assert.notEqual(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateIdle"]);
+    assert.equal(
+      rendered.container.querySelector(".listen-transcript-text")?.textContent,
+      "Harborline closing notes",
+    );
+    const link = rendered.container.querySelector("a.listen-open-conversations");
+    assert.ok(link);
+    assert.equal(link?.textContent, EN_MESSAGES["listen.openConversations"]);
+    assert.match(link?.getAttribute("href") ?? "", /(?:^|[?&])route=conversations(?:&|$)/);
+    assert.ok(rendered.container.querySelector('[data-consumer-action="start-listen"]'));
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Listen stop with no transcript says the session produced nothing", async () => {
+  // red-proof: idle after an empty stop is indistinguishable from never started.
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const wire = wireStore();
+  await wire.store.start();
+  wire.sockets[0].open();
+  wire.sockets[0].message(JSON.stringify(readyFrame));
+  const rendered = await renderComponent(ListenProduction, { store: wire.store });
+  try {
+    const stop = rendered.container.querySelector(".listen-stop-control");
+    assert.ok(stop);
+    await rendered.act(async () => stop.click());
+    const panel = rendered.container.querySelector(".listen-state-panel");
+    assert.equal(panel?.getAttribute("data-presentation"), "idle");
+    assert.equal(panel?.getAttribute("data-idle-reason"), "ended-empty");
+    assert.equal(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateEndedEmpty"]);
+    assert.equal(panel?.querySelector(".listen-state-body")?.textContent, EN_MESSAGES["listen.stateEndedEmptyBody"]);
+    assert.notEqual(panel?.querySelector(".listen-state-title")?.textContent, EN_MESSAGES["listen.stateIdle"]);
+    assert.equal(rendered.container.querySelector("a.listen-open-conversations"), null);
+  } finally {
+    await rendered.cleanup();
+  }
 });
