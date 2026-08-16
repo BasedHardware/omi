@@ -9656,4 +9656,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => '打开应用商店';
+
+  @override
+  String get sendRawAudioToOmi => '向 Omi 发送原始音频';
+
+  @override
+  String get sendRawAudioToOmiDescription => '关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。';
 }

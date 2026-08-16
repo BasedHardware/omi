@@ -518,6 +518,52 @@ def is_descendant_of(pid: int, ancestor_pid: int) -> bool:
     return current == ancestor
 
 
+def descendant_pids(ancestor_pid: int) -> tuple[int, ...]:
+    """Snapshot the live descendants of a supervised PID before it is signalled.
+
+    Emulator CLIs spawn their heavyweight children detached (`firebase
+    emulators:start` gives the Firestore JVM its own session), so a process
+    group signal never reaches them. Once the supervisor dies the survivors are
+    reparented to init and the tree is unrecoverable, so teardown has to capture
+    it first.
+    """
+
+    ancestor = int(ancestor_pid)
+    if ancestor <= 1:
+        return ()
+    try:
+        result = subprocess.run(
+            ["ps", "-axo", "pid=,ppid="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return ()
+    if result.returncode != 0:
+        return ()
+    children: dict[int, list[int]] = {}
+    for line in result.stdout.splitlines():
+        fields = line.split()
+        if len(fields) != 2:
+            continue
+        try:
+            pid, parent = int(fields[0]), int(fields[1])
+        except ValueError:
+            continue
+        children.setdefault(parent, []).append(pid)
+    found: set[int] = set()
+    queue = list(children.get(ancestor, ()))
+    while queue:
+        pid = queue.pop()
+        if pid in found or pid == ancestor:
+            continue
+        found.add(pid)
+        queue.extend(children.get(pid, ()))
+    return tuple(sorted(found))
+
+
 def validate_owned_pid(pid: int, *, process_manifest: Path, service: str | None = None) -> dict[str, object]:
     manifest = load_json_file(process_manifest)
     records = manifest.get("processes") if isinstance(manifest, dict) else None

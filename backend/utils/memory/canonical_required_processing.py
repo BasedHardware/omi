@@ -54,6 +54,7 @@ from utils.memory.required_promotion import (
     REQUIRED_PROCESSOR_VERSION,
     REQUIRED_PROMOTION_STATUS_PENDING,
 )
+from utils.memory.promotion_flex import PromotionFlexDeferred
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +229,7 @@ def _claim_retry_state_transaction(
     expected_item: MemoryItem,
     lease_owner: str,
     now: datetime,
+    lease_seconds: int,
 ) -> RequiredProcessingClaim:
     item_ref = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{expected_item.memory_id}")
     item_payload = _snapshot_payload(item_ref.get(transaction=transaction))
@@ -306,7 +308,7 @@ def _claim_retry_state_transaction(
         last_error_code=prior.last_error_code if prior is not None else "attempt_claimed",
         last_attempt_at=now,
         lease_owner=lease_owner,
-        lease_expires_at=now + timedelta(seconds=REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS),
+        lease_expires_at=now + timedelta(seconds=lease_seconds),
     )
     transaction.set(state_ref, claimed.model_dump(mode="python"))
     return RequiredProcessingClaim(state=claimed, item=item, claimed=True, reason="claimed")
@@ -319,8 +321,56 @@ def _claim_retry_state(
     lease_owner: str,
     now: datetime,
     db_client: Any,
+    lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
 ) -> RequiredProcessingClaim:
-    return _claim_retry_state_transaction(db_client.transaction(), db_client, uid, item, lease_owner, now)
+    return _claim_retry_state_transaction(
+        db_client.transaction(), db_client, uid, item, lease_owner, now, max(1, lease_seconds)
+    )
+
+
+@transactional
+def _release_deferred_retry_state_transaction(
+    transaction: Any,
+    db_client: Any,
+    uid: str,
+    item: MemoryItem,
+    *,
+    lease_owner: str,
+    now: datetime,
+) -> None:
+    """Release a Flex-capacity deferral without spending the quality retry budget."""
+    state_ref = db_client.document(_retry_state_document_path(uid, item))
+    payload = _snapshot_payload(state_ref.get(transaction=transaction))
+    if not payload:
+        return
+    prior = RequiredProcessingRetryState.model_validate(payload)
+    if prior.lease_owner != lease_owner:
+        raise ValueError("required-processing retry lease ownership changed")
+    released = prior.model_copy(
+        update={
+            "attempt_count": max(0, prior.attempt_count - 1),
+            "status": "retryable",
+            "last_error_code": "flex_deferred",
+            "last_attempt_at": now,
+            "next_attempt_at": now,
+            "lease_owner": None,
+            "lease_expires_at": None,
+        }
+    )
+    transaction.set(state_ref, released.model_dump(mode="python"))
+
+
+def _release_deferred_retry_state(
+    uid: str,
+    item: MemoryItem,
+    *,
+    lease_owner: str,
+    now: datetime,
+    db_client: Any,
+) -> None:
+    _release_deferred_retry_state_transaction(
+        db_client.transaction(), db_client, uid, item, lease_owner=lease_owner, now=now
+    )
 
 
 @transactional
@@ -872,6 +922,8 @@ def process_required_memory_item(
     db_client: Any = None,
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
+    attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    result_guard: Optional[Callable[[], None]] = None,
 ) -> RequiredMemoryProcessingResult:
     client = db_client if db_client is not None else default_db_client
     snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
@@ -893,6 +945,7 @@ def process_required_memory_item(
             lease_owner=lease_owner,
             now=current_time,
             db_client=client,
+            lease_seconds=attempt_lease_seconds,
         )
     except Exception as exc:
         return RequiredMemoryProcessingResult(
@@ -916,12 +969,35 @@ def process_required_memory_item(
 
     try:
         processed = processor(item)
+        if result_guard is not None:
+            result_guard()
         status = _apply_processed_result(
             item,
             processed,
             attempt_count=state.attempt_count,
             db_client=client,
             now=current_time,
+        )
+    except PromotionFlexDeferred:
+        try:
+            _release_deferred_retry_state(
+                uid,
+                item,
+                lease_owner=lease_owner,
+                now=current_time,
+                db_client=client,
+            )
+        except Exception as exc:
+            return RequiredMemoryProcessingResult(
+                memory_id=memory_id,
+                attempted=True,
+                error_code=f"flex_release_{type(exc).__name__}",
+            )
+        return RequiredMemoryProcessingResult(
+            memory_id=memory_id,
+            attempted=True,
+            retryable=True,
+            error_code="flex_deferred",
         )
     except Exception as exc:
         race_result = _completed_or_replaced_result(item, db_client=client)
@@ -975,6 +1051,8 @@ def run_required_memory_processing(
     processor: Optional[RequiredMemoryProcessor] = None,
     now: Optional[datetime] = None,
     limit: int = 25,
+    attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    result_guard: Optional[Callable[[], None]] = None,
 ) -> RequiredMemoryProcessingReport:
     client = db_client if db_client is not None else default_db_client
     report = RequiredMemoryProcessingReport(uid=uid)
@@ -993,6 +1071,8 @@ def run_required_memory_processing(
             db_client=client,
             processor=processor,
             now=now,
+            attempt_lease_seconds=attempt_lease_seconds,
+            result_guard=result_guard,
         )
         if result.attempted:
             report.attempted_count += 1

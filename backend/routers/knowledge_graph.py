@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Callable, Optional, cast
 
+from database import knowledge_graph as kg_db
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
 from utils.executors import db_executor, llm_executor, run_blocking
@@ -91,6 +92,22 @@ class ExtractKnowledgeGraphResponse(BaseModel):
     edges: List[Dict[str, Any]]
 
 
+def _legacy_knowledge_graph_response(uid: str) -> "KnowledgeGraphResponse":
+    """Bounded read of the pre-canonical graph, used when canonical is unavailable."""
+    graph = kg_db.get_knowledge_graph(uid)
+    nodes = graph.get('nodes', [])
+    edges = graph.get('edges', [])
+    return KnowledgeGraphResponse(
+        nodes=nodes,
+        edges=edges,
+        truncated=bool(graph.get('truncated', False)),
+        node_count=graph.get('node_count', len(nodes)),
+        edge_count=graph.get('edge_count', len(edges)),
+        node_limit=graph.get('node_limit'),
+        edge_limit=graph.get('edge_limit'),
+    )
+
+
 @router.get(
     "/v1/knowledge-graph",
     tags=["knowledge_graph"],
@@ -119,8 +136,12 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
         truncated = (
             bool(page.has_more) or len(page.nodes) > page_limit or len(page.edges) > page_limit or dropped_edges > 0
         )
-    except canonical_graph_service.CanonicalGraphReadUnavailable as exc:
-        raise HTTPException(status_code=503, detail="knowledge_graph_unavailable") from exc
+    except canonical_graph_service.CanonicalGraphReadUnavailable:
+        # Canonical intake is fenced off in production (MEMORY_MODE), so most
+        # accounts have no memory_state/head and the canonical read is
+        # permanently unavailable for them. Their graph still exists in the
+        # legacy store, so serve that instead of failing the feature outright.
+        return _legacy_knowledge_graph_response(uid)
     return KnowledgeGraphResponse(
         nodes=nodes,
         edges=edges,

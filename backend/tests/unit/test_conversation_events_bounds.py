@@ -99,6 +99,9 @@ def router():
     memory_service = ModuleType("utils.memory.memory_service")
     memory_service.MemoryService = MagicMock()
 
+    retraction_scope = ModuleType("utils.memory.retraction_scope")
+    setattr(retraction_scope, "retraction_can_be_skipped", MagicMock(return_value=False))
+
     request_validation = ModuleType("utils.request_validation")
     setattr(request_validation, "NonNegativeOffset", int)
     setattr(request_validation, "PositiveLimit", int)
@@ -164,6 +167,7 @@ def router():
         "utils.memory.memory_service": memory_service,
         "utils.memory.memory_system": memory_system,
         "utils.memory.canonical_activation": canonical_activation,
+        "utils.memory.retraction_scope": retraction_scope,
         "utils.retrieval": _pkg("utils.retrieval"),
         "utils.retrieval.tools": _pkg("utils.retrieval.tools"),
         "utils.retrieval.tools.calendar_tools": _pkg("utils.retrieval.tools.calendar_tools"),

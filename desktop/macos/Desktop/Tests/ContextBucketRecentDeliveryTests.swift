@@ -37,28 +37,32 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
       deliveredAt: now.addingTimeInterval(-26 * 60),
       now: now)
 
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
     let recent = await ContextBucketStore.shared.recentDeliveredForBucket(
       bucketID: "bucket", now: now)
     let prompt = ContextProactivityPromptBuilder.directorPrompt(
       snapshot: snapshot(versionID: versionID),
       tasks: [],
       frame: CapturedFrame(jpegData: Data(), appName: "Notes", frameNumber: 1, captureTime: now),
-      recentDeliveries: recent)
+      recentDeliveries: recent,
+      timeZone: timeZone)
 
     XCTAssertEqual(recent.map(\.decisionType), ["resurface", "insight"])
     XCTAssertEqual(
-      ContextProactivityPromptBuilder.recentDeliveriesSection(recent, now: now),
+      ContextProactivityPromptBuilder.recentDeliveriesSection(recent, timeZone: timeZone),
       """
       == RECENTLY DELIVERED FOR THIS BUCKET ==
-      - resurface (1m ago): Keep the investigation open
-      - insight (26m ago): Status changed
+      Do not re-send any of these points, even reworded.
+      - resurface (2027-01-15 02:58 EST): Keep the investigation open
+      - insight (2027-01-15 02:34 EST): Status changed
       """)
     XCTAssertTrue(
       prompt.hasSuffix(
         """
         == RECENTLY DELIVERED FOR THIS BUCKET ==
-        - resurface (1m ago): Keep the investigation open
-        - insight (26m ago): Status changed
+        Do not re-send any of these points, even reworded.
+        - resurface (2027-01-15 02:58 EST): Keep the investigation open
+        - insight (2027-01-15 02:34 EST): Status changed
         """))
   }
 
@@ -74,14 +78,14 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
       recentDeliveries: recent)
 
     XCTAssertEqual(recent, [])
-    XCTAssertNil(ContextProactivityPromptBuilder.recentDeliveriesSection(recent, now: now))
+    XCTAssertNil(ContextProactivityPromptBuilder.recentDeliveriesSection(recent))
     XCTAssertFalse(prompt.contains("== RECENTLY DELIVERED FOR THIS BUCKET =="))
   }
 
-  func testAssembledPromptCapsRecentDeliveriesAtThree() async throws {
+  func testAssembledPromptCapsRecentDeliveriesAtPromptCap() async throws {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let versionID = try await seedBucket(now: now)
-    for index in 0..<5 {
+    for index in 0..<(ContextBucketRecentDelivery.promptCap + 2) {
       try await seedDelivered(
         id: "nudge-\(index)",
         visitID: Int64(index + 1),
@@ -100,18 +104,43 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
       frame: CapturedFrame(jpegData: Data(), appName: "Notes", frameNumber: 1, captureTime: now),
       recentDeliveries: recent)
 
-    XCTAssertEqual(recent.map(\.message), ["nudge-0", "nudge-1", "nudge-2"])
-    XCTAssertEqual(recent.count, ContextBucketRecentDelivery.promptCap)
     XCTAssertEqual(
-      ContextProactivityPromptBuilder.recentDeliveriesSection(recent, now: now),
-      """
-      == RECENTLY DELIVERED FOR THIS BUCKET ==
-      - resurface (1m ago): nudge-0
-      - resurface (2m ago): nudge-1
-      - resurface (3m ago): nudge-2
-      """)
-    XCTAssertFalse(prompt.contains("nudge-3"))
-    XCTAssertFalse(prompt.contains("nudge-4"))
+      recent.map(\.message),
+      (0..<ContextBucketRecentDelivery.promptCap).map { "nudge-\($0)" })
+    XCTAssertEqual(recent.count, ContextBucketRecentDelivery.promptCap)
+    XCTAssertEqual(recent.count, 15, "the enlarged window is what makes the no-repeat rule enforceable")
+    XCTAssertTrue(prompt.contains("nudge-14"))
+    XCTAssertFalse(prompt.contains("nudge-15"))
+    XCTAssertFalse(prompt.contains("nudge-16"))
+  }
+
+  func testRecentDeliveriesSurviveExpiryInsideTheLookbackAndDropOutsideIt() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let versionID = try await seedBucket(now: now)
+    try await seedDelivered(
+      id: "expired-but-recent",
+      visitID: 1,
+      versionID: versionID,
+      decisionType: "insight",
+      message: "the beta rollout is still incomplete because the legacy PostHog path is live",
+      deliveredAt: now.addingTimeInterval(-2 * 60 * 60),
+      now: now,
+      expiresAt: now.addingTimeInterval(-60))
+    try await seedDelivered(
+      id: "outside-lookback",
+      visitID: 2,
+      versionID: versionID,
+      decisionType: "insight",
+      message: "an older point from yesterday",
+      deliveredAt: now.addingTimeInterval(-(ContextBucketRecentDelivery.memoryLookback + 60)),
+      now: now,
+      expiresAt: now.addingTimeInterval(30 * 24 * 60 * 60))
+
+    let recent = await ContextBucketStore.shared.recentDeliveredForBucket(
+      bucketID: "bucket", now: now)
+    XCTAssertEqual(
+      recent.map(\.message),
+      ["the beta rollout is still incomplete because the legacy PostHog path is live"])
   }
 
   private func snapshot(versionID: Int64) -> ContextBucketSnapshot {
@@ -142,7 +171,7 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
           VALUES ('bucket', 1, 'header', ?, ?)
           """,
         arguments: [Data(), now])
-      for visitID in 1...5 {
+      for visitID in 1...(ContextBucketRecentDelivery.promptCap + 2) {
         try db.execute(
           sql: """
             INSERT INTO context_visits
@@ -169,7 +198,8 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
     decisionType: String,
     message: String,
     deliveredAt: Date,
-    now: Date
+    now: Date,
+    expiresAt: Date? = nil
   ) async throws {
     let (database, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     let pool = try XCTUnwrap(database)
@@ -183,7 +213,7 @@ final class ContextBucketRecentDeliveryTests: XCTestCase {
           """,
         arguments: [
           id, visitID, versionID, decisionType, message, deliveredAt, deliveredAt,
-          now.addingTimeInterval(30 * 24 * 60 * 60), deliveredAt,
+          expiresAt ?? now.addingTimeInterval(30 * 24 * 60 * 60), deliveredAt,
         ])
     }
   }

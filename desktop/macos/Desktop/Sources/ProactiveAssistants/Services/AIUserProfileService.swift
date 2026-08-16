@@ -74,9 +74,7 @@ actor AIUserProfileService {
   func insertProfile(_ record: AIUserProfileRecord) async throws -> AIUserProfileRecord {
     let db = try await ensureDB()
     return try await db.write { database in
-      var inserted = record
-      try inserted.insert(database)
-      return inserted
+      try record.inserted(database)
     }
   }
 
