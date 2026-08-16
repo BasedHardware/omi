@@ -4,53 +4,25 @@ import SwiftUI
 
 // MARK: - Appearance
 
-/// What the Appearance tiles choose between.
-///
-/// `system` is the default and is not a third colour scheme — it is the absence of an override, which
-/// is exactly what Phase 0 of `docs/first-run-experience.md` established when it deleted the forced
-/// `NSApp.appearance = .aqua`. Light and Dark are opt-in overrides of that, so the mapping below has
-/// to produce **nil** for `system` rather than a guess at what the system currently is: a stored
-/// `.aqua` would go stale the moment the user's own Appearance setting changed.
-enum AppearanceOverride: String, CaseIterable, Identifiable, Codable, Sendable {
-    case system
-    case light
-    case dark
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .system: "System"
-        case .light: "Light"
-        case .dark: "Dark"
-        }
-    }
-
-    /// The appearance to install on `NSApp`, or nil to follow the system.
-    var nsAppearanceName: NSAppearance.Name? {
-        switch self {
-        case .system: nil
-        case .light: .aqua
-        case .dark: .darkAqua
-        }
-    }
-
-    var nsAppearance: NSAppearance? {
-        guard let nsAppearanceName else { return nil }
-        return NSAppearance(named: nsAppearanceName)
-    }
-}
-
-// There is deliberately no accent preference here.
+// **There is no appearance preference in this app, and there is no Appearance pane.**
 //
-// The Appearance pane used to offer one. It had exactly one consumer — `.tint()` on the Settings
-// window — so it recoloured the switches on its own pane and nothing else: every structural accent
-// in this app reads `Ink.accent`, which is a fixed `systemBlue` on purpose. Worse, its default case
-// resolved to `NSColor.controlAccentColor`, so on a Mac whose system accent is Purple it painted the
-// Settings window purple — the exact thing `Ink.accent` refuses to do for `INV-UI-1`
-// (`docs/product/invariants/brand-ui.md`). A control that cannot do what it says and can only
-// violate the brand rule is not a setting; it is removed rather than narrowed. `Ink.accent` remains
-// the one accent, guarded by `InkAccentTests` and `BrandColourGuard`.
+// Three controls used to live there and all three are gone rather than narrowed:
+//
+// - **The theme tiles** (System / Light / Dark) wrote `NSApp.appearance`. `System` — the default and
+//   what every install was on — installed nothing at all, so the whole control existed to let a user
+//   *disagree* with their own machine's Appearance setting inside one app. Phase 0 of
+//   `docs/first-run-experience.md` had already deleted a forced `NSApp.appearance = .aqua` for
+//   rendering a light popover inside a dark system menu; the tiles were the same defect with a
+//   switch on it. The app follows the system, full stop.
+// - **The accent picker**, removed earlier, reached `.tint()` on the Settings window and nothing
+//   else — every structural accent reads `Ink.accent` — while its default resolved to
+//   `NSColor.controlAccentColor`, painting the window purple on a Mac set to Purple, which is
+//   exactly what `INV-UI-1` (`docs/product/invariants/brand-ui.md`) forbids.
+// - **The timeline control toggles**, four switches that hid the timeline's own buttons. See
+//   `Rewind/RewindView.swift`.
+//
+// The one row on that pane that did something a user wants, **Show Dock Icon**, moved to General;
+// `DockPresence` below is unchanged and still owns its key, its default and its mapping.
 
 // MARK: - The Dock
 
@@ -108,176 +80,6 @@ enum DockPresence {
     /// What `applicationDidFinishLaunching` installs on `NSApp`.
     static func launchPolicy(reading defaults: UserDefaults = .standard) -> NSApplication.ActivationPolicy {
         activationPolicy(showsDockIcon: showsDockIcon(in: defaults))
-    }
-}
-
-// MARK: - Timeline controls
-
-/// Which of the timeline window's four controls are drawn.
-///
-/// Hiding a control never removes its keyboard shortcut — that is the promise the Appearance pane's
-/// description makes, and it is why this is a *visibility* model rather than an enablement one.
-struct TimelineControlVisibility: Equatable, Codable, Sendable {
-    var openExternally: Bool = true
-    var liveText: Bool = true
-    var zoomControls: Bool = true
-    var segmentNavigation: Bool = true
-
-    /// One control, as the Appearance pane and the live preview both need it.
-    enum Control: String, CaseIterable, Identifiable, Sendable {
-        case openExternally
-        case liveText
-        case zoomControls
-        case segmentNavigation
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .openExternally: "Open externally"
-            case .liveText: "Live Text"
-            case .zoomControls: "Zoom controls"
-            case .segmentNavigation: "Segment navigation"
-            }
-        }
-
-        var subtitle: String {
-            switch self {
-            case .openExternally:
-                "Opens the webpage, file, or folder captured in this frame. The icon adapts to the content."
-            case .liveText:
-                "Highlights selectable and copyable text detected in the frame. "
-                    + "Dims when no text has been detected yet."
-            case .zoomControls:
-                "Zooms the timeline track in and out. ⌘ + / − zooms the frame image instead."
-            case .segmentNavigation:
-                "Moves to the previous or next timeline segment. "
-                    + "These chevrons sit on the left and right edges of the frame."
-            }
-        }
-
-        /// The shortcut that keeps working when the control is hidden. Nil where the reference shows
-        /// no hint — Live Text has no chord in `RewindView`, and inventing one here would be a hint
-        /// that does nothing.
-        var shortcutHint: String? {
-            switch self {
-            case .openExternally: "↵"
-            case .liveText: nil
-            case .zoomControls: "⌘ ⇧ + / −"
-            case .segmentNavigation: "⌥ ← / →"
-            }
-        }
-
-        /// The symbol the preview draws for this control, matching `RewindView`'s cluster.
-        var previewSymbol: String {
-            switch self {
-            case .openExternally: "globe"
-            case .liveText: "text.viewfinder"
-            case .zoomControls: "plus.magnifyingglass"
-            case .segmentNavigation: "chevron.right"
-            }
-        }
-    }
-
-    subscript(control: Control) -> Bool {
-        get {
-            switch control {
-            case .openExternally: openExternally
-            case .liveText: liveText
-            case .zoomControls: zoomControls
-            case .segmentNavigation: segmentNavigation
-            }
-        }
-        set {
-            switch control {
-            case .openExternally: openExternally = newValue
-            case .liveText: liveText = newValue
-            case .zoomControls: zoomControls = newValue
-            case .segmentNavigation: segmentNavigation = newValue
-            }
-        }
-    }
-
-    /// The controls the preview should draw, in `RewindView`'s order.
-    var visible: [Control] { Control.allCases.filter { self[$0] } }
-}
-
-// MARK: - Capture
-
-/// The four Capture Quality tiles.
-///
-/// Every subtitle states the resolution and the trade in words. It deliberately quotes **no**
-/// per-frame byte figure: `ScreenWatcher`'s measured table (68.4 KB at HEIC q0.20, 110.2 KB at q0.40)
-/// was taken at one downscale, so attaching those numbers to a different one would be a fabricated
-/// measurement — the exact thing `J7` forbids.
-enum CaptureQuality: String, CaseIterable, Identifiable, Codable, Sendable {
-    case best
-    case standard
-    case compact
-    case smallest
-
-    var id: String { rawValue }
-
-    /// `standard` is the tile that matches what capture ships today: `ScreenWatcher.maxPixelSize`
-    /// 1600 and `frameQuality` 0.20.
-    static let `default`: CaptureQuality = .standard
-
-    var title: String {
-        switch self {
-        case .best: "Best Quality"
-        case .standard: "Default"
-        case .compact: "Compact"
-        case .smallest: "Smallest"
-        }
-    }
-
-    /// Longest side of the stored picture, in pixels.
-    var longestSide: Int {
-        switch self {
-        case .best: 2400
-        case .standard: 1600
-        case .compact: 1280
-        case .smallest: 1024
-        }
-    }
-
-    /// HEIC lossy-compression quality. Note HEIC's scale is not JPEG's — see `ScreenWatcher`.
-    var compressionQuality: Double {
-        switch self {
-        case .best: 0.40
-        case .standard: 0.20
-        case .compact: 0.15
-        case .smallest: 0.10
-        }
-    }
-
-    /// The line under the tile row, describing the *selected* tile.
-    ///
-    /// **`best` states its consequence, not only its cost.** "Largest files" is a disk-space remark
-    /// and reads as one; what it leaves out is that on this app larger files also mean *fewer days
-    /// of pictures*. `Engine.scheduleRetentionSweep` runs `enforceRetention(olderThanDays:toFitBytes:)`
-    /// under the default strategy, and that sweep expires images oldest-first the moment the frames
-    /// folder passes the user's threshold — so the same threshold that holds a month of Default
-    /// frames holds materially less at 2400 px and q0.40. The text is not part of that trade at all,
-    /// which is the half this string now says. `ScreenWatcher.writeFrameImage` already
-    /// documents this trade from the capture side ("A user who picks **Best Quality** is choosing to
-    /// spend that headroom"); until now no string the user reads said it. Storage's own copy had to
-    /// be fixed for exactly this omission — a bound that silently deletes data has to be disclosed
-    /// where the choice is made, not where the machinery lives.
-    ///
-    /// No multiplier and no byte figure, for the reason this enum's own note gives: the measured
-    /// table was taken at one downscale, and attaching it to another would be a fabricated
-    /// measurement. The direction is what is provable, so the direction is what is claimed.
-    var subtitle: String {
-        switch self {
-        case .best:
-            "2400 px on the longest side · sharpest text, largest files. Screenshots reach the "
-                + "Storage threshold sooner, so the same threshold keeps fewer days of pictures "
-                + "than it does at Default. The text of your history is unaffected."
-        case .standard: "1600 px on the longest side · sharp on Retina; recommended"
-        case .compact: "1280 px on the longest side · readable, noticeably smaller"
-        case .smallest: "1024 px on the longest side · layout and headings only"
-        }
     }
 }
 
@@ -503,48 +305,35 @@ final class SettingsStore: ObservableObject {
 
     static let shared = SettingsStore()
 
+    /// **Three retired keys are deliberately not listed and deliberately not migrated:**
+    /// `context.settings.appearance`, `context.settings.timelineControls` and
+    /// `context.settings.captureQuality`. Nothing reads them any more, so a stored value from an
+    /// older build is inert — which is the whole of the migration. Deleting them at launch would
+    /// be a write over a user's disk to tidy up after ourselves, and it would make a downgrade lose
+    /// the setting for real.
     private enum Key {
-        static let appearance = "context.settings.appearance"
         /// Not a second copy of the string: the launch path reads the same key through
         /// `DockPresence`, and a rename that only reached one of them would be silent.
         static let showsDockIcon = DockPresence.defaultsKey
-        static let timelineControls = "context.settings.timelineControls"
         static let screenCapture = "context.settings.screenCapture"
         static let pausesOnInactivity = "context.settings.pausesOnInactivity"
-        static let captureQuality = "context.settings.captureQuality"
         static let storageStrategy = "context.settings.storageStrategy"
         static let storageLimitBytes = "context.settings.storageLimitBytes"
         static let claudeTarget = "context.settings.claudeTarget"
     }
 
     private let defaults: UserDefaults
-    /// False in tests: `NSApp` is not a real application there, and installing an appearance or an
-    /// activation policy on it is neither meaningful nor safe.
+    /// False in tests: `NSApp` is not a real application there, and installing an activation policy
+    /// on it is neither meaningful nor safe.
     private let appliesToRunningApp: Bool
 
-    // MARK: Appearance
-
-    @Published var appearance: AppearanceOverride {
-        didSet {
-            guard appearance != oldValue else { return }
-            defaults.set(appearance.rawValue, forKey: Key.appearance)
-            applyAppearance()
-        }
-    }
+    // MARK: The Dock
 
     @Published var showsDockIcon: Bool {
         didSet {
             guard showsDockIcon != oldValue else { return }
             defaults.set(showsDockIcon, forKey: Key.showsDockIcon)
             applyDockIcon()
-        }
-    }
-
-    @Published var timelineControls: TimelineControlVisibility {
-        didSet {
-            guard timelineControls != oldValue else { return }
-            guard let data = try? JSONEncoder().encode(timelineControls) else { return }
-            defaults.set(data, forKey: Key.timelineControls)
         }
     }
 
@@ -561,13 +350,6 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard pausesOnInactivity != oldValue else { return }
             defaults.set(pausesOnInactivity, forKey: Key.pausesOnInactivity)
-        }
-    }
-
-    @Published var captureQuality: CaptureQuality {
-        didSet {
-            guard captureQuality != oldValue else { return }
-            defaults.set(captureQuality.rawValue, forKey: Key.captureQuality)
         }
     }
 
@@ -614,7 +396,6 @@ final class SettingsStore: ObservableObject {
             defaults.object(forKey: key) as? Bool ?? fallback
         }
 
-        self.appearance = enumValue(Key.appearance, AppearanceOverride.system)
         // **On**, and the default is `DockPresence`'s rather than a literal here.
         //
         // It was off, as a deliberate divergence from the reference's "toggle, on", because this app
@@ -625,13 +406,6 @@ final class SettingsStore: ObservableObject {
         // path have to answer the same question the same way for an install that has never opened
         // Settings, and two `false`s written in two files is how that stops being true.
         self.showsDockIcon = flag(Key.showsDockIcon, default: DockPresence.showsByDefault)
-        if let data = defaults.data(forKey: Key.timelineControls),
-            let decoded = try? JSONDecoder().decode(TimelineControlVisibility.self, from: data)
-        {
-            self.timelineControls = decoded
-        } else {
-            self.timelineControls = TimelineControlVisibility()
-        }
         self.screenCaptureEnabled = flag(Key.screenCapture, default: true)
         // **Off** by default, a second deliberate divergence from the reference's "toggle, on", and
         // for a sharper reason than the Dock row's.
@@ -657,7 +431,6 @@ final class SettingsStore: ObservableObject {
         // once the paused state is visible in the menu bar, which is `Capture/`/`Engine.swift` work
         // and not this pane's to do.
         self.pausesOnInactivity = flag(Key.pausesOnInactivity, default: false)
-        self.captureQuality = enumValue(Key.captureQuality, CaptureQuality.default)
         // **Registered, not written.** `Engine.scheduleRetentionSweep` reads this key straight out
         // of `UserDefaults` rather than through this store, and its own inline fallback is `.off` —
         // so a default declared only here would be a default the sweep never saw, and the strategy
@@ -681,7 +454,6 @@ final class SettingsStore: ObservableObject {
         self.storageLimitBytes = StorageLimit.clamp(Int64(storedLimit ?? Int(StorageLimit.defaultBytes)))
         self.claudeTarget = enumValue(Key.claudeTarget, ClaudeRouter.Target.claudeApp)
 
-        applyAppearance()
         applyDockIcon()
     }
 
@@ -731,11 +503,6 @@ final class SettingsStore: ObservableObject {
     }
 
     // MARK: Application
-
-    private func applyAppearance() {
-        guard appliesToRunningApp, NSApp != nil else { return }
-        NSApp.appearance = appearance.nsAppearance
-    }
 
     /// Live, in both directions, which is what lets the row's subtitle promise what it promises with
     /// no "takes effect on relaunch" caveat under it: `setActivationPolicy` adds and removes the Dock

@@ -873,40 +873,32 @@ final class RewindVisibilityTests: XCTestCase {
     }
 }
 
-/// **The Appearance pane's four Timeline switches have to reach the timeline.**
+/// **The timeline draws all four of its controls, and nothing may take one away again.**
 ///
-/// They did not. `SettingsStore.timelineControls` was written, persisted and drawn as a live preview
-/// beside the switches, and **no file outside `Settings/` ever read it** — `RewindView` drew all four
-/// controls unconditionally. Four switches under "Choose which controls appear over the timeline"
-/// that changed only the picture next to them.
+/// The Appearance pane offered four switches to hide them. They were written, persisted and drawn as
+/// a live preview beside the switches while `RewindView` drew all four unconditionally — four
+/// switches that changed only the picture next to them. They were wired up, and then the pane was
+/// removed along with the rest of Appearance, so the end state is the window having its controls
+/// unconditionally again.
 ///
-/// A static checker, and labelled as one: the honest behavioural test is that the buttons leave the
+/// A static checker, and labelled as one: the honest behavioural test is that the buttons are in the
 /// window, and asserting that means rendering the real `RewindView`, which needs a store, a frame
-/// loader and a window on screen. What this catches is the regression that actually happened — the
-/// preference losing its only reader — which is invisible to every other test in this file.
+/// loader and a window on screen. What this catches is the specific way this went wrong twice — a
+/// preference gate reappearing over a control — which is invisible to every other test in this file.
 final class TimelineControlVisibilityWiringTests: XCTestCase {
 
-    func testEveryTimelineControlSwitchIsReadByTheTimeline() throws {
+    func testNoTimelineControlIsGatedOnAPreference() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
                 .appendingPathComponent("Sources/ContextApp/Rewind/RewindView.swift"),
             encoding: .utf8)
 
-        for control in TimelineControlVisibility.Control.allCases {
-            XCTAssertTrue(
-                source.contains("timelineControls.\(control.rawValue)"),
-                "the Appearance pane offers a '\(control.title)' switch that the timeline never "
-                    + "reads, so turning it off changes nothing but the preview beside it")
+        XCTAssertFalse(
+            source.contains("timelineControls"),
+            "a preference is deciding again whether a timeline control is drawn")
+        for control in ["openExternallyButton", "liveTextButton", "segmentChevron", "zoomTrack"] {
+            XCTAssertTrue(source.contains(control), "the timeline no longer draws \(control)")
         }
-    }
-
-    /// And the default is every control on, so the switches start where the window really is.
-    func testTheDefaultShowsEveryControl() {
-        let fresh = TimelineControlVisibility()
-        XCTAssertTrue(fresh.openExternally)
-        XCTAssertTrue(fresh.liveText)
-        XCTAssertTrue(fresh.zoomControls)
-        XCTAssertTrue(fresh.segmentNavigation)
     }
 }

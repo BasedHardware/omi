@@ -103,6 +103,7 @@ enum ClaudeRegistrar {
         let code = connect(.claudeCode, binary: binary)
         let desktop = connect(.claudeDesktop, binary: binary)
         installSkill()
+        installMemory()
         let message = registerMessage([(.claudeCode, code), (.claudeDesktop, desktop)])
         ContextLog.info(message, logCategory)
         return Result(
@@ -117,6 +118,7 @@ enum ClaudeRegistrar {
         let code = disconnect(.claudeCode)
         let desktop = disconnect(.claudeDesktop)
         removeSkill()
+        removeMemory()
         let message = unregisterMessage([(.claudeCode, code), (.claudeDesktop, desktop)])
         ContextLog.info(message, logCategory)
         return Result(
@@ -157,6 +159,37 @@ enum ClaudeRegistrar {
             }
         } catch {
             ContextLog.error("Could not remove the Claude Code skill: \(error.localizedDescription)", logCategory)
+        }
+    }
+
+    // MARK: - The standing instruction
+
+    /// Writes the "check this Mac's context first" block into the user's global `CLAUDE.md`,
+    /// alongside the skill, and never fails the connection over it — same reasoning as the skill,
+    /// one step stronger. The connection is what makes the tools *available*; ``ClaudeMemory`` is
+    /// what makes an agent reach for them without being asked. A permissions problem in
+    /// `~/.claude` must not be reported to the user as "I couldn't connect to Claude Code".
+    private static func installMemory() {
+        do {
+            if try ClaudeMemory.install() {
+                ContextLog.info(
+                    "Wrote the standing instruction into \(displayPath(ClaudeMemory.documentURL.path))",
+                    logCategory)
+            }
+        } catch {
+            ContextLog.error(
+                "Could not write the standing instruction: \(error.localizedDescription)", logCategory)
+        }
+    }
+
+    private static func removeMemory() {
+        do {
+            if try ClaudeMemory.remove() {
+                ContextLog.info("Removed the standing instruction from the global CLAUDE.md", logCategory)
+            }
+        } catch {
+            ContextLog.error(
+                "Could not remove the standing instruction: \(error.localizedDescription)", logCategory)
         }
     }
 
