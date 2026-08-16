@@ -187,13 +187,12 @@ extension AppState {
     conversationRepository.cancelSearch()
   }
 
-  func deleteConversation(_ conversationId: String) async -> Bool {
+  func deleteConversation(_ conversationId: String) async throws {
     do {
       try await conversationRepository.delete(id: conversationId)
-      return true
     } catch {
       logError("Conversations: Failed to delete conversation", error: error)
-      return false
+      throw error
     }
   }
 

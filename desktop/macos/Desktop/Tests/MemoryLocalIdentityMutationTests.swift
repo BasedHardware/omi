@@ -68,6 +68,22 @@ final class MemoryLocalIdentityMutationTests: XCTestCase {
     XCTAssertEqual(backendRequestIDs, [server.id])
   }
 
+  func testFailedBackendDeleteRestoresMemoryAndSurfacesRecovery() async throws {
+    let server = makeMemory(id: "server-memory")
+    try await MemoryStorage.shared.syncServerMemories([server])
+    let viewModel = MemoriesViewModel(deleteMemoryRequest: { _ in
+      throw URLError(.notConnectedToInternet)
+    })
+
+    viewModel.memories = [server]
+    await viewModel.deleteMemory(server)
+    await viewModel.confirmDelete().value
+
+    XCTAssertEqual(viewModel.deletionErrorMessage, "Check your connection and try again.")
+    let restored = try await MemoryStorage.shared.getLocalMemories(limit: 100)
+    XCTAssertTrue(restored.contains { $0.id == server.id })
+  }
+
   private func insertLocalMemory(content: String) async throws -> MemoryRecord {
     try await MemoryStorage.shared.insertLocalMemory(MemoryRecord(content: content))
   }
