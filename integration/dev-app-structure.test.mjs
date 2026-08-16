@@ -31,7 +31,10 @@ test("RED-PROOF the demo launcher exports the persona only for the stack it boot
 });
 
 test("RED-PROOF the headed human path asks for on-device STT, not the scripted adapter", () => {
-  assert.match(app, /OMI_STT_ENGINE=mlx-whisper OMI_CHAT_MODEL/);
+  // Anchored to the boot invocation, not the bare pair: the refusal message
+  // below prints the same two variables as remediation prose, so a looser match
+  // stays green after OMI_STT_ENGINE is dropped from the line that boots.
+  assert.match(app, /OMI_STT_ENGINE=mlx-whisper OMI_CHAT_MODEL="\$OMI_CHAT_MODEL" "\$STACK" --up/);
   assert.match(app, /status\?\.stt_engine/);
   assert.match(app, /this stack is not transcribing real speech/);
   assert.match(app, /exit 1/);
