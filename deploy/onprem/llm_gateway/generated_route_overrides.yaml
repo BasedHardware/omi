@@ -52,6 +52,12 @@ generated_route_overrides:
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: memory_conflict
     primary: {provider: openai, model: qwen2.5:14b}
+  - feature: memory_conflict_flex
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: memory_l2_flex
+    primary: {provider: openai, model: qwen2.5:14b}
+  - feature: x_memory_extraction_flex
+    primary: {provider: openai, model: qwen2.5:14b}
   - feature: memory_l1
     primary: {provider: openai, model: qwen2.5:14b}
   - feature: memory_l2
