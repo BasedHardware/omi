@@ -14,8 +14,55 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PRODUCTION_TSX = join(ROOT, "packages/surfaces/src/production");
-const INTERACTIVE = /<(button|a)\b([^>]*?)>([\s\S]*?)<\/\1>/gi;
+const INTERACTIVE_OPEN = /<(button|a)\b/gi;
 const ICON = /<(?:ProductionIcon|ChromeIcon)\b/;
+
+/**
+ * Index of the `>` that closes this opening tag, skipping any `>` that belongs
+ * to a JSX expression or a string. `[^>]*?` cannot do this: `onClick={() =>
+ * ...}` ends the attribute scan at the arrow, which put the rest of the handler
+ * into the element's "body" and let that text pass as an accessible name. Every
+ * icon button in this tree has such a handler, so the fence saw none of them.
+ */
+function findOpenTagEnd(source, from) {
+  let depth = 0;
+  let quote = null;
+  for (let i = from; i < source.length; i++) {
+    const char = source[i];
+    if (quote !== null) {
+      if (char === "\\") i += 1;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") quote = char;
+    else if (char === "{") depth += 1;
+    else if (char === "}") depth -= 1;
+    else if (char === ">" && depth === 0) return i;
+  }
+  return -1;
+}
+
+function* interactiveElements(source) {
+  INTERACTIVE_OPEN.lastIndex = 0;
+  let match;
+  while ((match = INTERACTIVE_OPEN.exec(source))) {
+    const tag = match[1].toLowerCase();
+    const attrsStart = match.index + match[0].length;
+    const openEnd = findOpenTagEnd(source, attrsStart);
+    if (openEnd === -1) continue;
+    INTERACTIVE_OPEN.lastIndex = openEnd + 1;
+    if (source[openEnd - 1] === "/") continue;
+    const closeTag = `</${tag}>`;
+    const bodyEnd = source.toLowerCase().indexOf(closeTag, openEnd + 1);
+    if (bodyEnd === -1) continue;
+    yield {
+      index: match.index,
+      attrs: source.slice(attrsStart, openEnd),
+      body: source.slice(openEnd + 1, bodyEnd),
+      whole: source.slice(match.index, bodyEnd + closeTag.length),
+    };
+  }
+}
 
 function lineNumberAt(source, index) {
   let line = 1;
@@ -47,18 +94,14 @@ function hasAccessibleText(body) {
 export function findIconOnlyNameIssues(source, label) {
   const stripped = stripJsxComments(source);
   const hits = [];
-  INTERACTIVE.lastIndex = 0;
-  let match;
-  while ((match = INTERACTIVE.exec(stripped))) {
-    const attrs = match[2];
-    const body = match[3];
-    if (!ICON.test(body)) continue;
-    if (/\baria-label\s*=/.test(attrs) || /\baria-labelledby\s*=/.test(attrs)) continue;
-    if (hasAccessibleText(body)) continue;
+  for (const element of interactiveElements(stripped)) {
+    if (!ICON.test(element.body)) continue;
+    if (/\baria-label\s*=/.test(element.attrs) || /\baria-labelledby\s*=/.test(element.attrs)) continue;
+    if (hasAccessibleText(element.body)) continue;
     hits.push({
       file: label,
-      line: lineNumberAt(stripped, match.index),
-      snippet: match[0].replace(/\s+/g, " ").slice(0, 180),
+      line: lineNumberAt(stripped, element.index),
+      snippet: element.whole.replace(/\s+/g, " ").slice(0, 180),
     });
   }
   return hits;
@@ -89,6 +132,25 @@ const SELF_TESTS = [
     name: "an icon plus visible text passes without aria-label",
     tsx: `<a href="/x"><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>\n`,
     mustFail: false,
+  },
+  {
+    // The gap this fence shipped with: `=>` closed the attribute scan, so the
+    // rest of the handler became "visible text" and named the button. Every
+    // icon button in production carries an arrow handler, so the fence was
+    // blind to all of them while reporting itself green.
+    name: "an arrow-function handler does not smuggle a name past the fence",
+    tsx: `<button type="button" onClick={() => void attach()}><ProductionIcon name="attach" /></button>\n`,
+    mustFail: true,
+  },
+  {
+    name: "an arrow-function handler with aria-label still passes",
+    tsx: `<button type="button" aria-label={t(locale, "chat.attach")} onClick={() => void attach()}><ProductionIcon name="attach" /></button>\n`,
+    mustFail: false,
+  },
+  {
+    name: "a greater-than inside a string attribute does not end the tag early",
+    tsx: `<button type="button" title="a > b" onClick={() => go()}><ProductionIcon name="plus" /></button>\n`,
+    mustFail: true,
   },
 ];
 
