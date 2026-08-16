@@ -8,7 +8,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
-import 'package:omi/services/sockets/composite_transcription_socket.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -178,9 +177,6 @@ class _TestEnvFields implements EnvFields {
 
   @override
   String? get intercomIOSApiKey => null;
-
-  @override
-  String? get openAIAPIKey => null;
 
   @override
   String? get posthogApiKey => null;
