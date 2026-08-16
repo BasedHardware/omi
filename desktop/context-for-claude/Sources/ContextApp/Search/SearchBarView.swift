@@ -90,20 +90,26 @@ struct SearchBarView: View {
         case results
     }
 
-    /// The account half of the activity body.
+    /// The Activity store the lower panel draws.
     ///
     /// **A stored seam and not an expression inside `body`**, because the expression was a way for a
     /// render harness to read the user's real memories. The preview initialiser below can only nil
     /// out the *search* store; the activity branch built its own live reader every time it drew, so
     /// an empty-query harness case rendered this person's saved memories into PNGs on disk. Held
-    /// here, the harness passes `ActivityAccountAbsent()` and the promise its header makes — that
-    /// nothing of the user's is ever captured — is one the type system keeps.
-    private let account: ActivityAccountReading
+    /// here, the harness is handed an inert store and the promise its header makes — that nothing of
+    /// the user's is ever captured — is one the type system keeps.
+    ///
+    /// It is the *store* rather than the account reader behind it, because the store is the thing
+    /// that has to outlive this view: see `ActivitySpine`. Passing a reader meant a store per panel,
+    /// and a store per panel meant re-paging the whole account every time somebody opened the bar or
+    /// typed into it. It has no default for the same reason it is not built here — a surface that
+    /// can conjure its own spine is a surface that will, in some future call site nobody reviews.
+    private let spine: ActivityStore
 
     init(
         initialQuery: String = "",
         store: @escaping () -> ContextStore? = { nil },
-        account: ActivityAccountReading = ActivityLocalMemories(OmiActivityFeed()),
+        spine: ActivityStore,
         onDismiss: @escaping () -> Void,
         onHeightChange: @escaping (CGFloat) -> Void = { _ in },
         onOpenMoment: @escaping (SearchMoment) -> Void = { _ in },
@@ -119,7 +125,7 @@ struct SearchBarView: View {
         self.onOpenTimeline = onOpenTimeline
         self.onOpenSettings = onOpenSettings
         self.store = store
-        self.account = account
+        self.spine = spine
         _query = State(initialValue: initialQuery)
         _results = StateObject(wrappedValue: SearchResultsModel(store: store))
         // A panel handed a question to start from is answering it, not showing the day.
@@ -133,7 +139,10 @@ struct SearchBarView: View {
         self.initialQuery = query
         self.onDismiss = onDismiss
         self.store = { nil }
-        self.account = ActivityAccountAbsent()
+        // A store that is already its own answer: no capture database behind it and no account
+        // reader, so the harness cannot reach the user's real memories through this branch however
+        // it is driven. See `ActivityStore.holdsAFixedAnswer`.
+        self.spine = ActivityStore(days: [])
         _query = State(initialValue: query)
         _results = StateObject(wrappedValue: results)
         _shownBody = State(initialValue: query.isEmpty ? .activity : .results)
@@ -234,19 +243,15 @@ struct SearchBarView: View {
                 // The time chips are the bar's, not the surface's: `SearchTimeFilter.range` already
                 // returns exactly the bounds pair the activity store narrows on, so both bodies
                 // answer "when" from one value and cannot disagree about which day it is.
+                //
+                // **The application's store, not one of this panel's own.** The branch this sits on
+                // is unmounted the moment a question is typed and rebuilt when the field is cleared,
+                // and the window around it is rebuilt on every summoning — so a store belonging to
+                // this view is a corpus thrown away and re-paged several times a session. The
+                // reader behind it is `ActivityLocalMemories(OmiActivityFeed())` exactly as it was;
+                // what changed is who owns it. See `ActivitySpine`.
                 ActivitySurface(
-                    store: store,
-                    // The real account, not the absent one. Three of the five chips — conversations,
-                    // memories, tasks — have no local source at all, so a surface built with the
-                    // default `ActivityAccountAbsent` renders four of its five filters permanently
-                    // empty and says the account is unreachable while the user is signed in.
-                    //
-                    // Wrapped so the memory column is read the way the shipping Omi app reads it —
-                    // this Mac's own database first, the account second. Without it a `/v3/memories`
-                    // outage draws an empty column indistinguishable from an empty account, which is
-                    // the state the backend has actually been in. See `ActivityLocalMemories`; the
-                    // default of `account` above is the only place the app decides to use it.
-                    account: account,
+                    spine: spine,
                     query: query,
                     since: bounds.since,
                     until: bounds.until,
