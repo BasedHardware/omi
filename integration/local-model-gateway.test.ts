@@ -23,6 +23,9 @@ const KEY_ENV_NAMES = ["GLM_API_KEY", "ZAI_API_KEY", "OMI_BENCH_OPENAI_API_KEY"]
 const gatewayEnv = (overrides: Record<string, string | undefined> = {}): NodeJS.ProcessEnv => {
   const env: NodeJS.ProcessEnv = { ...process.env };
   for (const name of KEY_ENV_NAMES) delete env[name];
+  delete env.GLM_BASE_URL;
+  delete env.OMI_BENCH_OPENAI_BASE_URL;
+  delete env.OMI_BENCH_OPENAI_MODEL;
   for (const [name, value] of Object.entries(overrides)) {
     if (value === undefined) delete env[name];
     else env[name] = value;
@@ -78,6 +81,9 @@ test("model gateway disclosures are honest and do not reuse the test-gateway str
   expect(source).not.toContain("production_model: false");
   expect(source).not.toContain("https://api.omi.me");
   expect(source).toContain("/v1/chat/completions");
+  expect(source).toContain("GLM_BASE_URL");
+  expect(source).toContain("https://api.z.ai/api/coding/paas/v4");
+  expect(source).not.toContain("DEFAULT_BASE = \"https://api.z.ai/api/paas/v4\"");
   expect(stack).not.toContain("https://api.omi.me");
   expect(app).not.toMatch(/api\.omi\.me|\?rig=dev/);
 });
@@ -274,6 +280,53 @@ test("provider 4xx/5xx are surfaced as errors, not fake streams", async () => {
     expect(response.status).toBe(503);
     expect(await response.text()).toBe("upstream-no");
     expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(spawned.text()).not.toContain(MOCK_KEY);
+  } finally {
+    spawned.child.kill("SIGTERM");
+    provider.stop(true);
+    rmSync(scratch, { recursive: true, force: true });
+  }
+});
+
+test("provider 429 is forwarded as 429, never rewritten to the canned gateway stream", async () => {
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      return new Response("rate limited", {
+        status: 429,
+        headers: { "content-type": "text/plain", "retry-after": "2" },
+      });
+    },
+  });
+  const scratch = mkdtempSync(join(tmpdir(), "omi-local-model-gateway-429-"));
+  const readyPath = join(scratch, "ready.json");
+  const spawned = spawnGateway(gatewayEnv({
+    GLM_API_KEY: MOCK_KEY,
+    GLM_BASE_URL: `http://127.0.0.1:${provider.port}`,
+    OMI_LOCAL_MODEL_GATEWAY_PORT: "0",
+    OMI_LOCAL_MODEL_GATEWAY_TOKEN: GATEWAY_TOKEN,
+    OMI_LOCAL_MODEL_GATEWAY_READY: readyPath,
+    OMI_DEV_STACK_RUNDIR: scratch,
+  }));
+  try {
+    const ready = await waitForReady(readyPath);
+    const response = await fetch(`${ready.url}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${GATEWAY_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "omi:auto:chat-agent",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      }),
+    });
+    const body = await response.text();
+    expect(response.status).toBe(429);
+    expect(body).toBe("rate limited");
+    expect(body).not.toContain("Local test gateway");
     expect(spawned.text()).not.toContain(MOCK_KEY);
   } finally {
     spawned.child.kill("SIGTERM");

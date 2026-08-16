@@ -53,7 +53,8 @@ const STATUS_VALUES = [
 ] as const;
 const TERMINAL_CODES = [
   "completed", "cancelled", "generation_provider_failed", "generation_context_failed",
-  "generation_attachment_failed", "generation_interrupted", "generation_timeout", "tool_failed",
+  "generation_attachment_failed", "generation_interrupted", "generation_timeout",
+  "generation_rate_limited", "tool_failed",
   "approval_denied", "approval_expired", "recovery_exhausted",
 ] as const;
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;

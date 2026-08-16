@@ -930,6 +930,21 @@ describe("ratified chat generation wire red proofs", () => {
         attachmentFailure: false,
       },
       {
+        name: "rate-limited",
+        code: "generation_rate_limited",
+        source: Object.freeze({
+          start(input: Parameters<ChatGenerationSource["start"]>[0]) {
+            queueMicrotask(() => input.onError({
+              code: "generation_rate_limited",
+              retryable: true,
+            }));
+            return Object.freeze({ cancel: (): void => {} });
+          },
+        }),
+        context: createEmptyChatGenerationContextSource(),
+        attachmentFailure: false,
+      },
+      {
         name: "provider-getter",
         code: "generation_provider_failed",
         source: Object.freeze({
@@ -2331,6 +2346,35 @@ describe("ratified chat generation wire red proofs", () => {
     expect((await history(local)).map((entry) => entry.sender)).toEqual(["human"]);
     const replay = await agentEvents(local, admission.generation.id);
     expect((await replay.text())).toContain("event: terminal");
+    db.close();
+  });
+
+  test("rate-limited provider failure keeps generation_rate_limited through SSE and the agent terminal", async () => {
+    const source: ChatGenerationSource = Object.freeze({
+      start(input) {
+        queueMicrotask(() => input.onError({ code: "generation_rate_limited", retryable: true }));
+        return Object.freeze({ cancel: (): void => {} });
+      },
+    });
+    const agentStore = createInMemoryAgentRunEventStore();
+    const { db, local } = boot(createInMemoryLocalServiceStores(), source,
+      "agent-rate-limited-proof", createEmptyChatGenerationContextSource(),
+      undefined, undefined, undefined, undefined, agentStore);
+    const admission = await readAdmission(await post(local, create("agent-rate-limited")));
+    const generation = await generationEvents(local, admission.generation.id);
+    const frames = parseSse(await generation.text());
+    expect(frames.at(-1)?.data).toEqual({
+      kind: "failed",
+      error: { code: "generation_rate_limited", retryable: true },
+    });
+    const terminal = agentStore.list(admission.generation.id).at(-1);
+    expect(terminal).toMatchObject({
+      kind: "terminal",
+      terminalOutcome: "failed",
+      terminalCode: "generation_rate_limited",
+      retryable: true,
+      recoveryAction: null,
+    });
     db.close();
   });
 

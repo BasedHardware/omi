@@ -255,6 +255,7 @@ export const EN_MESSAGES = {
   "chat.responseUnavailable": "Response unavailable.",
   "chat.failedProviderUnavailable": "The chat provider is unavailable.",
   "chat.failedTimedOut": "The response timed out.",
+  "chat.failedRateLimited": "The chat provider is rate-limiting requests. Wait a moment, then try again.",
   "chat.liveUpdatesUnavailable": "Live response updates are unavailable in this shell.",
   "chat.liveUpdatesUnavailableHint": "Restart Omi or open this conversation in another Omi app to continue.",
   "chat.startNewMessage": "Start a new message",

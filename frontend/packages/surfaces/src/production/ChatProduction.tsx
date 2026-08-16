@@ -61,7 +61,7 @@ function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
 
 function failedReasonClass(
   message: ChatMessage,
-): "provider-unavailable" | "timed-out" | null {
+): "provider-unavailable" | "timed-out" | "rate-limited" | null {
   if (message.delivery.kind !== "failed") return null;
   if (message.delivery.source === "transport") return null;
   const terminal = [...(message.agentRun?.events ?? [])].reverse()
@@ -70,6 +70,7 @@ function failedReasonClass(
     ? (message.delivery.code ?? (terminal?.kind === "terminal" ? terminal.details.terminalCode : undefined))
     : undefined;
   if (code === "generation_timeout") return "timed-out";
+  if (code === "generation_rate_limited") return "rate-limited";
   if (message.delivery.source === "provider") return "provider-unavailable";
   return null;
 }
@@ -79,6 +80,7 @@ function failedMessageText(message: ChatMessage, locale: Locale): string {
   if (message.delivery.kind !== "failed") return "";
   const reason = failedReasonClass(message);
   if (reason === "timed-out") return t(locale, "chat.failedTimedOut");
+  if (reason === "rate-limited") return t(locale, "chat.failedRateLimited");
   if (reason === "provider-unavailable") return t(locale, "chat.failedProviderUnavailable");
   return t(locale, "chat.responseUnavailable");
 }
