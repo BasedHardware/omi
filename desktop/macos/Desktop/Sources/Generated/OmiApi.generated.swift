@@ -1369,6 +1369,7 @@ public enum OmiAPI {
     public let processingConversationId: String?
     public let processingMemoryId: String?
     public let source: ConversationSource?
+    public let speakerLabelSuggestions: [SpeakerLabelSuggestion]?
     public let starred: Bool?
     public let startedAt: String?
     public let status: ConversationStatus?
@@ -1405,6 +1406,7 @@ public enum OmiAPI {
       case processingConversationId = "processing_conversation_id"
       case processingMemoryId = "processing_memory_id"
       case source
+      case speakerLabelSuggestions = "speaker_label_suggestions"
       case starred
       case startedAt = "started_at"
       case status
@@ -1443,6 +1445,7 @@ public enum OmiAPI {
       processingConversationId = try c.decodeIfPresent(String.self, forKey: .processingConversationId)
       processingMemoryId = try c.decodeIfPresent(String.self, forKey: .processingMemoryId)
       source = try c.decodeIfPresent(ConversationSource.self, forKey: .source)
+      speakerLabelSuggestions = try c.decodeIfPresent([SpeakerLabelSuggestion].self, forKey: .speakerLabelSuggestions)
       starred = try c.decodeIfPresent(Bool.self, forKey: .starred)
       startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
       status = try c.decodeIfPresent(ConversationStatus.self, forKey: .status)
@@ -1454,7 +1457,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, speakerLabelSuggestions: [SpeakerLabelSuggestion]? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1480,6 +1483,7 @@ public enum OmiAPI {
       self.processingConversationId = processingConversationId
       self.processingMemoryId = processingMemoryId
       self.source = source
+      self.speakerLabelSuggestions = speakerLabelSuggestions
       self.starred = starred
       self.startedAt = startedAt
       self.status = status
@@ -3346,6 +3350,36 @@ public enum OmiAPI {
       self.expiresAt = expiresAt
       self.replaced = replaced
       self.snapshotId = snapshotId
+    }
+  }
+
+
+  public struct SpeakerLabelSuggestion: Codable {
+    public let confidence: Double?
+    public let personName: String
+    public let segmentIds: [String]?
+    public let speakerId: Int
+
+    private enum CodingKeys: String, CodingKey {
+      case confidence
+      case personName = "person_name"
+      case segmentIds = "segment_ids"
+      case speakerId = "speaker_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      confidence = try c.decodeIfPresent(Double.self, forKey: .confidence)
+      personName = try c.decode(String.self, forKey: .personName)
+      segmentIds = try c.decodeIfPresent([String].self, forKey: .segmentIds)
+      speakerId = try c.decode(Int.self, forKey: .speakerId)
+    }
+
+    public init(confidence: Double? = nil, personName: String, segmentIds: [String]? = nil, speakerId: Int) {
+      self.confidence = confidence
+      self.personName = personName
+      self.segmentIds = segmentIds
+      self.speakerId = speakerId
     }
   }
 
@@ -7768,6 +7802,59 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func dismissSpeakerLabelSuggestionV1ConversationsConversationIdSpeakerSuggestionsSpeakerIdDelete(client: OmiApiClient, conversationId: String, speakerId: Int, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
+    let _path = "/v1/conversations/\(conversationId)/speaker-suggestions/\(speakerId)"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "DELETE"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(Conversation.self, from: data)
+  }
+
+  public static func acceptSpeakerLabelSuggestionV1ConversationsConversationIdSpeakerSuggestionsSpeakerIdAcceptPost(client: OmiApiClient, conversationId: String, speakerId: Int, personId: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> Conversation {
+    let _path = "/v1/conversations/\(conversationId)/speaker-suggestions/\(speakerId)/accept"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let personId {
+      queryItems.append(URLQueryItem(name: "person_id", value: String(personId)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "POST"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(Conversation.self, from: data)
   }
 
   public static func setConversationStarredV1ConversationsConversationIdStarredPatch(client: OmiApiClient, conversationId: String, starred: Bool, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
@@ -14922,5 +15009,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 401 Swift client methods generated.
+  // Total: 403 Swift client methods generated.
 }

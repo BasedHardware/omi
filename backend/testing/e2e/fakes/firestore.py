@@ -8,6 +8,7 @@ subcollections, where filters, batch operations, get_all, etc.
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from functools import partial
 from typing import Optional
 
 from fake_firestore import MockFirestore
@@ -97,6 +98,29 @@ def _patch_document_delete_missing_doc_noop():
     FakeDocumentReference.delete = _delete
 
 
+def _patch_transaction_create_writes_document():
+    """Match real Firestore: ``transaction.create`` writes the document.
+
+    fake-firestore's ``FakeTransaction.create`` is a no-op, which silently drops
+    the atomic create-if-not-exists used by ``get_or_create_person_by_name``. A
+    created Person therefore never appears in ``get_people``. Real Firestore's
+    ``create`` fails if the document already exists, but the production callers
+    only ever call it after a guarded read, so queuing a ``set`` write is
+    behaviourally equivalent for the hermetic harness.
+    """
+    from fake_firestore import transaction as fake_transaction_module
+
+    if getattr(fake_transaction_module.FakeTransaction, "_omi_create_patched", False):
+        return
+
+    def _create(self, reference, document_data):
+        write_op = partial(reference.set, document_data)
+        self._add_write_op(write_op)
+
+    fake_transaction_module.FakeTransaction.create = _create
+    fake_transaction_module.FakeTransaction._omi_create_patched = True
+
+
 def get_mock_firestore() -> MockFirestore:
     """Return the shared MockFirestore instance. Raises if not initialized."""
     if _mock_store is None:
@@ -110,6 +134,7 @@ def setup_fake_firestore() -> MockFirestore:
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
     _patch_document_delete_missing_doc_noop()
+    _patch_transaction_create_writes_document()
     _mock_store = MockFirestore()
     return _mock_store
 

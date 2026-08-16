@@ -120,6 +120,16 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # ---------------------------------------------------------------------------
 
 
+def _redact_speaker_label_suggestions(conv: Dict[str, Any]) -> None:
+    suggestions = conv.get('speaker_label_suggestions')
+    if not isinstance(suggestions, list):
+        return
+    conv['speaker_label_suggestions'] = [
+        {key: value for key, value in item.items() if key != 'evidence_quote'} if isinstance(item, dict) else item
+        for item in suggestions
+    ]
+
+
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
     if not conv.get('is_locked', False):
@@ -136,6 +146,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['transcript_segments'] = []
     # MCP search may attach transcript match_snippets; never leak them for locked rows.
     conv['match_snippets'] = []
+    _redact_speaker_label_suggestions(conv)
     return conv
 
 
@@ -155,6 +166,7 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
     conv['transcript_segments'] = []
+    _redact_speaker_label_suggestions(conv)
     return conv
 
 

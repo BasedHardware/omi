@@ -23,6 +23,7 @@ from types import SimpleNamespace  # noqa: E402
 import numpy as np  # noqa: E402
 
 import routers.listen.speakers as speakers_mod  # noqa: E402
+from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings  # noqa: E402
 
 
 class _Persistence:
@@ -77,7 +78,7 @@ def test_recovered_embedding_is_usable_for_matching(monkeypatch):
 
     recovered = asyncio.run(_matcher()._recover_person_embedding(_v3_person()))
 
-    assert speakers_mod.compare_embeddings(recovered, vector) < speakers_mod.SPEAKER_MATCH_THRESHOLD
+    assert compare_embeddings(recovered, vector) < SPEAKER_MATCH_THRESHOLD
 
 
 def test_person_without_samples_is_not_recovered(monkeypatch):

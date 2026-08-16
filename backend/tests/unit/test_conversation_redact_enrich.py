@@ -74,6 +74,15 @@ def _make_conv_dict(**overrides):
         apps_results=[{"app_id": "a1", "content": "result"}],
         plugins_results=[{"plugin_id": "a1", "content": "result"}],
         suggested_summarization_apps=["app1"],
+        speaker_label_suggestions=[
+            {
+                "speaker_id": 1,
+                "person_name": "Alex",
+                "confidence": 0.8,
+                "segment_ids": ["segment-1"],
+                "evidence_quote": "private transcript text",
+            }
+        ],
         transcript_segments=[{"text": "hello", "speaker_id": 0, "is_user": True, "start": 0.0, "end": 1.0}],
     )
     defaults.update(overrides)
@@ -98,6 +107,8 @@ class TestRedactForList:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert 'evidence_quote' not in result['speaker_label_suggestions'][0]
+        assert result['speaker_label_suggestions'][0]['segment_ids'] == ['segment-1']
 
     def test_locked_no_structured_key(self):
         conv = {"id": "x", "is_locked": True}
@@ -162,6 +173,8 @@ class TestRedactForIntegration:
         assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
+        assert 'evidence_quote' not in result['speaker_label_suggestions'][0]
+        assert result['speaker_label_suggestions'][0]['segment_ids'] == ['segment-1']
 
     def test_locked_non_dict_structured_coerced(self):
         """Integration redaction also handles non-dict structured (e.g. Pydantic)."""

@@ -96,6 +96,28 @@ class SharedConversationChatResponse(BaseModel):
     message: str = Field(min_length=1, strict=True)
 
 
+class SpeakerLabelSuggestion(BaseModel):
+    """A name the finalization pass proposed but did not apply.
+
+    Speaker naming assigns a person only when a second model fails to refute
+    the identification. Everything short of that is offered here instead, with
+    the ids of the segments it was inferred from, so the user can accept it
+    rather than having the backend guess on their behalf.
+
+    The evidence is referenced, never copied: this model is stored as plain
+    Firestore fields on the conversation, outside the encryption boundary that
+    covers ``transcript_segments``, so carrying the verbatim line here would
+    publish transcript content an enhanced-protection conversation exists to
+    keep opaque. ``segment_ids`` point into the transcript the client already
+    holds, which is what it renders the evidence from.
+    """
+
+    speaker_id: int
+    person_name: str
+    confidence: float = 0.0
+    segment_ids: List[str] = []
+
+
 # TODO: remove this class when the app is updated to use apps_results
 class PluginResult(BaseModel):
     plugin_id: Optional[str]
@@ -180,6 +202,7 @@ class Conversation(BaseModel):
 
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
+    speaker_label_suggestions: List[SpeakerLabelSuggestion] = []
 
     # TODO: plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []

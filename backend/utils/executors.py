@@ -27,7 +27,7 @@ import functools
 import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
+from typing import Any, Callable, Coroutine, Dict, List, Optional, ParamSpec, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +141,14 @@ async def log_executor_health(
 
 
 _background_tasks: set[asyncio.Task[Any]] = set()
+_background_graceful_tasks: set[asyncio.Task[Any]] = set()
+_background_loop: Optional[asyncio.AbstractEventLoop] = None
+_background_loop_lock = threading.Lock()
 
 
-def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
+def start_background_task(
+    coro: Coroutine[Any, Any, Any], *, name: str, cancel_on_shutdown: bool = True
+) -> asyncio.Task[Any]:
     """Schedule *coro* as a tracked background task with exception logging.
 
     Use this instead of bare ``asyncio.create_task()`` for production
@@ -152,9 +157,12 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
     """
     task = asyncio.create_task(coro, name=name)
     _background_tasks.add(task)
+    if not cancel_on_shutdown:
+        _background_graceful_tasks.add(task)
 
     def _done(t: asyncio.Task[Any]) -> None:
         _background_tasks.discard(t)
+        _background_graceful_tasks.discard(t)
         if t.cancelled():
             logger.info('background_task cancelled: %s', t.get_name())
             return
@@ -166,6 +174,38 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
     return task
 
 
+def register_background_loop(loop: asyncio.AbstractEventLoop) -> None:
+    global _background_loop
+    with _background_loop_lock:
+        _background_loop = loop
+
+
+def unregister_background_loop(loop: asyncio.AbstractEventLoop) -> None:
+    global _background_loop
+    with _background_loop_lock:
+        if _background_loop is loop:
+            _background_loop = None
+
+
+def submit_background_task(
+    coro: Coroutine[Any, Any, Any], *, name: str, cancel_on_shutdown: bool = True
+) -> Future[Any]:
+    with _background_loop_lock:
+        loop = _background_loop
+    if loop is None or loop.is_closed() or not loop.is_running():
+        coro.close()
+        raise RuntimeError('application background loop is not available')
+
+    async def _start() -> asyncio.Task[Any]:
+        return start_background_task(coro, name=name, cancel_on_shutdown=cancel_on_shutdown)
+
+    try:
+        return asyncio.run_coroutine_threadsafe(_start(), loop)
+    except RuntimeError:
+        coro.close()
+        raise
+
+
 def get_background_task_count() -> int:
     """Return the number of currently tracked background tasks."""
     return len(_background_tasks)
@@ -173,12 +213,17 @@ def get_background_task_count() -> int:
 
 async def drain_background_tasks(timeout: float = 10.0) -> int:
     """Cancel and await all tracked background tasks at shutdown. Returns count cancelled."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    graceful = list(_background_graceful_tasks)
+    if graceful:
+        await asyncio.wait(graceful, timeout=timeout)
+        await asyncio.sleep(0)
     tasks = list(_background_tasks)
     if not tasks:
         return 0
     for t in tasks:
         t.cancel()
-    await asyncio.wait(tasks, timeout=timeout)
+    await asyncio.wait(tasks, timeout=max(0.0, deadline - asyncio.get_running_loop().time()))
     return len(tasks)
 
 

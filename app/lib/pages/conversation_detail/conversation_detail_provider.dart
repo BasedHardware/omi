@@ -629,6 +629,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         startedAt: _cachedConversation!.startedAt,
         finishedAt: _cachedConversation!.finishedAt,
         transcriptSegments: _cachedConversation!.transcriptSegments,
+        speakerLabelSuggestions: _cachedConversation!.speakerLabelSuggestions,
         appResults: _cachedConversation!.appResults,
         suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
         geolocation: _cachedConversation!.geolocation,

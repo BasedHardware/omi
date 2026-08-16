@@ -281,3 +281,33 @@ def test_load_contracts_dockerfile_filter_skips_non_matching_entries(contracts_m
     filtered = contracts_module.load_contracts(staged_registry, dockerfile_filter=backend_filter)
 
     assert [c.name for c in filtered] == ['backend']
+
+
+def test_a_virtualenv_under_any_name_is_never_copied(contracts_module, tmp_path):
+    """A venv is identified by pyvenv.cfg, not by being called `.venv`.
+
+    The source-closure check copies the build context into a temp directory.
+    `.openapi-venv` was not in the name list, so every run copied a local
+    environment of several hundred megabytes and eventually ran the disk out.
+    """
+    for name in ('.venv', '.openapi-venv', 'venv', 'some-future-venv'):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / 'pyvenv.cfg').write_text('home = /usr\n')
+    (tmp_path / 'utils').mkdir()
+
+    names = ['.venv', '.openapi-venv', 'venv', 'some-future-venv', 'utils']
+    skipped = contracts_module._ignore_source_directory(str(tmp_path), names)
+
+    assert skipped == {'.venv', '.openapi-venv', 'venv', 'some-future-venv'}
+    assert names == ['utils']
+
+
+def test_a_real_source_directory_survives_the_ignore_filter(contracts_module, tmp_path):
+    (tmp_path / 'utils').mkdir()
+    (tmp_path / '__pycache__').mkdir()
+
+    names = ['utils', '__pycache__']
+    skipped = contracts_module._ignore_source_directory(str(tmp_path), names)
+
+    assert skipped == {'__pycache__'}
+    assert names == ['utils']

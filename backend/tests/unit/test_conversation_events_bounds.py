@@ -241,9 +241,10 @@ class _FakeSegment:
         self.id = segment_id
         self.is_user = False
         self.person_id = None
+        self.speaker_id = 1
 
     def model_dump(self):
-        return {"id": self.id, "is_user": self.is_user, "person_id": self.person_id}
+        return {"id": self.id, "is_user": self.is_user, "person_id": self.person_id, "speaker_id": self.speaker_id}
 
 
 def _fake_conversation_with_segments(count, status=None, with_ids=False):
@@ -359,7 +360,10 @@ def test_bulk_assign_exact_id_still_supports_user_assignment(router):
     assert segments[0].is_user is True
     assert segments[0].person_id is None
     assert segments[1].is_user is False
-    assert background_tasks.tasks == []
+    # Reassigning the only segment a Person held away from them contradicts the
+    # inference that named them, so the voiceprint built from it is revoked.
+    assert len(background_tasks.tasks) == 1
+    assert background_tasks.tasks[0].kwargs["person_id"] == "old-person"
 
 
 def test_bulk_assign_rejects_unresolved_target_without_partial_mutation(router):

@@ -233,8 +233,21 @@ def final_stage_copy_instructions(dockerfile: Path) -> list[CopyInstruction]:
     return copies
 
 
-def _ignore_source_directory(_: str, names: list[str]) -> set[str]:
-    skipped = {name for name in names if name in IGNORED_SOURCE_DIRECTORIES}
+def _is_virtualenv(path: Path) -> bool:
+    """Whether a directory is a Python virtual environment.
+
+    Named after what it is rather than what it is called: the ignore list
+    covered `.venv` but not `.openapi-venv`, so every closure check copied a
+    582 MB local environment into a temp directory and this ran out of disk.
+    A venv is identified by `pyvenv.cfg`, which PEP 405 requires, so a new one
+    under any name is skipped without anyone remembering to add it.
+    """
+    return (path / "pyvenv.cfg").is_file()
+
+
+def _ignore_source_directory(dirpath: str, names: list[str]) -> set[str]:
+    root = Path(dirpath)
+    skipped = {name for name in names if name in IGNORED_SOURCE_DIRECTORIES or _is_virtualenv(root / name)}
     names[:] = [name for name in names if name not in skipped]
     return skipped
 

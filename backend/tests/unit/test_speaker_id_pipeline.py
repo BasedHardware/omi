@@ -166,6 +166,7 @@ _install_module("av", _av_mod)
 _storage_mod = ModuleType("utils.other.storage")
 for _name in [
     "delete_speech_profile_blob",
+    "delete_user_person_speech_sample",
     "download_audio_chunks_and_merge",
     "download_speech_profile_bytes",
     "list_audio_chunks",

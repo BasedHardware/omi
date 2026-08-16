@@ -3,7 +3,7 @@ import logging
 import os
 import struct
 import wave
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Tuple
 
 import numpy as np
 import httpx
@@ -17,6 +17,23 @@ logger = logging.getLogger(__name__)
 # Cosine distance threshold for speaker matching
 # Based on VoxCeleb 1 test set EER of 2.8%
 SPEAKER_MATCH_THRESHOLD = 0.45
+
+SPEAKER_MATCH_MARGIN = float(os.getenv("SPEAKER_MATCH_MARGIN", "0.05"))
+
+# Distance a candidate must beat when no runner-up is close enough to compare
+# it against.
+#
+# The margin needs two candidates to say anything. Against a single enrolled
+# person the runner-up is infinitely far away, the margin test cannot fail, and
+# SPEAKER_MATCH_THRESHOLD decides alone. That threshold is the equal error rate
+# point, where a false accept and a false reject are equally likely -- but here
+# they cost very different things. Rejecting costs an unnamed speaker; accepting
+# writes one person's voice into another person's enrolment, and every later
+# match inherits the mistake.
+#
+# So the lone-candidate case is held to a stricter distance than the roster
+# case. This wants calibrating per embedding model, like the threshold above.
+SPEAKER_MATCH_SOLE_THRESHOLD = float(os.getenv("SPEAKER_MATCH_SOLE_THRESHOLD", "0.35"))
 
 # Minimum audio duration (seconds) for speaker embedding extraction.
 # Audio shorter than this crashes pyannote wespeaker fbank (see issue #4572).
@@ -270,3 +287,63 @@ def find_best_match(
         return best_idx, best_distance
 
     return None
+
+
+def select_best_match(
+    query_embedding: np.ndarray[Any, Any],
+    candidates: Mapping[str, np.ndarray[Any, Any]],
+    threshold: float = SPEAKER_MATCH_THRESHOLD,
+    margin: float = SPEAKER_MATCH_MARGIN,
+    sole_threshold: float = SPEAKER_MATCH_SOLE_THRESHOLD,
+) -> Tuple[Optional[str], float, bool]:
+    """
+    Pick the matching candidate only when it is unambiguously the closest.
+
+    As the roster grows the runner-up creeps inside the threshold too, and
+    whichever of two similar voices happens to score marginally lower wins. That
+    silently attributes one person's speech to another. Requiring the winner to
+    beat the runner-up by `margin` turns those near-ties into no-match, which
+    surfaces as an unlabelled speaker instead of a confidently wrong name
+    (issue #5565).
+
+    A bare threshold is not enough for the other end of that range either. With
+    nobody else enrolled there is no runner-up, so the margin cannot speak and
+    the threshold decides by itself -- at the equal error rate point, which
+    accepts a false match as readily as it rejects a true one. Those are not
+    equally priced here, so a lone candidate is held to `sole_threshold`.
+
+    Args:
+        query_embedding: Embedding to match
+        candidates: Mapping of candidate key to embedding
+        threshold: Maximum distance for a valid match
+        margin: Minimum distance the runner-up must trail the winner by
+        sole_threshold: Maximum distance when no runner-up is inside `threshold`
+
+    Returns:
+        Tuple of (key or None, best distance, ambiguous). `ambiguous` is True
+        when a candidate was inside the threshold but failed the margin test,
+        so callers can distinguish "nobody matched" from "too close to call".
+    """
+    best_key: Optional[str] = None
+    best_distance = float('inf')
+    runner_up_distance = float('inf')
+
+    for key, candidate in candidates.items():
+        distance = compare_embeddings(query_embedding, candidate)
+        if distance < best_distance:
+            best_key, runner_up_distance, best_distance = key, best_distance, distance
+        elif distance < runner_up_distance:
+            runner_up_distance = distance
+
+    if best_key is None or best_distance >= threshold:
+        return None, best_distance, False
+
+    if runner_up_distance >= threshold:
+        if best_distance >= sole_threshold:
+            return None, best_distance, False
+        return best_key, best_distance, False
+
+    if runner_up_distance - best_distance < margin:
+        return None, best_distance, True
+
+    return best_key, best_distance, False

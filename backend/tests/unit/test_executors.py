@@ -17,9 +17,12 @@ from utils.executors import (
     get_background_task_count,
     get_executor_metrics,
     log_executor_health,
+    register_background_loop,
     run_blocking,
     start_background_task,
+    submit_background_task,
     submit_with_context,
+    unregister_background_loop,
     _ALL_EXECUTORS,
 )
 
@@ -248,6 +251,41 @@ async def test_start_background_task_tracks_and_removes():
     await task
     await asyncio.sleep(0)  # let done callback fire
     assert task not in _background_tasks
+
+
+@pytest.mark.asyncio
+async def test_submit_background_task_uses_the_registered_application_loop():
+    release = asyncio.Event()
+
+    async def wait_for_release():
+        await release.wait()
+        return 42
+
+    loop = asyncio.get_running_loop()
+    register_background_loop(loop)
+    try:
+        submitted = submit_background_task(wait_for_release(), name='test-submit')
+        task = await asyncio.wrap_future(submitted)
+        assert task in _background_tasks
+        release.set()
+        assert await task == 42
+        await asyncio.sleep(0)
+        assert task not in _background_tasks
+    finally:
+        unregister_background_loop(loop)
+
+
+@pytest.mark.asyncio
+async def test_drain_background_tasks_waits_for_graceful_tasks_before_cancelling():
+    finished = asyncio.Event()
+
+    async def finish_soon():
+        await asyncio.sleep(0.01)
+        finished.set()
+
+    start_background_task(finish_soon(), name='test-graceful', cancel_on_shutdown=False)
+    assert await drain_background_tasks(timeout=1.0) == 0
+    assert finished.is_set()
 
 
 @pytest.mark.asyncio

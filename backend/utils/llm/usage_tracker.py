@@ -218,4 +218,6 @@ class Features:
     CONVERSATION_STRUCTURE = "conv_structure"
     CONVERSATION_ACTION_ITEMS = "conv_action_items"
     CONVERSATION_FOLDER = "conv_folder"
+    SPEAKER_RESOLUTION = "speaker_resolution"
+    SPEAKER_VERIFICATION = "speaker_verification"
     CONVERSATION_APPS = "conv_apps"

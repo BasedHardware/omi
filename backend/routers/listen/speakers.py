@@ -15,7 +15,7 @@ from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_embedding import extract_embedding_from_bytes, select_best_match
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
 from utils.transcribe_store import user_db
 
@@ -117,13 +117,29 @@ class SpeakerMatcher:
         Only reached for `speech_samples_version >= 3` samples, which already passed
         verify_and_transcribe_sample when they were stored, so this restores a lost
         embedding without reopening the quality gate that deliberately drops bad samples.
+
+        A sample stored from an LLM-inferred identity is refused: passing the quality
+        gate says the audio is clean, not that it belongs to the person the model named.
+        Rebuilding from one would resurrect an enrolment whose embedding was cleared
+        precisely because that inference was wrong, silently and on the next session.
+
+        The refusal is per sample, not per person: recovery takes the first sample that
+        is not inferred, so a person who was first guessed at and later taught properly
+        is still rebuilt from the audio the user stood behind. Only a person whose every
+        sample is inferred has nothing recovery is allowed to trust.
         """
         person_id = person.get('id')
-        samples = person.get('speech_samples') or []
+        samples: list[Any] = person.get('speech_samples') or []
         if not samples:
             return None
+        trusted: Optional[str] = next(
+            (str(path) for path in samples if not user_db.is_person_speech_sample_llm_inferred(person, path)), None
+        )
+        if trusted is None:
+            logger.info('Speaker ID skipped recovery from inferred sample person=%s', person_id)
+            return None
         try:
-            audio = await run_blocking(storage_executor, download_sample_audio, samples[0])
+            audio = await run_blocking(storage_executor, download_sample_audio, trusted)
             if not audio:
                 return None
             vector = await run_blocking(sync_executor, cast(Any, extract_embedding_from_bytes), audio, 'sample.wav')
@@ -177,18 +193,17 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
-            best_id: Optional[str] = None
-            best_name: Optional[str] = None
-            best_distance = float('inf')
-            for person_id, value in self.person_embeddings.items():
-                distance = compare_embeddings(query, value['embedding'])
-                if distance < best_distance:
-                    best_id, best_name, best_distance = person_id, value['name'], distance
-            if best_id and best_name and best_distance < SPEAKER_MATCH_THRESHOLD:
+            best_id, best_distance, ambiguous = select_best_match(
+                query, {person_id: value['embedding'] for person_id, value in self.person_embeddings.items()}
+            )
+            best_name = self.person_embeddings[best_id]['name'] if best_id else None
+            if best_id and best_name:
                 self.speaker_to_person[speaker_id] = (best_id, best_name)
                 self.segment_assignments[segment['id']] = best_id
                 self.host.state.speaker_map_dirty = True
                 self.host.emit_speaker_suggestion(speaker_id, best_id, best_name, segment['id'])
+            elif ambiguous:
+                logger.info('Speaker ID ambiguous speaker=%s best_distance=%.3f', speaker_id, best_distance)
             else:
                 logger.info('Speaker ID no match speaker=%s best_distance=%.3f', speaker_id, best_distance)
         except Exception as error:

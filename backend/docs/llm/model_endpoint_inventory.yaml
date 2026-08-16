@@ -46,6 +46,8 @@ model_config_features:
       - persona_clone
       - session_titles
       - smart_glasses
+      - speaker_resolution
+      - speaker_verification
       - wrapped_analysis
       - app_generator
       - app_integration
