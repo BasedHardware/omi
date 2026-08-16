@@ -270,3 +270,11 @@ def test_sync_contract_rejects_duplicate_ids():
         )
     with pytest.raises(ValidationError):
         ContextBucketSyncRequest(device_id='mac-1', buckets=[build_bucket('bucket-1'), build_bucket('bucket-1')])
+    with pytest.raises(ValidationError):
+        ContextBucketSyncRequest(
+            device_id='mac-1',
+            buckets=[
+                build_bucket('bucket-1', facts=[build_fact('fact-1')]),
+                build_bucket('bucket-2', facts=[build_fact('fact-1')]),
+            ],
+        )

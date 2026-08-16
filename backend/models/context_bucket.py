@@ -91,6 +91,10 @@ class ContextBucketSyncRequest(BaseModel):
         seen = {bucket.bucket_id for bucket in self.buckets}
         if len(seen) != len(self.buckets):
             raise ValueError('buckets must have unique ids within a request')
+        facts_seen = {fact.fact_id for bucket in self.buckets for fact in bucket.facts}
+        facts_total = sum(len(bucket.facts) for bucket in self.buckets)
+        if len(facts_seen) != facts_total:
+            raise ValueError('facts must have unique ids across the whole request')
         return self
 
 
