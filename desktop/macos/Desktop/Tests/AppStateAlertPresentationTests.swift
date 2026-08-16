@@ -194,6 +194,51 @@ final class AppStateAlertPresentationTests: XCTestCase {
 
     XCTAssertEqual(completions, 1, "completion runs once after the sheet ends")
   }
+
+  func testAppKitPresenterPausesQueuedAlertsAfterACompletionDropsTheForeground() async {
+    // The microphone-permission alert's completion opens System Settings, which
+    // deactivates Omi. The next queued alert must not immediately summon Omi
+    // back over the settings pane: presentation waits until Omi is active again.
+    let windowSource = WindowSource()
+    let recorder = SheetPresentationRecorder(deferCompletions: true)
+    let presenter = AppKitSheetAlertPresenter(
+      shellWindowProvider: { windowSource.window },
+      appKitOperations: .init(beginSheetModal: recorder.present),
+      revealMainWindow: {})
+
+    let window = NSWindow()
+    windowSource.window = window
+    presenter.present(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.")
+    presenter.present(title: "Device Not Connected", message: "Connect your wearable device first.")
+
+    await Task.yield()
+    await Task.yield()
+    XCTAssertEqual(recorder.presentations.count, 1, "only the permission alert presents first")
+
+    // The first sheet's completion opens System Settings: Omi is no longer the
+    // active app, so the shell provider returns no presentable window.
+    windowSource.window = nil
+    recorder.endSheet()
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(
+      recorder.presentations.count, 1,
+      "queued alert must not be dragged forward while Omi is behind System Settings")
+
+    // Omi becomes active again; the queued alert presents on the next window.
+    windowSource.window = window
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+    await Task.yield()
+    await Task.yield()
+
+    XCTAssertEqual(
+      recorder.presentations,
+      [
+        .init(title: "Omi Needs Microphone Access", message: "Enable Omi under System Settings.", window: window),
+        .init(title: "Device Not Connected", message: "Connect your wearable device first.", window: window),
+      ])
+  }
 }
 
 @MainActor

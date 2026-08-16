@@ -119,7 +119,13 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
         self?.isPresentingAlert = false
         self?.activeAlert = nil
         pending.completion?()
-        self?.presentPendingAlertIfPossible()
+        // A completion can change the foreground application (for example the
+        // microphone-permission alert opens System Settings once dismissed).
+        // If Omi is no longer the active app, do not summon it back over the
+        // user's task just to drain the next queued alert; the active / key /
+        // sheet observers resume presentation when Omi is in front again.
+        guard let self, self.shellWindowProvider() != nil else { return }
+        self.presentPendingAlertIfPossible()
       }
     }
   }
