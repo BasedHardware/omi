@@ -57,15 +57,20 @@ final class GlassSurfaceReviewRegressionTests: XCTestCase {
       panel
     }
 
+    // Inside the corner's curve the returned content is on the panel. This is the control: without
+    // it a harness that rendered nothing at all would sail through the clip assertion below.
+    let insideTheCorner = try renderedColor(canvas, size: canvasSize, at: CGPoint(x: 90, y: 90))
+    XCTAssertTrue(
+      isReturnedRedContent(insideTheCorner),
+      "the returned red content must paint inside the panel's rounded corner")
+
+    // …and eight points further out, past the curve, the same rectangle must be gone. Asserted as
+    // "not the returned red" rather than as a colour: what is left there is the panel's own glass,
+    // whose lightness belongs to the appearance and is not a fact this test may depend on.
     let clippedCorner = try renderedColor(canvas, size: canvasSize, at: CGPoint(x: 98, y: 98))
-    XCTAssertLessThan(
-      clippedCorner.greenComponent,
-      0.5,
+    XCTAssertFalse(
+      isReturnedRedContent(clippedCorner),
       "the returned red content must not paint through the panel's rounded corner")
-    XCTAssertLessThan(
-      clippedCorner.redComponent - clippedCorner.greenComponent,
-      0.25,
-      "the clipped corner should be the glass/background, not the returned red overlay")
 
     let outerOverlay = try renderedColor(canvas, size: canvasSize, at: CGPoint(x: 108, y: 108))
     XCTAssertGreaterThan(outerOverlay.blueComponent, 0.6)
@@ -87,11 +92,36 @@ final class GlassSurfaceReviewRegressionTests: XCTestCase {
     }
   }
 
+  /// Whether a pixel is the test's red rectangle rather than glass, the blue overlay, or nothing.
+  ///
+  /// A channel comparison instead of an absolute level: `inkGlassPanel` pins its own colour scheme
+  /// and its ground is a system colour, so "how light is the glass" is not something this test may
+  /// assert — but "is this pixel dominated by red" is true of the rectangle under any appearance
+  /// and false of every neutral.
+  private func isReturnedRedContent(_ color: NSColor) -> Bool {
+    color.alphaComponent > 0.5
+      && color.redComponent - color.greenComponent > 0.25
+      && color.redComponent - color.blueComponent > 0.25
+  }
+
+  /// Renders through a real `NSHostingView` rather than through `ImageRenderer`.
+  ///
+  /// `inkGlassPanel` mounts `InkGlassHitRegionReporter`, an `NSViewRepresentable`, so the panel
+  /// keeps the pointer inside the window's ownership. `ImageRenderer` cannot draw a representable:
+  /// it substitutes a placeholder graphic for the whole panel, and every pixel read back then
+  /// describes the placeholder instead of the glass — which is silent, because a placeholder still
+  /// has colours to assert against. An AppKit view hierarchy draws the real surface.
   private func renderedColor(_ view: some View, size: CGSize, at point: CGPoint) throws -> NSColor {
-    let renderer = ImageRenderer(content: view.frame(width: size.width, height: size.height))
-    renderer.scale = 1
-    guard let image = renderer.cgImage else {
-      throw XCTSkip("ImageRenderer did not produce an image for the SwiftUI glass surface")
+    let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+
+    guard let representation = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
+      throw XCTSkip("AppKit did not vend a bitmap for the SwiftUI glass surface")
+    }
+    host.cacheDisplay(in: host.bounds, to: representation)
+    guard let image = representation.cgImage else {
+      throw XCTSkip("The cached glass surface bitmap carried no image")
     }
 
     var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
@@ -108,10 +138,15 @@ final class GlassSurfaceReviewRegressionTests: XCTestCase {
     else {
       throw XCTSkip("Could not create an image inspection context")
     }
-    context.draw(image, in: CGRect(origin: .zero, size: size))
+    context.draw(
+      image,
+      in: CGRect(origin: .zero, size: CGSize(width: image.width, height: image.height)))
 
-    let x = min(max(Int(point.x), 0), image.width - 1)
-    let y = min(max(Int(point.y), 0), image.height - 1)
+    // The bitmap comes back at the display's backing scale, which is not this test's to choose, so
+    // the probe point stays in points and is converted here.
+    let scale = CGFloat(image.width) / size.width
+    let x = min(max(Int(point.x * scale), 0), image.width - 1)
+    let y = min(max(Int(point.y * scale), 0), image.height - 1)
     let offset = (y * image.width + x) * 4
     return NSColor(
       srgbRed: CGFloat(pixels[offset]) / 255,

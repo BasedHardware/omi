@@ -9899,5 +9899,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get accountCutoverOpenStore => 'Apri store';
 
   @override
+  String get sendRawAudioToOmi => 'Invia l\'audio grezzo a Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Disattiva per impedire l\'invio dell\'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.';
+
+  @override
   String get findDevice => 'Trova';
 }

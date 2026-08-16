@@ -897,6 +897,31 @@ extension SettingsContentView {
         }
       }
 
+      settingsCard(settingId: "advanced.preferences.speaknotifications") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "speaker.wave.2")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Speak Notifications Aloud")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+
+            Text("Read proactive notifications out loud when they arrive, using your chat voice")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Toggle("", isOn: $speakNotificationsAloud)
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+        }
+      }
+
       // Launch at Login toggle
       settingsCard(settingId: "advanced.preferences.launchatlogin") {
         HStack(spacing: OmiSpacing.lg) {

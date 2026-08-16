@@ -22,6 +22,9 @@ class HelperProcess {
   private child: ChildProcessWithoutNullStreams | null = null
   private readonly queue: Pending[] = []
   private backoff = 500
+  // Earliest time (ms epoch) the next spawn is allowed. Set after a crash so a
+  // helper that dies on startup is not re-spawned on every incoming request.
+  private cooldownUntil = 0
   private starting = false
   // Set once the helper binary is confirmed missing (spawn ENOENT). Without this,
   // every OCR/window request re-spawns the missing exe, failing forever — flooding
@@ -30,6 +33,10 @@ class HelperProcess {
 
   private ensureStarted(): void {
     if (this.child || this.starting || this.unavailable) return
+    // Capped-backoff throttle: after a crash, wait `backoff` ms before the next
+    // spawn so a helper that dies on startup is not re-spawned on every incoming
+    // request (a fork storm). Requests inside the window fail fast and retry.
+    if (Date.now() < this.cooldownUntil) return
     this.starting = true
     const exe = resolveHelperPath()
     // The Linux helper is a Node script. Run it with Electron's OWN bundled Node
@@ -56,9 +63,27 @@ class HelperProcess {
       clearTimeout(pending.timer)
       pending.resolve(json)
     })
-    child.stdout.on('data', (chunk: Buffer) => decoder.push(chunk))
+    child.stdout.on('data', (chunk: Buffer) => {
+      try {
+        decoder.push(chunk)
+      } catch (e) {
+        // Desynced or oversized frame — drop this helper and restart clean.
+        console.error('[win-ocr-helper] protocol error:', (e as Error).message)
+        if (this.child === child) this.recycle()
+      }
+    })
     child.stderr.on('data', (c: Buffer) => console.log('[win-ocr-helper]', c.toString().trim()))
+    // A write to a dead helper makes stdin emit 'error' (EPIPE). With no listener
+    // Node rethrows it as an uncaught exception and the whole main process dies.
+    // Swallow stream errors here; exit/error supervision drives the recovery.
+    // (Optional call: the dispose regression harness stubs stdin as write-only.)
+    child.stdin.on?.('error', () => {})
+    child.stdout.on('error', () => {})
+    child.stderr.on('error', () => {})
     child.on('exit', (code) => {
+      // Ignore a late exit from an already-replaced child, or it would tear down
+      // the live helper and reject its in-flight request.
+      if (this.child !== child) return
       console.warn(`[win-ocr-helper] exited code=${code}`)
       this.handleExit()
     })
@@ -75,7 +100,7 @@ class HelperProcess {
       } else {
         console.error('[win-ocr-helper] spawn error:', e.message)
       }
-      this.handleExit()
+      if (this.child === child) this.handleExit()
     })
     // Successful start — reset backoff after a short grace period.
     setTimeout(() => {
@@ -91,6 +116,7 @@ class HelperProcess {
       clearTimeout(p.timer)
       p.reject(new Error('helper exited'))
     }
+    this.cooldownUntil = Date.now() + this.backoff
     this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS)
   }
 
@@ -133,12 +159,18 @@ class HelperProcess {
   }
 
   async windowInfo(): Promise<WindowInfo> {
+    // Unlike ocr(), rejection is part of this contract: a disposed or crashed
+    // helper must reject the in-flight request so callers can distinguish
+    // "no data" from "helper gone" (pinned by the dispose regression tests).
     const json = await this.request(OP_WINDOW, Buffer.alloc(0))
     return JSON.parse(json) as WindowInfo
   }
 
   dispose(): void {
     this.recycle()
+    // Explicit disposal is not a crash: the next request should spawn a fresh
+    // helper immediately instead of sitting out the crash-backoff window.
+    this.cooldownUntil = 0
   }
 }
 

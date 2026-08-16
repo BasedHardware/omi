@@ -21,7 +21,10 @@ from pydantic import BaseModel, Field, model_validator
 
 from database._client import db as default_db_client
 from database.firestore_index_registry import CANONICAL_CONSOLIDATION_QUERY
-from database.memory_apply_store import MissingMemoryDocument, apply_long_term_patch_firestore
+from database.memory_apply_store import (
+    MissingMemoryDocument,
+    apply_long_term_patch_firestore,
+)
 from database.memory_collections import MemoryCollections
 from database.vector_db import query_memory_vector_candidates
 from models.memory_evidence import SourceState
@@ -31,7 +34,11 @@ from models.memory_apply import (
     build_patch_mutation_identity,
     memory_content_hash,
 )
-from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
+from models.memory_contracts import (
+    DurablePatchDecision,
+    LifecycleState,
+    deterministic_contract_id,
+)
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_promotion import (
     PromotionGraphPlan,
@@ -53,6 +60,10 @@ from utils.memory.memory_system import (
     MemorySystem as MemorySystem,  # compatibility export for older test doubles; never used for routing
     ensure_canonical_apply_control_state,
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
+)
+from utils.memory.promotion_flex import (
+    PromotionFlexControlChanged,
+    PromotionFlexDeferred,
 )
 from utils.observability.fallback import record_fallback
 
@@ -243,6 +254,7 @@ def _claim_retry_state_transaction(
     item: MemoryItem,
     lease_owner: str,
     now: datetime,
+    lease_seconds: int,
 ) -> tuple[ConsolidationRetryState, bool]:
     ref = db_client.document(_retry_state_document_path(uid, item))
     snapshot = ref.get(transaction=transaction)
@@ -279,7 +291,7 @@ def _claim_retry_state_transaction(
         last_error_code=prior.last_error_code if prior is not None else "attempt_claimed",
         last_attempt_at=now,
         lease_owner=lease_owner,
-        lease_expires_at=now + timedelta(seconds=CONSOLIDATION_ATTEMPT_LEASE_SECONDS),
+        lease_expires_at=now + timedelta(seconds=lease_seconds),
     )
     transaction.set(ref, state.model_dump(mode="python"))
     return state, True
@@ -292,9 +304,10 @@ def _claim_retry_state(
     lease_owner: str,
     now: datetime,
     db_client: Any,
+    lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
 ) -> tuple[ConsolidationRetryState, bool]:
     transaction = db_client.transaction()
-    return _claim_retry_state_transaction(transaction, db_client, uid, item, lease_owner, now)
+    return _claim_retry_state_transaction(transaction, db_client, uid, item, lease_owner, now, lease_seconds)
 
 
 @transactional
@@ -425,7 +438,10 @@ def consolidation_enabled() -> bool:
 
 
 def consolidation_batch_threshold() -> int:
-    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", str(DEFAULT_CONSOLIDATION_BATCH_THRESHOLD))
+    raw = os.getenv(
+        "MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD",
+        str(DEFAULT_CONSOLIDATION_BATCH_THRESHOLD),
+    )
     try:
         return max(1, int(raw))
     except ValueError:
@@ -452,7 +468,10 @@ def max_consolidation_batches_per_pass() -> int:
 
 
 def candidates_per_item_limit() -> int:
-    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM", str(DEFAULT_CANDIDATES_PER_ITEM))
+    raw = os.getenv(
+        "MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM",
+        str(DEFAULT_CANDIDATES_PER_ITEM),
+    )
     try:
         return max(1, min(20, int(raw)))
     except ValueError:
@@ -820,7 +839,13 @@ class ConsolidationAgentDecision(BaseModel):
         "other_speaker",
         "unclear",
     ] = "unclear"
-    aboutness: Literal["primary_user", "user_owned_project", "user_relationship", "third_party", "unclear"] = "unclear"
+    aboutness: Literal[
+        "primary_user",
+        "user_owned_project",
+        "user_relationship",
+        "third_party",
+        "unclear",
+    ] = "unclear"
     basis_for_memory: Literal["explicit", "recurring", "inferred_pattern", "weak_or_none"] = "weak_or_none"
     confidence: Literal["high", "medium", "low"] = "medium"
     rationale: str = ""
@@ -948,6 +973,8 @@ def invoke_consolidation_agent(
             raw = llm_invoke(prompt)
         else:
             raw = submit_with_context(llm_executor, _invoke_consolidation_llm, prompt).result()
+    except (PromotionFlexControlChanged, PromotionFlexDeferred):
+        raise
     except Exception as exc:
         logger.warning(
             "consolidation_agent_invoke_failed uid=%s error=%s",
@@ -1029,7 +1056,11 @@ def _validate_agent_batch(
                 return f"output_invalid:restricted_sensitivity_promotion:{source.memory_id}"
             if decision.aboutness in {"third_party", "unclear"}:
                 return f"output_invalid:unsafe_aboutness_promotion:{source.memory_id}"
-            relationship_is_durable = decision.relationship_to_user in {"self", "owned_work", "adopted"} or (
+            relationship_is_durable = decision.relationship_to_user in {
+                "self",
+                "owned_work",
+                "adopted",
+            } or (
                 decision.relationship_to_user == "other_speaker"
                 and decision.aboutness == "user_relationship"
                 and decision.basis_for_memory == "recurring"
@@ -1049,7 +1080,12 @@ def _validate_agent_batch(
                 attribution_is_unknown = attribution in {"unknown", "legacy_assumed"} or not source_subject_id
                 if attribution_is_unknown and not source.user_asserted:
                     return f"output_invalid:unknown_source_subject_promotion:{source.memory_id}"
-                if attribution not in {"user", "third_party", "unknown", "legacy_assumed"}:
+                if attribution not in {
+                    "user",
+                    "third_party",
+                    "unknown",
+                    "legacy_assumed",
+                }:
                     return f"output_invalid:unknown_source_subject_promotion:{source.memory_id}"
                 if source_subject_id and decision.subject_entity_id != source_subject_id:
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
@@ -1367,7 +1403,12 @@ def _safe_consolidation_failure_code(reason: str) -> str:
         return ":".join(segments[:2])[:120]
     if segments[0] == "output_invalid":
         return ":".join(segments[:2])[:120]
-    if segments[0] in {"candidate_hydration", "recurrence_handoff", "apply_blocked", "retry_state"}:
+    if segments[0] in {
+        "candidate_hydration",
+        "recurrence_handoff",
+        "apply_blocked",
+        "retry_state",
+    }:
         return ":".join(segments[:2])[:120]
     return segments[0][:120]
 
@@ -1437,9 +1478,7 @@ def _escalate_to_terminal_review(
                 report.retryable_memory_ids.append(item.memory_id)
             _append_report_error(
                 report,
-                f"consolidation_terminal_route_failed:"
-                f"{type(review_exc).__name__}:"
-                f"{type(quarantine_exc).__name__}",
+                f"consolidation_terminal_route_failed:{type(review_exc).__name__}:{type(quarantine_exc).__name__}",
             )
             try:
                 _transition_retry_state(
@@ -1569,6 +1608,79 @@ def _record_batch_failure(
     )
 
 
+@transactional
+def _release_deferred_retry_state_transaction(
+    transaction: Any,
+    db_client: Any,
+    uid: str,
+    item: MemoryItem,
+    error_code: str,
+    now: datetime,
+    expected_lease_owner: str,
+) -> ConsolidationRetryState:
+    ref = db_client.document(_retry_state_document_path(uid, item))
+    snapshot = ref.get(transaction=transaction)
+    payload = _snapshot_payload(snapshot)
+    if not payload:
+        raise ValueError("consolidation retry state is missing")
+    prior = ConsolidationRetryState.model_validate(payload)
+    if (
+        prior.uid != uid
+        or prior.memory_id != item.memory_id
+        or prior.source_item_revision != item.item_revision
+        or prior.source_content_hash != item.content_hash
+    ):
+        raise ValueError("consolidation retry state identity mismatch")
+    if prior.lease_owner != expected_lease_owner:
+        raise ValueError("consolidation retry lease ownership changed")
+    state = prior.model_copy(
+        update={
+            "attempt_count": max(prior.attempt_count - 1, 0),
+            "status": "retryable",
+            "last_error_code": error_code,
+            "last_attempt_at": now,
+            "lease_owner": None,
+            "lease_expires_at": None,
+        }
+    )
+    transaction.set(ref, state.model_dump(mode="python"))
+    return state
+
+
+def _record_deferred_batch_failure(
+    uid: str,
+    items: List[MemoryItem],
+    *,
+    claimed_states: Dict[str, ConsolidationRetryState],
+    error_code: str,
+    report: ConsolidationReport,
+    now: datetime,
+    db_client: Any,
+) -> None:
+    safe_code = _safe_consolidation_failure_code(error_code)
+    _append_report_error(report, safe_code)
+    for item in items:
+        state = claimed_states.get(item.memory_id)
+        if state is None or state.lease_owner is None:
+            _append_report_error(report, "retry_state:missing_claim")
+            continue
+        try:
+            transaction = db_client.transaction()
+            _release_deferred_retry_state_transaction(
+                transaction,
+                db_client,
+                uid,
+                item,
+                safe_code,
+                now,
+                state.lease_owner,
+            )
+        except Exception as exc:
+            _append_report_error(report, f"retry_state:deferred_release_{type(exc).__name__}")
+        if item.memory_id not in report.retryable_memory_ids:
+            report.retryable_memory_ids.append(item.memory_id)
+
+
 def run_canonical_consolidation(
     uid: str,
     *,
@@ -1577,6 +1689,8 @@ def run_canonical_consolidation(
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
+    attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
+    result_guard: Optional[Callable[[], None]] = None,
 ) -> ConsolidationReport:
     """Batched consolidation entry point for one canonical user."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -1710,6 +1824,7 @@ def run_canonical_consolidation(
                     lease_owner=attempt_lease_owner,
                     now=current_time,
                     db_client=client,
+                    lease_seconds=attempt_lease_seconds,
                 )
             except Exception as exc:
                 watermark_blocked = True
@@ -1724,7 +1839,10 @@ def run_canonical_consolidation(
                 elif claimed_state.status == "quarantined":
                     if item.memory_id not in report.quarantined_memory_ids:
                         report.quarantined_memory_ids.append(item.memory_id)
-                    _append_report_error(report, f"consolidation_quarantined:{claimed_state.last_error_code}")
+                    _append_report_error(
+                        report,
+                        f"consolidation_quarantined:{claimed_state.last_error_code}",
+                    )
                 elif (
                     claimed_state.status == "in_progress"
                     and claimed_state.lease_expires_at is not None
@@ -1778,7 +1896,21 @@ def run_canonical_consolidation(
             )
             offset += effective_batch_cap
             continue
-        agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
+        try:
+            agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
+        except (PromotionFlexControlChanged, PromotionFlexDeferred) as exc:
+            watermark_blocked = True
+            _record_deferred_batch_failure(
+                uid,
+                llm_pending_batch,
+                claimed_states=claimed_states,
+                error_code=f"flex_deferred:{type(exc).__name__}",
+                report=report,
+                now=current_time,
+                db_client=client,
+            )
+            offset += effective_batch_cap
+            continue
         batches_run += 1
         pending_by_id = {item.memory_id: item for item in llm_pending_batch}
 
@@ -1804,6 +1936,23 @@ def run_canonical_consolidation(
             offset += effective_batch_cap
             continue
 
+        if result_guard is not None:
+            try:
+                result_guard()
+            except PromotionFlexControlChanged as exc:
+                watermark_blocked = True
+                _record_deferred_batch_failure(
+                    uid,
+                    llm_pending_batch,
+                    claimed_states=claimed_states,
+                    error_code=f"flex_deferred:{type(exc).__name__}",
+                    report=report,
+                    now=current_time,
+                    db_client=client,
+                )
+                offset += effective_batch_cap
+                continue
+
         for signal in agent_batch.recurrence_signals:
             recurrence_signals_by_id[signal.stable_loop_key] = signal
         if recurrence_signal_sink is not None and agent_batch.recurrence_signals:
@@ -1816,7 +1965,7 @@ def run_canonical_consolidation(
             except Exception as exc:
                 watermark_blocked = True
                 logger.warning(
-                    'consolidation_recurrence_handoff_blocked uid=%s reason=%s',
+                    "consolidation_recurrence_handoff_blocked uid=%s reason=%s",
                     uid,
                     type(exc).__name__,
                 )
@@ -1918,7 +2067,10 @@ def run_canonical_consolidation(
 
     if batched_ids and not watermark_blocked:
         updated_control = _read_control_state(uid, db_client=client).model_copy(
-            update={"last_consolidation_run_at": current_time, "updated_at": current_time}
+            update={
+                "last_consolidation_run_at": current_time,
+                "updated_at": current_time,
+            }
         )
         _persist_control_state(updated_control, db_client=client)
         report.last_consolidation_run_at = current_time

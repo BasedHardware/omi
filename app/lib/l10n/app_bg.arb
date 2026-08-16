@@ -3193,5 +3193,7 @@
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
     "accountCutoverOpenStore": "Открыть магазин",
+    "sendRawAudioToOmi": "Изпращане на необработен звук към Omi",
+    "sendRawAudioToOmiDescription": "Изключете, за да спрете изпращането на необработен звук към Omi. Транскрипции и данни, нужни за облачните функции, все още може да се изпращат към Omi.",
     "findDevice": "Намери"
 }

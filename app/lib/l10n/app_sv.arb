@@ -3215,5 +3215,7 @@
     "accountCutoverMigrationInProgressMessage": "Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.",
     "accountCutoverMigrationRollbackMessage": "Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.",
     "accountCutoverOpenStore": "Öppna butik",
+    "sendRawAudioToOmi": "Skicka rått ljud till Omi",
+    "sendRawAudioToOmiDescription": "Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.",
     "findDevice": "Hitta"
 }

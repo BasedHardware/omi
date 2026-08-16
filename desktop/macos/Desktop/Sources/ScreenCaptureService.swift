@@ -51,12 +51,19 @@ final class ScreenCaptureService: Sendable {
   /// for up to `sharedContentTTL` seconds; refresh on demand when a target window isn't
   /// present in the cache.
   private static let sharedContentLock = NSLock()
-  nonisolated(unsafe) private static var cachedSharedContent: Any?  // SCShareableContent, typed Any so this decl predates macOS 14 gate
+  // SCShareableContent, typed Any so this decl predates the macOS 14 gate.
+  nonisolated(unsafe) private static var cachedSharedContent: Any?
   nonisolated(unsafe) private static var sharedContentCachedAt: Date?
   private static let sharedContentTTL: TimeInterval = 5.0
 
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      throw ScreenCaptureKitUnavailable.grantNotLiveInThisProcess
+    }
     if !forceRefresh,
       !UserDefaults.standard.bool(forKey: .rewindDisableContentCache)
     {
@@ -83,6 +90,16 @@ final class ScreenCaptureService: Sendable {
 
   init() {}
 
+  /// TCC as observed the first time this snapshot is read. AppState init is the
+  /// first production caller (`checkPermission()`), which is before any
+  /// onboarding grant. Later `CGPreflightScreenCaptureAccess` can flip to true
+  /// without the window-server connection picking up the grant.
+  static let grantedAtProcessStart: Bool = CGPreflightScreenCaptureAccess()
+
+  private enum ScreenCaptureKitUnavailable: Error {
+    case grantNotLiveInThisProcess
+  }
+
   /// Check whether macOS TCC says this app has Screen Recording permission.
   ///
   /// Do not spawn `/usr/sbin/screencapture` here. That helper process can fail
@@ -90,6 +107,7 @@ final class ScreenCaptureService: Sendable {
   /// "Screen Recording disabled" state while System Settings correctly showed
   /// the app as allowed.
   static func checkPermission(forceActualTestIfPreflightDenied: Bool = false) -> Bool {
+    _ = grantedAtProcessStart
     let preflightGranted = CGPreflightScreenCaptureAccess()
 
     if !preflightGranted {
@@ -169,6 +187,22 @@ final class ScreenCaptureService: Sendable {
     }
   }
 
+  /// ScreenCaptureKit talks to the window-server connection opened at launch.
+  /// A first-in-session TCC grant is visible to preflight and dead to SCK;
+  /// calling SCK in that window aborts on some Macs instead of throwing.
+  @available(macOS 14.0, *)
+  static func requestScreenCaptureKitPermissionIfUsableInThisProcess() async -> Bool {
+    _ = grantedAtProcessStart
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      log("ScreenCaptureKit: this process launched before the grant; skipping until relaunch")
+      return false
+    }
+    return await requestScreenCaptureKitPermission()
+  }
+
   /// Force re-register this app with Launch Services to ensure it's the authoritative version
   /// This fixes issues where multiple app bundles with the same bundle ID confuse macOS
   /// about which app to grant permissions to.
@@ -237,12 +271,15 @@ final class ScreenCaptureService: Sendable {
     // Screen Recording list (PERM-02). This mirrors requestMicrophonePermission,
     // which activates before requesting and reliably creates its TCC row.
     NSApp.activate()
+    _ = grantedAtProcessStart
     CGRequestScreenCaptureAccess()
 
-    // 2. Request ScreenCaptureKit permission (macOS 14+)
+    // 2. Request ScreenCaptureKit permission (macOS 14+) only when this
+    // process's window-server connection already carries the grant. Calling
+    // SCK immediately after the first TCC dialog returns aborts on some Macs.
     if #available(macOS 14.0, *) {
       Task {
-        _ = await requestScreenCaptureKitPermission()
+        _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
       }
     }
 
@@ -257,9 +294,10 @@ final class ScreenCaptureService: Sendable {
   static func requestAllScreenCapturePermissionsAwaitingScreenCaptureKit() async -> Bool {
     ensureLaunchServicesRegistration()
     NSApp.activate()
+    _ = grantedAtProcessStart
     let tccGranted = CGRequestScreenCaptureAccess()
     if #available(macOS 14.0, *) {
-      _ = await requestScreenCaptureKitPermission()
+      _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
     }
     return tccGranted || checkPermission()
   }
@@ -296,6 +334,13 @@ final class ScreenCaptureService: Sendable {
   /// swallowed so this never blocks or disrupts onboarding.
   @available(macOS 14.0, *)
   static func primeCaptureConsent() async {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      log("primeCaptureConsent skipped: Screen Recording is not live in this process until relaunch")
+      return
+    }
     do {
       let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
       guard let display = content.displays.first else { return }
@@ -314,6 +359,12 @@ final class ScreenCaptureService: Sendable {
   /// Returns true if ScreenCaptureKit consent is granted, false if declined
   @available(macOS 14.0, *)
   static func testScreenCaptureKitPermission() async -> Bool {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      return false
+    }
     do {
       _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
       return true
@@ -331,6 +382,12 @@ final class ScreenCaptureService: Sendable {
     let tccGranted = CGPreflightScreenCaptureAccess()
     if !tccGranted {
       return false  // Not broken, just not granted
+    }
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      return false  // Grant isn't live in this process; relaunch, don't probe SCK
     }
 
     let sckGranted = await testScreenCaptureKitPermission()
@@ -350,6 +407,13 @@ final class ScreenCaptureService: Sendable {
     // 2. Re-request ScreenCaptureKit consent (macOS 14+)
     //    This can fix the "TCC says yes but SCK says no" broken state
     if #available(macOS 14.0, *) {
+      guard
+        ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+          grantedAtLaunch: grantedAtProcessStart)
+      else {
+        log("Screen capture: Soft recovery skipped SCK; grant is not live until relaunch")
+        return false
+      }
       let sckGranted = await requestScreenCaptureKitPermission()
       if sckGranted {
         log("Screen capture: Soft recovery succeeded (SCK re-consent granted)")
@@ -406,7 +470,7 @@ final class ScreenCaptureService: Sendable {
 
       // Re-request ScreenCaptureKit consent
       if #available(macOS 14.0, *) {
-        _ = await requestScreenCaptureKitPermission()
+        _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
       }
 
       await MainActor.run {

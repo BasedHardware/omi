@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("desktop-codemagic-failure-recovery.py")
@@ -132,6 +134,8 @@ class RecoveryTests(unittest.TestCase):
         self.assertNotIn("csrf-secret", json.dumps(capsule))
         self.assertNotIn("set-cookie-secret", json.dumps(capsule))
         self.assertNotIn("query-secret", json.dumps(capsule))
+        self.assertGreater(len(capsule["log_tail"]), 0)
+        self.assertIn("token=<redacted>", "\n".join(capsule["log_tail"]))
 
     def test_provider_only_failure_does_not_prescribe_local_rehearsal(self) -> None:
         capsule = RECOVERY.build_capsule(
@@ -211,6 +215,56 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("Do not cut another candidate", summary)
         self.assertIn("codemagic-env.sh", summary)
         self.assertNotIn("not-recorded", summary)
+
+    def test_unclassified_profile_emits_warning_and_embeds_log_tail(self) -> None:
+        log = b"\n".join(f"noise {i} token=super-secret".encode() for i in range(250))
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            capsule = RECOVERY.build_capsule(
+                build_id=BUILD_ID,
+                token="not-recorded",
+                profiles=self.profiles(),
+                opener=self.opener(build_payload("Unknown Codemagic step"), log),
+            )
+        self.assertEqual(capsule["failure_profile"], "unclassified")
+        self.assertIn("::warning::failure_profile unclassified", stdout.getvalue())
+        self.assertEqual(len(capsule["log_tail"]), 200)
+        self.assertIn("token=<redacted>", capsule["log_tail"][-1])
+        self.assertNotIn("super-secret", json.dumps(capsule))
+        summary = RECOVERY.markdown_summary(capsule)
+        self.assertIn("Failed-step log tail", summary)
+        self.assertIn("noise 249 token=<redacted>", summary)
+
+    def test_log_tail_redacts_query_tokens_github_pats_and_fence_breakers(self) -> None:
+        log = (
+            b"GET https://example.test/callback?token=supersecret&mode=test\n"
+            b"exchange https://example.test/oidc?foo=1&SOME_OIDC_TOKEN=oidc-secret-value\n"
+            b"redirect https://example.test/app#code=oauth-code-secret&state=xyz\n"
+            b"artifacts https://example.test/artifacts?build=42&arch=arm64&flavor=release\n"
+            b"auth github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv\n"
+            b"jwt eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature\n"
+            b"``` rm -rf / ```\n"
+        )
+        capsule = RECOVERY.build_capsule(
+            build_id=BUILD_ID,
+            token="not-recorded",
+            profiles=self.profiles(),
+            opener=self.opener(build_payload("Unknown Codemagic step"), log),
+        )
+        dumped = json.dumps(capsule)
+        self.assertNotIn("supersecret", dumped)
+        self.assertNotIn("oidc-secret-value", dumped)
+        self.assertNotIn("oauth-code-secret", dumped)
+        self.assertNotIn("github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuv", dumped)
+        self.assertNotIn("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", dumped)
+        self.assertIn("token=<redacted>", dumped)
+        self.assertIn("SOME_OIDC_TOKEN=<redacted>", dumped)
+        self.assertIn("code=<redacted>", dumped)
+        self.assertIn("&mode=test", dumped)
+        self.assertIn("?build=42&arch=arm64&flavor=release", dumped)
+        summary = RECOVERY.markdown_summary(capsule)
+        self.assertNotIn("``` rm -rf / ```", summary)
+        self.assertIn("''' rm -rf / '''", summary)
 
 
 if __name__ == "__main__":

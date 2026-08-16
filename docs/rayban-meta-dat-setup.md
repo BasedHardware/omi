@@ -14,7 +14,7 @@ capture + HFP audio. Full mode is required for founder acceptance.
    only for a future beta-channel distribution build.
 3. DAT apps cannot ship through the App Store yet. Use a local development
    build for this checklist.
-4. Xcode 26 with the iOS 26 SDK, CocoaPods 1.16.2, Flutter 3.41.9, and an iOS
+4. Xcode 26 with the iOS 26 SDK, CocoaPods 1.16.2, Flutter 3.44.5, and an iOS
    15.2+ device. The current `.allowBluetoothHFP` source requires the iOS 26
    SDK even though the app back-deploys to iOS 15.2.
 
@@ -94,7 +94,7 @@ cd ../app
 # USE_WEB_AUTH=true
 # USE_AUTH_CUSTOM_TOKEN=true
 
-FLUTTER_BIN=/path/to/flutter-3.41.9/bin/flutter \
+FLUTTER_BIN=/path/to/flutter-3.44.5/bin/flutter \
   scripts/rayban_dat.sh run -d <physical-iphone-id>
 ```
 

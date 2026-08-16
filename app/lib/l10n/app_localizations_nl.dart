@@ -9869,5 +9869,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get accountCutoverOpenStore => 'Store openen';
 
   @override
+  String get sendRawAudioToOmi => 'Onbewerkte audio naar Omi sturen';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.';
+
+  @override
   String get findDevice => 'Zoeken';
 }

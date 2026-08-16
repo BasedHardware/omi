@@ -18,7 +18,6 @@ enum InsightAssistantTelemetry {
     case masterNotificationsDisabled = "master_notifications_disabled"
     case frequencyOff = "frequency_off"
     case frequencyThrottled = "frequency_throttled"
-    case snoozed
     case floatingBarPresented = "floating_bar_presented"
     case floatingBarUnavailable = "floating_bar_unavailable"
     case queueCancelled = "queue_cancelled"

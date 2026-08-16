@@ -106,8 +106,13 @@ def _commit(
     target_exists = getattr(target_snapshot, "exists", False)
     if operation == "rollback":
         target = _manifest(target_snapshot, "rollback target manifest does not exist")
-        if target["qualification_tier"] != "T2" or target["qualification_passed"] is not True:
-            raise ValueError("rollback target must be retained and T2-qualified")
+        # Beta manifests carry the ``signed-smoke`` tier (whose frozen-schema
+        # truth is ``qualification_passed: False``), so a literal ``T2``/``True``
+        # requirement here rejects every current rollback target. The schema
+        # admits only ("T2", True), ("signed-smoke", False), ("emergency", False),
+        # so excluding emergency is exactly "normal-path evidence".
+        if target["qualification_tier"] == "emergency":
+            raise ValueError("rollback target must not be an emergency manifest")
     else:
         if emergency_manifest is None:
             raise ValueError("emergency manifest is required")

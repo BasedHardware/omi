@@ -1445,6 +1445,7 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       status: response.subscription?.status || 'active',
       is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
       current_period_end: response.subscription?.current_period_end,
+      stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,
       features: response.subscription?.features || [],

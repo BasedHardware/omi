@@ -17,9 +17,18 @@ os.environ.setdefault(
 from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.memory_apply import MemoryControlState, memory_content_hash
-from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.memory_evidence import (
+    ArtifactPreservationState,
+    MemoryEvidence,
+    SourceState,
+)
 from models.memory_recurrence import CanonicalRecurrenceSignal
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.product_memory import (
+    MemoryItemStatus,
+    MemoryTier,
+    ProcessingState,
+    MemoryItem,
+)
 from utils.memory import canonical_consolidation as consolidation
 from utils.memory.canonical_consolidation import (
     CONSOLIDATION_CONTEXT_ARGUMENTS_MAX_CHARS,
@@ -923,9 +932,18 @@ def test_clean_total_batch_routes_and_advances_watermark():
     response = ConsolidationAgentBatch(decisions=[_promote(item)])
 
     with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=[item]),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates", return_value=context),
+        patch(
+            "utils.memory.canonical_consolidation.resolve_memory_system",
+            return_value=MemorySystem.CANONICAL,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+            return_value=[item],
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+            return_value=context,
+        ),
         patch(
             "utils.memory.canonical_consolidation.invoke_consolidation_agent",
             return_value=response,
@@ -958,10 +976,22 @@ def test_one_pass_caps_llm_batches_and_leaves_overflow_for_next_pass():
         return ConsolidationAgentBatch(decisions=[_archive(context.pending_items[0])])
 
     with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=items),
-        patch("utils.memory.canonical_consolidation.consolidation_batch_cap", return_value=1),
-        patch("utils.memory.canonical_consolidation.max_consolidation_batches_per_pass", return_value=10),
+        patch(
+            "utils.memory.canonical_consolidation.resolve_memory_system",
+            return_value=MemorySystem.CANONICAL,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+            return_value=items,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.consolidation_batch_cap",
+            return_value=1,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.max_consolidation_batches_per_pass",
+            return_value=10,
+        ),
         patch(
             "utils.memory.canonical_consolidation.gather_consolidation_candidates",
             side_effect=context_for_batch,
@@ -997,7 +1027,10 @@ def test_query_cap_overflow_remains_due_on_the_next_scheduler_pass():
         return ConsolidationAgentBatch(decisions=[_archive(context.pending_items[0])])
 
     with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.canonical_consolidation.resolve_memory_system",
+            return_value=MemorySystem.CANONICAL,
+        ),
         patch(
             "utils.memory.canonical_consolidation.list_pending_consolidation_items",
             side_effect=[[selected], [overflow]],
@@ -1049,12 +1082,18 @@ def test_run_applies_promote_before_non_promote_pending_dependent():
         return [decision.source_memory_id]
 
     with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.canonical_consolidation.resolve_memory_system",
+            return_value=MemorySystem.CANONICAL,
+        ),
         patch(
             "utils.memory.canonical_consolidation.list_pending_consolidation_items",
             return_value=[survivor, duplicate],
         ),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates", return_value=context),
+        patch(
+            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+            return_value=context,
+        ),
         patch(
             "utils.memory.canonical_consolidation.invoke_consolidation_agent",
             return_value=response,
@@ -1078,9 +1117,18 @@ def test_incomplete_output_blocks_all_mutation_and_watermark():
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
 
     with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=items),
-        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates", return_value=_context(items)),
+        patch(
+            "utils.memory.canonical_consolidation.resolve_memory_system",
+            return_value=MemorySystem.CANONICAL,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+            return_value=items,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+            return_value=_context(items),
+        ),
         patch(
             "utils.memory.canonical_consolidation.invoke_consolidation_agent",
             return_value=ConsolidationAgentBatch(decisions=[_archive(items[0])]),
@@ -1110,13 +1158,25 @@ def test_recurrence_handoff_failure_blocks_routes_and_watermark():
         confidence=0.9,
         first_seen_at=NOW - timedelta(days=1),
         last_seen_at=NOW,
-        evidence_refs=[EvidenceRef(kind=EvidenceKind.memory_item, id=item.memory_id, scope=EvidenceScope.canonical)],
+        evidence_refs=[
+            EvidenceRef(
+                kind=EvidenceKind.memory_item,
+                id=item.memory_id,
+                scope=EvidenceScope.canonical,
+            )
+        ],
     )
     response = ConsolidationAgentBatch(decisions=[_archive(item)], recurrence_signals=[signal])
 
     with (
-        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=[item]),
+        patch(
+            "utils.memory.canonical_consolidation.resolve_memory_system",
+            return_value=MemorySystem.CANONICAL,
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+            return_value=[item],
+        ),
         patch(
             "utils.memory.canonical_consolidation.gather_consolidation_candidates",
             return_value=_context([item]),
@@ -1163,7 +1223,11 @@ def test_poison_source_has_bounded_llm_retries_then_terminal_review_without_star
 
     with (
         patch.object(consolidation, "resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch.object(consolidation, "list_pending_consolidation_items", side_effect=pending_by_run),
+        patch.object(
+            consolidation,
+            "list_pending_consolidation_items",
+            side_effect=pending_by_run,
+        ),
         patch.object(consolidation, "consolidation_batch_cap", return_value=2),
         patch.object(
             consolidation,
@@ -1197,7 +1261,10 @@ def test_poison_source_has_bounded_llm_retries_then_terminal_review_without_star
     assert third.retryable_memory_ids == []
     assert third.watermark_blocked is True
     assert llm_sources.count(poison.memory_id) == consolidation.MAX_CONSOLIDATION_FAILURE_ATTEMPTS
-    assert applied_routes == [(healthy.memory_id, "archive"), (poison.memory_id, "review")]
+    assert applied_routes == [
+        (healthy.memory_id, "archive"),
+        (poison.memory_id, "review"),
+    ]
     retry_docs = {
         payload["memory_id"]: payload
         for path, payload in db.docs.items()
@@ -1394,6 +1461,92 @@ def test_attempt_claim_is_durable_before_work_and_enforces_concurrent_cost_bound
     )
     assert claimed is False
     assert exhausted.attempt_count == consolidation.MAX_CONSOLIDATION_FAILURE_ATTEMPTS
+
+
+def test_attempt_claim_accepts_a_longer_flex_lease():
+    item = _item("mem_flex_claimed", "One Flex revision")
+    db = _FakeDb()
+
+    state, claimed = consolidation._claim_retry_state(
+        UID,
+        item,
+        lease_owner="flex-runner",
+        now=NOW,
+        db_client=db,
+        lease_seconds=1_200,
+    )
+
+    assert claimed is True
+    assert state.lease_expires_at == NOW + timedelta(seconds=1_200)
+
+
+def test_deferred_flex_attempt_releases_lease_without_consuming_quality_budget():
+    item = _item("mem_flex_deferred", "Retry this Flex revision later")
+    db = _FakeDb()
+    claimed_state, claimed = consolidation._claim_retry_state(
+        UID,
+        item,
+        lease_owner="flex-runner",
+        now=NOW,
+        db_client=db,
+        lease_seconds=1_200,
+    )
+    assert claimed is True
+    assert claimed_state.lease_owner is not None
+
+    released = consolidation._release_deferred_retry_state_transaction(
+        db.transaction(),
+        db,
+        UID,
+        item,
+        "flex_deferred:PromotionFlexDeferred",
+        NOW,
+        claimed_state.lease_owner,
+    )
+
+    assert released.status == "retryable"
+    assert released.attempt_count == 0
+    assert released.lease_owner is None
+    assert released.lease_expires_at is None
+
+
+def test_run_consolidation_defers_flex_unavailability_without_applying_or_spending_attempt():
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    item = _item("mem_flex_unavailable", "Retry this unavailable Flex call")
+    control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
+    db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
+
+    def defer(_prompt):
+        raise PromotionFlexDeferred("RateLimitError")
+
+    with (
+        patch(
+            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+            return_value=[item],
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+            return_value=_context([item]),
+        ),
+        patch("utils.memory.canonical_consolidation.apply_consolidation_decision") as apply_route,
+    ):
+        report = run_canonical_consolidation(
+            UID,
+            db_client=db,
+            run_id="flex-deferred",
+            now=NOW,
+            llm_invoke=defer,
+            attempt_lease_seconds=1_200,
+        )
+
+    state = consolidation._read_retry_state(UID, item, db_client=db)
+    assert state is not None
+    assert state.attempt_count == 0
+    assert state.status == "retryable"
+    assert report.retryable_memory_ids == [item.memory_id]
+    assert report.watermark_blocked is True
+    apply_route.assert_not_called()
 
 
 def test_new_revision_does_not_inherit_old_revision_quarantine():

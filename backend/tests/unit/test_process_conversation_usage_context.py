@@ -1031,8 +1031,8 @@ def test_llm_calls_use_omi_qos_tier_system():
     ), f"Expected get_llm('conv_action_items') for action items, got {action_match.group(1)}"
 
     # Verify cache keys are passed through get_llm's cache_key param (model-safe)
-    assert "_cache_bucket_key('omi-extract-actions')" in conv_proc_source, "Missing cache key for action items"
-    assert "_cache_bucket_key('omi-transcript-structure')" in conv_proc_source, "Missing cache key for structure"
+    assert 'ACTION_ITEMS_CACHE_KEY' in conv_proc_source, "Missing stable cache key for action items"
+    assert 'TRANSCRIPT_STRUCTURE_CACHE_KEY' in conv_proc_source, "Missing stable cache key for structure"
     assert "else 'omi-app-result'" in conv_proc_source, "Missing cache_key for app result"
     assert "cache_key='omi-daily-summary'" in conv_proc_source, "Missing cache_key for daily summary"
 

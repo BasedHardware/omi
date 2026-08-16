@@ -1027,7 +1027,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
       (environment(ambientFrequency: false), candidate(), .frequencyBudget),
       (environment(task: false), candidate(), .taskDisabled),
       (environment(focus: true), candidate(), .focusSuppressed),
-      (environment(snoozed: true), candidate(), .snoozed),
       (environment(), candidate(expiresAt: baseDate), .expired),
       (environment(), candidate(canWait: true), .canWait),
     ]
@@ -1386,7 +1385,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
     ambientFrequency: Bool = true,
     task: Bool = true,
     focus: Bool = false,
-    snoozed: Bool = false,
     now: Date? = nil,
     calendar: Calendar = Calendar(identifier: .gregorian)
   ) -> TaskInterruptionEnvironment {
@@ -1397,7 +1395,6 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ambientFrequencyEligible: ambientFrequency,
       taskNotificationsEnabled: task,
       focusSuppressed: focus,
-      snoozed: snoozed,
       now: now ?? baseDate,
       calendar: calendar
     )
