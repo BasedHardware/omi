@@ -79,6 +79,14 @@ generated_route_overrides:
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}
     request_timeout_ms: 900000
+  - feature: memory_l2_flex
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: medium}
+    request_timeout_ms: 900000
+  - feature: x_memory_extraction_flex
+    primary: {provider: openai, model: gpt-5.6-luna}
+    provider_options: {reasoning_effort: low}
+    request_timeout_ms: 900000
   - feature: memory_l1
     primary: {provider: openai, model: gpt-5.6-luna}
     provider_options: {reasoning_effort: low}

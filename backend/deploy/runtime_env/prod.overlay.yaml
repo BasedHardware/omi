@@ -364,7 +364,11 @@ overlay:
             value: 'off'
     jobs:
       notifications-job:
+        flags:
+          --task-timeout: 3600s
         env:
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:
@@ -383,7 +387,7 @@ overlay:
             value: 'false'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             value: 'false'
-          MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE:
-            value: 'false'
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend

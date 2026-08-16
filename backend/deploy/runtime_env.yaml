@@ -860,7 +860,12 @@ environments:
           - HOSTED_PUSHER_API_URL
       jobs:
         notifications-job:
+          flags:
+            --task-timeout: 3600s
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -874,6 +879,13 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
@@ -950,7 +962,7 @@ environments:
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE:
+            OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
             GOOGLE_CLOUD_PROJECT:
@@ -1762,7 +1774,12 @@ environments:
               category: rollout
       jobs:
         notifications-job:
+          flags:
+            --task-timeout: 3600s
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -1776,6 +1793,13 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
@@ -1846,8 +1870,8 @@ environments:
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE:
-              value: 'false'
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
               category: memory_rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'

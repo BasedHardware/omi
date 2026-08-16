@@ -231,6 +231,31 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 f'secret {forbidden_secret} belongs only on memory-maintenance-job',
             )
         )
+    notifications_flex_capable = (
+        (_manifest_literal_env_value(notifications_env, 'OMI_BACKGROUND_FLEX_CAPABLE') or '').strip().lower()
+    )
+    if notifications_flex_capable != 'true':
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                'OMI_BACKGROUND_FLEX_CAPABLE must be true so the shared live flag covers scheduled X extraction',
+            )
+        )
+    notifications_gateway_url = _as_config_dict(notifications_env.get('OMI_LLM_GATEWAY_URL'))
+    if notifications_gateway_url is None or notifications_gateway_url.get('env_var') != 'OMI_LLM_GATEWAY_URL':
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint for scheduled X Flex',
+            )
+        )
+    if 'OMI_LLM_GATEWAY_SERVICE_TOKEN' not in notifications_secrets:
+        errors.append(
+            ValidationError(
+                notifications_scope,
+                'missing secret OMI_LLM_GATEWAY_SERVICE_TOKEN for scheduled X Flex',
+            )
+        )
 
     job = _as_config_dict(jobs.get('memory-maintenance-job'))
     if job is None:
@@ -258,7 +283,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     for required_env in (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
-        'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE',
+        'OMI_BACKGROUND_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
         'TYPESENSE_HOST_PORT',
     ):

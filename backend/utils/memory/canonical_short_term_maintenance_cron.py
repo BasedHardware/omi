@@ -26,6 +26,7 @@ from utils.llm.clients import get_llm
 from utils.memory.canonical_consolidation import CONSOLIDATION_ATTEMPT_LEASE_SECONDS
 from utils.memory.canonical_required_processing import (
     ProcessedRequiredMemory,
+    REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     invoke_required_memory_processor,
 )
 from utils.memory.short_term_promotion import (
@@ -403,8 +404,10 @@ def run_universal_short_term_maintenance(
         return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
 
     client = db_client if db_client is not None else default_db_client
+    promotion_flex = PromotionFlexRunRouter(db_client=client)
+    effective_inventory_limit = min(inventory_limit, 1) if promotion_flex.control.enabled else inventory_limit
     try:
-        uids = _resolve_maintenance_uids(client, uid_inventory=uid_inventory, limit=inventory_limit)
+        uids = _resolve_maintenance_uids(client, uid_inventory=uid_inventory, limit=effective_inventory_limit)
     except CanonicalMaintenanceInventoryUnavailable as exc:
         message = "canonical_uid_inventory_unavailable"
         logger.warning(
@@ -429,10 +432,19 @@ def run_universal_short_term_maintenance(
         effective_run_id,
         len(uids),
     )
-    promotion_flex = PromotionFlexRunRouter(db_client=client)
-
     for uid in uids:
         promotion_llm_invoke = promotion_flex.llm_invoke_for_uid(uid)
+        l2_flex_llm = promotion_flex.llm_for_uid(
+            uid,
+            standard_feature="memory_l2",
+            flex_feature="memory_l2_flex",
+            workload="memory_l2",
+        )
+        required_processor = (
+            (lambda item, llm=l2_flex_llm: invoke_required_memory_processor(item, llm))
+            if l2_flex_llm is not None
+            else _required_memory_processor
+        )
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
@@ -440,7 +452,16 @@ def run_universal_short_term_maintenance(
                 now=maintenance_now,
                 run_id=effective_run_id,
                 recurrence_signal_sink=recurrence_signal_persister,
-                required_processor=_required_memory_processor,
+                required_processor=required_processor,
+                required_processing_attempt_lease_seconds=(
+                    MEMORY_PROMOTION_FLEX_LEASE_SECONDS
+                    if l2_flex_llm is not None
+                    else REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS
+                ),
+                required_processing_result_guard=(
+                    promotion_flex.assert_result_current if l2_flex_llm is not None else None
+                ),
+                required_processing_limit=1 if l2_flex_llm is not None else 25,
                 llm_invoke=promotion_llm_invoke,
                 consolidation_attempt_lease_seconds=(
                     MEMORY_PROMOTION_FLEX_LEASE_SECONDS

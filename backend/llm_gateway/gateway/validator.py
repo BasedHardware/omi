@@ -203,9 +203,13 @@ def _validate_forwarded_params(request: Mapping[str, Any], lane: LaneConfig) -> 
 def _validate_service_tier(value: object, lane: LaneConfig) -> None:
     if value != 'flex':
         raise GatewayInvalidRequestError('service_tier must be flex', param='service_tier')
-    if lane.lane_id != 'omi:auto:memory-conflict-flex':
+    if lane.lane_id not in {
+        'omi:auto:memory-conflict-flex',
+        'omi:auto:memory-l2-flex',
+        'omi:auto:x-memory-extraction-flex',
+    }:
         raise GatewayCapabilityMismatchError(
-            'Flex processing is only enabled for scheduled memory promotion',
+            'Flex processing is only enabled for scheduled background memory work',
             param='service_tier',
         )
 

@@ -104,23 +104,28 @@ This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
 cadence; the job is the sole host of
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
 
-The final planner has an optional OpenAI Flex experiment on the dedicated
-`memory_conflict_flex` gateway lane; ordinary `memory_conflict` traffic keeps
-its Standard timeout and cannot request Flex.
-`MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE` is enabled only on the development
-maintenance job and remains disabled in production. The live Firestore control
-at `llm_runtime_controls/memory_promotion` must contain exactly:
+The scheduled final planner, required L2 normalizer, and six-hour X memory
+extractor share one optional OpenAI Flex switch and use dedicated gateway lanes.
+Manual and post-OAuth X syncs remain Standard. Ordinary `memory_conflict`,
+`memory_l2`, and `memories` traffic keeps its Standard timeout and cannot
+request Flex. `OMI_BACKGROUND_FLEX_CAPABLE` is present only on the two owning
+jobs. The live Firestore control at `llm_runtime_controls/background_flex`
+must contain exactly:
 
 ```json
-{"mode":"standard","generation":1,"sample_percent":0,"max_calls_per_run":0}
+{"enabled":false,"generation":1}
 ```
 
-Set `mode` to `flex`, choose a deterministic UID sample, and set at most two
-Flex calls per hourly run to enable it. Increment `generation` with every
-control change. Returning `mode` to `standard` stops new Flex calls without a
-redeploy; an in-flight response from an older generation is discarded before
-canonical apply. Flex resource deferrals release their leases for the next
-scheduled run and do not consume the three-attempt model-output quality budget.
+Set `enabled` to `true` to route all three eligible scheduled workloads through
+Flex, and increment `generation` with every control change. Setting it back to
+`false` restores their legacy Standard paths without a redeploy. An in-flight
+response from an older generation is discarded before durable apply. Flex
+resource deferrals release L2/promotion leases for the next scheduled run and
+do not consume model-output quality retry budgets; X raw posts remain pending.
+Flex-mode memory maintenance advances one UID and at most one required L2 item
+per run so its durable cursor cannot jump across work that the 15-minute Flex
+budget could not start. Both owning jobs use verified private gateway endpoints,
+zero SDK retries, and a one-hour Cloud Run task budget.
 
 ## Search, graph, and derived providers
 

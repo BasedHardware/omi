@@ -20,7 +20,7 @@ class _Db:
         self.reads = 0
 
     def document(self, path):
-        assert path == promotion_flex.MEMORY_PROMOTION_FLEX_CONTROL_PATH
+        assert path == promotion_flex.BACKGROUND_FLEX_CONTROL_PATH
         outer = self
 
         class _Ref:
@@ -49,66 +49,99 @@ class _Model:
 
 
 def _flex_payload(**overrides):
-    return {
-        "mode": "flex",
-        "generation": 1,
-        "sample_percent": 100,
-        "max_calls_per_run": 1,
-        **overrides,
-    }
+    return {"enabled": True, "generation": 1, **overrides}
 
 
 def test_static_capability_defaults_off_without_firestore_read(monkeypatch):
-    monkeypatch.delenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, raising=False)
+    monkeypatch.delenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, raising=False)
     db = _Db(_flex_payload())
 
     assert promotion_flex.read_promotion_flex_control(db_client=db) == promotion_flex.PromotionFlexControl()
     assert db.reads == 0
 
 
+def test_gateway_flex_client_has_no_sdk_retry(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        promotion_flex,
+        "get_or_create_omi_gateway_llm",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or object(),
+    )
+
+    promotion_flex._get_gateway_flex_llm("memory_l2_flex", request_timeout=900.0)
+
+    assert calls == [
+        (
+            ("omi:auto:memory-l2-flex",),
+            {
+                "options": {"request_timeout": 900.0, "max_retries": 0},
+                "feature": "memory_l2_flex",
+            },
+        )
+    ]
+
+
 @pytest.mark.parametrize(
     "payload",
-    [
-        None,
-        {},
-        _flex_payload(mode="turbo"),
-        _flex_payload(sample_percent=101),
-        _flex_payload(max_calls_per_run=3),
-        {**_flex_payload(), "unexpected": True},
-    ],
+    [None, {}, _flex_payload(enabled="yes"), _flex_payload(generation=0), {**_flex_payload(), "unexpected": True}],
 )
 def test_missing_or_invalid_live_control_fails_to_standard(monkeypatch, payload):
-    monkeypatch.setenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
 
     assert promotion_flex.read_promotion_flex_control(db_client=_Db(payload)) == promotion_flex.PromotionFlexControl()
 
 
-def test_router_requests_flex_and_fences_the_result(monkeypatch):
-    monkeypatch.setenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "true")
+@pytest.mark.parametrize(
+    ("standard_feature", "flex_feature", "workload"),
+    [
+        ("memory_conflict", "memory_conflict_flex", "memory_promotion"),
+        ("memory_l2", "memory_l2_flex", "memory_l2"),
+        ("memories", "x_memory_extraction_flex", "x_memory_extraction"),
+    ],
+)
+def test_one_enabled_control_routes_every_scheduled_workload_to_flex(
+    monkeypatch, standard_feature, flex_feature, workload
+):
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
     db = _Db(_flex_payload())
     calls = []
     router = promotion_flex.PromotionFlexRunRouter(
         db_client=db,
-        llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
+        flex_llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
     )
 
-    invoke = router.llm_invoke_for_uid("uid-a")
-    assert invoke is not None
-    assert invoke("prompt") == "result"
+    model = router.llm_for_uid("uid-a", standard_feature=standard_feature, flex_feature=flex_feature, workload=workload)
+    assert model is not None
+    assert model.invoke("prompt").content == "result"
     assert calls == [
         (
             "factory",
-            ("memory_conflict_flex",),
-            {"request_timeout": promotion_flex.MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS},
+            (flex_feature,),
+            {"request_timeout": promotion_flex.BACKGROUND_FLEX_TIMEOUT_SECONDS},
         ),
         ("bind", {"service_tier": "flex"}),
         ("invoke", "prompt"),
     ]
-    assert db.reads == 3  # initial control, before request, after response
+
+
+def test_disabled_control_selects_no_flex_model(monkeypatch):
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    router = promotion_flex.PromotionFlexRunRouter(db_client=_Db({"enabled": False, "generation": 1}))
+
+    assert (
+        router.llm_for_uid(
+            "uid-a",
+            standard_feature="memory_l2",
+            flex_feature="memory_l2_flex",
+            workload="memory_l2",
+        )
+        is None
+    )
+    assert router.llm_invoke_for_uid("uid-a") is None
 
 
 def test_router_discards_result_when_live_generation_changes(monkeypatch):
-    monkeypatch.setenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
     db = _Db(_flex_payload())
 
     class _ChangingModel(_Model):
@@ -118,7 +151,7 @@ def test_router_discards_result_when_live_generation_changes(monkeypatch):
 
     router = promotion_flex.PromotionFlexRunRouter(
         db_client=db,
-        llm_factory=lambda *_args, **_kwargs: _ChangingModel([]),
+        flex_llm_factory=lambda *_args, **_kwargs: _ChangingModel([]),
     )
     invoke = router.llm_invoke_for_uid("uid-a")
     assert invoke is not None
@@ -127,27 +160,8 @@ def test_router_discards_result_when_live_generation_changes(monkeypatch):
         invoke("prompt")
 
 
-def test_router_uses_standard_after_the_per_run_flex_cap(monkeypatch):
-    monkeypatch.setenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "true")
-    control = promotion_flex.PromotionFlexControl(mode="flex", generation=1, sample_percent=100, max_calls_per_run=1)
-    calls = []
-    router = promotion_flex.PromotionFlexRunRouter(
-        db_client=object(),
-        control_reader=lambda **_kwargs: control,
-        llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
-    )
-    invoke = router.llm_invoke_for_uid("uid-a")
-    assert invoke is not None
-
-    assert invoke("first") == "result"
-    assert invoke("second") == "result"
-    assert calls[-2:] == [("factory", ("memory_conflict",), {}), ("invoke", "second")]
-    assert router.llm_invoke_for_uid("uid-b") is None
-
-
-def test_router_only_defers_transient_flex_errors(monkeypatch):
-    monkeypatch.setenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "true")
-    control = promotion_flex.PromotionFlexControl(mode="flex", generation=1, sample_percent=100, max_calls_per_run=1)
+def test_router_only_defers_transient_flex_errors():
+    control = promotion_flex.PromotionFlexControl(enabled=True, generation=1)
 
     class _FailingModel(_Model):
         def __init__(self, exc):
@@ -163,7 +177,7 @@ def test_router_only_defers_transient_flex_errors(monkeypatch):
     transient = promotion_flex.PromotionFlexRunRouter(
         db_client=object(),
         control_reader=lambda **_kwargs: control,
-        llm_factory=lambda *_args, **_kwargs: _FailingModel(_CapacityError()),
+        flex_llm_factory=lambda *_args, **_kwargs: _FailingModel(_CapacityError()),
     )
     transient_invoke = transient.llm_invoke_for_uid("uid-a")
     assert transient_invoke is not None
@@ -173,7 +187,7 @@ def test_router_only_defers_transient_flex_errors(monkeypatch):
     permanent = promotion_flex.PromotionFlexRunRouter(
         db_client=object(),
         control_reader=lambda **_kwargs: control,
-        llm_factory=lambda *_args, **_kwargs: _FailingModel(ValueError("bad request")),
+        flex_llm_factory=lambda *_args, **_kwargs: _FailingModel(ValueError("bad request")),
     )
     permanent_invoke = permanent.llm_invoke_for_uid("uid-a")
     assert permanent_invoke is not None
@@ -181,29 +195,24 @@ def test_router_only_defers_transient_flex_errors(monkeypatch):
         permanent_invoke("prompt")
 
 
-def test_router_uses_standard_when_a_flex_call_cannot_fit_the_job_budget(monkeypatch):
-    monkeypatch.setenv(promotion_flex.MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "true")
-    control = promotion_flex.PromotionFlexControl(mode="flex", generation=1, sample_percent=100, max_calls_per_run=1)
+def test_router_defers_instead_of_using_standard_when_flex_cannot_fit_job_budget():
+    control = promotion_flex.PromotionFlexControl(enabled=True, generation=1)
     clock = iter([0.0, 2_401.0])
     calls = []
     router = promotion_flex.PromotionFlexRunRouter(
         db_client=object(),
         control_reader=lambda **_kwargs: control,
-        llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
+        flex_llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
         monotonic=lambda: next(clock),
     )
-    invoke = router.llm_invoke_for_uid("uid-a")
-    assert invoke is not None
-
-    assert invoke("late") == "result"
-    assert calls == [("factory", ("memory_conflict",), {}), ("invoke", "late")]
-
-
-def test_router_does_not_select_unsampled_uid():
-    control = promotion_flex.PromotionFlexControl(mode="flex", generation=1, sample_percent=0, max_calls_per_run=1)
-    router = promotion_flex.PromotionFlexRunRouter(
-        db_client=object(),
-        control_reader=lambda **_kwargs: control,
+    model = router.llm_for_uid(
+        "uid-a",
+        standard_feature="memory_l2",
+        flex_feature="memory_l2_flex",
+        workload="memory_l2",
     )
+    assert model is not None
 
-    assert router.llm_invoke_for_uid("uid-a") is None
+    with pytest.raises(promotion_flex.PromotionFlexDeferred, match="job_budget"):
+        model.invoke("late")
+    assert calls == []

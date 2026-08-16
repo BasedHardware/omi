@@ -240,7 +240,7 @@ def test_injected_inventory_runs_arbitrary_uids(monkeypatch):
     assert summary.inventory_complete is True
 
 
-def test_sampled_flex_uid_receives_long_lease_and_apply_guard(monkeypatch):
+def test_enabled_flex_uid_routes_promotion_and_l2_with_long_leases_and_guards(monkeypatch):
     _enable(monkeypatch)
     calls = []
 
@@ -253,9 +253,13 @@ def test_sampled_flex_uid_receives_long_lease_and_apply_guard(monkeypatch):
     class _FlexRouter:
         def __init__(self, *, db_client):
             assert db_client is not None
+            self.control = type("Control", (), {"enabled": True})()
 
         def llm_invoke_for_uid(self, uid):
             return flex_invoke if uid == "uid-flex" else None
+
+        def llm_for_uid(self, uid, **_kwargs):
+            return object() if uid == "uid-flex" else None
 
         assert_result_current = staticmethod(result_guard)
 
@@ -273,13 +277,14 @@ def test_sampled_flex_uid_receives_long_lease_and_apply_guard(monkeypatch):
     )
 
     flex_kwargs = calls[0][1]
-    standard_kwargs = calls[1][1]
+    assert len(calls) == 1
     assert flex_kwargs["llm_invoke"] is flex_invoke
     assert flex_kwargs["consolidation_attempt_lease_seconds"] == cron.MEMORY_PROMOTION_FLEX_LEASE_SECONDS
     assert flex_kwargs["consolidation_result_guard"] is result_guard
-    assert standard_kwargs["llm_invoke"] is None
-    assert standard_kwargs["consolidation_attempt_lease_seconds"] == cron.CONSOLIDATION_ATTEMPT_LEASE_SECONDS
-    assert standard_kwargs["consolidation_result_guard"] is None
+    assert flex_kwargs["required_processing_attempt_lease_seconds"] == cron.MEMORY_PROMOTION_FLEX_LEASE_SECONDS
+    assert flex_kwargs["required_processing_result_guard"] is result_guard
+    assert flex_kwargs["required_processing_limit"] == 1
+    assert flex_kwargs["required_processor"] is not cron._required_memory_processor
 
 
 def test_inventory_candidates_come_from_the_injected_universal_inventory(monkeypatch):

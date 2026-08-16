@@ -459,6 +459,7 @@ def get_llm(
     cache_key: Optional[str] = None,
     prompt_cache_options: Optional[dict[str, str]] = None,
     request_timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> BaseChatModel:
     """Get the LLM client for a feature based on the active Model QoS profile.
 
@@ -525,14 +526,20 @@ def get_llm(
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
     elif gateway_feature_mode:
-        gateway_options = {"request_timeout": request_timeout} if request_timeout is not None else None
+        gateway_options = {}
+        if request_timeout is not None:
+            gateway_options["request_timeout"] = request_timeout
+        if max_retries is not None:
+            gateway_options["max_retries"] = max_retries
         result = get_or_create_omi_gateway_llm(
-            feature_auto_lane_id(feature), streaming, gateway_options, feature=feature
+            feature_auto_lane_id(feature), streaming, gateway_options or None, feature=feature
         )
     else:
         route_options = get_route_options(feature, model, provider)
         if request_timeout is not None:
             route_options = {**route_options, "request_timeout": request_timeout}
+        if max_retries is not None:
+            route_options = {**route_options, "max_retries": max_retries}
         result = get_default_client(model, provider, streaming, route_options)
 
     result = maybe_wrap_dev_gateway_shadow(

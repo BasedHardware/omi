@@ -1,63 +1,68 @@
-"""Bounded OpenAI Flex routing for scheduled Short-term memory promotion.
+"""One live switch for bounded OpenAI Flex routing in scheduled background work.
 
-The static capability is deliberately default-off. Once deployed with the
-capability enabled, operators can return new calls to Standard without a
-redeploy by updating ``llm_runtime_controls/memory_promotion`` in Firestore.
+Once the owning jobs are deployed capable, operators can move every eligible
+scheduled call between Flex and the legacy Standard path without a redeploy by
+updating the single ``llm_runtime_controls/background_flex`` Firestore document.
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional, cast
+from typing import Any, Callable, Optional, cast
 
-from utils.llm.clients import get_llm
-from utils.observability.fallback import record_fallback
+from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
 
 logger = logging.getLogger(__name__)
 
-MEMORY_PROMOTION_FLEX_CAPABLE_ENV = "MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE"
-MEMORY_PROMOTION_FLEX_CONTROL_PATH = "llm_runtime_controls/memory_promotion"
-MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS = 900.0
-MEMORY_PROMOTION_FLEX_LEASE_SECONDS = 1_200
-MEMORY_MAINTENANCE_JOB_BUDGET_SECONDS = 3_600.0
-MEMORY_PROMOTION_FLEX_JOB_SAFETY_SECONDS = 300.0
-MAX_MEMORY_PROMOTION_FLEX_CALLS_PER_RUN = 2
+BACKGROUND_FLEX_CAPABLE_ENV = "OMI_BACKGROUND_FLEX_CAPABLE"
+BACKGROUND_FLEX_CONTROL_PATH = "llm_runtime_controls/background_flex"
+BACKGROUND_FLEX_TIMEOUT_SECONDS = 900.0
+BACKGROUND_FLEX_LEASE_SECONDS = 1_200
+BACKGROUND_FLEX_JOB_BUDGET_SECONDS = 3_600.0
+BACKGROUND_FLEX_JOB_SAFETY_SECONDS = 300.0
+
+# Compatibility names retained while promotion call sites migrate with the rest
+# of this PR. They all point at the one shared background control.
+MEMORY_PROMOTION_FLEX_CAPABLE_ENV = BACKGROUND_FLEX_CAPABLE_ENV
+MEMORY_PROMOTION_FLEX_CONTROL_PATH = BACKGROUND_FLEX_CONTROL_PATH
+MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS = BACKGROUND_FLEX_TIMEOUT_SECONDS
+MEMORY_PROMOTION_FLEX_LEASE_SECONDS = BACKGROUND_FLEX_LEASE_SECONDS
+MEMORY_MAINTENANCE_JOB_BUDGET_SECONDS = BACKGROUND_FLEX_JOB_BUDGET_SECONDS
+MEMORY_PROMOTION_FLEX_JOB_SAFETY_SECONDS = BACKGROUND_FLEX_JOB_SAFETY_SECONDS
+
 _TRANSIENT_FLEX_STATUS_CODES = frozenset({408, 409, 429, 500, 502, 503, 504})
 _TRANSIENT_FLEX_EXCEPTION_NAMES = frozenset(
     {"APIConnectionError", "APITimeoutError", "InternalServerError", "RateLimitError"}
 )
 
 
-class PromotionFlexControlChanged(RuntimeError):
-    """The live control changed while a Flex result was in flight."""
+def _get_gateway_flex_llm(feature: str, *, request_timeout: float) -> Any:
+    return get_or_create_omi_gateway_llm(
+        feature_auto_lane_id(feature),
+        options={"request_timeout": request_timeout, "max_retries": 0},
+        feature=feature,
+    )
 
 
 class PromotionFlexDeferred(RuntimeError):
-    """Flex could not serve now; retry later without consuming quality budget."""
+    """Flex could not serve now; durable scheduled work should retry later."""
+
+
+class PromotionFlexControlChanged(PromotionFlexDeferred):
+    """The shared live control changed while a Flex result was in flight."""
 
 
 @dataclass(frozen=True)
 class PromotionFlexControl:
-    mode: Literal["standard", "flex"] = "standard"
+    enabled: bool = False
     generation: int = 0
-    sample_percent: int = 0
-    max_calls_per_run: int = 0
-
-    @property
-    def enabled(self) -> bool:
-        return self.mode == "flex" and self.sample_percent > 0 and self.max_calls_per_run > 0
 
 
 def promotion_flex_capable() -> bool:
-    return os.getenv(MEMORY_PROMOTION_FLEX_CAPABLE_ENV, "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
+    return os.getenv(BACKGROUND_FLEX_CAPABLE_ENV, "false").strip().lower() in {"1", "true", "yes"}
 
 
 def _standard_control() -> PromotionFlexControl:
@@ -65,96 +70,116 @@ def _standard_control() -> PromotionFlexControl:
 
 
 def read_promotion_flex_control(*, db_client: Any) -> PromotionFlexControl:
-    """Read strict live control, failing safely to Standard on any problem."""
+    """Read the strict shared control, failing safely to Standard."""
     if not promotion_flex_capable():
         return _standard_control()
     try:
-        snapshot = db_client.document(MEMORY_PROMOTION_FLEX_CONTROL_PATH).get()
+        snapshot = db_client.document(BACKGROUND_FLEX_CONTROL_PATH).get()
         if not getattr(snapshot, "exists", False):
             return _standard_control()
         payload = snapshot.to_dict()
-        if not isinstance(payload, dict) or set(payload) != {
-            "mode",
-            "generation",
-            "sample_percent",
-            "max_calls_per_run",
-        }:
+        if not isinstance(payload, dict) or set(payload) != {"enabled", "generation"}:
             raise ValueError("invalid fields")
-        mode = payload["mode"]
+        enabled = payload["enabled"]
         generation = payload["generation"]
-        sample_percent = payload["sample_percent"]
-        max_calls = payload["max_calls_per_run"]
-        if mode not in {"standard", "flex"}:
-            raise ValueError("invalid mode")
+        if not isinstance(enabled, bool):
+            raise ValueError("invalid enabled flag")
         if not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
             raise ValueError("invalid generation")
-        if not isinstance(sample_percent, int) or isinstance(sample_percent, bool) or not 0 <= sample_percent <= 100:
-            raise ValueError("invalid sample percent")
-        if (
-            not isinstance(max_calls, int)
-            or isinstance(max_calls, bool)
-            or not 0 <= max_calls <= MAX_MEMORY_PROMOTION_FLEX_CALLS_PER_RUN
-        ):
-            raise ValueError("invalid call cap")
-        return PromotionFlexControl(
-            mode=cast(Literal["standard", "flex"], mode),
-            generation=generation,
-            sample_percent=sample_percent,
-            max_calls_per_run=max_calls,
-        )
+        return PromotionFlexControl(enabled=enabled, generation=generation)
     except Exception as exc:
-        logger.warning("memory_promotion_flex_control_invalid error=%s", type(exc).__name__)
+        logger.warning("background_flex_control_invalid error=%s", type(exc).__name__)
         return _standard_control()
-
-
-def _sampled(uid: str, control: PromotionFlexControl) -> bool:
-    cohort_key = f"{control.generation}:{uid}".encode("utf-8")
-    bucket = int.from_bytes(hashlib.sha256(cohort_key).digest()[:4], "big") % 10_000
-    return bucket < control.sample_percent * 100
 
 
 def _response_text(response: Any) -> str:
     return cast(str, getattr(response, "content", str(response)))
 
 
+class _BackgroundFlexModel:
+    def __init__(
+        self,
+        router: "PromotionFlexRunRouter",
+        *,
+        uid: str,
+        standard_feature: str,
+        flex_feature: str,
+        workload: str,
+    ) -> None:
+        self._router = router
+        self._uid = uid
+        self._standard_feature = standard_feature
+        self._flex_feature = flex_feature
+        self._workload = workload
+
+    def invoke(self, payload: Any) -> Any:
+        return self._router.invoke_flex(
+            uid=self._uid,
+            payload=payload,
+            standard_feature=self._standard_feature,
+            flex_feature=self._flex_feature,
+            workload=self._workload,
+        )
+
+
 class PromotionFlexRunRouter:
-    """Own one maintenance run's deterministic cohort and global Flex budget."""
+    """Own one job run's snapshot of the shared background Flex switch."""
 
     def __init__(
         self,
         *,
         db_client: Any,
         control_reader: Callable[..., PromotionFlexControl] = read_promotion_flex_control,
-        llm_factory: Callable[..., Any] = get_llm,
+        flex_llm_factory: Callable[..., Any] = _get_gateway_flex_llm,
         monotonic: Callable[[], float] = time.monotonic,
+        started_at: Optional[float] = None,
     ) -> None:
         self._db_client = db_client
         self._control_reader = control_reader
-        self._llm_factory = llm_factory
+        self._flex_llm_factory = flex_llm_factory
         self._monotonic = monotonic
-        self._started_at = monotonic()
+        self._started_at = monotonic() if started_at is None else started_at
         self.control = control_reader(db_client=db_client)
         self._flex_calls_started = 0
-        self._last_call_used_flex = False
+
+    def llm_for_uid(
+        self,
+        uid: str,
+        *,
+        standard_feature: str,
+        flex_feature: str,
+        workload: str,
+    ) -> Optional[Any]:
+        if not self.control.enabled:
+            return None
+        return _BackgroundFlexModel(
+            self,
+            uid=uid,
+            standard_feature=standard_feature,
+            flex_feature=flex_feature,
+            workload=workload,
+        )
 
     def llm_invoke_for_uid(self, uid: str) -> Optional[Callable[[str], str]]:
-        if (
-            not self.control.enabled
-            or not _sampled(uid, self.control)
-            or self._flex_calls_started >= self.control.max_calls_per_run
-        ):
+        model = self.llm_for_uid(
+            uid,
+            standard_feature="memory_conflict",
+            flex_feature="memory_conflict_flex",
+            workload="memory_promotion",
+        )
+        if model is None:
             return None
-        return lambda prompt: self._invoke(uid=uid, prompt=prompt)
+        return lambda prompt: _response_text(model.invoke(prompt))
 
     def _read_current_control(self) -> PromotionFlexControl:
         return self._control_reader(db_client=self._db_client)
 
     def assert_control_current(self) -> None:
         if self._read_current_control() != self.control:
-            raise PromotionFlexControlChanged("control changed before Flex result apply")
+            raise PromotionFlexControlChanged("background Flex control changed before result apply")
 
     def assert_result_current(self) -> None:
-        if self._last_call_used_flex:
+        if self.control.enabled:
             self.assert_control_current()
 
     @staticmethod
@@ -166,58 +191,56 @@ class PromotionFlexRunRouter:
             or isinstance(exc, (ConnectionError, TimeoutError))
         )
 
-    def _invoke(self, *, uid: str, prompt: str) -> str:
+    def invoke_flex(
+        self,
+        *,
+        uid: str,
+        payload: Any,
+        standard_feature: str,
+        flex_feature: str,
+        workload: str,
+    ) -> Any:
         elapsed = max(self._monotonic() - self._started_at, 0.0)
         flex_has_time = (
-            elapsed + MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS
-            <= MEMORY_MAINTENANCE_JOB_BUDGET_SECONDS - MEMORY_PROMOTION_FLEX_JOB_SAFETY_SECONDS
+            elapsed + BACKGROUND_FLEX_TIMEOUT_SECONDS
+            <= BACKGROUND_FLEX_JOB_BUDGET_SECONDS - BACKGROUND_FLEX_JOB_SAFETY_SECONDS
         )
-        if self._flex_calls_started >= self.control.max_calls_per_run or not flex_has_time:
-            self._last_call_used_flex = False
-            record_fallback(
-                component="other",
-                from_mode="memory_promotion_flex",
-                to_mode="memory_promotion_standard",
-                reason="other",
-                outcome="recovered",
-                log=logger,
-            )
-            return _response_text(self._llm_factory("memory_conflict").invoke(prompt))
+        if not flex_has_time:
+            raise PromotionFlexDeferred("job_budget")
 
         self.assert_control_current()
-
         self._flex_calls_started += 1
-        self._last_call_used_flex = True
         logger.info(
-            "memory_promotion_flex_request uid=%s generation=%d ordinal=%d",
+            "background_flex_request workload=%s uid=%s generation=%d ordinal=%d",
+            workload,
             uid,
             self.control.generation,
             self._flex_calls_started,
         )
         try:
             response = (
-                self._llm_factory(
-                    "memory_conflict_flex",
-                    request_timeout=MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS,
-                )
+                self._flex_llm_factory(flex_feature, request_timeout=BACKGROUND_FLEX_TIMEOUT_SECONDS)
                 .bind(service_tier="flex")
-                .invoke(prompt)
+                .invoke(payload)
             )
         except Exception as exc:
             if self._is_transient_flex_error(exc):
                 raise PromotionFlexDeferred(type(exc).__name__) from exc
             raise
         self.assert_control_current()
-        return _response_text(response)
+        return response
 
 
 __all__ = [
-    "MAX_MEMORY_PROMOTION_FLEX_CALLS_PER_RUN",
-    "MEMORY_MAINTENANCE_JOB_BUDGET_SECONDS",
+    "BACKGROUND_FLEX_CAPABLE_ENV",
+    "BACKGROUND_FLEX_CONTROL_PATH",
+    "BACKGROUND_FLEX_JOB_BUDGET_SECONDS",
+    "BACKGROUND_FLEX_JOB_SAFETY_SECONDS",
+    "BACKGROUND_FLEX_LEASE_SECONDS",
+    "BACKGROUND_FLEX_TIMEOUT_SECONDS",
     "MEMORY_PROMOTION_FLEX_CAPABLE_ENV",
     "MEMORY_PROMOTION_FLEX_CONTROL_PATH",
     "MEMORY_PROMOTION_FLEX_LEASE_SECONDS",
-    "MEMORY_PROMOTION_FLEX_JOB_SAFETY_SECONDS",
     "MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS",
     "PromotionFlexControl",
     "PromotionFlexControlChanged",

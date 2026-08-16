@@ -43,8 +43,12 @@ def test_forwards_prompt_cache_key():
     assert validated.forwarded_params['prompt_cache_key'] == 'omi-extract-actions'
 
 
-def test_forwards_flex_only_for_the_memory_conflict_flex_lane():
-    lane = load_gateway_config(prod_mode=True).lanes['omi:auto:memory-conflict-flex']
+@pytest.mark.parametrize(
+    'lane_id',
+    ['omi:auto:memory-conflict-flex', 'omi:auto:memory-l2-flex', 'omi:auto:x-memory-extraction-flex'],
+)
+def test_forwards_flex_only_for_scheduled_background_lanes(lane_id):
+    lane = load_gateway_config(prod_mode=True).lanes[lane_id]
     request = valid_request(service_tier='flex')
     request.pop('response_format')
 
@@ -56,7 +60,7 @@ def test_forwards_flex_only_for_the_memory_conflict_flex_lane():
 def test_rejects_flex_for_other_lanes():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
 
-    with pytest.raises(GatewayCapabilityMismatchError, match='scheduled memory promotion'):
+    with pytest.raises(GatewayCapabilityMismatchError, match='scheduled background memory work'):
         validate_chat_completion_request(valid_request(service_tier='flex'), lane)
 
 

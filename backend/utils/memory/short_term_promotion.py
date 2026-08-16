@@ -37,6 +37,7 @@ from utils.memory.canonical_consolidation import (
     run_canonical_consolidation,
 )
 from utils.memory.canonical_required_processing import (
+    REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     RequiredMemoryProcessingReport,
     RequiredMemoryProcessor,
     run_required_memory_processing,
@@ -323,6 +324,9 @@ def run_canonical_short_term_maintenance(
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
     required_processor: Optional[RequiredMemoryProcessor] = None,
+    required_processing_attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    required_processing_result_guard: Optional[Callable[[], None]] = None,
+    required_processing_limit: int = 25,
     consolidation_attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
     consolidation_result_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
@@ -345,6 +349,9 @@ def run_canonical_short_term_maintenance(
         db_client=client,
         processor=required_processor,
         now=current_time,
+        attempt_lease_seconds=required_processing_attempt_lease_seconds,
+        result_guard=required_processing_result_guard,
+        limit=required_processing_limit,
     )
     lifecycle = run_canonical_short_term_ttl_lifecycle(
         uid,

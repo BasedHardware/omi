@@ -39,6 +39,7 @@ model_config_features:
       - memory_conflict
       - memory_conflict_flex
       - memory_l1
+      - memory_l2_flex
       - notifications
       - onboarding
       - openglass
@@ -48,6 +49,7 @@ model_config_features:
       - session_titles
       - smart_glasses
       - wrapped_analysis
+      - x_memory_extraction_flex
       - app_generator
       - app_integration
     structured_output:
