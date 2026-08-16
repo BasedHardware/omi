@@ -52,7 +52,8 @@
   border-radius: 999px;
 }
 
-.listen-state-glyph.is-loading .listen-state-glyph-ring {
+.listen-state-glyph.is-loading .listen-state-glyph-ring,
+.listen-state-glyph.is-connecting .listen-state-glyph-ring {
   border-style: dotted;
 }
 
@@ -137,6 +138,18 @@
   color: var(--content-secondary);
   font-size: var(--type-meta-size);
   line-height: var(--type-meta-line);
+}
+
+.listen-open-conversations {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--min-tap-target);
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--content-primary);
+  text-decoration: none;
 }
 
 .listen-state-panel.is-loud .listen-state-body {

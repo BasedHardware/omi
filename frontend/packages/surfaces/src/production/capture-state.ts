@@ -6,6 +6,7 @@
 export type CaptureState =
   | { readonly kind: "loading" }
   | { readonly kind: "idle" }
+  | { readonly kind: "connecting" }
   | {
       readonly kind: "capturing";
       readonly elapsedSeconds: number;
@@ -33,6 +34,7 @@ export type CaptureState =
 export type CaptureTitleKey =
   | "listen.stateLoading"
   | "listen.stateIdle"
+  | "listen.stateConnecting"
   | "listen.stateCapturing"
   | "listen.statePausedEntitlement"
   | "listen.stateOfflineBuffering"
@@ -43,6 +45,7 @@ export type CaptureTitleKey =
 export type CaptureBodyKey =
   | "listen.stateLoadingBody"
   | "listen.stateIdleBody"
+  | "listen.stateConnectingBody"
   | "listen.stateCapturingBody"
   | "listen.statePausedEntitlementBody"
   | "listen.stateOfflineBufferingBody"
@@ -91,6 +94,16 @@ export function describeCapture(state: CaptureState): CaptureDescription {
         backlogSeconds: 0,
         canStart: true,
         canStop: false,
+      };
+    case "connecting":
+      return {
+        titleKey: "listen.stateConnecting",
+        bodyKey: "listen.stateConnectingBody",
+        capturing: false,
+        loud: false,
+        backlogSeconds: 0,
+        canStart: false,
+        canStop: true,
       };
     case "capturing":
       return {

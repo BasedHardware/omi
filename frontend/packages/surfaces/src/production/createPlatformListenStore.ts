@@ -72,6 +72,10 @@ export function platformListenCaptureState(
     return { kind: "stopped-at-ceiling", untranscribedSeconds: backlog };
   }
 
+  if (transport.phase === "connecting") {
+    return { kind: "connecting" };
+  }
+
   if (transport.phase === "reconnecting") {
     const bufferedSeconds = transport.disconnectedAt === null
       ? 0
@@ -102,11 +106,9 @@ function status(client: PlatformListenCaptureClient): StoreStatus {
   return {
     refresh: {
       phase:
-        phase === "connecting"
-          ? "refreshing"
-          : phase === "reconnecting" || phase === "failed"
-            ? hasSavedData ? "saved-but-refresh-failed" : "unavailable"
-            : "ready",
+        phase === "reconnecting" || phase === "failed"
+          ? hasSavedData ? "saved-but-refresh-failed" : "unavailable"
+          : "ready",
       hasSavedData,
     },
     queue: IDLE_QUEUE,

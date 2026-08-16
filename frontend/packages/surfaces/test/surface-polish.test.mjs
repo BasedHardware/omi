@@ -317,7 +317,7 @@ test("Chat desktop empty/loading slot fills so the composer stays the last row",
   // hardcoded size back on the capability chip.
 });
 
-test("Listen waiting for speech uses the composed empty primitive without changing the words", async () => {
+test("Listen waiting for a transcript uses the composed empty primitive without claiming speech was heard", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const fixtureListenStore = await loadProductionExport("listen-fixtures.ts", "fixtureListenStore");
   const rendered = await renderComponent(ListenProduction, {

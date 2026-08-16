@@ -5,9 +5,10 @@ import type { ListenEntitlementSnapshot, TranscriptSegment } from "@omi-core/wir
 import type { ProductionListenStore } from "./ProductionListenStore.js";
 import type { CaptureState } from "./capture-state.js";
 import { backlogHours, describeCapture } from "./capture-state.js";
-import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionChrome, productionRouteHref } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
+import { listenPanelCopy } from "./listen-presentation.js";
 import "./listen.css";
 
 type Locale = string;
@@ -143,7 +144,10 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
   const followingLatestRef = useRef(true);
   const touchYRef = useRef<number | null>(null);
   const announcedCaptureKindRef = useRef<CaptureState["kind"] | null>(null);
+  const announcedTitleRef = useRef<string | null>(null);
   const announcedSegmentsRef = useRef(new Map<string, string>());
+  const previousCaptureKindRef = useRef<CaptureState["kind"] | null>(null);
+  const [emptyEnded, setEmptyEnded] = useState(false);
   useEffect(() => { onReadyRef.current = onReady; }, [onReady]);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -244,6 +248,27 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
       ? { kind: "loading" }
       : capture;
   const description = describeCapture(presentedCapture);
+  const panelCopy = listenPanelCopy({
+    capture: presentedCapture,
+    description,
+    preflight,
+    segmentCount: segments.length,
+    emptyEnded,
+  });
+  useLayoutEffect(() => {
+    const previousKind = previousCaptureKindRef.current;
+    previousCaptureKindRef.current = presentedCapture.kind;
+    if (presentedCapture.kind !== "idle") {
+      setEmptyEnded(false);
+      return;
+    }
+    if (segments.length > 0) {
+      setEmptyEnded(false);
+      return;
+    }
+    if (previousKind === null || previousKind === "idle" || previousKind === "loading") return;
+    setEmptyEnded(true);
+  }, [presentedCapture.kind, segments.length]);
   const elapsed = elapsedSeconds(presentedCapture);
   const buffered = bufferedSeconds(presentedCapture);
   const hours = backlogHours(description.backlogSeconds);
@@ -265,14 +290,16 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
       if (announcedSegmentsRef.current.get(key) !== segment.text) changedSegments.push(segment);
     }
     announcedSegmentsRef.current = nextSegmentMap;
-    const stateChanged = announcedCaptureKindRef.current !== presentedCapture.kind;
+    const stateChanged = announcedCaptureKindRef.current !== presentedCapture.kind
+      || announcedTitleRef.current !== panelCopy.titleKey;
     announcedCaptureKindRef.current = presentedCapture.kind;
+    announcedTitleRef.current = panelCopy.titleKey;
     const parts = [
-      stateChanged && !description.loud ? t(locale, description.titleKey) : null,
+      stateChanged && !description.loud ? t(locale, panelCopy.titleKey) : null,
       announceTranscript ? transcriptAnnouncement(changedSegments) : null,
     ].filter((part): part is string => Boolean(part));
     if (parts.length > 0) setListenAnnouncement(parts.join(" · "));
-  }, [announceTranscript, description.loud, description.titleKey, locale, presentedCapture.kind, segments]);
+  }, [announceTranscript, description.loud, locale, panelCopy.titleKey, presentedCapture.kind, segments]);
 
   return (
     <main
@@ -306,14 +333,20 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
           data-loud={description.loud ? "true" : "false"}
           data-capturing={description.capturing ? "true" : "false"}
           data-presentation={presentedCapture.kind}
+          {...(panelCopy.idleReason ? { "data-idle-reason": panelCopy.idleReason } : {})}
         >
           <div className={`listen-state-glyph is-${presentedCapture.kind}`} aria-hidden="true">
             <span className="listen-state-glyph-core" />
             <span className="listen-state-glyph-ring" />
           </div>
           <div className="listen-state-copy">
-            <h2 className="listen-state-title">{t(locale, description.titleKey)}</h2>
-            <p className="listen-state-body">{t(locale, description.bodyKey)}</p>
+            <h2 className="listen-state-title">{t(locale, panelCopy.titleKey)}</h2>
+            <p className="listen-state-body">{t(locale, panelCopy.bodyKey)}</p>
+            {panelCopy.showConversationsLink && (
+              <a className="listen-open-conversations" href={productionRouteHref("conversations")}>
+                {t(locale, "listen.openConversations")}
+              </a>
+            )}
             {elapsed !== null && (
               <p className="listen-elapsed">{t(locale, "listen.elapsed", { duration: formatDuration(elapsed, locale) })}</p>
             )}
