@@ -339,12 +339,12 @@ def test_explicit_cache_system_message_preserves_parser_schema_braces():
 
 
 def test_gateway_formatted_instructions_without_explicit_cache_stay_a_concrete_message():
-    """Flag-off gateway mode must not degrade pre-formatted instructions to a tuple template.
+    """The explicit-cache kill switch must not degrade pre-formatted instructions to a tuple template.
 
     Gateway mode pre-formats the parser schema (with literal JSON braces) into
     instructions_text. If that text were passed as a ('system', ...) template
     tuple, ChatPromptTemplate would parse the braces as variables and fail
-    before the LLM call — the default fail-closed state would be broken.
+    before the LLM call — the cache-off rollback path would be broken.
     """
     from langchain_core.prompts import ChatPromptTemplate
 

@@ -18,9 +18,10 @@ class _Db:
     def __init__(self, payload):
         self.payload = payload
         self.reads = 0
+        self.paths = []
 
     def document(self, path):
-        assert path == promotion_flex.BACKGROUND_FLEX_CONTROL_PATH
+        self.paths.append(path)
         outer = self
 
         class _Ref:
@@ -60,6 +61,38 @@ def test_static_capability_defaults_off_without_firestore_read(monkeypatch):
     assert db.reads == 0
 
 
+def test_background_flex_control_path_isolated_by_environment(monkeypatch):
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    dev_db = _Db(_flex_payload())
+    assert promotion_flex.background_flex_control_path() == "llm_runtime_controls/background_flex_dev"
+    assert promotion_flex.read_promotion_flex_control(db_client=dev_db).enabled is True
+
+    monkeypatch.setenv("OMI_ENV_STAGE", "prod")
+    prod_db = _Db({"enabled": False, "generation": 7})
+    assert promotion_flex.background_flex_control_path() == "llm_runtime_controls/background_flex_prod"
+    assert promotion_flex.read_promotion_flex_control(db_client=prod_db).enabled is False
+
+    assert dev_db.paths == ["llm_runtime_controls/background_flex_dev"]
+    assert prod_db.paths == ["llm_runtime_controls/background_flex_prod"]
+    assert dev_db.paths != prod_db.paths
+
+
+@pytest.mark.parametrize("stage", [None, "", "local", "offline", "staging", "production"])
+def test_missing_or_unsupported_environment_fails_closed_without_firestore_read(monkeypatch, stage):
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    if stage is None:
+        monkeypatch.delenv("OMI_ENV_STAGE", raising=False)
+    else:
+        monkeypatch.setenv("OMI_ENV_STAGE", stage)
+    db = _Db(_flex_payload())
+
+    assert promotion_flex.background_flex_control_path() is None
+    assert promotion_flex.read_promotion_flex_control(db_client=db) == promotion_flex.PromotionFlexControl()
+    assert db.reads == 0
+
+
 def test_gateway_flex_client_has_no_sdk_retry(monkeypatch):
     calls = []
     monkeypatch.setattr(
@@ -87,6 +120,7 @@ def test_gateway_flex_client_has_no_sdk_retry(monkeypatch):
 )
 def test_missing_or_invalid_live_control_fails_to_standard(monkeypatch, payload):
     monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
 
     assert promotion_flex.read_promotion_flex_control(db_client=_Db(payload)) == promotion_flex.PromotionFlexControl()
 
@@ -103,6 +137,7 @@ def test_one_enabled_control_routes_every_scheduled_workload_to_flex(
     monkeypatch, standard_feature, flex_feature, workload
 ):
     monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
     db = _Db(_flex_payload())
     calls = []
     router = promotion_flex.PromotionFlexRunRouter(
@@ -126,6 +161,7 @@ def test_one_enabled_control_routes_every_scheduled_workload_to_flex(
 
 def test_disabled_control_selects_no_flex_model(monkeypatch):
     monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
     router = promotion_flex.PromotionFlexRunRouter(db_client=_Db({"enabled": False, "generation": 1}))
 
     assert (
@@ -142,6 +178,7 @@ def test_disabled_control_selects_no_flex_model(monkeypatch):
 
 def test_router_discards_result_when_live_generation_changes(monkeypatch):
     monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
     db = _Db(_flex_payload())
 
     class _ChangingModel(_Model):

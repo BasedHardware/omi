@@ -2,7 +2,12 @@
 
 Once the owning jobs are deployed capable, operators can move every eligible
 scheduled call between Flex and the legacy Standard path without a redeploy by
-updating the single ``llm_runtime_controls/background_flex`` Firestore document.
+updating the single environment-scoped Firestore document for that stage.
+
+The dev and prod jobs can share the customer Firestore project, so the control
+document is deliberately stage-scoped. A missing, unsupported, or malformed
+``OMI_ENV_STAGE`` fails closed to Standard rather than risking a cross-stage
+toggle.
 """
 
 from __future__ import annotations
@@ -18,20 +23,16 @@ from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_ll
 logger = logging.getLogger(__name__)
 
 BACKGROUND_FLEX_CAPABLE_ENV = "OMI_BACKGROUND_FLEX_CAPABLE"
-BACKGROUND_FLEX_CONTROL_PATH = "llm_runtime_controls/background_flex"
+BACKGROUND_FLEX_CONTROL_COLLECTION = "llm_runtime_controls"
+BACKGROUND_FLEX_CONTROL_DOCUMENT_PREFIX = "background_flex"
 BACKGROUND_FLEX_TIMEOUT_SECONDS = 900.0
 BACKGROUND_FLEX_LEASE_SECONDS = 1_200
 BACKGROUND_FLEX_JOB_BUDGET_SECONDS = 3_600.0
 BACKGROUND_FLEX_JOB_SAFETY_SECONDS = 300.0
 
-# Compatibility names retained while promotion call sites migrate with the rest
-# of this PR. They all point at the one shared background control.
-MEMORY_PROMOTION_FLEX_CAPABLE_ENV = BACKGROUND_FLEX_CAPABLE_ENV
-MEMORY_PROMOTION_FLEX_CONTROL_PATH = BACKGROUND_FLEX_CONTROL_PATH
-MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS = BACKGROUND_FLEX_TIMEOUT_SECONDS
+# The maintenance cron still imports this lease constant while its call sites
+# migrate to the shared Flex router.
 MEMORY_PROMOTION_FLEX_LEASE_SECONDS = BACKGROUND_FLEX_LEASE_SECONDS
-MEMORY_MAINTENANCE_JOB_BUDGET_SECONDS = BACKGROUND_FLEX_JOB_BUDGET_SECONDS
-MEMORY_PROMOTION_FLEX_JOB_SAFETY_SECONDS = BACKGROUND_FLEX_JOB_SAFETY_SECONDS
 
 _TRANSIENT_FLEX_STATUS_CODES = frozenset({408, 409, 429, 500, 502, 503, 504})
 _TRANSIENT_FLEX_EXCEPTION_NAMES = frozenset(
@@ -65,16 +66,31 @@ def promotion_flex_capable() -> bool:
     return os.getenv(BACKGROUND_FLEX_CAPABLE_ENV, "false").strip().lower() in {"1", "true", "yes"}
 
 
+def background_flex_control_path() -> Optional[str]:
+    """Return the strict stage-scoped control document path.
+
+    Dev and prod intentionally use separate Firestore documents because their
+    jobs may read the same customer-data project. Other stages are not allowed
+    to read or write a live Flex switch; callers must use the Standard path.
+    """
+
+    stage = os.getenv("OMI_ENV_STAGE", "").strip().lower()
+    if stage not in {"dev", "prod"}:
+        return None
+    return f"{BACKGROUND_FLEX_CONTROL_COLLECTION}/{BACKGROUND_FLEX_CONTROL_DOCUMENT_PREFIX}_{stage}"
+
+
 def _standard_control() -> PromotionFlexControl:
     return PromotionFlexControl()
 
 
 def read_promotion_flex_control(*, db_client: Any) -> PromotionFlexControl:
     """Read the strict shared control, failing safely to Standard."""
-    if not promotion_flex_capable():
+    control_path = background_flex_control_path()
+    if not promotion_flex_capable() or control_path is None:
         return _standard_control()
     try:
-        snapshot = db_client.document(BACKGROUND_FLEX_CONTROL_PATH).get()
+        snapshot = db_client.document(control_path).get()
         if not getattr(snapshot, "exists", False):
             return _standard_control()
         payload = snapshot.to_dict()
@@ -233,19 +249,18 @@ class PromotionFlexRunRouter:
 
 __all__ = [
     "BACKGROUND_FLEX_CAPABLE_ENV",
-    "BACKGROUND_FLEX_CONTROL_PATH",
+    "BACKGROUND_FLEX_CONTROL_COLLECTION",
+    "BACKGROUND_FLEX_CONTROL_DOCUMENT_PREFIX",
     "BACKGROUND_FLEX_JOB_BUDGET_SECONDS",
     "BACKGROUND_FLEX_JOB_SAFETY_SECONDS",
     "BACKGROUND_FLEX_LEASE_SECONDS",
     "BACKGROUND_FLEX_TIMEOUT_SECONDS",
-    "MEMORY_PROMOTION_FLEX_CAPABLE_ENV",
-    "MEMORY_PROMOTION_FLEX_CONTROL_PATH",
     "MEMORY_PROMOTION_FLEX_LEASE_SECONDS",
-    "MEMORY_PROMOTION_FLEX_TIMEOUT_SECONDS",
     "PromotionFlexControl",
     "PromotionFlexControlChanged",
     "PromotionFlexDeferred",
     "PromotionFlexRunRouter",
+    "background_flex_control_path",
     "promotion_flex_capable",
     "read_promotion_flex_control",
 ]

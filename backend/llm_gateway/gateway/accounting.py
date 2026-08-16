@@ -656,15 +656,24 @@ def _estimate_cost(
     )
     if cache_write_rate is not None:
         numerator += usage.cache_write_tokens * cache_write_rate
-    cache_savings_numerator = usage.cached_input_tokens * max(
-        rate_card.input_micro_usd_per_million - rate_card.cached_input_micro_usd_per_million,
-        0,
+    # Compare the cache-aware input bill with the counterfactual bill for all
+    # input tokens at this tier's ordinary input rate.  Cache writes are part
+    # of that prompt-token counterfactual too, so their premium (or discount)
+    # is included in the net savings.  This intentionally may be negative for
+    # a cache miss whose write has not yet been amortized by a later read.
+    cache_savings_numerator = usage.cached_input_tokens * (
+        rate_card.input_micro_usd_per_million - rate_card.cached_input_micro_usd_per_million
     )
+    if usage.cache_write_tokens:
+        # A missing write rate was rejected above whenever write tokens are
+        # present, so this is safe after the guard at the top of this block.
+        assert cache_write_rate is not None
+        cache_savings_numerator += usage.cache_write_tokens * (rate_card.input_micro_usd_per_million - cache_write_rate)
     if provider.strip().lower() == 'openai' and traffic_type == 'flex':
         # OpenAI documents Flex tokens at Batch API rates (50% below the
         # synchronous Standard rates represented by this rate card).
         numerator //= 2
-        cache_savings_numerator //= 2
+        cache_savings_numerator = _half_toward_zero(cache_savings_numerator)
         cost_basis = 'flex_batch_token_rates_excludes_cache_storage'
     else:
         cost_basis = 'marginal_token_rates_excludes_cache_storage'
@@ -674,7 +683,14 @@ def _estimate_cost(
 
 
 def _rounded_micro_usd(numerator: int) -> int:
-    return (numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION
+    if numerator >= 0:
+        return (numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION
+    return -((-numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION)
+
+
+def _half_toward_zero(value: int) -> int:
+    """Scale a signed numerator by Flex's 50% factor without floor bias."""
+    return value // 2 if value >= 0 else -((-value) // 2)
 
 
 @lru_cache(maxsize=1)

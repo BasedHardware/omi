@@ -340,9 +340,12 @@ def test_gpt56_cache_keys_are_stable_versioned_and_never_include_request_content
     assert not conv_proc._has_gpt56_cacheable_static_prefix('short prefix')
 
 
-def test_gpt56_explicit_cache_requires_gateway_and_rollout_flag(monkeypatch):
+def test_gpt56_explicit_cache_defaults_on_in_gateway_and_honors_kill_switch(monkeypatch):
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
     monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+    assert conv_proc._gpt56_explicit_cache_enabled()
+
+    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
     assert not conv_proc._gpt56_explicit_cache_enabled()
 
     monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'true')
@@ -356,13 +359,13 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
     """Regression (cubic review): the None/legacy cache_key split keys on gateway mode.
 
     get_reprocess_transcript_structure and get_app_result have no cacheable
-    static prefix. With the gateway on but the rollout flag off (the default
-    fail-closed state) they must still pass cache_key=None: a legacy
+    static prefix. With the gateway on they must still pass cache_key=None: a legacy
     prompt_cache_key would opt these unique-prompt requests back into
-    implicit, billable cache writes.
+    implicit, billable cache writes. The explicit cache kill switch is set
+    below to verify the old fully-disabled behavior remains available.
     """
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
-    monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+    monkeypatch.setenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, 'false')
 
     captured: dict = {}
 
