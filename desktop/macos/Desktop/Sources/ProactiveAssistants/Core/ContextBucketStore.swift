@@ -630,6 +630,22 @@ actor ContextBucketStore {
       }) ?? false
   }
 
+  /// The grounding facts behind an armed candidate, rendered for the delivery
+  /// gate's evidence section. Empty on any failure: the gate prompt then shows
+  /// "(none)", which is strictly no worse than the pre-evidence prompt.
+  func groundingFactStatements(
+    _ factIDs: [String], bucketID: String
+  ) async -> [String] {
+    guard !factIDs.isEmpty else { return [] }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextProactiveCandidateLookup.groundingFactLines(
+          factIDs: factIDs, bucketID: bucketID, in: db)
+      }) ?? []
+  }
+
   func recentContextPool(
     excludingBucketID: String, now: Date = Date()
   ) async -> [ContextWorkstreamPoolItem] {

@@ -55,6 +55,12 @@ final class SearchBarWindow {
         if let window = current {
             window.alphaValue = 1
             window.makeKeyAndOrderFront(nil)
+            // The panel is already up and already holds a composed corpus, so the right thing is
+            // main's: keep every row on screen and ask the account what changed. Bounded by
+            // `ActivityStore.revalidationCooldown`, which is why hammering the hotkey is one
+            // request. The other branch does not need this — a freshly mounted surface calls
+            // `start()`, and `start()` on an already-started store revalidates.
+            ActivitySpine.shared.store.revalidate()
             NotificationCenter.default.post(
                 name: refocusNotification, object: nil,
                 userInfo: prefill.isEmpty ? nil : [prefillKey: prefill])
@@ -135,6 +141,11 @@ final class SearchBarWindow {
                 // capture opens one. Still the app's single store: a second connection would be a
                 // second migration racing the first.
                 store: { Engine.shared.contextStore },
+                // The application's Activity store, not one this panel builds. This window is
+                // rebuilt on every `present()` — `dismiss()` drops `current`, so the reuse branch
+                // above is only ever taken while the bar is already up — and a spine owned by the
+                // view would therefore re-page the whole account every time the bar is summoned.
+                spine: ActivitySpine.shared.store,
                 onDismiss: { dismiss() },
                 onHeightChange: { height in resize(to: height) },
                 onOpenMoment: { moment in open(moment) },

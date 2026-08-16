@@ -67,13 +67,13 @@ struct ShortcutModifiers: OptionSet, Hashable, Sendable {
 /// accelerator string. The printed key label is.
 enum ShortcutChord: Equatable, Hashable, Sendable {
     /// One modifier tapped twice, optionally with others held down throughout. `⌘⌘` is
-    /// `.doubleTap(.command, alsoHeld: [])`; `⌘⌘⇧` is `.doubleTap(.command, alsoHeld: [.shift])`.
+    /// `.doubleTap(.command, alsoHeld: [])`; `⌥⌥` is `.doubleTap(.option, alsoHeld: [])`.
     ///
-    /// Still here after `openActivity` moved off it, for two reasons that are not going away:
-    /// `openSearch` is still a double tap, and the conflict scanner has to be able to *say* what
-    /// another tool bound — Claude's Quick Entry is ⌥⌥ and Codex spells one of its own bindings
-    /// `doubleCommand`. A vocabulary that could not express a double tap could not report a
-    /// collision with one.
+    /// **This app binds nothing to a double tap any more** — the one action left is `openActivity`,
+    /// which is the two Command keys pressed together. The case stays because the conflict scanner
+    /// has to be able to *say* what another tool bound: Claude's Quick Entry is ⌥⌥ and Codex spells
+    /// one of its own bindings `doubleCommand`. A vocabulary that could not express a double tap
+    /// could not report a collision with one.
     case doubleTap(ShortcutModifiers, alsoHeld: ShortcutModifiers)
     /// The two physical Command keys pressed together — left and right, at the same time, with
     /// nothing else held.
@@ -103,9 +103,9 @@ enum ShortcutChord: Equatable, Hashable, Sendable {
             // writes it.
             return tapped.display + tapped.display + held.display
         case .bothCommandKeys:
-            // The `+` is doing real work. `⌘⌘` already means "tapped twice" everywhere else in this
-            // app, so printing this gesture the same way would say the wrong thing about it — and
-            // would print the launch gesture identically to the first half of the search one.
+            // The `+` is doing real work. `⌘⌘` means "tapped twice" wherever this app reports
+            // another tool's binding, so printing this gesture the same way would say the wrong
+            // thing about it.
             return Self.bothCommandKeysDisplay
         case .key(let label, let modifiers):
             return modifiers.display + label
@@ -131,127 +131,6 @@ enum ShortcutChord: Equatable, Hashable, Sendable {
             // shortcut on the machine, and its glyphs already say so.
             return modifiers.display + label
         }
-    }
-}
-
-// MARK: - The tap detector
-
-/// The double-tap rules, as a value.
-///
-/// Split out from the event plumbing on purpose: "two Command presses inside 380 ms with nothing in
-/// between" is the whole feature, and it is the part that can be wrong in ways no amount of clicking
-/// around would reveal. Feeding it synthetic snapshots is the only way to assert what happens when
-/// someone types ⌘C twice quickly, or holds ⌘ for a second, or taps ⌘ then adds Shift.
-///
-/// Fires on the **second release**, not the second press. Firing on the press is a few tens of
-/// milliseconds quicker and wrong: `⌘` down, `⌘` down again and *held* is the opening of ⌘S, and a
-/// window that opens on its way there is worse than one that opens 40 ms later.
-struct ModifierDoubleTap {
-    /// Between the two presses. The reference calls for 350–400 ms; 380 is the middle of that, and
-    /// comfortably below the ~500 ms at which two deliberate taps stop feeling like one gesture.
-    static let maxGap: TimeInterval = 0.380
-    /// A press held longer than this is a hold, not a tap — holding ⌘ is how macOS shows menu
-    /// shortcut hints, and it must never count.
-    static let maxHold: TimeInterval = 0.400
-
-    /// One `flagsChanged`, reduced to what the rules need. `at` is monotonic (`NSEvent.timestamp`).
-    struct Snapshot: Equatable {
-        let modifiers: ShortcutModifiers
-        let at: TimeInterval
-
-        init(modifiers: ShortcutModifiers, at: TimeInterval) {
-            self.modifiers = modifiers
-            self.at = at
-        }
-    }
-
-    /// The modifier being watched for a double tap.
-    private let tapped: ShortcutModifiers
-
-    // The press currently in flight, if the modifier is down.
-    private var pressBeganAt: TimeInterval?
-    private var pressHeld: ShortcutModifiers = []
-    private var pressIsClean = true
-
-    // The last press that completed as a clean tap, and is still eligible to be the first half.
-    private var firstTapBeganAt: TimeInterval?
-    private var firstTapHeld: ShortcutModifiers = []
-
-    private var wasDown = false
-
-    init(tapped: ShortcutModifiers = .command) {
-        self.tapped = tapped
-    }
-
-    /// - Returns: the modifiers held alongside the tapped one when a double tap completes, or `nil`.
-    mutating func flagsChanged(_ snapshot: Snapshot) -> ShortcutModifiers? {
-        let isDown = snapshot.modifiers.contains(tapped)
-        let held = snapshot.modifiers.subtracting(tapped)
-        defer { wasDown = isDown }
-
-        if isDown, !wasDown {
-            // Press.
-            pressBeganAt = snapshot.at
-            pressHeld = held
-            pressIsClean = true
-            return nil
-        }
-
-        if !isDown, wasDown {
-            // Release.
-            let began = pressBeganAt
-            pressBeganAt = nil
-            guard let began,
-                pressIsClean,
-                // A tap has to be short, and the modifiers held around it have to be the same at
-                // both ends — ⌘ down, then Shift added, then ⌘ up is not a chord anyone is aiming at.
-                snapshot.at - began <= Self.maxHold,
-                held == pressHeld
-            else {
-                forgetHistory()
-                return nil
-            }
-
-            if let firstBegan = firstTapBeganAt,
-                firstTapHeld == held,
-                began - firstBegan <= Self.maxGap {
-                forgetHistory()
-                return held
-            }
-
-            firstTapBeganAt = began
-            firstTapHeld = held
-            return nil
-        }
-
-        // A modifier changed while the tapped one was down (or while nothing was down). Changing the
-        // held set mid-press is what disqualifies ⌘ → ⌘⇧ from reading as either chord.
-        if isDown, held != pressHeld {
-            pressIsClean = false
-        }
-        return nil
-    }
-
-    /// Any ordinary key going down. `⌘C ⌘C` typed quickly is two presses inside the window, and the
-    /// only thing that tells it apart from `⌘⌘` is that a key happened in between.
-    mutating func keyPressed() {
-        pressIsClean = false
-        forgetHistory()
-    }
-
-    /// Drops every bit of in-flight state. Called when monitoring restarts, because the modifier may
-    /// have gone up while we were not watching and `wasDown` would then be a lie.
-    mutating func reset() {
-        pressBeganAt = nil
-        pressHeld = []
-        pressIsClean = true
-        wasDown = false
-        forgetHistory()
-    }
-
-    private mutating func forgetHistory() {
-        firstTapBeganAt = nil
-        firstTapHeld = []
     }
 }
 
@@ -409,15 +288,16 @@ struct BothCommandKeys {
 
 // MARK: - Global shortcuts
 
-/// The two system-wide shortcuts, and the honest truth about whether they are armed.
+/// The app's system-wide shortcut, and the honest truth about whether it is armed.
 ///
 /// Two mechanisms, because the two kinds of binding are not the same problem:
 ///
-/// - **The gesture defaults** (`⌘ + ⌘`, `⌘⌘⇧`) cannot be registered as hot keys at all. Neither the
-///   two Command keys pressed together nor a modifier tapped twice is a key equivalent, so
-///   `RegisterEventHotKey` has nothing to take; the only route is watching `flagsChanged` across the
-///   whole system, which macOS gates behind Accessibility. When that grant is missing the shortcut
-///   does not fire, and `readiness(for:)` says so rather than letting Settings imply otherwise.
+/// - **The gesture default** (`⌘ + ⌘`) cannot be registered as a hot key at all. The two Command
+///   keys pressed together is not a key equivalent, so `RegisterEventHotKey` has nothing to take;
+///   the only route is watching `flagsChanged` across the whole system, which macOS gates behind
+///   Accessibility. When that grant is missing the shortcut does not fire, `readiness(for:)` says
+///   so rather than letting Settings imply otherwise — and `askForAccessibility()` asks for it,
+///   which is the half that was missing.
 /// - **A recorded key equivalent** goes through `RegisterEventHotKey`, which needs no permission at
 ///   all. So a user who rebinds the shortcut gets one that works on a machine where Accessibility
 ///   was refused — and, just as importantly, the app stops observing every keystroke on the system
@@ -437,10 +317,16 @@ final class GlobalShortcuts {
     /// It is not: Activity is the main window — what a launch, the Dock icon and this chord all open
     /// — and the timeline is the second window a moment inside Activity opens into. The case name
     /// followed the behaviour; the *stored* name deliberately did not, and `storageKey` says why.
+    /// **There is one action, and there used to be two.** `openSearch` was a second chord onto the
+    /// *same* window: `ContextApp.shortcutFired` answered `.openActivity` and `.openSearch` with one
+    /// `window.press()`, because the Spotlight panel became the Activity window and the two stopped
+    /// being different surfaces. So the app shipped two recorders, two defaults (`⌘ + ⌘` and `⌘⌘⇧`)
+    /// and two conflict rows for one behaviour, and a user who rebound one of them could not tell
+    /// which had won. The duplicate is gone rather than hidden — a Settings row nobody can find is
+    /// still a chord that fires.
     enum Action: String, CaseIterable, Sendable {
         /// The app's primary way in. Brings the Activity window — the main window — forward.
         case openActivity
-        case openSearch
 
         /// The Settings row title. Named for the window it opens, which is the only thing about a
         /// shortcut row a user can check: a row still called "Open Timeline Shortcut" over a chord
@@ -448,7 +334,6 @@ final class GlobalShortcuts {
         var title: String {
             switch self {
             case .openActivity: return "Open Activity Shortcut"
-            case .openSearch: return "Open Search Shortcut"
             }
         }
 
@@ -458,7 +343,7 @@ final class GlobalShortcuts {
             "Record a keyboard shortcut. Clear it to use \(defaultChord.display)."
         }
 
-        /// `⌘ + ⌘` for Activity, `⌘⌘⇧` for search.
+        /// `⌘ + ⌘` — the two physical Command keys, pressed together.
         ///
         /// The app's way in used to be `⌘⌘` — a double tap — and it was reported as the wrong
         /// gesture twice: *"expressing both the command keys one by one. It's supposed to be both
@@ -468,14 +353,9 @@ final class GlobalShortcuts {
         /// as, and the app is now what it looks like. The chord did not move when the window behind
         /// it did — this is the gesture the product advertises, and it now lands on the main window
         /// rather than on the timeline.
-        ///
-        /// Search stays a double tap. Its chord is `⌘⌘⇧`, which cannot be confused with `⌘ + ⌘` by
-        /// hand or by this file — the two detectors cannot both fire on one gesture, since pressing
-        /// both Command keys puts the `.command` bit down once and a double tap puts it down twice.
         var defaultChord: ShortcutChord {
             switch self {
             case .openActivity: return .bothCommandKeys
-            case .openSearch: return .doubleTap(.command, alsoHeld: [.shift])
             }
         }
 
@@ -484,7 +364,6 @@ final class GlobalShortcuts {
         fileprivate var hotKeyID: UInt32 {
             switch self {
             case .openActivity: return 1
-            case .openSearch: return 2
             }
         }
 
@@ -504,7 +383,6 @@ final class GlobalShortcuts {
         private var storedName: String {
             switch self {
             case .openActivity: return "openTimeline"
-            case .openSearch: return "openSearch"
             }
         }
 
@@ -525,10 +403,10 @@ final class GlobalShortcuts {
     }
 
     enum Binding: Equatable, Sendable {
-        /// Nothing recorded, so the action answers to the modifier gesture it ships with —
-        /// `⌘ + ⌘` or `⌘⌘⇧`, whichever `Action.defaultChord` names. Named for the *kind* of binding
-        /// rather than for one gesture, because `openActivity`'s default is not a double tap and a
-        /// case called `doubleTapDefault` would have quietly become a lie about half of them.
+        /// Nothing recorded, so the action answers to the modifier gesture it ships with — `⌘ + ⌘`,
+        /// which is what `Action.defaultChord` names. Named for the *kind* of binding rather than
+        /// for the gesture itself, so a second gesture default could be added without the case
+        /// becoming a lie about one of them.
         case gestureDefault
         case recorded(Recorded)
     }
@@ -601,11 +479,12 @@ final class GlobalShortcuts {
     // MARK: State
 
     private let store: Store
-    /// The two gesture recognizers, both fed every `flagsChanged`. Neither can steal the other's
-    /// gesture: pressing both Command keys puts the `.command` bit down once, and a double tap puts
-    /// it down twice, so there is no ordering between them to get wrong.
-    private var doubleTap = ModifierDoubleTap(tapped: .command)
+    /// The gesture recognizer, fed every `flagsChanged`.
     private var bothCommands = BothCommandKeys()
+    /// Whether this launch has already raised the Accessibility alert. Per launch rather than
+    /// per install: macOS drops the grant whenever the app's signature changes, so a flag written
+    /// once and kept forever would leave the shortcut dead after an update with nothing said.
+    private var hasAskedForAccessibility = false
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var hotKeys: [Action: EventHotKeyRef] = [:]
@@ -739,7 +618,53 @@ final class GlobalShortcuts {
             installMonitors()
         } else {
             removeMonitors()
+            if wantsMonitor { askForAccessibility() }
         }
+    }
+
+    /// **Asks for the grant the gesture cannot work without, instead of only reporting its absence.**
+    ///
+    /// This is the whole of the reported bug — *"when I am pressing both command keys together it is
+    /// not opening my timeline"* — on a Mac where `AXIsProcessTrusted()` is false. The shortcut layer
+    /// knew: it declined to install the monitors and `readiness(for:)` answered `.needsAccessibility`.
+    /// Every surface that knew was a *description*: a note under a Settings row the user has to go
+    /// looking for, and a button that opens a pane where this app **is not listed at all** until it
+    /// has asked once. So the honest state was reported and nothing about it could be acted on.
+    ///
+    /// Three bounds on the nagging, because an alert nobody asked for is its own defect:
+    ///
+    /// - **Only when a gesture binding is in force.** A user who recorded a key equivalent has a
+    ///   shortcut that works with no grant at all (`RegisterEventHotKey` needs no permission), so
+    ///   there is nothing to ask them for.
+    /// - **Only after onboarding.** The first-run flow owns the permission choreography and asks for
+    ///   Accessibility itself; a second alert racing it at launch would be two dialogs about one
+    ///   switch, with the app's own card underneath them.
+    /// - **Once per launch.** `reapply()` runs on every app activation, and this app is activated
+    ///   constantly.
+    private func askForAccessibility() {
+        guard
+            Self.shouldAsk(
+                alreadyAsked: hasAskedForAccessibility, hasFinishedOnboarding: hasFinishedOnboarding)
+        else { return }
+        hasAskedForAccessibility = true
+        ContextLog.info(
+            "A gesture shortcut is bound and Accessibility is not granted — asking", Self.logCategory)
+        AXElement.requestTrust()
+    }
+
+    /// The rule itself, split from the machine that reads it, the way `Permissions.promptIsSpent`
+    /// is — the caller has already established that a gesture binding is in force and that
+    /// `AXElement.isTrusted` is false, since both of those are facts about *this* Mac and a test
+    /// written against the live values would pass for the wrong reason on a Mac that happens to have
+    /// granted the permission.
+    nonisolated static func shouldAsk(alreadyAsked: Bool, hasFinishedOnboarding: Bool) -> Bool {
+        !alreadyAsked && hasFinishedOnboarding
+    }
+
+    /// Read straight from defaults rather than through `Cinematic`'s gate, so this file depends on
+    /// the flag and not on the onboarding machinery that writes it.
+    private var hasFinishedOnboarding: Bool {
+        store.defaults.bool(forKey: CinematicGate.onboardedKey)
     }
 
     private func register(_ recorded: Recorded, for action: Action) {
@@ -789,10 +714,9 @@ final class GlobalShortcuts {
         resetDetectors()
     }
 
-    /// Both, always together: a detector left holding a belief from before the gap is a detector
-    /// that can fire on the first keypress after it.
+    /// A detector left holding a belief from before the gap is a detector that can fire on the
+    /// first keypress after it.
     private func resetDetectors() {
-        doubleTap.reset()
         bothCommands.reset()
     }
 
@@ -813,9 +737,6 @@ final class GlobalShortcuts {
         switch event.type {
         case .flagsChanged:
             let modifiers = ShortcutModifiers(event.modifierFlags)
-            if let held = doubleTap.flagsChanged(.init(modifiers: modifiers, at: event.timestamp)) {
-                fire(.doubleTap(.command, alsoHeld: held))
-            }
             // `event.keyCode` is the modifier key that moved — 55 or 54 for the two Command keys —
             // and it is the only thing here that distinguishes them, since `modifiers` says
             // `.command` for either. Valid on `flagsChanged`, which is a keyboard event.
@@ -825,7 +746,6 @@ final class GlobalShortcuts {
                 fire(.bothCommandKeys)
             }
         case .keyDown:
-            doubleTap.keyPressed()
             bothCommands.keyPressed()
         default:
             break
@@ -835,9 +755,9 @@ final class GlobalShortcuts {
     /// Delivers a gesture to whichever action is still on its default *and* ships that gesture.
     ///
     /// Only an action still on its default answers to a gesture: rebinding `openActivity` to ⌥Space
-    /// and leaving search on ⌘⌘⇧ must not leave ⌘ + ⌘ opening Activity as well. Matched against
-    /// `defaultChord` itself rather than against a second copy of the gesture's parts, so the table
-    /// Settings prints and the table that fires cannot drift apart.
+    /// must not leave ⌘ + ⌘ opening Activity as well. Matched against `defaultChord` itself rather
+    /// than against a second copy of the gesture's parts, so the table Settings prints and the table
+    /// that fires cannot drift apart.
     private func fire(_ chord: ShortcutChord) {
         guard
             let action = Action.allCases.first(where: {

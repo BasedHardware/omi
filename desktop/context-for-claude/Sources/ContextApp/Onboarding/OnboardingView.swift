@@ -1327,6 +1327,15 @@ struct OnboardingView: View {
         // The bed is the cinematic's, and the cinematic is over. Fades rather than cuts; a stop with
         // no music playing is a no-op, so this is safe however the run got here.
         Sound.music.stop()
+        // **The line above is a precondition of the Accessibility ask, so the ask is re-evaluated
+        // here rather than left to the next app activation.** `GlobalShortcuts.askForAccessibility()`
+        // refuses to raise the system alert until onboarding has finished — otherwise it would race
+        // the flow's own permission choreography — and the only thing that re-evaluates it is
+        // `reapply()`, which ran at launch when this flag was still false. Without this the user
+        // who finishes onboarding and stays in the app is never asked at all, and `⌘ + ⌘` goes on
+        // doing nothing until they happen to switch away and back. Idempotent like the rest of this
+        // method: `reapply()` re-registers what is already registered, and the ask is once per launch.
+        GlobalShortcuts.shared.refresh()
     }
 
     private func finish() {
