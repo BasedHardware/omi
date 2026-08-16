@@ -551,8 +551,11 @@ class MongoDocumentStore:
                 raise NotImplementedError(
                     "query_group start_after (document-name keyset) does not support combining with an explicit order_by"
                 )
-            # Document-name keyset: ``_id`` is the full logical path (mirrors Firestore __name__).
-            mongo_filter["_id"] = {"$gt": start_after}
+            # Document-name keyset: ``_id`` is the full logical path (mirrors Firestore __name__). MERGE
+            # the ``$gt`` into any existing ``_id`` range from a __name__ filter — reassigning the whole
+            # dict dropped that bound, so later pages escaped the requested name range (cubic PR 10887
+            # mongo.py:541).
+            mongo_filter.setdefault("_id", {})["$gt"] = start_after
         cursor = self._db[group].find(mongo_filter)
         if specs:
             sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]

@@ -141,13 +141,12 @@ def _neutral_data(data: Dict[str, Any]) -> Dict[str, Any]:
     return {k: _to_neutral(v) for k, v in data.items()}
 
 
-def _is_transient_mongo_txn_error(exc: Exception) -> bool:
-    """True for a Mongo transaction error the transaction machinery should retry (write conflict /
-    unknown-commit-result), surfaced via PyMongo's error labels."""
-    has_label = getattr(exc, "has_error_label", None)
-    if not callable(has_label):
-        return False
-    return bool(has_label("TransientTransactionError") or has_label("UnknownTransactionCommitResult"))
+_UNKNOWN_COMMIT_RETRIES = 100  # backstop bound on the idempotent commit-retry loop (never a real limit)
+
+
+def _has_txn_label(exc: Exception, label: str) -> bool:
+    fn = getattr(exc, "has_error_label", None)
+    return bool(callable(fn) and fn(label))
 
 
 @contextlib.contextmanager
@@ -499,15 +498,25 @@ class _FacadeTransaction:
     def _commit(self) -> Any:
         if self._session is None:
             return []
-        try:
-            self._session.commit_transaction()
-        except Exception as exc:  # translate a Mongo write-conflict into the retry signal the decorator expects
-            if _is_transient_mongo_txn_error(exc):
-                from google.api_core.exceptions import Aborted
+        # A commit that fails with UnknownTransactionCommitResult MAY already have succeeded on the server,
+        # so the transaction BODY must NOT be replayed (duplicate side effects). Retry the COMMIT itself —
+        # committing is idempotent — per MongoDB's driver guidance. Only a TransientTransactionError (write
+        # conflict, body never applied) is safe to replay via the decorator's Aborted retry (cubic PR 10887
+        # firestore_facade.py:508). Bound the commit-retry loop as a backstop against a pathological hang.
+        for _ in range(_UNKNOWN_COMMIT_RETRIES):
+            try:
+                self._session.commit_transaction()
+                return []
+            except Exception as exc:
+                if _has_txn_label(exc, "UnknownTransactionCommitResult"):
+                    continue  # retry the commit only — do NOT re-run the callback body
+                if _has_txn_label(exc, "TransientTransactionError"):
+                    from google.api_core.exceptions import Aborted
 
-                raise Aborted(str(exc)) from exc
-            raise
-        return []
+                    raise Aborted(str(exc)) from exc  # decorator replays the whole transaction
+                raise
+        # Exhausted commit retries on repeated UnknownTransactionCommitResult: surface it, don't replay.
+        raise RuntimeError("transaction commit did not resolve after repeated UnknownTransactionCommitResult")
 
     def _rollback(self) -> None:
         if self._session is not None:

@@ -412,3 +412,53 @@ def test_name_filter_string_bound_still_matches():
         items.document(k).set({"v": 1})
     q = items.where("__name__", ">=", "b")
     assert sorted(s.id for s in q.stream()) == ["b", "c"]
+
+
+def test_commit_retries_commit_only_on_unknown_result_but_replays_body_on_transient():
+    # cubic PR 10887 firestore_facade.py:508: UnknownTransactionCommitResult means the commit MAY have
+    # succeeded, so _commit must retry the COMMIT (idempotent) and NEVER signal a body replay; only a
+    # TransientTransactionError (body never applied) is replayed via Aborted.
+    from database.store import firestore_facade as ff
+    from google.api_core.exceptions import Aborted
+
+    class _LabelExc(Exception):
+        def __init__(self, label):
+            self._label = label
+
+        def has_error_label(self, label):
+            return label == self._label
+
+    class _UnknownThenOk:
+        def __init__(self):
+            self.commits = 0
+
+        def commit_transaction(self):
+            self.commits += 1
+            if self.commits < 3:
+                raise _LabelExc("UnknownTransactionCommitResult")
+
+    tx = ff._FacadeTransaction.__new__(ff._FacadeTransaction)
+    tx._session = _UnknownThenOk()
+    tx._commit()  # must not raise: retries the commit only
+    assert tx._session.commits == 3  # retried, no body replay
+
+    class _Transient:
+        def commit_transaction(self):
+            raise _LabelExc("TransientTransactionError")
+
+    tx2 = ff._FacadeTransaction.__new__(ff._FacadeTransaction)
+    tx2._session = _Transient()
+    with pytest.raises(Aborted):  # decorator replays the whole transaction body
+        tx2._commit()
+
+
+def test_group_query_order_by_field_missing_on_some_docs_does_not_crash():
+    # cubic PR 10887 store_fakes.py:344: query_group ordered by a field some group docs lack must not
+    # crash on a None sort key (the fake used to raise TypeError while both real adapters return rows).
+    # Firestore excludes docs missing the ordered field; the fake now filters them before sorting.
+    c = _client()
+    c.document("users/u1/items/a").set({"rank": 2})
+    c.document("users/u2/items/b").set({"rank": 1})
+    c.document("users/u3/items/c").set({"other": 9})  # no ``rank`` -> excluded from the order
+    ordered = [s.id for s in c.collection_group("items").order_by("rank").stream()]
+    assert ordered == ["b", "a"]  # c excluded, no TypeError

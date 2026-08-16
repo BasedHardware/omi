@@ -339,6 +339,11 @@ class FakeDocumentStore:
             raise NotImplementedError(
                 "query_group: a document-name start_after keyset cannot combine with an explicit order_by"
             )
+        # Firestore excludes docs missing an ordered field, and query() filters them before sorting; do the
+        # same here, or sorting a group by a sometimes-missing field hits None -> TypeError in the fake
+        # while both real backends return rows (cubic PR 10887 store_fakes.py:344).
+        for _f, _ in specs:
+            rows = [(p, d) for p, d in rows if _f in d]
         if specs and isinstance(order_by, str):
             f, fdir = specs[0]
             rows.sort(key=lambda pd, ff=f: (pd[1].get(ff), pd[0]), reverse=(fdir == "desc"))

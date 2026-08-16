@@ -261,11 +261,15 @@ def test_query_multi_field_order_by(store, uid):
 
 def test_query_group_spans_parents(store, uid):
     # collection-group: the same leaf collection under different parents, plus a different leaf excluded.
-    store.set(f"users/{uid}/widgets/w1", {"kind": "a"})
-    store.set(f"users/{uid}-other/widgets/w2", {"kind": "a"})
-    store.set(f"users/{uid}/gadgets/g1", {"kind": "a"})  # different leaf → excluded
+    # A collection-group query scans the whole leaf collection with no parent scope, and the contract
+    # backends persist across runs, so scope by a per-run-unique ``kind`` marker to isolate this run's docs
+    # (cubic PR 10887 test:251).
+    kind = f"a-{uid}"
+    store.set(f"users/{uid}/widgets/w1", {"kind": kind})
+    store.set(f"users/{uid}-other/widgets/w2", {"kind": kind})
+    store.set(f"users/{uid}/gadgets/g1", {"kind": kind})  # different leaf → excluded
 
-    hits = store.query_group("widgets", filters=[("kind", "==", "a")])
+    hits = store.query_group("widgets", filters=[("kind", "==", kind)])
     assert {d.id for d in hits} == {"w1", "w2"}
     # results carry the full logical path so the caller can recover the parent (uid)
     assert {d.path for d in hits} == {f"users/{uid}/widgets/w1", f"users/{uid}-other/widgets/w2"}
@@ -274,18 +278,20 @@ def test_query_group_spans_parents(store, uid):
 def test_query_group_start_after_keyset(store, uid):
     # document-name keyset over a collection-group: ordered by full logical path ascending,
     # resume strictly after the cursor path — the portable form of a Firestore __name__ cursor.
-    # Uses a kind marker unique to this test so the cross-parent query isolates its own docs.
+    # Uses a per-run-unique kind marker so the cross-parent query isolates its own docs across persistent
+    # backends (cubic PR 10887 test:251).
+    kind = f"ks-{uid}"
     for n in ("w1", "w2", "w3"):
-        store.set(f"users/{uid}/widgets/{n}", {"kind": "ks"})
+        store.set(f"users/{uid}/widgets/{n}", {"kind": kind})
     mine = [f"users/{uid}/widgets/{n}" for n in ("w1", "w2", "w3")]
 
-    paths = sorted(d.path for d in store.query_group("widgets", filters=[("kind", "==", "ks")]))
+    paths = sorted(d.path for d in store.query_group("widgets", filters=[("kind", "==", kind)]))
     assert paths == mine
 
-    after_first = store.query_group("widgets", filters=[("kind", "==", "ks")], start_after=mine[0])
+    after_first = store.query_group("widgets", filters=[("kind", "==", kind)], start_after=mine[0])
     assert [d.path for d in after_first] == mine[1:]
 
-    page = store.query_group("widgets", filters=[("kind", "==", "ks")], start_after=mine[0], limit=1)
+    page = store.query_group("widgets", filters=[("kind", "==", kind)], start_after=mine[0], limit=1)
     assert [d.path for d in page] == [mine[1]]
 
 
@@ -376,10 +382,11 @@ def test_query_multi_field_composite_cursor_paginates(store, uid):
 def test_query_group_name_order_with_cursor_paginates(store, uid):
     # cubic PR 10887 #2: a __name__ order on a collection group is the implicit doc-name keyset — it must
     # page, not raise (canonical maintenance cron was stuck at page 1 on Mongo).
+    kind = f"gz-{uid}"  # per-run-unique marker so the cross-parent query isolates this run (cubic test:251)
     for n in ("g1", "g2", "g3"):
-        store.set(f"users/{uid}/gizmos/{n}", {"kind": "gz"})
+        store.set(f"users/{uid}/gizmos/{n}", {"kind": kind})
     mine = sorted(f"users/{uid}/gizmos/{n}" for n in ("g1", "g2", "g3"))
-    page = store.query_group("gizmos", filters=[("kind", "==", "gz")], order_by="__name__", start_after=mine[0])
+    page = store.query_group("gizmos", filters=[("kind", "==", kind)], order_by="__name__", start_after=mine[0])
     assert [d.path for d in page] == mine[1:]
 
 
