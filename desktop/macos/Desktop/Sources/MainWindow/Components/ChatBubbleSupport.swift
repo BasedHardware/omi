@@ -44,13 +44,30 @@ struct ChatMessageTimestamp: View {
 /// the message and started reading as page furniture. Today says the time; this
 /// year adds the day; only another year is worth naming.
 enum ChatMessageTimestampFormat {
-  static func text(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-    let time = date.formatted(.dateTime.hour().minute())
+  /// - Parameters:
+  ///   - calendar: decides *and* renders. Which day a message belongs to and which day the stamp
+  ///     says have to be the same question: `Date.FormatStyle` otherwise resolves against
+  ///     `.autoupdatingCurrent`, so a caller passing any other calendar would get "today" decided in
+  ///     one zone and the clock time printed in another — a 1:28 PM stamp on a row the same call
+  ///     just decided was yesterday.
+  ///   - locale: how the stamp is worded; the user's, so the month reads in their language.
+  static func text(
+    for date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current
+  ) -> String {
+    func render(_ style: Date.FormatStyle) -> String {
+      var style = style
+      style.calendar = calendar
+      style.timeZone = calendar.timeZone
+      style.locale = locale
+      return date.formatted(style)
+    }
+
+    let time = render(.dateTime.hour().minute())
     if calendar.isDate(date, inSameDayAs: now) { return time }
     if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-      return "\(date.formatted(.dateTime.month(.abbreviated).day())) · \(time)"
+      return "\(render(.dateTime.month(.abbreviated).day())) · \(time)"
     }
-    return "\(date.formatted(.dateTime.year().month(.abbreviated).day())) · \(time)"
+    return "\(render(.dateTime.year().month(.abbreviated).day())) · \(time)"
   }
 }
 

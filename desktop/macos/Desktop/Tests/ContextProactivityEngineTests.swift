@@ -378,67 +378,6 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
-  func testCumulativeEngagementShortensDwellForARepeatedlyRevisitedBucket() {
-    let now = Date(timeIntervalSince1970: 1_725_000_000)
-    // Five 10-second visits within the last three minutes: 50s of engagement.
-    let engaged = (0..<5).map { index -> (startedAt: Date, endedAt: Date) in
-      let end = now.addingTimeInterval(TimeInterval(-20 * index) - 5)
-      return (startedAt: end.addingTimeInterval(-10), endedAt: end)
-    }
-    let engagedSeconds = ContextDwellPolicy.cumulativeEngagementSeconds(
-      visitIntervals: engaged, now: now)
-    XCTAssertEqual(engagedSeconds, 50, accuracy: 0.001)
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(
-        base: 8_000_000_000, cumulativeEngagementSeconds: engagedSeconds),
-      ContextDwellPolicy.shortenedDwellNanoseconds,
-      "a bucket the user keeps returning to earns the shortened dwell")
-
-    // Two sparse 5-second visits: 10s of engagement keeps the standard dwell.
-    let sparse = [0, 100].map { offset -> (startedAt: Date, endedAt: Date) in
-      let end = now.addingTimeInterval(TimeInterval(-offset) - 5)
-      return (startedAt: end.addingTimeInterval(-5), endedAt: end)
-    }
-    let sparseSeconds = ContextDwellPolicy.cumulativeEngagementSeconds(
-      visitIntervals: sparse, now: now)
-    XCTAssertEqual(sparseSeconds, 10, accuracy: 0.001)
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(
-        base: 8_000_000_000, cumulativeEngagementSeconds: sparseSeconds),
-      8_000_000_000)
-  }
-
-  func testCumulativeEngagementClipsToTheRollingWindowAndNeverLengthensTheDwell() {
-    let now = Date(timeIntervalSince1970: 1_725_000_000)
-    // A long visit that ended before the window contributes nothing; one that
-    // straddles the window start counts only its in-window portion.
-    let outside = [
-      (
-        startedAt: now.addingTimeInterval(-400),
-        endedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds - 1)
-      )
-    ]
-    XCTAssertEqual(
-      ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: outside, now: now), 0)
-
-    let straddling = [
-      (
-        startedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds - 100),
-        endedAt: now.addingTimeInterval(-ContextDwellPolicy.engagementLookbackSeconds + 8)
-      )
-    ]
-    XCTAssertEqual(
-      ContextDwellPolicy.cumulativeEngagementSeconds(visitIntervals: straddling, now: now),
-      8, accuracy: 0.001)
-
-    // The engagement bonus can only shorten: a caller-configured dwell below
-    // the shortened value (tests use zero) is never raised, and settle is
-    // never skipped outright by policy.
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(base: 0, cumulativeEngagementSeconds: 500), 0)
-    XCTAssertGreaterThan(ContextDwellPolicy.shortenedDwellNanoseconds, 0)
-  }
-
   func testDepartureEvaluationTriggersOnlyAtTheWorthinessThresholdWithTheFlagOn() {
     XCTAssertFalse(
       ContextDepartureEvaluationPolicy.triggers(
@@ -630,10 +569,32 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
-    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    XCTAssertEqual(
+      row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType,
+      "a transport failure never produced a director decision")
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "http_error")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+  }
+
+  func testEngineRecordsHttp502AsUnresolvedRatherThanSilence() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.http(status: 502, retryAfterSeconds: nil))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType)
+    XCTAssertNotEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "http_error")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 502)
   }
 
   func testEngineRecordsQuotaCooldownProvenanceOnSelfSuppressedLaneError() async throws {
@@ -649,7 +610,9 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
-    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    XCTAssertEqual(
+      row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType,
+      "quota cooldown is a lane skip, not a silence decision")
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
@@ -674,6 +637,7 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType)
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "decode")
     XCTAssertNil(provenance["status"])
@@ -805,35 +769,95 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     try await super.tearDown()
   }
 
-  func testRecentEngagementSumsOnlyCompletedVisitsInsideTheRollingWindow() async throws {
+  func testWorkstreamTagsPersistPoolAcrossBucketsAndResolveTheLiveTag() async throws {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     let pool = try XCTUnwrap(database)
     try await seedBucket(in: pool, now: now)
     try await pool.write { db in
-      // Five 10-second completed visits within three minutes, one stale
-      // completed visit outside the window, one recent discarded visit.
-      for index in 0..<5 {
-        let end = now.addingTimeInterval(TimeInterval(-20 * index) - 5)
-        try Self.insertVisit(
-          db, id: Int64(index + 1), poolEpoch: poolEpoch, outcome: "completed",
-          startedAt: end.addingTimeInterval(-10), endedAt: end)
-      }
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket-b', 'task', 'workstream-sibling', ?, ?)
+          """,
+        arguments: [now, now])
       try Self.insertVisit(
-        db, id: 6, poolEpoch: poolEpoch, outcome: "completed",
-        startedAt: now.addingTimeInterval(-400), endedAt: now.addingTimeInterval(-390))
-      try Self.insertVisit(
-        db, id: 7, poolEpoch: poolEpoch, outcome: "discarded",
-        startedAt: now.addingTimeInterval(-30), endedAt: now.addingTimeInterval(-1))
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+      try db.execute(
+        sql: """
+          INSERT INTO context_visits
+            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
+             normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
+          VALUES (2, 1, ?, 'bucket-b', 'Sibling App', 'raw', 'normalized', 'reference-b', ?, ?,
+                  'completed', ?, ?)
+          """,
+        arguments: [poolEpoch, now.addingTimeInterval(-60), now.addingTimeInterval(-40), now, now])
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+    let siblingFence = ContextVisitFence(
+      visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket-b",
+      startedAt: now.addingTimeInterval(-60))
+
+    func fact(_ statement: String, worthiness: Double, visit: Int64) -> BucketExtraction.Fact {
+      BucketExtraction.Fact(
+        statement: statement,
+        identifiers: ["identity"],
+        evidenceText: "identity",
+        evidenceRefs: ["visit:\(visit)"],
+        confidence: 1,
+        notifyWorthiness: worthiness)
+    }
+    // Extraction no longer writes workstream tags. Stamp historically tagged
+    // rows so pooling — still wired, now dormant for new facts — stays covered.
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "own narrative",
+        facts: [fact("own visit fact", worthiness: 0.7, visit: 1)]),
+      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
+      now: now)
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "sibling narrative",
+        facts: [
+          fact("sibling poolable fact", worthiness: 0.8, visit: 2),
+          fact("sibling weak fact", worthiness: 0.1, visit: 2),
+          fact("Identifier proposal: visit:2", worthiness: 0.9, visit: 2),
+        ]),
+      for: siblingFence, appName: "Sibling App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", now: now.addingTimeInterval(-30))
+
+    let storedStatements = try await pool.read { db in
+      try String.fetchAll(db, sql: "SELECT statement FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(
+      storedStatements,
+      ["own visit fact", "sibling poolable fact", "sibling weak fact"])
+    let tagsBeforeStamp = try await pool.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT workstreamTag FROM bucket_facts WHERE workstreamTag IS NOT NULL")
+    }
+    XCTAssertEqual(tagsBeforeStamp, [])
+
+    try await pool.write { db in
+      try db.execute(sql: "UPDATE bucket_facts SET workstreamTag = 'omi-app'")
     }
 
-    let engagement = await ContextBucketStore.shared.recentEngagementSeconds(
-      bucketID: "bucket", now: now)
-    XCTAssertEqual(engagement, 50, accuracy: 0.001)
-    XCTAssertEqual(
-      ContextDwellPolicy.dwellNanoseconds(
-        base: 8_000_000_000, cumulativeEngagementSeconds: engagement),
-      ContextDwellPolicy.shortenedDwellNanoseconds)
+    let liveTag = await ContextBucketStore.shared.liveWorkstreamTag(for: fence, now: now)
+    XCTAssertEqual(liveTag, "omi-app")
+
+    let candidates = await ContextBucketStore.shared.workstreamPool(
+      tag: "omi-app", excludingBucketID: "bucket", now: now)
+    let selected = ContextWorkstreamPooling.select(candidates, now: now)
+    XCTAssertEqual(selected.map(\.statement), ["sibling poolable fact"])
+    XCTAssertEqual(selected.map(\.bucketID), ["bucket-b"])
+    let section = try XCTUnwrap(
+      ContextWorkstreamPooling.promptSection(tag: "omi-app", items: selected, now: now))
+    XCTAssertTrue(section.contains("RELATED WORKSTREAM CONTEXT (omi-app)"))
+    XCTAssertTrue(section.contains("sibling poolable fact"))
+    XCTAssertFalse(section.contains("fact:"), "pooled facts must never expose citable refs")
   }
 
   func testWriteExtractionReportsTheMaximumWorthinessOfNewlyValidatedFactsOnly() async throws {
@@ -860,7 +884,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
           BucketExtraction.Fact(
             statement: "validated commitment",
             identifiers: ["deadline"],
-            evidenceText: "evidence",
+            evidenceText: "deadline evidence",
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.6),
@@ -893,7 +917,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
           BucketExtraction.Fact(
             statement: "mild update",
             identifiers: ["status"],
-            evidenceText: "evidence",
+            evidenceText: "status evidence",
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.59)
@@ -907,6 +931,67 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     XCTAssertFalse(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: belowResult.maximumValidatedWorthiness, flagEnabled: true))
+  }
+
+  func testWriteExtractionDropsScaffoldingGatesIdentifiersAndLeavesWorkstreamNull() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "Ambient narrative: A Finder window labeled Downloads sits in the foreground",
+            identifiers: ["Downloads"],
+            evidenceText: "A Finder window labeled Downloads sits in the foreground",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.9),
+          BucketExtraction.Fact(
+            statement: "Proposed fact 1 — The board was lying",
+            identifiers: ["board"],
+            evidenceText: "The board was lying",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.8),
+          BucketExtraction.Fact(
+            statement: "Nik asked for the demo recording before tomorrow's launch video.",
+            identifiers: ["fact-001", "f-002", "ftn-003", "visit:9", "screenshot:42", "Nik"],
+            evidenceText: "Nik asked for the demo recording before tomorrow's launch video.",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.7),
+        ]),
+      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
+      now: now)
+
+    let rows = try await pool.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT statement, identifiersJson, workstreamTag FROM bucket_facts
+          ORDER BY statement
+          """)
+    }
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(
+      rows.first?["statement"] as String?,
+      "Nik asked for the demo recording before tomorrow's launch video.")
+    XCTAssertNil(rows.first?["workstreamTag"] as String?)
+    let encoded = try XCTUnwrap(rows.first?["identifiersJson"] as String?)
+    let identifiers = try JSONDecoder().decode([String].self, from: Data(encoded.utf8))
+    XCTAssertEqual(identifiers, ["Nik"])
   }
 
   private func seedBucket(in pool: DatabasePool, now: Date) async throws {

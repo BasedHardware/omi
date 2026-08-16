@@ -17,6 +17,8 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSchema.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamPooling.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamReconciler.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDeliveryAuthority.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDestinationKey.swift

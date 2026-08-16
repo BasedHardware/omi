@@ -9843,4 +9843,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get sendRawAudioToOmi => 'Lähetä käsittelemätön ääni Omille';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.';
 }

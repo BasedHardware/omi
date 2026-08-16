@@ -3311,5 +3311,7 @@
     "accountCutoverMigrationInProgressMessage": "A fiókja migrálás alatt áll. A termékfunkciók szünetelnek a migráció befejezéséig.",
     "accountCutoverMigrationRollbackMessage": "A fiókja karbantartás alatt áll a migráció visszavonása után. Egyes újabb adatok elkülönítve maradhatnak.",
     "accountCutoverOpenStore": "Áruház megnyitása",
-    "signInWithSSO": "Bejelentkezés SSO-lel"
+    "signInWithSSO": "Bejelentkezés SSO-lel",
+    "sendRawAudioToOmi": "Nyers hang küldése az Ominak",
+    "sendRawAudioToOmiDescription": "Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak."
 }

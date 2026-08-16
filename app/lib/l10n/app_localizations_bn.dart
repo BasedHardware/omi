@@ -9848,4 +9848,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi-তে কাঁচা অডিও পাঠান';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi-তে কাঁচা অডিও পাঠানো বন্ধ করতে এটি বন্ধ করুন। ট্রান্সক্রিপ্ট ও ক্লাউড ফিচারের প্রয়োজনীয় ডেটা এখনও Omi-তে পাঠানো হতে পারে।';
 }

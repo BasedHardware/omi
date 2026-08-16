@@ -9866,4 +9866,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String get sendRawAudioToOmi => 'Sūtīt neapstrādātu audio uz Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.';
 }

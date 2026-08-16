@@ -250,11 +250,14 @@ class TestModelQosProfiles:
             'daily_summary',
             'external_structure',
             'memories',
+            'x_memory_extraction_flex',
             'learnings',
             'memory_conflict',
+            'memory_conflict_flex',
             'knowledge_graph',
             'memory_l1',
             'memory_l2',
+            'memory_l2_flex',
             'chat_responses',
             'chat_extraction',
             'chat_graph',
@@ -458,15 +461,8 @@ class TestGetOrCreateLlmBehavioral:
             _llm_cache.clear()
             _llm_cache.update(saved)
 
-    def test_explicit_cache_options_are_not_sent_to_the_gateway(self):
-        """The caller accepts explicit cache options and sends none of them.
-
-        The field is a contract between this caller and the gateway, and the
-        two deploy from separate pipelines, so a gateway predating the field
-        rejects the whole request. Sending it broke conversation structuring for
-        every request that routed through the gateway. Accepting the argument
-        keeps the call sites unchanged while nothing goes on the wire.
-        """
+    def test_explicit_cache_options_are_sent_in_extra_body_without_a_cache_key(self):
+        """Explicit mode reaches the wire even when the request opts out of cache writes."""
         from unittest.mock import patch as _patch
 
         import utils.llm.clients as clients_mod
@@ -485,7 +481,7 @@ class TestGetOrCreateLlmBehavioral:
             clients_mod.get_llm('conv_structure', prompt_cache_options=options)
 
         assert 'prompt_cache_options' not in captured, 'must not be bound as a named argument'
-        assert 'prompt_cache_options' not in captured.get('extra_body', {}), 'must not travel in the request body'
+        assert captured['extra_body'] == {'prompt_cache_options': options}
 
     def test_streaming_instance_has_streaming_flag(self):
         from unittest.mock import patch as _patch
@@ -548,7 +544,7 @@ class TestCacheKeySafety:
 
     def test_cache_key_models_contains_expected(self):
         assert supports_prompt_cache('gpt-5.6-luna')
-        assert supports_cache_retention('gpt-5.6-luna')
+        assert not supports_cache_retention('gpt-5.6-luna')
         assert not supports_prompt_cache('claude-sonnet-4-6')
 
 

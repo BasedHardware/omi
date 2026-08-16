@@ -3193,5 +3193,7 @@
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
     "accountCutoverOpenStore": "Otevřít obchod",
-    "signInWithSSO": "Přihlásit se přes SSO"
+    "signInWithSSO": "Přihlásit se přes SSO",
+    "sendRawAudioToOmi": "Odesílat nezpracovaný zvuk do Omi",
+    "sendRawAudioToOmiDescription": "Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat."
 }

@@ -10781,5 +10781,7 @@
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
     "accountCutoverOpenStore": "Buka toko",
-    "signInWithSSO": "Mag-sign in gamit ang SSO"
+    "signInWithSSO": "Mag-sign in gamit ang SSO",
+    "sendRawAudioToOmi": "Ipadala ang raw na audio sa Omi",
+    "sendRawAudioToOmiDescription": "I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature."
 }

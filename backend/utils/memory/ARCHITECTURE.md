@@ -104,6 +104,32 @@ This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
 cadence; the job is the sole host of
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
 
+The scheduled final planner, required L2 normalizer, and six-hour X memory
+extractor share one optional OpenAI Flex switch and use dedicated gateway lanes.
+Manual and post-OAuth X syncs remain Standard. Ordinary `memory_conflict`,
+`memory_l2`, and `memories` traffic keeps its Standard timeout and cannot
+request Flex. `OMI_BACKGROUND_FLEX_CAPABLE` is present only on the two owning
+jobs. The live Firestore control is stage-scoped because dev and prod can share
+the customer Firestore project: dev uses
+`llm_runtime_controls/background_flex_dev`, and prod uses
+`llm_runtime_controls/background_flex_prod`. Each document must contain
+exactly:
+
+```json
+{"enabled":false,"generation":1}
+```
+
+Set `enabled` to `true` to route all three eligible scheduled workloads through
+Flex, and increment `generation` with every control change. Setting it back to
+`false` restores their legacy Standard paths without a redeploy. An in-flight
+response from an older generation is discarded before durable apply. Flex
+resource deferrals release L2/promotion leases for the next scheduled run and
+do not consume model-output quality retry budgets; X raw posts remain pending.
+Flex-mode memory maintenance advances one UID and at most one required L2 item
+per run so its durable cursor cannot jump across work that the 15-minute Flex
+budget could not start. Both owning jobs use verified private gateway endpoints,
+zero SDK retries, and a one-hour Cloud Run task budget.
+
 ## Search, graph, and derived providers
 
 Canonical item state is authoritative. Keyword/vector results are candidates

@@ -3215,5 +3215,7 @@
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
     "accountCutoverOpenStore": "Otwórz sklep",
-    "signInWithSSO": "Prisijungti su SSO"
+    "signInWithSSO": "Prisijungti su SSO",
+    "sendRawAudioToOmi": "Siųsti neapdorotą garsą į Omi",
+    "sendRawAudioToOmiDescription": "Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi."
 }

@@ -9835,4 +9835,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Open store';
+
+  @override
+  String get sendRawAudioToOmi => 'Send raw audio to Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.';
 }
