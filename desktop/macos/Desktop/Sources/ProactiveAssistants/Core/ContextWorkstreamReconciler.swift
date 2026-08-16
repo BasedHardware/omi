@@ -19,6 +19,13 @@ struct ContextProactiveCandidate: Equatable, Sendable, FetchableRecord, Decodabl
     ContextProactiveCandidate.parseFactIDs(groundingFactIDsJson)
   }
 
+  /// The stored column stays `armed` until the lazy expiry sweep runs. Callers
+  /// that report state must use this so a past `expiresAt` is never still armed.
+  func effectiveState(at now: Date) -> String {
+    if state == "armed", expiresAt <= now { return "expired" }
+    return state
+  }
+
   static func parseFactIDs(_ json: String) -> [String] {
     guard let data = json.data(using: .utf8),
       let ids = try? JSONDecoder().decode([String].self, from: data)
@@ -292,33 +299,49 @@ enum ContextWorkstreamTagging {
     response: Response,
     batchIDs: [String],
     existingTags: Set<String>,
-    observations: String
+    observationsByBucket: [String: String]
   ) -> [AcceptedAssignment] {
-    var firstLabelByBucket: [(bucketID: String, tag: String)] = []
-    var seenBuckets = Set<String>()
+    // Proposals are collected without claiming their bucket: a bucket whose
+    // first proposal is null, unsanitizable, or fails per-bucket attestation
+    // must not block a later valid proposal for the same bucket. A bucket is
+    // only claimed below, once one of its proposals passes all validation.
+    var proposalsByBucket: [String: [String]] = [:]
+    var bucketOrder: [String] = []
     for assignment in response.assignments {
-      // Membership is checked (not claimed) here: a null or unsanitizable
-      // first assignment for a bucket must not block a later valid one for
-      // the same bucket, so `seenBuckets` is only marked once sanitization
-      // has actually succeeded.
       guard let bucketID = resolveGroup(assignment.group, batchIDs: batchIDs),
-        !seenBuckets.contains(bucketID),
         let tag = ContextWorkstreamTag.sanitize(assignment.label)
       else { continue }
-      seenBuckets.insert(bucketID)
-      firstLabelByBucket.append((bucketID, tag))
+      if proposalsByBucket[bucketID] == nil { bucketOrder.append(bucketID) }
+      proposalsByBucket[bucketID, default: []].append(tag)
     }
     var counts: [String: Int] = [:]
-    for item in firstLabelByBucket { counts[item.tag, default: 0] += 1 }
+    for bucketID in bucketOrder {
+      guard let firstProposal = proposalsByBucket[bucketID]?.first else { continue }
+      counts[firstProposal, default: 0] += 1
+    }
 
-    func isAllowed(_ tag: String) -> Bool {
+    func isAllowed(_ tag: String, bucketID: String) -> Bool {
       guard !isGenericLabel(tag) else { return false }
-      guard labelAppearsInObservations(tag, observations: observations) else { return false }
+      let bucketObservations = observationsByBucket[bucketID] ?? ""
+      guard labelAppearsInObservations(tag, observations: bucketObservations) else { return false }
       if existingTags.contains(tag) { return true }
       return (counts[tag] ?? 0) >= minimumGroupsForNewLabel
     }
 
-    var allowedTags = Set(firstLabelByBucket.map(\.tag).filter(isAllowed))
+    var firstLabelByBucket: [(bucketID: String, tag: String)] = []
+    for bucketID in bucketOrder {
+      // The first proposal that passes all validation claims the bucket;
+      // earlier proposals that were sanitizable but unattestable, generic,
+      // or below the new-label threshold are skipped, not fatal.
+      guard
+        let tag = proposalsByBucket[bucketID]?.first(where: {
+          isAllowed($0, bucketID: bucketID)
+        })
+      else { continue }
+      firstLabelByBucket.append((bucketID, tag))
+    }
+    let attested = firstLabelByBucket
+    var allowedTags = Set(attested.map(\.tag))
     if allowedTags.count > maximumLabels {
       let existingFirst = allowedTags.filter { existingTags.contains($0) }
         .sorted()
@@ -332,7 +355,7 @@ enum ContextWorkstreamTagging {
       allowedTags = Set(
         Array((existingFirst + newByCount).prefix(maximumLabels)))
     }
-    return firstLabelByBucket.filter { allowedTags.contains($0.tag) }.map {
+    return attested.filter { allowedTags.contains($0.tag) }.map {
       AcceptedAssignment(bucketID: $0.bucketID, tag: $0.tag)
     }
   }
@@ -535,8 +558,9 @@ enum ContextProactiveCandidateLookup {
   static func lookupArmed(
     bucketID: String, tags: [String], now: Date, in db: Database
   ) throws -> [ContextProactiveCandidate] {
+    let rows: [ContextProactiveCandidate]
     if tags.isEmpty {
-      return try ContextProactiveCandidate.fetchAll(
+      rows = try ContextProactiveCandidate.fetchAll(
         db,
         sql: """
           SELECT id, bucketID, workstreamTag, message, groundingFactIDsJson, triggerNote,
@@ -546,25 +570,27 @@ enum ContextProactiveCandidateLookup {
           ORDER BY createdAt DESC
           """,
         arguments: [now, bucketID])
+    } else {
+      let placeholders = tags.map { _ in "?" }.joined(separator: ",")
+      var arguments: StatementArguments = [now, bucketID]
+      arguments += StatementArguments(tags)
+      arguments += StatementArguments([bucketID])
+      rows = try ContextProactiveCandidate.fetchAll(
+        db,
+        sql: """
+          SELECT id, bucketID, workstreamTag, message, groundingFactIDsJson, triggerNote,
+                 state, createdAt, expiresAt, consumedAt
+          FROM proactive_candidates
+          WHERE state = 'armed' AND expiresAt > ?
+            AND (
+              bucketID = ?
+              OR (workstreamTag IS NOT NULL AND workstreamTag IN (\(placeholders)))
+            )
+          ORDER BY CASE WHEN bucketID = ? THEN 0 ELSE 1 END, createdAt DESC
+          """,
+        arguments: arguments)
     }
-    let placeholders = tags.map { _ in "?" }.joined(separator: ",")
-    var arguments: StatementArguments = [now, bucketID]
-    arguments += StatementArguments(tags)
-    arguments += StatementArguments([bucketID])
-    return try ContextProactiveCandidate.fetchAll(
-      db,
-      sql: """
-        SELECT id, bucketID, workstreamTag, message, groundingFactIDsJson, triggerNote,
-               state, createdAt, expiresAt, consumedAt
-        FROM proactive_candidates
-        WHERE state = 'armed' AND expiresAt > ?
-          AND (
-            bucketID = ?
-            OR (workstreamTag IS NOT NULL AND workstreamTag IN (\(placeholders)))
-          )
-        ORDER BY CASE WHEN bucketID = ? THEN 0 ELSE 1 END, createdAt DESC
-        """,
-      arguments: arguments)
+    return rows.filter { $0.effectiveState(at: now) == "armed" }
   }
 
   static func firstDeliverable(
@@ -827,7 +853,11 @@ actor ContextWorkstreamReconciler {
       response: parsed,
       batchIDs: batch.groups.map(\.bucketID),
       existingTags: batch.existingTags,
-      observations: batch.observations)
+      observationsByBucket: Dictionary(
+        batch.groups.map {
+          ($0.bucketID, $0.facts.map(\.statement).joined(separator: "\n"))
+        },
+        uniquingKeysWith: { first, _ in first }))
     try await store.insertWorkstreamAssignments(accepted, now: now)
     guard !accepted.isEmpty else { return batch }
     let newlyTagged = Dictionary(
@@ -957,9 +987,6 @@ struct ContextWorkstreamReconcileGroup: Equatable, Sendable {
 struct ContextWorkstreamReconcileBatch: Equatable, Sendable {
   let groups: [ContextWorkstreamReconcileGroup]
   let existingTags: Set<String>
-  var observations: String {
-    groups.flatMap(\.facts).map(\.statement).joined(separator: "\n")
-  }
 }
 
 enum ContextWorkstreamReconcileOutcome: Equatable {
