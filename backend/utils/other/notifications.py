@@ -2,7 +2,7 @@
 # async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
 from datetime import datetime, time, timedelta
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from utils.executors import db_executor, postprocess_executor, run_blocking
 
@@ -52,10 +52,13 @@ async def send_daily_summary_notification() -> None:
         # Group timezones by their current local hour
         timezones_by_hour = _get_timezones_grouped_by_hour()
 
-        # Resolve the delivery backend here (utils layer), not inside the database helper: the DB layer
-        # persists/reads recipients but must not own delivery policy. Passed down so the recipient shape
-        # (FCM tokens vs UnifiedPush endpoints) is decided by the caller (cubic PR 10887 #3).
-        unifiedpush = resolve_push_backend() == UNIFIEDPUSH
+        # Resolve the delivery backend ONCE here (utils layer), not inside the database helper: the DB
+        # layer persists/reads recipients but must not own delivery policy. Threaded down so the recipient
+        # shape (FCM tokens vs UnifiedPush endpoints) is decided by the caller (cubic PR 10887 #3) AND the
+        # per-user send does not re-resolve it — an invalid backend records its fallback once, not per user
+        # (cubic other/notifications.py:58).
+        backend = resolve_push_backend()
+        unifiedpush = backend == UNIFIEDPUSH
 
         for target_hour, timezones in timezones_by_hour.items():
             # Get users in those timezones who want notifications at this hour
@@ -63,7 +66,7 @@ async def send_daily_summary_notification() -> None:
 
             if users:
                 logger.info(f"Sending daily summary to {len(users)} users at local hour {target_hour}")
-                await _send_bulk_summary_notification(users)
+                await _send_bulk_summary_notification(users, backend)
 
     except Exception as e:
         logger.error(f"Error sending daily summary: {e}")
@@ -95,7 +98,7 @@ def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
     return timezones_by_hour
 
 
-def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
+def _send_summary_notification(user_data: Tuple[Any, ...], push_backend: Optional[str] = None) -> None:
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
@@ -212,15 +215,23 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        uid,
+        daily_summary_title,
+        summary_body,
+        NotificationMessage.get_message_as_dict(ai_message),
+        tokens=tokens,
+        push_backend=push_backend,
     )
 
 
-async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> None:
+async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]], push_backend: Optional[str] = None) -> None:
     _BATCH_SIZE = 8
     for i in range(0, len(users), _BATCH_SIZE):
         batch = users[i : i + _BATCH_SIZE]
-        tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
+        tasks = [
+            run_blocking(postprocess_executor, _send_summary_notification, user_tokens, push_backend)
+            for user_tokens in batch
+        ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for j, result in enumerate(results):
             if isinstance(result, Exception):

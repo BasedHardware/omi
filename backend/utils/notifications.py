@@ -17,6 +17,7 @@ from database.redis_db import (
 )
 from database.auth import get_user_from_uid
 from utils.notification_text import to_plain_text
+from utils.auth import get_auth_provider
 from utils.push.base import DISABLED, UNIFIEDPUSH, PushMessage
 from utils.push.selector import resolve_push_backend
 from .llm.notifications import (
@@ -30,8 +31,6 @@ logger = logging.getLogger(__name__)
 
 
 def _get_user(uid: str) -> Any:
-    from utils.auth import get_auth_provider
-
     return get_auth_provider().get_user_profile(uid)  # UserProfile: .display_name / .email etc.
 
 
@@ -222,9 +221,15 @@ def _send_to_user(
     is_background: bool = False,
     priority: str = 'normal',
     tokens: Optional[List[str]] = None,
+    push_backend: Optional[str] = None,
 ) -> int:
-    """Send a message to all user's devices using batch send. Returns count of successful sends."""
-    backend = resolve_push_backend()
+    """Send a message to all user's devices using batch send. Returns count of successful sends.
+
+    ``push_backend`` lets a caller that already resolved the backend (e.g. the daily-summary fan-out) pass
+    it in, so an invalid PUSH_NOTIFICATION_BACKEND records its fallback ONCE per operation instead of once
+    per recipient (cubic PR 10887 other/notifications.py:58), mirroring send_bulk_notification.
+    """
+    backend = push_backend or resolve_push_backend()
     if backend == DISABLED:
         return 0
     if backend == UNIFIEDPUSH:
@@ -308,14 +313,20 @@ async def _send_to_user_async(
 
 
 def send_notification(
-    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+    user_id: str,
+    title: str,
+    body: str,
+    data: Optional[Dict[str, Any]] = None,
+    tokens: Optional[List[str]] = None,
+    push_backend: Optional[str] = None,
 ) -> None:
-    """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup."""
+    """Send notification to all user's devices. Optionally pass pre-fetched tokens to avoid DB lookup and
+    a pre-resolved ``push_backend`` to record any fallback once per operation (see _send_to_user)."""
     logger.info(f'send_notification to user {user_id}')
     body = to_plain_text(body)
     tag = _generate_notification_tag(user_id, title, body, data)
     notification = messaging.Notification(title=title, body=body)
-    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+    _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens, push_backend=push_backend)
 
 
 def send_user_notification(user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> int:

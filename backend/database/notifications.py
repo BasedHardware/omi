@@ -418,6 +418,22 @@ def get_users_for_daily_summary(
     for chunk in timezone_chunks:
         chunk_users: List[Tuple[str, List[Any], Any]] = []
         try:
+            # For UnifiedPush, batch this chunk's endpoints in ONE collection-group query keyed by uid,
+            # instead of a per-user get_all_endpoints inside the loop below (N+1 on the DB worker every
+            # summary hour, cubic PR 10887 database/notifications.py:443). save_endpoint stamps the
+            # endpoint's time_zone alongside the user's, so filtering the group by the chunk's timezones
+            # returns exactly the matched users' endpoints.
+            endpoints_by_uid: Dict[str, List[Any]] = {}
+            if unifiedpush:
+                for snap in (
+                    db.collection_group(_UNIFIEDPUSH_COLLECTION)
+                    .where(filter=FieldFilter('time_zone', 'in', chunk))
+                    .stream()
+                ):
+                    parts = snap.reference.path.split('/')  # users/{uid}/unifiedpush_endpoints/{device_key}
+                    if len(parts) > 1:
+                        endpoints_by_uid.setdefault(parts[1], []).append(_endpoint_from_doc(snap))
+
             # Query users in these timezones
             query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
 
@@ -440,7 +456,7 @@ def get_users_for_daily_summary(
                 # non-empty to keep the user in the fan-out; for FCM it carries the tokens to send.
                 recipients: List[Any]
                 if unifiedpush:
-                    recipients = list(get_all_endpoints(uid))
+                    recipients = endpoints_by_uid.get(uid, [])  # from the batched group query above
                 else:
                     tokens: List[str] = []
                     token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
