@@ -634,27 +634,27 @@ async def proactive_completion(
             )
         raise HTTPException(status_code=502, detail="Proactive model unavailable") from exc
     if not isinstance(response_body, dict):
-        if length_retry_attempted and provider_request is not None:
+        if length_retry_attempted:
             _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         raise HTTPException(status_code=502, detail="Proactive model returned an invalid response")
     try:
         _validate_gateway_output(response_body, request)
     except HTTPException as exc:
-        if length_retry_attempted and provider_request is not None:
+        if length_retry_attempted:
             _record_length_retry_outcome(provider_request, "exhausted")
         await _release_quota(uid, request.operation)
         logger.warning(
             "desktop_proactivity_invalid_structured_output operation=%s fallback_class=%s "
             "provider_model=%s status=%s detail=%s",
             operation,
-            provider_request.fallback_class if provider_request is not None else "unknown",
+            provider_request.fallback_class,
             response_body.get("model", "unknown"),
             exc.status_code,
             exc.detail,
         )
         raise
-    if length_retry_attempted and provider_request is not None:
+    if length_retry_attempted:
         _record_length_retry_outcome(provider_request, "recovered")
     usage = _usage_envelope(response_body)
     provider_model = response_body.get("model")
