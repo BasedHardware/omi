@@ -10,7 +10,7 @@ records which lane it was so the claim cannot quietly inflate later.
 Run a lane with `node integration/lanes.mjs L0` (or `L1`, `L2`, `L3`,
 `L4`). The runner invents no checks. Every command is one you could type
 yourself (`lanes.mjs:8-10`). Time budgets are printed, never enforced
-(`lanes.mjs:437-439`).
+(`lanes.mjs:457-459`).
 
 Frontend and backend now live in this repository
 (`integration/lib/provenance.mjs:98-103`). `OMI_CORE_ROOT` and
@@ -242,6 +242,17 @@ service and the 5290 origin (`run.mjs:150-154, 192-195`).
 - `bun run prod-local` also wants 4851. It is the hosted kernel, not a
   second QA server; see [`docs/architecture.md`](architecture.md).
 - Two processes in one range role after the twenty ports are taken.
+- Two L3 iOS runs after four simulator leases are taken. The cap is
+  `SIMULATOR_LEASE_MAX_CONCURRENT = 4`
+  (`apps/service/net/simulator-lease.ts`). Exhausting it is a refusal that
+  names the live holders, never a 124 timeout.
 
-iOS does not use the 5290/15290 lease. Its origin is a frozen custom scheme
-(`frontend/shells/ios/scripts/dev-run-ios.sh:18-20`).
+iOS origin is a frozen custom scheme
+(`frontend/shells/ios/scripts/dev-run-ios.sh:18-20`), so it does not use
+the 5290/15290 port lease. The device is leased the same way ports are:
+a lock file plus a live-holder check, keyed by UDID
+(`simulator-lease.ts`). `lanes.mjs` acquires one for L3 and passes
+`--device <udid>` into `dev-stack.sh`. A booted simulator with no live
+lease is treated as someone else's and is never shut down, erased, or
+stolen. If no free shutdown device exists, the harness boots one, up to
+the cap of 4.

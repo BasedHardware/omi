@@ -55,6 +55,7 @@ import {
   verifyArtifact,
 } from "./lib/provenance.mjs";
 import { laneStepEnvironment } from "./lib/lane-step-env.mjs";
+import { appendDeviceArgument, holdSimulatorLease } from "./lib/ios-lane-device.mjs";
 
 const CORE_REPO = REPO_PATHS["core-foundation"];
 const PLATFORM_REPO = REPO_PATHS.platform;
@@ -181,7 +182,7 @@ export const LANES = {
       // asserts the two tree hashes really are equal first, or it would pass
       // vacuously the moment the fixtures drifted — the same shape as the
       // mutation that stayed green.
-      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/dev-app-structure.test.mjs integration/lib/artifact-safety.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/provenance-root.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs frontend/shells/macos/tests/consumer-evidence-writer.test.mjs frontend/shells/ios/tests/dev-run-ios.test.mjs" },
+      { cwd: CORE_REPO, command: "node --test integration/dev-stack-cli.test.mjs integration/dev-app-structure.test.mjs integration/lib/artifact-safety.test.mjs integration/lib/evidence-cli.test.mjs integration/lib/evidence-matrix.test.mjs integration/lib/ios-lane-device.test.mjs integration/lib/lane-step-env.test.mjs integration/lib/process-owner.test.mjs integration/lib/provenance-root.test.mjs integration/lib/receipts.test.mjs integration/lib/receipts-concurrency.test.mjs integration/lib/run-report.test.mjs integration/lib/sanitize-log.test.mjs integration/single-service-structure.test.mjs frontend/shells/macos/tests/consumer-evidence-writer.test.mjs frontend/shells/ios/tests/dev-run-ios.test.mjs" },
     ],
   },
   L3: {
@@ -378,6 +379,7 @@ function runLane(laneId, { json = false } = {}) {
   const results = [];
   let ok = true;
   const l3RunDir = laneId === "L3" ? mkdtempSync(join(tmpdir(), "omi-l3-direct-")) : null;
+  let simulatorLease = null;
 
   if (lane.preflight) {
     const pre = lane.preflight();
@@ -416,12 +418,30 @@ function runLane(laneId, { json = false } = {}) {
       process.stdout.write(`  ${repo.padEnd(16)} ${path}${at}\n`);
     }
   }
+  if (laneId === "L3" && l3RunDir !== null) {
+    try {
+      simulatorLease = holdSimulatorLease({
+        holderScript: join(PLATFORM_REPO, "integration/lib/stack-simulator-lease.ts"),
+        runId: `l3-${process.pid}`,
+        outPath: join(l3RunDir, "simulator-lease.json"),
+        parentPid: process.pid,
+      });
+    } catch (error) {
+      process.stderr.write(`${error.message}\n`);
+      if (l3RunDir !== null) rmSync(l3RunDir, { recursive: true, force: true });
+      process.exit(1);
+    }
+    if (!json) {
+      process.stdout.write(`  simulator ${simulatorLease.name} (${simulatorLease.udid})\n`);
+    }
+  }
   for (const step of lane.steps) {
     const stepStart = Date.now();
     let status = 0;
     let output = "";
+    const command = appendDeviceArgument(step.command, simulatorLease?.udid);
     try {
-      output = execSync(step.command, {
+      output = execSync(command, {
         cwd: step.cwd,
         encoding: "utf8",
         stdio: json ? "pipe" : "inherit",
@@ -433,11 +453,11 @@ function runLane(laneId, { json = false } = {}) {
       ok = false;
     }
     const durationMs = Date.now() - stepStart;
-    results.push({ command: step.command, cwd: step.cwd, status, durationMs, ...(json && status !== 0 ? { output: output.slice(-4000) } : {}) });
+    results.push({ command, cwd: step.cwd, status, durationMs, ...(json && status !== 0 ? { output: output.slice(-4000) } : {}) });
     // Durations are PRINTED, never enforced. A time budget that fails a lane
     // turns a slow machine into a red build and teaches people to skip the lane;
     // the number is here to be noticed by a human, not to gate anything.
-    if (!json) process.stdout.write(`  ${status === 0 ? "✓" : "✗"} ${step.command}  (${durationMs}ms)\n`);
+    if (!json) process.stdout.write(`  ${status === 0 ? "✓" : "✗"} ${command}  (${durationMs}ms)\n`);
     if (status !== 0) break;
   }
 
@@ -484,6 +504,7 @@ function runLane(laneId, { json = false } = {}) {
     if (!json) process.stderr.write(`  ! receipt not written: ${error.message}\n`);
   }
 
+  if (simulatorLease !== null) simulatorLease.release();
   if (l3RunDir !== null) rmSync(l3RunDir, { recursive: true, force: true });
 
   if (json) process.stdout.write(`${JSON.stringify({ ...receipt, arbiters, receiptPath: receiptFile }, null, 2)}\n`);

@@ -42,6 +42,13 @@ afterEach(() => {
         try { process.kill(pid, "SIGKILL"); } catch {}
       }
     }
+    const simulatorLeasePidPath = join(runRoot, "simulator-lease-holder.pid");
+    if (existsSync(simulatorLeasePidPath)) {
+      const pid = Number(readFileSync(simulatorLeasePidPath, "utf8").trim());
+      if (Number.isInteger(pid) && pid > 0) {
+        try { process.kill(pid, "SIGKILL"); } catch {}
+      }
+    }
   }
   rmSync(scratch, { recursive: true, force: true });
 });

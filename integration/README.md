@@ -10,7 +10,7 @@ shells, then joins producer and consumer evidence for one run.
 # Hermetic core-side guards and report/receipt arbitration
 node integration/lanes.mjs L2
 
-# Full two-shell lane; chooses a simulator deterministically
+# Full two-shell lane; leases a simulator (cap 4) and passes --device
 node integration/lanes.mjs L3
 
 # Listen → conversation → memory → Home → chat retrieval (named tier above L3).

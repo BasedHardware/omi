@@ -31,6 +31,8 @@ test("RED-PROOF the registered stack cannot reintroduce the retired service", ()
 test("RED-PROOF control-acceptance verification boots a leased stack and does not attach to 4851", () => {
   assert.match(control, /"--up", "--lease"/);
   assert.match(lanes, /command: "integration\/dev-stack\.sh --assert --lease"/);
+  assert.match(lanes, /appendDeviceArgument\(step\.command, simulatorLease\?\.udid\)/);
+  assert.match(lanes, /holdSimulatorLease/);
   assert.match(control, /Verification never attaches to 4851\/8788\/8791/);
   assert.doesNotMatch(control, /if \(!SCREEN_PROOF && !serviceUp && !gatewayUp\)/);
 });
@@ -67,6 +69,10 @@ test("RED-PROOF the pinned app origin and the leased verification origin stay di
   assert.doesNotMatch(stack, /for candidate|free_port|kill.*5290/);
   assert.match(stack, /--lease/);
   assert.match(stack, /stack-port-lease\.ts/);
+  assert.match(stack, /stack-simulator-lease\.ts/);
+  assert.match(stack, /if \[\[ -z "\$DEVICE" \]\]/);
+  assert.match(stack, /ios_args\+=\(--device "\$DEVICE"\)/);
+  assert.doesNotMatch(stack, /simctl erase|simctl delete/);
 });
 
 test("RED-PROOF there is one app-facing service listener and one run-scoped SQLite path", () => {
