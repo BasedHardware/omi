@@ -149,6 +149,68 @@ final class ActivityRevalidationTests: XCTestCase {
         XCTAssertEqual(store.days, painted)
     }
 
+    // MARK: - What a failing read may not erase
+
+    /// **The offline launch, which is the case the cache exists for.**
+    ///
+    /// The seed paints from disk and the failing read lands a moment later carrying nothing. Taking
+    /// the read wholesale wiped the rows the user had just been shown, and which of the two landed
+    /// first was a race — so the panel was empty about half the time, on the one launch where the
+    /// cache is the whole of the answer.
+    func testASourceThatSaidNothingAndCarriedNothingKeepsWhatIsOnScreen() {
+        let painted = ActivityAccountFeed(
+            conversations: [conversation("cached", at: 0)], answered: [])
+
+        let held = ActivityStore.retaining(rowsNotAnsweredIn: .unreachable, from: painted)
+
+        XCTAssertEqual(held.conversations.map(\.id), ["cached"])
+        XCTAssertTrue(held.answered.isEmpty, "and it still reports that nobody answered")
+    }
+
+    /// **The half that a first attempt at this got wrong.** The paging reader answers with
+    /// everything it has gathered, so a source absent from `answered` routinely carries hundreds of
+    /// real rows fetched on an earlier read. Those are the corpus, not a stale leftover.
+    func testASourceThatSaidNothingButCarriedRowsKeepsTheRowsItCarried() {
+        let previous = ActivityAccountFeed(
+            conversations: [conversation("old", at: 0)], answered: [])
+        let carrying = ActivityAccountFeed(
+            conversations: [conversation("a", at: 0), conversation("b", at: 60)],
+            answered: [.memories, .tasks])
+
+        let held = ActivityStore.retaining(rowsNotAnsweredIn: carrying, from: previous)
+
+        XCTAssertEqual(held.conversations.map(\.id), ["a", "b"])
+    }
+
+    /// And an **answered** source is taken as it comes, empty included: "I hold nothing" is an
+    /// answer, and the account is the authority on it. Retaining here would resurrect deletions.
+    func testAnAnsweredSourceIsTakenEvenWhenItIsEmpty() {
+        let previous = ActivityAccountFeed(
+            conversations: [conversation("deleted", at: 0)], answered: [])
+        let emptied = ActivityAccountFeed(
+            conversations: [], answered: Set(ActivityAccountSource.allCases))
+
+        let held = ActivityStore.retaining(rowsNotAnsweredIn: emptied, from: previous)
+
+        XCTAssertTrue(held.conversations.isEmpty)
+    }
+
+    /// A transient failure in the opening read must not outlive the read that succeeded after it.
+    /// `openWindow` used to be the only thing that reset this, which was enough while an opening
+    /// read happened once per window — a revalidation runs another one.
+    @MainActor
+    func testASuccessfulRevalidationClearsAStaleCaptureFailure() async {
+        let account = CountingAccount(
+            feed: ActivityAccountFeed(conversations: [conversation("a", at: 0)]))
+        let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
+        store.start()
+        await settle()
+
+        XCTAssertNil(
+            store.readFailure,
+            "a store with no capture database reports its availability, not a read failure")
+    }
+
     // MARK: - Signing out
 
     /// A window-lived store forgot the account by dying. A process-lived one has to be told, and

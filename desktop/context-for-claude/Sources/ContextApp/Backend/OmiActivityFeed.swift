@@ -247,6 +247,7 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing, Activ
             case .opening:
                 // The opening read has asked all three already; there is nothing left to try.
                 await readOpeningPage(limit: bounded, epoch: epoch)
+                await corpus.headWasRead()
                 break pages
             case .page(let source, let offset):
                 tried.insert(source)
@@ -672,6 +673,9 @@ private actor AccountCorpus {
 
     func epoch() -> Int { generation }
 
+    /// The reopened head has been read; later pages are ordinary paging again and may not delete.
+    func headWasRead() { headIsAuthoritative = false }
+
     /// Whether a page fetched at `epoch` may still be filed. False after a sign-out.
     private func isCurrent(_ epoch: Int) -> Bool { epoch == generation }
 
@@ -680,6 +684,12 @@ private actor AccountCorpus {
     ) {
         guard isCurrent(epoch) else { return }
         record(.conversations, outcome, received: outcome.rows?.count)
+        if let rows = outcome.rows, isHeadReread(outcome) {
+            prune(
+                .conversations, keeping: rows.compactMap(\.id),
+                newerThan: rows.compactMap { $0.startedAt?.seconds ?? $0.createdAt?.seconds }.min(),
+                from: &conversations, at: { $0.startedAt?.seconds ?? $0.createdAt?.seconds })
+        }
         for row in outcome.rows ?? [] {
             absorb(.conversations, id: row.id, row: row, into: &conversations)
         }
@@ -689,6 +699,15 @@ private actor AccountCorpus {
         guard isCurrent(epoch) else { return }
         if outcome.beganPastHead { memoriesBeganPastHead = true }
         record(.memories, outcome, received: outcome.rows?.count)
+        // **Never for memories that had to start past their own head.** That page is complete
+        // except at the top by construction, so the rows above it are absent because they were
+        // never asked for — deleting them would be reading "not fetched" as "deleted".
+        if let rows = outcome.rows, isHeadReread(outcome), !outcome.beganPastHead {
+            prune(
+                .memories, keeping: rows.compactMap(\.id),
+                newerThan: rows.compactMap { $0.capturedAt?.seconds ?? $0.createdAt?.seconds }.min(),
+                from: &memories, at: { $0.capturedAt?.seconds ?? $0.createdAt?.seconds })
+        }
         for row in outcome.rows ?? [] {
             absorb(.memories, id: row.id, row: row, into: &memories)
         }
@@ -699,9 +718,61 @@ private actor AccountCorpus {
         record(.tasks, outcome, received: outcome.rows?.actionItems.count)
         // The one source that can say it has reached the end without an empty page to prove it.
         if let page = outcome.rows, !page.hasMore { state[.tasks]?.isExhausted = true }
+        if let page = outcome.rows, isHeadReread(outcome) {
+            prune(
+                .tasks, keeping: page.actionItems.compactMap(\.id),
+                newerThan: page.actionItems.compactMap { $0.createdAt?.seconds }.min(),
+                from: &tasks, at: { $0.createdAt?.seconds })
+        }
         for row in outcome.rows?.actionItems ?? [] {
             absorb(.tasks, id: row.id, row: row, into: &tasks)
         }
+    }
+
+    /// Whether this page is a re-read of a head we have already seen, and so may delete.
+    private func isHeadReread<Row>(_ outcome: OmiActivityFeed.SourceOutcome<Row>) -> Bool {
+        headIsAuthoritative && outcome.offset == 0
+    }
+
+    /// Drops rows the account has stopped listing, **within the window the new head page covers.**
+    ///
+    /// Without this a revalidation could only add and update: `reopenHead` re-reads offset zero and
+    /// `absorb` replaces the ids it sees, so a conversation deleted on the phone stayed on the spine
+    /// for the life of the process. That is a regression the process-lived store introduced — a
+    /// panel rebuilt per window used to lose the row simply by being rebuilt.
+    ///
+    /// **The bound is what makes it safe.** A head page is authoritative only for its own range: it
+    /// returned the newest `limit` rows, so anything held that is *newer than its oldest row* and
+    /// absent from it has genuinely gone. Everything older is behind the page and says nothing about
+    /// itself. An empty head page means the source now holds nothing at all, and every row goes.
+    private func prune<Row>(
+        _ source: ActivityAccountSource,
+        keeping ids: [String],
+        newerThan oldest: Double?,
+        from rows: inout [Row],
+        at instant: (Row) -> Double?
+    ) {
+        let returned = Set(ids)
+        func survives(_ row: Row, _ id: String) -> Bool {
+            if returned.contains(id) { return true }
+            // Older than the page's own reach, so the page is not evidence about it.
+            guard let oldest else { return false }
+            guard let at = instant(row) else { return true }
+            return at < oldest
+        }
+
+        var kept: [Row] = []
+        var rebuilt: [String: Int] = [:]
+        kept.reserveCapacity(rows.count)
+        let byIndex = Dictionary(uniqueKeysWithValues: (index[source] ?? [:]).map { ($1, $0) })
+        for (position, row) in rows.enumerated() {
+            guard let id = byIndex[position] else { continue }
+            guard survives(row, id) else { continue }
+            rebuilt[id] = kept.count
+            kept.append(row)
+        }
+        rows = kept
+        index[source] = rebuilt
     }
 
     /// Reopens the newest page of every source without disturbing where hydration has walked to.
@@ -711,7 +782,13 @@ private actor AccountCorpus {
     /// it, and the rows arriving at offset zero are in front of the cursor rather than behind it.
     func reopenHead() {
         didOpen = false
+        headIsAuthoritative = true
     }
+
+    /// Whether the next opening commit is a *re-read* of the head rather than a first sight of it.
+    ///
+    /// It is what lets a re-read delete. See `prune(_:keeping:newerThan:)`.
+    private var headIsAuthoritative = false
 
     /// Back to the state this actor was constructed in. Every field, deliberately enumerated rather
     /// than reassigned wholesale — an actor cannot replace `self`, and a field added later that this

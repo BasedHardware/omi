@@ -378,14 +378,13 @@ final class ActivityStore: ObservableObject {
         guard Self.shouldRevalidate(now: now, lastRevalidate: lastRevalidate) else { return }
         lastRevalidate = now
 
-        let generation = self.generation
-        Task { [weak self, account] in
-            // Sends the reader's cursor back to offset zero for one read, which is the only offset a
-            // forward-only walk never re-asks for and the only one new rows arrive at.
-            await (account as? ActivityAccountCursor)?.refreshHead()
-            guard let self, generation == self.generation else { return }
-            self.readAccount(generation: generation)
-        }
+        // **The reopen and the read it is for are one operation, so they take the slot together.**
+        // Spawning the reopen and calling `readAccount` after it left a window in which the retry
+        // ladder or the sign-in subscription could claim the slot first: that read would then be
+        // refused nothing and this one refused everything, and the reopened head would sit
+        // unconsumed until whatever asked next. Passing the intent into `readAccount` puts the whole
+        // sequence behind the one guard that already exists for it.
+        readAccount(generation: generation, reopeningHead: true)
         revalidateLocalHalf(generation: generation)
     }
 
@@ -582,12 +581,16 @@ final class ActivityStore: ObservableObject {
     /// the window opening, the healing ladder, and hydration — and hydration reads again whenever a
     /// read grew the corpus. Two overlapping reads would each grow the corpus and each start their
     /// own successor, so a second reader is not a duplicate request, it is a doubling one.
-    private func readAccount(generation: Int) {
+    /// - Parameter reopeningHead: send the reader's cursor back to offset zero before reading. The
+    ///   only offset a forward-only walk never re-asks for, and the only one new rows arrive at.
+    ///   Inside the single-flight slot rather than before it — see `revalidate`.
+    private func readAccount(generation: Int, reopeningHead: Bool = false) {
         guard accountReadInFlight != generation else { return }
         accountReadInFlight = generation
         let since = self.since
         let until = self.until
         Task { [weak self, account] in
+            if reopeningHead { await (account as? ActivityAccountCursor)?.refreshHead() }
             let feed = await account.read(
                 since: since, until: until, limit: Self.accountCeiling)
             // Asked only when it matters, and only of a reader that has one. A reachable account has
@@ -676,11 +679,25 @@ final class ActivityStore: ObservableObject {
         // read that added rows means there are more pages behind it and the next one is worth
         // making; a read that added none has either reached the end of the account or failed, and
         // neither improves by asking again — the healing ladder below owns the second case.
-        let grew = feed.rowCount > accountFeed.rowCount
+        // **A source that did not answer does not get to erase what is on screen for it.**
+        //
+        // This is the offline launch, and getting it wrong made the cache worthless in the one case
+        // it matters most: the seed paints from disk, the failing read lands a moment later carrying
+        // nothing, and replacing the feed wholesale wiped the rows the user had just been shown.
+        // Which of the two landed first was a race, so the panel was empty about half the time.
+        //
+        // Per source rather than whole-feed, because the account fails per source — conversations
+        // served while `/v3/memories` answered 503 for eight hours. What each source last said
+        // stands until that source itself says otherwise. `answered` below is still the *read's*
+        // own, never the merge's: the rows may be retained, but the claim about who spoke may not.
+        let held = Self.retaining(rowsNotAnsweredIn: feed, from: accountFeed)
+        let grew = held.rowCount > accountFeed.rowCount
         let wasFirst = !accountSettled
-        accountFeed = feed
-        // Whatever was painted off disk has just been replaced by what the account said.
-        isShowingCachedRows = false
+        // Still a cached paint for as long as any source on screen is standing on rows that came
+        // off disk rather than out of an answer.
+        isShowingCachedRows =
+            isShowingCachedRows && feed.answered.count < ActivityAccountSource.allCases.count
+        accountFeed = held
         accountSettled = true
         accountReachable = feed.reachable
         accountUnreachableReason = feed.reachable ? nil : reason
@@ -765,6 +782,42 @@ final class ActivityStore: ObservableObject {
             let epoch = await cache.currentEpoch()
             self?.accountCacheEpoch = epoch
         }
+    }
+
+    /// `feed`, with any source it neither answered for **nor carried rows for** taken from
+    /// `previous`.
+    ///
+    /// **Both halves of that condition are load-bearing, and getting the first one alone wrong is
+    /// how this was first written.** The paging reader answers with everything it has gathered, so a
+    /// source absent from `answered` routinely still carries hundreds of perfectly real rows it
+    /// fetched on an earlier read — that is the documented shape of a page that did not arrive, not
+    /// a stale leftover, and substituting the previous feed for it threw the whole corpus away on
+    /// the first partial answer. The existing spine tests caught it immediately.
+    ///
+    /// So what is retained is only the case the cache exists for: a source that said nothing *and*
+    /// handed over nothing, where the rows on screen came off disk and the alternative is a blank
+    /// panel. An **answered** source is always taken as it comes, empty included — "I hold nothing"
+    /// is an answer, and the account is the authority on it.
+    ///
+    /// Retained rows keep whatever standing they already had; `isShowingCachedRows` is what says a
+    /// paint is still a copy. Nothing here promotes them.
+    nonisolated static func retaining(
+        rowsNotAnsweredIn feed: ActivityAccountFeed, from previous: ActivityAccountFeed
+    ) -> ActivityAccountFeed {
+        guard feed.answered.count < ActivityAccountSource.allCases.count else { return feed }
+        func rows<Row>(
+            _ source: ActivityAccountSource, _ incoming: [Row], _ held: [Row]
+        ) -> [Row] {
+            if feed.answered.contains(source) { return incoming }
+            return incoming.isEmpty ? held : incoming
+        }
+        return ActivityAccountFeed(
+            conversations: rows(.conversations, feed.conversations, previous.conversations),
+            memories: rows(.memories, feed.memories, previous.memories),
+            tasks: rows(.tasks, feed.tasks, previous.tasks),
+            answered: feed.answered,
+            locallySourced: feed.locallySourced,
+            memoriesBeginPastHead: feed.memoriesBeginPastHead)
     }
 
     // MARK: - Hydration
@@ -852,7 +905,12 @@ final class ActivityStore: ObservableObject {
 
     private func absorb(opening: ActivityOpeningRead, generation: Int) {
         guard generation == self.generation else { return }
-        if opening.failed { readFailure = Self.readFailureNote }
+        // **Cleared on success, not only set on failure.** `openWindow` used to be the one thing
+        // that reset this, which was enough while an opening read happened once per window. A
+        // revalidation runs another one, so a transient failure — a database busy for a moment
+        // during a migration — left the panel apologising for a read that had since succeeded, for
+        // as long as the process lived.
+        readFailure = opening.failed ? Self.readFailureNote : nil
         sessions = opening.sessions
         uploadLinks = opening.uploadLinks
         // One frame of an app captured today teaches the whole back catalogue of that app what its

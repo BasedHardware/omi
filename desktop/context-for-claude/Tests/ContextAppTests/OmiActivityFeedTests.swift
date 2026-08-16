@@ -1231,6 +1231,58 @@ extension OmiActivityFeedTests {
             "the previous account's page was in flight across the sign-out and must not be held")
     }
 
+    /// **A revalidation has to be able to delete, and until the head became authoritative it could
+    /// only add.** `reopenHead` re-reads offset zero and `absorb` replaces the ids it sees, so a
+    /// conversation deleted on the phone stayed on the spine for the life of the process. That is a
+    /// regression the process-lived store introduced: a panel rebuilt per window used to lose the
+    /// row simply by being rebuilt.
+    func testAHeadRereadDropsARowTheAccountHasStoppedListing() async {
+        let backend = MutableHeadBackend(ids: ["c2", "c1", "c0"])
+        let feed = Self.feed(overMutableHead: backend)
+
+        let first = await feed.read(since: nil, until: nil, limit: 10)
+        XCTAssertEqual(first.conversations.map(\.id), ["c2", "c1", "c0"], "precondition")
+
+        // c1 is deleted on the phone.
+        await backend.set(ids: ["c2", "c0"])
+        await feed.refreshHead()
+        let second = await feed.read(since: nil, until: nil, limit: 10)
+
+        XCTAssertEqual(
+            second.conversations.map(\.id), ["c2", "c0"],
+            "a row absent from a re-read of the head, within the head's own range, has gone")
+    }
+
+    /// **And it may only delete within the range the head page actually covers.** A head page
+    /// returned the newest `limit` rows and is evidence about nothing older; treating its absence as
+    /// a deletion would empty the account behind it on every revalidation.
+    func testAHeadRereadNeverDeletesRowsOlderThanItsOwnPage() async {
+        let backend = MutableHeadBackend(ids: ["c4", "c3", "c2", "c1", "c0"])
+        let feed = Self.feed(overMutableHead: backend)
+
+        // Page the whole account in two at a time.
+        let all = await Self.readUntilSettled(feed, limit: 2)
+        XCTAssertEqual(all.conversations.count, 5, "precondition")
+
+        // The head is re-read at a page size of two, so it can only speak for c4 and c3.
+        await feed.refreshHead()
+        let after = await Self.readUntilSettled(feed, limit: 2)
+
+        XCTAssertEqual(
+            Set(after.conversations.map(\.id)), ["c0", "c1", "c2", "c3", "c4"],
+            "everything behind the head page is untouched by a re-read of it")
+    }
+
+    private static func feed(overMutableHead backend: MutableHeadBackend) -> OmiActivityFeed {
+        OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { try await backend.conversations($0) },
+            fetchMemories: { _ in [] },
+            fetchTasks: { _ in WireActionItemPage(actionItems: []) },
+            now: { placement })
+    }
+
     private static func readUntilSettled(
         _ feed: OmiActivityFeed, limit: Int, reads: Int = 40
     ) async -> ActivityAccountFeed {
@@ -1375,5 +1427,32 @@ private actor Counter {
     func next() -> Int {
         defer { count += 1 }
         return count
+    }
+}
+
+/// A conversations endpoint whose row set the test can change between reads, newest id first.
+///
+/// Instants descend with position so a page's "oldest row" is well defined — which is what bounds
+/// what a head re-read is allowed to delete.
+private actor MutableHeadBackend {
+    private var ids: [String]
+
+    init(ids: [String]) { self.ids = ids }
+
+    func set(ids: [String]) { self.ids = ids }
+
+    func conversations(_ query: [String: String]) -> [WireConversation] {
+        let offset = Int(query["offset"] ?? "0") ?? 0
+        let limit = Int(query["limit"] ?? "1") ?? 1
+        guard offset < ids.count else { return [] }
+        let page = ids[offset..<min(offset + limit, ids.count)]
+        return page.enumerated().map { position, id in
+            WireConversation(
+                id: id, createdAt: nil,
+                startedAt: WireInstant(seconds: 1_786_000_000 - Double(offset + position)),
+                finishedAt: nil,
+                structured: WireConversation.WireStructured(
+                    title: id, overview: nil, emoji: "🎙️"))
+        }
     }
 }
