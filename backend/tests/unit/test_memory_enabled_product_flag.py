@@ -60,7 +60,7 @@ def test_get_enabled_is_not_the_list_fence(monkeypatch):
         cursor_secret()
 
 
-def test_dev_overlay_pins_memory_enabled_on_and_prod_stays_off():
+def test_dev_and_prod_overlays_pin_memory_enabled_on():
     import yaml
 
     composed = yaml.safe_load((BACKEND / "deploy/runtime_env.yaml").read_text(encoding="utf-8"))
@@ -85,8 +85,11 @@ def test_dev_overlay_pins_memory_enabled_on_and_prod_stays_off():
         ("prod/cloud_run/backend", prod["cloud_run"]["services"]["backend"]["env"]),
         ("prod/job", prod["cloud_run"]["jobs"]["memory-maintenance-job"]["env"]),
     ):
+        # Prod GO was 2026-08-15: request-path prod pins MEMORY_ENABLED=on so the
+        # next deploy cannot silently pause fleet memory writes again.
         assert "MEMORY_MODE" not in env_map and "MEMORY_V3_GET_ENABLED" not in env_map, scope
-        assert _value(env_map, "MEMORY_ENABLED") == "off", scope
+        assert _value(env_map, "MEMORY_ENABLED") == "on", scope
+        assert _value(env_map, "MEMORY_CANONICAL_MAINTENANCE_ENABLED") in {"", "false"}
 
 
 def test_memory_enabled_on_does_not_require_maintenance():

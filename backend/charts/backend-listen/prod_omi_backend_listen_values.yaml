@@ -147,7 +147,7 @@ env:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_ENABLED
-    value: "off"
+    value: "on"
   - name: MEMORY_V3_CURSOR_SECRET
     valueFrom:
       secretKeyRef:

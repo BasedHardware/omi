@@ -205,7 +205,9 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert rc == 0
     out = capsys.readouterr().out
     job_env = _job_env_block(out, 'memory_maintenance_job')
-    assert 'MEMORY_ENABLED=off' in job_env
+    # Prod GO 2026-08-15: the maintenance job follows the request-path product
+    # flag while the ST→LT cron stays off.
+    assert 'MEMORY_ENABLED=on' in job_env
     assert 'MEMORY_MODE=' not in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
