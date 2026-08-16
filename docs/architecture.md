@@ -14,6 +14,7 @@ Related, already written, and not restated here:
 - Boot, seed, reset, stop: [`docs/running-locally.md`](running-locally.md)
 - UI fixture harness (backend-free): [`docs/ui-harness.md`](ui-harness.md)
 - Local JSONL inspection log: [`docs/telemetry.md`](telemetry.md)
+- Network-fence proposal (not built): [`docs/network-fence-proposal.md`](network-fence-proposal.md)
 
 ## Shape
 
@@ -55,9 +56,11 @@ and is forbidden on both production closures (see Rule 18 below).
 The service is allowed to leave the machine for **Firebase Authentication**
 and **the chat model provider**. Nothing else is a sanctioned leak.
 
-The thing that enforces this in-tree is Rule 18, `bun run lint:closure`,
+The in-tree enforcement of the **import** half is Rule 18, `bun run lint:closure`,
 implemented by `scripts/lint-import-closure.ts` and traced by
-`scripts/trace-value-imports.ts`.
+`scripts/trace-value-imports.ts`. It is a dependency/import-closure fence,
+not a network observer. The host-level follow-up is
+[`docs/network-fence-proposal.md`](network-fence-proposal.md).
 
 What the fence **actually traces**: the transitive **value-import** closure
 of listed TypeScript entrypoints. Type-only imports are excluded
@@ -66,7 +69,7 @@ of listed TypeScript entrypoints. Type-only imports are excluded
 (`trace-value-imports.ts:109-116`). The tracer does not inspect `fetch`
 URLs, environment values, or which host a running process contacted.
 
-Two groups, deliberately different lists (`lint-import-closure.ts:3-49`):
+Two groups, deliberately different lists (`lint-import-closure.ts:42-66`):
 
 | Group | Entrypoints | Forbidden substrings |
 |---|---|---|
@@ -86,12 +89,12 @@ Firebase identity is composed on the hosted memory path
 not import it; it issues a committed loopback bearer
 (`dev-server.ts:70-76`).
 
-**Finding, not smoothed over:** the comment at `lint-import-closure.ts:11-15`
-names "two sanctioned leaks (Firebase auth and the chat model provider)".
-The fence catches **linked modules**, not network destinations. A `fetch` to
-an unsanctioned host from a module that is already on the closure would not
-fail Rule 18. The CLOUD forbid-list does not include `drivers/model/codex`;
-the LOCAL list does. Entrypoint and forbid-list edits are David-only
+The comment at `lint-import-closure.ts` names this as an import-closure
+fence and points at [`docs/network-fence-proposal.md`](network-fence-proposal.md)
+for a host-level follow-up. A `fetch` to an unsanctioned host from a module
+that is already on the closure still does not fail Rule 18. The CLOUD
+forbid-list does not include `drivers/model/codex`; the LOCAL list does.
+Entrypoint and forbid-list edits are David-only
 (`trace-value-imports.ts:28`).
 
 ## Domains, and where each one's data comes from now

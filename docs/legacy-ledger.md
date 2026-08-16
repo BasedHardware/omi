@@ -5,6 +5,9 @@ Proposed fates only. David ratifies later. This lane deletes nothing.
 Each row is one legacy-compatibility touchpoint still present in platform.
 The mechanical check is the proof that production kernels do not value-link
 the touchpoint; rule 18 (`bun run lint:closure`) covers several of them.
+Rule 18 is an import-closure fence. It does not inspect `fetch` URLs or
+observe which host a running process contacted; that gap is
+[`docs/network-fence-proposal.md`](network-fence-proposal.md).
 
 | Touchpoint | What it is | Why it exists | Proposed fate | Gate before deletion | Mechanical check |
 | --- | --- | --- | --- | --- | --- |
