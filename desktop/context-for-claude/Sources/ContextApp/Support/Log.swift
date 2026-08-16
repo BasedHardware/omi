@@ -1,3 +1,4 @@
+import ContextCore
 import Foundation
 import OSLog
 
@@ -32,6 +33,12 @@ import OSLog
 /// **Not `process == "Context for Claude"`.** That matches, but it also drags in every framework
 /// this process links — CoreAudio, CFNetwork, boringssl — and buries the app's own lines in
 /// thousands of them. The subsystem is the app's, and only the app's.
+///
+/// **The subsystem is the running bundle id**, so a locally built app logs under
+/// `com.omi.context-for-claude.dev` and the installed release under `com.omi.context-for-claude`.
+/// That is the point — two builds writing one subsystem produce an interleaved transcript nobody
+/// can attribute. Query the one you are debugging, or `subsystem BEGINSWITH
+/// "com.omi.context-for-claude"` for both.
 ///
 /// To hand a whole run to somebody, the same query over a window that contains it:
 ///
@@ -84,7 +91,12 @@ enum ContextLog {
 
     // MARK: - os.Logger
 
-    private static let subsystem = "com.omi.context-for-claude"
+    /// The running bundle, not the shipping constant, so a dev build's lines and the installed
+    /// app's are separable in one `log show` rather than interleaved under one name.
+    ///
+    /// Internal rather than private only so the wiring can be asserted — `os.Logger` never gives its
+    /// subsystem back, so reading this constant is the whole of what is observable about it.
+    static let subsystem = ContextPaths.bundleIdentifier
     private static let loggersLock = NSLock()
     private static nonisolated(unsafe) var loggers: [String: Logger] = [:]
 

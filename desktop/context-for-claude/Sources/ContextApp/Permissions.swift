@@ -506,7 +506,15 @@ enum Permissions {
     /// clipboard. A command the user is told to run and a command the app puts on their clipboard have
     /// to be the same string — two literals is how they drift, and a wrong bundle id in a `tccutil`
     /// line either does nothing or resets somebody else's permission.
-    static let screenRecordResetCommand = "tccutil reset ScreenCapture com.omi.context-for-claude"
+    ///
+    /// Names the *running* bundle, not the one that ships. A dev build handing the user
+    /// `tccutil reset ScreenCapture com.omi.context-for-claude` tells them to destroy the production
+    /// app's grant, which repairs nothing here and breaks something that was working.
+    static let screenRecordResetCommand = screenRecordResetCommand(for: ContextPaths.bundleIdentifier)
+
+    static func screenRecordResetCommand(for bundleIdentifier: String) -> String {
+        "tccutil reset ScreenCapture \(bundleIdentifier)"
+    }
 
     enum ScreenBlock: Equatable {
         /// Never granted. The user's own choice, and nothing has gone wrong.
