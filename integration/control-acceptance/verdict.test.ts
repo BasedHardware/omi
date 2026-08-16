@@ -798,15 +798,37 @@ test("a journey skip is a fail, not a muted pass", () => {
   assert.ok(verdict.failures.includes("CONTROL mic=skipped-tcc-denied"));
 });
 
-test("the journey is a named tier above L3", () => {
+test("the journey is a named tier above L3, either a real step or an explained hold", () => {
   assert.match(lanes, /L4:/);
   assert.match(lanes, /run\.mjs --journey/);
   const l3Start = lanes.indexOf("  L3: {");
   const l4Start = lanes.indexOf("  L4: {");
   assert.ok(l4Start > l3Start);
+  const afterLanes = lanes.indexOf("\n};", l4Start);
   const l3 = lanes.slice(l3Start, l4Start);
+  const l4 = lanes.slice(l4Start, afterLanes === -1 ? lanes.length : afterLanes);
   assert.doesNotMatch(l3, /--journey/);
   assert.doesNotMatch(l3, /--seam-break/);
+  const stepCommands = [...l4.matchAll(/^\s*command: "(.+)",$/gm)].map((m) => m[1]);
+  const holdNoted = /NOT YET A GATE/.test(l4);
+  const wiredIn = stepCommands.some((c) => c.includes("run.mjs --journey"));
+  assert.equal(
+    wiredIn,
+    !holdNoted,
+    "L4 is either a real --journey step or an explained hold — never a silent absence",
+  );
+  if (!holdNoted) return;
+  const mentions = [...l4.matchAll(/CONTROL ([a-z.]+)=([a-z-]+)/g)];
+  assert.ok(mentions.length > 0, "a hold must name CONTROL slug=verdict as its current red");
+  for (const [, slug, verdict] of mentions) {
+    assert.equal(
+      isPass(slug, verdict),
+      false,
+      `hold names passing token CONTROL ${slug}=${verdict}`,
+    );
+  }
+  assert.match(l4, /CONTROL chat.memory=memory-not-retrieved/);
+  assert.match(l4, /chat.memory=retrieved-and-streamed/);
 });
 
 test("the runner applies journey retrieval from the gateway request log", () => {
@@ -814,4 +836,9 @@ test("the runner applies journey retrieval from the gateway request log", () => 
   assert.match(run, /GATEWAY_REQUEST_LOG_NAME/);
   assert.match(run, /stripServedMemoryRecord/);
   assert.match(run, /witnesses\?\.memoryId/);
+  // red-proof: readFileSync(join(dirname(ownerPath), GATEWAY_REQUEST_LOG_NAME))
+  // reads the stack rundir, not the run-scoped directory the canned gateway writes.
+  assert.match(run, /dirname\(owner\.readinessPath\)/);
+  assert.match(run, /join\(runScopedDir, GATEWAY_REQUEST_LOG_NAME\)/);
+  assert.doesNotMatch(run, /readFileSync\(join\(dirname\(ownerPath\), GATEWAY_REQUEST_LOG_NAME\)/);
 });

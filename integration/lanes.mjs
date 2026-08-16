@@ -226,11 +226,33 @@ export const LANES = {
     name: "e2e journey — listen to chat-memory",
     budgetNote: "named tier above L3; runner prints wall-clock",
     reason: "one rendered-layer chain: he speaks, a transcript appears, it becomes a conversation, the conversation becomes a memory, Home shows it, and chat retrieval is joined by that memory's id. Too slow to fold into L3 — do not add it there. Canned gateway by default.",
+    /**
+     * NOT YET A GATE, and deliberately not softened into one.
+     *
+     * `node integration/control-acceptance/run.mjs --journey` works and is the
+     * real chain — it reports every hop at the rendered layer. It is held out
+     * of L4 because it is currently RED on one true positive:
+     *
+     *     CONTROL chat.memory=memory-not-retrieved
+     *
+     * Live 2026-08-15, wall-clock=263270ms: mic, conversation, memory, and
+     * Home carried the fact; chat streamed and persisted without that
+     * run's memory in the served request. `streamed-and-persisted` is not a
+     * pass for this slug. The four per-domain hops staying green is why this
+     * tier exists.
+     *
+     * Wire it in as the step below the moment the harness prints
+     * chat.memory=retrieved-and-streamed.
+     */
+    preflight: () => ({
+      ok: false,
+      reason: "NOT YET A GATE: CONTROL chat.memory=memory-not-retrieved",
+      action: "wire in `node integration/control-acceptance/run.mjs --journey` when the harness prints chat.memory=retrieved-and-streamed",
+    }),
     steps: [
-      {
-        cwd: PLATFORM_REPO,
-        command: "node integration/control-acceptance/run.mjs --journey",
-      },
+      // Held. Restoring the command without discharging the hold is the
+      // silent-absence fork: the test requires exactly one of (preflight hold
+      // naming a non-pass token) or (a real --journey step).
     ],
   },
 };

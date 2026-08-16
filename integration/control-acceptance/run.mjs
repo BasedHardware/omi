@@ -190,6 +190,7 @@ const ownerPath = booted
 let token = "";
 let serviceUrl = PRODUCTION_SERVICE_URL;
 let surfacePort = "5290";
+let runScopedDir = "";
 try {
   const owner = JSON.parse(readFileSync(ownerPath, "utf8"));
   const ready = JSON.parse(readFileSync(owner.readinessPath, "utf8"));
@@ -198,6 +199,12 @@ try {
   if (typeof ready.baseUrl === "string" && ready.baseUrl.startsWith("http://127.0.0.1:")) {
     serviceUrl = ready.baseUrl;
   }
+  // The canned gateway appends gateway-requests.jsonl next to its ready file,
+  // which is the run-scoped directory (`runs/<id>/`), not the stack rundir that
+  // holds service-owner.json. Reading the owner-dir log produced empty served
+  // items and CONTROL chat.memory=memory-not-retrieved while the page and the
+  // model had the fact.
+  runScopedDir = dirname(owner.readinessPath);
 } catch {
   fail("ERROR: stack owner record did not yield a readiness token.");
 }
@@ -295,7 +302,7 @@ const report = (() => {
     const memoriesAfter = memoryRecordsFrom(getJson(`${serviceUrl}/v1/memories?limit=100`, token));
     let servedLog = "";
     try {
-      servedLog = readFileSync(join(dirname(ownerPath), GATEWAY_REQUEST_LOG_NAME), "utf8");
+      servedLog = readFileSync(join(runScopedDir, GATEWAY_REQUEST_LOG_NAME), "utf8");
     } catch {
       servedLog = "";
     }
