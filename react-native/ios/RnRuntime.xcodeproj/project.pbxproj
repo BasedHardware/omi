@@ -13,8 +13,8 @@
 		0D1A2B3C4D5E6F708192A3B8 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D1A2B3C4D5E6F708192A3B9 /* UserNotifications.framework */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		4AA5CD6BD223060A0F26C5EC /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
-		761780ED2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EF /* SceneDelegate.swift */; };
+		761780ED2CA45674006654EE /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.mm */; };
+		761780ED2CA45674006654EF /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EF /* main.m */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		A1B2C3D4E5F60718293A4B5C /* OmiCppBoundary.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* OmiCppBoundary.mm */; };
 		A1B2C3D4E5F60718293A4B5E /* omi_native_boundary.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5F /* omi_native_boundary.cpp */; };
@@ -33,14 +33,15 @@
 		3B4392A12AC88292D35C810B /* Pods-RnRuntime.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime.debug.xcconfig"; path = "Target Support Files/Pods-RnRuntime/Pods-RnRuntime.debug.xcconfig"; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-RnRuntime.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime.release.xcconfig"; path = "Target Support Files/Pods-RnRuntime/Pods-RnRuntime.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-RnRuntime.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RnRuntime.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = RnRuntime/AppDelegate.swift; sourceTree = "<group>"; };
-		761780EC2CA45674006654EF /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SceneDelegate.swift; path = RnRuntime/SceneDelegate.swift; sourceTree = "<group>"; };
+		761780EC2CA45674006654EE /* AppDelegate.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = AppDelegate.mm; path = RnRuntime/AppDelegate.mm; sourceTree = "<group>"; };
+		761780EC2CA45674006654EF /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = main.m; path = RnRuntime/main.m; sourceTree = "<group>"; };
+		761780EC2CA45674006654F0 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = RnRuntime/AppDelegate.h; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = RnRuntime/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5D /* OmiCppBoundary.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiCppBoundary.mm; path = RnRuntime/OmiCppBoundary.mm; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5F /* omi_native_boundary.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_native_boundary.cpp; path = "../../native-core/src/omi_native_boundary.cpp"; sourceTree = "<group>"; };
 		B3D4E5F60718293A4B5C6D7F /* OmiNativeModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiNativeModule.mm; path = RnRuntime/OmiNativeModule.mm; sourceTree = "<group>"; };
-		B3D4E5F60718293A4B5C6D82 /* OmiBackendModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiBackendModule.mm; path = RnRuntime/OmiBackendModule.mm; sourceTree = "<group>"; };
 		B3D4E5F60718293A4B5C6D80 /* OmiNativeModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = OmiNativeModule.h; path = RnRuntime/OmiNativeModule.h; sourceTree = "<group>"; };
+		B3D4E5F60718293A4B5C6D82 /* OmiBackendModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; name = OmiBackendModule.mm; path = RnRuntime/OmiBackendModule.mm; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -63,8 +64,9 @@
 			isa = PBXGroup;
 			children = (
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
-				761780EC2CA45674006654EE /* AppDelegate.swift */,
-				761780EC2CA45674006654EF /* SceneDelegate.swift */,
+				761780EC2CA45674006654F0 /* AppDelegate.h */,
+				761780EC2CA45674006654EE /* AppDelegate.mm */,
+				761780EC2CA45674006654EF /* main.m */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
@@ -272,8 +274,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
-				761780ED2CA45674006654EF /* SceneDelegate.swift in Sources */,
+				761780ED2CA45674006654EE /* AppDelegate.mm in Sources */,
+				761780ED2CA45674006654EF /* main.m in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* OmiCppBoundary.mm in Sources */,
 				B3D4E5F60718293A4B5C6D7E /* OmiNativeModule.mm in Sources */,
 				B3D4E5F60718293A4B5C6D81 /* OmiBackendModule.mm in Sources */,
@@ -313,7 +315,6 @@
 				PRODUCT_BUNDLE_IDENTIFIER = hk.tsc.example;
 				PRODUCT_NAME = RnRuntime;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
@@ -345,7 +346,6 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = hk.tsc.example;
 				PRODUCT_NAME = RnRuntime;
-				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;

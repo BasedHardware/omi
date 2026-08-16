@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+DerivedData/
+build/
+node_modules/
+Pods/
+*.tsbuildinfo
+.xcode.env
+.xcode.env.local
+packages/contracts/ratified/dist/

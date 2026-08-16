@@ -5,9 +5,9 @@
     "version": "0.8.0"
   },
   "compatibility": "additive",
-  "provenanceSha256": "29d32be3cd43343b6649f395a2bdcf79493666f142b55b717fe7c36bba964e54",
-  "sourceDigest": "d7c345d3903e9e144c496337a5199589e15d6566b2fcd34bcc3241270889588f",
-  "tarballSha256": "45b128b10949f83352073a3e047ad956a8b059cc633dde6f57d3a54e715de603",
+  "provenanceSha256": "e11b65788233dff82727c12a2e472c429054ea06ed3f0e395362c940d7903182",
+  "sourceDigest": "69601bc089bfe9f0d4551a73a854c44e4aa14b7a66aeb60413fc3d6b5eff5938",
+  "tarballSha256": "6d9dbed324a36573ba05705b8240613ecfdec67bc319d5d55bbca1f2583a8853",
   "files": [
     "package/PROVENANCE.json",
     "package/README.md",

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+build_dir="$(mktemp -d /tmp/omi-v5-native-core.XXXXXX)"
+cmake -S native-core -B "$build_dir"
+cmake --build "$build_dir"
+ctest --test-dir "$build_dir" --output-on-failure

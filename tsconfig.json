@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    {"path": "packages/contracts"},
+    {"path": "packages/kernel"},
+    {"path": "packages/sync"},
+    {"path": "packages/wire-listen"},
+    {"path": "packages/adapters-platform"}
+  ]
+}

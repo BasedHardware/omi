@@ -20,7 +20,6 @@ import {
   Pressable,
   type PressableProps,
   requireNativeComponent,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +28,7 @@ import {
   View,
   type ViewProps,
 } from 'react-native';
+import {SafeAreaView} from 'react-native-safe-area-context';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Brain from 'lucide-react-native/icons/brain';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';

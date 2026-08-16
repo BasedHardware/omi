@@ -6,11 +6,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(omi_native SHARED
   jni_bridge.cpp
-  ../../../../../../cpp/src/omi_native_boundary.cpp
+  ../../../../../../native-core/src/omi_native_boundary.cpp
 )
 
 target_include_directories(omi_native PRIVATE
-  ../../../../../../cpp/include
+  ../../../../../../native-core/include
 )
 
 find_library(log-lib log)

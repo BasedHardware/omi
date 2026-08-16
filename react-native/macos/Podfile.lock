@@ -1260,6 +1260,8 @@ PODS:
     - React-jsiexecutor
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
+  - react-native-safe-area-context (5.9.0):
+    - React-Core
   - React-NativeModulesApple (0.79.0):
     - glog
     - React-callinvoker
@@ -1600,6 +1602,7 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native-macos/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native-macos/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native-macos/ReactCommon/react/nativemodule/microtasks`)
+  - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - React-NativeModulesApple (from `../node_modules/react-native-macos/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native-macos/ReactCommon/oscompat`)
   - React-perflogger (from `../node_modules/react-native-macos/ReactCommon/reactperflogger`)
@@ -1709,6 +1712,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-macos/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native-macos/ReactCommon/react/nativemodule/microtasks"
+  react-native-safe-area-context:
+    :path: "../node_modules/react-native-safe-area-context"
   React-NativeModulesApple:
     :path: "../node_modules/react-native-macos/ReactCommon/react/nativemodule/core/platform/ios"
   React-oscompat:
@@ -1814,6 +1819,7 @@ SPEC CHECKSUMS:
   React-logger: 043ab0e246d3d88fbc37220e564d8c54150f5cd1
   React-Mapbuffer: ff9b8a32826894e5da46d6eaa48ade8b61e81a26
   React-microtasksnativemodule: 38a8e3307971553af502bbdad2574bbc4c9f1004
+  react-native-safe-area-context: 2a9f3c3a5106cc0fffc0ca29691a111e48f41553
   React-NativeModulesApple: 020f0908d1f331f19429752eaedb619f3b20e93c
   React-oscompat: 2098ea5138dec4d965bd9f0fac95fc8419f64087
   React-perflogger: a0b5553ee2c4577708376bb577674eaf01413ca2
@@ -1842,7 +1848,7 @@ SPEC CHECKSUMS:
   React-timing: 01fb653bcd2c119213c2a57a70586b906cd328a7
   React-utils: c276acc90b7da1158fc99381943e1b708aec9f35
   ReactAppDependencyProvider: 1d1d794177511cbb0249dd4e5083389eb2bb1d7b
-  ReactCodegen: 101cda4d8ed5d534c187968062fab27959a1de97
+  ReactCodegen: a51629df67a6a0f528f27d42348493e17edd723f
   ReactCommon: 6ca2d140e3aac63917c5c45c2a548f94a348130a
   RNSVG: c61e38e1c0c90ed982418ed696ec272b706995bb
   SocketRocket: 03f7111df1a343b162bf5b06ead333be808e1e0a
@@ -1850,4 +1856,4 @@ SPEC CHECKSUMS:
 
 PODFILE CHECKSUM: 72565ad1826e7aee90aedcbccaa85a27227a00c0
 
-COCOAPODS: 1.17.0
+COCOAPODS: 1.15.2

@@ -1,5 +1,5 @@
 {
-  "name": "RnRuntime",
+  "name": "@omi-v5/client",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -9,13 +9,18 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
+    "typecheck": "tsc --noEmit",
     "windows": "react-native run-windows"
   },
   "dependencies": {
+    "@omi-core/adapters-platform": "workspace:*",
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/ratified-contracts": "workspace:*",
     "lucide-react-native": "^1.31.0",
     "react": "19.0.0",
     "react-native": "0.79.6",
     "react-native-macos": "0.79.0",
+    "react-native-safe-area-context": "5.9.0",
     "react-native-svg": "^15.15.5",
     "react-native-windows": "0.79.0"
   },
@@ -34,11 +39,12 @@
     "@types/react": "^19.0.0",
     "@types/react-test-renderer": "^19.0.0",
     "eslint": "^8.19.0",
+    "eslint-plugin-jest": "27.9.0",
     "jest": "^29.6.3",
+    "metro-config": "^0.82.5",
     "prettier": "2.8.8",
     "react-test-renderer": "19.0.0",
-    "typescript": "5.0.4",
-    "metro-config": "^0.82.5"
+    "typescript": "5.0.4"
   },
   "engines": {
     "node": ">=18"

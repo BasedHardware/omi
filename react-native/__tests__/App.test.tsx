@@ -186,6 +186,18 @@ jest.mock('lucide-react-native', () => {
   };
 });
 
+jest.mock('react-native-safe-area-context', () => {
+  const ReactRuntime = require('react');
+  const component =
+    (name: string) =>
+    ({children, ...props}: {children?: React.ReactNode}) =>
+      ReactRuntime.createElement(name, props, children);
+  return {
+    SafeAreaProvider: component('SafeAreaProvider'),
+    SafeAreaView: component('SafeAreaView'),
+  };
+});
+
 jest.mock(
   'lucide-react-native/icons/arrow-up',
   () => (props: Record<string, unknown>) =>

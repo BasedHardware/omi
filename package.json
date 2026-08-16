@@ -1,0 +1,27 @@
+{
+  "name": "omi-v5",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "react-native",
+    "packages/*",
+    "packages/contracts/ratified"
+  ],
+  "scripts": {
+    "build": "bun run --cwd packages/contracts/ratified build && bun x tsc -b",
+    "check": "bun run boundaries && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run native:test",
+    "boundaries": "bun scripts/check-boundaries.ts",
+    "format": "bun x prettier --write 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
+    "format:check": "bun x prettier --check 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
+    "lint": "bun run --cwd react-native lint",
+    "native:test": "scripts/test-native-core",
+    "setup": "scripts/setup",
+    "test": "bun run --cwd react-native test -- --runInBand && bun run --cwd packages/contracts/ratified verify",
+    "typecheck": "bun run build && bun run --cwd react-native typecheck",
+    "push:v5": "scripts/push-v5"
+  },
+  "devDependencies": {
+    "prettier": "2.8.8",
+    "typescript": "5.7.3"
+  }
+}

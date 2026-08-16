@@ -1,0 +1,3 @@
+Use Bun for every JavaScript and TypeScript command. Keep product UI, routes, state, motion, and lifecycle orchestration in React Native. Objective-C++ is limited to platform bootstrap, real macOS material and window behavior, credential-bearing transport policy, desktop commands, and the C++ codec boundary. Swift sources, legacy product trees, compatibility aliases, and direct authenticated JavaScript networking are not allowed.
+
+Run `bun run check` before every commit and push. Push the standalone `main` branch only through `bun run push:v5`, which mirrors the identical commit to `BasedHardware/omi:v5`. Do not add secrets, generated dependencies, build output, or local Xcode environment files.
