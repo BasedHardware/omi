@@ -202,6 +202,121 @@ test("Chat true-empty and loading states render through the composed empty primi
   // drops the heading/icon and fails these queries.
 });
 
+function chatBodyStore({ phase, messages }) {
+  return {
+    status: () => ({
+      refresh: { phase, hasSavedData: messages.length > 0 },
+      queue: { phase: "idle", pendingCount: 0 },
+    }),
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async history() {
+      return { messages, hasOlder: false, olderCursor: null };
+    },
+    async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; },
+    async send() {},
+    capabilities() {
+      return {
+        maxAttachmentsPerMessage: 2,
+        maxAttachmentBytes: 10_000,
+        allowedAttachmentMimeTypes: ["application/pdf"],
+      };
+    },
+    stagingAvailable() { return false; },
+    async stageAttachment() { return null; },
+    async scanAttachment() { return "clean"; },
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async cancel() {},
+    async resolveApproval() {},
+  };
+}
+
+const savedUserMessage = {
+  role: "user",
+  text: "What did we decide about the handoff?",
+  delivery: {
+    kind: "canonical",
+    serverId: "saved-chat-human",
+    clientMessageId: "saved-chat-human",
+    generationOutcome: null,
+  },
+  attachments: [],
+};
+
+test("Chat keeps saved messages on screen while refresh is still initial-loading", async () => {
+  // red-proof: ChatProduction's first branch used to be `phase === "initial-loading"`
+  // with no messageCount check, so a hydrated projection disappeared behind
+  // common.loading. The helper returning "thread" is not this proof — this
+  // query is.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const rendered = await renderComponent(ChatProduction, {
+    store: chatBodyStore({ phase: "initial-loading", messages: [savedUserMessage] }),
+  });
+  try {
+    assert.ok(
+      rendered.container.querySelector(".chat-message"),
+      "saved messages stay in the thread during initial-loading",
+    );
+    assert.equal(
+      rendered.container.querySelector(".chat-empty-state"),
+      null,
+      "loading empty must not replace a thread that already has rows",
+    );
+    assert.equal(rendered.container.querySelector("[data-empty-kind]"), null);
+    assert.ok(rendered.container.textContent.includes("What did we decide about the handoff?"));
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Chat refreshing with zero messages is loading, not beginning-of-conversation", async () => {
+  // red-proof: the final else used to render the thread (and chat.historyStart)
+  // for every phase that was not initial-loading/unavailable/ready-empty.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const rendered = await renderComponent(ChatProduction, {
+    store: chatBodyStore({ phase: "refreshing", messages: [] }),
+  });
+  try {
+    const region = rendered.container.querySelector(".chat-empty-state .production-empty-state");
+    assert.ok(region, "zero-row refreshing is a composed loading state");
+    assert.equal(region.querySelector("h2")?.textContent, EN_MESSAGES["common.loading"]);
+    assert.equal(rendered.container.querySelector("[data-empty-kind]"), null);
+    assert.equal(rendered.container.querySelector(".chat-history-start"), null);
+    assert.equal(rendered.container.textContent.includes(EN_MESSAGES["chat.historyStart"]), false);
+    assert.equal(rendered.container.textContent.includes(EN_MESSAGES["chat.emptyTitle"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Chat desktop empty/loading slot fills so the composer stays the last row", async () => {
+  const css = await read("src/production/chat.css");
+  assert.match(
+    css,
+    /html\[data-platform="desktop"\] main\[data-route="chat"\] \.chat-empty-state \{[^}]*flex: 1 1 auto/,
+  );
+  assert.match(
+    css,
+    /html\[data-platform="desktop"\] main\[data-route="chat"\] \.chat-empty-state \{[^}]*min-height: 0/,
+  );
+  assert.match(
+    css,
+    /\.chat-message-text \{[^}]*max-width: var\(--measure-body\)/,
+  );
+  assert.match(
+    css,
+    /\.chat-agent-capability,\s*\n\.chat-agent-state \{[^}]*text-overflow: ellipsis/,
+  );
+  assert.doesNotMatch(
+    css,
+    /\.chat-agent-capability,\s*\n\.chat-agent-state \{[^}]*padding: 2px /,
+  );
+  // red-proof: without flex on .chat-empty-state the composer sits under the
+  // empty copy instead of at the panel bottom; restoring padding: 2px puts a
+  // hardcoded size back on the capability chip.
+});
+
 test("Listen waiting for speech uses the composed empty primitive without changing the words", async () => {
   const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
   const fixtureListenStore = await loadProductionExport("listen-fixtures.ts", "fixtureListenStore");

@@ -116,8 +116,10 @@ html[data-platform="mobile"] .chat-jump-latest {
 
 .chat-message-text {
   margin: 0;
+  max-width: var(--measure-body);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font-size: var(--type-body-size);
   line-height: var(--type-body-line);
   color: var(--content-primary);
 }
@@ -142,12 +144,16 @@ html[data-platform="mobile"] .chat-jump-latest {
 
 .chat-agent-capability,
 .chat-agent-state {
-  padding: 2px var(--space-xs);
+  max-width: var(--measure-label);
+  overflow: hidden;
+  padding: var(--space-xs);
   border-radius: var(--radius-pill);
   background: var(--surface-elevated);
   color: var(--content-secondary);
   font-family: var(--type-label-family);
   font-size: var(--type-label-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-agent-run ol {
@@ -244,6 +250,15 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-thread {
   flex: 1 1 auto;
   min-height: 0;
   margin-bottom: 0;
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-empty-state {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  place-content: center;
 }
 
 html[data-platform="desktop"] main[data-route="chat"] .chat-message-list {
