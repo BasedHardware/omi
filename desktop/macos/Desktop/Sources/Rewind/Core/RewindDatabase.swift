@@ -2778,7 +2778,7 @@ actor RewindDatabase {
         // unrelated screenshot.
         record.id = nil
         if record.imagePath == nil { record.imagePath = "" }
-        try record.insert(db)
+        _ = try record.inserted(db)
       }
 
       return screenshots.count
