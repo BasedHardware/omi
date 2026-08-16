@@ -1,0 +1,41 @@
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityAccountCache.swift
+  s_31a21db428771c::t_4e21dfd1c950a2 45-69,141-148,200-203
+desktop/context-for-claude/Sources/ContextApp/Activity/ActivityStore.swift
+  s_421db9c0df0bbf::t_317f9d48ba0251 429-446,449-452,548,746-751,754-767
+desktop/context-for-claude/Sources/ContextApp/Backend/OmiActivityFeed.swift
+  s_31a21db428771c::t_9c1992b7d9aa10 235-242,249,253,295,305-307,311-313,318,320-321,325,668-681,688-689,697-698,720-722
+desktop/context-for-claude/Sources/ContextCore/AccountCacheQueries.swift
+  s_31a21db428771c::t_2801d738909247 51-56,66,110
+desktop/context-for-claude/Tests/ContextAppTests/ActivityAccountCacheTests.swift
+  s_31a21db428771c::t_2bd8b4d9e5dfaa 31-32,36,42-48,76,101,119,131,133-134,149,161-162,169-206,216-217,223,240-241,257,274-275,280-283,292-314
+desktop/context-for-claude/Tests/ContextAppTests/ActivityRevalidationTests.swift
+  s_31a21db428771c::t_4733c07a6fc642 176-225,275-299,347-390
+desktop/context-for-claude/Tests/ContextAppTests/OmiActivityFeedTests.swift
+  s_31a21db428771c::t_46e6b910b64f50 1185-1233,1346-1379
+desktop/context-for-claude/Tests/ContextCoreTests/AccountCacheQueriesTests.swift
+  s_31a21db428771c::t_9afbad1dda4806 125-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "7a658391373233b26064f90810a0ab3d1b641c53",
+  "prompts": {},
+  "sessions": {
+    "s_31a21db428771c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bdb0c54-f98d-4b5f-9e7f-cee463cdb235",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_421db9c0df0bbf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "60ec0fd0-8e18-42b2-8f1e-77af47bc6a8f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
