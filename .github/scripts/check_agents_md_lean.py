@@ -96,7 +96,9 @@ def main() -> int:
     repo = Path(__file__).resolve().parents[2]
 
     errors: list[str] = []
-    found = {str(p.relative_to(repo)) for p in discover(repo)}
+    # as_posix keeps the keys `/`-separated on Windows too; str() would emit
+    # backslashes there and misreport every budgeted file as both new and gone.
+    found = {p.relative_to(repo).as_posix() for p in discover(repo)}
 
     # Every AGENTS.md must carry a budget, so a new guide cannot land unbounded.
     for rel in sorted(found - BUDGETS.keys()):

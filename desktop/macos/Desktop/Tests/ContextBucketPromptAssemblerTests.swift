@@ -563,6 +563,41 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       "the rolling tail must keep roughly the room it had before the frozen budget grew")
   }
 
+  /// The frozen segment's head is the cache prefix. Eviction takes from the head,
+  /// so trimming to exactly the budget moved the prefix on every publish of a
+  /// saturated bucket — measured at 0 cached tokens across 91 director calls.
+  func testSaturatedFrozenSegmentKeepsItsHeadAcrossManyPublishes() {
+    let line = { (n: Int) in "- entry:\(String(format: "%05d", n)) \(String(repeating: "n", count: 480))\n" }
+    // Start just over budget so the first publish evicts, then keep appending.
+    var lines = (0..<40).map(line)
+    XCTAssertGreaterThan(
+      lines.reduce(0) { $0 + $1.utf8.count }, ContextBucketPromptAssembler.frozenRankedByteBudget)
+
+    lines = ContextBucketCompactionPolicy.evictToLowWaterMark(lines)
+    let headAfterEviction = try? XCTUnwrap(lines.first)
+    XCTAssertLessThanOrEqual(
+      lines.reduce(0) { $0 + $1.utf8.count },
+      ContextBucketPromptAssembler.frozenRankedLowWaterMark)
+
+    // Every later publish appends one compacted entry, as `publishVersion` does.
+    var publishesWithAnUnchangedHead = 0
+    for n in 40..<48 {
+      lines.append(line(n))
+      lines = ContextBucketCompactionPolicy.evictToLowWaterMark(lines)
+      if lines.first == headAfterEviction { publishesWithAnUnchangedHead += 1 }
+    }
+    XCTAssertEqual(
+      publishesWithAnUnchangedHead, 8,
+      "the cache prefix must survive the publishes between evictions, not break on each one")
+  }
+
+  func testEvictionOnlyRunsWhenTheBudgetIsActuallyExceeded() {
+    let lines = ["- entry:one a\n", "- entry:two b\n"]
+    XCTAssertEqual(
+      ContextBucketCompactionPolicy.evictToLowWaterMark(lines), lines,
+      "a segment under budget must be returned untouched, head included")
+  }
+
   func testAssembleIgnoresAVolatileStoredHeaderSoTheCachePrefixStaysStable() {
     let snapshot = ContextBucketSnapshot(
       bucketID: "bucket", versionID: 41, version: 41,

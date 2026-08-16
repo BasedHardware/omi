@@ -909,13 +909,19 @@ def _extract_memories_canonical(
             language=language,
             strict=True,
         )
+        ungrounded_candidates = 0
         for candidate in extracted_candidates:
             evidence_quotes = _grounded_l1_evidence_quotes(
                 candidate.evidence_quotes,
                 conversation.transcript_segments,
             )
             if not evidence_quotes:
-                raise ValueError("canonical memory extraction returned evidence without a unique source binding")
+                # A quote that binds to no single segment is a verdict on this
+                # candidate, not on the run. Dropping it keeps the capture fence
+                # intact — nothing unbound is written — without discarding the
+                # grounded siblings and the rest of conversation finalization.
+                ungrounded_candidates += 1
+                continue
             subject_entity_id, subject_attribution, subject_kind = _l1_candidate_subject(
                 source_id=conversation.id,
                 about=candidate.about,
@@ -942,6 +948,25 @@ def _extract_memories_canonical(
                     _l1_candidate_sensitivity_labels(candidate),
                     True,
                 )
+            )
+        if extracted_candidates and not capture_candidates:
+            # Every candidate failed grounding: the run itself is untrustworthy,
+            # so it must not submit the empty replacement that would retract the
+            # source's existing memories.
+            raise ValueError("canonical memory extraction returned evidence without a unique source binding")
+        if ungrounded_candidates:
+            logger.warning(
+                "canonical memory extraction dropped %s of %s ungrounded candidates conversation=%s",
+                ungrounded_candidates,
+                len(extracted_candidates),
+                conversation.id,
+            )
+            record_fallback(
+                component='other',
+                from_mode='canonical_memory_extraction',
+                to_mode='grounded_candidates_only',
+                reason='other',
+                outcome='degraded',
             )
 
     is_locked = conversation.is_locked

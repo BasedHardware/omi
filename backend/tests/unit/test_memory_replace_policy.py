@@ -225,6 +225,70 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     mock_service.replace_conversation_memories.assert_not_called()
 
 
+def test_canonical_capture_drops_only_the_ungrounded_candidate(monkeypatch):
+    """One ungrounded candidate must not discard its grounded siblings."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    content="The user works at Acme.",
+                    evidence_quotes=["I work at Acme"],
+                    speaker_label="SPEAKER_00",
+                    speaker_scope="session-local",
+                    about="the user",
+                    risk_flags=[],
+                    archive_class="general",
+                ),
+                SimpleNamespace(
+                    content="The user was diagnosed with condition X.",
+                    evidence_quotes=["I was diagnosed with condition X"],
+                    speaker_label="SPEAKER_00",
+                    speaker_scope="session-local",
+                    about="the user",
+                    risk_flags=[],
+                    archive_class="general",
+                ),
+            ]
+        ),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-partially-grounded",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="I work at Acme and we talked about the grocery list.",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+    )
+
+    result = pc._extract_memories_canonical("uid-partial-grounding", conversation, db_client=MagicMock())
+
+    assert result.count == 1
+    replacement_payloads = mock_service.replace_conversation_memories.call_args.args[2]
+    assert len(replacement_payloads) == 1
+    assert replacement_payloads[0]["content"] == "The user works at Acme."
+
+
 @pytest.mark.parametrize(
     "matched_segments",
     [

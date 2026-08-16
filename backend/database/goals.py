@@ -354,15 +354,28 @@ def get_all_goals(
     uid: str,
     include_inactive: bool = False,
     *,
+    limit: Optional[int] = None,
     firestore_client: Any = None,
 ) -> List[Dict[str, Any]]:
+    """Fetch a user's goals, newest first.
+
+    ``limit`` bounds the returned page after the in-Python newest-first sort. It is opt-in:
+    every existing caller omits it and keeps the full-list behaviour they rely on.
+
+    The bound is deliberately NOT pushed into the Firestore query: ``order_by('created_at')``
+    excludes documents that lack the field entirely, and legacy or manually created goals can
+    lack ``created_at`` — a query-level order+limit would silently drop them. Instead the full
+    stream is sorted here (goals without ``created_at`` coerce to ``datetime.min`` and sort
+    last) and the page is sliced, so the bound caps the response payload while dateless legacy
+    goals still appear once dated goals run out.
+    """
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
     goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]
     goals.sort(key=_goal_created_at_sort_key, reverse=True)
-    return goals
+    return goals if limit is None else goals[:limit]
 
 
 def create_goal(
