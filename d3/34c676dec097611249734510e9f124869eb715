@@ -1,0 +1,19 @@
+desktop/context-for-claude/ARCHITECTURE.md
+  s_31a21db428771c::t_5bb79add887ee6 91,108-114,152-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d334c676dec097611249734510e9f124869eb715",
+  "prompts": {},
+  "sessions": {
+    "s_31a21db428771c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bdb0c54-f98d-4b5f-9e7f-cee463cdb235",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
