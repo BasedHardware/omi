@@ -18,6 +18,8 @@ from database.redis_db import (
 from database.auth import get_user_from_uid
 from utils.notification_text import to_plain_text
 from utils.auth import get_auth_provider
+from utils.push import unifiedpush as _up
+from database.notifications import UnifiedPushEndpoint
 from utils.push.base import DISABLED, UNIFIEDPUSH, PushMessage
 from utils.push.selector import resolve_push_backend
 from .llm.notifications import (
@@ -233,8 +235,6 @@ def _send_to_user(
     if backend == DISABLED:
         return 0
     if backend == UNIFIEDPUSH:
-        from utils.push import unifiedpush as _up
-
         return _up.send_to_user(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = notification_db.get_all_tokens(user_id)
@@ -280,8 +280,6 @@ async def _send_to_user_async(
     if backend == DISABLED:
         return 0
     if backend == UNIFIEDPUSH:
-        from utils.push import unifiedpush as _up
-
         return await _up.send_to_user_async(user_id, _to_push_message(tag, notification, data, is_background, priority))
     if tokens is None:
         tokens = await run_blocking(db_executor, notification_db.get_all_tokens, user_id)
@@ -473,9 +471,6 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str, 
         return
     if backend == UNIFIEDPUSH:
         # In unifiedpush mode the caller gathers endpoints (not FCM tokens) as the recipients.
-        from utils.push import unifiedpush as _up
-        from database.notifications import UnifiedPushEndpoint
-
         # Normalize to UnifiedPushEndpoint so a caller passing bare URL strings (the pre-key-set
         # recipient shape) still delivers instead of failing inside send_bulk.
         endpoints = [

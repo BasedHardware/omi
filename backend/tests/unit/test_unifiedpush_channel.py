@@ -93,6 +93,20 @@ def test_send_to_user_counts_success_and_drops_dead(monkeypatch):
     assert removed == [['http://ntfy/dead?up=1']]  # 410 dropped; 503 kept as transient
 
 
+def test_send_to_user_preserves_count_when_cleanup_fails(monkeypatch):
+    # A dead-endpoint cleanup failure must NOT abort a confirmed delivery: BYOK gates its 24h dedupe lock on
+    # the returned count, so raising past it would re-alert on the next error (cubic PR 10887 notifications.py:238).
+    _endpoints(monkeypatch, ['http://ntfy/live?up=1', 'http://ntfy/dead?up=1'])
+    statuses = {'http://ntfy/live?up=1': 200, 'http://ntfy/dead?up=1': 410}
+    monkeypatch.setattr(up, '_post_sync', lambda url, _body, _headers: statuses[url])
+
+    def _boom(_eps):
+        raise RuntimeError('store unavailable')
+
+    monkeypatch.setattr(up.notification_db, 'remove_bulk_endpoints', _boom)
+    assert up.send_to_user('u1', PushMessage(tag='t', title='omi', body='hi')) == 1  # delivered count survives
+
+
 def test_send_to_user_network_error_keeps_endpoint(monkeypatch):
     removed = _endpoints(monkeypatch, ['http://ntfy/x?up=1'])
     monkeypatch.setattr(up, '_post_sync', lambda _url, _body, _headers: None)  # network error → None

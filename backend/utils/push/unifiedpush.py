@@ -112,6 +112,28 @@ def _classify(endpoint_url: str, status: Optional[int], dead: List[str]) -> bool
     return False
 
 
+def _cleanup_dead_endpoints(dead: List[str], delivered: int) -> None:
+    # Dead-endpoint cleanup must NOT abort a confirmed delivery: a remove_bulk_endpoints failure after a
+    # successful send would otherwise raise past the returned count, so BYOK (which gates its 24h dedupe lock
+    # on the count) treats the notification as undelivered and re-alerts. Isolate it, mirroring the FCM path
+    # (cubic PR 10887 notifications.py:238).
+    if not dead:
+        return
+    try:
+        notification_db.remove_bulk_endpoints(dead)
+    except Exception as e:
+        logger.error('UnifiedPush dead-endpoint cleanup failed (delivered %s, cleanup deferred): %s', delivered, e)
+
+
+async def _cleanup_dead_endpoints_async(dead: List[str], delivered: int) -> None:
+    if not dead:
+        return
+    try:
+        await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)
+    except Exception as e:
+        logger.error('UnifiedPush dead-endpoint cleanup failed (delivered %s, cleanup deferred): %s', delivered, e)
+
+
 def _encode_for(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> tuple[bytes, dict]:
     """Return the (body, headers) to POST for one endpoint: RFC 8291-encrypted then hex-armored when
     it registered a WebPush key set, else the plaintext JSON (back-compat with pre-encryption clients).
@@ -184,8 +206,7 @@ def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[Uni
     dead: List[str] = []
     success = sum(1 for ep in endpoints if _classify(ep.url, _send_one_sync(ep, plaintext), dead))
 
-    if dead:
-        notification_db.remove_bulk_endpoints(dead)
+    _cleanup_dead_endpoints(dead, success)
     logger.info('UnifiedPush send: %s/%s successful', success, len(endpoints))
     return success
 
@@ -206,8 +227,7 @@ async def send_to_user_async(
     dead: List[str] = []
     success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep.url, status, dead))
 
-    if dead:
-        await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)
+    await _cleanup_dead_endpoints_async(dead, success)
     logger.info('UnifiedPush send: %s/%s successful', success, len(endpoints))
     return success
 
@@ -223,6 +243,5 @@ async def send_bulk(endpoints: List[UnifiedPushEndpoint], msg: PushMessage) -> N
     dead: List[str] = []
     success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep.url, status, dead))
 
-    if dead:
-        await run_blocking(db_executor, notification_db.remove_bulk_endpoints, dead)
+    await _cleanup_dead_endpoints_async(dead, success)
     logger.info('UnifiedPush bulk send: %s/%s successful', success, len(endpoints))
