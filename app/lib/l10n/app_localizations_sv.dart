@@ -9844,4 +9844,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Öppna butik';
+
+  @override
+  String get sendRawAudioToOmi => 'Skicka rått ljud till Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.';
 }
