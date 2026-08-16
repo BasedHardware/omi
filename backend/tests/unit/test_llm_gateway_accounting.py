@@ -48,6 +48,9 @@ def test_openai_cache_request_detection_matches_explicit_contract() -> None:
     )
     assert not cache_requested_for_openai_request(
         {
+            # Include the routing key so the check reaches the breakpoint-detection
+            # branch instead of short-circuiting on the missing prompt_cache_key guard.
+            'prompt_cache_key': 'omi-transcript-structure-v1',
             'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
             'messages': [{'role': 'system', 'content': 'unique transcript'}],
         }

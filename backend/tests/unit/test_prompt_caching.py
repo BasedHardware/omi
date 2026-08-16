@@ -195,7 +195,7 @@ class TestPromptMessageOrdering:
         args = calls[0].strip()
         # The cached prefix is a concrete message so parser-schema braces are
         # never treated as ChatPromptTemplate variables.
-        instructions_pos = args.index('_gpt56_cacheable_system_message(instructions_text')
+        instructions_pos = args.index('_gpt56_cacheable_system_message(')
         context_pos = args.index('context_message')
         assert instructions_pos < context_pos, "instructions_text must come before context_message"
 
@@ -204,7 +204,7 @@ class TestPromptMessageOrdering:
         calls = self._get_from_messages_calls(extract_action_items)
         assert len(calls) == 1, "Expected exactly one from_messages call"
         args = calls[0].strip()
-        instructions_pos = args.index('_gpt56_cacheable_system_message(instructions_text')
+        instructions_pos = args.index('_gpt56_cacheable_system_message(')
         context_pos = args.index('context_message')
         assert instructions_pos < context_pos, "instructions_text must come before context_message"
 
@@ -324,7 +324,7 @@ def test_explicit_cache_system_message_preserves_parser_schema_braces():
     """A cached system message must bypass ChatPromptTemplate variable parsing."""
     from langchain_core.prompts import ChatPromptTemplate
 
-    system_message = _gpt56_cacheable_system_message('{"title": "string"}', cache_enabled=True)
+    system_message = _gpt56_cacheable_system_message('{"title": "string"}', cache_enabled=True, formatted=True)
     prompt = ChatPromptTemplate.from_messages([system_message, ('system', 'Content: {conversation_context}')])
 
     messages = prompt.format_messages(conversation_context='Transcript: hello')
@@ -336,3 +336,25 @@ def test_explicit_cache_system_message_preserves_parser_schema_braces():
             'prompt_cache_breakpoint': {'mode': 'explicit'},
         }
     ]
+
+
+def test_gateway_formatted_instructions_without_explicit_cache_stay_a_concrete_message():
+    """Flag-off gateway mode must not degrade pre-formatted instructions to a tuple template.
+
+    Gateway mode pre-formats the parser schema (with literal JSON braces) into
+    instructions_text. If that text were passed as a ('system', ...) template
+    tuple, ChatPromptTemplate would parse the braces as variables and fail
+    before the LLM call — the default fail-closed state would be broken.
+    """
+    from langchain_core.prompts import ChatPromptTemplate
+
+    message = _gpt56_cacheable_system_message('Schema: {"title": "string"}', cache_enabled=False, formatted=True)
+
+    assert not isinstance(message, tuple), 'formatted instructions must be a concrete message'
+    assert message.content == [
+        {'type': 'text', 'text': 'Schema: {"title": "string"}'}
+    ], 'no breakpoint: explicit-cache disabled must not request a cache write'
+
+    prompt = ChatPromptTemplate.from_messages([message, ('system', 'Content: {conversation_context}')])
+    rendered = prompt.format_messages(conversation_context='Transcript: hello')
+    assert rendered[0].content[0]['text'] == 'Schema: {"title": "string"}'

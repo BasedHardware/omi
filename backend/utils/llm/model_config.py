@@ -144,7 +144,9 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
 #   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
 #                                  gpt-4o, gpt-5.x and o-series families.
 #   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
-#                                  gpt-5.x and o-series families.
+#                                  gpt-5.x and o-series families, except gpt-5.6, which
+#                                  uses the explicit prompt_cache_options contract instead
+#                                  (see supports_cache_retention).
 _CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4o', 'o1', 'o3', 'o4')
 _CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 

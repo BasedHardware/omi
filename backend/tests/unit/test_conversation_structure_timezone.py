@@ -350,3 +350,63 @@ def test_gpt56_explicit_cache_requires_gateway_and_rollout_flag(monkeypatch):
 
     monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: False)
     assert not conv_proc._gpt56_explicit_cache_enabled()
+
+
+def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(monkeypatch):
+    """Regression (cubic review): the None/legacy cache_key split keys on gateway mode.
+
+    get_reprocess_transcript_structure and get_app_result have no cacheable
+    static prefix. With the gateway on but the rollout flag off (the default
+    fail-closed state) they must still pass cache_key=None: a legacy
+    prompt_cache_key would opt these unique-prompt requests back into
+    implicit, billable cache writes.
+    """
+    monkeypatch.setattr(conv_proc, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.delenv(conv_proc.GPT56_EXPLICIT_CACHE_ENABLED_ENV, raising=False)
+
+    captured: dict = {}
+
+    class _Chain:
+        def __init__(self, llm):
+            self._llm = llm
+
+        def __or__(self, _other):
+            return self
+
+        def invoke(self, *_args, **_kwargs):
+            return MagicMock(events=[])
+
+    class _LLM:
+        def __or__(self, _parser):
+            return _Chain(self)
+
+        def invoke(self, *_args, **_kwargs):
+            return MagicMock(content='{}')
+
+    def _fake_get_llm(_feature, **kwargs):
+        captured.update(kwargs)
+        return _LLM()
+
+    with patch.object(conv_proc, 'get_llm', side_effect=_fake_get_llm), patch.object(
+        conv_proc, 'ChatPromptTemplate'
+    ) as mock_prompt_cls, patch.object(conv_proc, '_build_conversation_context', return_value='ctx'):
+        mock_prompt = MagicMock()
+        mock_prompt.__or__ = MagicMock(return_value=_Chain(_LLM()))
+        mock_prompt_cls.from_messages.return_value = mock_prompt
+        conv_proc.get_reprocess_transcript_structure(
+            transcript='Lunch meeting',
+            started_at=datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc),
+            language_code='en',
+            tz='UTC',
+        )
+        assert captured['cache_key'] is None
+        assert captured['prompt_cache_options'] is None
+
+        captured.clear()
+        app = MagicMock()
+        app.name = 'Test App'
+        app.description = 'desc'
+        app.memory_prompt = 'memory prompt'
+        conv_proc.get_app_result(transcript='Lunch meeting', photos=[], app=app, language_code='en')
+        assert captured['cache_key'] is None
+        assert captured['prompt_cache_options'] is None
