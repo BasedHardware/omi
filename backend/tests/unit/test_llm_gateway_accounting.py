@@ -17,11 +17,45 @@ from llm_gateway.gateway.accounting import (
     ProviderUsage,
     anthropic_usage_from_response,
     build_accounting_event,
+    cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
     image_usage,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
+
+
+def test_openai_cache_request_detection_matches_explicit_contract() -> None:
+    breakpoint_messages = [
+        {
+            'role': 'system',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': 'static instructions',
+                    'prompt_cache_breakpoint': {'mode': 'explicit'},
+                }
+            ],
+        }
+    ]
+
+    assert cache_requested_for_openai_request(
+        {
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': breakpoint_messages,
+        }
+    )
+    assert not cache_requested_for_openai_request(
+        {
+            # Include the routing key so the check reaches the breakpoint-detection
+            # branch instead of short-circuiting on the missing prompt_cache_key guard.
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': [{'role': 'system', 'content': 'unique transcript'}],
+        }
+    )
+    assert cache_requested_for_openai_request({'prompt_cache_key': 'legacy-key', 'messages': []})
 
 
 def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> None:
@@ -63,6 +97,42 @@ def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> Non
     assert partial is not None and partial.cache_status == CacheStatus.PARTIAL_HIT
     assert miss is not None and miss.cache_status == CacheStatus.MISS
     assert no_cache_read is not None and no_cache_read.cache_status == CacheStatus.NO_CACHE_READ_OBSERVED
+
+
+def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
+    metadata = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-flex',
+            'model': 'gpt-5.6-luna',
+            'service_tier': 'flex',
+            'usage': {'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000},
+        }
+    )
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.6-luna',
+        route_artifact_id='route.memory_conflict_flex.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=metadata,
+    )
+    context = AccountingContext.create(
+        request_id='request-flex',
+        caller='memory-maintenance-job',
+        user_uid=None,
+        feature='memory_conflict',
+        api_surface='openai.chat_completions',
+        payer='omi',
+    )
+
+    event = build_accounting_event(context, attempt)
+
+    assert event.traffic_type == 'flex'
+    assert event.estimated_cost_micro_usd == 700_000
+    assert event.cost_basis == 'flex_batch_token_rates_excludes_cache_storage'
 
 
 def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None:

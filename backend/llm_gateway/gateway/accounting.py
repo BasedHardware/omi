@@ -291,9 +291,13 @@ def openai_usage_from_response(
     *,
     cache_requested: bool = False,
 ) -> ProviderResponseMetadata:
+    service_tier = _string_or_none(response.get('service_tier'))
     usage_value = response.get('usage')
     if not isinstance(usage_value, Mapping):
-        return ProviderResponseMetadata(provider_response_id=_string_or_none(response.get('id')))
+        return ProviderResponseMetadata(
+            provider_response_id=_string_or_none(response.get('id')),
+            traffic_type=service_tier,
+        )
     raw_usage = cast(Mapping[str, Any], usage_value)
     if not _has_any_field(
         raw_usage, 'prompt_tokens', 'input_tokens', 'completion_tokens', 'output_tokens', 'total_tokens'
@@ -301,12 +305,14 @@ def openai_usage_from_response(
         return ProviderResponseMetadata(
             provider_response_id=_string_or_none(response.get('id')),
             actual_model_version=_string_or_none(response.get('model')),
+            traffic_type=service_tier,
         )
     usage = _openai_usage(raw_usage, cache_requested=cache_requested)
     return ProviderResponseMetadata(
         usage=usage,
         provider_response_id=_string_or_none(response.get('id')),
         actual_model_version=_string_or_none(response.get('model')),
+        traffic_type=service_tier,
     )
 
 
@@ -475,6 +481,7 @@ def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt)
         model=attempt.configured_model,
         usage=attempt.usage,
         usage_status=attempt.usage_status,
+        traffic_type=attempt.traffic_type,
     )
     return AccountingEvent(
         attempt_id=f'{context.invocation_id}:{attempt.ordinal}',
@@ -608,6 +615,7 @@ def _estimate_cost(
     model: str,
     usage: ProviderUsage | None,
     usage_status: UsageStatus,
+    traffic_type: str | None,
 ) -> tuple[CostStatus, int | None, int | None, str | None, str]:
     if payer == 'byok':
         return CostStatus.NOT_OMI_COST, 0, 0, None, 'byok_not_omi_cogs'
@@ -648,12 +656,21 @@ def _estimate_cost(
     )
     if cache_write_rate is not None:
         numerator += usage.cache_write_tokens * cache_write_rate
-    cost = _rounded_micro_usd(numerator)
-    savings = _rounded_micro_usd(
-        usage.cached_input_tokens
-        * max(rate_card.input_micro_usd_per_million - rate_card.cached_input_micro_usd_per_million, 0)
+    cache_savings_numerator = usage.cached_input_tokens * max(
+        rate_card.input_micro_usd_per_million - rate_card.cached_input_micro_usd_per_million,
+        0,
     )
-    return CostStatus.ESTIMATED, cost, savings, rate_card.rate_card_id, 'marginal_token_rates_excludes_cache_storage'
+    if provider.strip().lower() == 'openai' and traffic_type == 'flex':
+        # OpenAI documents Flex tokens at Batch API rates (50% below the
+        # synchronous Standard rates represented by this rate card).
+        numerator //= 2
+        cache_savings_numerator //= 2
+        cost_basis = 'flex_batch_token_rates_excludes_cache_storage'
+    else:
+        cost_basis = 'marginal_token_rates_excludes_cache_storage'
+    cost = _rounded_micro_usd(numerator)
+    savings = _rounded_micro_usd(cache_savings_numerator)
+    return CostStatus.ESTIMATED, cost, savings, rate_card.rate_card_id, cost_basis
 
 
 def _rounded_micro_usd(numerator: int) -> int:

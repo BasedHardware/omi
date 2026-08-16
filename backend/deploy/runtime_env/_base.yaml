@@ -51,6 +51,9 @@ environment_shared:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
+        OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
+          value: 'false'
+          category: rollout
         OMI_LLM_CHAT_AGENT_ROUTE:
           value: gateway
           category: rollout
@@ -488,7 +491,12 @@ environment_shared:
             category: memory_rollout
     jobs:
       notifications-job:
+        flags:
+          --task-timeout: 3600s
         secrets:
+          OMI_LLM_GATEWAY_SERVICE_TOKEN:
+            secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
             version: latest
@@ -502,6 +510,13 @@ environment_shared:
             secret: PINECONE_API_KEY
             version: latest
         env:
+          OMI_LLM_GATEWAY_URL:
+            env_var: OMI_LLM_GATEWAY_URL
+            default: http://127.0.0.1:9
+            category: service_discovery
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'false'
+            category: memory_rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:
@@ -566,4 +581,7 @@ environment_shared:
             category: memory_rollout
           MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
             value: 'true'
+            category: memory_rollout
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'false'
             category: memory_rollout
