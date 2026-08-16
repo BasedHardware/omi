@@ -159,9 +159,9 @@ enum ContextWorkstreamPooling {
       header: "RELATED WORKSTREAM CONTEXT (\(tag))",
       intro: """
         Validated facts from other buckets in the same workstream, most relevant first.
-        Context only: use them to connect what the user is doing across apps. They are
-        not citable — never place them in bucket_entry_refs or fact_ids — and a point
-        they already cover must not be re-delivered from this bucket.
+        Context only: use them to connect what the user is doing across apps.
+        They are not citable: never place them in bucket_entry_refs or fact_ids.
+        Do not re-deliver a point they already cover from this bucket.
         """,
       items: items,
       now: now)
@@ -174,9 +174,9 @@ enum ContextWorkstreamPooling {
       header: "RECENT CONTEXT FROM OTHER WINDOWS (last 15 min)",
       intro: """
         Validated facts from other windows in the last 15 minutes, most relevant first.
-        Context only: use them to connect what the user is doing across apps. They are
-        not citable — never place them in bucket_entry_refs or fact_ids — and a point
-        they already cover must not be re-delivered from this bucket.
+        Context only: use them to connect what the user is doing across apps.
+        They are not citable: never place them in bucket_entry_refs or fact_ids.
+        Do not re-deliver a point they already cover from this bucket.
         """,
       items: items,
       now: now)

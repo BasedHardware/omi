@@ -677,11 +677,19 @@ actor ContextProactivityEngine {
         state: "failed")
       return
     }
+    // The facts the candidate was written from, not just this visit's facts:
+    // the gate is judging a claim made at write time, and without its original
+    // evidence it could only compare the claim against the current screen —
+    // which is how 13 of 14 live rejections came to read "not supported by the
+    // current screen" for candidates that were correct when written.
+    let groundingFacts = await store.groundingFactStatements(
+      candidate.groundingFactIDs, bucketID: candidate.bucketID)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: ContextProactiveCandidateGate.prompt(
           message: candidate.message,
+          groundingFacts: groundingFacts,
           validatedFacts: snapshot.validatedFacts,
           recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
