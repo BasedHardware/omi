@@ -214,6 +214,48 @@ test("loading never claims signed-out, empty, or unavailable copy", async () => 
   }
 });
 
+test("Settings keeps a cached signed-in identity on screen while refresh is still initial-loading", async () => {
+  // red-proof: accountPresentation used to return "loading" whenever
+  // phase === "initial-loading", so a hydrated identity disappeared behind
+  // common.loading. The helper returning "signed-in" is not this proof — this
+  // query is.
+  const SettingsProduction = await loadProductionExport("SettingsProduction.tsx", "SettingsProduction");
+  const snapshot = {
+    identity: { displayName: "Alex Rivera", email: "alex@example.com" },
+    appearance: "system",
+    entitlement: null,
+  };
+  const store = {
+    async snapshot() { return snapshot; },
+    status() {
+      return { refresh: { phase: "initial-loading", hasSavedData: true }, queue: { phase: "idle", pendingCount: 0 } };
+    },
+    async deadLetters() { return []; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async patch() {},
+    async signOut() {},
+    async discardDeadLetter() {},
+  };
+  const rendered = await renderComponent(SettingsProduction, {
+    store,
+    fixture: "loading-with-identity",
+    locale: "en",
+  });
+  try {
+    assert.equal(
+      rendered.container.querySelector('[data-settings-account="signed-in"]') != null,
+      true,
+      "cached identity stays visible during initial-loading",
+    );
+    assert.ok(textOf(rendered).includes("Alex Rivera"));
+    assert.equal(rendered.container.querySelector('[data-settings-account="loading"]'), null);
+    assert.equal(textOf(rendered).includes(EN_MESSAGES["settings.notSignedIn"]), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("ready store with unresolved snapshot never claims signed-out", async () => {
   // red-proof: treating null snapshot identity as signed-out while phase is ready
   // makes this assertion fail — the DOM must not say "You are not signed in" before

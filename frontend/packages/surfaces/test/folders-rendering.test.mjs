@@ -89,6 +89,29 @@ test("Folders keeps saved rows visible when a later list read fails", async () =
   }
 });
 
+test("Folders does not claim there are no folders while refresh is still loading", async () => {
+  const FoldersProduction = await loadProductionExport("FoldersProduction.tsx", "FoldersProduction");
+  const fixtureFolderStore = await loadProductionExport("conversation-fixtures.ts", "fixtureFolderStore");
+  const rendered = await renderComponent(FoldersProduction, { store: fixtureFolderStore("loading") });
+  try {
+    await settle(rendered);
+    // red-proof: drop the `phase === "ready"` conjunct on the empty state so
+    // a still-loading folders list announces "No folders yet".
+    assert.equal(
+      rendered.container.textContent?.includes(EN_MESSAGES["folders.emptyTitle"]),
+      false,
+      "loading must not claim the user has no folders",
+    );
+    assert.equal(rendered.container.querySelector(".folders-list"), null);
+    assert.equal(
+      rendered.container.querySelector(".production-lifecycle-region")?.getAttribute("data-phase"),
+      "initial-loading",
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("Folders empty state leads to the complete conversation list", async () => {
   const FoldersProduction = await loadProductionExport("FoldersProduction.tsx", "FoldersProduction");
   const store = {

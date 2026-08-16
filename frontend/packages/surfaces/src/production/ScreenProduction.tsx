@@ -4,6 +4,7 @@ import type { ScreenOcrBlock, ScreenTextSearchHit } from "@omi-core/adapters-pla
 import type { ProductionScreenStore, ScreenFrameImageState } from "./ProductionScreenStore.js";
 import {
   highlightRectsFor,
+  screenDaySpanKind,
   snippetParts,
   SCREEN_PLAYBACK_RATES,
   screenPausedMessageKey,
@@ -189,6 +190,11 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
   const counterTotal = frames.length;
   const counterCurrent = counterTotal === 0 ? 0 : cursor + 1;
   const empty = emptyKind !== null ? emptyCopy(emptyKind, locale) : null;
+  const daySpanKind = screenDaySpanKind({
+    phase: status.refresh.phase,
+    oldestCapturedAt: days.oldest_captured_at,
+    newestCapturedAt: days.newest_captured_at,
+  });
 
   return (
     <main
@@ -270,9 +276,11 @@ export function ScreenProduction({ store, locale = "en", onReady, source = { kin
             {dayOpen && (
               <div id={dayPopoverId} className="screen-day-popover" role="dialog" aria-label={t(locale, "screen.dayPopover")}>
                 <p className="screen-day-span" data-day-span="true">
-                  {days.oldest_captured_at && days.newest_captured_at
+                  {daySpanKind === "range" && days.oldest_captured_at && days.newest_captured_at
                     ? `${frameTimestamp(days.oldest_captured_at, locale)} – ${frameTimestamp(days.newest_captured_at, locale)}`
-                    : t(locale, "screen.emptyDayTitle")}
+                    : daySpanKind === "day-empty"
+                      ? t(locale, "screen.emptyDayTitle")
+                      : null}
                 </p>
                 <div className="screen-day-jumps">
                   <button type="button" onClick={() => void run(() => store.jumpDay("older"))}>{t(locale, "screen.older")}</button>

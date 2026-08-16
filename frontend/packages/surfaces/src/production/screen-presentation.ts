@@ -43,6 +43,23 @@ export type ScreenPlaybackRate = 0.5 | 1 | 2 | 4 | 8;
 export const SCREEN_PLAYBACK_RATES: readonly ScreenPlaybackRate[] = [0.5, 1, 2, 4, 8];
 export const SCREEN_PLAYBACK_TICK_MS = 200;
 
+export type ScreenDaySpanKind = "range" | "day-empty" | null;
+
+/**
+ * Copy for the day-picker span. A missing oldest/newest timestamp is not
+ * "no captures for this day" until refresh has finished — that claim is
+ * `day-empty`, and only `ready` may make it.
+ */
+export function screenDaySpanKind(input: {
+  readonly phase: "initial-loading" | "refreshing" | "ready" | "saved-but-refresh-failed" | "unavailable";
+  readonly oldestCapturedAt: string | null;
+  readonly newestCapturedAt: string | null;
+}): ScreenDaySpanKind {
+  if (input.oldestCapturedAt && input.newestCapturedAt) return "range";
+  if (input.phase !== "ready") return null;
+  return "day-empty";
+}
+
 export function screenEmptyKind(input: {
   readonly phase: "initial-loading" | "refreshing" | "ready" | "saved-but-refresh-failed" | "unavailable";
   readonly permission: "granted" | "denied" | "undetermined";

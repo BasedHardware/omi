@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { t } from "@omi-core/i18n";
-import type { StoreStatus } from "@omi-core/domain";
 import type { AppearanceSelection, EntitlementState, SettingsSnapshot } from "./settings-merge.js";
 import { entitlementNotice, usageLabelArgs } from "./settings-merge.js";
+import { accountPresentation } from "./settings-presentation.js";
 import type { ProductionSettingsStore } from "./ProductionSettingsStore.js";
 import type { ProductionScreenStore } from "./ProductionScreenStore.js";
 import { SCREEN_RETENTION_DAYS, type ScreenRetentionDays } from "@omi-core/adapters-platform";
@@ -16,7 +16,6 @@ import "./settings.css";
 type Locale = string;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type SavePhase = "idle" | "saving" | "saved" | "failed";
-type AccountPresentation = "loading" | "unavailable" | "signed-out" | "signed-in";
 type PlanPresentation = "metered" | "unmetered" | "absent";
 type LimitPresentation = "ok" | "reached-upgrade" | "reached-no-upgrade";
 
@@ -29,19 +28,6 @@ function appearanceLabel(selection: AppearanceSelection, locale: Locale): string
     case "light": return t(locale, "appearance.light");
     case "dark": return t(locale, "appearance.dark");
   }
-}
-
-function accountPresentation(
-  phase: StoreStatus["refresh"]["phase"],
-  snapshot: SettingsSnapshot | null,
-): AccountPresentation {
-  if (phase === "initial-loading") return "loading";
-  if (phase === "unavailable") return "unavailable";
-  // Snapshot readiness is separate from refresh phase: a ready store may still
-  // be awaiting its first snapshot. Signed-out is only proven once that read
-  // has landed with a null identity — never as the missing-data fallback.
-  if (snapshot === null) return "loading";
-  return snapshot.identity ? "signed-in" : "signed-out";
 }
 
 function planPresentation(entitlement: EntitlementState): PlanPresentation {

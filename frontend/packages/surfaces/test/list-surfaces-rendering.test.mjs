@@ -107,6 +107,68 @@ test("ConversationsProduction renders loading, true-empty, filter-miss, and deta
   } finally {
     await detailMiss.cleanup();
   }
+
+  const loadingDetail = await renderComponent(ConversationsProduction, props("loading", { detailId: "calm-conversation-one" }));
+  try {
+    // red-proof: ConversationsProduction treated `detailId && !selected` as
+    // not-found without consulting phase, so a still-loading detail URL claimed
+    // the conversation was removed. conversationDetailKind returning "loading"
+    // is not this proof — this query is.
+    assert.equal(
+      loadingDetail.container.querySelector('[data-empty-kind="detail-not-found"]') == null,
+      true,
+      "loading detail must not claim the conversation was removed",
+    );
+    assert.equal(
+      loadingDetail.container.textContent?.includes(EN_MESSAGES["conversations.detailNotFound"]),
+      false,
+    );
+    assert.equal(
+      loadingDetail.container.textContent?.includes(EN_MESSAGES["conversations.detailNotFoundBody"]),
+      false,
+    );
+    const loadingRegion = loadingDetail.container.querySelector(".production-empty-state");
+    assert.equal(loadingRegion != null, true, "unresolved detail during initial-loading is a composed loading state");
+    assert.equal(loadingRegion?.querySelector("h2")?.textContent, EN_MESSAGES["common.loading"]);
+  } finally {
+    await loadingDetail.cleanup();
+  }
+
+  const hydratedBase = fixtureConversationStore("normal");
+  const hydratedLoading = {
+    ...hydratedBase,
+    status() {
+      return { refresh: { phase: "initial-loading", hasSavedData: true }, queue: { phase: "idle", pendingCount: 0 } };
+    },
+  };
+  const hydratedDetail = await renderComponent(ConversationsProduction, {
+    store: hydratedLoading,
+    foldersStore: fixtureFolderStore(),
+    fixture: "loading-with-rows",
+    detailId: "calm-conversation-one",
+  });
+  try {
+    // red-proof: a found row during initial-loading used to be possible only
+    // because the JSX asked `selected` first; once that check moved behind a
+    // phase-first helper, a hydrated detail would vanish behind common.loading.
+    // conversationDetailKind returning "detail" is not this proof — this query is.
+    assert.equal(
+      hydratedDetail.container.querySelector("[data-conversation-detail='calm-conversation-one']") != null,
+      true,
+      "a saved conversation stays on screen during initial-loading",
+    );
+    assert.ok(hydratedDetail.container.textContent?.includes("Morning review"));
+    assert.equal(
+      hydratedDetail.container.querySelector('[data-empty-kind="detail-not-found"]'),
+      null,
+    );
+    assert.equal(
+      hydratedDetail.container.textContent?.includes(EN_MESSAGES["conversations.detailNotFound"]),
+      false,
+    );
+  } finally {
+    await hydratedDetail.cleanup();
+  }
 });
 
 test("TasksProduction renders loading, true-empty, and filter-miss as distinct DOM states", async () => {
@@ -143,6 +205,66 @@ test("TasksProduction renders loading, true-empty, and filter-miss as distinct D
     assert.equal(miss.textContent?.trim(), EN_MESSAGES["common.noResults"]);
   } finally {
     await filtered.cleanup();
+  }
+
+  const base = fixtureStore("normal");
+  const hydratedLoading = {
+    ...base,
+    status() {
+      return { refresh: { phase: "initial-loading", hasSavedData: true }, queue: { phase: "idle", pendingCount: 0 } };
+    },
+  };
+  const hidden = await renderComponent(TasksProduction, {
+    store: hydratedLoading,
+    fixture: "loading-with-rows",
+    translate: (key, vars) => t("en", key, vars),
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+  });
+  try {
+    // red-proof: TasksProduction's first branch used to be `phase === "initial-loading"`
+    // with no rowCount check, so a hydrated projection disappeared behind
+    // common.loading. tasksBodyKind returning "rows" is not this proof — this
+    // query is.
+    assert.equal(
+      hidden.container.querySelector("article.task-card") != null,
+      true,
+      "saved tasks stay on screen during initial-loading",
+    );
+    assert.equal(
+      hidden.container.querySelector(".tasks-empty-state .production-empty-state h2") == null,
+      true,
+    );
+    assert.equal(hidden.container.querySelector("[data-empty-kind]") == null, true);
+    assert.ok(hidden.container.textContent?.includes("Follow up on the overdue review note"));
+  } finally {
+    await hidden.cleanup();
+  }
+
+  const emptyBase = fixtureStore("empty");
+  const refreshingEmpty = {
+    ...emptyBase,
+    status() {
+      return { refresh: { phase: "refreshing", hasSavedData: false }, queue: { phase: "idle", pendingCount: 0 } };
+    },
+  };
+  const refreshing = await renderComponent(TasksProduction, {
+    store: refreshingEmpty,
+    fixture: "refreshing-empty",
+    translate: (key, vars) => t("en", key, vars),
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+  });
+  try {
+    // red-proof: zero-row refreshing used to fall through the final else into
+    // an empty groups region. That is not empty-projection copy, but it is
+    // also not a finished snapshot — Chat's historyStart bug in another
+    // costume. The JSX must read tasksBodyKind === "loading".
+    const region = refreshing.container.querySelector(".tasks-empty-state .production-empty-state");
+    assert.ok(region, "zero-row refreshing is a composed loading state");
+    assert.equal(region.querySelector("h2")?.textContent, EN_MESSAGES["common.loading"]);
+    assert.equal(refreshing.container.querySelector("[data-empty-kind]"), null);
+    assert.equal(refreshing.container.textContent?.includes(EN_MESSAGES["tasks.emptyTitle"]), false);
+  } finally {
+    await refreshing.cleanup();
   }
 });
 
