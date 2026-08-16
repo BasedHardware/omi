@@ -212,7 +212,7 @@ class SettingsSyncManager {
     // grapheme clusters and can undercount emoji and composed scripts.
     let length = prompt.unicodeScalars.count
     guard length <= maximumLength else {
-      if prompt == shippedDefault {
+      if isShippedDefault(prompt, shippedDefault: shippedDefault, assistantName: assistantName) {
         // Every install already ships this text, so an oversized default is not unsynced
         // user data — a later pull has nothing of the user's to destroy. Claiming
         // ownership here is what made `applyRemotePrompt` refuse the account's real
@@ -235,11 +235,41 @@ class SettingsSyncManager {
     return prompt
   }
 
-  /// Record prompt ownership at the local write boundary so an oversized value is
-  /// protected even before the next network sync attempt.
-  static func recordLocalPromptOwner(_ assistantName: String) {
+  /// Record prompt provenance and ownership at the local write boundary, so an oversized
+  /// user-authored value is protected even before the next network sync attempt.
+  ///
+  /// The provenance marker is what keeps a *previously* shipped default recognisable after
+  /// the app ships a new one. By then the persisted text no longer matches the current
+  /// default, but this recorded the answer while it still did.
+  static func recordLocalPromptOwner(_ assistantName: String, isShippedDefault: Bool) {
+    UserDefaults.standard.set(
+      isShippedDefault, forKey: storedPromptIsShippedDefaultKey(assistantName))
+    guard !isShippedDefault else {
+      // Writing a shipped default releases any claim the previous value held: there is no
+      // longer unsynced user text here for a pull to destroy.
+      UserDefaults.standard.removeObject(forKey: oversizedPromptOwnerKey(assistantName))
+      return
+    }
     guard let owner = currentOwnerID else { return }
     UserDefaults.standard.set(owner, forKey: oversizedPromptOwnerKey(assistantName))
+  }
+
+  /// Whether a local prompt is a shipped default rather than something the user authored.
+  ///
+  /// Text comparison alone only recognises the *current* default, and the reset path
+  /// persists the default it saw. After the app ships a new one, that stored text stops
+  /// matching and would be misread as user-authored — claiming ownership and blocking the
+  /// account's prompt all over again. The recorded marker covers exactly that window.
+  ///
+  /// An absent marker means a build older than this one wrote the value, so the text
+  /// comparison stands alone and behaviour is unchanged for it.
+  private static func isShippedDefault(
+    _ prompt: String,
+    shippedDefault: String,
+    assistantName: String
+  ) -> Bool {
+    if prompt == shippedDefault { return true }
+    return UserDefaults.standard.bool(forKey: storedPromptIsShippedDefaultKey(assistantName))
   }
 
   /// An oversized local prompt that the user wrote is unsynced data. Preserve it across
@@ -260,7 +290,8 @@ class SettingsSyncManager {
   ) {
     let localLength = localPrompt.unicodeScalars.count
     let recordedOwner = UserDefaults.standard.string(forKey: Self.oversizedPromptOwnerKey(assistantName))
-    if localPrompt != shippedDefault,
+    if !Self.isShippedDefault(
+      localPrompt, shippedDefault: shippedDefault, assistantName: assistantName),
       localLength > maximumLength,
       let currentOwner = Self.currentOwnerID,
       recordedOwner == currentOwner
@@ -284,5 +315,9 @@ class SettingsSyncManager {
 
   private static func oversizedPromptOwnerKey(_ assistantName: String) -> String {
     "assistantPrompt.unsyncedOversizedOwner.\(assistantName)"
+  }
+
+  private static func storedPromptIsShippedDefaultKey(_ assistantName: String) -> String {
+    "assistantPrompt.storedIsShippedDefault.\(assistantName)"
   }
 }

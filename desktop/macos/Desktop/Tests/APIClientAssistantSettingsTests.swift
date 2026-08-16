@@ -148,6 +148,62 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     }
   }
 
+  /// A shipped default that is still persisted after the app changed its default. The
+  /// stored text no longer matches the current default, so only the provenance recorded at
+  /// write time can tell it apart from something the user wrote — without it the old
+  /// default is reclassified as custom, claims ownership, and blocks the account prompt
+  /// exactly as before.
+  @MainActor
+  func testPersistedPreviousShippedDefaultStillHydrates() {
+    withTaskPromptState(owner: "owner-default-changed") {
+      let previouslyShippedDefault = String(
+        repeating: "y", count: TaskAssistantSettings.maximumSyncedAnalysisPromptLength + 1)
+
+      // The older build stored its own shipped default: the write recorded it as shipped,
+      // which is the classification this build can no longer derive from the text.
+      TaskAssistantSettings.shared.analysisPrompt = previouslyShippedDefault
+      SettingsSyncManager.recordLocalPromptOwner("task", isShippedDefault: true)
+
+      // This build ships a different default, so the stored text matches nothing.
+      XCTAssertNotEqual(
+        TaskAssistantSettings.shared.analysisPrompt, TaskAssistantSettings.defaultAnalysisPrompt)
+
+      // The push has to run first: it is what re-claims ownership of an oversized prompt,
+      // so without provenance this is the step that locks the old default in place.
+      XCTAssertNil(
+        SettingsSyncManager.promptForSync(
+          TaskAssistantSettings.shared.analysisPrompt,
+          assistantName: "task",
+          maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
+          shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt))
+
+      hydrateTaskPrompt("account prompt")
+
+      XCTAssertEqual(
+        TaskAssistantSettings.shared.analysisPrompt,
+        "account prompt",
+        "a previously shipped default is still a shipped default, not user-authored text")
+    }
+  }
+
+  /// The other half of that contract: provenance must not become a blanket exemption. A
+  /// prompt the user actually wrote stays protected even though it is equally oversized.
+  @MainActor
+  func testUserAuthoredOversizedPromptIsNotTreatedAsAShippedDefault() {
+    withTaskPromptState(owner: "owner-authored") {
+      let authored = String(
+        repeating: "z", count: TaskAssistantSettings.maximumSyncedAnalysisPromptLength + 1)
+      TaskAssistantSettings.shared.analysisPrompt = authored
+
+      hydrateTaskPrompt("account prompt")
+
+      XCTAssertEqual(
+        TaskAssistantSettings.shared.analysisPrompt,
+        authored,
+        "text the user wrote and the server never took must stay protected")
+    }
+  }
+
   /// Reset means this device has no custom local opinion, so account state may hydrate
   /// again — even though the prompt the user is resetting away from did own the stamp.
   @MainActor
