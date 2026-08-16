@@ -141,12 +141,21 @@ actor ActivityAccountCache {
     /// - Parameter epoch: the value `currentEpoch()` gave when the read behind `feed` began. A save
     ///   quoting a stale one is dropped: the account it describes has been signed out of.
     func save(_ feed: ActivityAccountFeed, epoch: Int) async {
+        // **The store is acquired first, and the epoch is checked after it.** The order is the whole
+        // of the fence, because **actors are reentrant**: `await store()` is a suspension point
+        // inside this actor, so a `clear()` arriving while this call is parked there runs to
+        // completion and this one then resumes past a check it had already passed. Checking first
+        // reads as the careful thing to do and is exactly the hole — the previous revision of this
+        // file had it that way and was still racy.
+        //
+        // Acquiring the handle first means the only suspension is behind us: everything from the
+        // check to the last write below is synchronous, so nothing can interleave between them.
+        guard let store = await store() else { return }
         guard epoch == self.epoch else {
             ContextLog.info(
                 "Account cache: dropping a write from a signed-out session", Self.category)
             return
         }
-        guard let store = await store() else { return }
         let cacheable = feed.answered.subtracting(feed.locallySourced)
         guard !cacheable.isEmpty else { return }
 
@@ -197,9 +206,11 @@ actor ActivityAccountCache {
     /// Empties it. Signing out is the caller — one account's rows must never be the first thing the
     /// next account sees.
     func clear() async {
-        // Before the write, and unconditionally — a clear that could not reach the database must
-        // still invalidate the saves in flight behind it, or a failed delete becomes the previous
-        // account's rows being written back a moment later.
+        // **Before its own suspension point, not merely before the delete.** Same reentrancy as
+        // `save`: bumping after `await store()` would leave a window in which a save parked on that
+        // await resumes still believing it is current. Unconditional for a second reason — a clear
+        // that cannot reach the database must still invalidate the writes behind it, or a failed
+        // delete becomes the previous account's rows written back a moment later.
         epoch &+= 1
         guard let store = await store() else { return }
         try? AccountCacheQueries.clear(store)

@@ -66,11 +66,13 @@ final class ActivityRevalidationTests: XCTestCase {
         let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
 
         store.start()
-        await settle()
+        await waitUntil("the opening read and its hydration") { store.corpusSettled }
         XCTAssertEqual(store.days.count, 1, "precondition: the first read painted something")
         let painted = store.days
-        // The opening read is followed by hydration's own reads until the corpus stops growing, so
-        // the baseline is measured rather than assumed — this suite is about what revalidation adds.
+        // **Waited to quiescence, not merely to first paint.** The opening read is followed by
+        // hydration's own reads until the corpus stops growing, and a baseline captured mid-walk
+        // would have the revalidation refused by the single-flight guard — a green-looking test
+        // that measured the wrong thing.
         let opened = account.reads
 
         store.revalidate(now: Date(timeIntervalSince1970: Self.base))
@@ -81,10 +83,8 @@ final class ActivityRevalidationTests: XCTestCase {
         XCTAssertEqual(store.days, painted, "the list may not blink while the account is asked")
         XCTAssertFalse(store.isPreparing, "and a list that is already correct is not 'preparing'")
 
-        await settle()
-        XCTAssertEqual(store.days, painted)
-        XCTAssertGreaterThan(
-            account.reads, opened, "and the account really was asked")
+        await waitUntil("the revalidating read") { account.reads > opened }
+        XCTAssertEqual(store.days, painted, "and it still has not blinked now the read has landed")
         XCTAssertEqual(account.refreshes, 1, "through the head, which is where new rows arrive")
     }
 
@@ -96,21 +96,19 @@ final class ActivityRevalidationTests: XCTestCase {
             feed: ActivityAccountFeed(conversations: [conversation("a", at: 0)]))
         let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
         store.start()
-        await settle()
+        await waitUntil("the opening read and its hydration") { store.corpusSettled }
         let opened = account.reads
 
         let now = Date(timeIntervalSince1970: Self.base)
         store.revalidate(now: now)
-        await settle()
-        XCTAssertEqual(account.reads, opened + 1)
+        await waitUntil("the first revalidation") { account.reads == opened + 1 }
 
         store.revalidate(now: now.addingTimeInterval(30))
         await settle()
         XCTAssertEqual(account.reads, opened + 1, "inside the cooldown, nothing is asked")
 
         store.revalidate(now: now.addingTimeInterval(61))
-        await settle()
-        XCTAssertEqual(account.reads, opened + 2, "and outside it, the panel asks again")
+        await waitUntil("the revalidation past the cooldown") { account.reads == opened + 2 }
     }
 
     /// `start()` is called from `.task` on every appearance, and the surface now appears many times
@@ -122,14 +120,12 @@ final class ActivityRevalidationTests: XCTestCase {
         let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
 
         store.start()
-        await settle()
+        await waitUntil("the opening read and its hydration") { store.corpusSettled }
         let painted = store.days
         let opened = account.reads
 
         store.start()
-        await settle()
-
-        XCTAssertEqual(account.reads, opened + 1, "a second appearance asks what changed")
+        await waitUntil("the second appearance to ask") { account.reads == opened + 1 }
         XCTAssertEqual(store.days, painted, "and does not rebuild the list to do it")
     }
 
@@ -222,11 +218,10 @@ final class ActivityRevalidationTests: XCTestCase {
             feed: ActivityAccountFeed(conversations: [conversation("a", at: 0)]))
         let store = ActivityStore(store: { nil }, account: account, calendar: Self.calendar)
         store.start()
-        await settle()
-        XCTAssertTrue(store.accountReachable, "precondition")
+        await waitUntil("the opening read and its hydration") { store.corpusSettled }
 
         store.forgetTheAccount()
-        await settle()
+        await waitUntil("the account half to be dropped") { store.days.isEmpty }
 
         XCTAssertFalse(store.accountReachable)
         XCTAssertEqual(store.accountUnreachableReason, .signedOut)
@@ -297,14 +292,12 @@ final class ActivityRevalidationTests: XCTestCase {
         withExtendedLifetime(spine) {}
 
         store.start()
-        await settle()
-        XCTAssertTrue(store.accountReachable, "precondition")
+        await waitUntil("the opening read and its hydration") { store.corpusSettled }
 
         signIns.send(false)
-        await settle()
+        await waitUntil("the spine to forget the account") { store.days.isEmpty }
 
         XCTAssertEqual(store.accountUnreachableReason, .signedOut)
-        XCTAssertTrue(store.days.isEmpty)
     }
 
     /// Activation is the other signal, and it is the one main uses. Driven through an injected
@@ -323,13 +316,11 @@ final class ActivityRevalidationTests: XCTestCase {
         withExtendedLifetime(spine) {}
 
         store.start()
-        await settle()
+        await waitUntil("the opening read and its hydration") { store.corpusSettled }
         let opened = account.reads
 
         activations.send(())
-        await settle()
-
-        XCTAssertEqual(account.reads, opened + 1)
+        await waitUntil("activation to revalidate") { account.reads == opened + 1 }
     }
 
     // MARK: - Helpers

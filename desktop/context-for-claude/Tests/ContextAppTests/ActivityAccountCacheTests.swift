@@ -192,6 +192,38 @@ final class ActivityAccountCacheTests: XCTestCase {
             "the next account's first paint must not be the previous account's conversations")
     }
 
+    /// **The reentrancy hole, which the first version of the fence did not close.**
+    ///
+    /// `await store()` is a suspension point *inside* the actor, and actors are reentrant — so a
+    /// `clear()` arriving while a save is parked there runs to completion, and the save then resumes
+    /// past an epoch check it had already passed. Checking the epoch before acquiring the store
+    /// reads as the careful order and is exactly the bug.
+    func testASaveSuspendedWhenSignOutLandsIsStillDropped() async {
+        let gate = FirstCallerGate()
+        let store = self.store!
+        let reentrant = ActivityAccountCache(store: {
+            await gate.holdTheFirstCaller()
+            return store
+        })
+        let minted = await reentrant.currentEpoch()
+
+        // A save that will park inside the provider.
+        async let saving: Void = reentrant.save(
+            ActivityAccountFeed(conversations: [conversation("c1")], answered: [.conversations]),
+            epoch: minted)
+        await gate.waitUntilHeld()
+
+        // Sign-out, reentering the actor while that save is suspended.
+        await reentrant.clear()
+        await gate.release()
+        await saving
+
+        let read = await reentrant.load()
+        XCTAssertTrue(
+            read.conversations.isEmpty,
+            "a save parked across a sign-out may not resume into the next account's cache")
+    }
+
     /// The epoch invalidates writes even when the delete itself could not run — a clear that failed
     /// to reach the database must still stop the saves behind it, or a failed delete becomes the
     /// previous account's rows written back a moment later.
@@ -331,6 +363,32 @@ private struct SilentAccount: ActivityAccountReading {
 private struct EmptyButAnsweringAccount: ActivityAccountReading {
     func read(since: Double?, until: Double?, limit: Int) async -> ActivityAccountFeed {
         ActivityAccountFeed(answered: Set(ActivityAccountSource.allCases))
+    }
+}
+
+/// Holds the *first* caller only, so a test can park one actor method inside its suspension point
+/// and let a second one reenter past it. A plain gate would deadlock: the reentering call goes
+/// through the same provider.
+private actor FirstCallerGate {
+    private var held = false
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func holdTheFirstCaller() async {
+        guard !held else { return }
+        held = true
+        guard !released else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func waitUntilHeld() async {
+        while !held { await Task.yield() }
+    }
+
+    func release() {
+        released = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
     }
 }
 
