@@ -1,3 +1,0 @@
-{
-  "change": "Proactive context notifications no longer repeat a point already delivered, and stay silent when they would only narrate what is already on screen"
-}
