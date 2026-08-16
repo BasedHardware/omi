@@ -79,6 +79,29 @@ routes:
     policy: *desktop_migration_policy
   - route_type: http
     method: POST
+    path: /v1/stt/transcribe
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: stt:transcribe
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: unknown
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v1/webhooks/sentry
     policy: *desktop_migration_policy
   - route_type: http
