@@ -243,6 +243,17 @@ export interface LocalServiceOptions {
    * on-device engine — canned STT lines look like captured speech.
    */
   readonly sttEngine?: string;
+  /**
+   * Live chat generation tier reported on `/v1/qa/status`. Defaults to none.
+   * This is the SAME capability tier the Chat transcript stamps on an answer
+   * (`stampForGatewayEngine`), so the headed launcher's gate and the chip a
+   * reader sees cannot disagree — the canned gateway answering
+   * "Local test gateway answered." is exactly what this lets the launcher
+   * refuse.
+   */
+  readonly chatGateway?: string;
+  /** Model id the chat gateway declared, for display. Never a credential. */
+  readonly chatModel?: string;
   /** Required downstream processing adapter factory, bound to this composition's store. */
   readonly conversationProcessorFactory: ListenConversationProcessorFactory;
   /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
@@ -1106,6 +1117,8 @@ export const createLocalService = (options: LocalServiceOptions): LocalService =
     isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
     seedIdentity,
     sttEngine: () => options.sttEngine ?? "scripted",
+    chatGateway: () => options.chatGateway ?? "none",
+    chatModel: () => options.chatModel ?? null,
   });
   registerQaEvidenceRoutes(app, {
     evidence: producerEvidence,

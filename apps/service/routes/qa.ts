@@ -33,6 +33,13 @@ export interface QaRouteDependencies {
   readonly seedIdentity: () => Readonly<Record<string, string | number>>;
   /** Live Listen engine. Configuration identity, not user content. */
   readonly sttEngine: () => string;
+  /**
+   * Live chat generation tier, as the transcript stamps it. Configuration
+   * identity, not user content.
+   */
+  readonly chatGateway: () => string;
+  /** Model id the chat gateway declared, or null. Never a credential. */
+  readonly chatModel: () => string | null;
 }
 
 const fixedResponse = (body: string, status: number): Response =>
@@ -55,12 +62,15 @@ export const registerQaRoutes = (app: Hono, deps: QaRouteDependencies): void => 
   app.get("/v1/qa/status", (context) => {
     deps.counter.recordNonDomainRequest();
     void context;
+    const chatModel = deps.chatModel();
     return new Response(
       JSON.stringify({
         version: "qa-status-v1",
         served: deps.counter.snapshot(),
         seed: deps.seedIdentity(),
         stt_engine: deps.sttEngine(),
+        chat_gateway: deps.chatGateway(),
+        ...(chatModel === null ? {} : { chat_model: chatModel }),
       }),
       { status: 200, headers: JSON_HEADERS },
     );

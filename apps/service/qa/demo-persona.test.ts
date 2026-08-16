@@ -9,6 +9,10 @@ import { join } from "node:path";
 
 import { createLocalDevService } from "../app-facing";
 import {
+  parseGatewayReadyBody,
+  stampForGatewayEngine,
+} from "../chat/gateway-engine-identity";
+import {
   applyDemoPersonaSeed,
   DEMO_PERSONA_DISPLAY_NAME,
   DEMO_PERSONA_MEMORY_COUNT,
@@ -161,8 +165,12 @@ describe("demo persona HTTP routes", () => {
         memory_count: DEMO_PERSONA_MEMORY_COUNT,
         persona: "demo",
       });
-      const status = await (await request("/v1/qa/status")).json() as { readonly stt_engine?: string };
+      const status = await (await request("/v1/qa/status")).json() as {
+        readonly stt_engine?: string;
+        readonly chat_gateway?: string;
+      };
       expect(status.stt_engine).toBe("scripted");
+      expect(status.chat_gateway).toBe("none");
     } finally {
       db.close();
     }
@@ -251,6 +259,61 @@ describe("qa status reports the live STT engine", () => {
         readonly stt_engine?: string;
       };
       expect(status.stt_engine).toBe("mlx-whisper");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("qa status reports the live chat generation tier", () => {
+  test("a real-provider stack names its tier and model on /v1/qa/status", async () => {
+    // red-proof: report the gateway URL or a boolean here instead of the tier
+    // and the headed launcher can no longer refuse a stack whose answers would
+    // read "Local test gateway" on the transcript chip.
+    const db = new Database(":memory:");
+    const service = createLocalDevService({
+      db,
+      ownerAccountId: OWNER,
+      memoryCount: 12,
+      accountTimezone: TIMEZONE,
+      devSecretLabel: SECRET,
+      listenDefaultUnmetered: true,
+      chatGateway: "real-provider",
+      chatModel: "glm-4.7",
+    });
+    try {
+      const status = await (await service.app.request("/v1/qa/status")).json() as {
+        readonly chat_gateway?: string;
+        readonly chat_model?: string;
+      };
+      expect(status.chat_gateway).toBe("real-provider");
+      expect(status.chat_model).toBe("glm-4.7");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("the canned gateway is reported as unknown, never as a provider", async () => {
+    const db = new Database(":memory:");
+    const service = createLocalDevService({
+      db,
+      ownerAccountId: OWNER,
+      memoryCount: 12,
+      accountTimezone: TIMEZONE,
+      devSecretLabel: SECRET,
+      listenDefaultUnmetered: true,
+      chatGateway: stampForGatewayEngine(
+        parseGatewayReadyBody({ schema: "omi.local-test-gateway.v1" }),
+        "default",
+      ).tier,
+    });
+    try {
+      const status = await (await service.app.request("/v1/qa/status")).json() as {
+        readonly chat_gateway?: string;
+        readonly chat_model?: string;
+      };
+      expect(status.chat_gateway).toBe("unknown");
+      expect(status.chat_model).toBeUndefined();
     } finally {
       db.close();
     }
