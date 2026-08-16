@@ -7,8 +7,9 @@
  * account-control projection is `new` with an activated epoch. In-process
  * tests stage that through `/v1/qa/control/observe` from revision 1; the
  * headed app does not. This helper is the process-side equivalent: call it
- * from `bin/dev-server.ts` AFTER `createLocalDevService`, never from inside
- * the factory, so those tests keep a missing projection to restage.
+ * from `bin/dev-server.ts` AFTER `createLocalDevService`, and again from the
+ * process-registered `afterReset` hook, never from inside the factory, so
+ * those tests keep a missing projection to restage.
  *
  * Persistent QA DBs are the landmine. Restaging an already-observed row from
  * revision 1 poisons the projection and every subsequent write denies. Absent

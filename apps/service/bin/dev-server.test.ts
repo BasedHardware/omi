@@ -35,6 +35,7 @@ const spawnService = async (
   databasePath: string,
   readinessPath: string,
   extraEnv: Record<string, string> = {},
+  runId: string = RUN,
 ): Promise<{
   readonly child: Bun.Subprocess;
   readonly readiness: Readiness;
@@ -43,7 +44,7 @@ const spawnService = async (
   readonly releaseLease: () => void;
 }> => {
   const leaseDir = mkdtempSync(join(tmpdir(), "omi-dev-server-lease-"));
-  const lease = acquireAppFacingTestLease({ runId: RUN });
+  const lease = acquireAppFacingTestLease({ runId });
   const leasePath = join(leaseDir, "app-facing-test-lease.json");
   writeAppFacingTestLeaseFile(leasePath, lease);
   const port = lease.port;
@@ -59,7 +60,7 @@ const spawnService = async (
       ...process.env,
       OMI_PORT: String(port),
       OMI_QA_DB: databasePath,
-      OMI_RUN_ID: RUN,
+      OMI_RUN_ID: runId,
       OMI_DEV_READY_RECORD: readinessPath,
       TZ: "UTC",
       OMI_STT_ENGINE: "",
@@ -323,6 +324,74 @@ test("real dev-server owns one durable SQLite service for all eight domains", as
     });
     expect((await resetHistory.json() as { readonly messages: readonly unknown[] }).messages)
       .toEqual([]);
+  } finally {
+    if (child !== null) await stopService(child);
+    releaseLease?.();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 20_000);
+
+test("POST /v1/qa/reset leaves the process able to accept platform task writes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "omi-dev-server-reset-write-"));
+  const databasePath = join(directory, "qa.sqlite");
+  const readinessPath = join(directory, "readiness.json");
+  const runId = "run-dev-server-reset-write-ready";
+  let child: Bun.Subprocess | null = null;
+  let releaseLease: (() => void) | null = null;
+  try {
+    const booted = await spawnService(databasePath, readinessPath, {}, runId);
+    child = booted.child;
+    releaseLease = booted.releaseLease;
+    const token = booted.readiness.devToken;
+    await assertOwnerWriteReady(booted.baseUrl, token);
+
+    const pageBefore = await fetch(`${booted.baseUrl}/v1/memories?limit=3`, {
+      headers: authorizedHeaders(token, "macos"),
+    });
+    expect(pageBefore.status).toBe(200);
+    const pageBeforeBody = await pageBefore.text();
+
+    const reset = await fetch(`${booted.baseUrl}/v1/qa/reset`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(reset.status).toBe(200);
+
+    const pageAfter = await fetch(`${booted.baseUrl}/v1/memories?limit=3`, {
+      headers: authorizedHeaders(token, "macos"),
+    });
+    expect(pageAfter.status).toBe(200);
+    expect(await pageAfter.text()).toBe(pageBeforeBody);
+
+    const created = await postJson(booted.baseUrl, "/v1/tasks/ops", token, {
+      write_id: "c".repeat(64),
+      account_epoch: 7,
+      domain: "tasks",
+      op: {
+        op: "create",
+        record_id: "reset-cutover-task",
+        content: {
+          description: "write after reset",
+          completed: false,
+          completedAt: null,
+          dueAt: null,
+          owner: null,
+          source: "user",
+          provenance: [],
+          sortOrder: 0,
+          indentLevel: 0,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    });
+    // red-proof: omit the process-registered afterReset hook. The write is
+    // denied with 503 {"error":"maintenance","refusal_outcome":"control_unavailable"}.
+    expect(created.status).toBe(200);
+    expect(await created.json()).toMatchObject({
+      idempotent: false,
+      applied: { record_id: "reset-cutover-task" },
+    });
   } finally {
     if (child !== null) await stopService(child);
     releaseLease?.();

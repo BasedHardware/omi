@@ -22,6 +22,13 @@ test("dev-server keeps the producer endpoint inside the registered local composi
   expect(source).not.toMatch(/integration\/server|write-journey-door|qa-api-server/);
 });
 
+test("local owner cutover stays at the process layer", () => {
+  expect(appFacingSource).not.toContain("ensureLocalOwnerWriteReady");
+  expect(source).toContain("afterReset: admitLocalOwnerWrites");
+  expect(source).toContain("admitLocalOwnerWrites()");
+  expect(occurrences(/\bensureLocalOwnerWriteReady\s*\(/g)).toBe(1);
+});
+
 test("dev-server routes generation through the gateway or fails closed without one", () => {
   expect(source).toContain("createGatewayChatGenerationSource");
   expect(source).toContain("createGatewayRequiredChatGenerationSource");

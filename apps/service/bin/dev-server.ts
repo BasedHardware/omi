@@ -313,6 +313,17 @@ const main = async (): Promise<void> => {
       },
     })
     : null;
+  const admitLocalOwnerWrites = (): ReturnType<typeof ensureLocalOwnerWriteReady> => {
+    const outcome = ensureLocalOwnerWriteReady(stores.control, config.ownerAccountId);
+    appendRuntimeLog({
+      proc: "service",
+      level: "info",
+      event: "service.local_owner_write_ready",
+      outcome,
+    });
+    return outcome;
+  };
+
   try {
     service = createLocalDevService({
       db,
@@ -332,6 +343,7 @@ const main = async (): Promise<void> => {
       ...(config.seedPersona === "demo"
         ? { seedPersona: "demo" as const, overlaySeed: applyDemoPersonaSeed }
         : {}),
+      afterReset: admitLocalOwnerWrites,
     });
     serviceForGatewayTools = service;
   } catch (error) {
@@ -344,18 +356,11 @@ const main = async (): Promise<void> => {
   // app does not run the QA observe/activate dance the `/v1/tasks/ops` tests
   // do. Cut over only when the projection is absent. A durable partial or
   // poisoned row is a boot failure — restaging from revision 1 would poison
-  // every subsequent write.
+  // every subsequent write. `/v1/qa/reset` wipes the projection, so the same
+  // helper is registered as `afterReset` above — still process-owned, still
+  // absent → admit / already-ready → no-op / any other state → refuse.
   try {
-    const outcome = ensureLocalOwnerWriteReady(
-      service.writePath.control,
-      config.ownerAccountId,
-    );
-    appendRuntimeLog({
-      proc: "service",
-      level: "info",
-      event: "service.local_owner_write_ready",
-      outcome,
-    });
+    admitLocalOwnerWrites();
   } catch (error) {
     void transcriptionSource?.dispose();
     const message = error instanceof LocalOwnerWriteReadyError

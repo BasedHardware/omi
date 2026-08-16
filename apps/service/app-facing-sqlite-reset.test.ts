@@ -172,6 +172,23 @@ test("explicit QA reset restores every externally supplied SQLite store family",
   expect(stores.registry.size(OWNER)).toBe(0);
   expect(stores.stragglers.exportAccount(OWNER)).toEqual([]);
   expect(stores.control.read(OWNER)).toBeNull();
+  const fenced = await service.app.request("/v1/tasks/ops", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${service.devToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      write_id: "c".repeat(64),
+      account_epoch: 7,
+      domain: "tasks",
+      op: { op: "create", record_id: "reset-must-restage", content: { title: "after reset" } },
+    }),
+  });
+  expect(fenced.status).toBe(503);
+  expect(await fenced.text()).toBe(
+    '{"error":"maintenance","refusal_outcome":"control_unavailable"}',
+  );
   expect(stores.settings.readSettings(OWNER)).toEqual({
     status: "available",
     snapshot: {
