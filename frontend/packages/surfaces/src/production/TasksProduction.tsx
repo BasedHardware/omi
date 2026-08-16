@@ -6,7 +6,7 @@ import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { ProductionIcon } from "./ProductionIcon.js";
-import { tasksEmptyKind } from "./tasks-presentation.js";
+import { tasksBodyKind } from "./tasks-presentation.js";
 import "./tasks.css";
 
 type Translate = <K extends MessageKey>(key: K, vars?: MessageVariables<K>) => string;
@@ -290,7 +290,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   const selectedTask = selectedTaskId ? rows.find((task) => task.id === selectedTaskId) : undefined;
   const filtering = query.trim().length > 0;
   const visibleCount = groups.reduce((count, group) => count + grouped[group].length, 0);
-  const emptyKind = tasksEmptyKind({
+  const bodyKind = tasksBodyKind({
     phase: status.refresh.phase,
     rowCount: rows.length,
     visibleCount,
@@ -378,11 +378,11 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
         <span><kbd>{translate("tasks.keyIndent")}</kbd> {translate("tasks.shortcutIndent")}</span>
         <span><kbd>{translate("tasks.keyOutdent")}</kbd> {translate("tasks.shortcutOutdent")}</span>
       </div>
-      {status.refresh.phase === "initial-loading" ? (
+      {bodyKind === "loading" ? (
         <div className="tasks-empty-state">
           <ProductionEmptyState icon="loading" title={translate("common.loading")} />
         </div>
-      ) : status.refresh.phase === "ready" && rows.length === 0 ? (
+      ) : bodyKind === "empty-projection" ? (
         <div data-empty-kind="empty-projection">
           <ProductionEmptyState
             icon={TASK_EMPTY_ICON}
@@ -391,11 +391,11 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
             action={<button type="button" className="control-primary" onClick={openCreate}>{translate("tasks.newTask")}</button>}
           />
         </div>
-      ) : status.refresh.phase === "unavailable" && rows.length === 0 ? (
+      ) : bodyKind === "unavailable" ? (
         <div className="tasks-empty-state">
           <ProductionEmptyState icon="alert" title={translate("lifecycle.unavailable")} />
         </div>
-      ) : emptyKind === "filtered-out" ? (
+      ) : bodyKind === "filtered-out" ? (
         <p className="tasks-empty-state" data-empty-kind="filtered-out">{translate("common.noResults")}</p>
       ) : (
         <section className="tasks-groups" aria-label={translate("tasks.title")}>

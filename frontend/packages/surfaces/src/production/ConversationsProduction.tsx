@@ -9,6 +9,7 @@ import type {
   ProductionPlatformFolderStore,
 } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
+import { conversationDetailKind } from "./conversation-presentation.js";
 import { listEmptyKind } from "./list-empty-presentation.js";
 import { ProductionChrome, ProductionLibrarySegment } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionFilterChips, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type ProductionFilterOption, type SurfaceDataSource } from "./ProductionPrimitives.js";
@@ -367,6 +368,11 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
     rowCount: rows.length,
     visibleCount: visibleRows.length,
   });
+  const detailKind = conversationDetailKind({
+    phase: status.refresh.phase,
+    detailId,
+    found: Boolean(selected),
+  });
   const source = (fixture
     ? { kind: "fixture", fixture }
     : { kind: "live", origin: "bridge" }) satisfies SurfaceDataSource;
@@ -389,7 +395,7 @@ export function ConversationsProduction({ store, foldersStore, fixture, detailId
         nextAction={status.refresh.phase !== "ready" ? t(locale, "common.retry") : null}
         retry={status.refresh.phase !== "ready" ? { onRetry: async () => { await run(() => store.refresh()); } } : null}
       />
-      {selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailId ? <div data-empty-kind="detail-not-found"><ProductionEmptyState title={t(locale, "conversations.detailNotFound")} detail={t(locale, "conversations.detailNotFoundBody")} action={<a className="conversation-back" href={listHref(fixture)}><ProductionIcon name="back" />{t(locale, "conversation.detail.back")}</a>} /></div> : <>
+      {detailKind === "detail" && selected ? <ConversationDetail conversation={selected} folders={folders} locale={locale} run={run} store={store} fixture={fixture} /> : detailKind === "not-found" ? <div data-empty-kind="detail-not-found"><ProductionEmptyState title={t(locale, "conversations.detailNotFound")} detail={t(locale, "conversations.detailNotFoundBody")} action={<a className="conversation-back" href={listHref(fixture)}><ProductionIcon name="back" />{t(locale, "conversation.detail.back")}</a>} /></div> : detailKind === "loading" ? <ProductionEmptyState icon="loading" title={t(locale, "common.loading")} /> : detailKind === "unavailable" ? <ProductionEmptyState icon="alert" title={t(locale, "lifecycle.unavailable")} /> : <>
         <div className="conversation-controls">
           <ProductionSearchField className="conversation-search" label={t(locale, "conversations.filterSavedPlaceholder")} placeholder={t(locale, "conversations.filterSavedPlaceholder")} value={query} onValueChange={setQuery} />
         </div>

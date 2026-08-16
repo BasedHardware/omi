@@ -6,6 +6,7 @@ import {
   followNewestCaptureDay,
   groupScreenSearchHits,
   highlightRectsFor,
+  screenDaySpanKind,
   screenEmptyKind,
   screenPausedMessageKey,
   snippetParts,
@@ -29,6 +30,43 @@ test("empty kinds stay distinct for never-enabled, permission-denied, day-empty,
   assert.equal(screenEmptyKind({ ...base, phase: "initial-loading", dayFrameCount: 0 }), null);
   // red-proof: treating permission-denied as never-enabled, or a search miss as
   // a day with no captures, collapses two of these four assertions.
+});
+
+test("day-picker span does not claim an empty day before refresh is ready", () => {
+  assert.equal(
+    screenDaySpanKind({
+      phase: "initial-loading",
+      oldestCapturedAt: null,
+      newestCapturedAt: null,
+    }),
+    null,
+  );
+  assert.equal(
+    screenDaySpanKind({
+      phase: "refreshing",
+      oldestCapturedAt: null,
+      newestCapturedAt: null,
+    }),
+    null,
+  );
+  assert.equal(
+    screenDaySpanKind({
+      phase: "ready",
+      oldestCapturedAt: null,
+      newestCapturedAt: null,
+    }),
+    "day-empty",
+  );
+  assert.equal(
+    screenDaySpanKind({
+      phase: "initial-loading",
+      oldestCapturedAt: "2026-08-04T11:58:00.000Z",
+      newestCapturedAt: "2026-08-07T11:50:00.000Z",
+    }),
+    "range",
+  );
+  // red-proof: fall through to screen.emptyDayTitle whenever timestamps are
+  // missing, including while the day list is still loading.
 });
 
 test("search hits group by app/window inside a 30s window", () => {

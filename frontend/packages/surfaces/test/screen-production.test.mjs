@@ -65,6 +65,59 @@ test("the four empty kinds render distinct copy and stay uncollapsed", async () 
   // into day-empty, makes this uniqueness assertion fail at the rendered layer.
 });
 
+test("Rewind day picker does not claim an empty day while refresh is still loading", async () => {
+  // red-proof: the day-span else used to render screen.emptyDayTitle whenever
+  // oldest/newest timestamps were missing, including during initial-loading.
+  // screenDaySpanKind returning null is not this proof — this query is.
+  const { rendered } = await renderScreen("loading");
+  try {
+    const toggle = rendered.container.querySelector(".screen-day-toggle");
+    assert.ok(toggle, "day picker toggle is on screen during loading");
+    await rendered.act(async () => { toggle.click(); });
+    const span = rendered.container.querySelector("[data-day-span='true']");
+    assert.ok(span, "opening the picker still renders the span");
+    assert.equal(
+      span.textContent?.includes(EN_MESSAGES["screen.emptyDayTitle"]),
+      false,
+      "loading day span must not claim this day has no captures",
+    );
+    assert.equal(rendered.container.querySelector("[data-empty-kind='day-empty']"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("ready Rewind day picker may claim an empty day once refresh has finished", async () => {
+  const ScreenProduction = await loadProductionExport("ScreenProduction.tsx", "ScreenProduction");
+  const fixtureScreenStore = await loadProductionExport("screen-fixtures.ts", "fixtureScreenStore");
+  const base = fixtureScreenStore("loading");
+  const readyEmptySpan = {
+    ...base,
+    status() {
+      return { refresh: { phase: "ready", hasSavedData: false }, queue: { phase: "idle", pendingCount: 0 } };
+    },
+  };
+  const rendered = await renderComponent(ScreenProduction, {
+    store: readyEmptySpan,
+    fixture: "ready-empty-span",
+    locale: "en",
+  });
+  try {
+    const toggle = rendered.container.querySelector(".screen-day-toggle");
+    assert.ok(toggle, "day picker toggle is on screen when ready with no timestamps");
+    await rendered.act(async () => { toggle.click(); });
+    const span = rendered.container.querySelector("[data-day-span='true']");
+    assert.ok(span);
+    assert.equal(
+      span.textContent?.includes(EN_MESSAGES["screen.emptyDayTitle"]),
+      true,
+      "a finished ready snapshot with no timestamps may claim this day has no captures",
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("ready Rewind renders app badge, window title, timestamp, extracted text, and playback counter", async () => {
   const { rendered } = await renderScreen("ready");
   try {
