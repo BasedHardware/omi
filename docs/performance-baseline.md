@@ -230,7 +230,9 @@ Chat first-turn median needs five independent boots.
 
 ## Green gates at the after-tree
 
-Taken on this machine at `ed2e2fee3c`. David's app held 4851/5290/8788.
+Taken on this machine. David's app held 4851/5290/8788. `bun test` / lints /
+frontend build at `ed2e2fee3c`. L1–L4 frozen at `03f9918726` (docs-only commit
+on top of the Chat warmup; frontend hash unchanged).
 
 | Gate | Result |
 |---|---|
@@ -238,7 +240,7 @@ Taken on this machine at `ed2e2fee3c`. David's app held 4851/5290/8788.
 | `bun run lint:imports` | exit 0 |
 | `bun run lint:closure` | exit 0 |
 | `(cd frontend && pnpm -r build)` | exit 0 |
-
-L1–L4 are run after this tree is committed so a ladder cannot see a mid-run
-hash change. Outcomes belong in the lane report if this section is not yet
-updated.
+| L1 | PASS in 57268ms |
+| L2 | PASS in 77077ms |
+| L3 | PASS in 350527ms; CONTROL-ACCEPTANCE status=PASS passed=15 failed=0 skipped=0 |
+| L4 | PASS in 277615ms; CONTROL-ACCEPTANCE status=PASS passed=5 failed=0 skipped=0 |
