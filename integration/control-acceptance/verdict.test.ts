@@ -222,6 +222,8 @@ test("the in-page driver clicks surface controls and does not call stores", () =
   assert.match(driver, /chat\.memory/);
   assert.match(driver, /blocked-prior/);
   assert.match(driver, /listen-stop-control/);
+  assert.match(driver, /sessionStorage\.getItem\(KEY\)/);
+  assert.match(driver, /sessionStorage\.setItem\(KEY/);
   assert.doesNotMatch(driver, /skipped-already-granted/);
   assert.doesNotMatch(driver, /record\(state, "mic", "reached-os"\)/);
   assert.doesNotMatch(driver, /record\(state, "screen", "reached-os"\)/);
@@ -260,6 +262,35 @@ test("the runner is a sibling of --accept and never aims at production", () => {
   assert.doesNotMatch(run, /OMI_PROBE_MAX_ATTEMPTS: "150"/);
   assert.match(run, /--journey/);
   assert.match(run, /--seam-break/);
+});
+
+test("iOS reuses the macOS driver and verdict, and is not an L3/L4 gate", () => {
+  // red-proof: copy verdict.mjs, invent skipped-simulator, or wire --ios into L3.
+  assert.match(run, /--ios/);
+  assert.match(run, /dev-run-ios\.sh/);
+  assert.match(run, /omi-ui:\/\/local/);
+  assert.match(run, /IOS && SCREEN_PROOF/);
+  assert.match(run, /OMI_PROBE_JS_FILE/);
+  assert.match(run, /DRIVER_PATH/);
+  assert.match(run, /findBootedIosSimulator/);
+  assert.match(run, /no booted iOS simulator/);
+  assert.match(run, /before the leased stack is created/);
+  assert.match(run, /maxBuffer: 64 \* 1024 \* 1024/);
+  assert.doesNotMatch(run, /skipped-simulator|skipped-no-bridge|skipped-no-mic/);
+  assert.equal(SKIP_VERDICTS.includes("skipped-tcc-denied"), true);
+  assert.equal(SKIP_VERDICTS.length, 2);
+  const l3Start = lanes.indexOf("  L3: {");
+  const l4Start = lanes.indexOf("  L4: {");
+  const l3 = lanes.slice(l3Start, l4Start === -1 ? lanes.length : l4Start);
+  const l4 = lanes.slice(l4Start);
+  const l3Commands = [...l3.matchAll(/^\s*command: "(.+)",$/gm)].map((m) => m[1]);
+  const l4Commands = [...l4.matchAll(/^\s*command: "(.+)",$/gm)].map((m) => m[1]);
+  assert.equal(l3Commands.some((c) => c.includes("run.mjs") && !c.includes("--journey")), true);
+  assert.equal(l3Commands.some((c) => c.includes("--ios")), false);
+  assert.equal(l4Commands.some((c) => c.includes("--ios")), false);
+  assert.match(run, /buildDriverSource/);
+  assert.match(run, /applyChatProvenance/);
+  assert.match(run, /reportFromProbeText/);
 });
 
 test("the driver reaches WKWebView as parseable JavaScript", () => {

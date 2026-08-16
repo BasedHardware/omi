@@ -8,11 +8,13 @@
 #   ./scripts/dev-run-ios.sh --generation platform # LIVE against the platform generation (default)
 #   ./scripts/dev-run-ios.sh --fixture conversations   # FIXTURE, bridge bypassed
 #   ./scripts/dev-run-ios.sh --device <udid>
+#   ./scripts/dev-run-ios.sh --probe-out /tmp/ios.probe.txt   # control-acceptance
 #
 # Env (all overridable, local-sane defaults):
 #   OMI_API_BASE_URL   default http://127.0.0.1:4851 (registered local production)
 #   OMI_API_TOKEN      dev token; fetched from the issuer when unset
 #   OMI_DEV_TOKEN_ISSUER_URL   optional dev-mode token issuer
+#   OMI_PROBE_JS_FILE  driver source for --probe-out (shared macOS driver.js)
 #   FLUTTER_BIN        default: whichever `flutter` resolves to
 #
 # THE ORIGIN IS FROZEN at omi-ui://local (ADR-009) and is NOT configurable here
@@ -40,6 +42,8 @@ generation="platform"
 evidence_out=""
 run_id_arg=""
 capture_out=""
+probe_out=""
+probe_js_file=""
 launched=0
 bundle_id="me.omi.proto.omiWebviewProto"
 evidence_tmp=""
@@ -68,14 +72,26 @@ while (( $# )); do
     --evidence-out) evidence_out="${2:?--evidence-out needs a host path}"; shift 2 ;;
     --run-id) run_id_arg="${2:?--run-id needs a raw run id}"; shift 2 ;;
     --capture-out) capture_out="${2:?--capture-out needs a PNG path}"; shift 2 ;;
+    --probe-out) probe_out="${2:?--probe-out needs a host path}"; shift 2 ;;
     --accept) accept=1; shift ;;
-    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "ERROR: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
 
 # A prior host success must be gone even when a later route, URL, toolchain,
 # build, install, gate, or launch check fails.
+if [[ -n "$probe_out" ]]; then
+  if [[ -d "$probe_out" ]]; then
+    echo "ERROR: --probe-out must name a file, not a directory." >&2
+    exit 2
+  fi
+  rm -f -- "$probe_out"
+  [[ -d "$(dirname "$probe_out")" ]] || {
+    echo "ERROR: --probe-out parent directory does not exist." >&2
+    exit 2
+  }
+fi
 if [[ -n "$evidence_out" ]]; then
   if [[ -d "$evidence_out" ]]; then
     echo "ERROR: --evidence-out must name a file, not a directory." >&2
@@ -109,8 +125,8 @@ if (( capture_mode )); then
     echo "ERROR: fixture capture requires --fixture, --capture-out, and --run-id." >&2
     exit 2
   fi
-  if [[ -n "$evidence_out" || $accept -eq 1 ]]; then
-    echo "ERROR: fixture capture cannot be combined with consumer evidence or --accept." >&2
+  if [[ -n "$evidence_out" || -n "$probe_out" || $accept -eq 1 ]]; then
+    echo "ERROR: fixture capture cannot be combined with consumer evidence, control probe, or --accept." >&2
     exit 2
   fi
   if [[ ! "$fixture" =~ ^(memories|tasks|conversations|folders|listen|chat|settings)$ ]]; then
@@ -138,6 +154,22 @@ if (( capture_mode )); then
     exit 2
   fi
   rm -f -- "$capture_out"
+fi
+
+if [[ -n "$probe_out" ]]; then
+  if [[ -n "$evidence_out" || -n "$fixture" || $accept -eq 1 ]]; then
+    echo "ERROR: --probe-out cannot be combined with consumer evidence, --fixture, or --accept." >&2
+    exit 2
+  fi
+  probe_js_file="${OMI_PROBE_JS_FILE:-}"
+  if [[ -z "$probe_js_file" || ! -f "$probe_js_file" || ! -s "$probe_js_file" ]]; then
+    echo "ERROR: --probe-out needs OMI_PROBE_JS_FILE pointing at a non-empty driver file." >&2
+    exit 2
+  fi
+  if [[ "$probe_js_file" != /* ]]; then
+    echo "ERROR: OMI_PROBE_JS_FILE must be an absolute path." >&2
+    exit 2
+  fi
 fi
 
 case "$route" in
@@ -259,6 +291,13 @@ else
       --dart-define=OMI_CONSUMER_EVIDENCE_EXIT=true
     )
   fi
+  if [[ -n "$probe_out" ]]; then
+    defines+=(
+      --dart-define=OMI_PROBE_FILENAME=omi-control-probe.js
+      --dart-define=OMI_PROBE_RESULT_FILENAME=omi-control-probe-result.txt
+      --dart-define=OMI_PROBE_EXIT=true
+    )
+  fi
   echo "MODE: LIVE — route $route, backend $api_base (reachable, HTTP $code), credential held by the shell."
   echo "PRODUCER: x-omi-client-id=${run_id}::ios"
 fi
@@ -278,7 +317,7 @@ fi
 ( cd "$here" && "$node_bin" tools/build-surfaces-bundle.mjs )
 
 cd "$app"
-if [[ -z "$evidence_out" && -z "$capture_out" ]]; then
+if [[ -z "$evidence_out" && -z "$capture_out" && -z "$probe_out" ]]; then
   exec "$flutter_bin" run -d "$device" "${defines[@]}"
 fi
 
@@ -302,6 +341,64 @@ if [[ -n "$capture_out" ]]; then
   xcrun simctl io "$device" screenshot "$capture_out" >/dev/null
   [[ -s "$capture_out" ]] || { echo "ERROR: simulator did not write $capture_out" >&2; exit 1; }
   echo "CAPTURE: wrote $capture_out"
+  exit 0
+fi
+
+if [[ -n "$probe_out" ]]; then
+  echo "PROBE: build -> install -> inject driver -> launch -> collect PROBE_JS"
+  "$flutter_bin" build ios --simulator --debug "${defines[@]}"
+  app_bundle="$app/build/ios/iphonesimulator/Runner.app"
+  if [[ ! -d "$app_bundle" ]]; then
+    echo "ERROR: Flutter build did not produce $app_bundle" >&2
+    exit 1
+  fi
+  # Consumer evidence's first route is memories. An in-place simctl install
+  # keeps WKWebsiteDataStore, and a 2026-08-16 probe loaded
+  # omi-ui://local/index.html?route=memories with #root empty. Verification
+  # cannot share that restored document.
+  xcrun simctl uninstall "$device" "$bundle_id" >/dev/null 2>&1 || true
+  xcrun simctl install "$device" "$app_bundle"
+  container="$(xcrun simctl get_app_container "$device" "$bundle_id" data)"
+  if [[ -z "$container" ]]; then
+    echo "ERROR: could not resolve the installed app's data container." >&2
+    exit 1
+  fi
+  mkdir -p "$container/Documents"
+  cp "$probe_js_file" "$container/Documents/omi-control-probe.js"
+  container_result="$container/Documents/omi-control-probe-result.txt"
+  rm -f -- "$container_result"
+  xcrun simctl launch "$device" "$bundle_id" >/dev/null
+  launched=1
+
+  probe_wait_seconds="${OMI_PROBE_WAIT_SECONDS:-180}"
+  if [[ ! "$probe_wait_seconds" =~ ^[0-9]+$ ]] || (( probe_wait_seconds < 1 || probe_wait_seconds > 300 )); then
+    echo "ERROR: OMI_PROBE_WAIT_SECONDS must be 1..300." >&2
+    exit 2
+  fi
+  for ((second = 0; second < probe_wait_seconds; second++)); do
+    if [[ -s "$container_result" ]] && grep -q '^PROBE_JS: ' "$container_result"; then
+      # Heartbeat PENDING (error: probe-started) means the Dart isolate is
+      # alive; keep waiting for the overwrite. A finished timeout line also
+      # contains OMI_CONTROL_PENDING and must not sit until the outer bound.
+      if grep -q "error: probe-started" "$container_result"; then
+        :
+      else
+        break
+      fi
+    fi
+    sleep 1
+  done
+  if [[ ! -s "$container_result" ]]; then
+    echo "ERROR: native iOS probe result was not written within ${probe_wait_seconds}s." >&2
+    exit 124
+  fi
+  if ! grep -q '^PROBE_JS: ' "$container_result"; then
+    echo "ERROR: native iOS probe result was not a PROBE_JS line." >&2
+    exit 1
+  fi
+  cp "$container_result" "$probe_out"
+  echo "PROBE: native iOS PROBE_JS collected at $probe_out"
+  cat "$probe_out"
   exit 0
 fi
 

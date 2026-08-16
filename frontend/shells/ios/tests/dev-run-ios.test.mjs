@@ -60,6 +60,13 @@ test("the iOS QA launcher selects only a closed local-origin production route", 
 printf '%s\n' "$*" >> "${simctlLog}"
 if [[ "$1 $2" == "simctl get_app_container" ]]; then printf '%s\n' "${container}"; exit 0; fi
 if [[ "$1 $2" == "simctl launch" ]]; then
+  if [[ -f "${container}/Documents/omi-control-probe.js" ]]; then
+    [[ -e "${container}/Documents/omi-control-probe-result.txt" ]] && exit 71
+    if [[ "\${OMI_TEST_NO_NATIVE_RESULT:-}" != "1" ]]; then
+      printf 'PROBE_JS: {"schema":"omi.control-acceptance.v1","steps":[]} error: none\\n' > "${container}/Documents/omi-control-probe-result.txt"
+    fi
+    exit 0
+  fi
   [[ -e "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json" ]] && exit 71
   if [[ "\${OMI_TEST_INVALID_NATIVE_RESULT:-}" == "1" ]]; then
     cp "${invalidNativeResult}" "${container}/Documents/omi-c3b3-consumer-run-launcher-proof.json"
@@ -259,6 +266,69 @@ exit 0
       false,
       "invalid native result is removed from the simulator container",
     );
+
+    const probeOut = path.join(scratch, "ios.probe.txt");
+    const probeDriver = path.join(scratch, "driver.js");
+    writeFileSync(probeDriver, "(() => '{\"schema\":\"omi.control-acceptance.v1\",\"steps\":[]}')()");
+    writeFileSync(probeOut, "prior probe success");
+    writeFileSync(flutterCount, "");
+    const probeMissingDriver = spawnSync("/bin/bash", [
+      launcher, "--route", "home", "--device", "simulator-proof", "--probe-out", probeOut,
+    ], { encoding: "utf8", env });
+    assert.equal(probeMissingDriver.status, 2, probeMissingDriver.stderr || probeMissingDriver.stdout);
+    assert.match(probeMissingDriver.stderr, /OMI_PROBE_JS_FILE/);
+    assert.equal(existsSync(probeOut), false, "probe gate must remove prior host success");
+
+    writeFileSync(probeOut, "prior probe success");
+    const probeWithEvidence = spawnSync("/bin/bash", [
+      launcher, "--route", "home", "--device", "simulator-proof",
+      "--probe-out", probeOut, "--evidence-out", evidence, "--run-id", "run-launcher-proof",
+    ], { encoding: "utf8", env: { ...env, OMI_PROBE_JS_FILE: probeDriver } });
+    assert.equal(probeWithEvidence.status, 2);
+    assert.match(probeWithEvidence.stderr, /cannot be combined/);
+    assert.equal(existsSync(probeOut), false);
+
+    writeFileSync(simctlLog, "");
+    writeFileSync(flutterCount, "");
+    const probed = spawnSync("/bin/bash", [
+      launcher, "--route", "home", "--device", "simulator-proof", "--probe-out", probeOut,
+    ], {
+      encoding: "utf8",
+      env: { ...env, OMI_PROBE_JS_FILE: probeDriver },
+    });
+    assert.equal(probed.status, 0, probed.stderr || probed.stdout);
+    const probeArgs = readFileSync(argsFile, "utf8");
+    assert.match(probeArgs, /^build\nios\n--simulator\n--debug/m);
+    assert.match(probeArgs, /--dart-define=OMI_PROBE_FILENAME=omi-control-probe\.js/);
+    assert.match(probeArgs, /--dart-define=OMI_PROBE_RESULT_FILENAME=omi-control-probe-result\.txt/);
+    assert.match(probeArgs, /--dart-define=OMI_PROBE_EXIT=true/);
+    assert.match(probeArgs, /--dart-define=SURFACE_QUERY=route=home&platform=mobile&generation=platform/);
+    assert.doesNotMatch(probeArgs, /OMI_CONSUMER_EVIDENCE|OMI_ACCEPTANCE|rig=dev|qa=/);
+    assert.doesNotMatch(probeArgs, new RegExp(probeOut.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(readFileSync(probeOut, "utf8"), /^PROBE_JS: /);
+    assert.match(readFileSync(simctlLog, "utf8"), /simctl uninstall simulator-proof me\.omi\.proto\.omiWebviewProto/);
+    assert.match(readFileSync(simctlLog, "utf8"), /simctl install simulator-proof/);
+    assert.match(readFileSync(simctlLog, "utf8"), /simctl launch simulator-proof me\.omi\.proto\.omiWebviewProto/);
+    assert.equal(
+      existsSync(path.join(container, "Documents/omi-control-probe.js")),
+      true,
+      "the shared driver must land in the simulator Documents directory",
+    );
+
+    writeFileSync(probeOut, "stale before timeout");
+    const probeTimeout = spawnSync("/bin/bash", [
+      launcher, "--route", "home", "--device", "simulator-proof", "--probe-out", probeOut,
+    ], {
+      encoding: "utf8",
+      env: {
+        ...env,
+        OMI_PROBE_JS_FILE: probeDriver,
+        OMI_TEST_NO_NATIVE_RESULT: "1",
+        OMI_PROBE_WAIT_SECONDS: "1",
+      },
+    });
+    assert.equal(probeTimeout.status, 124, probeTimeout.stderr || probeTimeout.stdout);
+    assert.equal(existsSync(probeOut), false, "probe timeout cannot retain host success");
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

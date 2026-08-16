@@ -21,6 +21,13 @@ node integration/control-acceptance/run.mjs
 # Rewind + omiScreenBridge only. Does not send Chat. Use when 4851 is already
 # serving and is not paired with the canned gateway.
 node integration/control-acceptance/run.mjs --screen-proof
+
+# Same driver.js and verdict.mjs, iOS simulator WKWebView at omi-ui://local.
+# Not an L3/L4 gate. Refuses before leasing a stack if no iOS simulator is
+# booted. A missing screen bridge or a simulator without a real microphone
+# tap is a real token (bridge-unreachable / empty-transcript /
+# skipped-tcc-denied), never a new skip word.
+node integration/control-acceptance/run.mjs --ios
 ```
 
 Default Chat generation is the canned gateway on 8788. The runner refuses to
@@ -163,6 +170,9 @@ control result. That line is a different mode.
 5. Put the assertion at the layer the user observes. Reading a helper that the
    JSX then ignores is the wrong altitude.
 
-The in-page driver is injected through the existing `OMI_PROBE_JS` hook. It
-keeps progress in `sessionStorage` so a real `<a href>` navigation does not
-reset the run. It does not edit `frontend/shells/**`.
+The in-page driver is injected through the existing `OMI_PROBE_JS` hook on
+macOS. It keeps progress in `sessionStorage` so a real `<a href>` navigation
+does not reset the run. `--ios` writes that same driver into the simulator
+Documents directory and the Flutter host evaluates it
+(`frontend/shells/ios/app/lib/control_probe.dart`). The driver still does not
+edit `frontend/packages/surfaces/**`.

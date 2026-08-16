@@ -219,14 +219,16 @@ keeps the user's excerpt.
 
 These would otherwise be assumed.
 
-**iOS has not had the macOS control scrutiny.** L3's first step drives both
+**iOS control clicks exist, and they are not L3.** L3's first step drives both
 shells through `integration/dev-stack.sh --assert` and joins producer and
 consumer evidence. The second L3 step, and all of L4, click real controls
 inside the **macOS** WKWebView (`integration/control-acceptance/run.mjs`,
-`integration/lanes.mjs` L3/L4). There is no equivalent click-through for
-iOS in this tree. The iOS origin is frozen at a custom scheme
-(`frontend/shells/ios/scripts/dev-run-ios.sh:18-20`) and is not the macOS
-5290/15290 origin lease.
+`integration/lanes.mjs` L3/L4). iOS click-through is the same runner with
+`--ios`: same `driver.js`, same `verdict.mjs`, same outcome tokens, injected
+through the Flutter host at the frozen `omi-ui://local` origin
+(`frontend/shells/ios/scripts/dev-run-ios.sh`). That origin is not the macOS
+5290/15290 lease. `--ios` is not a lane gate; a green L3 still does not
+entitle an iOS control claim.
 
 **The real chat-provider path is newly present, not the default proof.**
 Default Chat is the canned loopback gateway. The opt-in real-model proxy is
