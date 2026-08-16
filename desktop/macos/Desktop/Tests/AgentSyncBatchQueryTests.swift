@@ -503,7 +503,7 @@ final class AgentSyncBatchQueryTests: XCTestCase {
       XCTAssertFalse(syncedTables.contains("screenshots"))
       XCTAssertFalse(syncedTables.contains("observations"))
       let graphPayload = payloads.first { payload in
-        (payload["table"] as? String) == "local_kg_nodes"
+        (payload["table"] as? String) == "local_kg_nodes" && !((payload["rows"] as? [[String: Any]]) ?? []).isEmpty
       }
       XCTAssertEqual(graphPayload?["source_namespace"] as? String, ClientDeviceService.shared.clientDeviceId)
       XCTAssertEqual(graphPayload?["reconcile_complete"] as? Bool, false)
