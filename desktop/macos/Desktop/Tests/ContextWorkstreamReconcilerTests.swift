@@ -248,6 +248,30 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       "the invalid first assignment for b1 must not claim the bucket and drop the valid one")
   }
 
+  func testAcceptedAssignmentsLetALaterValidProposalWinAfterAnUnattestableFirstOneForTheSameBucket() {
+    let response = ContextWorkstreamTagging.Response(
+      workstreams: [.init(label: "Hermes", evidence: "two groups")],
+      assignments: [
+        // b1's first proposal sanitizes but is absent from b1's own facts;
+        // it must not claim the bucket and drop b1's later attestable one.
+        .init(group: "G1", label: "Hermes"),
+        .init(group: "G1", label: "Car"),
+        .init(group: "G2", label: "Hermes"),
+      ])
+    let accepted = ContextWorkstreamTagging.acceptedAssignments(
+      response: response,
+      batchIDs: ["b1", "b2"],
+      existingTags: ["car"],
+      observationsByBucket: [
+        "b1": "The CAR contract review is due.",
+        "b2": "Hermes PR blocked.",
+      ])
+    XCTAssertEqual(
+      Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
+      ["b1:car", "b2:hermes"],
+      "an unattestable first proposal must not claim the bucket and drop the later valid one")
+  }
+
   func testInsertArmedCandidatesLetsALaterValidCandidateWinAfterAnEarlierInvalidOneForTheSameBucket() throws {
     let queue = try migratedQueue()
     try queue.write { db in

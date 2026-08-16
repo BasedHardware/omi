@@ -301,22 +301,23 @@ enum ContextWorkstreamTagging {
     existingTags: Set<String>,
     observationsByBucket: [String: String]
   ) -> [AcceptedAssignment] {
-    var firstLabelByBucket: [(bucketID: String, tag: String)] = []
-    var seenBuckets = Set<String>()
+    // Proposals are collected without claiming their bucket: a bucket whose
+    // first proposal is null, unsanitizable, or fails per-bucket attestation
+    // must not block a later valid proposal for the same bucket. A bucket is
+    // only claimed below, once one of its proposals passes all validation.
+    var proposalsByBucket: [String: [String]] = [:]
+    var bucketOrder: [String] = []
     for assignment in response.assignments {
-      // Membership is checked (not claimed) here: a null or unsanitizable
-      // first assignment for a bucket must not block a later valid one for
-      // the same bucket, so `seenBuckets` is only marked once sanitization
-      // has actually succeeded.
       guard let bucketID = resolveGroup(assignment.group, batchIDs: batchIDs),
-        !seenBuckets.contains(bucketID),
         let tag = ContextWorkstreamTag.sanitize(assignment.label)
       else { continue }
-      seenBuckets.insert(bucketID)
-      firstLabelByBucket.append((bucketID, tag))
+      if proposalsByBucket[bucketID] == nil { bucketOrder.append(bucketID) }
+      proposalsByBucket[bucketID, default: []].append(tag)
     }
     var counts: [String: Int] = [:]
-    for item in firstLabelByBucket { counts[item.tag, default: 0] += 1 }
+    for bucketID in bucketOrder {
+      counts[proposalsByBucket[bucketID]!.first!, default: 0] += 1
+    }
 
     func isAllowed(_ tag: String, bucketID: String) -> Bool {
       guard !isGenericLabel(tag) else { return false }
@@ -326,7 +327,19 @@ enum ContextWorkstreamTagging {
       return (counts[tag] ?? 0) >= minimumGroupsForNewLabel
     }
 
-    let attested = firstLabelByBucket.filter { isAllowed($0.tag, bucketID: $0.bucketID) }
+    var firstLabelByBucket: [(bucketID: String, tag: String)] = []
+    for bucketID in bucketOrder {
+      // The first proposal that passes all validation claims the bucket;
+      // earlier proposals that were sanitizable but unattestable, generic,
+      // or below the new-label threshold are skipped, not fatal.
+      guard
+        let tag = proposalsByBucket[bucketID]!.first(where: {
+          isAllowed($0, bucketID: bucketID)
+        })
+      else { continue }
+      firstLabelByBucket.append((bucketID, tag))
+    }
+    let attested = firstLabelByBucket
     var allowedTags = Set(attested.map(\.tag))
     if allowedTags.count > maximumLabels {
       let existingFirst = allowedTags.filter { existingTags.contains($0) }
