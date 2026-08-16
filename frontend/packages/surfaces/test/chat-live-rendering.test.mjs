@@ -857,7 +857,8 @@ test("observer and provider failures render as non-streaming assistant failures"
 test("failed generations render the reason class and a retry affordance", async () => {
   // red-proof: ChatProduction.tsx failedMessageText falling through to a generic
   // "Response unavailable." for every provider code, or omitting the retry
-  // button, fails the timeout copy / data-failure-class / recovery assertions.
+  // button, fails the timeout / rate-limit / provider copy, data-failure-class,
+  // and recovery assertions. A 429 that renders as "unavailable" is the defect.
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const createProductionChatStore = await loadProductionExport(
     "ProductionChatStore.ts",
@@ -894,6 +895,22 @@ test("failed generations render the reason class and a retry affordance", async 
     assert.equal(failed.getAttribute("data-failure-class"), "provider-unavailable");
     assert.equal(failed.textContent.includes(EN_MESSAGES["chat.failedProviderUnavailable"]), true);
     assert.ok(failed.querySelector(".chat-failure-recovery button"));
+
+    await rendered.act(async () => {
+      domain.deliveries = [{
+        generationId: "rate-limited-generation",
+        clientMessageId: "reason-human",
+        terminal: { kind: "failed", error: { code: "generation_rate_limited", retryable: true } },
+      }];
+      domain.notify();
+      await Promise.resolve();
+    });
+    failed = rendered.container.querySelector(".chat-message.is-failed");
+    assert.ok(failed);
+    assert.equal(failed.getAttribute("data-failure-class"), "rate-limited");
+    assert.equal(failed.textContent.includes(EN_MESSAGES["chat.failedRateLimited"]), true);
+    assert.equal(failed.textContent.includes(EN_MESSAGES["chat.failedProviderUnavailable"]), false);
+    assert.ok(failed.querySelector(".chat-failure-recovery button"), "rate limit stays retryable");
   } finally {
     await rendered.cleanup();
   }

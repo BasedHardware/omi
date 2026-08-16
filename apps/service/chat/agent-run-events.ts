@@ -44,6 +44,7 @@ export type AgentRunTerminalCode =
   | "generation_attachment_failed"
   | "generation_interrupted"
   | "generation_timeout"
+  | "generation_rate_limited"
   | "tool_failed"
   | "approval_denied"
   | "approval_expired"
@@ -421,7 +422,8 @@ const asEvent = (record: Record<string, unknown>, kind: AgentRunEventKind): Agen
     case "terminal":
       return includesString(["completed", "degraded", "failed", "cancelled"], record.terminalOutcome)
         && includesString(["completed", "cancelled", "generation_provider_failed", "generation_context_failed",
-          "generation_attachment_failed", "generation_interrupted", "generation_timeout", "tool_failed",
+          "generation_attachment_failed", "generation_interrupted", "generation_timeout",
+          "generation_rate_limited", "tool_failed",
           "approval_denied", "approval_expired", "recovery_exhausted"], record.terminalCode)
         && isBoolean(record.retryable)
         && (record.recoveryAction === null

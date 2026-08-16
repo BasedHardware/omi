@@ -127,7 +127,8 @@ export type ChatGenerationFailureCode =
   | "generation_context_failed"
   | "generation_attachment_failed"
   | "generation_interrupted"
-  | "generation_timeout";
+  | "generation_timeout"
+  | "generation_rate_limited";
 
 export interface ChatGenerationFailure {
   readonly code: ChatGenerationFailureCode;
@@ -268,7 +269,7 @@ const classifyFailure = (
   try {
     const candidate = readFailureDeclaration(error);
     const allowed = stage === "provider"
-      ? ["generation_provider_failed", "generation_timeout"]
+      ? ["generation_provider_failed", "generation_timeout", "generation_rate_limited"]
       : stage === "context"
         ? ["generation_context_failed", "generation_timeout"]
         : stage === "attachment"

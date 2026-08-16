@@ -149,6 +149,7 @@ const traceOf = (
         "generation_attachment_failed",
         "generation_interrupted",
         "generation_timeout",
+        "generation_rate_limited",
       ].includes(frame.error.code)
         ? frame.error.code as ChatGenerationFailureCode
         : "generation_provider_failed";

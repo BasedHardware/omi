@@ -198,6 +198,21 @@ describe("chat generation reliability", () => {
     expect(readChatLog(runDir).some((row) => row.event === "provider_attempt_failed" && row.reason === "http_429")).toBe(true);
   });
 
+  test("exhausts retries on repeated 429 and surfaces generation_rate_limited", async () => {
+    isolateLogs();
+    let calls = 0;
+    const result = await runSource(async () => {
+      calls += 1;
+      return statusResponse(429);
+    });
+    expect(calls).toBe(3);
+    expect(result.error).toEqual({ code: "generation_rate_limited", retryable: true });
+    const started = readChatLog(runDir).filter((row) => row.event === "provider_request_started");
+    expect(started).toHaveLength(3);
+    expect(readChatLog(runDir).filter((row) => row.event === "provider_attempt_failed" && row.reason === "http_429")).toHaveLength(3);
+    expect(readChatLog(runDir).at(-1)).toMatchObject({ event: "generation_terminal", outcome: "failed" });
+  });
+
   test("exhausts retries on repeated 5xx and logs every attempt", async () => {
     isolateLogs();
     let calls = 0;

@@ -4,6 +4,13 @@ export const GATEWAY_RETRY_ATTEMPTS = 3;
 export const GATEWAY_RETRY_DELAYS_MS = Object.freeze([250, 1_000]);
 export const MAX_GATEWAY_EVENT_BYTES = 1_048_576;
 
+/**
+ * 429 is retried on the same gateway with this same bound: 3 attempts and
+ * delays 250ms then 1000ms (~1.25s extra). After that the failure is
+ * `generation_rate_limited`, never a canned-gateway fallback. The bound is
+ * short on purpose: a long Retry-After would freeze the chat surface.
+ */
+
 const sseDataPayloads = (event: string): readonly string[] => Object.freeze(event
   .split(/\r?\n/u)
   .filter((line) => line.startsWith("data:"))
@@ -12,13 +19,24 @@ const sseDataPayloads = (event: string): readonly string[] => Object.freeze(even
 export const isTransientGatewayStatus = (status: number): boolean =>
   status === 429 || status === 408 || (status >= 500 && status <= 599);
 
-export const gatewayFailure = (code: "generation_provider_failed" | "generation_timeout") =>
+export type GatewayFailureCode =
+  | "generation_provider_failed"
+  | "generation_timeout"
+  | "generation_rate_limited";
+
+export const gatewayFailure = (code: GatewayFailureCode) =>
   Object.freeze({ code, retryable: true });
 
 export const failureForGatewayStatus = (
   status: number,
-): Readonly<{ readonly code: "generation_provider_failed" | "generation_timeout"; readonly retryable: true }> =>
-  gatewayFailure(status === 408 || status === 504 ? "generation_timeout" : "generation_provider_failed");
+): Readonly<{ readonly code: GatewayFailureCode; readonly retryable: true }> =>
+  gatewayFailure(
+    status === 408 || status === 504
+      ? "generation_timeout"
+      : status === 429
+        ? "generation_rate_limited"
+        : "generation_provider_failed",
+  );
 
 const ownPlainObject = (value: unknown): Record<string, unknown> | null => {
   if (value === null || typeof value !== "object" || Array.isArray(value)

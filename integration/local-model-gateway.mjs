@@ -12,15 +12,18 @@
  *   GLM_API_KEY=... OMI_CHAT_MODEL=real integration/dev-stack.sh --up
  * Key env names (first non-empty wins): GLM_API_KEY, ZAI_API_KEY,
  * OMI_BENCH_OPENAI_API_KEY. Optional: OMI_BENCH_OPENAI_BASE_URL,
- * OMI_BENCH_OPENAI_MODEL, OMI_LOCAL_MODEL_GATEWAY_TOKEN,
- * OMI_LOCAL_MODEL_GATEWAY_PORT (default 8791).
+ * GLM_BASE_URL (used when the bench URL is unset), OMI_BENCH_OPENAI_MODEL,
+ * OMI_LOCAL_MODEL_GATEWAY_TOKEN, OMI_LOCAL_MODEL_GATEWAY_PORT (default 8791).
  */
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const DISCLOSURE = "local real-model proxy";
 const DEFAULT_PORT = 8791;
-const DEFAULT_BASE = "https://api.z.ai/api/paas/v4";
+// Coding-plan path. The pay-as-you-go sibling (`/api/paas/v4`) is where this
+// account has no balance; a correct key there returns 429 / code 1113 and
+// reads as a rate limit. Override with OMI_BENCH_OPENAI_BASE_URL or GLM_BASE_URL.
+const DEFAULT_BASE = "https://api.z.ai/api/coding/paas/v4";
 const DEFAULT_MODEL = "glm-4.7";
 const KEY_ENV_NAMES = Object.freeze(["GLM_API_KEY", "ZAI_API_KEY", "OMI_BENCH_OPENAI_API_KEY"]);
 const SAFE_GATEWAY_LANE = /^omi:auto:[a-z0-9][a-z0-9-]{0,95}$/;
@@ -31,7 +34,9 @@ const port = Number(process.env.OMI_LOCAL_MODEL_GATEWAY_PORT || DEFAULT_PORT);
 const token = process.env.OMI_LOCAL_MODEL_GATEWAY_TOKEN || "";
 const readyPath = process.env.OMI_LOCAL_MODEL_GATEWAY_READY || "";
 const modelId = process.env.OMI_BENCH_OPENAI_MODEL || DEFAULT_MODEL;
-const rawBase = (process.env.OMI_BENCH_OPENAI_BASE_URL || DEFAULT_BASE).replace(/\/$/u, "");
+const rawBase = (process.env.OMI_BENCH_OPENAI_BASE_URL
+  || process.env.GLM_BASE_URL
+  || DEFAULT_BASE).replace(/\/$/u, "");
 
 const readProviderKey = () => {
   for (const name of KEY_ENV_NAMES) {
