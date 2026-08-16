@@ -5,54 +5,53 @@ import XCTest
 
 @testable import ContextApp
 
-/// The two Capture settings that used to be pictures of settings.
+/// The two Capture behaviours that used to be pictures of settings.
 ///
 /// Both were drawn, both were persisted, and neither had a reader anywhere in the capture pipeline:
 /// the four Capture Quality tiles quoted four pixel sizes at a pipeline that hard-coded one, and
-/// "Pause on Inactivity" was a toggle with zero consumers. A control the pipeline does not consult
-/// is a decoration, so these assert the pipeline consulting them.
+/// "Pause on Inactivity" was a toggle with zero consumers.
+///
+/// **The tiles are gone now, and that is exactly why the first test stayed.** The user-facing choice
+/// was removed, not the resizing and re-encoding it drove — capture still downscales to
+/// `FrameImage.Quality.longestSide` and still encodes at `.compression`. A pipeline that quietly
+/// stopped doing either would look identical from the outside until somebody's disk filled or their
+/// screenshots turned to mush, which is the same class of defect as the original: a stated number
+/// that nothing applies.
 final class CapturePacingTests: XCTestCase {
 
-    // MARK: - Capture Quality
+    // MARK: - Capture quality
 
-    /// The tile's stated resolution is the resolution stored. This is the whole defect: picking
-    /// **Smallest** stored exactly what **Best Quality** stored.
-    func testTheSelectedTileDecidesHowLargeTheStoredImageIs() throws {
+    /// The stored image really is brought down to the one size this app writes.
+    func testTheStoredImageIsDownscaledToTheOneSizeCaptureWrites() throws {
         let capture = try syntheticScreen(width: 3_000, height: 2_000)
 
-        for quality in CaptureQuality.allCases {
-            let stored = try XCTUnwrap(
-                FrameImage.downscaled(capture, longestSide: quality.longestSide),
-                "\(quality.title) did not resize a capture larger than its own ceiling")
-            XCTAssertEqual(
-                max(stored.width, stored.height), quality.longestSide,
-                "\(quality.title) promises \(quality.longestSide) px on the longest side")
-            XCTAssertEqual(
-                Double(stored.width) / Double(stored.height), 1.5, accuracy: 0.01,
-                "the aspect ratio of the screen must survive the downscale")
-        }
+        let stored = try XCTUnwrap(
+            FrameImage.downscaled(capture, longestSide: FrameImage.Quality.longestSide),
+            "a capture larger than the ceiling was not resized")
+        XCTAssertEqual(max(stored.width, stored.height), FrameImage.Quality.longestSide)
+        XCTAssertEqual(
+            Double(stored.width) / Double(stored.height), 1.5, accuracy: 0.01,
+            "the aspect ratio of the screen must survive the downscale")
     }
 
-    /// …and the fidelity knob is real too, isolated from the size knob by encoding one identical
-    /// image at every point on the scale.
+    /// …and the fidelity knob is real too: encoding at the stored quality is materially cheaper than
+    /// encoding the same image losslessly, which is what a `compression` value nothing applied would
+    /// look like.
     ///
-    /// The expected sizes are not asserted, only their order — but the order is a measurement rather
-    /// than a hope. Encoding this fixture through this exact path gave 27,423 / 16,567 / 14,218 /
-    /// 10,252 bytes for Best / Default / Compact / Smallest, which is separation wide enough that a
-    /// re-encode on another macOS version cannot invert it.
-    func testTheSelectedTileDecidesHowHardTheStoredImageIsCompressed() throws {
+    /// The ratio is not asserted, only the direction — but the direction is a measurement rather than
+    /// a hope. Encoding this fixture through this exact path gave 16,567 bytes at q0.20 against
+    /// 27,423 at q0.40, separation wide enough that a re-encode on another macOS version cannot
+    /// invert it.
+    func testTheStoredImageIsCompressedAtTheStatedQuality() throws {
         let image = try syntheticScreen(width: 800, height: 600)
-        let ordered: [CaptureQuality] = [.best, .standard, .compact, .smallest]
 
-        let sizes = try ordered.map { try XCTUnwrap(FrameImage.data(from: image, quality: $0)).count }
+        let stored = try XCTUnwrap(FrameImage.data(from: image)).count
+        let lossless = try XCTUnwrap(losslessHEIC(image)).count
 
-        for index in 1..<ordered.count {
-            XCTAssertGreaterThan(
-                sizes[index - 1], sizes[index],
-                "\(ordered[index - 1].title) did not store more than \(ordered[index].title) — the "
-                    + "same picture coming out the same size at two tiles is what a hard-coded "
-                    + "compression quality looks like")
-        }
+        XCTAssertLessThan(
+            stored, lossless,
+            "the same picture costing the same either way is what a compression quality nothing "
+                + "applies looks like")
     }
 
     /// An image already inside the ceiling is left alone rather than re-rendered, which is what
@@ -60,8 +59,22 @@ final class CapturePacingTests: XCTestCase {
     func testACaptureSmallerThanTheCeilingIsNotResized() throws {
         let small = try syntheticScreen(width: 900, height: 600)
 
-        XCTAssertNil(FrameImage.downscaled(small, longestSide: CaptureQuality.best.longestSide))
-        XCTAssertNotNil(FrameImage.encoded(small, quality: .best), "…and is still encodable")
+        XCTAssertNil(FrameImage.downscaled(small, longestSide: FrameImage.Quality.longestSide))
+        XCTAssertNotNil(FrameImage.encoded(small), "…and is still encodable")
+    }
+
+    /// The same `CGImageDestination` call `FrameImage.data(from:)` makes, at quality 1.0, so the two
+    /// numbers differ in exactly one input.
+    private func losslessHEIC(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard
+            let destination = CGImageDestinationCreateWithData(
+                data as CFMutableData, "public.heic" as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(
+            destination, image, [kCGImageDestinationLossyCompressionQuality: 1.0] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
     }
 
     // MARK: - Capture request lifecycle

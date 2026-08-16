@@ -30,34 +30,37 @@ final class SettingsTests: XCTestCase {
         return SettingsStore(defaults: defaults, appliesToRunningApp: false)
     }
 
-    // MARK: - Appearance (I14)
+    // MARK: - Appearance, and its absence
 
-    /// The whole point of Phase 0: `System` installs no appearance at all.
+    /// **There is no Appearance pane, and the sidebar is the whole of that claim.**
     ///
-    /// A mapping that resolved `system` to `.aqua` or `.darkAqua` would re-introduce the exact defect
-    /// `docs/first-run-experience.md` § 0.1 removed — a process pinned to one appearance while the
-    /// system menu around it is the other — and it would then go stale the moment the user changed
-    /// their own Appearance setting.
-    func testSystemAppearanceMeansNoOverride() {
-        XCTAssertNil(AppearanceOverride.system.nsAppearanceName)
-        XCTAssertNil(AppearanceOverride.system.nsAppearance)
-        XCTAssertEqual(AppearanceOverride.light.nsAppearanceName, .aqua)
-        XCTAssertEqual(AppearanceOverride.dark.nsAppearanceName, .darkAqua)
+    /// The pane held a theme override, a Dock switch and four timeline-control toggles. The theme
+    /// override is the one worth a guard: it wrote `NSApp.appearance`, and re-introducing it would
+    /// re-introduce the exact defect `docs/first-run-experience.md` § 0.1 removed — a process pinned
+    /// to one appearance while the system menu around it is the other. This app follows the system.
+    func testThereIsNoAppearancePane() {
+        XCTAssertEqual(
+            SettingsPane.allCases.map(\.rawValue),
+            ["general", "agents", "capture", "storage", "exclusions"])
+        XCTAssertFalse(SettingsPane.allCases.map(\.title).contains("Appearance"))
     }
 
+    /// The Dock row was the one control on that pane a user wants, so it moved rather than went —
+    /// to General, beside Launch on Login, which is the question it actually answers.
     @MainActor
-    func testAppearanceDefaultsToSystemAndPersists() {
+    func testTheDockRowSurvivedThePaneAndStillPersists() {
         let suite = "context.settings.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
 
         let first = SettingsStore(defaults: defaults, appliesToRunningApp: false)
-        XCTAssertEqual(first.appearance, .system, "System is the default; Light/Dark are overrides")
-        first.appearance = .dark
+        XCTAssertEqual(first.showsDockIcon, DockPresence.showsByDefault)
+        first.showsDockIcon = !DockPresence.showsByDefault
 
         let second = SettingsStore(defaults: defaults, appliesToRunningApp: false)
-        XCTAssertEqual(second.appearance, .dark)
+        XCTAssertEqual(second.showsDockIcon, !DockPresence.showsByDefault)
     }
+
 
     // MARK: - The brand-colour guard (INV-UI-1)
 
@@ -96,113 +99,21 @@ final class SettingsTests: XCTestCase {
     // `declaredAccentIntake`, and that allowlist's own documentation names an empty list as the goal.
     // A second checker here would be the duplicate that guard was written to make unnecessary.
 
-    // MARK: - Timeline controls (I17–I22)
-
-    /// The preview reflects the toggles, and hiding a control never removes the chord that drives it.
-    func testTimelineVisibilityDrivesThePreviewAndKeepsShortcuts() {
-        var controls = TimelineControlVisibility()
-        XCTAssertEqual(controls.visible.count, TimelineControlVisibility.Control.allCases.count)
-
-        controls[.zoomControls] = false
-        XCTAssertFalse(controls.visible.contains(.zoomControls))
-        XCTAssertEqual(controls.visible, [.openExternally, .liveText, .segmentNavigation])
-
-        // The hint is a property of the control, not of its visibility — which is what makes
-        // "their keyboard shortcuts keep working even when a control is hidden" true rather than
-        // decorative.
-        XCTAssertEqual(TimelineControlVisibility.Control.zoomControls.shortcutHint, "⌘ ⇧ + / −")
-        XCTAssertEqual(TimelineControlVisibility.Control.segmentNavigation.shortcutHint, "⌥ ← / →")
-        XCTAssertEqual(TimelineControlVisibility.Control.openExternally.shortcutHint, "↵")
-        // Live Text has no chord in `RewindView`, so it must not advertise one.
-        XCTAssertNil(TimelineControlVisibility.Control.liveText.shortcutHint)
-    }
-
-    /// The preview's strip has to read as a *sweep* — that is the property these eight hand-picked
-    /// names own, and the one the palette cannot supply.
-    ///
-    /// This test used to also assert that none of the eight fell inside `TimelinePreview.violetBand`
-    /// (`215..<250`). That constant and that assertion are gone, retired rather than rebased onto
-    /// `BrandColour`, for two reasons. The brand property is now proven at the generator:
-    /// `RewindTests` checks the rendered colour of all 2503 values `RewindPalette` can emit, so eight
-    /// names drawn from that same generator cannot produce a violet, and restating it here over a
-    /// handful of them is coverage theatre — worse, a band whose floor (215°) sits below the arc's
-    /// ceiling (220°) is a test that has almost no room left to fail. And the constant was a hazard
-    /// in itself: it is exactly the kind of number a future reader uses to re-derive a ceiling, and
-    /// it encoded the *old* one.
-    func testTimelinePreviewSampleAppsSweepTheArc() {
-        XCTAssertFalse(TimelinePreview.sampleApps.isEmpty)
-        let hues = TimelinePreview.sampleApps.map(RewindPalette.hue(forApp:))
-        XCTAssertGreaterThan(
-            (hues.max() ?? 0) - (hues.min() ?? 0), 150,
-            "the preview's segments must span the arc, not cluster")
-    }
-
-    @MainActor
-    func testTimelineVisibilityRoundTripsThroughDefaults() {
-        let suite = "context.settings.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        addTeardownBlock { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-        let first = SettingsStore(defaults: defaults, appliesToRunningApp: false)
-        var controls = first.timelineControls
-        controls[.liveText] = false
-        first.timelineControls = controls
-
-        let second = SettingsStore(defaults: defaults, appliesToRunningApp: false)
-        XCTAssertFalse(second.timelineControls.liveText)
-        XCTAssertTrue(second.timelineControls.openExternally)
-    }
-
     // MARK: - Capture (I25)
 
-    /// The tiles are one scale, and each one's copy states its own number.
+    /// **The Capture Quality tiles are gone, and so is the preference behind them.**
     ///
-    /// **This deliberately no longer pins `standard.longestSide == 1600`.** That assertion was
-    /// written when capture hard-coded `ScreenPipeline.maxPixelSize` and `frameQuality`, and it
-    /// guarded the tile's copy against drifting from those constants. Both are gone: capture now
-    /// reads `quality.longestSide` and `quality.compressionQuality` from this same enum, so the
-    /// assertion had become the enum compared with itself — a literal restated in two files, which
-    /// fails only when someone edits both and passes whenever the product is wrong. The behavioural
-    /// guard that replaced it is `CapturePacingTests`, which encodes a synthetic screen through
-    /// `FrameImage` at every tile and asserts the stored pixels and the stored byte ordering. What is
-    /// left here is what this file is for: properties of the *copy*.
-    func testCaptureQualityTilesAreOneScaleAndEachStatesItsOwnResolution() {
-        XCTAssertEqual(CaptureQuality.default, .standard)
-
-        // Monotonic in both knobs, so the four tiles are one scale rather than four opinions.
-        let ordered: [CaptureQuality] = [.best, .standard, .compact, .smallest]
-        for (finer, coarser) in zip(ordered, ordered.dropFirst()) {
-            XCTAssertGreaterThan(finer.longestSide, coarser.longestSide)
-            XCTAssertGreaterThan(finer.compressionQuality, coarser.compressionQuality)
-        }
-
-        for quality in CaptureQuality.allCases {
-            XCTAssertTrue(
-                quality.subtitle.contains("\(quality.longestSide) px"),
-                "\(quality.title)'s subtitle must state the resolution it actually stores")
-        }
+    /// Four tiles chose between 2400/1600/1280/1024 px at four encoder qualities. Three of the four
+    /// bought disk back by making the user's own screenshots harder to read — and, since `look`
+    /// started handing frames to Claude as images, harder for a model to read too. What ships is what
+    /// every install was already on. The numbers moved to `FrameImage.Quality`, where
+    /// `CapturePacingTests` asserts the pipeline actually applies them; what is asserted here is that
+    /// no second opinion about them grew back in the settings layer.
+    func testTheStoredFrameSizeIsOneNumberAndItIsTheOneCaptureAlwaysShipped() {
+        XCTAssertEqual(FrameImage.Quality.longestSide, 1600)
+        XCTAssertEqual(FrameImage.Quality.compression, 0.20, accuracy: 0.0001)
     }
 
-    /// The tile that costs history has to say so.
-    ///
-    /// `Best Quality` is ~2.25× the pixels of `Default` at nearly twice the encoder quality, and the
-    /// retention sweep deletes oldest-first the moment the frames folder passes the user's threshold
-    /// (`Engine.scheduleRetentionSweep` → `enforceRetention(olderThanDays:toFitBytes:)`). So picking
-    /// this tile shortens how much history a given Storage limit holds — a consequence "largest
-    /// files" does not convey, and the same omission the Storage strings were fixed for.
-    ///
-    /// A copy assertion, and it is a static tripwire rather than behavioural coverage: it proves the
-    /// sentence exists, not that the sweep obeys it. The sweep's own bounds are asserted in
-    /// `testEveryStringDescribingLimitDisclosesTheAgePrune` and in `ContextCoreTests`.
-    func testBestQualityDisclosesThatItShortensHistoryUnderAStorageLimit() {
-        let best = CaptureQuality.best.subtitle
-        XCTAssertTrue(
-            best.localizedCaseInsensitiveContains("threshold"),
-            "Best Quality must name the bound its cost lands on: \(best)")
-        XCTAssertTrue(
-            best.localizedCaseInsensitiveContains("fewer days"),
-            "…and say what is lost, not only that files are larger: \(best)")
-    }
 
     /// Pause on Inactivity must not change an existing user's capture on their behalf.
     ///
@@ -812,41 +723,26 @@ final class SettingsTests: XCTestCase {
         XCTAssertFalse(engine.isFaviconFetchAllowed)
     }
 
-    /// The Airgap row must not claim more than `NetworkEgress` enforces.
+    /// **The Airgap switch is gone from Settings, and the enforcement behind it is not.**
     ///
-    /// It opened with "Stops all network access", and that was false in a way the user could not
-    /// discover: the switch is enforced against this app's seven `NetworkEgress.Client` cases and
-    /// against `OmiBackend` inside the MCP server, and against nothing else. The MCP server's local
-    /// tools are ungated on purpose — `ContextMCPKit/Airgap.swift` states the reason — so with the
-    /// switch on, asking Claude what you were working on returns OCR'd screen text and Claude carries
-    /// it to Anthropic. That is the product working; the sentence claiming otherwise was the defect.
+    /// Removed on the report *"remove the option to toggle sound and airgap mode in settings"*. The
+    /// removal is of a control, deliberately not of a promise: `ExclusionEngine` still carries the
+    /// flag, `NetworkEgress` still refuses every client while it is set, and anyone whose
+    /// `exclusions.json` already says `airgapMode` keeps exactly the behaviour they chose. Ripping
+    /// out the enforcement instead would silently start uploading for those users, which is the one
+    /// outcome nobody asked for.
     ///
-    /// A copy assertion, so a static tripwire. The enforcement it describes is behavioural elsewhere:
-    /// `AirgapEgressTests` for this app's clients, `ContextMCPKitTests/AirgapTests` for the server's.
-    func testTheAirgapSubtitleClaimsOnlyWhatIsEnforced() {
-        let subtitle = SettingsGeneralPane.airgapSubtitle
-        XCTAssertFalse(
-            subtitle.localizedCaseInsensitiveContains("all network access"),
-            "the MCP tools still read local capture on request, so this is not all network access")
-        XCTAssertTrue(
-            subtitle.localizedCaseInsensitiveContains("this app"),
-            "the subject of the promise is this app, and the sentence has to say so: \(subtitle)")
-        XCTAssertTrue(
-            subtitle.localizedCaseInsensitiveContains("mcp"),
-            "and it has to name what is still reachable: \(subtitle)")
-        XCTAssertTrue(
-            subtitle.localizedCaseInsensitiveContains("anthropic"),
-            "and where that goes, which is the part a user cannot infer: \(subtitle)")
+    /// So this asserts the engine, not the pane — the pane has no row left to read.
+    func testAirgapEnforcementSurvivesTheRemovalOfItsSwitch() {
+        let engine = makeEngine()
+        XCTAssertFalse(engine.current.airgapMode, "off is still the default")
 
-        // The clauses that *are* enforced stay named, or the row understates instead. Each maps to a
-        // `NetworkEgress.Client` case: conversationUpload/screenActivitySync, listenSocket, the
-        // engine's favicon gate, and signIn.
-        for promise in ["uploads", "cloud transcription", "favicon", "signing in", "queued"] {
-            XCTAssertTrue(
-                subtitle.localizedCaseInsensitiveContains(promise),
-                "the subtitle dropped an enforced clause: \(promise)")
-        }
+        engine.setAirgapMode(true)
+        XCTAssertTrue(engine.current.airgapMode, "the flag is still settable and still persisted")
+        XCTAssertFalse(engine.isFaviconFetchAllowed)
+        XCTAssertEqual(engine.faviconFetch(for: "anthropic.com"), .suppressed(.airgapMode))
     }
+
 
     // MARK: - Agents (I9, I13)
 
@@ -873,66 +769,42 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(second.claudeTarget, .terminal)
     }
 
-    /// Detection reads the disk. The seam is injected so this asserts the *mapping*, not what happens
-    /// to be installed on the machine running the suite.
-    func testAgentDetectionReportsWhatIsActuallyThere() {
-        let claudeApp = URL(fileURLWithPath: "/Applications/Claude.app")
-        let detector = AgentDetector(
-            applicationForBundleID: { $0 == "com.anthropic.claudefordesktop" ? claudeApp : nil },
-            isExecutableFile: { $0.hasSuffix("/codex") && $0.contains("/opt/homebrew/") },
-            isDirectory: { _ in false })
+    /// **No absolute path with the user's name in it may reach the window or a log line.**
+    ///
+    /// All that is left of what was an agent survey. `AgentSurface`/`AgentPresence` and their
+    /// injected filesystem probe fed a "Detected on this Mac" section listing Claude, Codex and
+    /// Cursor with Installed / Configured / Not found pills — read-only, acted on by nothing, and
+    /// removed with the section. The path helpers stayed because this property has to: the Storage
+    /// pane prints the capture directory, and `/Users/<name>/…` in a window is the user's name in
+    /// every screenshot they take of it.
+    func testDisplayedPathsAreHomeRelative() {
+        let expanded = AgentPaths.expand("~/.claude/local/claude")
+        XCTAssertTrue(expanded.hasPrefix("/"), "the seam is always handed an absolute path")
+        XCTAssertFalse(expanded.contains("~"))
 
-        XCTAssertEqual(detector.presence(of: .claude), .application(claudeApp))
-        XCTAssertEqual(detector.presence(of: .codex), .executable("/opt/homebrew/bin/codex"))
-        // The seam is always handed an absolute path, so no implementation of it has to expand `~`.
-        XCTAssertEqual(detector.presence(of: .codex).detail, "/opt/homebrew/bin/codex")
-        XCTAssertEqual(detector.presence(of: .cursor), .absent)
-
-        XCTAssertEqual(detector.presence(of: .claude).label, "Installed")
-        XCTAssertEqual(detector.presence(of: .codex).label, "Installed")
-        // The requirement is explicit that a not-installed state has to exist.
-        XCTAssertEqual(detector.presence(of: .cursor).label, "Not installed")
-        XCTAssertFalse(detector.presence(of: .cursor).isInstalled)
-    }
-
-    /// A state directory is real evidence but weaker than a binary, and must not read as `Installed`.
-    func testAConfiguredButUninstalledAgentIsNotReportedAsInstalled() {
-        let detector = AgentDetector(
-            applicationForBundleID: { _ in nil },
-            isExecutableFile: { _ in false },
-            isDirectory: { $0.contains(".codex") })
-
-        XCTAssertEqual(detector.presence(of: .codex), .configured(AgentDetector.expand("~/.codex")))
-        XCTAssertEqual(detector.presence(of: .codex).detail, "~/.codex")
-        XCTAssertEqual(detector.presence(of: .codex).label, "Configured")
-        XCTAssertTrue(detector.presence(of: .codex).isInstalled)
-    }
-
-    /// No absolute path with the user's name in it may reach the window or a log line.
-    func testAgentDetailPathsAreHomeRelative() {
-        let detector = AgentDetector(
-            applicationForBundleID: { _ in nil },
-            isExecutableFile: { $0 == AgentDetector.expand("~/.claude/local/claude") },
-            isDirectory: { _ in false })
-        let detail = detector.presence(of: .claude).detail
-        XCTAssertEqual(detail, "~/.claude/local/claude")
+        let displayed = AgentPaths.abbreviate(expanded)
+        XCTAssertEqual(displayed, "~/.claude/local/claude")
         XCTAssertFalse(
-            detail?.hasPrefix("/Users") ?? true,
+            displayed.hasPrefix("/Users"),
             "an absolute home path carries the user's name into the window and any log line")
     }
 
+
     // MARK: - Shortcuts (I1–I3)
 
-    /// The two defaults the reference names, printed the way it prints them.
-    func testDefaultChordsPrintAsTheReferenceWritesThem() {
+    /// **One recorder, and the default the reference names.**
+    ///
+    /// The pane drew two. `Open Search Shortcut` recorded a `⌘⌘⇧` double tap onto the *same* window
+    /// this one opens — `ContextApp.shortcutFired` answered both with one `window.press()` — so the
+    /// second row offered to rebind a chord whose only observable effect was already the first row's.
+    /// Removed on the report *"remove open search shortcut option in settings"*, and removed from the
+    /// shortcut layer with it, because hiding the row would have left the chord firing.
+    func testThereIsOneRecorderAndItPrintsTheDefaultTheReferenceNames() {
+        XCTAssertEqual(ShortcutAction.allCases, [.openActivity])
         XCTAssertEqual(ShortcutAction.openActivity.defaultChord.displayString, "⌘ + ⌘")
-        XCTAssertEqual(ShortcutAction.openSearch.defaultChord.displayString, "⌘⌘⇧")
         XCTAssertEqual(
             ShortcutAction.openActivity.subtitle,
             "Record a keyboard shortcut. Clear it to use ⌘ + ⌘.")
-        XCTAssertEqual(
-            ShortcutAction.openSearch.subtitle,
-            "Record a keyboard shortcut. Clear it to use ⌘⌘⇧.")
     }
 
     @MainActor
@@ -955,11 +827,6 @@ final class SettingsTests: XCTestCase {
             return XCTFail("⌘Q is reserved by macOS and must be refused")
         }
 
-        // And the two slots may not collide with each other.
-        provider.record(chord, for: .openActivity)
-        guard case .rejected = provider.record(chord, for: .openSearch) else {
-            return XCTFail("one chord cannot drive two actions")
-        }
     }
 
     /// `I3`: the conflict row is a live query, so an empty answer means no row at all.
@@ -1017,29 +884,29 @@ final class SettingsTests: XCTestCase {
         let provider = InMemoryShortcutBindings(
             readiness: [.openActivity: .needsAccessibility])
         XCTAssertEqual(provider.readiness(for: .openActivity), .needsAccessibility)
-        XCTAssertEqual(provider.readiness(for: .openSearch), .armed, "only the slot asked about moves")
 
-        let pane = SettingsGeneralPane(
-            store: makeStore(), shortcuts: provider,
-            exclusions: ExclusionsObserver(engine: makeEngine()))
+        let pane = SettingsGeneralPane(store: makeStore(), shortcuts: provider)
         let subtitle = pane.subtitle(for: .openActivity)
         XCTAssertTrue(subtitle.hasPrefix(ShortcutAction.openActivity.subtitle), subtitle)
         XCTAssertTrue(subtitle.contains("Accessibility"), subtitle)
-        XCTAssertEqual(
-            pane.subtitle(for: .openSearch), ShortcutAction.openSearch.subtitle,
-            "an armed slot says nothing extra")
-        XCTAssertTrue(pane.needsAccessibility, "the repair row is offered")
+
+        // …and an armed slot says nothing extra.
+        let armed = SettingsGeneralPane(store: makeStore(), shortcuts: InMemoryShortcutBindings())
+        XCTAssertEqual(armed.subtitle(for: .openActivity), ShortcutAction.openActivity.subtitle)
     }
 
-    /// The repair row explains *why* there is no prompt to press, because there is not one: macOS
-    /// has no dialog for Accessibility, and a user told to "allow it when asked" waits forever.
-    func testTheAccessibilityRepairRowExplainsThatThereIsNoPrompt() {
-        let copy = SettingsGeneralPane.accessibilitySubtitle
-        XCTAssertTrue(copy.contains("no prompt"), copy)
-        XCTAssertTrue(copy.contains("Accessibility"), copy)
-        // And it names the way out that needs no grant at all, which is the whole reason the
-        // recorder exists beside the gesture.
-        XCTAssertTrue(copy.contains("works without this"), copy)
+    /// **The row is the only place that says so, now that the standalone Accessibility section is
+    /// gone.**
+    ///
+    /// That section appeared under the recorders whenever the grant was missing and offered a button
+    /// to a pane where this app was not even listed — reported as *"why is accessibility in shortcuts,
+    /// makes no sense"*. It is removed, and what replaced it is `GlobalShortcuts.askForAccessibility()`
+    /// raising the real system alert. The subtitle warning stays regardless, because a user who
+    /// dismissed that alert still needs the recorder to admit the chord in it does not fire.
+    func testTheWarningNamesTheGrantAndSaysTheShortcutDoesNothingWithoutIt() throws {
+        let note = try XCTUnwrap(ShortcutReadiness.needsAccessibility.note)
+        XCTAssertTrue(note.contains("Accessibility"), note)
+        XCTAssertTrue(note.localizedCaseInsensitiveContains("does nothing"), note)
     }
 
     @MainActor
@@ -1047,7 +914,7 @@ final class SettingsTests: XCTestCase {
         let provider = InMemoryShortcutBindings()
         var notifications = 0
         let token = provider.addObserver { notifications += 1 }
-        provider.clear(.openSearch)
+        provider.clear(.openActivity)
         XCTAssertEqual(notifications, 1)
 
         provider.removeObserver(token)
@@ -1093,11 +960,14 @@ final class SettingsTests: XCTestCase {
 
     // MARK: - The window's own contract
 
-    /// The sidebar is six panes in the documented order, each with a symbol that resolves.
-    func testSixPanesInOrderWithResolvableSymbols() {
+    /// The sidebar is five panes in the documented order, each with a symbol that resolves.
+    ///
+    /// Six until Appearance went; see `testThereIsNoAppearancePane` for why it went and where its one
+    /// useful row moved to.
+    func testFivePanesInOrderWithResolvableSymbols() {
         XCTAssertEqual(
             SettingsPane.allCases.map(\.title),
-            ["General", "Agents", "Appearance", "Capture", "Storage", "Exclusions"])
+            ["General", "Agents", "Capture", "Storage", "Exclusions"])
         for pane in SettingsPane.allCases {
             XCTAssertNotNil(
                 NSImage(systemSymbolName: pane.symbol, accessibilityDescription: nil),

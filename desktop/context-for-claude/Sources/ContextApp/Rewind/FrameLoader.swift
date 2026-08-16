@@ -65,35 +65,37 @@ final class FrameLoader {
     /// again, and the frame the playhead is actually on never goes through the cap at all.
     static let maximumConcurrentDecodes = 4
 
-    /// Longest side requested from the decoder: **the largest size any Capture Quality tile stores**.
+    /// Longest side requested from the decoder: **2400, deliberately larger than anything this app
+    /// writes today.**
     ///
-    /// **Derived, not pinned, because the pinned version was silently wrong.** It was the literal
-    /// `1600`, documented as matching `ScreenPipeline.maxPixelSize` — "the size the file was written
-    /// at". That constant no longer exists: capture is sized for Vision and the *stored* image is
-    /// brought down to `CaptureQuality.longestSide` in `FrameImage.encoded`, which is 1024…2400
-    /// depending on the tile the user picked. So on **Best Quality** every 2400 px frame was being
-    /// re-sampled down to 1600 by the only UI that shows frames — the user paid for the pixels in
-    /// disk and got them thrown away at the last step. A literal here is a second opinion about a
-    /// number capture owns; reading the ceiling off `CaptureQuality` leaves nothing to keep true.
+    /// It was the literal `1600`, documented as matching a capture constant that no longer exists;
+    /// then it was derived from the Capture Quality tiles, taking the largest of the four,
+    /// because on **Best Quality** every 2400 px frame was being re-sampled down to 1600 by the only
+    /// UI that shows frames — the user paid for the pixels in disk and got them thrown away at the
+    /// last step. The tiles are gone and capture now writes one size (`FrameImage.Quality`, 1600),
+    /// so this is a literal again — but it is emphatically **not** `FrameImage.Quality.longestSide`.
     ///
-    /// The ceiling and not the user's *current* tile, deliberately: frames on disk were written under
-    /// whatever tile was selected at the time, so a cap that tracked the setting would soften
-    /// yesterday's frames the moment somebody moved it down.
+    /// A frame on disk was written under whatever tile was selected when it was taken, and installs
+    /// that ran on Best Quality have real 2400 px files. Tying this ceiling to what capture writes
+    /// *now* would soften every one of those the day this shipped, which is the same defect as the
+    /// original `1600` with a better-looking expression. The number is the widest frame this app has
+    /// ever written and it can only move down when no such file can still exist.
     ///
     /// **Asking for more than the file holds costs nothing** — `kCGImageSourceThumbnailMaxPixelSize`
     /// is a ceiling and not a target, so a smaller stored frame comes back at its own size and is not
     /// interpolated up. (The comment this replaces claimed the opposite, which is what made the
     /// literal look safe.) Measured through exactly the options `decode` passes, on real HEIC files
-    /// written at all four tile sizes: at cap 2400 the 1600/1280/1024 files decode to 1600×1000
-    /// (6.10 MB), 1280×800 (3.91 MB) and 1024×640 (2.50 MB) — byte-for-byte what they cost at cap
-    /// 1600 — while the 2400 px file decodes to 2400×1500 instead of being squashed to 1600×1000.
+    /// written at all four historical tile sizes: at cap 2400 the 1600/1280/1024 files decode to
+    /// 1600×1000 (6.10 MB), 1280×800 (3.91 MB) and 1024×640 (2.50 MB) — byte-for-byte what they cost
+    /// at cap 1600 — while a 2400 px file decodes to 2400×1500 instead of being squashed.
     ///
-    /// What it does cost is memory on Best Quality alone, where a decoded frame is **13.7 MB** rather
-    /// than 6.1 MB. `memoryBudgetBytes` still covers the window that matters: see its note.
+    /// What it does cost is memory on those legacy Best Quality frames alone, where a decoded frame
+    /// is **13.7 MB** rather than 6.1 MB. `memoryBudgetBytes` still covers the window that matters:
+    /// see its note.
     ///
     /// `nonisolated` because `decode` reads it on a detached task; a main-actor constant would be an
     /// error in the Swift 6 language mode.
-    nonisolated static let maxPixelSize = CaptureQuality.allCases.map(\.longestSide).max() ?? 2400
+    nonisolated static let maxPixelSize = 2400
 
     private var cache = FrameMemoryCache(budgetBytes: FrameLoader.memoryBudgetBytes)
 

@@ -3,140 +3,6 @@ import XCTest
 
 @testable import ContextApp
 
-// MARK: - The double-tap detector
-
-/// The timing rules, asserted directly rather than through the UI.
-///
-/// Every one of these is a case a user hits within a minute of installing: typing ⌘C twice, holding ⌘
-/// to see menu hints, tapping ⌘ then reaching for Shift. None of them is reachable by clicking around
-/// deliberately, and all of them would ship as "the timeline opens by itself sometimes".
-final class ModifierDoubleTapTests: XCTestCase {
-    private var detector = ModifierDoubleTap()
-
-    override func setUp() {
-        super.setUp()
-        detector = ModifierDoubleTap()
-    }
-
-    /// One press-and-release of Command, plus whatever else is held throughout.
-    @discardableResult
-    private func tap(
-        at start: TimeInterval, hold: TimeInterval = 0.05, alsoHeld: ShortcutModifiers = []
-    ) -> ShortcutModifiers? {
-        _ = detector.flagsChanged(.init(modifiers: alsoHeld.union(.command), at: start))
-        return detector.flagsChanged(.init(modifiers: alsoHeld, at: start + hold))
-    }
-
-    func testTwoQuickTapsOfCommandFire() {
-        XCTAssertNil(tap(at: 1.00))
-        XCTAssertEqual(tap(at: 1.20), [])
-    }
-
-    func testASingleTapNeverFires() {
-        XCTAssertNil(tap(at: 1.00))
-    }
-
-    /// The gap is measured press-to-press, and 380 ms is the boundary.
-    func testTapsFurtherApartThanTheWindowAreTwoSeparateTaps() {
-        XCTAssertNil(tap(at: 1.00))
-        XCTAssertNil(tap(at: 1.00 + ModifierDoubleTap.maxGap + 0.01))
-    }
-
-    func testTapsExactlyAtTheWindowStillFire() {
-        XCTAssertNil(tap(at: 1.00))
-        XCTAssertEqual(tap(at: 1.00 + ModifierDoubleTap.maxGap), [])
-    }
-
-    /// ⌘C ⌘C typed quickly is two Command presses inside the window. The key in between is the only
-    /// thing that distinguishes it from the gesture, so it had better be enough.
-    func testTypingACommandShortcutTwiceDoesNotFire() {
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.00))
-        detector.keyPressed()  // C
-        _ = detector.flagsChanged(.init(modifiers: [], at: 1.05))
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.15))
-        detector.keyPressed()  // C again
-        XCTAssertNil(detector.flagsChanged(.init(modifiers: [], at: 1.20)))
-    }
-
-    /// A key pressed during the *second* half is the ⌘S case: ⌘ tapped, then ⌘ held down on the way
-    /// to a real shortcut. Firing there would open a window on top of what the user was doing.
-    func testAKeyDuringTheSecondPressDoesNotFire() {
-        XCTAssertNil(tap(at: 1.00))
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.15))
-        detector.keyPressed()  // S
-        XCTAssertNil(detector.flagsChanged(.init(modifiers: [], at: 1.30)))
-    }
-
-    /// Holding Command is how macOS shows menu shortcut hints. It is not a tap.
-    func testALongHoldIsNotATap() {
-        XCTAssertNil(tap(at: 1.00, hold: ModifierDoubleTap.maxHold + 0.01))
-        XCTAssertNil(tap(at: 1.00 + ModifierDoubleTap.maxHold + 0.10))
-    }
-
-    func testShiftHeldThroughoutProducesTheSearchChord() {
-        XCTAssertNil(tap(at: 1.00, alsoHeld: .shift))
-        XCTAssertEqual(tap(at: 1.20, alsoHeld: .shift), [.shift])
-    }
-
-    /// The two halves have to agree. A bare tap followed by a Shift-held tap is not one gesture, and
-    /// guessing which of the two chords was meant is worse than doing nothing.
-    func testTapsWithDifferentHeldModifiersDoNotPairUp() {
-        XCTAssertNil(tap(at: 1.00))
-        XCTAssertNil(tap(at: 1.20, alsoHeld: .shift))
-    }
-
-    /// Shift arriving mid-press disqualifies that press outright.
-    func testAddingAModifierDuringAPressDisqualifiesIt() {
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.00))
-        _ = detector.flagsChanged(.init(modifiers: [.command, .shift], at: 1.03))
-        _ = detector.flagsChanged(.init(modifiers: .shift, at: 1.06))
-        XCTAssertNil(tap(at: 1.15, alsoHeld: .shift))
-    }
-
-    /// Firing consumes both taps, so a third tap is the first half of the next gesture and not a
-    /// second fire.
-    func testFiringConsumesBothTapsSoTheThirdTapIsAFreshStart() {
-        XCTAssertNil(tap(at: 1.00))
-        XCTAssertEqual(tap(at: 1.15), [])
-        XCTAssertNil(tap(at: 1.30))
-        XCTAssertEqual(tap(at: 1.45), [])
-    }
-
-    /// Caps Lock and Fn arrive as `flagsChanged` for reasons that have nothing to do with the keys
-    /// being pressed. They must not read as the held set changing.
-    func testCapsLockDoesNotDisturbAGesture() {
-        func snapshot(_ flags: NSEvent.ModifierFlags, _ at: TimeInterval) -> ModifierDoubleTap.Snapshot {
-            .init(modifiers: ShortcutModifiers(flags), at: at)
-        }
-        _ = detector.flagsChanged(snapshot([.command, .capsLock], 1.00))
-        _ = detector.flagsChanged(snapshot([.capsLock], 1.05))
-        _ = detector.flagsChanged(snapshot([.command, .capsLock, .function], 1.15))
-        XCTAssertEqual(detector.flagsChanged(snapshot([.capsLock, .function], 1.20)), [])
-    }
-
-    /// `reset()` exists because the modifier can go up while monitoring is off; a stale "was down"
-    /// would make the next release look like a completed tap.
-    func testResetForgetsAnInFlightPress() {
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.00))
-        detector.reset()
-        XCTAssertNil(detector.flagsChanged(.init(modifiers: [], at: 1.05)))
-        XCTAssertNil(tap(at: 1.10))
-        XCTAssertEqual(tap(at: 1.20), [])
-    }
-
-    /// The timeline's gesture, seen by this detector: both Command keys go down and come back up,
-    /// which puts the `.command` mask down **once**. Two ⌘ keys are not two taps, and if this fired
-    /// on them the two gestures could not both exist on one keyboard.
-    func testBothCommandKeysPressedTogetherAreNotADoubleTap() {
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.00))  // left down
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.03))  // right down, mask unchanged
-        _ = detector.flagsChanged(.init(modifiers: .command, at: 1.20))  // right up, mask unchanged
-        XCTAssertNil(detector.flagsChanged(.init(modifiers: [], at: 1.22)))  // left up
-    }
-}
-
-// MARK: - Both Command keys
-
 /// The timeline gesture's rules, asserted directly, because there is no keyboard in a test process.
 ///
 /// Everything here is a case a user hits in their first minute: ⌘C, ⌘Tab, resting a thumb on ⌘ while
@@ -303,35 +169,83 @@ final class BothCommandKeysTests: XCTestCase {
     }
 }
 
+// MARK: - Asking for the grant the gesture needs
+
+/// **The reported bug: pressing both Command keys did nothing.**
+///
+/// *"When I am pressing both command keys together it is not opening my timeline."* Measured on the
+/// reporting Mac: `capture-state.json` had `accessibility: granted false`, so `reapply()` declined to
+/// install the `flagsChanged` monitors and the gesture could not fire. Everything about that was
+/// already *reported* correctly — `readiness(for:)` answered `.needsAccessibility` and the Settings
+/// row said so — and none of it was *actionable*: the app never asked, and an app that has never
+/// asked is not listed in Privacy & Security ▸ Accessibility at all, so the button offering to open
+/// that pane sent people to a list their app was not in.
+///
+/// `AXIsProcessTrustedWithOptions` is what both registers the app in that list and raises the alert
+/// with a button leading to it, and `reapply()` now calls it. These assert the bounds on doing so,
+/// because an alert nobody asked for is its own defect.
+final class AccessibilityAskTests: XCTestCase {
+
+    /// Once per launch. `reapply()` runs on every `didBecomeActive`, and this app is activated
+    /// constantly — a second alert on every return from another window would be unusable.
+    func testTheAlertIsRaisedAtMostOncePerLaunch() {
+        XCTAssertTrue(GlobalShortcuts.shouldAsk(alreadyAsked: false, hasFinishedOnboarding: true))
+        XCTAssertFalse(GlobalShortcuts.shouldAsk(alreadyAsked: true, hasFinishedOnboarding: true))
+    }
+
+    /// Never during onboarding. The first-run flow owns the permission choreography and asks for
+    /// Accessibility itself; a second alert racing it at launch would be two dialogs about one
+    /// switch, with the app's own card underneath them.
+    func testNothingIsAskedBeforeOnboardingHasFinished() {
+        XCTAssertFalse(GlobalShortcuts.shouldAsk(alreadyAsked: false, hasFinishedOnboarding: false))
+    }
+
+    /// **Per launch and not per install, deliberately.** macOS drops the grant when the app's
+    /// signature changes, which is every Sparkle update — the same way this Mac lost Screen Recording
+    /// and system audio. A flag persisted once and kept forever would leave the shortcut dead after
+    /// an update with nothing said about it, so nothing here reads or writes `UserDefaults`.
+    func testTheAskIsNotPersistedAcrossLaunches() throws {
+        let source = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("Sources/ContextApp/Shortcuts/GlobalShortcuts.swift"),
+            encoding: .utf8)
+        XCTAssertFalse(
+            source.contains("askedForAccessibility\""),
+            "a persisted flag would silence the ask forever, including after an update drops the grant")
+    }
+}
+
 // MARK: - Chords
 
 final class ShortcutChordTests: XCTestCase {
-    /// Activity is the two Command keys together; search is still a double tap.
-    func testTheDefaultsPrintAsTheReferenceWritesThem() {
+    /// **One action, one default.** There were two, and `openSearch` — a `⌘⌘⇧` double tap — reached
+    /// the same window through the same `window.press()`, so this asserts the count as well as the
+    /// chord: a second action reappearing is a second recorder in Settings and a second way to open
+    /// one window.
+    func testThereIsOneShortcutAndItIsTheBothCommandGesture() {
+        XCTAssertEqual(GlobalShortcuts.Action.allCases, [.openActivity])
+        XCTAssertEqual(ShortcutAction.allCases, [.openActivity])
         XCTAssertEqual(GlobalShortcuts.Action.openActivity.defaultChord, .bothCommandKeys)
         XCTAssertEqual(GlobalShortcuts.Action.openActivity.defaultChord.display, "⌘ + ⌘")
-        XCTAssertEqual(GlobalShortcuts.Action.openSearch.defaultChord.display, "⌘⌘⇧")
     }
 
-    /// The two gestures may never be printed the same way. `⌘⌘` means "tapped twice" everywhere in
-    /// this app, and it is *taken* — it is the first two glyphs of the search default — so printing
-    /// the launch gesture that way would tell the user the wrong thing twice over.
-    func testTheTwoGesturesAreSpelledApart() {
-        let launch = GlobalShortcuts.Action.openActivity.defaultChord.display
-        XCTAssertNotEqual(launch, "⌘⌘")
-        XCTAssertFalse(GlobalShortcuts.Action.openSearch.defaultChord.display.hasPrefix(launch))
+    /// The gesture may never be printed as `⌘⌘`. That spelling means "tapped twice" wherever this
+    /// app reports another tool's binding — Claude's Quick Entry, Codex's `doubleCommand` — so
+    /// printing the launch gesture that way would tell the user the wrong thing about their own
+    /// keyboard.
+    func testTheGestureIsNotSpelledLikeADoubleTap() {
+        XCTAssertNotEqual(GlobalShortcuts.Action.openActivity.defaultChord.display, "⌘⌘")
+        XCTAssertEqual(ShortcutChord.doubleTap(.command, alsoHeld: []).display, "⌘⌘")
     }
 
-    /// Settings and the shortcut layer describe the same two shortcuts through two different chord
-    /// types. A gesture the recorder spells differently from the thing that fires reads as a third
+    /// Settings and the shortcut layer describe the same shortcut through two different chord types.
+    /// A gesture the recorder spells differently from the thing that fires reads as a second
     /// shortcut nobody bound.
-    func testSettingsAndTheShortcutLayerSpellTheDefaultsIdentically() {
+    func testSettingsAndTheShortcutLayerSpellTheDefaultIdentically() {
         XCTAssertEqual(
             ShortcutAction.openActivity.defaultChord.displayString,
             GlobalShortcuts.Action.openActivity.defaultChord.display)
-        XCTAssertEqual(
-            ShortcutAction.openSearch.defaultChord.displayString,
-            GlobalShortcuts.Action.openSearch.defaultChord.display)
     }
 
     /// Glyphs are exactly what fails for a gesture nobody has seen before: `⌘ + ⌘` does not say that
@@ -361,9 +275,6 @@ final class ShortcutChordTests: XCTestCase {
         XCTAssertEqual(
             GlobalShortcuts.Action.openActivity.subtitle,
             "Record a keyboard shortcut. Clear it to use ⌘ + ⌘.")
-        XCTAssertEqual(
-            GlobalShortcuts.Action.openSearch.subtitle,
-            "Record a keyboard shortcut. Clear it to use ⌘⌘⇧.")
     }
 
     /// **A row is named for the window it opens.** `⌘ + ⌘` used to open the timeline and the row said
@@ -411,11 +322,9 @@ final class ShortcutStoreTests: XCTestCase {
 
     func testARecordedShortcutRoundTrips() {
         let recorded = GlobalShortcuts.Recorded(keyCode: 40, modifiers: [.command, .shift], label: "K")
-        store.setRecorded(recorded, for: .openSearch)
-        XCTAssertEqual(store.binding(for: .openSearch), .recorded(recorded))
-        XCTAssertEqual(store.chord(for: .openSearch).display, "⇧⌘K")
-        // The other action is untouched — one recorder must not move the other row.
-        XCTAssertEqual(store.binding(for: .openActivity), .gestureDefault)
+        store.setRecorded(recorded, for: .openActivity)
+        XCTAssertEqual(store.binding(for: .openActivity), .recorded(recorded))
+        XCTAssertEqual(store.chord(for: .openActivity).display, "⇧⌘K")
     }
 
     /// The behaviour the reference's copy promises out loud.
@@ -439,8 +348,6 @@ final class ShortcutStoreTests: XCTestCase {
     func testStorageKeysFollowTheContextNamespace() {
         XCTAssertEqual(
             GlobalShortcuts.Action.openActivity.storageKey, "context.shortcut.openTimeline.keyEquivalent")
-        XCTAssertEqual(
-            GlobalShortcuts.Action.openSearch.storageKey, "context.shortcut.openSearch.keyEquivalent")
     }
 
     /// **A chord recorded before the rename still fires after it.**
@@ -568,8 +475,7 @@ final class ShortcutConflictsTests: XCTestCase {
     }
 
     private static let ourDefaults: [GlobalShortcuts.Action: ShortcutChord] = [
-        .openActivity: .bothCommandKeys,
-        .openSearch: .doubleTap(.command, alsoHeld: [.shift]),
+        .openActivity: .bothCommandKeys
     ]
 
     // MARK: Nothing installed
@@ -652,14 +558,17 @@ final class ShortcutConflictsTests: XCTestCase {
         XCTAssertTrue(report.conflicts.isEmpty)
     }
 
-    /// A single bare ⌘ fires on the first ⌘ of *either* of our gestures — the first half of the
-    /// search double tap, and the first of the two keys in the timeline's — so it collides even
-    /// though neither binding is the same chord. Comparing chords alone would miss this.
-    func testASingleBareCommandCollidesWithEitherCommandGesture() throws {
+    /// A single bare ⌘ fires on the first ⌘ of our gesture, so it collides even though the two
+    /// bindings are not the same chord. Comparing chords alone would miss this.
+    ///
+    /// It used to produce **two** rows, one per default, because `openSearch`'s `⌘⌘⇧` started on
+    /// Command too. One action, one row — and one row is also the honest count: two rows over one
+    /// window told the user they had two problems.
+    func testASingleBareCommandCollidesWithTheCommandGesture() throws {
         try write(#"[{"command":"globalDictationHold","key":"leftCommand"}]"#, to: "keybindings.json")
         let report = ShortcutConflicts.scan(
             ours: Self.ourDefaults, at: try locations(codexInstalled: true), airgapMode: false)
-        XCTAssertEqual(report.conflicts.count, 2, "one per default, since both start on Command")
+        XCTAssertEqual(report.conflicts.count, 1, "one row, because there is one shortcut")
         XCTAssertEqual(report.conflicts.first?.tool, .codex)
         XCTAssertEqual(
             report.conflicts.first(where: { $0.action == .openActivity })?.title, "Codex also uses ⌘ + ⌘")
@@ -734,7 +643,7 @@ final class ShortcutConflictsTests: XCTestCase {
     func testAnAcceleratorInClaudesConfigMatchesOurRecordedShortcut() throws {
         try write(#"{"quickEntryShortcut":{"accelerator":"CmdOrCtrl+Shift+K"}}"#, to: "claude-config.json")
         let report = ShortcutConflicts.scan(
-            ours: [.openSearch: .key(label: "K", modifiers: [.command, .shift])],
+            ours: [.openActivity: .key(label: "K", modifiers: [.command, .shift])],
             at: try locations(claudeInstalled: true), airgapMode: false)
         XCTAssertEqual(report.conflicts.count, 1)
         XCTAssertEqual(report.conflicts[0].chord.display, "⇧⌘K")
@@ -780,14 +689,14 @@ final class ShortcutConflictsTests: XCTestCase {
     /// Airgap Mode stops the scan reading anyone's files, even though none of it is a network
     /// request. The row then says it cannot tell, which is the truthful thing for it to say.
     func testAirgapModeStopsTheScanAndReportsThatItCannotTell() throws {
-        // A bare ⌘, which is in the way of both of our gestures — so the fixture really would draw
-        // rows, which is the half of this test that makes the other half mean anything.
+        // A bare ⌘, which is in the way of our gesture — so the fixture really would draw a row,
+        // which is the half of this test that makes the other half mean anything.
         try write(#"[{"command":"globalDictationToggle","key":"leftCommand"}]"#, to: "keybindings.json")
         let locations = try locations(claudeInstalled: true, codexInstalled: true, cursorInstalled: true)
 
-        // Off: the conflicts are found.
+        // Off: the conflict is found.
         XCTAssertEqual(
-            ShortcutConflicts.scan(ours: Self.ourDefaults, at: locations, airgapMode: false).conflicts.count, 2)
+            ShortcutConflicts.scan(ours: Self.ourDefaults, at: locations, airgapMode: false).conflicts.count, 1)
 
         let airgapped = ShortcutConflicts.scan(ours: Self.ourDefaults, at: locations, airgapMode: true)
         XCTAssertTrue(airgapped.conflicts.isEmpty)

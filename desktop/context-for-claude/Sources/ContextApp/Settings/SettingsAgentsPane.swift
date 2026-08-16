@@ -2,8 +2,14 @@ import AppKit
 import ContextCore
 import SwiftUI
 
-/// Agents: how Claude is opened, whether Claude can reach this app at all, and which agent surfaces
-/// are genuinely on this Mac.
+/// Agents: how Claude is opened, and whether Claude can reach this app at all.
+///
+/// **A third section, "Detected on this Mac", is gone.** It surveyed the machine for Claude Code,
+/// Claude Desktop, Codex and Cursor and drew a row per surface with an Installed / Configured /
+/// Not found pill. Every row was read-only: nothing on this pane acts on the survey, and the two
+/// surfaces this app actually registers with are named by the tip above it either way — so it was
+/// a list the user could not do anything with, in the pane where the two controls that do something
+/// live. Removed on the report *"remove the detected on this mac from UI in settings"*.
 ///
 /// The reference's third row is a toggle that installs a `coast` CLI into `~/.local/bin`. We ship no
 /// CLI — `docs/rewind-and-settings.md` says outright that our equivalent is the MCP registration — so
@@ -28,7 +34,6 @@ struct SettingsAgentsPane: View {
     /// Bumped by each attempt so the expiry below restarts rather than clearing a newer message.
     @State private var registrationMessageAttempt = 0
     @State private var isRegistering = false
-    @State private var survey: [(surface: AgentSurface, presence: AgentPresence)] = []
     /// What each Claude target would really do *on this Mac*, from `ClaudeRouter`'s own probe. Nil
     /// until it has answered, which is one frame — see `targetSubtitle` for what stands in.
     @State private var targetDetail: String?
@@ -63,9 +68,18 @@ struct SettingsAgentsPane: View {
 
             SettingsSection(
                 title: "Access",
+                // **Names all three things the switch writes.** It used to say "writes only the one
+                // entry, into Claude's own config", which was already understating it — a skill has
+                // been installed alongside the registration for some time — and the standing
+                // instruction in the user's global `CLAUDE.md` makes the omission a real one: that
+                // file is loaded into every prompt they run, so a switch that edits it has to say
+                // so where it is switched. All three are removed again on disconnect.
                 footnote: registrationMessage
-                    ?? "Registers this app's MCP server so Claude can read what was captured. "
-                    + "Writes only the one entry, into Claude's own config."
+                    ?? "Registers this app's MCP server so Claude can read what was captured, "
+                    + "installs a skill in ~/.claude/skills, and adds a block to your global "
+                    + "~/.claude/CLAUDE.md telling Claude to check this Mac's context before "
+                    + "answering. Nothing else in those files is touched, and disconnecting "
+                    + "removes all three."
             ) {
                 SettingsRow(
                     icon: "point.3.connected.trianglepath.dotted",
@@ -108,26 +122,6 @@ struct SettingsAgentsPane: View {
                 AgentPromptMock()
             }
 
-            SettingsSection(
-                title: "Detected on this Mac",
-                footnote: survey.allSatisfy({ !$0.presence.isInstalled })
-                    ? "None of these were found. This list reads the applications and command-line "
-                        + "tools actually present, so it will fill in as you install them."
-                    : nil
-            ) {
-                SettingsRowStack(
-                    items: survey.map { AgentSurveyRow(surface: $0.surface, presence: $0.presence) }
-                ) {
-                    row in
-                    SettingsRow(
-                        icon: row.presence.isInstalled ? "checkmark.seal" : "questionmark.app.dashed",
-                        title: row.surface.title,
-                        subtitle: row.presence.detail
-                    ) {
-                        AgentPresencePill(presence: row.presence)
-                    }
-                }
-            }
         }
         .task {
             // Every probe on this pane touches the disk or LaunchServices, and none of them belongs
@@ -135,7 +129,6 @@ struct SettingsAgentsPane: View {
             // so a probe placed there is a file read per unrelated state change. Here they run once
             // per appearance instead. The registrar's two JSON parses go off the main actor as well,
             // because they are the only ones that open and decode a file.
-            survey = AgentDetector.live.survey()
             targetDetail = ClaudeRouter.targetSubtitle(surface: ClaudeHandoff.surface)
             registration = await Task.detached(priority: .userInitiated) {
                 ClaudeRegistrar.status()
@@ -214,42 +207,6 @@ struct SettingsAgentsPane: View {
                 ClaudeRegistrar.status()
             }.value
             isRegistering = false
-        }
-    }
-}
-
-/// `Identifiable` wrapper so the survey can go through `SettingsRowStack`.
-private struct AgentSurveyRow: Identifiable {
-    let surface: AgentSurface
-    let presence: AgentPresence
-    var id: String { surface.rawValue }
-}
-
-/// The green-dot `Installed` pill, and the two honest alternatives to it.
-struct AgentPresencePill: View {
-    let presence: AgentPresence
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 6, height: 6)
-            Text(presence.label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(presence.isInstalled ? Ink.primary : Ink.secondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule(style: .continuous).fill(Ink.wash))
-        .fixedSize()
-    }
-
-    private var dotColor: Color {
-        switch presence {
-        case .application, .executable: Ink.listeningGreen
-        // Configured but no binary found: real evidence, weaker than a green dot should imply.
-        case .configured: Ink.accent
-        case .absent: Ink.secondary
         }
     }
 }

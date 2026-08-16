@@ -3,8 +3,20 @@ import Carbon.HIToolbox
 import ContextCore
 import SwiftUI
 
-/// General: the two shortcut recorders, the conflict row when there is one, launch at login, Airgap
-/// Mode, and the version.
+/// General: the shortcut recorder, the conflict row when there is one, launch at login, the Dock
+/// icon, and the version.
+///
+/// **Three rows this pane used to carry are gone, and none of them was a narrowing.** The Airgap
+/// Mode and Sound switches were removed on the report *"remove the option to toggle sound and
+/// airgap mode in settings"*; the machinery behind Airgap is untouched and still enforced by
+/// `Backend/NetworkEgress.swift` for anyone whose `exclusions.json` already carries it, and the
+/// cinematic keeps its own mute button, which is the surface where music is actually playing. The
+/// third was a standing **Accessibility** section under the recorders, and it went because it could
+/// not do its job: it appeared only when the grant was missing, offered a pane where this app was
+/// not even listed, and read as an unexplained privacy row bolted to a keyboard section.
+/// `GlobalShortcuts.askForAccessibility()` now raises the real system alert instead, which both
+/// explains itself and lists the app. The recorder's own subtitle still says outright when the
+/// chord cannot fire.
 ///
 /// **The Updates row is live, and on most builds it says so by refusing to be.** `ContextUpdater`
 /// answers `UpdatePolicy` before Sparkle is ever constructed, and the policy turns the updater off
@@ -15,21 +27,9 @@ import SwiftUI
 struct SettingsGeneralPane: View {
     @ObservedObject var store: SettingsStore
     let shortcuts: ShortcutBindingProvider
-    @ObservedObject var exclusions: ExclusionsObserver
 
-    /// The Airgap row's subtitle, lifted out of `body` for the same reason `SettingsStoragePane`
-    /// lifts its three confirmation strings out: it is the whole of the promise this switch makes,
-    /// and a promise no test can read is a promise nothing holds to its claims. See the row below
-    /// for why each clause is worded as it is.
-    static let airgapSubtitle =
-        "Stops this app from reaching the network: no screen or conversation uploads, no cloud "
-        + "transcription, no favicon requests, and no signing in. Capture, transcription, and search "
-        + "keep working on this Mac, and anything waiting to upload stays queued until you turn this "
-        + "off. It does not restrict Claude: the MCP tools still read what was captured here, so "
-        + "whatever you ask Claude about still reaches Anthropic."
-
-    /// **The four strings the reset row is made of**, internal for the same reason the Airgap subtitle
-    /// and `SettingsStoragePane`'s three confirmation strings are: they are the whole of what the user
+    /// **The four strings the reset row is made of**, internal for the same reason
+    /// `SettingsStoragePane`'s three confirmation strings are: they are the whole of what the user
     /// is told before a press that takes over their screen for several minutes, and copy nothing reads
     /// is copy nothing can hold to its claims.
     ///
@@ -38,20 +38,25 @@ struct SettingsGeneralPane: View {
     /// `context.settings.*` key. The sentence exists because "reset" is a word people reasonably read
     /// as "wipe", and a row that made them find out by pressing it would be the failure.
     static let resetSubtitle =
-        "Starts the first-run experience over: the opening sequence, the setup cards, then the "
+        "Starts the first-run experience over: the opening sequence, the onboarding cards, then the "
         + "walkthrough. Nothing is deleted — what you have captured, your settings, your permissions "
         + "and your sign-in all stay exactly as they are."
 
-    static let resetConfirmationTitle = "Run setup again?"
+    /// **"Onboarding", not "setup", in all four strings and in the row's own title.** Reported as
+    /// *"don't call it run setup again, call it run onboarding again or something"* — and the
+    /// rename is the accurate word as well as the asked-for one: the button replays the first-run
+    /// *experience* (the cinematic, the cards, the walkthrough), it does not re-run an installer or
+    /// reconfigure anything.
+    static let resetConfirmationTitle = "Run onboarding again?"
 
     /// Says what happens to the window the press came from, because it happens immediately and a
     /// window that vanishes without having been mentioned reads as a crash.
     static let resetConfirmationMessage =
-        "Settings closes and the opening sequence starts, followed by the setup cards and the "
+        "Settings closes and the opening sequence starts, followed by the onboarding cards and the "
         + "walkthrough. It takes a few minutes, and you can leave at any point. Nothing is deleted: "
         + "your recordings, transcripts, settings, permissions and sign-in are untouched."
 
-    static let resetConfirmationAction = "Run setup again"
+    static let resetConfirmationAction = "Run onboarding again"
 
     /// Bumped whenever the provider says something changed, which is what re-reads the recorders.
     @State private var shortcutGeneration = 0
@@ -96,25 +101,6 @@ struct SettingsGeneralPane: View {
                     .padding(.horizontal, 4)
             }
 
-            // The one press that fixes the state the rows have just reported. Offered only when
-            // Accessibility is what is missing: a refused key equivalent is not repaired by opening
-            // a privacy pane, and a button that cannot help is worse than no button.
-            if needsAccessibility {
-                SettingsSection {
-                    SettingsRow(
-                        icon: "hand.raised",
-                        title: "Accessibility",
-                        subtitle: Self.accessibilitySubtitle
-                    ) {
-                        Button("Open Accessibility Settings") {
-                            Sound.effect(.click)
-                            Permissions.openSettings(for: .accessibility)
-                        }
-                        .controlSize(.small)
-                    }
-                }
-            }
-
             // Shown **only** on a live conflict. The provider is asked every time the pane renders
             // rather than a flag being persisted: a stored conflict would keep this row on screen
             // after the user uninstalled the other tool.
@@ -141,7 +127,7 @@ struct SettingsGeneralPane: View {
                 }
             }
 
-            SettingsSection(title: "Startup and privacy") {
+            SettingsSection(title: "Startup") {
                 SettingsRow(
                     icon: "power",
                     title: "Launch on Login",
@@ -156,70 +142,31 @@ struct SettingsGeneralPane: View {
 
                 SettingsRowDivider()
 
-                // The subtitle is the promise, so it names exactly what stops and what that costs.
-                // It used to advertise "telemetry, update checks, and remote favicon requests" —
-                // update checks do not exist in this build, telemetry never leaves this Mac in the
-                // first place (`Support/Telemetry.swift`), and meanwhile the app went on uploading
-                // the contents of the user's screen every sixty seconds. Every clause below is now
-                // enforced in code by `Backend/NetworkEgress.swift`, and all of it is immediate:
-                // there is nothing left here that waits for a relaunch.
-                //
-                // **It no longer opens with "Stops all network access", because that was false.**
-                // What the switch is enforced against is this app's own remote clients — every case
-                // of `NetworkEgress.Client`, the update check included — plus the one living in the
-                // MCP server, `OmiBackend`, which `ContextMCPKit/Airgap.swift` suppresses in that
-                // separate process. What it is *not* enforced against, deliberately, is that same
-                // server's local tools: `recall`, `screen`, `activity` and the rest read this Mac's
-                // own capture database, and `Airgap.swift` states the reason — suppressing them
-                // "costs a tool its account half and never its answer". So a user with the switch
-                // on who asks Claude what they were working on gets an answer assembled from OCR'd
-                // screen text, and Claude carries that text to Anthropic as part of the conversation
-                // the user opened. That is the product behaving as designed. A subtitle that claimed
-                // no network access while it happened was the defect, so the last sentence says it
-                // outright instead of leaving the user to infer it — the switch bounds what *this
-                // app* sends on its own initiative, not what Claude sends when asked.
+                // Moved here from the Appearance pane, which no longer exists. It never was an
+                // appearance choice: it decides whether this app has a second home besides the menu
+                // bar, which is a fact about how it starts and is found — the same question the row
+                // above answers. `DockPresence` owns the default and the mapping either way.
                 SettingsRow(
-                    icon: "airplane",
-                    title: "Airgap Mode",
-                    subtitle: Self.airgapSubtitle
+                    icon: "dock.rectangle",
+                    title: "Show Dock Icon",
+                    subtitle: "Keeps the app's icon visible in the Dock during normal use."
                 ) {
                     SettingsToggle(
-                        title: "Airgap Mode",
-                        isOn: Binding(
-                            get: { exclusions.snapshot.airgapMode },
-                            set: { ExclusionEngine.shared.setAirgapMode($0) }),
+                        title: "Show Dock Icon", isOn: $store.showsDockIcon,
                         onChange: { _ in Sound.effect(.click) })
-                }
-
-                SettingsRowDivider()
-
-                SettingsRow(
-                    icon: "music.note",
-                    title: "Sound",
-                    subtitle: "Plays the ambient bed during the first-run sequence. "
-                        + "Click sounds follow your system's interface-sound setting."
-                ) {
-                    SettingsToggle(
-                        title: "Sound",
-                        isOn: Binding(
-                            get: { Sound.music.isEnabled },
-                            set: { enabled in
-                                Sound.music.isEnabled = enabled
-                                if enabled { Sound.effect(.click) }
-                            }))
                 }
             }
 
-            // Its own section rather than a fourth row under "Startup and privacy": this one does not
-            // set a preference, it starts something, and a button that takes over the screen for a
-            // few minutes should not be sitting in a stack of switches.
-            SettingsSection(title: "Setup") {
+            // Its own section rather than a third row under "Startup": this one does not set a
+            // preference, it starts something, and a button that takes over the screen for a few
+            // minutes should not be sitting in a stack of switches.
+            SettingsSection(title: "Onboarding") {
                 SettingsRow(
                     icon: "arrow.counterclockwise",
-                    title: "Run setup again",
+                    title: Self.resetConfirmationAction,
                     subtitle: Self.resetSubtitle
                 ) {
-                    Button("Run setup again") {
+                    Button(Self.resetConfirmationAction) {
                         Sound.effect(.click)
                         isConfirmingReset = true
                     }
@@ -299,23 +246,11 @@ struct SettingsGeneralPane: View {
         return "\(action.subtitle) \(note)"
     }
 
-    var needsAccessibility: Bool {
-        ShortcutAction.allCases.contains { shortcuts.readiness(for: $0) == .needsAccessibility }
-    }
-
-    /// Both slots' answers, for the "did anything move?" comparison above. An array rather than a
-    /// dictionary because there are two of them and `ShortcutAction.allCases` fixes the order.
+    /// Every slot's answer, for the "did anything move?" comparison above. An array rather than a
+    /// dictionary because `ShortcutAction.allCases` fixes the order.
     private var readinessSnapshot: [ShortcutReadiness] {
         ShortcutAction.allCases.map { shortcuts.readiness(for: $0) }
     }
-
-    /// Why the app cannot simply ask. Accessibility has no system prompt — the only route is the
-    /// Settings row — which is why this is a button that opens a pane rather than one that requests.
-    static let accessibilitySubtitle =
-        "The gesture shortcuts are watched for system-wide, and macOS only allows that with "
-        + "Accessibility granted. There is no prompt for it: switch Context for Claude on in "
-        + "Privacy & Security ▸ Accessibility, then come back. A shortcut you record with a key in "
-        + "it works without this."
 
     // MARK: - Shortcuts
 

@@ -312,13 +312,15 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
 
     /// **What a global shortcut does**, as a function of the chord and the window it toggles.
     ///
-    /// **Both chords reach the Activity panel, and that is the product decision rather than a duplicated
-    /// case.** Both Command keys together is this app's advertised way in, and what a way in has to land
-    /// on is the surface the app opens on — Activity. It used to land on the timeline, from when the
-    /// timeline *was* the app's one real window; leaving it there would have made the gesture the
-    /// product teaches the one gesture that does not take you to the app.
+    /// **There is one chord and it reaches the Activity panel.** Both Command keys together is this
+    /// app's advertised way in, and what a way in has to land on is the surface the app opens on —
+    /// Activity. It used to land on the timeline, from when the timeline *was* the app's one real
+    /// window; leaving it there would have made the gesture the product teaches the one gesture that
+    /// does not take you to the app. There was a second chord, `openSearch`, and it arrived here to
+    /// do the identical thing — two recorders, two defaults and two conflict rows over one
+    /// `window.press()`. It is gone; see `GlobalShortcuts.Action`.
     ///
-    /// **Both toggle, and that is the reported fix rather than a tidy-up.** `openActivity` called
+    /// **It toggles, and that is the reported fix rather than a tidy-up.** `openActivity` called
     /// `present`, on the reasoning that a launch and a Dock click must never close anything — true, and
     /// not a fact about a *keystroke*: *"Every window that gets launched by a hotkey should also be
     /// dismissed by the same hotkey, right now I have no way to exit this without clicking X."* So the
@@ -342,7 +344,7 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     static func shortcutFired(_ action: GlobalShortcuts.Action, on window: HotkeyToggle) -> HotkeyPress {
         switch action {
-        case .openActivity, .openSearch:
+        case .openActivity:
             return window.press()
         }
     }
