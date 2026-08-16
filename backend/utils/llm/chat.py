@@ -508,6 +508,56 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Opt
     )
 
 
+WORK_CONTEXT_FACT_LIMIT = 20
+WORK_CONTEXT_MINIMUM_CONFIDENCE = 0.6
+
+
+def _sanitize_prompt_text(value: str) -> str:
+    """Neutralize markup in model-authored text before it enters the prompt."""
+
+    return value.replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _get_work_context_section(uid: str, user_name: str) -> str:
+    """Render recently observed work context from synced context bucket facts.
+
+    The facts are extracted from the user's own screen activity on their devices
+    and already passed device-side validation. They are model-authored text, so
+    they are sanitized here for the same reason page-context titles are.
+
+    Chat must never fail because this optional context is unavailable, so every
+    failure degrades to an empty section.
+    """
+
+    try:
+        import database.account_cutover as account_cutover_db
+        import database.context_buckets as context_buckets_db
+
+        account_generation = account_cutover_db.get_account_cutover_record(uid).account_generation
+        facts = context_buckets_db.list_context_facts(
+            uid,
+            account_generation=account_generation,
+            minimum_confidence=WORK_CONTEXT_MINIMUM_CONFIDENCE,
+            limit=WORK_CONTEXT_FACT_LIMIT,
+        )
+    except Exception as error:
+        logger.warning(f"work context unavailable for prompt assembly: {error}")
+        return ""
+
+    if not facts:
+        return ""
+
+    fact_lines = "\n".join(f"- {_sanitize_prompt_text(fact.statement)}" for fact in facts)
+    return f"""<work_context>
+Recently observed on {user_name}'s devices:
+{fact_lines}
+This is background awareness of what they have been working on. Use it when it is
+relevant, and never recite it back or imply you were watching them.
+</work_context>
+
+"""
+
+
 def _get_agentic_qa_prompt(  # type: ignore[reportUnusedFunction]  # imported by retrieval/agentic.py
     uid: str,
     app: Optional[App] = None,
@@ -600,6 +650,8 @@ Keep these goals in mind when giving advice or suggestions.
 
 """
 
+    work_context_section = _get_work_context_section(uid, user_name)
+
     # Add page context if provided
     context_section = ""
     if context:
@@ -623,6 +675,7 @@ Keep this context in mind when answering their question.
         "current_datetime_str": current_datetime_str,
         "current_datetime_iso": current_datetime_iso,
         "goal_section": goal_section,
+        "work_context_section": work_context_section,
         "file_context_section": file_context_section,
         "context_section": context_section,
         "plugin_section": plugin_section,
@@ -797,7 +850,7 @@ Timezone: {tz}
 Current date time: {current_datetime_str}
 Current date time ISO: {current_datetime_iso}
 </user_context>
-{goal_section}{file_context_section}{context_section}
+{goal_section}{work_context_section}{file_context_section}{context_section}
 <tool_datetime_rules>
 **DateTime Formatting Rules for Tool Calls:**
 When using tools with date/time parameters (start_date, end_date), you MUST follow these rules:
@@ -878,6 +931,7 @@ def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: 
     current_datetime_str = variables.get("current_datetime_str", "")
     current_datetime_iso = variables.get("current_datetime_iso", "")
     goal_section = variables.get("goal_section", "")
+    work_context_section = variables.get("work_context_section", "")
     file_context_section = variables.get("file_context_section", "")
     context_section = variables.get("context_section", "")
     plugin_section = variables.get("plugin_section", "")
@@ -887,7 +941,7 @@ def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: 
     return f"""<assistant_role>
 You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
 </assistant_role>
-{goal_section}{file_context_section}{context_section}
+{goal_section}{work_context_section}{file_context_section}{context_section}
 
 <current_datetime>
 Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}
