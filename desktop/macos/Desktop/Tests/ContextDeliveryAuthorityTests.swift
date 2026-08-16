@@ -114,11 +114,15 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
       "director reservation must share the newest global proactive presentation clock")
   }
 
-  func testDailyBudgetUsesRollingTwentyFourHourWindowNotLocalMidnight() {
+  func testDailyBudgetUsesRollingTwentyFourHourWindowNotLocalMidnight() throws {
     let now = Date(timeIntervalSince1970: 1_725_000_000)
     let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
     XCTAssertEqual(windowStart, now.addingTimeInterval(-24 * 60 * 60))
-    XCTAssertNotEqual(windowStart, Calendar.current.startOfDay(for: now))
+    // The contrast is with *a* local midnight, so it is drawn against a pinned zone rather than the
+    // machine's: an assertion that reads `TimeZone.current` states a different thing on every runner.
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+    XCTAssertNotEqual(windowStart, calendar.startOfDay(for: now))
   }
 
   func testFrequencyCooldownMatchesNotificationSpacingAndMaximumHasNoThrottle() {
