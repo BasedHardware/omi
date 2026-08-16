@@ -1,0 +1,156 @@
+import XCTest
+
+@testable import Omi_Computer
+
+final class ContextBucketSyncPayloadTests: XCTestCase {
+  private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+  private func bucket(
+    _ bucketID: String = "bucket-1",
+    workstreamID: String? = nil,
+    displayLabel: String? = "Design doc"
+  ) -> ContextBucketSyncBucket {
+    ContextBucketSyncBucket(
+      bucketID: bucketID,
+      subjectKind: "document",
+      subjectID: "design-doc",
+      workstreamID: workstreamID,
+      displayLabel: displayLabel,
+      notifyWorthiness: 0.7,
+      visitCount: 3,
+      lastVisitedAt: now,
+      updatedAt: now)
+  }
+
+  private func fact(
+    _ factID: String = "fact-1",
+    bucketID: String = "bucket-1",
+    workstreamTag: String? = nil,
+    expiresAt: Date? = nil
+  ) -> ContextBucketSyncFact {
+    ContextBucketSyncFact(
+      factID: factID,
+      bucketID: bucketID,
+      statement: "Ship the parity pack",
+      identifiers: ["parity-pack"],
+      confidence: 0.9,
+      notifyWorthiness: 0.8,
+      dispositionState: "none",
+      workstreamTag: workstreamTag,
+      expiresAt: expiresAt,
+      updatedAt: now)
+  }
+
+  private func buckets(in body: [String: Any]) -> [[String: Any]] {
+    (body["buckets"] as? [[String: Any]]) ?? []
+  }
+
+  private func facts(in bucket: [String: Any]) -> [[String: Any]] {
+    (bucket["facts"] as? [[String: Any]]) ?? []
+  }
+
+  func testBodyGroupsFactsUnderTheirBucket() {
+    let body = ContextBucketSyncPayload.body(
+      deviceID: "macos_abc",
+      buckets: [bucket("bucket-1"), bucket("bucket-2")],
+      facts: [fact("fact-1"), fact("fact-2", bucketID: "bucket-2"), fact("fact-3")])
+
+    let published = buckets(in: body)
+    XCTAssertEqual(body["device_id"] as? String, "macos_abc")
+    XCTAssertEqual(published.count, 2)
+    XCTAssertEqual(facts(in: published[0]).compactMap { $0["fact_id"] as? String }, ["fact-1", "fact-3"])
+    XCTAssertEqual(facts(in: published[1]).compactMap { $0["fact_id"] as? String }, ["fact-2"])
+  }
+
+  func testFactWithoutItsBucketIsDroppedRatherThanOrphaned() {
+    let body = ContextBucketSyncPayload.body(
+      deviceID: "macos_abc",
+      buckets: [bucket("bucket-1")],
+      facts: [fact("fact-1"), fact("stray", bucketID: "bucket-missing")])
+
+    let published = buckets(in: body)
+    XCTAssertEqual(published.count, 1)
+    XCTAssertEqual(facts(in: published[0]).compactMap { $0["fact_id"] as? String }, ["fact-1"])
+  }
+
+  func testEvidenceIsAlwaysDeviceLocalAndCarriesNoScreenContent() {
+    let body = ContextBucketSyncPayload.body(
+      deviceID: "macos_abc", buckets: [bucket()], facts: [fact()])
+
+    let payload = facts(in: buckets(in: body)[0])[0]
+    let refs = (payload["evidence_refs"] as? [[String: Any]]) ?? []
+    XCTAssertEqual(refs.count, 1)
+    XCTAssertEqual(refs[0]["scope"] as? String, ContextBucketSyncPayload.evidenceScope)
+    XCTAssertEqual(refs[0]["kind"] as? String, ContextBucketSyncPayload.evidenceKind)
+    XCTAssertEqual(refs[0]["device_id"] as? String, "macos_abc")
+
+    // The device boundary: nothing quoted from the screen may appear in a payload.
+    for forbidden in ["evidence_text", "narrative", "raw_context_key", "normalized_context_key"] {
+      XCTAssertNil(payload[forbidden], "\(forbidden) must never be published")
+    }
+  }
+
+  func testOptionalFieldsAreOmittedRatherThanSentAsNull() {
+    let body = ContextBucketSyncPayload.body(
+      deviceID: "macos_abc",
+      buckets: [bucket(workstreamID: nil, displayLabel: nil)],
+      facts: [fact(workstreamTag: nil, expiresAt: nil)])
+
+    let published = buckets(in: body)[0]
+    XCTAssertNil(published["workstream_id"])
+    XCTAssertNil(published["display_label"])
+    let payload = facts(in: published)[0]
+    XCTAssertNil(payload["workstream_tag"])
+    XCTAssertNil(payload["expires_at"])
+  }
+
+  func testOptionalFieldsAreSentWhenPresent() {
+    let body = ContextBucketSyncPayload.body(
+      deviceID: "macos_abc",
+      buckets: [bucket(workstreamID: "ws-1", displayLabel: "Design doc")],
+      facts: [fact(workstreamTag: "ws-1", expiresAt: now)])
+
+    let published = buckets(in: body)[0]
+    XCTAssertEqual(published["workstream_id"] as? String, "ws-1")
+    XCTAssertEqual(published["display_label"] as? String, "Design doc")
+    XCTAssertEqual(facts(in: published)[0]["workstream_tag"] as? String, "ws-1")
+    XCTAssertNotNil(facts(in: published)[0]["expires_at"])
+  }
+
+  func testBodyRespectsTheBackendBucketLimit() {
+    let overLimit = (0...ContextBucketSyncPayload.bucketLimit).map { bucket("bucket-\($0)") }
+
+    let body = ContextBucketSyncPayload.body(deviceID: "macos_abc", buckets: overLimit, facts: [])
+
+    XCTAssertEqual(buckets(in: body).count, ContextBucketSyncPayload.bucketLimit)
+  }
+
+  func testBodyIsJSONSerializable() throws {
+    let body = ContextBucketSyncPayload.body(
+      deviceID: "macos_abc",
+      buckets: [bucket(workstreamID: "ws-1")],
+      facts: [fact(workstreamTag: "ws-1", expiresAt: now)])
+
+    XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))
+  }
+
+  func testPurgeBodyIsBounded() {
+    let body = ContextBucketSyncPayload.purgeBody(bucketIDs: (0..<500).map { "bucket-\($0)" })
+
+    XCTAssertEqual((body["bucket_ids"] as? [String])?.count, 200)
+  }
+
+  func testRetryAfterIsParsedAndNeverNegative() throws {
+    let url = try XCTUnwrap(URL(string: "https://example.com"))
+    func response(_ value: String) throws -> HTTPURLResponse {
+      try XCTUnwrap(
+        HTTPURLResponse(
+          url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": value]))
+    }
+
+    XCTAssertEqual(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response("30")), 30)
+    XCTAssertEqual(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response(" 45 ")), 45)
+    XCTAssertEqual(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response("-5")), 0)
+    XCTAssertNil(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response("soon")))
+  }
+}

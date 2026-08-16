@@ -142,7 +142,7 @@ enum ContextBucketVisitResolver {
     // A subject binding (including explicit_open) already owns this identity, so
     // do not require a prior completed visit before attaching the subject bucket.
     if binding == nil {
-      let recentCutoff = startedAt.addingTimeInterval(-7 * 24 * 60 * 60)
+      let recentCutoff = startedAt.addingTimeInterval(-ContextBucketTuning.coldStartLookback)
       let previousVisits: Int
       if let handleIdentity, try db.columns(in: "context_visits").map(\.name).contains("primaryHandleValue") {
         previousVisits =
@@ -162,7 +162,7 @@ enum ContextBucketVisitResolver {
               "SELECT COUNT(*) FROM context_visits WHERE referenceHash = ? AND outcome = 'completed' AND startedAt >= ?",
             arguments: [referenceHash, recentCutoff]) ?? 0
       }
-      guard previousVisits >= 1 else { return nil }
+      guard previousVisits >= ContextBucketTuning.coldStartMinimumVisits else { return nil }
     }
 
     let id = UUID().uuidString.lowercased()

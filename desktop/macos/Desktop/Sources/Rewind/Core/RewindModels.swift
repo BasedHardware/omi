@@ -525,8 +525,9 @@ class RewindSettings: ObservableObject {
     RewindPendingContextBucketPurgeJournal.enqueue(appName: appName, ownerID: ownerID)
     Task { @MainActor in
       do {
-        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        let purgedBucketIDs = try await ContextBucketStore.shared.purgeExcludedApp(appName)
         RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+        await Self.retractPublishedBuckets(purgedBucketIDs)
       } catch {
         logError("RewindSettings: purge-on-exclude failed", error: error)
       }
@@ -547,11 +548,27 @@ class RewindSettings: ObservableObject {
     for appName in pending {
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
       do {
-        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
+        let purgedBucketIDs = try await ContextBucketStore.shared.purgeExcludedApp(appName)
         RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+        await Self.retractPublishedBuckets(purgedBucketIDs)
       } catch {
         logError("RewindSettings: deferred purge-on-exclude failed", error: error)
       }
+    }
+  }
+
+  /// Delete the backend's copies of buckets this device just purged.
+  ///
+  /// Excluding an app is a privacy action, so it must reach every copy. The
+  /// local delete is authoritative and already happened; a failure here leaves
+  /// the server copy until the next attempt rather than blocking exclusion.
+  private static func retractPublishedBuckets(_ bucketIDs: Set<String>) async {
+    guard !bucketIDs.isEmpty else { return }
+    guard await MainActor.run(body: { ContextBucketsFeature.isBackendSyncEnabled }) else { return }
+    do {
+      try await ContextBucketSyncClient.shared.purge(bucketIDs: Array(bucketIDs))
+    } catch {
+      logError("RewindSettings: backend bucket retraction failed", error: error)
     }
   }
 
