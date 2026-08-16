@@ -4,7 +4,7 @@
  * The payload hash moved to `@omi-core/kernel` — one definition, shared by the
  * codec and by every transport binding, and re-exported here so existing
  * callers keep their import path.
- * Mirrors tasks-codec.ts / memories-codec.ts over the chat contract (ADR-005).
+ * Mirrors tasks-codec.ts over the chat contract (ADR-005).
  *
  * Payload hash is a PURE function of the caller-controlled immutable fields —
  * no Env clock, no Math.random — including the ratified ordered attachment id
