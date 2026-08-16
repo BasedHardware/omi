@@ -389,6 +389,11 @@ test("rendered live Chat streams changing assistant text and converges without d
     const stop = streaming.querySelector("button");
     assert.ok(stop);
     assert.equal(stop.disabled, false, "cancel remains interactive during streaming");
+    assert.equal(
+      stop.className.includes("control-danger"),
+      true,
+      "Stop is ranked as danger, matching Listen, not an unranked glass pill",
+    );
     await click(rendered, stop);
     assert.deepEqual(domain.cancelled, ["generation-live"]);
 
@@ -1240,6 +1245,97 @@ test("real-provider receipt names the model and is not Local test gateway", asyn
     assert.equal(label.textContent, "External model response (glm-4.7)");
     assert.equal(label.textContent.includes(EN_MESSAGES["chat.agentLocalTestGateway"]), false);
     assert.notEqual(rendered.container.querySelector(".chat-message-text")?.textContent, "Local test gateway answered.");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("unknown-tier real-looking adapter never claims External model response", async () => {
+  // red-proof: treating omi.local-model-gateway.v1 as real because the adapter
+  // string looks like a proxy, without reading tier, overstates provenance.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const now = Date.UTC(2026, 7, 7, 12, 0, 0);
+  const store = {
+    status: () => status(),
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async history() {
+      return {
+        messages: [{
+          role: "assistant",
+          text: "Gateway answered without a real-provider mint.",
+          delivery: {
+            kind: "canonical",
+            serverId: "unknown-tier-assistant",
+            clientMessageId: null,
+            generationOutcome: "completed",
+          },
+          attachments: [],
+          agentRun: {
+            state: "complete",
+            events: [
+              {
+                sequence: 1, createdAt: now, kind: "capability_receipt",
+                safeSummary: "Loopback gateway declared",
+                details: {
+                  tier: "unknown",
+                  adapter: "omi.local-model-gateway.v1/glm-4.7",
+                  deterministic: false,
+                },
+              },
+            ],
+          },
+        }],
+        hasOlder: false,
+        olderCursor: null,
+      };
+    },
+    async loadOlder() { return { messages: [], hasOlder: false, olderCursor: null }; },
+    async send() {},
+    capabilities() {
+      return { maxAttachmentsPerMessage: 2, maxAttachmentBytes: 10_000, allowedAttachmentMimeTypes: ["application/pdf"] };
+    },
+    stagingAvailable() { return false; },
+    async stageAttachment() { return null; },
+    async scanAttachment() { return "clean"; },
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async cancel() {},
+    async resolveApproval() {},
+  };
+  const rendered = await renderComponent(ChatProduction, { store });
+  try {
+    const label = rendered.container.querySelector(".chat-agent-capability");
+    assert.ok(label);
+    assert.equal(label.textContent, EN_MESSAGES["chat.agentUnknown"]);
+    assert.equal(label.textContent.includes(EN_MESSAGES["chat.agentProvider"]), false);
+    assert.equal(rendered.container.textContent.includes("External model response"), false);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("Send names the in-flight state instead of staying labelled Send", async () => {
+  // red-proof: leaving the submit label as chat.send while sending is true
+  // makes this fail even though the control is disabled.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  let release;
+  domain.sendGate = new Promise((resolve) => { release = resolve; });
+  const rendered = await renderComponent(ChatProduction, { store: createProductionChatStore(domain) });
+  try {
+    const textarea = rendered.container.querySelector("textarea.chat-draft");
+    const send = rendered.container.querySelector("button.chat-send");
+    await setTextarea(rendered, textarea, "A question while send is in flight");
+    await click(rendered, send);
+    assert.equal(send.textContent?.trim(), EN_MESSAGES["chat.pending"]);
+    assert.equal(send.getAttribute("aria-busy"), "true");
+    assert.equal(send.getAttribute("aria-label"), EN_MESSAGES["chat.pending"]);
+    await rendered.act(async () => { release(); await Promise.resolve(); });
   } finally {
     await rendered.cleanup();
   }

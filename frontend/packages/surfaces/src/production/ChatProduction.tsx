@@ -16,6 +16,7 @@ import {
   toTrayAttachment,
   type ChatTrayAttachment,
 } from "./chat-attachment-scan.js";
+import { chatBodyKind } from "./chat-presentation.js";
 import {
   attachmentCapState,
   mergeOlderPage,
@@ -588,6 +589,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
   const admittedUserMessages = messages.filter(
     (message) => message.role === "user" && message.delivery.kind === "canonical",
   ).length;
+  const bodyKind = chatBodyKind(status.refresh.phase, messages.length);
 
   return (
     <main className="production-shell" aria-label={t(locale, "chat.title")} data-production-shell="true" data-route="chat" data-surface-state={status.refresh.phase} data-qa-fixture={fixture ?? "none"} data-consumer-chat-admission-count={admittedUserMessages} data-consumer-semantic={`chat:messages:${messages.length}:admitted:${admittedUserMessages}:streaming:${messages.some((message) => message.delivery.kind === "streaming") ? 1 : 0}:staging:${stagingAvailable ? 1 : 0}`}>
@@ -612,15 +614,15 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           message={operationError ? null : chatAnnouncement(messages, locale)}
           {...(announcementScheduler ? { scheduler: announcementScheduler } : {})}
         />
-        {status.refresh.phase === "initial-loading" ? (
+        {bodyKind === "loading" ? (
           <div className="chat-empty-state">
             <ProductionEmptyState icon="loading" title={t(locale, "common.loading")} />
           </div>
-        ) : status.refresh.phase === "unavailable" && messages.length === 0 ? (
+        ) : bodyKind === "unavailable" ? (
           <div className="chat-empty-state">
             <ProductionEmptyState icon="alert" title={t(locale, "lifecycle.unavailable")} />
           </div>
-        ) : status.refresh.phase === "ready" && messages.length === 0 ? (
+        ) : bodyKind === "empty-projection" ? (
           <div className="chat-empty-state" data-empty-kind="empty-projection">
             <ProductionEmptyState icon="conversations" title={t(locale, "chat.emptyTitle")} detail={t(locale, "chat.emptyBody")} />
           </div>
@@ -753,7 +755,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                       </ul>
                     )}
                     {streamingGenerationId && (
-                      <button type="button" onClick={() => cancelGeneration(streamingGenerationId)} aria-label={t(locale, "chat.stop")}>
+                      <button type="button" className="control-danger" onClick={() => cancelGeneration(streamingGenerationId)} aria-label={t(locale, "chat.stop")}>
                         {t(locale, "chat.stop")}
                       </button>
                     )}
@@ -869,8 +871,8 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               aria-label={t(locale, "chat.composerLabel")}
               onChange={(event) => setDraft(event.target.value)}
             />
-            <button type="submit" className="chat-send control-primary" disabled={!canSend} aria-label={t(locale, "chat.send")}>
-              {t(locale, "chat.send")}
+            <button type="submit" className="chat-send control-primary" disabled={!canSend} aria-busy={sending || undefined} aria-label={sending ? t(locale, "chat.pending") : t(locale, "chat.send")}>
+              {sending ? t(locale, "chat.pending") : t(locale, "chat.send")}
             </button>
           </div>
         </form>
