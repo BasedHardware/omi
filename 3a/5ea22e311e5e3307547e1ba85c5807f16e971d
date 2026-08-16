@@ -1,0 +1,49 @@
+desktop/context-for-claude/scripts/package-dmg.sh
+  s_d58145f2e376ea::t_84e77b2ad79b9b 165-170
+  s_d58145f2e376ea::t_26e62fc2f6c239 194-236
+desktop/context-for-claude/CONTRACTS.md
+  s_d58145f2e376ea::t_018fb6d9f65298 611,613-632
+  s_d58145f2e376ea::t_d698f7ec1a547b 340-342
+.github/checks-manifest.yaml
+  s_d58145f2e376ea::t_691adf90a99041 49-53
+desktop/context-for-claude/docs/first-run-experience.md
+  s_d58145f2e376ea::t_098e438d46cb1e 390-395
+.github/failure-classes/FC-shared-platform-identity-across-signing-identities.json
+  s_d58145f2e376ea::t_99a6f8640754ae 1-20
+desktop/context-for-claude/scripts/uninstall.sh
+  s_d58145f2e376ea::t_afda4b5e8a9e14 7
+  s_d58145f2e376ea::t_41bd79893dcead 21-23,26
+  s_d58145f2e376ea::t_7bd0c3ae286f20 53,55,63-82
+  s_d58145f2e376ea::t_ed7f438a7c437a 83
+desktop/context-for-claude/scripts/build.sh
+  s_d58145f2e376ea::t_98733bcd074b6c 60-77
+  s_d58145f2e376ea::t_9b83afbb21847e 234-236
+  s_d58145f2e376ea::t_e6ba2f1a7da495 35-39
+  s_d58145f2e376ea::t_d3babb9e45b801 151,155
+  s_d58145f2e376ea::t_d2f17d5fbce627 164-166,169-170
+  s_d58145f2e376ea::t_bb9ae1d314eb85 288-299
+desktop/context-for-claude/scripts/build-identity.sh
+  s_d58145f2e376ea::t_9d04ebaea100c1 1-40,42-60,68,88,106,108-111,117
+  s_d58145f2e376ea::t_04bd5845d3ff7d 61-67,69-87,89-105,107,112-116
+  s_d58145f2e376ea::t_a771c319eb0740 41
+desktop/context-for-claude/scripts/test-build-identity.sh
+  s_d58145f2e376ea::t_363278821c18d0 117-128,130,132,135,137-139
+  s_d58145f2e376ea::t_5d3af12e4a4b6b 1-113,143-145,147-167
+  s_d58145f2e376ea::t_c4d95d2504fbd1 114-116,129,131,133-134,136,140-142,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "3a5ea22e311e5e3307547e1ba85c5807f16e971d",
+  "prompts": {},
+  "sessions": {
+    "s_d58145f2e376ea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9844074c-1a64-4911-aeee-4b41df105dff",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
