@@ -54,3 +54,13 @@ test("RED-PROOF the launcher discloses the local test gateway, never production"
   assert.match(app, /not a real model/);
   assert.doesNotMatch(app, /api\.omi\.me|\?rig=dev/);
 });
+
+test("RED-PROOF the human demo launcher is headed; --accept stays headless", () => {
+  // red-proof: drop `export OMI_HEADED=1` and `bun run app` parks offscreen
+  // with no Dock icon. Drop the unset and `dev-app.sh --accept` inherits a
+  // headed parent and steals focus.
+  assert.match(
+    app,
+    /if \(\( MODE_ACCEPT \)\); then\n  unset OMI_HEADED\nelse\n  export OMI_HEADED=1\nfi/,
+  );
+});

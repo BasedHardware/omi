@@ -147,6 +147,14 @@ printf '\n  stop the stack with:  integration/dev-stack.sh --stop\n\n'
 macos_args=(--api "$SERVICE_URL" --route home)
 (( MODE_ACCEPT )) && macos_args+=(--accept)
 
+# Human demo is headed. --accept is the headless-safe check and must not
+# inherit a Dock icon or steal focus from a headed parent.
+if (( MODE_ACCEPT )); then
+  unset OMI_HEADED
+else
+  export OMI_HEADED=1
+fi
+
 OMI_API_TOKEN="$DEV_TOKEN" \
 OMI_SURFACE_PORT=5290 \
 OMI_APP_NAME="${OMI_APP_NAME:-omi-on-local-demo}" \
