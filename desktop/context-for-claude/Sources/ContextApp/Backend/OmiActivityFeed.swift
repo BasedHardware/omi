@@ -91,7 +91,7 @@ import Foundation
 /// only when *no* source answered, which is also the exact shape of every reason the account is
 /// genuinely unavailable: Airgap Mode, signed out, no route, an outage. Those fail all three
 /// together, so the distinction the field exists for survives.
-struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
+struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing, ActivityAccountCursor {
 
     // Everything that reaches off this file, as replaceable closures with the production wiring as
     // their defaults — the pattern `ScreenActivityUploader` established. It is what lets the airgap
@@ -136,6 +136,39 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     func unreachableReason() async -> ActivityAccountUnreachableReason? {
         await diagnosis.reason()
+    }
+
+    /// Reopens the newest page of every source, so the next `read` asks the account for it again.
+    ///
+    /// **The corpus is a cursor that only ever moves forward, and that is right for hydration and
+    /// wrong for coming back to a panel an hour later.** Once every source has run out of pages the
+    /// reader answers `.settled` and makes no further request for the life of the window: correct,
+    /// because nothing behind the cursor changes, and useless, because everything *in front* of it
+    /// does. A conversation recorded since the last read lives at offset zero, which is the one
+    /// offset a forward-only walk will never ask for twice.
+    ///
+    /// So this clears the opening flag and nothing else. The next read races the three heads exactly
+    /// as a first read does, new rows are appended, rows already held are **updated in place** —
+    /// which is how a title the account has since written reaches a row that was cached untitled —
+    /// and each source's paging cursor is left where hydration left it, so revalidating costs three
+    /// requests rather than a second walk of the account.
+    ///
+    /// Deliberately not a `read` of its own. The store still calls `read`, so the local-memory
+    /// decorator still wraps the answer and there is one path into the feed rather than two.
+    func refreshHead() async {
+        await corpus.reopenHead()
+    }
+
+    /// Drops every row and every cursor. The signed-in account has changed.
+    ///
+    /// **This reader now outlives a sign-out and did not used to.** It was built per panel, so
+    /// forgetting was what happened when the window closed and nothing had to say so. One reader for
+    /// the life of the process is what makes coming back to the panel instant (`ActivitySpine`), and
+    /// the price of that is exactly this: the corpus is account-scoped state, and nobody else is
+    /// going to throw it away on the way out.
+    func forget() async {
+        await corpus.forgetEverything()
+        await diagnosis.record(nil)
     }
 
     /// One page per source. The spine shows a window of a day, not an account export, and every one
@@ -558,7 +591,12 @@ private actor AccountCorpus {
     private var conversations: [WireConversation] = []
     private var memories: [WireMemory] = []
     private var tasks: [WireActionItem] = []
-    private var seen: [ActivityAccountSource: Set<String>] = [:]
+    /// Where each id already sits in the array above, so a row seen twice is *replaced* rather than
+    /// dropped. A set of ids could only answer "have we had this one", which was enough while the
+    /// cursor only moved forward and is not enough now `reopenHead` re-asks for page zero: the whole
+    /// point of re-asking is that a row may have changed since, and the change we care about most is
+    /// a conversation the backend has titled in the meantime.
+    private var index: [ActivityAccountSource: [String: Int]] = [:]
     private var state: [ActivityAccountSource: SourceState] = [:]
     private var didOpen = false
     private var memoriesBeganPastHead = false
@@ -618,16 +656,16 @@ private actor AccountCorpus {
 
     func commit(conversations outcome: OmiActivityFeed.SourceOutcome<[WireConversation]>) {
         record(.conversations, outcome, received: outcome.rows?.count)
-        for row in outcome.rows ?? [] where insert(.conversations, id: row.id) {
-            conversations.append(row)
+        for row in outcome.rows ?? [] {
+            absorb(.conversations, id: row.id, row: row, into: &conversations)
         }
     }
 
     func commit(memories outcome: OmiActivityFeed.SourceOutcome<[WireMemory]>) {
         if outcome.beganPastHead { memoriesBeganPastHead = true }
         record(.memories, outcome, received: outcome.rows?.count)
-        for row in outcome.rows ?? [] where insert(.memories, id: row.id) {
-            memories.append(row)
+        for row in outcome.rows ?? [] {
+            absorb(.memories, id: row.id, row: row, into: &memories)
         }
     }
 
@@ -635,9 +673,32 @@ private actor AccountCorpus {
         record(.tasks, outcome, received: outcome.rows?.actionItems.count)
         // The one source that can say it has reached the end without an empty page to prove it.
         if let page = outcome.rows, !page.hasMore { state[.tasks]?.isExhausted = true }
-        for row in outcome.rows?.actionItems ?? [] where insert(.tasks, id: row.id) {
-            tasks.append(row)
+        for row in outcome.rows?.actionItems ?? [] {
+            absorb(.tasks, id: row.id, row: row, into: &tasks)
         }
+    }
+
+    /// Reopens the newest page of every source without disturbing where hydration has walked to.
+    ///
+    /// One flag, and the restraint is the design — see `OmiActivityFeed.refreshHead`. `nextOffset`,
+    /// `pages` and `isExhausted` are all left alone: a source that has reached its end has reached
+    /// it, and the rows arriving at offset zero are in front of the cursor rather than behind it.
+    func reopenHead() {
+        didOpen = false
+    }
+
+    /// Back to the state this actor was constructed in. Every field, deliberately enumerated rather
+    /// than reassigned wholesale — an actor cannot replace `self`, and a field added later that this
+    /// forgot to clear would be one account's data surviving into another's session.
+    func forgetEverything() {
+        conversations = []
+        memories = []
+        tasks = []
+        index = [:]
+        state = [:]
+        didOpen = false
+        memoriesBeganPastHead = false
+        rotation = 0
     }
 
     /// How many rows are held over every source — the reader's own version of the growth signal the
@@ -669,7 +730,11 @@ private actor AccountCorpus {
             current.failures = 0
             current.lastFailure = nil
             current.everAnswered = true
-            current.nextOffset = outcome.offset + max(received, 0)
+            // **Monotonic, because the head can be re-read.** `reopenHead` sends the next read back
+            // to offset zero without moving the cursor, so a plain assignment here would walk the
+            // whole account again from page one after every revalidation. A walk only ever moves
+            // forward, so taking the larger of the two is the same arithmetic everywhere else.
+            current.nextOffset = max(current.nextOffset, outcome.offset + max(received, 0))
             // `ServerPaging`: only an empty page is the end. A short one is the backend's own
             // post-filtering, and reading it as the end is how the rest of an account disappears.
             if received == 0 { current.isExhausted = true }
@@ -680,11 +745,27 @@ private actor AccountCorpus {
         state[source] = current
     }
 
-    /// Whether this row is one we have not already been handed. A row with no id cannot be
-    /// identified, so it cannot be diffed, deduplicated or rendered — the projection drops it too.
-    private func insert(_ source: ActivityAccountSource, id: String?) -> Bool {
-        guard let id, !id.isEmpty else { return false }
-        return seen[source, default: []].insert(id).inserted
+    /// Files one row under its identity: appended the first time, **replaced** every time after.
+    ///
+    /// Replacement rather than the first-sighting-wins rule this used to have. Both are correct for
+    /// a forward-only walk, where a row arriving twice is the offset drift `ServerPaging` documents
+    /// and the two copies are the same row. They are not both correct once `reopenHead` re-asks for
+    /// page zero: there the second copy is deliberately newer, and keeping the first is how a
+    /// conversation the backend titled ten minutes ago goes on reading `Untitled conversation` until
+    /// the panel is rebuilt. Position is held constant so nothing reorders under the reader.
+    ///
+    /// A row with no id cannot be identified, so it cannot be diffed, selected or scrolled to — the
+    /// projection drops it too, and it is dropped here rather than appended unkeyed.
+    private func absorb<Row>(
+        _ source: ActivityAccountSource, id: String?, row: Row, into rows: inout [Row]
+    ) {
+        guard let id, !id.isEmpty else { return }
+        if let existing = index[source]?[id] {
+            rows[existing] = row
+            return
+        }
+        index[source, default: [:]][id] = rows.count
+        rows.append(row)
     }
 }
 

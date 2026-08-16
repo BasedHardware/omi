@@ -1113,6 +1113,75 @@ extension OmiActivityFeedTests {
 
     /// Reads until the reader stops asking for anything, the way `ActivityStore` does: again while
     /// the answer keeps growing, and once more to find out that it has stopped.
+    // MARK: - Coming back to a settled corpus
+
+    /// **The cursor only ever moves away from the newest row, and that is the one place new rows
+    /// arrive.** Once every source is exhausted the reader answers `.settled` and makes no further
+    /// request — correct while nothing behind the cursor changes, useless the moment somebody comes
+    /// back to the panel an hour later. `refreshHead` is the reopening, and this is what it must
+    /// cost: three requests at offset zero, not a second walk of the account.
+    func testRefreshingTheHeadRereadsOffsetZeroWithoutWalkingTheAccountAgain() async {
+        let backend = PagingBackend(conversations: 5, memories: 0, tasks: 0)
+        let feed = Self.feed(over: backend)
+
+        _ = await Self.readUntilSettled(feed, limit: 2)
+        let walked = await backend.asks("conversations")
+        XCTAssertEqual(walked, [0, 2, 4, 5], "precondition: the whole account is in")
+
+        await feed.refreshHead()
+        _ = await Self.readUntilSettled(feed, limit: 2)
+
+        let reasked = await backend.asks("conversations")
+        XCTAssertEqual(
+            reasked, walked + [0], "one request at the head, and the walk is not repeated")
+    }
+
+    /// **The regression this pair of changes exists for, at the reader.** A conversation is
+    /// uploaded before the backend has titled it, so the row the account first hands over is
+    /// untitled; the title lands minutes later. A corpus whose de-duplication was
+    /// first-sighting-wins would keep the untitled copy for the life of the process, which is the
+    /// panel saying `Untitled conversation` over a conversation that has had a name for an hour.
+    func testARowTheAccountHasSinceTitledReplacesTheUntitledCopy() async {
+        let backend = RetitlingBackend()
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { try await backend.conversations($0) },
+            fetchMemories: { _ in [] },
+            fetchTasks: { _ in WireActionItemPage(actionItems: []) },
+            now: { Self.placement })
+
+        let first = await feed.read(since: nil, until: nil, limit: 10)
+        XCTAssertEqual(first.conversations.map(\.title), [""], "the backend has not named it yet")
+
+        await backend.title("Design review")
+        await feed.refreshHead()
+        let second = await feed.read(since: nil, until: nil, limit: 10)
+
+        XCTAssertEqual(second.conversations.count, 1, "one conversation, not two copies of one")
+        XCTAssertEqual(second.conversations.map(\.title), ["Design review"])
+    }
+
+    /// Signing out. The reader now outlives a sign-out — it belongs to the process rather than to a
+    /// panel — so everything the previous account handed over has to go, cursors included.
+    func testForgettingDropsEveryRowAndReopensFromTheTop() async {
+        let backend = PagingBackend(conversations: 3, memories: 0, tasks: 0)
+        let feed = Self.feed(over: backend)
+
+        let settled = await Self.readUntilSettled(feed, limit: 10)
+        XCTAssertEqual(settled.conversations.count, 3, "precondition")
+
+        await feed.forget()
+        let after = await feed.read(since: nil, until: nil, limit: 10)
+
+        let asks = await backend.asks("conversations")
+        XCTAssertEqual(
+            asks.last, 0, "the next read starts at the top, as a first read does")
+        XCTAssertEqual(
+            after.conversations.count, 3,
+            "and what it holds is what this read returned, not what the last account said")
+    }
+
     private static func readUntilSettled(
         _ feed: OmiActivityFeed, limit: Int, reads: Int = 40
     ) async -> ActivityAccountFeed {
@@ -1204,5 +1273,24 @@ private actor PagingBackend {
         let total = counts[source] ?? 0
         guard offset < total else { return offset..<offset }
         return offset..<min(offset + limit, total)
+    }
+}
+
+/// One conversation whose title the backend fills in later — the ordinary lifecycle of an uploaded
+/// transcript, and the reason a corpus has to be able to replace a row it already holds.
+private actor RetitlingBackend {
+    private var currentTitle = ""
+
+    func title(_ title: String) { currentTitle = title }
+
+    func conversations(_ query: [String: String]) -> [WireConversation] {
+        guard (Int(query["offset"] ?? "0") ?? 0) == 0 else { return [] }
+        return [
+            WireConversation(
+                id: "c0", createdAt: nil, startedAt: WireInstant(seconds: 1_786_000_000),
+                finishedAt: nil,
+                structured: WireConversation.WireStructured(
+                    title: currentTitle, overview: nil, emoji: "🎙️"))
+        ]
     }
 }

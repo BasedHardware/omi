@@ -197,6 +197,31 @@ protocol ActivityAccountReading: Sendable {
     func read(since: Double?, until: Double?, limit: Int) async -> ActivityAccountFeed
 }
 
+/// An account reader whose walk through the account can be moved by the caller.
+///
+/// **Separate from `ActivityAccountReading` for the reason `ActivityAccountDiagnosing` is**: a
+/// preview's account, a test's account and `ActivityAccountAbsent` have no cursor and nothing to
+/// move, and making every one of them implement two no-ops would be a protocol demanding a promise
+/// only one implementation can keep.
+///
+/// It exists because a reader that pages is a reader that only ever moves *away* from the newest
+/// row, and holds everything it has passed. Both facts are right while a corpus is filling and both
+/// are wrong later: what changed since the reader left is at offset zero, which a forward-only
+/// cursor never asks for twice, and what it is holding belongs to whichever account was signed in
+/// when it read it.
+///
+/// Neither method fetches. They move the cursor; the next `read` is what spends a request, which is
+/// what keeps one read path through the decorators instead of two.
+protocol ActivityAccountCursor: Sendable {
+    /// Reopen the newest page of every source, so the next `read` asks the account for it again.
+    /// Everything already gathered is kept, and rows that come back changed replace their copies.
+    func refreshHead() async
+
+    /// Drop everything gathered and every cursor. The account that answered has been signed out of,
+    /// and not one row of what it said may reach whoever signs in next.
+    func forget() async
+}
+
 /// The account nobody connected. Used by previews, the render harness, and every test that is about
 /// composition rather than about the network.
 struct ActivityAccountAbsent: ActivityAccountReading {

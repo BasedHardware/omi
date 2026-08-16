@@ -209,9 +209,20 @@ final class ActivityStore: ObservableObject {
     /// The account half of the spine. Held rather than asked for: unlike `ContextStore` it is a
     /// value the host owns from the start, and `ActivityAccountAbsent` is a perfectly good one.
     private let account: ActivityAccountReading
+    /// The last answer the account gave, on disk. See `ActivityAccountCache` — it is a copy with no
+    /// standing, and `seed(cached:generation:)` is the only thing that reads it.
+    private let cache: ActivityAccountCache?
     private let calendar: Calendar
     /// The healing schedule, injectable so a test can prove the ladder without spending it.
     private let accountRetryDelays: [Duration]
+    /// True for a store handed its answer at construction — previews and the render harness.
+    ///
+    /// **It exists to stop `revalidate()` from reaching one.** That initialiser assigns `composed`
+    /// directly and has no sources behind it, so any recomposition rebuilds the list out of three
+    /// empty inputs and erases the very thing the preview was constructed to show. `didStart` used
+    /// to be enough, back when the only thing it guarded was the opening read; a `start()` that now
+    /// revalidates on every appearance is exactly the call a preview makes.
+    private let holdsAFixedAnswer: Bool
 
     /// Composed, unfiltered. The filter pass reads this and never mutates it.
     private var composed: [ActivityDay] = []
@@ -258,14 +269,17 @@ final class ActivityStore: ObservableObject {
     init(
         store: @escaping () -> ContextStore?,
         account: ActivityAccountReading = ActivityAccountAbsent(),
+        cache: ActivityAccountCache? = nil,
         calendar: Calendar = .current,
         accountRetryDelays: [Duration] = ActivityStore.accountRetryDelays,
         signIns: AnyPublisher<Bool, Never>? = nil
     ) {
         self.store = store
         self.account = account
+        self.cache = cache
         self.calendar = calendar
         self.accountRetryDelays = accountRetryDelays
+        self.holdsAFixedAnswer = false
 
         // **Signing in is the one repair the retry ladder must not wait for, and cannot find.**
         // `healsOnItsOwn` correctly refuses to re-poll a signed-out account — no amount of waiting
@@ -307,8 +321,10 @@ final class ActivityStore: ObservableObject {
     ) {
         self.store = { nil }
         self.account = ActivityAccountAbsent()
+        self.cache = nil
         self.calendar = calendar
         self.accountRetryDelays = Self.accountRetryDelays
+        self.holdsAFixedAnswer = true
         self.composed = days
         self.days = days
         self.matchCount = days.reduce(0) { $0 + $1.matchCount }
@@ -323,11 +339,135 @@ final class ActivityStore: ObservableObject {
 
     // MARK: - Input
 
-    /// Begins the opening read, once. Safe to call from `.task` on every appearance.
+    /// Begins the opening read, once — and revalidates on every appearance after that.
+    ///
+    /// **The second half is the whole of what the panel coming forward means.** This store outlives
+    /// the window that draws it (see `ActivitySpine`), so a surface mounting for the twentieth time
+    /// already holds a composed corpus and must not throw it away to fetch one it already has. What
+    /// it should do is exactly what main does on `didBecomeActiveNotification`: keep every row on
+    /// screen and ask the account what changed. `revalidate()` is that, and its cooldown is what
+    /// keeps a burst of mounts from becoming a burst of requests.
     func start() {
-        guard !didStart else { return }
+        guard !didStart else {
+            revalidate()
+            return
+        }
         didStart = true
         openWindow()
+    }
+
+    /// Ask the account what has changed, **without disturbing anything already on screen.**
+    ///
+    /// The distinction from `openWindow()` is the entire point and it is worth stating plainly:
+    /// opening a window is a new question and throws away the answer to the old one; revalidating is
+    /// the same question asked again. So nothing here clears `composed`, `accountFeed`, `screen` or
+    /// `loadedDays`, nothing sets `isPreparing`, and the generation does **not** advance — a spinner
+    /// over a list that is already correct is a worse answer than the list.
+    ///
+    /// Both halves are re-read, because both can have moved: the account has whatever was recorded
+    /// on the phone since, and this Mac has whatever it captured while the panel was closed.
+    ///
+    /// - Parameter now: injected so the cooldown can be proved without waiting a minute for it.
+    func revalidate(now: Date = Date()) {
+        guard didStart, !holdsAFixedAnswer else { return }
+        // **A read of this window is already out.** It will answer with whatever the account holds,
+        // so a second one buys nothing — and reopening the head under it would spend the reopen on a
+        // read that has already chosen its page. Deliberately *not* stamped: the next time the panel
+        // comes forward is a fresh chance rather than one silently skipped.
+        guard accountReadInFlight == nil else { return }
+        guard Self.shouldRevalidate(now: now, lastRevalidate: lastRevalidate) else { return }
+        lastRevalidate = now
+
+        let generation = self.generation
+        Task { [weak self, account] in
+            // Sends the reader's cursor back to offset zero for one read, which is the only offset a
+            // forward-only walk never re-asks for and the only one new rows arrive at.
+            await (account as? ActivityAccountCursor)?.refreshHead()
+            guard let self, generation == self.generation else { return }
+            self.readAccount(generation: generation)
+        }
+        revalidateLocalHalf(generation: generation)
+    }
+
+    /// Re-reads this Mac's half: the session headers, the upload links, and the frames of any day
+    /// that could still be growing.
+    ///
+    /// **Only the days that could have changed.** `loadedDays` exists so a scroll never re-queries a
+    /// day it already has, and revalidation must not undo that for a year of history — the frames of
+    /// last March are as read as they will ever be. A day is re-readable exactly when capture could
+    /// have added to it since the last read, which is every day from the one that read happened on
+    /// onwards: one day on an ordinary re-open, two when the panel was left open overnight.
+    private func revalidateLocalHalf(generation: Int) {
+        guard let store = store() else { return }
+        let horizon = calendar.startOfDay(for: lastLocalRead ?? Date())
+        let stale = loadedDays.filter { $0 >= horizon }
+        loadedDays.subtract(stale)
+        lastLocalRead = Date()
+
+        let calendar = self.calendar
+        let since = self.since
+        let until = self.until
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let opening = ActivityStore.readOpening(
+                store: store, calendar: calendar, since: since, until: until)
+            await self?.absorb(opening: opening, generation: generation)
+        }
+    }
+
+    /// Drops everything the previous account said, from memory and from disk, and asks again.
+    ///
+    /// **A store that belongs to the process outlives a sign-out, and a window-lived one never did.**
+    /// Nothing used to have to say this: the panel closed, the store went with it, and the next
+    /// account got a new one. `ActivitySpine` traded that for a panel that opens instantly, so the
+    /// obligation it used to discharge by accident is discharged here on purpose.
+    ///
+    /// The local half is deliberately untouched. Frames and speech on this Mac are not scoped to an
+    /// Omi account — they were captured whether or not anybody was signed in, and they are the whole
+    /// of what a signed-out user should still be able to see.
+    func forgetTheAccount() {
+        ContextLog.info("Signed out; forgetting the account half of the spine", "activity")
+        Task { [account, cache] in
+            await (account as? ActivityAccountCursor)?.forget()
+            await cache?.clear()
+        }
+
+        accountFeed = .unreachable
+        accountSettled = false
+        accountReachable = false
+        accountUnreachableReason = .signedOut
+        accountLocallySourced = []
+        accountAnswered = []
+        accountCorpusIsWhole = false
+        isShowingCachedRows = false
+        accountReads = 0
+        accountRereads = 0
+        accountRetry?.cancel()
+        accountRetry = nil
+        // The next sign-in is entitled to ask immediately rather than serve out a cooldown started
+        // by somebody else's session.
+        lastRevalidate = nil
+        recompose()
+    }
+
+    /// When the panel last asked the account what changed, so a burst of mounts is one request.
+    private var lastRevalidate: Date?
+    /// When this Mac's half was last read, which decides how many days a revalidation re-reads.
+    private var lastLocalRead: Date?
+
+    /// The shortest gap between two revalidations.
+    ///
+    /// **Main's number, deliberately** — `PollingConfig.activationCooldown` is 60 seconds, for the
+    /// reason its own comment gives: activation fires on every cmd-tab, and a panel that answers
+    /// each one with three requests is a client that spends someone's rate limit to re-learn what it
+    /// already knew. This surface has more reason to be careful than main does, not less; it was
+    /// last found rendering an entire account as 429 for hours.
+    nonisolated static let revalidationCooldown: TimeInterval = 60
+
+    /// Whether enough time has passed. A free function over its inputs so the cooldown is provable
+    /// without a clock — the same shape, and the same reason, as `PollingConfig`'s.
+    nonisolated static func shouldRevalidate(now: Date, lastRevalidate: Date?) -> Bool {
+        guard let lastRevalidate else { return true }
+        return now.timeIntervalSince(lastRevalidate) >= revalidationCooldown
     }
 
     /// The question the host is asking: the chip, the typed term, the time bounds.
@@ -377,12 +517,14 @@ final class ActivityStore: ObservableObject {
         // has already fetched are the same pages whichever window is open, because no source here is
         // fetched by date — so a re-opened window costs no re-reads, only a fresh budget.
         accountCorpusIsWhole = false
+        isShowingCachedRows = false
         accountReads = 0
         corpusSettled = false
         isPreparing = store() != nil
         readFailure = nil
         loader.purge()
 
+        seedFromCache(generation: generation)
         readAccount(generation: generation)
 
         guard let store = store() else {
@@ -392,6 +534,7 @@ final class ActivityStore: ObservableObject {
             return
         }
         capture = .open
+        lastLocalRead = Date()
         // A watch left over from a window opened before the database existed would fire again the
         // moment it noticed one, re-opening a window this call has just opened.
         storeWatch?.cancel()
@@ -433,6 +576,58 @@ final class ActivityStore: ObservableObject {
         }
     }
 
+    // MARK: - The paint before the network
+
+    /// Draws the account's last answer off disk while the real one is in flight.
+    ///
+    /// **Deliberately not `absorb(account:)`.** That path draws conclusions — the account answered,
+    /// these sources are live, the corpus is this whole — and a copy on disk supports none of them.
+    /// Everything this touches is the rows themselves; every published fact about the *account*
+    /// stays exactly as `openWindow` left it, so the corner keeps saying "still counting", the
+    /// unreachable copy keeps its own counsel, and the first real answer replaces these rows without
+    /// having to undo a claim this made on its behalf.
+    private func seedFromCache(generation: Int) {
+        guard let cache else { return }
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let cached = await cache.load()
+            await self?.seed(cached: cached, generation: generation)
+        }
+    }
+
+    private func seed(
+        cached: (
+            conversations: [ActivityAccountConversation], memories: [ActivityAccountMemory],
+            tasks: [ActivityAccountTask]
+        ),
+        generation: Int
+    ) {
+        guard generation == self.generation else { return }
+        // **The account outranks a copy of it — but only where it actually spoke.** On a warm
+        // connection the network can beat the disk, and painting a cache over an answer that has
+        // landed would put rows back the account has just said are gone. That is what the second
+        // clause refuses, and an *empty* answer is covered by it: a source in `answered` said
+        // "nothing", which is a fact about the account and outranks anything on disk.
+        //
+        // `accountSettled` alone would have been the wrong test, and wrong in the direction that
+        // matters most. A read comes back settled whether it answered or not, so an offline
+        // launch — the single case where a cached paint is the whole of what the user gets — would
+        // have raced the disk against a failure and lost to it about half the time.
+        guard accountFeed.rowCount == 0, accountFeed.answered.isEmpty else { return }
+        guard !(cached.conversations.isEmpty && cached.memories.isEmpty && cached.tasks.isEmpty)
+        else { return }
+
+        accountFeed = ActivityAccountFeed(
+            conversations: cached.conversations, memories: cached.memories, tasks: cached.tasks,
+            // Nothing answered. This is the load-bearing half of the whole file — see above.
+            answered: [])
+        isShowingCachedRows = true
+        ContextLog.info(
+            "Account cache: painting \(cached.conversations.count) conversations, "
+                + "\(cached.memories.count) memories, \(cached.tasks.count) tasks while the account "
+                + "is asked", "activity")
+        recompose()
+    }
+
     /// The generation of the account read currently in flight, if there is one.
     ///
     /// Stamped with the generation rather than a bare flag so that a window opening while an old
@@ -462,6 +657,8 @@ final class ActivityStore: ObservableObject {
         let grew = feed.rowCount > accountFeed.rowCount
         let wasFirst = !accountSettled
         accountFeed = feed
+        // Whatever was painted off disk has just been replaced by what the account said.
+        isShowingCachedRows = false
         accountSettled = true
         accountReachable = feed.reachable
         accountUnreachableReason = feed.reachable ? nil : reason
@@ -512,6 +709,21 @@ final class ActivityStore: ObservableObject {
         } else {
             recomposeSoon()
         }
+
+        // **Twice per window, and both times for a reason.** The first answer is precisely the page
+        // a cold launch needs to paint, so it is worth keeping the moment it lands rather than at
+        // the end of a walk the user may quit before. The settled corpus is the best copy that
+        // window will ever have. Every page in between is the same newest rows plus older ones the
+        // cache is going to trim off anyway, so writing those would be a database write per page to
+        // store nothing new.
+        if wasFirst || accountCorpusIsWhole { write(feed, toCache: generation) }
+    }
+
+    /// Writes the answer back for the next cold launch to paint. Detached: this is a SQLite write on
+    /// the path of a read that has already been absorbed, and nothing on screen is waiting for it.
+    private func write(_ feed: ActivityAccountFeed, toCache generation: Int) {
+        guard let cache, generation == self.generation, feed.reachable else { return }
+        Task.detached(priority: .utility) { await cache.save(feed) }
     }
 
     // MARK: - Hydration
@@ -526,6 +738,15 @@ final class ActivityStore: ObservableObject {
     /// of each kind. The reference draws the same sentence from `SpineHydrator.state == .whole` and
     /// keeps saying `so far · still counting` until every page is in; this is that signal.
     private var accountCorpusIsWhole = false
+
+    /// Whether the account rows currently composed came off disk rather than off the wire.
+    ///
+    /// **It exists so the corner cannot call a cached number final.** An unreachable account makes
+    /// `accountCorpusIsWhole` true on purpose — there are no more pages coming, so the count has
+    /// genuinely stopped moving — and before there was a cache that was also honest, because an
+    /// unreachable account contributed no rows at all. Now it can contribute two hundred, and
+    /// "everything Omi has kept" stated over yesterday's copy is a claim nobody checked.
+    private var isShowingCachedRows = false
 
     /// How many reads this window has spent on the account. Bounded by `maximumAccountReads`.
     private var accountReads = 0
@@ -786,7 +1007,8 @@ final class ActivityStore: ObservableObject {
     /// no more pages to give rather than when the first of them arrived.
     private func updateCorpusSettled() {
         corpusSettled =
-            accountSettled && accountCorpusIsWhole && !isPreparing && queue.isEmpty && active == 0
+            accountSettled && accountCorpusIsWhole && !isShowingCachedRows && !isPreparing
+            && queue.isEmpty && active == 0
     }
 
     private func refilter() {
