@@ -129,8 +129,24 @@ export function taskOpToWriteOp(domainOp: TaskOp): WriteOp | null {
   switch (domainOp.op) {
     case "create": {
       if (typeof domainOp.description !== "string") return null;
-      const content: Record<string, unknown> = { description: domainOp.description, source: domainOp.source };
-      if (domainOp.dueAt !== undefined) content["dueAt"] = domainOp.dueAt;
+      // The eleven bag fields the read composition projects. Omitting any one
+      // makes GET /v1/tasks fail closed (UnprojectableTaskRecordError) for the
+      // whole page — the write-journey helper exists for that reason. Defaults
+      // match tasksCodec.applyOp so the optimistic overlay and the stored bag
+      // agree. `opId` and `at` stay off the bag: `at` becomes createdAt/updatedAt.
+      const content: Record<string, unknown> = {
+        description: domainOp.description,
+        completed: false,
+        completedAt: null,
+        dueAt: domainOp.dueAt ?? null,
+        owner: null,
+        source: domainOp.source,
+        provenance: [],
+        sortOrder: 0,
+        indentLevel: 0,
+        createdAt: domainOp.at,
+        updatedAt: domainOp.at,
+      };
       return { op: "create", record_id: domainOp.id, content };
     }
     case "patch": {
@@ -259,12 +275,11 @@ export async function sendPlatformTaskOp(
  * Bind the op-sender to `@omi-core/sync`'s `Transport`, which is what an
  * `Outbox` drains through.
  *
- * There is deliberately no store here. `openTasks()` stays legacy tonight
- * (FABLE-wave3-review-rulings R7) and the platform tasks READ store is another
- * lane's seam; a second construction site for the same domain ports is the
- * two-doors defect rule 16 exists to prevent. This exports the transport and
- * the stamps, and the composition — `Outbox.open(bridge, env, transport,
- * "tasks", stamps)` — is one line at whichever binding owns the queue.
+ * There is deliberately no store here. `PlatformTasksStore` is the one
+ * construction site; this exports the transport and the stamps, and the
+ * composition — `Outbox.open(bridge, env, transport, "platform-tasks",
+ * stamps)` — is one line there. A second construction site for the same
+ * domain ports is the two-doors defect rule 16 exists to prevent.
  */
 export function platformTasksTransport(options: PlatformTasksOpSenderOptions): Transport {
   return { send: (op: PendingOp) => sendPlatformTaskOp(options, op) };

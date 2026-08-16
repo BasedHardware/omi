@@ -35,6 +35,7 @@ import { HomeProduction, mapHomeProjection } from "./HomeProduction.js";
 import { openHomeSearchSources } from "./home-sources.js";
 import { openConversationRouteSources } from "./conversation-sources.js";
 import { openFolderRouteSource } from "./folder-sources.js";
+import { openTaskRouteSource } from "./task-sources.js";
 import { homeConversationHitFromRecord, homeMemoryHitFromLegacy } from "./home-hits.js";
 import { MemoriesPlatformProduction } from "./MemoriesPlatformProduction.js";
 import { fixtureStore, FIXTURE_STATES, type FixtureState } from "./memory-fixtures.js";
@@ -224,6 +225,7 @@ type OmiRuntimeState = {
     memoriesGeneration: RenderedGeneration | null;
     conversationsGeneration: RenderedGeneration | null;
     foldersGeneration: RenderedGeneration | null;
+    tasksGeneration: RenderedGeneration | null;
   } | null;
   mismatch: string | null;
   // The artifact I measured is the artifact I edited: `__OMI_BUILD_STAMP__` is baked in
@@ -255,19 +257,35 @@ const markRendered = (
   routeGenerations: {
     conversations?: RenderedGeneration | null;
     folders?: RenderedGeneration | null;
+    tasks?: RenderedGeneration | null;
   } = {},
 ): void => {
   const conversationsGeneration = routeGenerations.conversations ?? null;
   const foldersGeneration = routeGenerations.folders ?? null;
-  runtimeState.rendered = { surface, memoriesGeneration, conversationsGeneration, foldersGeneration };
+  const tasksGeneration = routeGenerations.tasks ?? null;
+  runtimeState.rendered = {
+    surface,
+    memoriesGeneration,
+    conversationsGeneration,
+    foldersGeneration,
+    tasksGeneration,
+  };
   document.documentElement.dataset["renderedSurface"] = surface;
-  const writeGeneration = (key: "renderedMemoriesGeneration" | "renderedConversationsGeneration" | "renderedFoldersGeneration", value: RenderedGeneration | null): void => {
+  const writeGeneration = (
+    key:
+      | "renderedMemoriesGeneration"
+      | "renderedConversationsGeneration"
+      | "renderedFoldersGeneration"
+      | "renderedTasksGeneration",
+    value: RenderedGeneration | null,
+  ): void => {
     if (value === null) delete document.documentElement.dataset[key];
     else document.documentElement.dataset[key] = value;
   };
   writeGeneration("renderedMemoriesGeneration", memoriesGeneration);
   writeGeneration("renderedConversationsGeneration", conversationsGeneration);
   writeGeneration("renderedFoldersGeneration", foldersGeneration);
+  writeGeneration("renderedTasksGeneration", tasksGeneration);
   const mismatches: string[] = [];
   if (generationMismatch(generationSelection.memories, memoriesGeneration)) {
     mismatches.push(`memories: selected platform, rendered legacy (surface ${surface})`);
@@ -277,6 +295,9 @@ const markRendered = (
   }
   if (generationMismatch(generationSelection.folders, foldersGeneration)) {
     mismatches.push(`folders: selected platform, rendered legacy (surface ${surface})`);
+  }
+  if (generationMismatch(generationSelection.tasks, tasksGeneration)) {
+    mismatches.push(`tasks: selected platform, rendered legacy (surface ${surface})`);
   }
   if (mismatches.length > 0) {
     // The host asked for the platform generation and is being shown legacy records.
@@ -305,6 +326,7 @@ const emitReady = (state: string): void => {
     + ` rendered.memories=${rendered?.memoriesGeneration ?? "none"}`
     + ` rendered.conversations=${rendered?.conversationsGeneration ?? "none"}`
     + ` rendered.folders=${rendered?.foldersGeneration ?? "none"}`
+    + ` rendered.tasks=${rendered?.tasksGeneration ?? "none"}`
     + ` mismatch=${runtimeState.mismatch === null ? "no" : "yes"}`
     + ` stamp=${stampSummary(runtimeState.stamp)}`,
   );
@@ -419,9 +441,9 @@ if (query.get("lab") === "1") {
         // run must still be there in the morning.
         const env = realEnv(await openOnDiskFallbackSink(bridge));
         // One factory for every route. `PlatformProductionStoreFactory` extends the legacy
-        // one, so `openConversations()` / `openFolders()` stay the legacy writable stores.
-        // Conversations and Folders routes branch to the named platform ports the same
-        // way Home does — they do not repoint the shared factory.
+        // one, so `openConversations()` / `openFolders()` / `openTasks()` stay the legacy
+        // writable ports. Home, Conversations, Folders, and Tasks routes branch to the
+        // named platform ports — they do not repoint the shared factory.
         //
         // Both transports resolve through the same bridge channel today because
         // `BridgeHttpRequest` carries no binding selector: the shell holds exactly one base
@@ -472,9 +494,10 @@ if (query.get("lab") === "1") {
             : "bridge";
           root.render(<StrictMode><HomeProduction sources={sources} source={{ kind: "live", origin: hostConfig.platformOriginLabel ?? "bridge" }} locale={locale} initialLastSuccessAt={homeInitialLastSuccessAt} now={env.now} onReady={() => emitReady(homeReady)} /></StrictMode>);
         } else if (route === "tasks") {
-          const store = await stores.openTasks();
-          markRendered("tasks", null);
-          root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady("bridge")} /></StrictMode>);
+          const { store, tasksGeneration } = await openTaskRouteSource(platform);
+          markRendered("tasks", null, { tasks: tasksGeneration });
+          const tasksReady = tasksGeneration === "platform" ? "bridge:platform" : "bridge";
+          root.render(<StrictMode><TasksProduction store={store} locale={locale} translate={translateTasks} now={env.now()} onReady={() => emitReady(tasksReady)} /></StrictMode>);
         } else if (route === "conversations") {
           const { store, foldersStore, conversationsGeneration, foldersGeneration } = await openConversationRouteSources(platform);
           markRendered("conversations", null, {

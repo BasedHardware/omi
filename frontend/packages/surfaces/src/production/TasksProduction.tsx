@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task, TaskPatch } from "@omi-core/contracts";
 import type { MessageKey, MessageVariables } from "@omi-core/i18n";
-import type { ProductionTaskStore } from "./ProductionStores.js";
+import type { ProductionPlatformTaskStore, ProductionTaskStore } from "./ProductionStores.js";
 import { deadLetterView } from "./dead-letter-presentation.js";
 import { ProductionChrome } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, ProductionSearchField, type SurfaceDataSource } from "./ProductionPrimitives.js";
@@ -10,6 +10,7 @@ import { tasksEmptyKind } from "./tasks-presentation.js";
 import "./tasks.css";
 
 type Translate = <K extends MessageKey>(key: K, vars?: MessageVariables<K>) => string;
+type TasksRouteStore = ProductionTaskStore | ProductionPlatformTaskStore;
 type RunOperation = (operation: () => Promise<void>) => Promise<boolean>;
 type GroupKey = "overdue" | "today" | "tomorrow" | "later" | "noDeadline";
 const GROUP_KEYS: Record<GroupKey, MessageKey> = {
@@ -22,7 +23,7 @@ const GROUP_KEYS: Record<GroupKey, MessageKey> = {
 const TASK_EMPTY_ICON = "tasks" as const;
 
 export type TasksProductionProps = {
-  store: ProductionTaskStore;
+  store: TasksRouteStore;
   fixture?: string;
   locale?: string | undefined;
   translate: Translate;
@@ -87,12 +88,12 @@ function groupLabel(group: GroupKey, translate: Translate): string {
 
 function TaskCard({ task, store, translate, formatDate, run, selected, onSelect }: {
   task: Task;
-  store: ProductionTaskStore;
+  store: TasksRouteStore;
   translate: Translate;
   formatDate: (timestamp: number) => string;
   run: RunOperation;
   selected: boolean;
-  onSelect: (id: Task["id"]) => void;
+  onSelect: (id: string) => void;
 }): React.JSX.Element {
   const [draft, setDraft] = useState(task.description);
   const [dueDraft, setDueDraft] = useState(dateInputValue(task.dueAt));
@@ -193,13 +194,13 @@ function TaskCard({ task, store, translate, formatDate, run, selected, onSelect 
 
 export function TasksProduction({ store, fixture, locale = "en", translate, now, calendarDay, formatDate, onReady }: TasksProductionProps): React.JSX.Element {
   const [rows, setRows] = useState<Task[]>([]);
-  const [dead, setDead] = useState<Awaited<ReturnType<ProductionTaskStore["deadLetters"]>>>([]);
+  const [dead, setDead] = useState<Awaited<ReturnType<TasksRouteStore["deadLetters"]>>>([]);
   const [status, setStatus] = useState(store.status());
   const [draft, setDraft] = useState("");
   const [dueDraft, setDueDraft] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selectedTaskId, setSelectedTaskId] = useState<Task["id"] | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const draftRef = useRef<HTMLTextAreaElement>(null);
   const shellRef = useRef<HTMLElement>(null);
@@ -212,7 +213,7 @@ export function TasksProduction({ store, fixture, locale = "en", translate, now,
   const reload = useCallback(async (): Promise<void> => {
     try {
       const [nextRows, nextDead] = await Promise.all([store.list(), store.deadLetters()]);
-      setRows(nextRows);
+      setRows([...nextRows] as Task[]);
       setDead(nextDead);
     } catch {
       setOperationError(translate("lifecycle.error"));

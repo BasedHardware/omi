@@ -1,16 +1,19 @@
 /**
- * The platform generation's task read STORE, and the parked flip.
+ * The platform generation's task store, and the factory-level flip R7 still
+ * forbids.
  *
- * Two things are pinned here, and the second is the one a future reader will be
- * glad of:
+ * Two things are pinned here:
  *
  *  1. The store's honesty rules — coverage never restored from cache, coverage
  *     dropped on a failed read, a narrower cache discarded wholesale.
- *  2. THAT `openTasks()` IS STILL LEGACY. Fable pre-ruled the flip PARKED for
- *     this run (R7) and said it stays legacy at wake REGARDLESS of what the
- *     fixture evidence shows. A ruling that lives only in a document is a ruling
- *     the next lane can undo by accident at 4am; this test makes undoing it a
- *     red suite and a deliberate act.
+ *  2. Writes use the ratified ops envelope (`POST /v1/tasks/ops`) with
+ *     `write_id` idempotency and the account epoch observed from the read.
+ *     Completeness stays the server's envelope. Opaque read handles without a
+ *     write id are refused rather than upserted.
+ *
+ * The factory-level `openTasks()` flip is still pinned by
+ * `frontend/scripts/check-openTasks-parked.mjs` (David's 2026-08-16 park lift
+ * branches at the route, not in the factory).
  */
 
 import assert from "node:assert/strict";
@@ -36,8 +39,10 @@ const pageFor = (wireCase: string): unknown => {
 const ok = (page: unknown): HttpResponse => ({ status: 200, json: page, text: JSON.stringify(page) });
 
 class Scripted implements HttpClient {
+  readonly calls: { method: string; path: string; body?: unknown }[] = [];
   constructor(private readonly queue: HttpResponse[]) {}
-  async request(): Promise<HttpResponse> {
+  async request(method: string, path: string, body?: unknown): Promise<HttpResponse> {
+    this.calls.push(body === undefined ? { method, path } : { method, path, body });
     const next = this.queue.shift();
     if (!next) throw new Error("unscripted request");
     return next;
@@ -119,13 +124,121 @@ test("loadMore appends and keeps the FIRST occurrence of a repeated id", async (
   assert.equal(store.hasMore(), false);
 });
 
-// THE FLIP PIN IS NOT HERE, and that is a real constraint rather than an
-// omission. `createPlatformProductionStoreFactory` lives in
-// `@omi-core/surfaces`, which compiles to a Vite bundle and has no unit-test
-// seam of its own — the same reason its own header gives for why the generation
-// SELECTOR lives in `@omi-core/domain` instead. Adding a testkit dependency on
-// it to reach one function would drag a bundle into the unit suite.
-//
-// So R7's parked flip is pinned by `core/scripts/check-openTasks-parked.mjs`,
-// which is a STATIC TRIPWIRE and is labelled as one there. It is weaker than a
-// behavioural assertion and it is the strongest thing available at this seam.
+test("create/edit/complete go through POST /v1/tasks/ops with write_id, and completeness stays the server's", async () => {
+  // red-proof: send create to /v1/action-items instead of /v1/tasks/ops, or
+  // derive complete from items.length. APPLIED AND OBSERVED RED.
+  const empty = pageFor("absence:query_gap") as Record<string, unknown>;
+  empty["accountEpoch"] = 7;
+  const revision = "a".repeat(64);
+  const opaqueId = "task1_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const afterCreate = pageFor("window:complete_terminal") as {
+    items: Array<Record<string, unknown>>;
+    completeness: { status: string };
+    accountEpoch?: number;
+  };
+  afterCreate.accountEpoch = 7;
+  afterCreate.items[0] = {
+    ...afterCreate.items[0]!,
+    id: opaqueId,
+    description: "round-trip task",
+    completed: false,
+    revision,
+  };
+
+  const http = new Scripted([
+    ok(empty),
+    {
+      status: 200,
+      json: { applied: { record_id: "placeholder", revision }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "placeholder", revision }, idempotent: false }),
+    },
+    ok(afterCreate),
+    {
+      status: 200,
+      json: { applied: { record_id: "placeholder", revision: "b".repeat(64) }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "placeholder", revision: "b".repeat(64) }, idempotent: false }),
+    },
+    {
+      status: 200,
+      json: { applied: { record_id: "placeholder", revision: "c".repeat(64) }, idempotent: false },
+      text: JSON.stringify({ applied: { record_id: "placeholder", revision: "c".repeat(64) }, idempotent: false }),
+    },
+  ]);
+  const store = await PlatformTasksStore.open(disk().openBridge("u1"), env, http);
+  await store.refresh();
+  const coverage = store.coverage();
+  assert.equal(coverage.kind, "known");
+  assert.equal(coverage.kind === "known" && coverage.complete, true, "complete is the server's envelope");
+
+  await store.create("round-trip task");
+  await env.advance(10);
+  const created = await store.list();
+  assert.equal(created.length, 1);
+  assert.equal(created[0]!.description, "round-trip task");
+  const localId = created[0]!.id;
+  assert.match(localId, /^[a-z]+(-[a-z]+)+$/);
+
+  const createCall = http.calls.find((call) => call.method === "POST");
+  assert.equal(createCall?.path, "/v1/tasks/ops");
+  const createEnvelope = createCall?.body as { write_id?: string; account_epoch?: number; domain?: string; op?: { op?: string; record_id?: string } };
+  assert.match(String(createEnvelope.write_id), /^[0-9a-f]{64}$/);
+  assert.equal(createEnvelope.account_epoch, 7);
+  assert.equal(createEnvelope.domain, "tasks");
+  assert.equal(createEnvelope.op?.op, "create");
+  assert.equal(createEnvelope.op?.record_id, localId);
+
+  await store.refresh();
+  const afterRefresh = await store.list();
+  assert.equal(afterRefresh.length, 1);
+  assert.equal(afterRefresh[0]!.id, localId, "opaque read handle rekeys onto the write id");
+
+  await store.patch(localId, { description: "round-trip edited" });
+  await env.advance(10);
+  assert.equal((await store.list())[0]!.description, "round-trip edited");
+
+  await store.patch(localId, { completed: true });
+  await env.advance(10);
+  assert.equal((await store.list())[0]!.completed, true);
+
+  const patches = http.calls.filter((call) => call.method === "POST").slice(1);
+  assert.equal(patches.length, 2);
+  for (const call of patches) {
+    assert.equal(call.path, "/v1/tasks/ops");
+    const envelope = call.body as { op?: { op?: string; record_id?: string; patch?: Record<string, unknown> } };
+    assert.equal(envelope.op?.op, "patch");
+    assert.equal(envelope.op?.record_id, localId, "patch uses the write id, not the opaque handle");
+  }
+  assert.equal((patches[0]!.body as { op: { patch: { description: string } } }).op.patch.description, "round-trip edited");
+  assert.equal((patches[1]!.body as { op: { patch: { completed: boolean } } }).op.patch.completed, true);
+});
+
+test("create refuses to journal when the read has not observed an account epoch", async () => {
+  // red-proof: a live demo stack omits accountEpoch until control cutover;
+  // inventing epoch 0 here would stamp a generation the fence cannot catch.
+  const page = pageFor("window:complete_terminal");
+  const store = await PlatformTasksStore.open(disk().openBridge("u1"), env, new Scripted([ok(page)]));
+  await store.refresh();
+  await assert.rejects(() => store.create("no epoch"), /account-epoch/);
+});
+
+test("a patch against a bare opaque read handle is refused rather than upserted", async () => {
+  // red-proof: send the HMAC handle as record_id. The write door upserts a
+  // second row. APPLIED AND OBSERVED RED.
+  const page = pageFor("window:complete_terminal") as { items: { id: string }[] };
+  const store = await PlatformTasksStore.open(
+    disk().openBridge("u1"),
+    env,
+    new Scripted([ok(page)]),
+  );
+  await store.refresh();
+  const opaqueId = (await store.list())[0]!.id;
+  await assert.rejects(
+    () => store.patch(opaqueId, { completed: true }),
+    /opaque read handle has no write id/,
+  );
+});
+
+// THE FACTORY-LEVEL FLIP PIN IS NOT HERE. `createPlatformProductionStoreFactory`
+// lives in `@omi-core/surfaces`. R7 still forbids that flip after David's
+// 2026-08-16 park lift — the route branches instead — and that is pinned by
+// `frontend/scripts/check-openTasks-parked.mjs`.

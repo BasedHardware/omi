@@ -3,8 +3,8 @@
  *
  * Two backend generations now coexist: `legacy` (the old wire, through
  * `packages/adapters-legacy`) and `platform` (the contracts-native wire,
- * through `packages/adapters-platform`). Memories, conversations, and folders
- * are ratified on platform; tasks stay legacy until their write path is.
+ * through `packages/adapters-platform`). Memories, conversations, folders,
+ * and tasks are ratified on platform (David's 2026-08-16 Tasks park lift).
  *
  * The surfaces must not know which generation they are on — that is what the
  * `ProductionStores` ports are for. The SHELL knows, and it must be able to
@@ -53,7 +53,10 @@ export const PRODUCTION_GENERATION_AVAILABILITY: Readonly<
   conversations: ["legacy", "platform"],
   // Ratified: @omi-core/ratified-contracts 0.9.0, folders READ envelope.
   folders: ["legacy", "platform"],
-  tasks: ["legacy"],
+  // Ratified: @omi-core/ratified-contracts write/ops + tasks READ envelope.
+  // David's 2026-08-16 ruling lifted the R7 park: the write path is the
+  // established ops envelope, not a new one.
+  tasks: ["legacy", "platform"],
 };
 
 export const LEGACY_ONLY_GENERATION: GenerationSelection = {
@@ -166,8 +169,8 @@ export function resolveGenerationSelection(requested: unknown): ResolvedGenerati
  *
  * Recognized keys are `generation.<domain>` and the bare `<domain>`, so a host
  * can namespace or not. `generations=platform` (no domain) is the shorthand
- * for "every domain that HAS this generation uses it" — today memories,
- * conversations, and folders — and which reports a rejection for nothing,
+ * for "every domain that HAS this generation uses it" — today every production
+ * domain — and which reports a rejection for nothing,
  * because asking for the best available is not the same as asking for
  * something unavailable.
  */

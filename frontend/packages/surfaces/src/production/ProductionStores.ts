@@ -169,38 +169,33 @@ export type ProductionMemoryCorrectionStore = {
 };
 
 /**
- * The platform generation's task READ store.
+ * The platform generation's task store.
  *
- * ADDITIVE AND SEPARATE from `ProductionTaskStore`, and the reason is NOT the
- * one that separates the two memory stores. There the record classes genuinely
- * differ and no honest mapping exists. Here the field sets are IDENTICAL by
- * ruling — `DAVID-tasks-read-epoch-and-ci` D2 ratifies all thirteen precisely so
- * the surface renders the same off either generation.
+ * ADDITIVE AND SEPARATE from `ProductionTaskStore` because `id` differs:
+ * `Task["id"]` is a `RecordId`; a platform task id is the ratified
+ * reader-scoped opaque ref, which is not a `RecordId`. Field sets are
+ * IDENTICAL by ruling — `DAVID-tasks-read-epoch-and-ci` D2 — so the surface
+ * renders the same off either generation.
  *
- * What differs is `id`, and it is enough. `Task["id"]` is a `RecordId`; a
- * platform task id is the ratified reader-scoped opaque ref, which is not a
- * `RecordId`, does not parse as one, and is not stable across readers. And this
- * store has no writes: `ProductionTaskStore` is a `WriteAwareStore` with
- * `create`/`patch`/`delete` and dead letters, and satisfying that surface here
- * would mean either inventing writes this wire does not have or handing back a
- * store whose methods throw at runtime while satisfying the type.
- *
- * Writes for this generation go through `POST /v1/tasks/ops` — a separate
- * ratified wire with its own envelope and idempotency, which is CLIENT's seam,
- * not this one.
+ * Writes go through `POST /v1/tasks/ops` — the ratified ops envelope with
+ * `write_id` idempotency. Completeness is the server's envelope, never
+ * derived. `openTasks()` is NOT repointed at this store; the Tasks route
+ * asks for it BY NAME, exactly as Conversations and Folders do.
  *
  * IT IS AN `ObservableStore`, so `status()`, `subscribe()` and `refresh()`
  * behave identically to every other store and a surface's offline/refresh
- * rendering is unchanged across generations. That uniformity is the flip's
- * precondition, not a nicety.
+ * rendering is unchanged across generations.
  */
-export type ProductionPlatformTaskStore = ObservableStore & {
+export type ProductionPlatformTaskStore = WriteAwareStore & {
   list(): Promise<readonly PlatformTaskItem[]>;
   /** Honest coverage. `{ kind: "unknown" }` until an honest page is read. */
   coverage(): PlatformTaskCoverageState;
   hasMore(): boolean;
   /** Append the next keyset page. No-op when there is no continuation. */
   loadMore(): Promise<void>;
+  create(description: string, dueAt?: number): Promise<void>;
+  patch(id: string, patch: TaskPatch): Promise<void>;
+  delete(id: string): Promise<void>;
 };
 
 export type ProductionPlatformConversationStore = WriteAwareStore & {
@@ -241,19 +236,13 @@ export type PlatformProductionStoreFactory = ProductionStoreFactory & {
    */
   openMemoryCorrection(): Promise<ProductionMemoryCorrectionStore>;
   /**
-   * The platform generation's tasks READ store.
+   * The platform generation's tasks store.
    *
-   * NAMED SEPARATELY ON PURPOSE, and `openTasks()` is NOT repointed at it. Fable
-   * pre-ruled the flip PARKED for the wave-3 run (R7): production has no
-   * control-state publisher, so every platform-generation write denies, and no
-   * ratified path puts a real account's existing tasks behind the platform
-   * generation — a flip today serves an empty list to a real account and refuses
-   * every write. That is an outage, not a product event.
-   *
-   * So a surface that wants the platform read model asks for it BY NAME, exactly
-   * as `openSynthesizedMemories()` works. When David ratifies the data path, the
-   * flip is `openTasks: () => PlatformTasksStore.open(...)` — one line, and the
-   * rollback is the same line, which is what D2's parity bought.
+   * NAMED SEPARATELY ON PURPOSE, and `openTasks()` is NOT repointed at it.
+   * David's 2026-08-16 ruling lifted the R7 park: the Tasks *route* branches
+   * to this port when `selection.tasks === "platform"`, the same way Home,
+   * Conversations, and Folders already branch. A factory-level flip of
+   * `openTasks()` remains forbidden — that is what R7 still catches.
    */
   openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
   /**

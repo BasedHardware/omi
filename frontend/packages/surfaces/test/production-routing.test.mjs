@@ -144,7 +144,7 @@ test("Tasks records no rendered Memories generation under the mixed platform sel
   const main = await read("src/production/main.tsx");
   assert.match(
     main,
-    /markRendered\("tasks", null\)/,
+    /markRendered\("tasks", null, \{ tasks: tasksGeneration \}\)/,
     "the Tasks route must not be mislabeled as a legacy Memories render",
   );
   assert.doesNotMatch(main, /markRendered\("tasks", "legacy"\)/);
@@ -182,6 +182,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
   assert.match(main, /"renderedMemoriesGeneration"/);
   assert.match(main, /"renderedConversationsGeneration"/);
   assert.match(main, /"renderedFoldersGeneration"/);
+  assert.match(main, /"renderedTasksGeneration"/);
   assert.match(main, /OMI_GENERATION_MISMATCH/);
   assert.match(main, /OMI_GENERATION_REJECTED/);
   // The ready line carries the same facts for log scrapers.
@@ -189,6 +190,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
   assert.match(main, /rendered\?\.memoriesGeneration/);
   assert.match(main, /rendered\?\.conversationsGeneration/);
   assert.match(main, /rendered\?\.foldersGeneration/);
+  assert.match(main, /rendered\?\.tasksGeneration/);
 
   // Every live render records what it rendered — otherwise `rendered` stays null and the
   // mismatch alarm can never fire. Conversations and Folders must record the generation
@@ -196,7 +198,7 @@ test("what actually rendered is observable from outside the bundle", async () =>
   for (const marker of [
     'markRendered("memories-platform", "platform")',
     'markRendered("home", memoriesGeneration, { conversations: conversationsGeneration })',
-    'markRendered("tasks", null)',
+    'markRendered("tasks", null, { tasks: tasksGeneration })',
     'markRendered(route, null)',
     'markRendered("listen", null)',
     'markRendered("chat", null)',

@@ -12,6 +12,13 @@ after(closeRenderHarness);
 
 const translate = (key, vars) => t("en", key, vars);
 
+function setTextareaValue(rendered, textarea, value) {
+  const setter = Object.getOwnPropertyDescriptor(rendered.window.HTMLTextAreaElement.prototype, "value")?.set;
+  assert.ok(setter, "jsdom textarea value setter is available");
+  setter.call(textarea, value);
+  textarea.dispatchEvent(new rendered.window.Event("input", { bubbles: true }));
+}
+
 test("TasksProduction renders shared chrome, translated affordances, and accessible task flows", async () => {
   const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
   const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
@@ -212,6 +219,74 @@ test("Tasks empty state starts a focused first task", async () => {
   }
 });
 
+test("Tasks create, edit, and complete each render on the card", async () => {
+  // red-proof: if add() never reloads, or TaskCard ignores the patched
+  // description/completed flags, this fails at the card the user sees.
+  const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
+  const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
+  const store = fixtureStore("empty");
+  const rendered = await renderComponent(TasksProduction, {
+    store,
+    fixture: "empty",
+    translate,
+    now: Date.UTC(2026, 7, 7, 12, 0, 0),
+  });
+  try {
+    const start = rendered.container.querySelector('[data-empty-kind="empty-projection"] button');
+    assert.ok(start);
+    await rendered.act(async () => {
+      start.click();
+      await new Promise((resolve) => rendered.window.requestAnimationFrame(resolve));
+    });
+    const draft = rendered.container.querySelector(`textarea[aria-label="${EN_MESSAGES["tasks.newTask"]}"]`);
+    assert.ok(draft);
+    await rendered.act(async () => {
+      draft.focus();
+      setTextareaValue(rendered, draft, "round-trip created task");
+    });
+    const add = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === EN_MESSAGES["tasks.add"]);
+    assert.ok(add);
+    assert.equal(add.disabled, false, "create enables once the draft has text");
+    await rendered.act(async () => {
+      add.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    let card = rendered.container.querySelector("article.task-card");
+    assert.ok(card, "created task must render as a card");
+    assert.match(card.querySelector(".task-description")?.textContent ?? "", /round-trip created task/);
+
+    const edit = card.querySelector(`button[aria-label="${EN_MESSAGES["common.edit"]}"]`);
+    assert.ok(edit);
+    await rendered.act(async () => { edit.click(); });
+    const editor = card.querySelector("textarea.task-editor");
+    assert.ok(editor);
+    await rendered.act(async () => {
+      editor.focus();
+      setTextareaValue(rendered, editor, "round-trip edited task");
+    });
+    const save = [...card.querySelectorAll("button")].find((button) => button.textContent === EN_MESSAGES["common.save"]);
+    assert.ok(save);
+    await rendered.act(async () => {
+      save.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    card = rendered.container.querySelector("article.task-card");
+    assert.match(card?.querySelector(".task-description")?.textContent ?? "", /round-trip edited task/);
+
+    const check = card.querySelector("button.task-check");
+    assert.ok(check);
+    await rendered.act(async () => {
+      check.click();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    });
+    card = rendered.container.querySelector("article.task-card");
+    assert.equal(card?.classList.contains("is-completed"), true, "completed task must render as completed");
+    assert.equal(card?.querySelector("button.task-check")?.getAttribute("aria-pressed"), "true");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("Tasks treats an earlier due time today as overdue", async () => {
   const TasksProduction = await loadProductionExport("TasksProduction.tsx", "TasksProduction");
   const fixtureStore = await loadProductionExport("task-fixtures.ts", "fixtureStore");
@@ -298,4 +373,45 @@ test("Tasks arrow navigation preserves focus on nested controls and shell links"
   } finally {
     await retry.cleanup();
   }
+});
+
+function taskRouteStub(name) {
+  return {
+    async list() { return []; },
+    status() { return { refresh: { phase: "ready", hasSavedData: false }, queue: { phase: "idle", pendingCount: 0 } }; },
+    subscribe() { return () => {}; },
+    async refresh() {},
+    async deadLetters() { return []; },
+    async discardDeadLetter() {},
+    async create() {},
+    async patch() {},
+    async delete() {},
+    label: name,
+  };
+}
+
+test("openTaskRouteSource on a platform selection never opens the legacy store", async () => {
+  const openTaskRouteSource = await loadProductionExport("task-sources.ts", "openTaskRouteSource");
+  const calls = { tasks: 0, platformTasks: 0 };
+  const { tasksGeneration } = await openTaskRouteSource({
+    selection: { memories: "platform", conversations: "platform", folders: "platform", tasks: "platform" },
+    async openTasks() { calls.tasks += 1; return taskRouteStub("legacy-tasks"); },
+    async openPlatformTasks() { calls.platformTasks += 1; return taskRouteStub("platform-tasks"); },
+  });
+  assert.equal(tasksGeneration, "platform");
+  assert.deepEqual(calls, { tasks: 0, platformTasks: 1 });
+  // red-proof: routing Tasks through openTasks() under a platform selection
+  // keeps the last surface on the legacy wire.
+});
+
+test("openTaskRouteSource on a legacy selection stays on the legacy store", async () => {
+  const openTaskRouteSource = await loadProductionExport("task-sources.ts", "openTaskRouteSource");
+  const calls = { tasks: 0, platformTasks: 0 };
+  const { tasksGeneration } = await openTaskRouteSource({
+    selection: { memories: "legacy", conversations: "legacy", folders: "legacy", tasks: "legacy" },
+    async openTasks() { calls.tasks += 1; return taskRouteStub("legacy-tasks"); },
+    async openPlatformTasks() { calls.platformTasks += 1; return taskRouteStub("platform-tasks"); },
+  });
+  assert.equal(tasksGeneration, "legacy");
+  assert.deepEqual(calls, { tasks: 1, platformTasks: 0 });
 });

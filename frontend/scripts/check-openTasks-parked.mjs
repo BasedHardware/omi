@@ -1,28 +1,32 @@
 #!/usr/bin/env node
 /**
- * R7's parked flip, pinned mechanically.
+ * R7's factory-flip tripwire, updated under David's 2026-08-16 Tasks park lift.
  *
  * **THIS IS A STATIC TRIPWIRE, NOT BEHAVIOURAL COVERAGE**, and it is labelled as
  * one because `AGENTS.md` requires that label: "Asserting that source strings
  * occur in a certain order is a static tripwire, not behavioral coverage."
  * It reads source text. It cannot prove what `openTasks()` returns at runtime.
  *
- * WHY A TRIPWIRE IS THE STRONGEST THING AVAILABLE AT THIS SEAM.
- * `createPlatformProductionStoreFactory` lives in `@omi-core/surfaces`, which
- * compiles to a Vite bundle and has no unit-test seam of its own — the same
- * reason that package's own header gives for why the generation SELECTOR was
- * moved into `@omi-core/domain`. A behavioural pin would mean either adding a
- * bundle dependency to the unit suite or moving the factory, and moving the
- * factory at 4am to make a guard convenient is how a guard ends up shaping the
- * code it guards.
+ * THE PARK WAS LIFTED. David ruled 2026-08-16: move Tasks to the platform
+ * generation and unpark R7. Editing was why it was parked; the route now
+ * branches to `openPlatformTasks()` the same way Home, Conversations, and
+ * Folders already branch. This check is NOT deleted. A fence that now permits
+ * everything was deleted with extra steps.
  *
- * WHAT IT PROTECTS. Fable pre-ruled the `openTasks()` flip PARKED (R7), with
- * reasoning that does not reverse by ruling: every platform-generation write in
- * production denies today, and no ratified path puts a real account's existing
- * tasks behind the platform generation. A flip serves an empty list AND refuses
- * every write — an outage, not a product event. The flip is one line, which is
- * exactly what makes this necessary: a one-line change is one an agent can make
- * at 4am believing it is finishing the job.
+ * WHAT IT STILL CATCHES after the lift:
+ *   1. Repointing `openTasks()` inside `createPlatformProductionStoreFactory`
+ *      (or the shared legacy factory) to `PlatformTasksStore.open` — the
+ *      landmine the brief names. The route branches; the factory does not.
+ *   2. Removing the `TasksStore.open` binding from `openTasks` (blanker
+ *      desync or a silent rename) — R23's positive control.
+ *   3. Removing `openPlatformTasks` so the named platform port is gone.
+ *   4. A Tasks route that no longer branches on `selection.tasks` — serving
+ *      legacy under a platform selection, or platform under a legacy one.
+ *
+ * The blanker, self-test fixtures, and R23 pairing are unchanged in kind.
+ * WHEN THIS CHECK SHOULD BE DELETED: when `openTasks()` itself is the platform
+ * store AND the legacy factory port is gone, which is the `adapters-legacy`
+ * deletion lane, not this one.
  *
  * ── ROUND 2: PROSE IN A STRING WAS A FALSE POSITIVE ──────────────────────────
  *
@@ -76,14 +80,16 @@
  * promote their own guard. If it fires on another lane that is a swarm-wide
  * blocker, never something to route around.
  *
- * WHEN THIS CHECK SHOULD BE DELETED: when David ratifies the ingestion/data path
- * the flip depends on. Deleting it is then part of the flip's own diff.
+ * WHEN THIS CHECK SHOULD BE DELETED: when `openTasks()` itself is the platform
+ * store AND the legacy factory port is gone — the `adapters-legacy` deletion
+ * lane, not this one. Deleting it is then part of that lane's own diff.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const TARGET = "packages/surfaces/src/production/ProductionStores.ts";
+const ROUTE_TARGET = "packages/surfaces/src/production/task-sources.ts";
 
 /**
  * Blanks every byte that is not code — comment bodies, string contents and
@@ -160,8 +166,11 @@ export function blankNonCode(text) {
 const LEGACY_BINDING = /openTasks:\s*\(\)\s*=>\s*TasksStore\.open\(/;
 const FLIPPED_BINDING = /openTasks:\s*\(\)\s*=>\s*PlatformTasksStore\.open\(/;
 const OPT_IN = /openPlatformTasks\s*:/;
+const ROUTE_BRANCH = /tasksGeneration ===/;
+const ROUTE_PLATFORM_CALL = /openPlatformTasks\s*\(/;
+const ROUTE_LEGACY_CALL = /openTasks\s*\(/;
 
-/** Pure analysis over one source text. Returns a list of failure strings. */
+/** Pure analysis over one factory source text. Returns a list of failure strings. */
 export function analyze(source, label = TARGET) {
   const failures = [];
   const code = blankNonCode(source);
@@ -171,30 +180,57 @@ export function analyze(source, label = TARGET) {
   // the only thing standing between a desync and a silent pass.
   if (!LEGACY_BINDING.test(code)) {
     failures.push(
-      `${label}: \`openTasks\` is not seen binding \`TasksStore.open\`. Either the parked flip has `
-      + "been performed (it needs David's ingestion/data-path ruling, and this check is deleted in "
-      + "the same diff — fable R7), or this checker's blanker desynced and ate the binding. Both are "
-      + "failures; the second is why this positive control exists (R23: a negative assertion cannot "
-      + "tell you it has stopped matching anything).",
+      `${label}: \`openTasks\` is not seen binding \`TasksStore.open\`. The Tasks route `
+      + "branches at the route (David's 2026-08-16 park lift); the factory must keep the "
+      + "legacy port. If the blanker desynced and ate the binding, that is the other "
+      + "failure this positive control exists for (R23).",
     );
   }
 
   if (FLIPPED_BINDING.test(code)) {
     failures.push(
-      `${label}: \`openTasks\` is bound to \`PlatformTasksStore.open\` — the flip fable PARKED (R7). `
-      + "Production has no control-state publisher, so every platform-generation write denies, and no "
-      + "ratified path puts a real account's tasks behind the platform generation: this serves an empty "
-      + "list and refuses every write.",
+      `${label}: \`openTasks\` is bound to \`PlatformTasksStore.open\` — the factory-level `
+      + "flip R7 still forbids after David's 2026-08-16 park lift. Branch at the route; "
+      + "do not repoint the shared factory.",
     );
   }
 
   if (!OPT_IN.test(code)) {
     failures.push(
-      `${label}: \`openPlatformTasks\` is gone. The platform tasks read model must stay reachable BY NAME; `
-      + "removing it turns a parked flip into a deleted feature.",
+      `${label}: \`openPlatformTasks\` is gone. The platform tasks store must stay reachable BY NAME; `
+      + "removing it turns a route branch into a missing port.",
     );
   }
 
+  return failures;
+}
+
+/** Pure analysis over the Tasks route source. Returns a list of failure strings. */
+export function analyzeRoute(source, label = ROUTE_TARGET) {
+  const failures = [];
+  const code = blankNonCode(source);
+
+  if (!ROUTE_BRANCH.test(code)) {
+    failures.push(
+      `${label}: the Tasks route does not branch on \`tasksGeneration ===\`. `
+      + "A platform selection would silently open the legacy store.",
+    );
+  }
+  if (!ROUTE_PLATFORM_CALL.test(code)) {
+    failures.push(
+      `${label}: the Tasks route never calls \`openPlatformTasks()\`. The park lift is a route branch, not a factory flip.`,
+    );
+  }
+  if (!ROUTE_LEGACY_CALL.test(code)) {
+    failures.push(
+      `${label}: the Tasks route never calls \`openTasks()\`. \`--generation legacy\` would have nowhere to go.`,
+    );
+  }
+  if (FLIPPED_BINDING.test(code)) {
+    failures.push(
+      `${label}: the Tasks route binds \`openTasks\` to \`PlatformTasksStore.open\` — factory-flip shape in the route file.`,
+    );
+  }
   return failures;
 }
 
@@ -260,10 +296,54 @@ const SELF_TEST_FIXTURES = [
   },
 ];
 
+const cleanRoute = `
+export async function openTaskRouteSource(stores) {
+  const tasksGeneration = stores.selection.tasks;
+  const store = tasksGeneration === "platform"
+    ? await stores.openPlatformTasks()
+    : await stores.openTasks();
+  return { store, tasksGeneration };
+}
+`;
+
+const ROUTE_SELF_TEST_FIXTURES = [
+  { name: "the ordinary correct route branch", mustPass: true, source: cleanRoute },
+  {
+    name: "the factory flip quoted as illustrative text in the route file",
+    mustPass: true,
+    source: `${cleanRoute}\nconst note = "the flip would read openTasks: () => PlatformTasksStore.open(bridge, env, http)";\n`,
+  },
+  {
+    name: "a route that never opens the platform store",
+    mustPass: false,
+    source: cleanRoute.replace("await stores.openPlatformTasks()", "await stores.openTasks()"),
+  },
+  {
+    name: "a route that never opens the legacy store",
+    mustPass: false,
+    source: cleanRoute.replace("await stores.openTasks()", "await stores.openPlatformTasks()"),
+  },
+  {
+    name: "a route that does not branch on tasksGeneration",
+    mustPass: false,
+    source: cleanRoute.replace("tasksGeneration === \"platform\"", "false"),
+  },
+];
+
 function runSelfTest() {
   const broken = [];
   for (const fixture of SELF_TEST_FIXTURES) {
     const failures = analyze(fixture.source, `self-test/${fixture.name}`);
+    const passed = failures.length === 0;
+    if (passed !== fixture.mustPass) {
+      broken.push(
+        `self-test "${fixture.name}": expected the check to ${fixture.mustPass ? "PASS" : "FAIL"}, `
+        + `it ${passed ? "passed" : "failed"}${passed ? "" : ` — ${failures[0]}`}`,
+      );
+    }
+  }
+  for (const fixture of ROUTE_SELF_TEST_FIXTURES) {
+    const failures = analyzeRoute(fixture.source, `self-test/${fixture.name}`);
     const passed = failures.length === 0;
     if (passed !== fixture.mustPass) {
       broken.push(
@@ -292,12 +372,20 @@ try {
 }
 if (source !== undefined) failures.push(...analyze(source));
 
+let routeSource;
+try {
+  routeSource = readFileSync(join(ROOT, ROUTE_TARGET), "utf8");
+} catch (error) {
+  failures.push(`cannot read ${ROUTE_TARGET} — ${error.message}. If this file moved, this check must move with it, not be deleted.`);
+}
+if (routeSource !== undefined) failures.push(...analyzeRoute(routeSource));
+
 if (failures.length) {
   console.error(`core/ openTasks parked-flip check FAILED (${failures.length}):`);
   for (const failure of failures) console.error("  " + failure);
   process.exit(1);
 }
 console.log(
-  `core/ openTasks parked-flip check passed (R7: the flip stays parked; `
-  + `${SELF_TEST_FIXTURES.length} self-test fixtures green).`,
+  `core/ openTasks parked-flip check passed (R7: factory flip stays forbidden after David's 2026-08-16 Tasks park lift; `
+  + `the route branches; ${SELF_TEST_FIXTURES.length + ROUTE_SELF_TEST_FIXTURES.length} self-test fixtures green).`,
 );
