@@ -413,6 +413,40 @@ class TestChatQuotaBYOKBypass:
             enforce_chat_quota('non-byok-uid')
         assert exc_info.value.status_code == 402
 
+    @patch('utils.subscription.has_validated_byok_keys', return_value=False)
+    @patch('utils.subscription.get_byok_key')
+    @patch('utils.subscription.users_db')
+    @patch('utils.subscription.get_chat_quota_snapshot')
+    def test_enforce_chat_quota_does_not_bypass_on_unvalidated_raw_header(
+        self, mock_snapshot, mock_users_db, mock_get_key, _mock_not_validated
+    ):
+        """Raw LLM header presence alone must never bypass the quota gate.
+
+        The reviewer's gate: the paywall/chat-quota bypass must be tied to a
+        *validated* enrollment, not to any non-empty LLM BYOK header. Even when
+        a raw OpenAI header is present and the user is BYOK-active, an
+        unvalidated request (has_validated_byok_keys() == False) must still hit
+        the 402 quota gate.
+        """
+        from models.users import PlanType
+
+        mock_users_db.is_byok_active.return_value = True
+        mock_get_key.side_effect = lambda p: 'sk-raw-but-unvalidated' if p == 'openai' else None
+        mock_snapshot.return_value = {
+            'plan': PlanType.basic,
+            'unit': 'questions',
+            'used': 31,
+            'limit': 30,
+            'allowed': False,
+            'reset_at': '2026-05-01',
+        }
+        from fastapi import HTTPException
+        from utils.subscription import enforce_chat_quota
+
+        with pytest.raises(HTTPException) as exc_info:
+            enforce_chat_quota('unvalidated-header-uid')
+        assert exc_info.value.status_code == 402
+
 
 # ---------------------------------------------------------------------------
 # 7. Transcription credit BYOK bypass
@@ -800,6 +834,32 @@ class TestCacheRouting:
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
         assert result is not None
 
+    def test_legacy_openai_key_never_pairs_with_gemini_resolved_model(self, monkeypatch):
+        """A legacy OpenAI key must not be paired with a Gemini-resolved model.
+
+        'followup' resolves to a Gemini model in the BYOK QoS profile. When only a
+        legacy OpenAI key is present (no Gemini key), the fallback must select the
+        OpenAI-compatible fallback model — never hand the OpenAI credential to the
+        resolved Gemini model, which would be an incompatible model/provider
+        request at the provider.
+        """
+        from utils.llm import clients
+
+        create_client = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr(clients, '_create_byok_client', create_client)
+        # Only a legacy Gemini-resolved feature, but only an OpenAI key is attached.
+        monkeypatch.setattr(
+            clients, 'get_byok_key', lambda provider: 'sk-legacy-openai' if provider == 'openai' else None
+        )
+        monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
+        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
+
+        assert clients.get_llm('followup') is not None
+        args = create_client.call_args.args
+        assert args[0] == 'gpt-4o-mini', f"model must be OpenAI fallback, got {args[0]}"
+        assert args[1] == 'openai', f"provider must stay openai, got {args[1]}"
+        assert args[2] == 'sk-legacy-openai'
+
 
 # ---------------------------------------------------------------------------
 # 12. Middleware dispatch: context isolation between requests
@@ -1045,6 +1105,33 @@ class TestBYOKFingerprintValidation:
         try:
             validate_byok_request('byok-uid')
             assert get_byok_keys() == self._valid_request_keys
+        finally:
+            _byok_ctx.reset(token)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_empty_fingerprint_entry_does_not_pass_a_key(self, mock_get_state):
+        """An enrolled provider with an empty/null stored fingerprint must NOT
+        pass an unverified request key into the context.
+
+        The reviewer's gate: filter on a VALID stored fingerprint, not mere
+        provider membership. A request key for a provider whose stored
+        fingerprint is empty/null must be dropped exactly like an unenrolled
+        provider, so it never reaches the provider clients.
+        """
+        from utils.byok import _byok_ctx, validate_byok_request, get_byok_keys
+
+        state = self._mock_byok_state()
+        state['fingerprints']['openai'] = ''
+        mock_get_state.return_value = state
+
+        keys = dict(self._valid_request_keys)
+        token = _byok_ctx.set(keys)
+        try:
+            validate_byok_request('empty-fp-uid')
+            exposed = get_byok_keys()
+            assert 'openai' not in exposed, "empty-fingerprint openai key must not be used"
+            assert set(exposed) == set(state['fingerprints']) - {'openai'}
         finally:
             _byok_ctx.reset(token)
 
