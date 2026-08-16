@@ -30,6 +30,10 @@ from typing import Iterable
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPOSITORY_ROOT / "backend" / "runtime_images.json"
 IGNORED_SOURCE_DIRECTORIES = {".git", ".pytest_cache", ".venv", "__pycache__"}
+# First-party modules that raise at import time unless an environment variable is set.
+# An import smoke reaching one of these without the variable fails the deploy, so the
+# registry must declare a non-production placeholder in ``smoke_environment``.
+IMPORT_TIME_REQUIRED_ENVIRONMENT = {"utils.encryption": "ENCRYPTION_SECRET"}
 
 
 @dataclass(frozen=True)
@@ -387,6 +391,48 @@ def source_closure_errors(contract: ImageContract) -> list[str]:
     return errors
 
 
+def first_party_import_closure(contract: ImageContract, entrypoints: Iterable[str]) -> set[str]:
+    """Return the first-party modules reachable from ``entrypoints`` in the checkout."""
+    source_roots = _first_party_source_roots(contract)
+    visited: set[str] = set()
+
+    def visit(module: str) -> None:
+        if module in visited:
+            return
+        visited.add(module)
+        source = _find_module_source(source_roots, module)
+        if source is None:
+            return
+        source_path, _ = source
+        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        for imported in _imported_modules(
+            tree, module, source_roots, current_is_package=source_path.name == "__init__.py"
+        ):
+            if _module_or_namespace_exists(source_roots, imported.split(".", 1)[0]):
+                visit(imported)
+
+    for entrypoint in entrypoints:
+        visit(entrypoint)
+    return visited
+
+
+def import_smoke_environment_errors(contracts: Iterable[ImageContract]) -> list[str]:
+    """Fail registrations whose import smoke would hit an import-time environment guard."""
+    errors: list[str] = []
+    for contract in contracts:
+        if not contract.image_import_smoke:
+            continue
+        declared = dict(contract.smoke_environment)
+        reachable = first_party_import_closure(contract, contract.smoke_entrypoints)
+        for module, variable in sorted(IMPORT_TIME_REQUIRED_ENVIRONMENT.items()):
+            if module in reachable and variable not in declared:
+                errors.append(
+                    f"{contract.name}: import smoke reaches {module!r}, which raises at import time "
+                    f"unless {variable} is set; declare a non-production {variable} in smoke_environment"
+                )
+    return errors
+
+
 def check_source_closures(contracts: Iterable[ImageContract]) -> list[str]:
     errors: list[str] = []
     for contract in contracts:
@@ -604,6 +650,7 @@ def main() -> int:
             errors = []
             if args.command in {"check", "check-source"}:
                 errors.extend(check_source_closures(contracts))
+                errors.extend(import_smoke_environment_errors(contracts))
             if args.command in {"check", "check-workflows"}:
                 errors.extend(workflow_contract_errors(contracts))
             if errors:
