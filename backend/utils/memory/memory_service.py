@@ -1831,7 +1831,12 @@ class MemoryService:
         device_scope_request: Optional[DeviceScopeRequest] = None,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
-        candidate_cap = max(capped, min(int(candidate_limit or capped), 60))
+        # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
+        # Callers that already over-fetch (e.g. timeframe-scoped chat) pass candidate_limit.
+        candidate_cap = max(
+            capped,
+            min(int(candidate_limit if candidate_limit is not None else capped * 3), 60),
+        )
         try:
             canonical = self._canonical.search(
                 uid,

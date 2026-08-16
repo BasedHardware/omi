@@ -570,6 +570,13 @@ def search_conversations_tool(
             if not conversations_data:
                 return f"No conversations found matching query: '{query}'"
             conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+            # Index hits can be stale vs created_at; re-check the hydrated doc against the
+            # hard chat window so timeframe-scoped Ask never returns out-of-window rows.
+            start_bound = start_dt.timestamp() if start_dt is not None else None
+            end_bound = end_dt.timestamp() if end_dt is not None else None
+            conversations_data = [
+                c for c in conversations_data if conversation_matches_date_range(c, start_bound, end_bound)
+            ]
             if not conversations_data:
                 return f"No conversations found matching query: '{query}'"
 

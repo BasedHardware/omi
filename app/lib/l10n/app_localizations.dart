@@ -18356,6 +18356,7 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ask about this'**
   String get askAboutThisConversation;
+
   /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
   ///
   /// In en, this message translates to:

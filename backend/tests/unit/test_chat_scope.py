@@ -181,6 +181,39 @@ def test_search_conversations_tool_rejects_other_exact_reference_under_scope():
     assert "scoped to conversation only-me" in out.lower()
 
 
+def test_search_conversations_tool_refilters_hydrated_hits_to_timeframe():
+    """Stale index IDs must not leak conversations outside the hard chat window."""
+    cfg = {
+        "configurable": {
+            "user_id": "u1",
+            "conversations_collected": [],
+            "chat_scope": {
+                "start_date": "2026-08-09T00:00:00+00:00",
+                "end_date": "2026-08-09T23:59:59+00:00",
+            },
+        }
+    }
+    stale = {
+        "id": "stale",
+        "created_at": datetime(2026, 7, 1, tzinfo=timezone.utc),
+        "is_locked": False,
+        "discarded": False,
+        "structured": {"title": "Old", "overview": "hi", "emoji": "🙂", "category": "other"},
+        "transcript_segments": [],
+    }
+    with (
+        patch.object(tools, "parse_exact_conversation_reference", return_value=None),
+        patch.object(tools, "keyword_search_conversation_ids", return_value=["stale"]),
+        patch.object(tools.vector_db, "query_vectors", return_value=[]),
+        patch.object(tools.conversations_db, "get_conversations_by_id", return_value=[stale]),
+        patch.object(tools, "conversations_to_string") as render,
+        patch.object(tools.notification_db, "get_user_time_zone", return_value="UTC"),
+    ):
+        out = tools.search_conversations_tool.invoke({"query": "standup"}, config=cfg)
+    assert "no conversations found" in out.lower()
+    render.assert_not_called()
+
+
 def test_get_action_items_tool_forces_conversation_scope():
     import utils.retrieval.tools.action_item_tools as action_tools
 
