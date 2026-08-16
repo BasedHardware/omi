@@ -113,7 +113,7 @@ exit 0
       env,
     });
     assert.equal(defaultHome.status, 0, defaultHome.stderr || defaultHome.stdout);
-    assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=home&platform=mobile&generation=platform/);
+    assert.match(readFileSync(argsFile, "utf8"), /SURFACE_QUERY=route=conversations&platform=mobile&generation=platform/);
     assert.match(readFileSync(argsFile, "utf8"), /OMI_API_BASE_URL=http:\/\/127\.0\.0\.1:4851/);
     assert.equal(readFileSync(argsFile, "utf8").match(/generation=platform/g)?.length, 1);
 

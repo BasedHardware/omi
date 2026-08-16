@@ -6,7 +6,7 @@
 # scripts/dev-stack.sh, not just by a human.
 #
 #   ./scripts/dev-run-macos.sh --route chat        # LIVE Chat against the local backend
-#   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4851 --route home
+#   ./scripts/dev-run-macos.sh --api http://127.0.0.1:4851 --route conversations
 #   ./scripts/dev-run-macos.sh --generation platform # LIVE against the platform generation (default)
 #   ./scripts/dev-run-macos.sh --accept            # headless acceptance, exits nonzero on zero traffic
 #
@@ -38,7 +38,7 @@ core="$(cd "$here/../.." && pwd)"
 
 api_base="${OMI_API_BASE_URL:-http://127.0.0.1:4851}"
 accept=0
-route="home"
+route="conversations"
 generation="platform"
 evidence_out=""
 run_id_arg=""

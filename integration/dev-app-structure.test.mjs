@@ -15,7 +15,7 @@ test("RED-PROOF dev-app.sh composes the existing stack and macOS launcher", () =
   assert.match(app, /dev-stack\.sh/);
   assert.match(app, /--up/);
   assert.match(app, /dev-run-macos\.sh/);
-  assert.match(app, /--route home/);
+  assert.match(app, /--route conversations/);
   assert.doesNotMatch(app, /Bun\.serve|createLocalDevService/);
   assert.equal((app.match(/exec "\$MACOS_LAUNCHER"/g) ?? []).length, 1);
 });

@@ -194,7 +194,7 @@ test("macOS QA launcher freezes origin, URLs, and the eight evidence routes befo
     assert.equal(defaultHome.status, 0);
     assert.match(`${defaultHome.stdout}${defaultHome.stderr}`, /pinned app http:\/\/127\.0\.0\.1:5290/);
     actions = run.readActions();
-    assert.match(actions, /launch\|query=route=home&platform=desktop&generation=platform\|.*api=http:\/\/127\.0\.0\.1:4851\|/);
+    assert.match(actions, /launch\|query=route=conversations&platform=desktop&generation=platform\|.*api=http:\/\/127\.0\.0\.1:4851\|/);
 
     const verificationOrigin = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851", "--route", "chat"], {
       encoding: "utf8", env: { ...run.environment, OMI_SURFACE_PORT: "15290" },

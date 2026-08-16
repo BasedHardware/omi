@@ -9,6 +9,11 @@ import {
   type ProductionCommandId,
 } from "./command-registry.js";
 import { ProductionIcon, type ProductionIconName } from "./ProductionIcon.js";
+import {
+  DEFAULT_PRODUCTION_ROUTE,
+  isActivityHubRoute,
+  isHomeScreenRoute,
+} from "./production-routing.js";
 
 type Locale = string;
 import type { ProductionRoute } from "./command-registry.js";
@@ -234,8 +239,8 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
         {top ? (
           <div className="nav-desktop">
             <div className="nav-primary">
-              <a href={productionRouteHref("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>
-              <a href={productionRouteHref("conversations")} aria-current={active === "memories" || active === "conversations" || active === "folders" || active === "brain-map" ? "page" : undefined}><ChromeIcon name="library" /><span className="nav-label">{t(locale, "nav.library")}</span></a>
+              <a href={productionRouteHref("chat")} aria-current={isHomeScreenRoute(active) ? "page" : undefined}><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>
+              <a href={productionRouteHref(DEFAULT_PRODUCTION_ROUTE)} aria-current={isActivityHubRoute(active) ? "page" : undefined}><ChromeIcon name="library" /><span className="nav-label">{t(locale, "nav.activity")}</span></a>
               <a href={productionRouteHref("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" /><span className="nav-label">{t(locale, "nav.tasks")}</span></a>
               <a href={productionRouteHref("rewind")} aria-current={active === "rewind" ? "page" : undefined}><ChromeIcon name="rewind" /><span className="nav-label">{t(locale, "nav.rewind")}</span></a>
               <a href={productionRouteHref("apps")} aria-current={active === "apps" ? "page" : undefined}><ChromeIcon name="apps" /><span className="nav-label">{t(locale, "nav.apps")}</span></a>
@@ -256,8 +261,8 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
           <a href={productionSettingsSheetHref(active)} className="nav-icon-control" aria-current={active === "settings" ? "page" : undefined} aria-label={t(locale, "nav.settings")} title={t(locale, "nav.settings")}><ChromeIcon name="settings" /></a>
         </div> : null}
         <div className="nav-mobile">
-          <a href={productionRouteHref("home")} aria-current={active === "home" ? "page" : undefined}><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>
-          <a href={productionRouteHref("conversations")} aria-current={active === "conversations" || active === "memories" || active === "folders" || active === "brain-map" ? "page" : undefined}><ChromeIcon name="conversations" /><span className="nav-label">{t(locale, "nav.conversations")}</span></a>
+          <a href={productionRouteHref("chat")} aria-current={isHomeScreenRoute(active) ? "page" : undefined}><ChromeIcon name="home" /><span className="nav-label">{t(locale, "nav.home")}</span></a>
+          <a href={productionRouteHref(DEFAULT_PRODUCTION_ROUTE)} aria-current={isActivityHubRoute(active) ? "page" : undefined}><ChromeIcon name="conversations" /><span className="nav-label">{t(locale, "nav.activity")}</span></a>
           <a href={productionRouteHref("tasks")} aria-current={active === "tasks" ? "page" : undefined}><ChromeIcon name="tasks" /><span className="nav-label">{t(locale, "nav.tasks")}</span></a>
           <a href={productionRouteHref("apps")} aria-current={active === "apps" ? "page" : undefined}><ChromeIcon name="apps" /><span className="nav-label">{t(locale, "nav.apps")}</span></a>
         </div>
@@ -288,12 +293,12 @@ export function ProductionChrome({ locale, active, placement = "top", commandHan
 
 export function ProductionLibrarySegment({ locale, active }: { locale: Locale; active: "memories" | "conversations" | "brain-map" }): React.JSX.Element {
   return <>
-    <nav className="desktop-library-segment" aria-label={t(locale, "nav.library")}>
+    <nav className="desktop-library-segment" aria-label={t(locale, "nav.activity")}>
       <a href={productionRouteHref("conversations")} aria-current={active === "conversations" ? "page" : undefined}>{t(locale, "nav.conversations")}</a>
       <a href={productionRouteHref("memories")} aria-current={active === "memories" ? "page" : undefined}>{t(locale, "nav.memories")}</a>
       <a href={productionRouteHref("brain-map")} aria-current={active === "brain-map" ? "page" : undefined}>{t(locale, "nav.brainMap")}</a>
     </nav>
-    <nav className="mobile-library-segment" aria-label={t(locale, "nav.library")}>
+    <nav className="mobile-library-segment" aria-label={t(locale, "nav.activity")}>
       <a href={productionRouteHref("conversations")} aria-current={active === "conversations" ? "page" : undefined}>{t(locale, "nav.conversations")}</a>
       <a href={productionRouteHref("memories")} aria-current={active === "memories" ? "page" : undefined}>{t(locale, "nav.memories")}</a>
       <a href={productionRouteHref("brain-map")} aria-current={active === "brain-map" ? "page" : undefined}>{t(locale, "nav.brainMap")}</a>
