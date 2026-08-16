@@ -14,6 +14,7 @@ import 'chat_attachment_staging_host.dart';
 import 'chat_bridge_javascript_sink.dart';
 import 'chat_stream_host.dart';
 import 'consumer_evidence.dart';
+import 'control_probe.dart';
 import 'gen/bridge.g.dart';
 import 'gen/bridge_http_contract.g.dart';
 import 'listen_socket_host.dart';
@@ -51,6 +52,10 @@ const String _runClientId = String.fromEnvironment('OMI_RUN_CLIENT_ID', defaultV
 // Launcher-owned safe basename for a Documents-local native result. Host paths
 // never cross into the simulator process or JavaScript state.
 const String _consumerEvidenceFilename = String.fromEnvironment('OMI_CONSUMER_EVIDENCE_FILENAME', defaultValue: '');
+// Launcher-owned safe basenames for the shared control-acceptance driver.
+// Host paths never cross into the simulator process or JavaScript state.
+const String _probeFilename = String.fromEnvironment('OMI_PROBE_FILENAME', defaultValue: '');
+const String _probeResultFilename = String.fromEnvironment('OMI_PROBE_RESULT_FILENAME', defaultValue: '');
 // Optional scheme query/profile namespace. Values are appended to the local
 // scheme URL, never interpolated into page JavaScript or logs.
 const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
@@ -63,6 +68,7 @@ const bool _captureOnly = bool.fromEnvironment('OMI_CAPTURE_ONLY', defaultValue:
 const bool _acceptance = bool.fromEnvironment('OMI_ACCEPTANCE', defaultValue: false);
 const bool _acceptanceExit = bool.fromEnvironment('OMI_ACCEPTANCE_EXIT', defaultValue: false);
 const bool _consumerEvidenceExit = bool.fromEnvironment('OMI_CONSUMER_EVIDENCE_EXIT', defaultValue: false);
+const bool _probeExit = bool.fromEnvironment('OMI_PROBE_EXIT', defaultValue: false);
 
 const Set<String> _captureDomains = {
   'memories',
@@ -253,6 +259,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
   ChatAttachmentStagingHost? _chatStaging;
   ConsumerEvidenceDriver? _consumerEvidence;
   String? _consumerEvidenceResultPath;
+  ControlProbeDriver? _controlProbe;
+  final List<String> _probeChannelInbox = [];
+  bool _controlProbeStarted = false;
   Timer? _transcriptTimer;
   Timer? _acceptanceFallback;
   int _sessions = 0;
@@ -504,6 +513,11 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       }
       return;
     }
+    if (_probeFilename.isNotEmpty) {
+      await _chatSink?.activateDocument();
+      unawaited(_startControlProbe());
+      return;
+    }
     await _chatSink?.activateDocument();
     if (const bool.fromEnvironment('AUTODRIVE')) {
       await _autodrive();
@@ -561,6 +575,9 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
         );
         // Probe phase machine only for the original v1/v2/v3 suite.
         _schemePhase = _schemeBundle == 'v1' ? 1 : 0;
+        if (_consumerEvidenceFilename.isNotEmpty && _probeFilename.isNotEmpty) {
+          throw StateError('consumer evidence and control probe are mutually exclusive');
+        }
         if (_consumerEvidenceFilename.isNotEmpty) {
           if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,191}\.json$').hasMatch(_consumerEvidenceFilename)) {
             throw StateError('consumer evidence filename is not a safe basename');
@@ -568,6 +585,14 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
           _consumerEvidenceResultPath = '${_scheme!.docsDir}/$_consumerEvidenceFilename';
           await _startConsumerEvidence();
         } else {
+          if (_probeFilename.isNotEmpty) {
+            if (!isSafeProbeBasename(_probeFilename) || _probeFilename != controlProbeDriverFilename) {
+              throw StateError('control probe driver filename is not the closed basename');
+            }
+            if (!isSafeProbeBasename(_probeResultFilename) || _probeResultFilename != controlProbeResultFilename) {
+              throw StateError('control probe result filename is not the closed basename');
+            }
+          }
           await _mountBundle(_schemeBundle);
         }
       case SurfaceMode.ship:
@@ -629,6 +654,62 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
       },
     );
     await _consumerEvidence!.start();
+  }
+
+  Future<void> _startControlProbe() async {
+    if (_controlProbeStarted) return;
+    _controlProbeStarted = true;
+    try {
+      if (_mode != SurfaceMode.scheme || _schemeBundle != 'surfaces' || _http == null) {
+        throw StateError('control probe requires the live surfaces scheme host');
+      }
+      final docsDir = _scheme?.docsDir;
+      if (docsDir == null || docsDir.isEmpty) {
+        throw StateError('control probe documents directory is missing');
+      }
+      final driverFile = File('$docsDir/$_probeFilename');
+      if (!await driverFile.exists()) {
+        throw StateError('control probe driver file is missing');
+      }
+      final resultPath = '$docsDir/$_probeResultFilename';
+      await File(resultPath).writeAsString(
+        '${formatProbeJsLine(value: controlProbePendingValue, error: 'probe-started')}\n',
+        flush: true,
+      );
+      final probe = ControlProbeDriver(
+        driverSource: await driverFile.readAsString(),
+        resultPath: resultPath,
+        evaluate: _controller.runJavaScriptReturningResult,
+        hostQuery: _surfaceQuerySuffix,
+      );
+      _controlProbe = probe;
+      final inbox = List<String>.of(_probeChannelInbox);
+      _probeChannelInbox.clear();
+      for (final message in inbox) {
+        unawaited(probe.acceptChannel(message));
+      }
+      await probe.start();
+      debugPrint(await File(probe.resultPath).readAsString());
+      if (_probeExit) exit(0);
+    } catch (error) {
+      debugPrint('CONTROL-PROBE: FAIL $error');
+      try {
+        final probe = _controlProbe;
+        if (probe != null) {
+          await probe.writeLine(formatProbeJsLine(error: error.toString()));
+        } else {
+          final docsDir = _scheme?.docsDir;
+          if (docsDir != null && docsDir.isNotEmpty && _probeResultFilename.isNotEmpty) {
+            final result = File('$docsDir/$_probeResultFilename');
+            await result.parent.create(recursive: true);
+            await result.writeAsString('${formatProbeJsLine(error: error.toString())}\n', flush: true);
+          }
+        }
+      } catch (_) {
+        // The launcher times out if this write also fails.
+      }
+      if (_probeExit) exit(1);
+    }
   }
 
   /// Gate-then-navigate. Returns false when the contract gate refused the
@@ -980,6 +1061,7 @@ class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver i
     unawaited(_chatStream?.close());
     unawaited(_chatStaging?.close());
     unawaited(_consumerEvidence?.teardown());
+    unawaited(_controlProbe?.teardown());
     super.dispose();
   }
 

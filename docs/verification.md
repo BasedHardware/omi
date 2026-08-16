@@ -81,7 +81,8 @@ this lane actually clicked. Headless and assert-based by default
 
 Not entitled to claim the listen→memory→chat chain (that is L4). Not
 entitled to claim iOS received the same click-through: the second step is
-macOS-only.
+macOS-only. iOS uses the same runner with `--ios`; that command is not an
+L3 step.
 
 Steps (`lanes.mjs:191-222`):
 

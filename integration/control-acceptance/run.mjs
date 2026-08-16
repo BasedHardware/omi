@@ -9,7 +9,7 @@
 // usage: node integration/control-acceptance/run.mjs
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,7 @@ const PRODUCTION_GATEWAY_TEST = "http://127.0.0.1:8788";
 const PRODUCTION_GATEWAY_REAL = "http://127.0.0.1:8791";
 const APP_NAME = "omi-on-control-acceptance";
 const JOURNEY_APP_NAME = "omi-on-journey-acceptance";
+const IOS_PROBE_DRIVER_FILENAME = "omi-control-probe.js";
 
 function fail(message, code = 1) {
   process.stderr.write(`${message}\n`);
@@ -49,6 +50,43 @@ function serving(url) {
     stdio: ["ignore", "pipe", "pipe"],
   });
   return result.status === 0;
+}
+
+function findBootedIosSimulator() {
+  const wanted = typeof process.env.OMI_IOS_DEVICE === "string" && process.env.OMI_IOS_DEVICE.length > 0
+    ? process.env.OMI_IOS_DEVICE
+    : null;
+  const listed = spawnSync("xcrun", ["simctl", "list", "devices", "booted", "-j"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (listed.status !== 0) {
+    return { ok: false, reason: (listed.stderr || "xcrun simctl list devices booted failed").trim() };
+  }
+  let data;
+  try {
+    data = JSON.parse(listed.stdout);
+  } catch {
+    return { ok: false, reason: "simctl booted-device JSON was unreadable" };
+  }
+  const ios = [];
+  for (const [runtime, devices] of Object.entries(data?.devices ?? {})) {
+    if (!/iOS|iphoneos/i.test(runtime)) continue;
+    for (const device of devices ?? []) {
+      if (!device || device.state !== "Booted" || typeof device.udid !== "string") continue;
+      if (wanted && device.udid === wanted) {
+        return { ok: true, udid: device.udid, name: device.name ?? device.udid };
+      }
+      ios.push(device);
+    }
+  }
+  if (wanted) {
+    return { ok: false, reason: `OMI_IOS_DEVICE=${wanted} is not a booted iOS simulator` };
+  }
+  if (ios.length === 0) {
+    return { ok: false, reason: "no booted iOS simulator" };
+  }
+  return { ok: true, udid: ios[0].udid, name: ios[0].name ?? ios[0].udid };
 }
 
 function printReport(report) {
@@ -96,23 +134,29 @@ function memoryRecordsFrom(payload) {
 }
 
 const { REPO_PATHS } = await import("../lib/provenance.mjs");
-const launcher = join(REPO_PATHS["core-foundation"], "frontend/shells/macos/scripts/dev-run-macos.sh");
+const macosLauncher = join(REPO_PATHS["core-foundation"], "frontend/shells/macos/scripts/dev-run-macos.sh");
+const iosLauncher = join(REPO_PATHS["core-foundation"], "frontend/shells/ios/scripts/dev-run-ios.sh");
 const stack = join(PLATFORM_ROOT, "integration/dev-stack.sh");
 
 const SCREEN_PROOF = process.argv.includes("--screen-proof");
 const JOURNEY = process.argv.includes("--journey");
 const SEAM_BREAK = process.argv.includes("--seam-break");
+const IOS = process.argv.includes("--ios");
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   process.stdout.write(
     [
-      "usage: node integration/control-acceptance/run.mjs [--screen-proof | --journey [--seam-break]]",
+      "usage: node integration/control-acceptance/run.mjs [--ios] [--screen-proof | --journey [--seam-break]]",
       "",
       "Sibling of integration/dev-app.sh --accept. Drives Home, Chat, Listen,",
       "Rewind, and every chrome route in the built macOS shell against the live",
       "local stack. Prints CONTROL <slug>=<verdict> lines, a skip list, and",
-      "CONTROL-ACCEPTANCE status=PASS|FAIL.",
+      "CONTROL-ACCEPTANCE status=PASS|FAIL. --ios drives the same driver.js and",
+      "the same verdict.mjs inside the iOS simulator WKWebView (omi-ui://local).",
       "",
+      "--ios           use frontend/shells/ios/scripts/dev-run-ios.sh. Origin is",
+      "                the frozen custom scheme, not the macOS 5290/15290 lease.",
+      "                Mutually exclusive with --screen-proof.",
       "--screen-proof  only the Rewind capture control + omiScreenBridge round",
       "                trip. Does not send Chat. Use this when the local service",
       "                is already serving and the canned gateway is not paired with it.",
@@ -132,6 +176,7 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
 
 if (SCREEN_PROOF && JOURNEY) fail("ERROR: --screen-proof and --journey are mutually exclusive.", 2);
 if (SEAM_BREAK && !JOURNEY) fail("ERROR: --seam-break requires --journey.", 2);
+if (IOS && SCREEN_PROOF) fail("ERROR: --ios and --screen-proof are mutually exclusive.", 2);
 
 switch (process.env.OMI_CHAT_MODEL ?? "") {
   case "":
@@ -152,6 +197,16 @@ if (SCREEN_PROOF) {
   if (!serviceUp) {
     fail("ERROR: --screen-proof needs a reachable local service on 4851.");
   }
+}
+
+let iosDevice = null;
+if (IOS) {
+  const sim = findBootedIosSimulator();
+  if (!sim.ok) {
+    fail(`ERROR: --ios needs a booted iOS simulator before the leased stack is created. ${sim.reason}`);
+  }
+  iosDevice = sim.udid;
+  process.stdout.write(`control-acceptance ios-simulator ${sim.name} ${sim.udid}\n`);
 }
 
 const runDir = mkdtempSync(join(tmpdir(), "omi-control-acceptance-"));
@@ -224,6 +279,9 @@ if (existsSync(leasePath)) {
   // Persistence across relaunch is a property only the long-lived app on
   // 5290 needs. This run wants a clean origin. Missing or out-of-range
   // surface is a refusal, never a fallback onto 5290.
+  // iOS does not load that HTTP origin — its surface is frozen at
+  // omi-ui://local — but the lease still proves this run did not attach to
+  // the pinned 4851/5290 stack.
   const leasedSurface = lease?.ports?.surface;
   if (!Number.isInteger(leasedSurface) || leasedSurface < 15290 || leasedSurface > 15309 || leasedSurface === 5290) {
     fail("ERROR: verification lease did not include a run-scoped surface origin in 15290-15309; refusing to use the pinned app origin 5290. This is a refusal, not a fallback.");
@@ -253,14 +311,17 @@ const driver = buildDriverSource(readFileSync(DRIVER_PATH, "utf8"), {
   baseline,
 });
 const appName = JOURNEY ? JOURNEY_APP_NAME : APP_NAME;
+mkdirSync(buildDir, { recursive: true });
+const driverPath = join(runDir, IOS_PROBE_DRIVER_FILENAME);
+const probeOut = join(buildDir, `${appName}.probe.txt`);
+if (IOS) writeFileSync(driverPath, driver);
+const launcher = IOS ? iosLauncher : macosLauncher;
 const childEnv = {
   ...process.env,
   OMI_API_TOKEN: token,
   OMI_API_BASE_URL: serviceUrl,
-  OMI_SURFACE_PORT: surfacePort,
   OMI_APP_NAME: appName,
   OMI_BUILD_DIR: buildDir,
-  OMI_PROBE_JS: driver,
   OMI_PROBE_EXIT: "1",
   OMI_PROBE_PENDING_VALUE: PENDING_VALUE,
   // Canned stays at 100. Real journey chat needs ~160 ticks for a 60s
@@ -269,9 +330,18 @@ const childEnv = {
   OMI_PROBE_RETRY_INTERVAL: "0.4",
   OMI_PROBE_DELAY: "5",
   OMI_PROBE_SETTLE: "2",
+  // real-model-chat: real journey chat needs the longer acceptance wait.
   OMI_ACCEPTANCE_WAIT_SECONDS: JOURNEY ? (realChat ? "300" : "240") : "180",
+  // ios-control-parity: the iOS probe has its own wait, canned-sized.
+  OMI_PROBE_WAIT_SECONDS: JOURNEY ? "240" : "180",
   OMI_READY_TIMEOUT_SECONDS: "30",
 };
+if (IOS) {
+  childEnv.OMI_PROBE_JS_FILE = driverPath;
+} else {
+  childEnv.OMI_SURFACE_PORT = surfacePort;
+  childEnv.OMI_PROBE_JS = driver;
+}
 process.stdout.write(
   `control-acceptance intent=${realChat ? "real" : "test"} probeAttempts=${childEnv.OMI_PROBE_MAX_ATTEMPTS}\n`,
 );
@@ -289,16 +359,28 @@ if (SCREEN_PROOF) {
 }
 
 const started = Date.now();
-if (surfacePort !== "5290") {
+if (IOS) {
+  process.stdout.write(
+    "control-acceptance verification origin omi-ui://local (pinned app origin 5290 is not this run)\n",
+  );
+} else if (surfacePort !== "5290") {
   process.stdout.write(
     `control-acceptance verification origin http://127.0.0.1:${surfacePort} (pinned app origin 5290 is not this run)\n`,
   );
 }
-const launched = spawnSync(launcher, ["--api", serviceUrl, "--route", JOURNEY ? "listen" : "home"], {
+const launchArgs = ["--api", serviceUrl, "--route", JOURNEY ? "listen" : "home"];
+if (IOS) {
+  launchArgs.push("--probe-out", probeOut);
+  if (iosDevice) launchArgs.push("--device", iosDevice);
+}
+const launched = spawnSync(launcher, launchArgs, {
   cwd: dirname(launcher),
   env: childEnv,
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
+  // Flutter's simulator build is chatty; the Node default 1MB maxBuffer would
+  // throw away a finished PROBE_JS line after a green compile.
+  maxBuffer: 64 * 1024 * 1024,
 });
 const elapsedMs = Date.now() - started;
 const logPath = join(buildDir, `${appName}.run.log`);
@@ -307,6 +389,13 @@ try {
   logText += `\n${readFileSync(logPath, "utf8")}`;
 } catch {
   // Probe output lives on the run log when the launcher redirected it.
+}
+if (IOS) {
+  try {
+    logText += `\n${readFileSync(probeOut, "utf8")}`;
+  } catch {
+    // The launcher copies PROBE_JS here; absence is probe-missing below.
+  }
 }
 
 if (/api\.omi\.me|\?rig=dev/.test(logText)) {
@@ -387,7 +476,7 @@ process.stdout.write(`control-acceptance mode=${mode} wall-clock=${elapsedMs}ms 
 printReport(report);
 
 if (launched.status !== 0 && report.parse?.reason === "probe-missing") {
-  process.stderr.write("ERROR: macOS launcher exited before a PROBE_JS line.\n");
+  process.stderr.write(`ERROR: ${IOS ? "iOS" : "macOS"} launcher exited before a PROBE_JS line.\n`);
   const tail = logText.trim().split(/\n/).slice(-30).join("\n");
   if (tail) process.stderr.write(`${tail}\n`);
 }
