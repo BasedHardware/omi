@@ -111,8 +111,9 @@ export const registerFolderRoutes = (
       return errorResponse(401, "unauthorized");
     }
     const url = requestUrl(context.req.raw);
-    // Dual-serve: no `limit`/`cursor` keeps the unpaginated bare array so
-    // adapters-legacy keeps working. Either parameter is the ratified envelope.
+    // Dual-serve: no `limit`/`cursor` keeps the unpaginated bare array.
+    // Either parameter is the ratified envelope. Demo-persona and route tests
+    // still read the bare list.
     if (url !== null && (url.searchParams.has("limit") || url.searchParams.has("cursor"))) {
       return serveFoldersEnvelope(context.req.raw, principal, deps);
     }

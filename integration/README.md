@@ -14,8 +14,7 @@ node integration/lanes.mjs L2
 node integration/lanes.mjs L3
 
 # Listen → conversation → memory → Home → chat retrieval (named tier above L3).
-# Currently held on CONTROL chat.memory=memory-not-retrieved; the runner still
-# exists: node integration/control-acceptance/run.mjs --journey
+# A real gate (`409b7ae057`). Runner: node integration/control-acceptance/run.mjs --journey
 node integration/lanes.mjs L4
 
 # Or name the simulator explicitly
@@ -59,10 +58,8 @@ after it has read the exact report. The headed click-through for a human is stil
 outside `--assert`. Control clicks for the gate live in
 `integration/control-acceptance/` (`node integration/control-acceptance/run.mjs`).
 That sibling of `--accept` drives Home, Chat, Listen, Rewind, and every chrome
-route in the built macOS shell. It is held out of L3 while Rewind is red on
-`CONTROL screen=frame-unavailable`. Wire it in when the harness prints
-`screen=frame-rendered`. Read `integration/control-acceptance/README.md`
-before adding a control.
+route in the built macOS shell. It is an L3 step (`081b7d789a`), not a hold.
+Read `integration/control-acceptance/README.md` before adding a control.
 
 ## Platform companion contract
 

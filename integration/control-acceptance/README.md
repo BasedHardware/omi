@@ -40,9 +40,10 @@ named tier above L3: a measured full control-acceptance run is already ~3 min,
 and the journey adds listen-stop, formation wait, and a retrieval clause on
 top. Do not fold it into L3.
 
-L4 is **held** on `CONTROL chat.memory=memory-not-retrieved` (live 2026-08-15,
-`wall-clock=263270ms`). Wire it in when the harness prints
-`chat.memory=retrieved-and-streamed`. The command still runs by hand:
+L4 is a real gate (`409b7ae057`). The pass token is
+`CONTROL chat.memory=retrieved-and-streamed`. `--seam-break` is the negative
+control: endpoints stay healthy and the served request drops the identified
+memory.
 
 ```bash
 node integration/control-acceptance/run.mjs --journey
