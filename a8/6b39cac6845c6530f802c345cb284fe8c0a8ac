@@ -1,0 +1,30 @@
+desktop/context-for-claude/Tests/ContextAppTests/SettingsRenderHarness.swift
+  s_fe9b5f58848810::t_07ead487659a82 1-84
+  s_fe9b5f58848810::t_8088f6f5c957c4 85-117
+desktop/context-for-claude/changelog/unreleased/20260816-settings-cleanup.json
+  s_fe9b5f58848810::t_8f74e134f7639e 1-3
+desktop/context-for-claude/Tests/ContextAppTests/TimelineKeyStatusTests.swift
+  s_fe9b5f58848810::t_8be7b48ad9bba8 20-21,25-36,44
+desktop/context-for-claude/Sources/ContextCore/ClaudeMemory.swift
+  s_fe9b5f58848810::t_a4c48033e1d93b 135-140,142,155
+desktop/context-for-claude/Tests/ContextCoreTests/ClaudeMemoryTests.swift
+  s_fe9b5f58848810::t_f2152f705c5aca 127-180
+desktop/context-for-claude/docs/requirements-checklist.md
+  s_fe9b5f58848810::t_d57567d422556a 118,120-129,135,138,150,153-159,162,164-170,177-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a86b39cac6845c6530f802c345cb284fe8c0a8ac",
+  "prompts": {},
+  "sessions": {
+    "s_fe9b5f58848810": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "523f4649-d10d-476a-9e8e-831ac39269e9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
