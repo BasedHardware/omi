@@ -1,3 +1,0 @@
-{
-  "change": "Fixed newly created records losing their ID, which left later edits and deletions silently doing nothing"
-}
