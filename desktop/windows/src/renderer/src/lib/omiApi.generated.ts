@@ -1949,7 +1949,7 @@ export interface FullConversation {
   finished_at: string | null;
   id: string;
   language?: string | null;
-  match_snippets?: Array<TranscriptMatchSnippet>;
+  match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   started_at: string | null;
   structured: SimpleStructured;
   transcript_segments?: Array<SimpleTranscriptSegment>;
@@ -3061,7 +3061,7 @@ export interface ScreenActivitySyncRequest {
 
 export interface SearchConversationsResponse {
   current_page: number;
-  items: Array<Conversation>;
+  items: Array<ConversationSearchItem>;
   per_page: number;
   total_pages: number;
 }
@@ -3238,7 +3238,7 @@ export interface SimpleConversation {
   finished_at: string | null;
   id: string;
   language?: string | null;
-  match_snippets?: Array<TranscriptMatchSnippet>;
+  match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   started_at: string | null;
   structured: SimpleStructured;
 }
