@@ -24,7 +24,7 @@
 #   - LibriSpeech test-clean.tar.gz for the Parakeet WER gate; downloaded on the host
 #     (outside the guard) into $LIBRISPEECH_CACHE if absent.
 #
-# Usage:  deploy/onprem/run-inference-live-tests.sh [diarizer|nllb|parakeet ...]
+# Usage:  deploy/onprem/run-inference-live-tests.sh [diarizer|nllb|whisper ...]
 #   (no args = all three). Override defaults via env: COMPOSE_PROJECT, TEST_IMAGE,
 #   LIBRISPEECH_CACHE, ENCRYPTION_SECRET.
 set -euo pipefail

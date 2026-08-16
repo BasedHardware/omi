@@ -5,6 +5,7 @@ actually runs the algorithm check."""
 from __future__ import annotations
 
 import time
+from functools import lru_cache
 from types import SimpleNamespace
 
 import jwt as jwt_mod
@@ -16,8 +17,18 @@ from utils.auth.adapters import oidc as oidc_mod
 from utils.auth.adapters.oidc import OIDCAuthProvider, _signing_algs
 
 _ISSUER = "http://keycloak:8080/realms/omi"
-_RSA = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-_EC = ec.generate_private_key(ec.SECP256R1())
+
+
+# Generate the keys lazily (cached) so the RSA-2048 keygen cost is not paid at import/collection and
+# dumped onto the first test's measured phase (backend/tests/README.md fast-unit budget) — cubic PR 10887.
+@lru_cache(maxsize=1)
+def _rsa():
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+
+@lru_cache(maxsize=1)
+def _ec():
+    return ec.generate_private_key(ec.SECP256R1())
 
 
 def _claims(**over) -> dict:
@@ -45,8 +56,8 @@ def test_es256_token_accepted_when_configured(monkeypatch):
     monkeypatch.setenv("OIDC_AUDIENCE", "omi-backend")
     monkeypatch.setenv("OIDC_ISSUER", _ISSUER)
     monkeypatch.setenv("OIDC_SIGNING_ALGS", "ES256")
-    _mock_jwks(monkeypatch, _EC.public_key())
-    token = jwt_mod.encode(_claims(), _EC, algorithm="ES256")
+    _mock_jwks(monkeypatch, _ec().public_key())
+    token = jwt_mod.encode(_claims(), _ec(), algorithm="ES256")
     assert OIDCAuthProvider().verify_token(token).uid == "u1"
 
 
@@ -54,8 +65,8 @@ def test_es256_token_rejected_under_default_rs256_only(monkeypatch):
     monkeypatch.setenv("OIDC_AUDIENCE", "omi-backend")
     monkeypatch.setenv("OIDC_ISSUER", _ISSUER)
     monkeypatch.delenv("OIDC_SIGNING_ALGS", raising=False)  # default RS256
-    _mock_jwks(monkeypatch, _EC.public_key())
-    token = jwt_mod.encode(_claims(), _EC, algorithm="ES256")
+    _mock_jwks(monkeypatch, _ec().public_key())
+    token = jwt_mod.encode(_claims(), _ec(), algorithm="ES256")
     with pytest.raises(errors.InvalidToken):
         OIDCAuthProvider().verify_token(token)
 
@@ -66,7 +77,7 @@ def test_missing_issuer_is_permanent_autherror_not_transient_jwks(monkeypatch):
     monkeypatch.setenv("OIDC_AUDIENCE", "omi-backend")
     monkeypatch.delenv("OIDC_ISSUER", raising=False)
     oidc_mod.reset_jwks_cache_for_tests()
-    token = jwt_mod.encode(_claims(), _RSA, algorithm="RS256")
+    token = jwt_mod.encode(_claims(), _rsa(), algorithm="RS256")
     with pytest.raises(errors.AuthError) as ei:
         OIDCAuthProvider().verify_token(token)
     assert not isinstance(ei.value, errors.JWKSUnavailable)  # not the transient class

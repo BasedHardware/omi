@@ -407,8 +407,8 @@ backend live tests against the running compose services in one shot — the repr
 committed form of the per-service recipes below:
 
 ```
-deploy/onprem/run-inference-live-tests.sh            # diarizer + nllb + parakeet
-# expected: diarizer PASS · nllb PASS · parakeet PASS
+deploy/onprem/run-inference-live-tests.sh            # diarizer + nllb + whisper
+# expected: diarizer PASS · nllb PASS · whisper PASS
 ```
 
 Requirements and gotchas:

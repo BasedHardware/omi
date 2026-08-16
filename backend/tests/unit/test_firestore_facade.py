@@ -63,7 +63,6 @@ def test_collection_where_fieldfilter_order_limit():
 
 def test_unsupported_operator_fails_loud():
     c = _client()
-    import pytest
 
     with pytest.raises(NotImplementedError):
         list(c.collection("users/u1/goals").where("x", "STARTS_WITH", "y").stream())
@@ -108,7 +107,6 @@ def test_document_id_validation_rejects_path_injection_and_reserved_ids():
     # Cubic PR 10887: the neutral store addresses docs by a '/'-delimited path, so a '/' in a single
     # client-supplied id would split into extra segments and write to the WRONG collection/key. The
     # facade mirrors Firestore's id contract centrally so every collection().document(id) is defended.
-    import pytest
 
     c = _client()
     col = c.collection("users/u1/screen_activity")
@@ -214,7 +212,6 @@ def test_write_option_precondition_enforced_on_batch_delete():
     # clear (which build a precondition via write_option and pass it to batch.delete) raised
     # AttributeError on the Mongo-backed facade. It must exist AND enforce the precondition, surfacing
     # a stale revision as google FailedPrecondition (what those callers catch to re-read and retry).
-    import pytest
     from google.api_core.exceptions import FailedPrecondition
 
     c = _client()
@@ -239,7 +236,6 @@ def test_write_option_precondition_enforced_on_batch_delete():
 def test_last_update_option_precondition_enforced_on_reference_update():
     # review-queue self-heal passes a native LastUpdateOption to reference.update; the facade must map
     # it to the store precondition, not silently ignore it, and raise on a stale revision.
-    import pytest
     from google.api_core.exceptions import FailedPrecondition
     from google.cloud.firestore_v1 import LastUpdateOption
 
@@ -340,7 +336,6 @@ def test_docref_get_threads_read_timeout_to_store():
 def test_get_all_batches_via_get_many_not_per_ref():
     # cubic review 4939247683: get_all must batch by collection through store.get_many (one $in per
     # collection on Mongo), not do N point reads. Spy the fake store's get_many vs get.
-    from tests.store_fakes import FakeDocumentStore
 
     store = FakeDocumentStore()
     c = NeutralFirestoreClient(store)
@@ -363,7 +358,6 @@ def test_get_all_batches_via_get_many_not_per_ref():
 def test_get_all_in_transaction_reads_through_session():
     # With a transaction, get_all must read through the transaction (read-your-writes), NOT the
     # session-unaware get_many. Prove each ref is routed through transaction._read.
-    from tests.store_fakes import FakeDocumentStore
 
     store = FakeDocumentStore()
     store.set("users/u1/goals/x", {"v": 9})

@@ -24,31 +24,18 @@ _BACKEND = Path(__file__).resolve().parents[2]
 
 
 class _RecordingObjectStore(FakeObjectStore):
-    """FakeObjectStore recording open_write/put/delete/get_bytes keys, so tests can assert the batch
-    path streams via open_write (not a single put) and which extensions delete/download tried."""
+    """FakeObjectStore recording open_write keys, so tests can assert the batch path streams via open_write
+    (asserted via open_write_calls). (put/delete/get_bytes were also recorded but never asserted, and the
+    fake's open_write itself calls put on close, so put_calls could not distinguish streaming from a
+    single-shot put — dropped as dead/misleading bookkeeping, cubic PR 10887 test:41.)"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.open_write_calls: list = []
-        self.put_calls: list = []
-        self.deleted: list = []
-        self.fetched: list = []
 
     def open_write(self, bucket, key, *, content_type=None):
         self.open_write_calls.append((key, content_type))
         return super().open_write(bucket, key, content_type=content_type)
-
-    def put(self, bucket, key, data, **kwargs):
-        self.put_calls.append(key)
-        return super().put(bucket, key, data, **kwargs)
-
-    def delete(self, bucket, key):
-        self.deleted.append(key)
-        return super().delete(bucket, key)
-
-    def get_bytes(self, bucket, key):
-        self.fetched.append(key)
-        return super().get_bytes(bucket, key)
 
 
 @pytest.fixture(autouse=True)
