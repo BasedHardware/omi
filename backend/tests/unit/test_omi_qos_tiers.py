@@ -252,6 +252,7 @@ class TestModelQosProfiles:
             'memories',
             'learnings',
             'memory_conflict',
+            'memory_conflict_flex',
             'knowledge_graph',
             'memory_l1',
             'memory_l2',

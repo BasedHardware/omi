@@ -189,6 +189,7 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> d
             'MEMORY_ENABLED': {'value': 'off' if mode == 'off' else 'on', 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
+            'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE': {'value': 'false', 'category': 'memory_rollout'},
         },
         'secrets': {
             'SERVICE_ACCOUNT_JSON': {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'},
@@ -1899,6 +1900,7 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',

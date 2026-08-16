@@ -570,3 +570,6 @@ environment_shared:
           MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
             value: 'true'
             category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE:
+            value: 'false'
+            category: memory_rollout

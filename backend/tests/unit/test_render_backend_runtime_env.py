@@ -111,6 +111,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
     assert 'MEMORY_MODE=' not in memory_env
@@ -154,6 +155,7 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
@@ -195,7 +197,10 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert 'MEMORY_ENABLED=off' in job_env
     assert 'MEMORY_MODE=' not in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
+    assert 'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE=false' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
+    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
+    assert '--task-timeout=3600s' in _MODULE['_render_flags'](prod_memory_job['flags'])
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
     assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')

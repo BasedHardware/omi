@@ -122,6 +122,13 @@ def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
 
 
+def test_only_memory_conflict_flex_route_allows_the_documented_flex_timeout():
+    config = load_gateway_config(prod_mode=True)
+
+    assert config.route_artifacts['route.memory_conflict.model_config.001'].timeouts.request_ms == 120_000
+    assert config.route_artifacts['route.memory_conflict_flex.model_config.001'].timeouts.request_ms == 900_000
+
+
 def test_anthropic_generated_lanes_do_not_advertise_streaming_without_adapter_support():
     config = load_gateway_config(prod_mode=True)
 

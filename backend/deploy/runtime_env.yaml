@@ -950,6 +950,9 @@ environments:
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
               value: 'true'
               category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
@@ -1804,6 +1807,7 @@ environments:
               version: latest
           flags:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --task-timeout: 3600s
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -1841,6 +1845,9 @@ environments:
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
               value: 'true'
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE:
+              value: 'false'
               category: memory_rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'

@@ -63,6 +63,7 @@ _TWO_TIER_MODEL_PROFILE: Dict[str, Tuple[str, str]] = {
     'memories': ('gpt-5.6-luna', 'openai'),
     'learnings': ('gpt-5.6-luna', 'openai'),
     'memory_conflict': ('gpt-5.6-luna', 'openai'),
+    'memory_conflict_flex': ('gpt-5.6-luna', 'openai'),
     'knowledge_graph': ('gpt-5.6-luna', 'openai'),
     'memory_l1': ('gpt-5.6-luna', 'openai'),
     'memory_l2': ('gpt-5.6-luna', 'openai'),

@@ -37,6 +37,7 @@ model_config_features:
       - memories
       - memory_category
       - memory_conflict
+      - memory_conflict_flex
       - memory_l1
       - notifications
       - onboarding

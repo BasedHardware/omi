@@ -104,6 +104,24 @@ This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
 cadence; the job is the sole host of
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
 
+The final planner has an optional OpenAI Flex experiment on the dedicated
+`memory_conflict_flex` gateway lane; ordinary `memory_conflict` traffic keeps
+its Standard timeout and cannot request Flex.
+`MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE` is enabled only on the development
+maintenance job and remains disabled in production. The live Firestore control
+at `llm_runtime_controls/memory_promotion` must contain exactly:
+
+```json
+{"mode":"standard","generation":1,"sample_percent":0,"max_calls_per_run":0}
+```
+
+Set `mode` to `flex`, choose a deterministic UID sample, and set at most two
+Flex calls per hourly run to enable it. Increment `generation` with every
+control change. Returning `mode` to `standard` stops new Flex calls without a
+redeploy; an in-flight response from an older generation is discarded before
+canonical apply. Flex resource deferrals release their leases for the next
+scheduled run and do not consume the three-attempt model-output quality budget.
+
 ## Search, graph, and derived providers
 
 Canonical item state is authoritative. Keyword/vector results are candidates

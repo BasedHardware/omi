@@ -23,6 +23,7 @@ from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize_validation_error
 from utils.observability.fallback import record_fallback
 from utils.llm.clients import get_llm
+from utils.memory.canonical_consolidation import CONSOLIDATION_ATTEMPT_LEASE_SECONDS
 from utils.memory.canonical_required_processing import (
     ProcessedRequiredMemory,
     invoke_required_memory_processor,
@@ -36,7 +37,15 @@ from utils.memory.memory_system import (
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_COLLECTION,
     CANONICAL_MEMORY_MAINTENANCE_REGISTRY_SCHEMA_VERSION,
 )
-from scripts.enrich_historical_memory_graph import MAX_PAGE_SIZE, MAX_STRUCTURED_SCAN_SIZE, run_enrichment
+from utils.memory.promotion_flex import (
+    MEMORY_PROMOTION_FLEX_LEASE_SECONDS,
+    PromotionFlexRunRouter,
+)
+from scripts.enrich_historical_memory_graph import (
+    MAX_PAGE_SIZE,
+    MAX_STRUCTURED_SCAN_SIZE,
+    run_enrichment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +142,10 @@ def _read_seed_cursor(db_client: Any) -> str:
 
 
 def _persist_seed_cursor(db_client: Any, last_path: str) -> None:
-    payload = {"schema_version": CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION, "last_path": last_path}
+    payload = {
+        "schema_version": CANONICAL_MEMORY_MAINTENANCE_SEED_SCHEMA_VERSION,
+        "last_path": last_path,
+    }
     try:
         db_client.document(CANONICAL_MEMORY_MAINTENANCE_SEED_CURSOR_PATH).set(payload, merge=True)
     except Exception as exc:
@@ -282,7 +294,10 @@ def canonical_graph_backfill_enabled() -> bool:
 
 def canonical_graph_backfill_page_size() -> int:
     """Return the bounded per-user assertion-enrichment budget for one cron run."""
-    raw = os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV, str(DEFAULT_GRAPH_BACKFILL_PAGE_SIZE))
+    raw = os.getenv(
+        MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE_ENV,
+        str(DEFAULT_GRAPH_BACKFILL_PAGE_SIZE),
+    )
     try:
         value = int(raw)
     except ValueError:
@@ -302,8 +317,14 @@ def canonical_graph_backfill_scan_size(*, page_size: int | None = None) -> int:
     """
     current_page_size = page_size if page_size is not None else canonical_graph_backfill_page_size()
     current_page_size = min(MAX_PAGE_SIZE, max(1, current_page_size))
-    maximum = min(MAX_STRUCTURED_SCAN_SIZE, current_page_size * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER)
-    raw = os.getenv(MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV, str(DEFAULT_GRAPH_BACKFILL_SCAN_SIZE))
+    maximum = min(
+        MAX_STRUCTURED_SCAN_SIZE,
+        current_page_size * GRAPH_BACKFILL_SCAN_PAGE_MULTIPLIER,
+    )
+    raw = os.getenv(
+        MEMORY_CANONICAL_GRAPH_BACKFILL_SCAN_SIZE_ENV,
+        str(DEFAULT_GRAPH_BACKFILL_SCAN_SIZE),
+    )
     try:
         value = int(raw)
     except ValueError:
@@ -333,7 +354,7 @@ class CanonicalShortTermMaintenanceCronSummary:
 def _coerce_run_id(run_id: Optional[str], *, now: datetime) -> str:
     if run_id:
         return run_id
-    return f"cron-{now.strftime('%Y%m%d%H%M%S')}"
+    return f'cron-{now.strftime("%Y%m%d%H%M%S")}'
 
 
 def _skipped_reason(report: CanonicalShortTermMaintenanceReport) -> Optional[str]:
@@ -386,7 +407,11 @@ def run_universal_short_term_maintenance(
         uids = _resolve_maintenance_uids(client, uid_inventory=uid_inventory, limit=inventory_limit)
     except CanonicalMaintenanceInventoryUnavailable as exc:
         message = "canonical_uid_inventory_unavailable"
-        logger.warning("canonical_short_term_maintenance_cron: %s (%s)", message, type(exc).__name__)
+        logger.warning(
+            "canonical_short_term_maintenance_cron: %s (%s)",
+            message,
+            type(exc).__name__,
+        )
         return CanonicalShortTermMaintenanceCronSummary(
             run_id=effective_run_id,
             inventory_source="unavailable",
@@ -404,8 +429,10 @@ def run_universal_short_term_maintenance(
         effective_run_id,
         len(uids),
     )
+    promotion_flex = PromotionFlexRunRouter(db_client=client)
 
     for uid in uids:
+        promotion_llm_invoke = promotion_flex.llm_invoke_for_uid(uid)
         try:
             report = run_canonical_short_term_maintenance(
                 uid,
@@ -414,6 +441,15 @@ def run_universal_short_term_maintenance(
                 run_id=effective_run_id,
                 recurrence_signal_sink=recurrence_signal_persister,
                 required_processor=_required_memory_processor,
+                llm_invoke=promotion_llm_invoke,
+                consolidation_attempt_lease_seconds=(
+                    MEMORY_PROMOTION_FLEX_LEASE_SECONDS
+                    if promotion_llm_invoke is not None
+                    else CONSOLIDATION_ATTEMPT_LEASE_SECONDS
+                ),
+                consolidation_result_guard=(
+                    promotion_flex.assert_result_current if promotion_llm_invoke is not None else None
+                ),
             )
         except Exception as exc:
             message = _safe_maintenance_error(uid, exc)

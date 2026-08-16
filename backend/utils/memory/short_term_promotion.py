@@ -30,6 +30,7 @@ from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, Pro
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState
 from utils.memory.canonical_consolidation import (
+    CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
     ConsolidationAgentDecision,
     ConsolidationReport,
     apply_consolidation_decision,
@@ -322,6 +323,8 @@ def run_canonical_short_term_maintenance(
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
     required_processor: Optional[RequiredMemoryProcessor] = None,
+    consolidation_attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
+    consolidation_result_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -356,6 +359,8 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         llm_invoke=llm_invoke,
         recurrence_signal_sink=recurrence_signal_sink,
+        attempt_lease_seconds=consolidation_attempt_lease_seconds,
+        result_guard=consolidation_result_guard,
     )
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.

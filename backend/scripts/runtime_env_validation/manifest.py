@@ -258,6 +258,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     for required_env in (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
+        'MEMORY_CANONICAL_PROMOTION_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
         'TYPESENSE_HOST_PORT',
     ):
