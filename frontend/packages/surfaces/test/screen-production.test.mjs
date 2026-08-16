@@ -438,8 +438,17 @@ test("the track stays keyboard-operable and named after the range input goes tra
 test("app chevrons sit on the frame and step a whole app stretch at a time", async () => {
   const { rendered, store } = await renderScreen("ready");
   try {
-    const stage = rendered.container.querySelector(".screen-frame-stage .screen-stage-chrome");
-    assert.ok(stage, "the chrome is welded to the frame, not parked above it");
+    // Anchored to the image wrapper, which is the picture's own rectangle. The
+    // stage centres a contained image, so a capture narrower than the stage
+    // leaves empty ground down each side; anchored one level out, the chevrons
+    // float in that band instead of sitting on the frame's edge.
+    const stage = rendered.container.querySelector(".screen-frame-image-wrap > .screen-stage-chrome");
+    assert.ok(stage, "the chrome is welded to the picture, not to the stage around it");
+    assert.equal(
+      rendered.container.querySelector(".screen-frame-stage > .screen-stage-chrome"),
+      null,
+      "no stage-anchored copy survives",
+    );
     assert.ok(stage.querySelector("[data-timestamp-pill='true']"), "the timestamp pill moved onto the picture");
 
     // Frame 0 is the first Safari capture, so there is no earlier app to step
