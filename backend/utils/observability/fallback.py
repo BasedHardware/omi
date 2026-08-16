@@ -66,6 +66,7 @@ ALLOWED_COMPONENTS = frozenset(
         'gemini_stream_proxy',
         'llm_gateway',
         'memory_analytics',
+        'memory_platform',
         'redis_ratelimit',
         'silent_mic',
         'firestore_read',

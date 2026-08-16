@@ -152,6 +152,14 @@ The supported controls and rollback floor are documented in
   the list fence, not `MEMORY_V3_GET_ENABLED` (unused on the route). First page
   falls back to offset `read()` for that 503.
 
+## Backend-authoritative platform
+
+The public authority and zkr replica boundary is documented in
+`docs/memory/backend-authority.md`. The capability contract is exposed through
+`GET /v1/memory/platform` and the hosted MCP `memory_platform` tool. Both are
+discovery surfaces; memory content continues through the existing scoped
+`MemoryService` and MCP tools.
+
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader
 and historical adapter deployed. Physical legacy deletion is a separate,

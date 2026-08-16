@@ -129,6 +129,14 @@ class _FakeRedis:
     def __init__(self, cached=None):
         self.cached = cached
         self.cached_writes = []
+        self.retired = set()
+
+    def mark_api_key_hash_retired_strict(self, hashed_key):
+        self.retired.add(hashed_key)
+        return True
+
+    def api_key_hash_is_retired(self, hashed_key):
+        return hashed_key in self.retired
 
     def read_cached_mcp_api_key_auth_context(self, _hashed_key):
         if self.cached is None:

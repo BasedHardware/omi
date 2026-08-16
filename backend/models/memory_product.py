@@ -85,7 +85,9 @@ class ProductMemorySearchResponse(BaseModel):
 
     uid: str = Field(description='Authenticated user id.')
     query: str = Field(description='Search query string.')
-    items: List[ProductMemorySearchItem] = Field(description='Default-visible memory rows for the current page.')
+    items: List[ProductMemorySearchItem] = Field(
+        description='Default-visible memory search projections for the current page.'
+    )
     total_count: int = Field(description='Total default-visible items matching the query.')
     returned_count: int = Field(description='Number of items returned in this page.')
     limit: int = Field(description='Bounded page size used for this response.')

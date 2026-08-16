@@ -1,5 +1,7 @@
 const envConfig = {
   API_URL: process.env.API_URL,
+  /** Browser-visible backend origin. `API_URL` is server-only and is undefined in the client bundle. */
+  PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
   NODE_ENV: process.env.NEXT_PUBLIC_NODE_ENV,
   IS_DEVELOPMENT: process.env.NEXT_PUBLIC_NODE_ENV === 'development',
   WEB_URL: process.env.WEB_URL ?? 'https://h.omi.me',

@@ -305,6 +305,14 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "TYPESENSE_PROTOCOL": "http",
         "BASE_API_URL": cfg.backend_url,
         "API_BASE_URL": cfg.backend_url,
+        # The local web frontend (`web/frontend`, `npm run dev`) is a different
+        # origin from the harness backend, so its browser requests need an
+        # explicit CORS opt-in. Production keeps its own allowlist; these two
+        # loopback origins only ever resolve to a developer's own machine. 3001
+        # is included because Next falls back to it when 3000 is already taken.
+        "CORS_ALLOWED_ORIGINS": (
+            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
+        ),
         "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
         "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
         "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,

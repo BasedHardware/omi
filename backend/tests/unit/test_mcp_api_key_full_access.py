@@ -117,6 +117,14 @@ class _Redis:
     def __init__(self):
         self.auth_context = None
         self.cached = []
+        self.retired = set()
+
+    def mark_api_key_hash_retired_strict(self, hashed_key):
+        self.retired.add(hashed_key)
+        return True
+
+    def api_key_hash_is_retired(self, hashed_key):
+        return hashed_key in self.retired
 
     def read_cached_mcp_api_key_auth_context(self, _hashed_key):
         if self.auth_context is None:
@@ -201,7 +209,6 @@ def test_legacy_mcp_key_auth_repairs_identity_scopes_and_memory_grant(monkeypatc
             "key_prefix": "omi_mcp",
             "created_at": datetime.utcnow(),
             "last_used_at": None,
-            "scopes": ["memories.read"],
         }
     )
     redis = _Redis()
@@ -235,13 +242,11 @@ def test_stale_cached_mcp_key_auth_repairs_once_and_rewrites_cache(monkeypatch):
             "id": "cached-key",
             "user_id": "user-1",
             "hashed_key": "hashed",
-            "scopes": ["memories.read"],
         }
     )
     redis = _Redis()
     redis.auth_context = {
         "user_id": "user-1",
-        "scopes": ["memories.read"],
         "key_id": "cached-key",
         "app_id": None,
     }
