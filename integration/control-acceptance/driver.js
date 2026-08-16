@@ -4,11 +4,19 @@
   const KEY = "omi.control-acceptance.v1";
   const HOME_FAILURE_NOTICE = "Showing saved data. Couldn't refresh.";
   const CHAT_STREAMING = "Omi is responding";
+  const JOURNEY_CHAT_PROMPT = "journey-acceptance ping";
   const PHASE_TICK_LIMIT = 50;
   // Stated outcome deadline. The macOS probe hook caps attempts at 100, so a
   // longer wait here starves Chat/Rewind/nav when Listen does not transcribe.
   const OUTCOME_TICK_LIMIT = 40;
-  const MODE = window.__omiCAMode === "screen" ? "screen" : "full";
+  const MODE = window.__omiCAMode === "screen"
+    ? "screen"
+    : window.__omiCAMode === "journey"
+      ? "journey"
+      : "full";
+  const BASELINE = window.__omiCABaseline && typeof window.__omiCABaseline === "object"
+    ? window.__omiCABaseline
+    : { conversationIds: [], memoryIds: [] };
 
   const NAV_ROUTES = [
     "home",
@@ -51,6 +59,10 @@
     screenFrameSelected: false,
     statusId: null,
     witnesses: null,
+    transcriptNeedles: [],
+    conversationId: null,
+    memoryId: null,
+    memoryText: null,
   });
 
   const shell = () => document.querySelector("main[data-production-shell='true']");
@@ -83,8 +95,35 @@
     if (
       phase === "listen-wait-transcript"
       || phase === "screen-wait-outcome"
+      || phase === "listen-stop"
+      || phase === "conversations-wait"
+      || phase === "memories-wait"
+      || phase === "home-memory-wait"
     ) return OUTCOME_TICK_LIMIT;
     return PHASE_TICK_LIMIT;
+  };
+
+  const JOURNEY_SLUGS = ["mic", "conversation", "memory", "home.memory", "chat.memory"];
+
+  const blockRest = (state, fromSlug) => {
+    let seen = false;
+    for (const slug of JOURNEY_SLUGS) {
+      if (slug === fromSlug) seen = true;
+      else if (seen) record(state, slug, "blocked-prior");
+    }
+  };
+
+  const afterListen = (state, ok) => {
+    if (MODE !== "journey") {
+      state.phase = "rewind-nav";
+      return "continue";
+    }
+    if (ok) {
+      state.phase = "listen-stop";
+      return "continue";
+    }
+    blockRest(state, "mic");
+    return "finish";
   };
 
   const listenTranscript = (root) => {
@@ -102,6 +141,52 @@
       return "transcript-rendered";
     }
     return "empty-transcript";
+  };
+
+  const transcriptNeedlesOf = (root) => {
+    const rows = root?.querySelectorAll(".listen-transcript-row") ?? [];
+    const needles = [];
+    for (const row of rows) {
+      const text = (row.querySelector(".listen-transcript-text")?.textContent || row.textContent || "").trim();
+      if (text) needles.push(text);
+    }
+    return needles;
+  };
+
+  const conversationRow = (baselineIds) => {
+    const known = baselineIds || [];
+    const nodes = document.querySelectorAll("[data-conversation-id]");
+    for (const node of nodes) {
+      const id = (node.getAttribute("data-conversation-id") || "").trim();
+      if (id && known.indexOf(id) === -1) return { verdict: "row-rendered", id };
+    }
+    return { verdict: "row-missing", id: null };
+  };
+
+  const memoryCard = (baselineIds, needles) => {
+    const known = baselineIds || [];
+    const hay = needles || [];
+    const nodes = document.querySelectorAll("[data-proposition-id]");
+    for (const node of nodes) {
+      const id = (node.getAttribute("data-proposition-id") || "").trim();
+      if (!id || known.indexOf(id) !== -1) continue;
+      const text = ((node.querySelector(".proposition-text")?.textContent || node.textContent || "")).replace(/\s+/g, " ").trim();
+      for (let i = 0; i < hay.length; i += 1) {
+        if (hay[i] && text.includes(hay[i])) return { verdict: "card-rendered", id, text };
+      }
+    }
+    return { verdict: "card-missing", id: null, text: "" };
+  };
+
+  const homeMemoryRow = (memoryText) => {
+    const needle = (memoryText || "").replace(/\s+/g, " ").trim();
+    if (!needle) return "row-missing";
+    const nodes = document.querySelectorAll(".home-result-row");
+    for (const node of nodes) {
+      const text = (node.textContent || "").replace(/\s+/g, " ").trim();
+      if (text.includes(needle)) return "row-rendered";
+    }
+    return "row-missing";
   };
 
   const screenFrame = (root) => {
@@ -272,6 +357,11 @@
       save(state);
       return PENDING;
     }
+    if (MODE === "journey") {
+      state.phase = "listen-nav";
+      save(state);
+      return PENDING;
+    }
     state.phase = "home-wait";
     save(state);
     return PENDING;
@@ -280,11 +370,23 @@
   if (state.phaseTicks > phaseLimit(state.phase)) {
     if (state.phase === "listen-wait-transcript") timeout(state, "mic", listenTranscript(root));
     else if (state.phase === "listen-act") timeout(state, "mic", "no-control");
+    else if (state.phase === "listen-stop") timeout(state, "conversation", "stop-failed");
+    else if (state.phase === "conversations-wait" || state.phase === "conversations-nav") {
+      timeout(state, "conversation", conversationRow(BASELINE.conversationIds).verdict);
+    }
+    else if (state.phase === "memories-wait" || state.phase === "memories-nav") {
+      timeout(state, "memory", memoryCard(BASELINE.memoryIds, state.transcriptNeedles).verdict);
+    }
+    else if (state.phase === "home-memory-wait" || state.phase === "home-memory-nav") {
+      timeout(state, "home.memory", homeMemoryRow(state.memoryText));
+    }
     else if (state.phase === "screen-wait-outcome" || state.phase === "screen-assert-frame") {
       timeout(state, "screen", screenFrame(root));
     }
     else if (state.phase.startsWith("home")) timeout(state, "home", "timeout");
-    else if (state.phase.startsWith("chat")) timeout(state, "chat", "timeout");
+    else if (state.phase.startsWith("chat") || state.phase.startsWith("journey-chat")) {
+      timeout(state, MODE === "journey" ? "chat.memory" : "chat", "timeout");
+    }
     else if (state.phase.startsWith("listen")) timeout(state, "mic", "timeout");
     else if (state.phase.startsWith("rewind") || state.phase.startsWith("screen")) {
       timeout(state, "screen", "timeout");
@@ -297,6 +399,11 @@
       save(state);
       return PENDING;
     } else {
+      return finish(state);
+    }
+    if (MODE === "journey") {
+      const last = state.steps[state.steps.length - 1];
+      if (last) blockRest(state, last.slug);
       return finish(state);
     }
     if (state.phase.startsWith("home")) state.phase = "chat-nav";
@@ -469,8 +576,8 @@
       return PENDING;
     }
     record(state, "mic", "no-control");
-    record(state, "nav.listen", "missing-control");
-    state.phase = "rewind-nav";
+    if (MODE !== "journey") record(state, "nav.listen", "missing-control");
+    if (afterListen(state, false) === "finish") return finish(state);
     save(state);
     return PENDING;
   }
@@ -484,7 +591,9 @@
       save(state);
       return PENDING;
     }
-    record(state, "nav.listen", visibleText(root).length > 0 ? "rendered" : "missing-surface");
+    if (MODE !== "journey") {
+      record(state, "nav.listen", visibleText(root).length > 0 ? "rendered" : "missing-surface");
+    }
     state.phase = "listen-act";
     save(state);
     return PENDING;
@@ -496,7 +605,7 @@
       const start = document.querySelector("[data-consumer-action='start-listen']");
       click(allow || start);
       record(state, "mic", "channel-unreachable");
-      state.phase = "rewind-nav";
+      if (afterListen(state, false) === "finish") return finish(state);
       save(state);
       return PENDING;
     }
@@ -508,7 +617,7 @@
     const capturing = root?.getAttribute("data-capture-kind") === "capturing";
     if (permission === "denied" || /Open Settings/i.test(allow?.textContent || "")) {
       record(state, "mic", "skipped-tcc-denied");
-      state.phase = "rewind-nav";
+      if (afterListen(state, false) === "finish") return finish(state);
       save(state);
       return PENDING;
     }
@@ -555,7 +664,7 @@
       )?.textContent || "",
     )) {
       record(state, "mic", "skipped-tcc-denied");
-      state.phase = "rewind-nav";
+      if (afterListen(state, false) === "finish") return finish(state);
       save(state);
       return PENDING;
     }
@@ -571,12 +680,238 @@
   if (state.phase === "listen-wait-transcript") {
     if (listenTranscript(root) === "transcript-rendered") {
       record(state, "mic", "transcript-rendered");
-      state.phase = "rewind-nav";
+      state.transcriptNeedles = transcriptNeedlesOf(root);
+      if (afterListen(state, true) === "finish") return finish(state);
       save(state);
       return PENDING;
     }
     save(state);
     return PENDING;
+  }
+
+  if (state.phase === "listen-stop") {
+    const capturing = root?.getAttribute("data-capture-kind") === "capturing";
+    if (!capturing) {
+      state.phase = "conversations-nav";
+      save(state);
+      return PENDING;
+    }
+    const stop = document.querySelector("button.listen-stop-control");
+    if (stop && !stop.disabled) click(stop);
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "conversations-nav") {
+    if (routeOf(root) === "conversations") {
+      state.phase = "conversations-wait";
+      save(state);
+      return PENDING;
+    }
+    const asked = requestRoute(state, "conversations");
+    if (asked === "navigating" || asked === "palette") {
+      if (asked !== "palette") state.phase = "conversations-wait";
+      save(state);
+      return PENDING;
+    }
+    record(state, "conversation", "no-control");
+    blockRest(state, "conversation");
+    return finish(state);
+  }
+
+  if (state.phase === "conversations-wait") {
+    if (!root || routeOf(root) !== "conversations") {
+      save(state);
+      return PENDING;
+    }
+    const found = conversationRow(BASELINE.conversationIds);
+    if (found.verdict !== "row-rendered") {
+      save(state);
+      return PENDING;
+    }
+    record(state, "conversation", "row-rendered");
+    state.conversationId = found.id;
+    state.witnesses = { ...(state.witnesses || {}), conversationId: found.id };
+    state.phase = "memories-nav";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "memories-nav") {
+    if (routeOf(root) === "memories") {
+      state.phase = "memories-wait";
+      save(state);
+      return PENDING;
+    }
+    const asked = requestRoute(state, "memories");
+    if (asked === "navigating" || asked === "palette") {
+      if (asked !== "palette") state.phase = "memories-wait";
+      save(state);
+      return PENDING;
+    }
+    record(state, "memory", "no-control");
+    blockRest(state, "memory");
+    return finish(state);
+  }
+
+  if (state.phase === "memories-wait") {
+    if (!root || routeOf(root) !== "memories") {
+      save(state);
+      return PENDING;
+    }
+    const found = memoryCard(BASELINE.memoryIds, state.transcriptNeedles);
+    if (found.verdict !== "card-rendered") {
+      save(state);
+      return PENDING;
+    }
+    record(state, "memory", "card-rendered");
+    state.memoryId = found.id;
+    state.memoryText = found.text;
+    state.witnesses = {
+      ...(state.witnesses || {}),
+      memoryId: found.id,
+      memoryText: found.text,
+      transcriptNeedles: state.transcriptNeedles,
+    };
+    state.phase = "home-memory-nav";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "home-memory-nav") {
+    if (routeOf(root) === "home") {
+      state.phase = "home-memory-wait";
+      save(state);
+      return PENDING;
+    }
+    const asked = requestRoute(state, "home");
+    if (asked === "navigating" || asked === "palette") {
+      if (asked !== "palette") state.phase = "home-memory-wait";
+      save(state);
+      return PENDING;
+    }
+    record(state, "home.memory", "no-control");
+    blockRest(state, "home.memory");
+    return finish(state);
+  }
+
+  if (state.phase === "home-memory-wait") {
+    if (!root || routeOf(root) !== "home") {
+      save(state);
+      return PENDING;
+    }
+    const verdict = homeMemoryRow(state.memoryText);
+    if (verdict !== "row-rendered") {
+      save(state);
+      return PENDING;
+    }
+    record(state, "home.memory", "row-rendered");
+    state.phase = "journey-chat-nav";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "journey-chat-nav") {
+    if (routeOf(root) === "chat") {
+      state.phase = "journey-chat-wait";
+      save(state);
+      return PENDING;
+    }
+    const entry = document.querySelector("a.home-chat-entry") || navLink("chat");
+    if (entry) {
+      save(state);
+      click(entry);
+      state.phase = "journey-chat-wait";
+      save(state);
+      return PENDING;
+    }
+    const asked = requestRoute(state, "chat");
+    if (asked === "navigating" || asked === "palette") {
+      state.phase = asked === "palette" ? "journey-chat-nav" : "journey-chat-wait";
+      save(state);
+      return PENDING;
+    }
+    record(state, "chat.memory", "no-control");
+    return finish(state);
+  }
+
+  if (state.phase === "journey-chat-wait") {
+    if (!root || routeOf(root) !== "chat") {
+      save(state);
+      return PENDING;
+    }
+    if (root.getAttribute("data-surface-state") !== "ready") {
+      save(state);
+      return PENDING;
+    }
+    state.phase = "journey-chat-author";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "journey-chat-author") {
+    const draft = document.querySelector("textarea.chat-draft");
+    const send = document.querySelector("button.chat-send");
+    if (!draft || !send) {
+      record(state, "chat.memory", "no-control");
+      return finish(state);
+    }
+    state.chatBaseline = Number(root.getAttribute("data-consumer-chat-admission-count") || "0");
+    if (!nativeType(draft, JOURNEY_CHAT_PROMPT)) {
+      record(state, "chat.memory", "send-failed");
+      return finish(state);
+    }
+    state.phase = "journey-chat-send";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "journey-chat-send") {
+    const send = document.querySelector("button.chat-send");
+    if (!send || send.disabled) {
+      save(state);
+      return PENDING;
+    }
+    installChatObserver(state);
+    click(send);
+    state.phase = "journey-chat-wait-result";
+    save(state);
+    return PENDING;
+  }
+
+  if (state.phase === "journey-chat-wait-result") {
+    const admitted = Number(root?.getAttribute("data-consumer-chat-admission-count") || "0");
+    const streamingNow = Boolean(
+      document.querySelector('.chat-message.is-assistant[data-delivery="streaming"]')
+      || visibleText(root).includes(CHAT_STREAMING),
+    );
+    if (streamingNow) state.sawStreaming = true;
+    const persisted = assistantPersisted() && Number.isFinite(state.chatBaseline) && admitted > state.chatBaseline;
+    if (!persisted) {
+      save(state);
+      return PENDING;
+    }
+    const assistant = lastCanonicalAssistant();
+    const capabilityLabel = (assistant?.querySelector(".chat-agent-capability")?.textContent || "").trim();
+    const assistantText = (assistant?.querySelector(".chat-message-text")?.textContent || "").trim();
+    if (!capabilityLabel) {
+      save(state);
+      return PENDING;
+    }
+    state.witnesses = {
+      ...(state.witnesses || {}),
+      chat: { capabilityLabel, assistantText },
+      memoryId: state.memoryId,
+      conversationId: state.conversationId,
+      memoryText: state.memoryText,
+      transcriptNeedles: state.transcriptNeedles,
+    };
+    if (!state.sawStreaming) {
+      record(state, "chat.memory", "no-stream");
+    } else {
+      record(state, "chat.memory", "streamed-and-persisted");
+    }
+    return finish(state);
   }
 
   if (state.phase === "rewind-nav") {

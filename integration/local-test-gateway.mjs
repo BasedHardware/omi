@@ -7,8 +7,8 @@
  * apps/service/bin/dev-server.ts. The service still uses
  * createGatewayChatGenerationSource against this loopback.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const DISCLOSURE = "local test gateway";
 const DEFAULT_PORT = 8788;
@@ -56,6 +56,30 @@ const server = Bun.serve({
     const authorization = request.headers.get("authorization") || "";
     if (authorization !== `Bearer ${token}`) {
       return new Response("unauthorized", { status: 401 });
+    }
+    let messages = [];
+    try {
+      const inbound = await request.json();
+      if (inbound && typeof inbound === "object" && Array.isArray(inbound.messages)) {
+        messages = inbound.messages;
+      }
+    } catch {
+      messages = [];
+    }
+    if (readyPath) {
+      try {
+        appendFileSync(
+          join(dirname(readyPath), "gateway-requests.jsonl"),
+          `${JSON.stringify({
+            event: "gateway.request",
+            ts: new Date().toISOString(),
+            messages,
+          })}\n`,
+          { mode: 0o600 },
+        );
+      } catch {
+        // Recording must never change the canned SSE.
+      }
     }
     return new Response(sse, {
       status: 200,
