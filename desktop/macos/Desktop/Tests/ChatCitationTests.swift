@@ -318,8 +318,12 @@ final class ChatCitationTests: XCTestCase {
     let snapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
       runID: runID, attemptID: "query-attempt")
 
-    XCTAssertEqual(snapshot.references.map(\.sourceID), ["conversation-20"])
-    XCTAssertEqual(snapshot.references.first?.ordinal, 1)
+    XCTAssertTrue(
+      snapshot.references.isEmpty,
+      "a non-empty mismatched attempt must not consume another attempt's ledger")
+    let remaining = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+      runID: runID, attemptID: "tool-attempt")
+    XCTAssertEqual(remaining.references.map(\.sourceID), ["conversation-20"])
   }
 
   func testRegistryConsumeFallsBackWhenTerminalAttemptIdIsEmpty() async {
@@ -500,6 +504,18 @@ final class ChatCitationTests: XCTestCase {
     XCTAssertTrue(resolved.references.isEmpty)
   }
 
+  func testKindOnlyLabelsStayInertWhenOverlapTies() {
+    let first = ChatCitationReference(
+      ordinal: 8001, kind: .memory, sourceID: "m1", preview: "Shipped the beta recap")
+    let second = ChatCitationReference(
+      ordinal: 8002, kind: .memory, sourceID: "m2", preview: "Shipped the beta recap")
+    let resolved = ChatCitationMarkup.resolvingKindLabels(
+      in: "You shipped the beta recap [memory]",
+      using: [first, second])
+    XCTAssertEqual(resolved.text, "You shipped the beta recap [memory]")
+    XCTAssertTrue(resolved.references.isEmpty)
+  }
+
   func testKindOnlyLabelsStayInertWithoutOverlap() {
     let first = ChatCitationReference(
       ordinal: 8001, kind: .memory, sourceID: "m1", preview: "Alpha project timeline")
@@ -584,6 +600,86 @@ final class ChatCitationTests: XCTestCase {
     }
     XCTAssertEqual(blockText, "Shipped the beta recap [8001]")
     XCTAssertEqual(message.inlineCitationReferences, [memory])
+  }
+
+  func testSelectedSourceFallbackLandsOnVisibleAnswerBlock() {
+    var message = ChatMessage(
+      id: "ai-1",
+      text: "Looking that up.\n\nYou filmed the launch.",
+      sender: .ai,
+      contentBlocks: [
+        .text(id: "commentary", text: "Looking that up."),
+        .toolCall(id: "tool", name: "execute_sql", status: .completed),
+        .text(id: "answer", text: "You filmed the launch."),
+      ])
+    let source = ChatCitationReference(
+      ordinal: 12, kind: .conversation, sourceID: "c1", title: "Launch")
+    message.applySelectedSourceFallback(
+      selectedReferences: [source],
+      requestedSources: true,
+      retrievedReferences: [source])
+    XCTAssertEqual(message.visibleAnswerText, "You filmed the launch.\n\nSources: [12]")
+    XCTAssertTrue(message.text.contains("Sources: [12]"))
+  }
+
+  func testRequestedSourcesRailUsesTurnLedgerNotLookupCorpus() {
+    var message = ChatMessage(
+      id: "ai-1",
+      text: "You filmed the launch.",
+      sender: .ai,
+      contentBlocks: [.text(id: "answer", text: "You filmed the launch.")])
+    let turn = ChatCitationReference(
+      ordinal: 3, kind: .conversation, sourceID: "c1", title: "Launch")
+    message.applySelectedSourceFallback(
+      selectedReferences: [],
+      requestedSources: true,
+      retrievedReferences: [turn])
+    XCTAssertEqual(message.visibleAnswerText, "You filmed the launch.\n\nSources: [3]")
+
+    var unanswered = ChatMessage(
+      id: "ai-2",
+      text: "You filmed the launch.",
+      sender: .ai,
+      contentBlocks: [.text(id: "answer", text: "You filmed the launch.")])
+    unanswered.applySelectedSourceFallback(
+      selectedReferences: [],
+      requestedSources: true,
+      retrievedReferences: [])
+    XCTAssertEqual(unanswered.visibleAnswerText, "You filmed the launch.")
+    XCTAssertFalse(unanswered.visibleAnswerText.contains("[8001]"))
+  }
+
+  func testSelectedSourceFallbackSeedsEmptyRowFromQueryText() {
+    var message = ChatMessage(id: "ai-1", text: "", sender: .ai)
+    let source = ChatCitationReference(
+      ordinal: 4, kind: .memory, sourceID: "m1", title: "Note")
+    message.applySelectedSourceFallback(
+      selectedReferences: [source],
+      requestedSources: false,
+      retrievedReferences: [source],
+      fallbackText: "The note is empty.")
+    XCTAssertEqual(message.visibleAnswerText, "The note is empty.\n\nSources: [4]")
+  }
+
+  func testCitationBackupDropsDuplicateOrdinals() {
+    let first = ChatCitationReference(
+      ordinal: 7, kind: .memory, sourceID: "m1", title: "One")
+    let duplicate = ChatCitationReference(
+      ordinal: 7, kind: .memory, sourceID: "m2", title: "Two")
+    let extra = ChatCitationReference(
+      ordinal: 8, kind: .conversation, sourceID: "c1", title: "Talk")
+    let merged = ChatContentBlockCodec.mergingCitationBackup(
+      [],
+      backup: [
+        .citation(id: "a", reference: first),
+        .citation(id: "b", reference: duplicate),
+        .citation(id: "c", reference: extra),
+      ])
+    let ordinals = merged.compactMap { block -> Int? in
+      guard case .citation(_, let reference) = block else { return nil }
+      return reference.ordinal
+    }
+    XCTAssertEqual(ordinals, [7, 8])
   }
 
   func testPeekSnapshotLeavesLedgerForLaterConsume() async {

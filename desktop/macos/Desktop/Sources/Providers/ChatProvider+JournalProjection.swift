@@ -156,22 +156,26 @@ extension ChatProvider {
       guard case .citation(_, let reference) = block else { return nil }
       return reference
     }
-    let allTerminalCitationReferences = ChatCitationReference.appendingLookup(
-      await kindCitationLookupReferences(),
-      to: ChatCitationReference.merging(
-        terminalCitationReferences,
-        durableToolReferences,
-        ChatCitationProvenanceRegistry.references(
-          fromToolCallBlocks: messages[index].contentBlocks))
-    )
-    guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return queryText }
-    messages[index].text = ChatCitationMarkup.appendingSelectedSources(
-      to: messages[index].text.isEmpty ? queryText : messages[index].text,
+    let turnReferences = ChatCitationReference.merging(
+      terminalCitationReferences,
+      durableToolReferences,
+      ChatCitationProvenanceRegistry.references(
+        fromToolCallBlocks: messages[index].contentBlocks))
+    messages[index].applySelectedSourceFallback(
       selectedReferences: selectedReferences,
       requestedSources: requestedSources,
-      retrievedReferences: allTerminalCitationReferences)
+      retrievedReferences: turnReferences,
+      fallbackText: queryText)
     messages[index].isStreaming = false
-    await applyKindOnlyCitationBinding(to: messageId, base: allTerminalCitationReferences)
+    let bindBase: [ChatCitationReference]
+    if messages[index].hasKindOnlyCitationMarkers {
+      bindBase = ChatCitationReference.appendingLookup(
+        await kindCitationLookupReferences(),
+        to: turnReferences)
+    } else {
+      bindBase = turnReferences
+    }
+    await applyKindOnlyCitationBinding(to: messageId, base: bindBase)
     guard let current = messages.first(where: { $0.id == messageId }) else { return queryText }
     let visible = current.visibleAnswerText
     return visible.isEmpty ? current.text : visible

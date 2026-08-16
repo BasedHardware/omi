@@ -1326,7 +1326,9 @@ enum ContentBlockGroup: Identifiable {
     let hasTextAfterLastTool =
       lastToolIndex.map { toolIndex in
         grouped[(toolIndex + 1)...].contains { group in
-          if case .text = group { return true }
+          if case .text(_, let text) = group {
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          }
           return false
         }
       } ?? false

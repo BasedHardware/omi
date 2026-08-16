@@ -3488,10 +3488,7 @@ class ChatProvider: ObservableObject {
     // Kind-only binding rewrites markers and appends citation blocks in memory.
     // A stale journal echo still has `[memory]` and no citation blocks; keep the
     // already-bound row so chips do not vanish between hydrate and the next bind.
-    if existing.hasPersistedCitationBlocks,
-      !existing.hasKindOnlyCitationMarkers,
-      projected.hasKindOnlyCitationMarkers
-    {
+    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
       merged.text = existing.text
       merged.contentBlocks = existing.contentBlocks
     }

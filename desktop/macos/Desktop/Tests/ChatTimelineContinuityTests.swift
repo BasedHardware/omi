@@ -271,6 +271,24 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(text, "I started a background agent for that.")
   }
 
+  func testWhitespaceOnlyPostToolTextDoesNotDropSettledCommentary() {
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text_1", text: "I started a background agent for that."),
+      .toolCall(id: "tool_1", name: "spawn_agent", status: .completed, output: "started"),
+      .text(id: "text_2", text: " \n "),
+    ]
+    XCTAssertEqual(
+      ChatAssistantAnswerText.visible(
+        contentBlocks: blocks, fallback: "I started a background agent for that.", isStreaming: false),
+      "I started a background agent for that.")
+    let settled = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(settled.count, 1)
+    guard case .text(_, let text) = settled[0] else {
+      return XCTFail("whitespace after a tool must not hide the settled pre-tool answer")
+    }
+    XCTAssertEqual(text, "I started a background agent for that.")
+  }
+
   func testFloatingResponseCopiesTheSharedFinalOutputProjection() throws {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

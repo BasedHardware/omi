@@ -345,14 +345,17 @@ enum ChatCitationMarkup {
     }
     let scored = pool.map { ($0, overlapScore(claim: claim, reference: $0)) }
     let unused = scored.filter { !used.contains(sourceKey($0.0)) }
-    if let best = unused.max(by: { $0.1 < $1.1 }), best.1 >= 2 {
-      used.insert(sourceKey(best.0))
+    func uniqueBest(in candidates: [(ChatCitationReference, Int)]) -> ChatCitationReference? {
+      guard let best = candidates.max(by: { $0.1 < $1.1 }), best.1 >= 2 else { return nil }
+      let tied = candidates.filter { $0.1 == best.1 }
+      guard tied.count == 1 else { return nil }
       return best.0
     }
-    if let best = scored.max(by: { $0.1 < $1.1 }), best.1 >= 2 {
-      return best.0
+    if let best = uniqueBest(in: unused) {
+      used.insert(sourceKey(best))
+      return best
     }
-    return nil
+    return uniqueBest(in: scored)
   }
 
   static func kindOnlySearchQueries(
@@ -557,6 +560,53 @@ extension ChatMessage {
           reference: reference)
       })
   }
+
+  mutating func applySelectedSourceFallback(
+    selectedReferences: [ChatCitationReference],
+    requestedSources: Bool,
+    retrievedReferences: [ChatCitationReference],
+    fallbackText: String = ""
+  ) {
+    func apply(_ value: String) -> String {
+      ChatCitationMarkup.appendingSelectedSources(
+        to: value,
+        selectedReferences: selectedReferences,
+        requestedSources: requestedSources,
+        retrievedReferences: retrievedReferences)
+    }
+    if text.isEmpty {
+      text = fallbackText
+    }
+    text = apply(text)
+    guard let index = lastVisibleAnswerTextIndex,
+      case .text(let id, let blockText) = contentBlocks[index]
+    else { return }
+    contentBlocks[index] = .text(id: id, text: apply(blockText))
+  }
+
+  private var lastVisibleAnswerTextIndex: Int? {
+    func lastNonEmptyText(in range: Range<Int>) -> Int? {
+      for index in range.reversed() {
+        if case .text(_, let text) = contentBlocks[index],
+          !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+          return index
+        }
+      }
+      return nil
+    }
+    let lastTool = contentBlocks.lastIndex { block in
+      if case .toolCall = block { return true }
+      return false
+    }
+    if let lastTool {
+      if let after = lastNonEmptyText(in: (lastTool + 1)..<contentBlocks.count) {
+        return after
+      }
+      return lastNonEmptyText(in: contentBlocks.startIndex..<lastTool)
+    }
+    return lastNonEmptyText(in: contentBlocks.indices)
+  }
 }
 
 /// Per-attempt source ledger. Tool output teaches the model the assigned ordinals; the terminal
@@ -670,6 +720,9 @@ actor ChatCitationProvenanceRegistry {
     if !attempt.isEmpty, let bucket = buckets[Key(runID: runID, attemptID: attempt)] {
       return snapshot(from: bucket)
     }
+    guard attempt.isEmpty else {
+      return Snapshot(references: [], selectedReferences: [])
+    }
     let matching = buckets.filter { $0.key.runID == runID }
     guard matching.count == 1, let (_, bucket) = matching.first else {
       return Snapshot(references: [], selectedReferences: [])
@@ -702,8 +755,12 @@ actor ChatCitationProvenanceRegistry {
       return snapshot(from: bucket)
     }
     // Host tools authorize against the canonical run, but some adapters finish
-    // the query with a different or empty attempt id. If this run has exactly
-    // one ledger, that is the same provenance the model cited.
+    // the query with an empty attempt id. If this run has exactly one ledger,
+    // that is the same provenance the model cited. A non-empty mismatch must
+    // not steal another attempt's citations.
+    guard attempt.isEmpty else {
+      return Snapshot(references: [], selectedReferences: [])
+    }
     let matching = buckets.filter { $0.key.runID == runID }
     guard matching.count == 1, let (key, bucket) = matching.first else {
       return Snapshot(references: [], selectedReferences: [])

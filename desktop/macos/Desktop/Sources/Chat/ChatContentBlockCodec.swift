@@ -231,14 +231,14 @@ enum ChatContentBlockCodec {
     _ blocks: [ChatContentBlock],
     backup: [ChatContentBlock]
   ) -> [ChatContentBlock] {
-    let existing = Set(
+    var seen = Set(
       blocks.compactMap { block -> Int? in
         guard case .citation(_, let reference) = block else { return nil }
         return reference.ordinal
       })
     let recovered = backup.filter { block in
       guard case .citation(_, let reference) = block else { return false }
-      return !existing.contains(reference.ordinal)
+      return seen.insert(reference.ordinal).inserted
     }
     return recovered.isEmpty ? blocks : blocks + recovered
   }
