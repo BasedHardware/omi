@@ -7,7 +7,7 @@ name: omi-onprem
 # does not use (the mirror of keeping the Firestore emulator out of base/prod).
 services:
   mongo:
-    image: mongo:7
+    image: mongo:7  # major-pin (currently v7.0.40; gets 7.x security patches, not :latest)
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     healthcheck:
       # Initiate the one-member replica set on first probe, then report healthy once primary.
@@ -53,7 +53,7 @@ services:
   #   then: docker compose --profile objstore up -d --build
   # Buckets are provisioning (ADR-0032 §5): create them out-of-band before first use.
   rustfs:
-    image: rustfs/rustfs@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21  # v1.0.0-beta.12 (registry digest, verified)
+    image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21  # tag@digest (verified: tag resolves to this digest)
     profiles: ["objstore"]
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
@@ -166,7 +166,7 @@ services:
   # on first upsert. Enable with the `chat` profile (RAG needs it) and set in backend.env:
   #   VECTOR_STORE_BACKEND=qdrant + QDRANT_URL=http://qdrant:6333 + QDRANT_VECTOR_DIM=<embedding dim>.
   qdrant:
-    image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # qdrant/qdrant:latest registry digest, verified (re-pulled)
+    image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # qdrant 1.19.0 (registry digest, verified)
     profiles: ["chat"]
     volumes:
       - qdrant-storage:/qdrant/storage
