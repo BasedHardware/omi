@@ -216,4 +216,3 @@ def merge_synced_local_kg(
         reconcile_complete=reconcile_complete,
         db_client=db_client,
     )
-
