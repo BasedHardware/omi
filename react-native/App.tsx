@@ -454,7 +454,13 @@ function ConversationsPage({
 
   return (
     <View style={styles.conversationPage}>
-      <Text style={styles.projectionTitle}>Conversations</Text>
+      <Text
+        style={[
+          styles.projectionTitle,
+          Platform.OS === 'macos' && styles.macPrimaryText,
+        ]}>
+        Conversations
+      </Text>
       <View style={styles.conversationDiscovery}>
         <View style={styles.conversationSearchBox}>
           <Search accessible={false} color="#777777" size={17} />
@@ -697,7 +703,13 @@ function MemoriesPage({
   const filtering = query.trim() !== '';
   return (
     <View style={styles.memoryPage}>
-      <Text style={styles.projectionTitle}>Memories</Text>
+      <Text
+        style={[
+          styles.projectionTitle,
+          Platform.OS === 'macos' && styles.macPrimaryText,
+        ]}>
+        Memories
+      </Text>
       <View style={styles.memorySearchBox}>
         <Search accessible={false} color="#777777" size={17} />
         <TextInput
@@ -824,7 +836,13 @@ function TasksPage({
   const filtering = query.trim() !== '';
   return (
     <View style={styles.tasksPage}>
-      <Text style={styles.projectionTitle}>Tasks</Text>
+      <Text
+        style={[
+          styles.projectionTitle,
+          Platform.OS === 'macos' && styles.macPrimaryText,
+        ]}>
+        Tasks
+      </Text>
       <View style={styles.taskSearchBox}>
         <Search accessible={false} color="#777777" size={17} />
         <TextInput
@@ -1875,7 +1893,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         header={
                           <View style={styles.searchHeader}>
                             <Text style={styles.searchEyebrow}>HOME</Text>
-                            <Text style={styles.searchTitle}>
+                            <Text
+                              style={[
+                                styles.searchTitle,
+                                macDesktop && styles.macPrimaryText,
+                              ]}>
                               Search what you’ve seen and heard
                             </Text>
                             <View
@@ -2023,7 +2045,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                               },
                             ]}>
                             <OmiMark />
-                            <Text style={styles.greeting}>I’m ready.</Text>
+                            <Text
+                              style={[
+                                styles.greeting,
+                                macDesktop && styles.macPrimaryText,
+                              ]}>
+                              I’m ready.
+                            </Text>
                             <View style={styles.currents}>
                               <Text style={styles.sectionLabel}>CURRENTS</Text>
                               {chatError === null ? (
@@ -2160,6 +2188,7 @@ const styles = StyleSheet.create({
   macTopNavItemActive: {backgroundColor: '#ffffff'},
   macTopNavText: {color: '#505050', fontSize: 13, fontWeight: '600'},
   macTopNavTextActive: {color: '#141414'},
+  macPrimaryText: {color: '#141414'},
   navigation: {backgroundColor: '#141414'},
   rail: {paddingHorizontal: 8, paddingVertical: 24},
   railHeader: {alignItems: 'flex-start', gap: 8},

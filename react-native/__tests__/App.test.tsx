@@ -1298,6 +1298,46 @@ test('uses transparent separated macOS desktop chrome', async () => {
   ).toBeDefined();
 });
 
+test.each([800, 960, 1440])(
+  'keeps primary text legible over macOS glass at %ipx',
+  async width => {
+    mockPlatformOS = 'macos';
+    mockViewportWidth = width;
+    const renderer = await renderApp();
+    const homeTitle = renderer.root.find(
+      node =>
+        String(node.type) === 'Text' &&
+        node.props.children === 'Search what you’ve seen and heard',
+    );
+
+    expect(homeTitle.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({color: '#141414'})]),
+    );
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.accessibilityRole === 'tablist' &&
+          Array.isArray(node.props.style),
+      ),
+    ).toHaveLength(0);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root
+        .find(node => node.props.accessibilityLabel === 'Tasks navigation')
+        .props.onPress();
+    });
+    const tasksTitle = renderer.root
+      .findAll(
+        node => String(node.type) === 'Text' && node.props.children === 'Tasks',
+      )
+      .find(node => Array.isArray(node.props.style));
+    expect(tasksTitle).toBeDefined();
+    expect(tasksTitle!.props.style).toEqual(
+      expect.arrayContaining([expect.objectContaining({color: '#141414'})]),
+    );
+  },
+);
+
 test('keeps non-macOS mobile navigation and pane composition unchanged', async () => {
   mockPlatformOS = 'ios';
   mockViewportWidth = 390;
