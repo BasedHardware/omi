@@ -1,0 +1,3 @@
+{
+  "change": "⌘ + ⌘ now asks for the Accessibility grant it needs instead of silently doing nothing; Settings loses the Appearance pane, the search-shortcut recorder, Capture Quality, the Airgap and Sound switches and the agent survey, and opens at the timeline's size"
+}

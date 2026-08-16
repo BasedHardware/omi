@@ -124,6 +124,60 @@ final class ClaudeMemoryTests: XCTestCase {
         XCTAssertEqual(ClaudeMemory.stripped(from: mine), mine)
     }
 
+    // MARK: - The disk half
+
+    /// The write really lands, `~/.claude` is created when it is missing, and a second install
+    /// touches nothing — which is what keeps a file the user may have open in an editor from being
+    /// rewritten on every launch.
+    func testInstallCreatesTheDirectoryWritesTheBlockAndIsIdempotent() throws {
+        let home = try temporaryHome()
+        let url = home.appendingPathComponent(".claude/CLAUDE.md")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.deletingLastPathComponent().path))
+
+        XCTAssertTrue(try ClaudeMemory.install(at: url))
+        let written = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(ClaudeMemory.isInstalled(in: written))
+
+        XCTAssertFalse(
+            try ClaudeMemory.install(at: url), "a correct file must not be rewritten")
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), written)
+    }
+
+    /// Disconnecting deletes a file this app created and nothing else was ever written to — an empty
+    /// `CLAUDE.md` left behind is litter that reads as a broken config.
+    func testRemoveDeletesAFileThatWasOnlyEverOurs() throws {
+        let home = try temporaryHome()
+        let url = home.appendingPathComponent(".claude/CLAUDE.md")
+        try ClaudeMemory.install(at: url)
+
+        XCTAssertTrue(try ClaudeMemory.remove(at: url))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertFalse(try ClaudeMemory.remove(at: url), "nothing left to remove")
+    }
+
+    /// …but a file the user has written in is theirs, whatever is left after our paragraph goes.
+    func testRemoveKeepsAFileTheUserHasWrittenIn() throws {
+        let home = try temporaryHome()
+        let url = home.appendingPathComponent(".claude/CLAUDE.md")
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "# My rules\n\n- Never push to main.\n".write(to: url, atomically: true, encoding: .utf8)
+        try ClaudeMemory.install(at: url)
+
+        XCTAssertTrue(try ClaudeMemory.remove(at: url))
+        let remaining = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(remaining.contains("- Never push to main."))
+        XCTAssertFalse(remaining.contains(ClaudeMemory.beginMarker))
+    }
+
+    private func temporaryHome() throws -> URL {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("claude-memory-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: home) }
+        return home
+    }
+
     // MARK: - What it says
 
     /// The instruction is only worth writing if it states the rule the product needs: look *before*

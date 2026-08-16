@@ -132,9 +132,14 @@ public enum ClaudeMemory {
     ///
     /// Returns whether anything changed, so connecting twice does not touch a file the user may have
     /// open in an editor.
+    ///
+    /// - Parameter url: the file to write. Defaulted to ``documentURL`` and injected only so the
+    ///   disk half of this type is exercisable — the pure merge above is the interesting logic, but
+    ///   "creates `~/.claude` when it is missing", "leaves an unchanged file alone" and "deletes a
+    ///   file that was only ever ours" are properties of *this* function, and a test that could not
+    ///   reach them would leave the only part that touches the user's disk unproven.
     @discardableResult
-    public static func install() throws -> Bool {
-        let url = documentURL
+    public static func install(at url: URL = documentURL) throws -> Bool {
         let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         guard !isInstalled(in: existing) else { return false }
         try FileManager.default.createDirectory(
@@ -147,8 +152,7 @@ public enum ClaudeMemory {
     /// `CLAUDE.md` we created and then emptied is litter, but a file the user has written in is
     /// theirs whatever is left after our paragraph goes.
     @discardableResult
-    public static func remove() throws -> Bool {
-        let url = documentURL
+    public static func remove(at url: URL = documentURL) throws -> Bool {
         guard let existing = try? String(contentsOf: url, encoding: .utf8),
             blockRange(in: existing) != nil
         else { return false }

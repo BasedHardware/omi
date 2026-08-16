@@ -17,11 +17,23 @@ import XCTest
 /// gap between what the test built and what the app builds, so a second hand-built window would be the
 /// same test again with a different assertion on it.
 ///
-/// The test process is `.accessory` and is never activated, which is not a limitation — it is the
-/// condition. `makeKeyWindow` is documented as a no-op while the application is inactive, and
+/// The test process is never activated, which is not a limitation — it is the condition.
+/// `makeKeyWindow` is documented as a no-op while the application is inactive, and
 /// `NSApp.activate(ignoringOtherApps:)` is deprecated as of macOS 14 and does not reliably activate; in
 /// this process it does not activate at all. A window that is key here is a window whose key status
 /// does not depend on activation having landed, which is precisely the guarantee 1.0.4 lacked.
+///
+/// **The activation policy is the app's own, installed on purpose, and it used to arrive by
+/// accident.** `setUp` set `.accessory` and said so in this paragraph — and then `RewindWindow.present`
+/// built a `RewindView`, which held an `@ObservedObject` on `SettingsStore.shared`, whose `init`
+/// calls `applyDockIcon()` and therefore `NSApp.setActivationPolicy(.regular)`. So every measurement
+/// in this file was taken on a `.regular` process while the file documented an `.accessory` one. That
+/// was invisible until the timeline stopped reading `SettingsStore` at all (the Appearance pane's
+/// timeline-control toggles went, and with them the view's only reason to hold the store): the
+/// process stayed `.accessory`, no window in it could take key status, and three of these four tests
+/// went from measuring to skipping — coverage deleted by a change nowhere near them. Installing
+/// `DockPresence.launchPolicy()` is what `applicationDidFinishLaunching` does, so what is measured is
+/// now the shipped configuration, stated rather than inherited.
 @MainActor
 final class TimelineKeyStatusTests: XCTestCase {
 
@@ -29,7 +41,7 @@ final class TimelineKeyStatusTests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        NSApplication.shared.setActivationPolicy(.accessory)
+        NSApplication.shared.setActivationPolicy(DockPresence.launchPolicy())
         root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("timeline-key-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
