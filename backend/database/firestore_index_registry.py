@@ -210,6 +210,30 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('account_generation'), _asc('status'), _asc('__name__')),
     ),
+    FirestoreIndexRequirement(
+        'context_buckets_generation_updated',
+        'context_buckets',
+        'COLLECTION',
+        (_asc('account_generation'), _desc('updated_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'context_buckets_generation_workstream_updated',
+        'context_buckets',
+        'COLLECTION',
+        (_asc('account_generation'), _asc('workstream_id'), _desc('updated_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'context_bucket_facts_generation_updated',
+        'context_bucket_facts',
+        'COLLECTION',
+        (_asc('account_generation'), _desc('updated_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'context_bucket_facts_generation_workstream_updated',
+        'context_bucket_facts',
+        'COLLECTION',
+        (_asc('account_generation'), _asc('workstream_tag'), _desc('updated_at'), _asc('__name__')),
+    ),
 )
 
 
