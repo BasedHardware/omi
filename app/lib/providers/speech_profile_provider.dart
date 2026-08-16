@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -60,8 +61,8 @@ class SpeechProfileProvider extends ChangeNotifier
   String text = '';
   SpeechProfileProgressState progressState = SpeechProfileProgressState.keepSpeaking;
 
-  late Function? _finalizedCallback;
-  late Function? _processConversationCallback;
+  Function? _finalizedCallback;
+  Function? _processConversationCallback;
 
   /// only used during onboarding /////
   SpeechProfileLoadingState loadingState = SpeechProfileLoadingState.uploading;
@@ -209,6 +210,11 @@ class SpeechProfileProvider extends ChangeNotifier
         );
   }
 
+  /// Uploads the recorded speech-profile audio. Overridden in tests to avoid
+  /// a real network call.
+  @visibleForTesting
+  Future<bool> uploadSpeechProfile(File file) => uploadProfile(file);
+
   /// Start phone microphone streaming (alternative to BLE device streaming).
   /// Returns false when the mic could not be acquired — contention with a live
   /// conversation throws a [StateError] — so [initialise] fails visibly instead
@@ -277,7 +283,7 @@ class SpeechProfileProvider extends ChangeNotifier
       bool uploadSuccess = false;
       bool uploadFailedDueToShortAudio = false;
       try {
-        uploadSuccess = await uploadProfile(data.item1).timeout(
+        uploadSuccess = await uploadSpeechProfile(data.item1).timeout(
           const Duration(seconds: 30),
           onTimeout: () {
             Logger.debug('Profile upload timed out after 30 seconds');
@@ -293,15 +299,7 @@ class SpeechProfileProvider extends ChangeNotifier
       }
 
       if (!uploadSuccess) {
-        // Upload failed - notify user but still process conversation
-        uploadingProfile = false;
-        notifyError(uploadFailedDueToShortAudio ? 'TOO_SHORT' : 'UPLOAD_FAILED');
-
-        // Still trigger conversation processing
-        if (_processConversationCallback != null) {
-          Logger.debug('Triggering conversation processing despite upload failure...');
-          _processConversationCallback!();
-        }
+        completeAfterUploadFailure(tooShort: uploadFailedDueToShortAudio);
         return;
       }
 
@@ -328,6 +326,32 @@ class SpeechProfileProvider extends ChangeNotifier
         _finalizedCallback!();
       }
     }
+  }
+
+  /// Upload failed - notify user but still complete onboarding. A failed
+  /// voice-print upload (e.g. no speech-profiles bucket configured, as in the
+  /// local dev harness) is a degraded feature, not a reason to trap the user
+  /// on the last onboarding question forever: the "All Done" continue button
+  /// in speech_profile_widget.dart is gated on profileCompleted, which this
+  /// branch previously never set. Separated from finalize() so it's directly
+  /// testable without a real (opus-decoder-backed) WavBytesUtil.
+  @visibleForTesting
+  void completeAfterUploadFailure({required bool tooShort}) {
+    uploadingProfile = false;
+    notifyError(tooShort ? 'TOO_SHORT' : 'UPLOAD_FAILED');
+
+    // Still trigger conversation processing
+    if (_processConversationCallback != null) {
+      Logger.debug('Triggering conversation processing despite upload failure...');
+      _processConversationCallback!();
+    }
+
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    profileCompleted = true;
+    text = '';
+    updateLoadingState(SpeechProfileLoadingState.allSet);
+    notifyListeners();
   }
 
   // TODO: use connection directly

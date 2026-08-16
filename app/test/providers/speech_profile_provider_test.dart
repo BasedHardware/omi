@@ -173,4 +173,35 @@ void main() {
       });
     });
   });
+
+  // Regression coverage: finalize()'s upload-failure branch commented "still
+  // process conversation" but never set profileCompleted, so the "All Done"
+  // continue button (gated on provider.profileCompleted in
+  // speech_profile_widget.dart) never appeared — trapping the user on the
+  // last onboarding question forever whenever the speech-profile upload
+  // fails (e.g. BUCKET_SPEECH_PROFILES unconfigured locally).
+  group('onboarding completes even when the speech-profile upload fails', () {
+    test('marks the profile completed after an upload failure', () {
+      final provider = SpeechProfileProvider();
+
+      provider.completeAfterUploadFailure(tooShort: false);
+
+      expect(provider.profileCompleted, isTrue, reason: 'the user must be able to leave onboarding');
+      expect(provider.uploadingProfile, isFalse);
+      expect(provider.error, 'UPLOAD_FAILED');
+
+      provider.dispose();
+    });
+
+    test('marks the profile completed after a too-short-audio failure', () {
+      final provider = SpeechProfileProvider();
+
+      provider.completeAfterUploadFailure(tooShort: true);
+
+      expect(provider.profileCompleted, isTrue, reason: 'the user must be able to leave onboarding');
+      expect(provider.error, 'TOO_SHORT');
+
+      provider.dispose();
+    });
+  });
 }
