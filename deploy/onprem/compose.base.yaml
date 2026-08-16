@@ -31,7 +31,8 @@ services:
         PYTHON_BASE_IMAGE: python:3.11-slim
     env_file:
       - ./backend.env.base
-    # create the temp dirs used at runtime (main.py does not create them), then start uvicorn
+    # Defensive/parity mkdir of the runtime temp dirs before uvicorn — main.py DOES create them at import
+    # (_temp/_samples/_segments/_speech_profiles), so this is belt-and-suspenders, not a gap (cubic :34).
     command:
       - sh
       - -c
@@ -72,9 +73,9 @@ services:
 
 networks:
   omi:
-    driver: bridge
-  # Non-internal network for the TLS reverse proxies so their published ports have host ingress
-  # (the `omi` net is internal:true → no external routing). Proxies join both: `edge` for the
-  # device/host, `omi` to reach keycloak/backend by service name.
+    driver: bridge  # bridged (ADR-0048): on-prem is local-services, not air-gapped; data sovereignty is
+                    # by config (local backends), not network isolation. Services reach each other by name.
+  # The TLS reverse proxies also join `edge` so their published ports have host ingress; `edge` is where
+  # the device/host connects, `omi` is service-to-service (keycloak/backend by name).
   edge:
     driver: bridge

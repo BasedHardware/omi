@@ -66,24 +66,26 @@ RUN ldconfig && \
 
 COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py
+
+# Pre-cache tiktoken BPE encodings at build time so runtime stays hermetic. The chat token-budget
+# step (utils/retrieval/safety.py) loads cl100k_base / o200k_base; without a baked cache tiktoken
+# fetches them from openaipublic.blob.core.windows.net on first use. TIKTOKEN_CACHE_DIR points the
+# runtime at the baked cache. (D32 — on-prem chat.) The download goes through
+# scripts/prewarm_tiktoken_cache.py (no args → its BAKED_ENCODINGS list is the single source of truth),
+# which retries transient CDN failures (429/5xx) with bounded backoff. BAKED_ENCODINGS is pinned by
+# test_tiktoken_baked_encodings. Run this BEFORE `COPY backend/ .` (copying only the self-contained
+# prewarm script) so a backend source change does not invalidate this layer and re-download the blobs
+# on every build (cubic PR 10887 Dockerfile:85).
+ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
+COPY backend/scripts/prewarm_tiktoken_cache.py /app/scripts/prewarm_tiktoken_cache.py
+RUN /opt/venv/bin/python scripts/prewarm_tiktoken_cache.py \
+ && test -n "$(ls -A "$TIKTOKEN_CACHE_DIR")"
+
 # Bundle the index manifest next to the backend tree so the on-prem Mongo index reconcile (run at
 # startup by scripts/reconcile_mongo_indexes.py when STORAGE_BACKEND=mongo) finds it in the image —
 # `COPY backend/ .` does not include this repo-root file (cubic PR 10887 main.py:288).
 COPY firestore.indexes.json /app/firestore.indexes.json
 COPY backend/ .
-
-# Pre-cache tiktoken BPE encodings at build time so runtime stays hermetic. The chat token-budget
-# step (utils/retrieval/safety.py) loads cl100k_base / o200k_base; without a baked cache tiktoken
-# fetches them from openaipublic.blob.core.windows.net on first use, which fails on the no-egress
-# on-prem network (build-time egress is allowed, like the helm/model pre-fetches). TIKTOKEN_CACHE_DIR
-# points the runtime at the baked cache. (D32 — on-prem chat.)
-# The download goes through scripts/prewarm_tiktoken_cache.py (no args → its BAKED_ENCODINGS list is
-# the single source of truth for what gets baked), which retries transient CDN failures (429/5xx) with
-# bounded backoff so one flaky blob response can't fail the build. BAKED_ENCODINGS is pinned to the
-# encodings production code actually requests by test_tiktoken_baked_encodings.
-ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
-RUN /opt/venv/bin/python scripts/prewarm_tiktoken_cache.py \
- && test -n "$(ls -A "$TIKTOKEN_CACHE_DIR")"
 
 # Run as a non-root user: a compromise of the app process (e.g. via a
 # dependency RCE) shouldn't hand the attacker root inside the container by

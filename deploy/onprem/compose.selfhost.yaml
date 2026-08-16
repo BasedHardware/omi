@@ -7,7 +7,7 @@ name: omi-onprem
 # does not use (the mirror of keeping the Firestore emulator out of base/prod).
 services:
   mongo:
-    image: mongo:latest
+    image: mongo:7
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     healthcheck:
       # Initiate the one-member replica set on first probe, then report healthy once primary.
@@ -47,11 +47,13 @@ services:
   # Alternate object-store backend (ADR-0032/0004). Opt-in via the `objstore` profile so the default
   # on-prem baseline stays GCS-shaped (ADR-0003). RustFS is one S3-compatible product; the S3 adapter
   # is generic (MinIO/SeaweedFS/Ceph/AWS work the same by changing S3_ENDPOINT/credentials). To use it:
-  #   OBJECT_STORE_BACKEND=s3 + S3_ENDPOINT=http://rustfs:9000 + S3_ACCESS_KEY/S3_SECRET_KEY in backend.env,
+  #   OBJECT_STORE_BACKEND=s3 + S3_ENDPOINT=http://rustfs:9000 in backend.env; put S3_ACCESS_KEY/S3_SECRET_KEY
+  #   in the deploy/onprem .env (NOT backend.env — the backend `environment:` block above interpolates them
+  #   from the compose .env and overrides env_file, so both client and server always share one value),
   #   then: docker compose --profile objstore up -d --build
   # Buckets are provisioning (ADR-0032 §5): create them out-of-band before first use.
   rustfs:
-    image: rustfs/rustfs:latest
+    image: rustfs/rustfs@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
     profiles: ["objstore"]
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
@@ -164,7 +166,7 @@ services:
   # on first upsert. Enable with the `chat` profile (RAG needs it) and set in backend.env:
   #   VECTOR_STORE_BACKEND=qdrant + QDRANT_URL=http://qdrant:6333 + QDRANT_VECTOR_DIM=<embedding dim>.
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant@sha256:0bd98fa7977f1e75694779359ca4e212822e5a71334e28421182f72f209d5286
     profiles: ["chat"]
     volumes:
       - qdrant-storage:/qdrant/storage
@@ -210,6 +212,11 @@ services:
       # Base nvcr.io/nvidia/nemo:26.02 — run `docker login nvcr.io` (free NGC account) before building.
       dockerfile: backend/parakeet/Dockerfile
     profiles: ["inference"]
+    # NIM mode forwards to whisper — wait until whisper's model is resident (its /health readiness), so the
+    # first /v3/stream transcriptions don't fail against a not-yet-ready backend (cubic PR 10887 :207).
+    depends_on:
+      whisper:
+        condition: service_healthy
     environment:
       PARAKEET_INFERENCE_MODE: nim
       NIM_INFERENCE_URL: http://whisper:8000   # gateway appends /v1/audio/transcriptions (no /v1 here)
@@ -286,6 +293,15 @@ services:
       HF_HOME: /models/hf                 # model pre-provisioned into the volume (internal network = no egress)
       WHISPER_MODEL: large-v3
       WHISPER_COMPUTE_TYPE: int8_float16   # ~1.5GB on GPU; CTranslate2 mode validated on sm_120
+    healthcheck:
+      # /health reports ready only once large-v3 is resident (main.py loads eagerly at import), so the
+      # parakeet NIM gateway can gate on this and never forward before whisper can serve (cubic PR 10887
+      # compose.selfhost.yaml:207). Long start_period: model load on first boot.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 120s
     volumes:
       - inference-models:/models
     # GPU via CDI — see the diarizer service note. CPU-only smoke: WHISPER_DEVICE=cpu + drop this stanza.

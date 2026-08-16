@@ -9,3 +9,6 @@ backend.env.*
 llm_gateway.env.*
 !backend.env.*.example
 !llm_gateway.env.*.example
+
+# GCP service-account key for the cloud posture (compose.prod.cloud mounts ./secrets/gcp-sa.json).
+secrets/

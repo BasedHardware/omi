@@ -1,7 +1,9 @@
 name: omi-onprem
-# Omi self-host — PROD (hermetic). Base services + `omi` internal:true = the no-egress proof of
-# ADR-0001. Inference/LLM/embeddings endpoints are operator services reachable on the `omi` net (NO
-# host access). Expose the API only via the TLS proxies (`--profile auth`). No implicit default:
+# Omi self-host — PROD. On-prem = LOCAL services on a BRIDGED `omi` network (ADR-0048): the host may reach
+# the internet for image/dep/model provisioning and the operator's LLM/embeddings host; data sovereignty
+# is guaranteed by CONFIGURATION (every port bound to a local backend), not by network isolation. (Not an
+# air-gapped posture — ADR-0001's no-egress line was an acceptance idea, not a deployment mandate; dropped
+# here per ADR-0048.) Expose the API only via the TLS proxies (`--profile auth`). No implicit default:
 # always pass -f (there is no docker-compose.yml).
 #   docker compose -f compose.prod.yaml [--profile auth|chat|…] up -d
 include:
@@ -18,6 +20,3 @@ services:
     # mounted per-environment (base intentionally omits it) so test principals never reach prod.
     volumes:
       - ./keycloak/omi-realm.example.json:/opt/keycloak/data/import/omi-realm.json:ro
-networks:
-  omi:
-    internal: true
