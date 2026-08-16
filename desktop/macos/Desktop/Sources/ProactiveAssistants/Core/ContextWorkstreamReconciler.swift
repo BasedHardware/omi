@@ -783,8 +783,10 @@ enum ContextProactiveCandidateGate {
       The notification was written earlier, from the stored evidence below, not from the
       current screen. The current screen is not expected to mention it.
       Answer show=false only for one of these three reasons:
-      1. The current screen shows the matter already resolved, completed, or changed, so
-         the notification is now wrong or moot.
+      1. The current screen clearly shows that the very matter this notification is about
+         is already resolved, completed, or changed, so the notification is now wrong or
+         moot. A different task, pull request, or topic being resolved on screen is not
+         this reason.
       2. The notification repeats a point in the recently-delivered list, even reworded.
       3. The notification only tells the user what they are already looking at right now.
       Otherwise answer show=true.

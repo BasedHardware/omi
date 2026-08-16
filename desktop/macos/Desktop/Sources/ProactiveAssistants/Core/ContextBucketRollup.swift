@@ -521,6 +521,9 @@ struct BucketExtractionWriteResult: Equatable, Sendable {
 }
 
 extension ContextBucketStore {
+  /// `applyWritePolicy` gates `ContextFactWritePolicy`; false keeps the write
+  /// path byte-identical to the pre-policy behavior. The flag is read by the
+  /// caller on the main actor and passed in, mirroring the departure flag.
   @discardableResult
   func writeExtraction(
     _ extraction: BucketExtraction,
@@ -528,6 +531,7 @@ extension ContextBucketStore {
     appName: String,
     rawContextKey: String,
     normalizedContextKey: String,
+    applyWritePolicy: Bool = false,
     now: Date = Date()
   ) async throws -> BucketExtractionWriteResult? {
     guard let bucketID = fence.bucketID else { return nil }
@@ -594,6 +598,9 @@ extension ContextBucketStore {
         for fact in extraction.facts.prefix(20) {
           let statement = String(fact.statement.prefix(500))
           if ContextWorkstreamPooling.isScaffolding(statement) { continue }
+          let policyVerdict =
+            applyWritePolicy ? ContextFactWritePolicy.verdict(statement) : .pass
+          if policyVerdict == .dropMachinery { continue }
           let evidenceText = String(fact.evidenceText.prefix(1_000))
           let evidenceRefs = BucketFactValidator.resolvableEvidenceRefs(
             Array(fact.evidenceRefs.prefix(10)), allowed: allowedEvidenceRefs)
@@ -618,7 +625,17 @@ extension ContextBucketStore {
             evidenceText: evidenceText,
             evidenceRefs: evidenceRefs,
             duplicate: duplicate)
-          let worthiness = validity == .validated ? min(max(fact.notifyWorthiness, 0), 1) : 0
+          var worthiness = validity == .validated ? min(max(fact.notifyWorthiness, 0), 1) : 0
+          switch policyVerdict {
+          case .capScenery:
+            // Stored but never armed: scenery stays honest context for the
+            // director while losing all downstream worthiness effects.
+            worthiness = 0
+          case .floorHumanEvent where validity == .validated:
+            worthiness = max(worthiness, ContextFactWritePolicy.humanEventWorthinessFloor)
+          default:
+            break
+          }
           maximumWorthiness = max(maximumWorthiness, worthiness)
           try db.execute(
             sql: """
@@ -940,7 +957,10 @@ actor ContextBucketRollupWriter {
         appName: frame.appName,
         rawContextKey: "\(frame.appName)\n\(frame.windowTitle ?? "")",
         normalizedContextKey: ContextTitleNormalizer.identityKey(
-          appName: frame.appName, windowTitle: frame.windowTitle) ?? "")
+          appName: frame.appName, windowTitle: frame.windowTitle) ?? "",
+        applyWritePolicy: await MainActor.run(body: {
+          ContextBucketsFeature.isFactWritePolicyEnabled
+        }))
       await ContextProactivityTelemetry.recordExtractionOutcome(.success)
       await applyDestinationIfEligible(extraction: extraction, frame: frame, fence: fence)
       // Departure-triggered evaluation: only a fact this extraction newly
