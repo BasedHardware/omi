@@ -180,6 +180,31 @@ def test_precondition_update_advances_revision_even_under_same_ms_writes(store, 
         store.update(base, {"n": 999}, if_updated_at=first)
 
 
+def test_unconditional_writes_advance_revision_even_under_same_ms_writes(store, uid):
+    # cubic PR 10887 mongo.py:161: an UNCONDITIONAL write (full set, merge, update-without-precondition) must
+    # ALSO advance _updated_at strictly. Two such writes in the same BSON millisecond otherwise share a
+    # revision, so a reader's stale if_updated_at token still satisfies the next conditional update — a silent
+    # lost update (repro'd). _rev_stamp closed this only for precondition writes; the repeatable set/merge/
+    # update paths now stamp max(now, prev+1ms) too. Rapid loops provoke same-ms collisions on both backends.
+    base = f"users/{uid}"
+    store.set(base, {"n": 0})
+    first = store.get(base).updated_at
+    prev = first
+    for i in range(1, 50):
+        store.set(base, {"n": i})  # unconditional full-set (pipeline monotonic path)
+        cur = store.get(base).updated_at
+        assert cur > prev, f"full-set revision not strictly increasing at iter {i}: {prev} -> {cur}"
+        prev = cur
+    for i in range(50, 90):
+        store.set(base, {"m": i}, merge=True)  # unconditional merge (operator + bump path)
+        cur = store.get(base).updated_at
+        assert cur > prev, f"merge revision not strictly increasing at iter {i}: {prev} -> {cur}"
+        prev = cur
+    # the original (now stale) token must be rejected: the OCC revision never collided under the rapid writes
+    with pytest.raises(PreconditionFailed):
+        store.update(base, {"n": 999}, if_updated_at=first)
+
+
 def test_delete_with_matching_precondition_applies(store, uid):
     store.set(f"users/{uid}", {"v": 1})
     rev = store.get(f"users/{uid}").updated_at

@@ -70,6 +70,20 @@ def _rev_stamp(if_updated_at: Any = None) -> datetime:
     return max(now, if_updated_at + timedelta(milliseconds=1))
 
 
+_UPDATED_AT_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def _monotonic_updated_at(now: datetime) -> Dict[str, Any]:
+    """Aggregation-pipeline expression for a strictly-increasing per-document ``_updated_at``:
+    ``max(now, prev + 1ms)``. Two UNCONDITIONAL writes in the same BSON millisecond otherwise share a
+    revision, so a reader's stale ``if_updated_at`` token still satisfies the next conditional update — a
+    silent lost update (cubic PR 10887 mongo.py:161; repro'd). ``_rev_stamp`` closed this only for
+    precondition writes; this closes it for the repeatable set/merge/update paths. A brand-new doc (prev is
+    null) resolves to ``now``. Cost is negligible (~+4% per write, measured) since with no contention
+    ``prev + 1ms < now`` so the result is just ``now``."""
+    return {"$max": [now, {"$add": [{"$ifNull": ["$_updated_at", _UPDATED_AT_EPOCH]}, 1]}]}
+
+
 def _is_sentinel(value: Any) -> bool:
     return value is DELETE or value is SERVER_TIMESTAMP or isinstance(value, (ArrayUnion, ArrayRemove, Increment))
 
@@ -142,25 +156,46 @@ class _MongoBatch:
         # raise NotFound on a missing doc), which forces the sequential commit path.
         self._ops.append((collection_name, op, run, checked))
 
+    def _append_bump(self, collection_name: str, path: str, now: datetime) -> None:
+        # Monotonic _updated_at for an operator-based queued write. bulk_write runs ops in order (ordered=True)
+        # and the sequential fallback runs each op's closure in order, so this bump reliably reads the value
+        # the preceding merge/update op wrote and lifts it to max(now, prev+1ms) (cubic 10887 mongo.py:161).
+        bump = [{"$set": {"_updated_at": _monotonic_updated_at(now)}}]
+        self._append(
+            collection_name,
+            UpdateOne({"_id": path}, bump),
+            lambda coll, _b=bump: coll.update_one({"_id": path}, _b),
+        )
+
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
         collection_name, parent, key = _doc_meta(path)
         now = _now()
         if merge:
+            # Operator-based merge can't compute a monotonic _updated_at inline -> stamp via a bump op.
             update: Dict[str, Any] = _build_update_ops(data)
-            update.setdefault("$set", {})["_updated_at"] = now
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
             self._append(
                 collection_name,
                 UpdateOne({"_id": path}, update, upsert=True),
                 lambda coll: coll.update_one({"_id": path}, update, upsert=True),
             )
+            self._append_bump(collection_name, path, now)
         else:
             plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
-            # $set the whole payload (non-merge) + $setOnInsert an immutable _created_at (cubic 10887 #1).
-            doc_update = {
-                "$set": {"d": plain, "_parent": parent, "_key": key, "_updated_at": now},
-                "$setOnInsert": {"_created_at": now},
-            }
+            # Pipeline replace: whole ``d`` (non-merge), monotonic ``_updated_at``, immutable ``_created_at``
+            # via ``$ifNull`` (pipelines have no ``$setOnInsert``) (cubic 10887 #1 + mongo.py:161).
+            doc_update = [
+                {
+                    "$set": {
+                        # $literal so ``d`` REPLACES rather than deep-merges (see MongoDocumentStore._set).
+                        "d": {"$literal": plain},
+                        "_parent": parent,
+                        "_key": key,
+                        "_updated_at": _monotonic_updated_at(now),
+                        "_created_at": {"$ifNull": ["$_created_at", now]},
+                    }
+                }
+            ]
             self._append(
                 collection_name,
                 UpdateOne({"_id": path}, doc_update, upsert=True),
@@ -202,24 +237,35 @@ class _MongoBatch:
 
     def update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
+        now = _now()
         update = _build_update_ops(data)
-        update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
-        query: Dict[str, Any] = {"_id": path}
         if if_updated_at is not None:
-            query["_updated_at"] = if_updated_at
+            # OCC: precondition + strictly-greater revision (``_rev_stamp``) in one atomic op — already
+            # monotonic vs the matched token, so no bump. A no-match means the precondition can't hold
+            # (revision moved OR doc missing); Firestore raises FailedPrecondition for a last-update-time
+            # precondition on a MISSING doc too (emulator-verified), so map it to PreconditionFailed.
+            update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
+            query = {"_id": path, "_updated_at": if_updated_at}
+
+            def run_occ(coll: Any) -> None:
+                if coll.update_one(query, update).matched_count == 0:
+                    raise PreconditionFailed(path)
+
+            self._append(collection_name, UpdateOne(query, update), run_occ, checked=True)
+            return
+
+        # Non-OCC: apply the operator field ops (when any), then bump _updated_at monotonically. Both run in
+        # queued order in the checked/sequential path; the bump also enforces existence (a missing doc no-ops
+        # both) -> NotFound, matching the Firestore batch (raises at commit, not a silent drop).
+        bump = [{"$set": {"_updated_at": _monotonic_updated_at(now)}}]
 
         def run(coll: Any) -> None:
-            result = coll.update_one(query, update)
-            if result.matched_count == 0:
-                # No match under a precondition means the precondition can't hold — whether the revision
-                # moved (stale) OR the document is missing. Firestore raises FailedPrecondition for a
-                # last-update-time precondition on a MISSING doc too (verified against the emulator), so
-                # raise PreconditionFailed to match the reference backend and the non-batch _update.
-                # Without a precondition, update requires an existing doc -> NotFound (matching the
-                # Firestore batch, which raises at commit, not a silent drop). See ADR superseding 0045.
-                raise PreconditionFailed(path) if if_updated_at is not None else NotFound(path)
+            if update:
+                coll.update_one({"_id": path}, update)
+            if coll.update_one({"_id": path}, bump).matched_count == 0:
+                raise NotFound(path)
 
-        self._append(collection_name, UpdateOne(query, update), run, checked=True)
+        self._append(collection_name, UpdateOne({"_id": path}, bump), run, checked=True)
 
     def delete(self, path: str, *, if_updated_at: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
@@ -322,23 +368,46 @@ class MongoDocumentStore:
             return StoredDocument.missing(path)
         return _to_record(doc, path)
 
+    def _bump_updated_at(self, collection: Any, path: str, now: datetime, session: Any) -> None:
+        # Strictly-increasing per-doc revision for an operator-based write, which cannot express $max in
+        # update-operator syntax. A second pipeline update reads the just-written value and bumps it to
+        # max(now, prev+1ms) so repeatable merge/update writes never collide on _updated_at (cubic 10887
+        # mongo.py:161). Runs in the same session, so inside a transaction it is atomic with the write.
+        collection.update_one({"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session)
+
     def _set(self, path: str, data: Dict[str, Any], *, merge: bool = False, session: Any = None) -> None:
         collection_name, parent, key = _doc_meta(path)
         collection = self._db[collection_name]
         now = _now()
         if merge:
+            # Operator-based merge (dotted $set / $inc / array ops) cannot compute a monotonic _updated_at
+            # in one update, so stamp it via a second pipeline bump (below) rather than a colliding raw now.
             update: Dict[str, Any] = _build_update_ops(data)
-            update.setdefault("$set", {})["_updated_at"] = now
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
             collection.update_one({"_id": path}, update, upsert=True, session=session)
+            self._bump_updated_at(collection, path, now, session)
             return
-        # merge=False -> full payload replace. ``$set`` on the whole ``d`` field replaces the payload
-        # (non-merge semantics) while ``$setOnInsert: _created_at`` keeps an immutable creation time across
-        # rewrites (cubic PR 10887 #1). Any transforms (rare on a non-merge set) apply right after.
+        # merge=False -> full payload replace via a pipeline update: ``$set`` the whole ``d`` field
+        # (non-merge semantics), a monotonic ``_updated_at`` (strictly increasing per doc), and keep an
+        # immutable ``_created_at`` with ``$ifNull`` (pipeline updates have no ``$setOnInsert``) (cubic
+        # PR 10887 #1 + mongo.py:161). Any transforms (rare on a non-merge set) apply right after.
         plain = {k: v for k, v in data.items() if not _is_sentinel(v)}
         collection.update_one(
             {"_id": path},
-            {"$set": {"d": plain, "_parent": parent, "_key": key, "_updated_at": now}, "$setOnInsert": {"_created_at": now}},
+            [
+                {
+                    "$set": {
+                        # $literal so ``d`` REPLACES (a pipeline $set of a bare object deep-MERGES into the
+                        # existing d — non-merge semantics need a literal replacement); it also keeps any
+                        # $-prefixed payload keys literal instead of evaluating them as field paths.
+                        "d": {"$literal": plain},
+                        "_parent": parent,
+                        "_key": key,
+                        "_updated_at": _monotonic_updated_at(now),
+                        "_created_at": {"$ifNull": ["$_created_at", now]},
+                    }
+                }
+            ],
             upsert=True,
             session=session,
         )
@@ -348,23 +417,32 @@ class MongoDocumentStore:
 
     def _update(self, path: str, data: Dict[str, Any], *, if_updated_at: Any = None, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
+        collection = self._db[collection_name]
+        now = _now()
         update = _build_update_ops(data)
-        update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
         # ``update`` requires an existing document (the Firestore reference adapter raises NotFound
         # otherwise). Mongo's update_one silently no-ops on no match, so translate matched_count==0
         # into the neutral NotFound to preserve parity across backends.
-        query: Dict[str, Any] = {"_id": path}
         if if_updated_at is not None:
             # Optimistic-concurrency precondition (neutral LastUpdateOption): only apply if the stored
-            # revision still matches. A no-match under a precondition means the precondition cannot hold —
-            # whether the revision moved (stale) OR the document is missing — and Firestore raises
-            # FailedPrecondition for a last-update-time precondition on a MISSING doc too (verified against
-            # the emulator). So map it to PreconditionFailed to match the reference backend, superseding
-            # ADR-0045's existence-probe (which assumed Firestore raised NotFound here — it does not).
-            query["_updated_at"] = if_updated_at
-        result = self._db[collection_name].update_one(query, update, session=session)
+            # revision still matches. ``_rev_stamp`` writes a strictly-greater revision in the SAME atomic
+            # update, so this path is already monotonic (the new value > the matched token) — no bump needed.
+            # A no-match means the precondition cannot hold — whether the revision moved (stale) OR the
+            # document is missing — and Firestore raises FailedPrecondition for a last-update-time precondition
+            # on a MISSING doc too (verified against the emulator), superseding ADR-0045's existence-probe.
+            update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
+            result = collection.update_one({"_id": path, "_updated_at": if_updated_at}, update, session=session)
+            if result.matched_count == 0:
+                raise PreconditionFailed(path)
+            return
+        # Non-OCC update: the operator write can't compute a monotonic _updated_at inline, so apply the field
+        # ops (when any), then bump _updated_at to max(now, prev+1ms) via a pipeline (cubic 10887 mongo.py:161).
+        # The bump also enforces existence: on a missing doc both the ops and the bump no-op -> NotFound.
+        if update:
+            collection.update_one({"_id": path}, update, session=session)
+        result = collection.update_one({"_id": path}, [{"$set": {"_updated_at": _monotonic_updated_at(now)}}], session=session)
         if result.matched_count == 0:
-            raise PreconditionFailed(path) if if_updated_at is not None else NotFound(path)
+            raise NotFound(path)
 
     def _delete(self, path: str, *, if_updated_at: Any = None, session: Any = None) -> None:
         collection_name, _, _ = _doc_meta(path)
