@@ -77,6 +77,10 @@ LEASE_HOLDER_PID_PATH="$RUNDIR/port-lease-holder.pid"
 LEASE_HOLDER_IDENTITY_FILE="$RUNDIR/port-lease-holder-start-identity"
 LEASE_HOLDER_PID=""
 LEASE_HOLDER_START_IDENTITY=""
+SIMULATOR_LEASE_HOLDER_PID_PATH="$RUNDIR/simulator-lease-holder.pid"
+SIMULATOR_LEASE_HOLDER_IDENTITY_FILE="$RUNDIR/simulator-lease-holder-start-identity"
+SIMULATOR_LEASE_HOLDER_PID=""
+SIMULATOR_LEASE_HOLDER_START_IDENTITY=""
 APP_FACING_LEASE=""
 mkdir -p "$RUNDIR"
 RUNTIME_LOG="$HERE/../apps/service/observability/runtime-log.ts"
@@ -154,12 +158,23 @@ stop_lease_holder() {
     "$RUNDIR/port-lease-holder-start-identity" "stack-port-lease.ts"
 }
 
+stop_simulator_lease_holder() {
+  if [[ "${SIMULATOR_LEASE_HOLDER_PID:-}" =~ ^[0-9]+$ && -n "${SIMULATOR_LEASE_HOLDER_START_IDENTITY:-}" ]]; then
+    stop_gateway_process "$SIMULATOR_LEASE_HOLDER_PID" "$SIMULATOR_LEASE_HOLDER_START_IDENTITY" \
+      "stack-simulator-lease.ts" \
+      "${SIMULATOR_LEASE_HOLDER_PID_PATH:-}" "${SIMULATOR_LEASE_HOLDER_IDENTITY_FILE:-}"
+  fi
+  stop_gateway_record "$RUNDIR/simulator-lease-holder.pid" \
+    "$RUNDIR/simulator-lease-holder-start-identity" "stack-simulator-lease.ts"
+}
+
 if (( STOP_ONLY )); then
   runtime_log info dev-stack.stop
   stop_owned_gateways
   node "$OWNER_TOOL" stop --record "$OWNERFILE"
   stop_rc=$?
   stop_lease_holder
+  stop_simulator_lease_holder
   exit "$stop_rc"
 fi
 if (( DOCTOR_ONLY )); then
@@ -234,6 +249,7 @@ cleanup() {
     fi
   fi
   stop_lease_holder
+  stop_simulator_lease_holder
   [[ ! -p "$SERVICE_LOG_PIPE" ]] || rm -f -- "$SERVICE_LOG_PIPE"
   [[ ! -e "$SERVICE_LOG_READY" ]] || rm -f -- "$SERVICE_LOG_READY"
   # Keep failed-run diagnostics. Deleting the run dir on a successful stop used
@@ -492,6 +508,38 @@ fi
 for tool in corepack xcrun; do need "$tool"; done
 [[ -x "$MACOS_LAUNCHER" ]] || { echo "ERROR: macOS launcher is absent or not executable: $MACOS_LAUNCHER" >&2; exit 1; }
 [[ -x "$IOS_LAUNCHER" ]] || { echo "ERROR: iOS launcher is absent or not executable: $IOS_LAUNCHER" >&2; exit 1; }
+if [[ -z "$DEVICE" ]]; then
+  SIMULATOR_LEASE_FILE="$RUN_DIR/simulator-lease.json"
+  rm -f -- "$SIMULATOR_LEASE_HOLDER_PID_PATH" "$SIMULATOR_LEASE_HOLDER_IDENTITY_FILE" "$SIMULATOR_LEASE_FILE"
+  ( exec bun "$HERE/lib/stack-simulator-lease.ts" hold --run-id "$RUN_ID" --out "$SIMULATOR_LEASE_FILE" --parent-pid $$ ) \
+    >/dev/null 2>"$RUN_DIR/simulator-lease-holder.log" &
+  SIMULATOR_LEASE_HOLDER_PID=$!
+  SIMULATOR_LEASE_SNAPSHOT="$(node "$OWNER_TOOL" snapshot --pid "$SIMULATOR_LEASE_HOLDER_PID")" || exit $?
+  SIMULATOR_LEASE_HOLDER_START_IDENTITY="$(printf '%s' "$SIMULATOR_LEASE_SNAPSHOT" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).startIdentity))')"
+  printf '%s\n' "$SIMULATOR_LEASE_HOLDER_PID" > "$SIMULATOR_LEASE_HOLDER_PID_PATH"
+  printf '%s\n' "$SIMULATOR_LEASE_HOLDER_START_IDENTITY" > "$SIMULATOR_LEASE_HOLDER_IDENTITY_FILE"
+  simulator_ready=0
+  for _ in $(seq 1 360); do
+    if [[ -s "$SIMULATOR_LEASE_FILE" ]]; then simulator_ready=1; break; fi
+    kill -0 "$SIMULATOR_LEASE_HOLDER_PID" 2>/dev/null || break
+    sleep 0.5
+  done
+  if (( simulator_ready == 0 )); then
+    echo "ERROR: could not acquire a run-scoped iOS simulator." >&2
+    if [[ -s "$RUN_DIR/simulator-lease-holder.log" ]]; then cat "$RUN_DIR/simulator-lease-holder.log" >&2; fi
+    runtime_log warn dev-stack.refused --reason simulator_lease_failed
+    exit 1
+  fi
+  DEVICE="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.udid||""))' "$SIMULATOR_LEASE_FILE")"
+  SIMULATOR_NAME="$(node -e 'const j=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.name||""))' "$SIMULATOR_LEASE_FILE")"
+  if [[ ! "$DEVICE" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
+    echo "ERROR: simulator lease did not yield a UDID." >&2
+    if [[ -s "$RUN_DIR/simulator-lease-holder.log" ]]; then cat "$RUN_DIR/simulator-lease-holder.log" >&2; fi
+    exit 1
+  fi
+  printf 'lease simulator=%s name=%s\n' "$DEVICE" "$SIMULATOR_NAME"
+fi
 printf 'macOS origin %s; iOS origin omi-ui://local\n' "$MACOS_ORIGIN"
 
 CORE_BUILD_RAW="$LOG_DIR/core-build.raw.log"
