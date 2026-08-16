@@ -776,43 +776,52 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket-b",
       startedAt: now.addingTimeInterval(-60))
 
-    func fact(_ statement: String, workstream: String?, worthiness: Double, visit: Int64)
-      -> BucketExtraction.Fact
-    {
+    func fact(_ statement: String, worthiness: Double, visit: Int64) -> BucketExtraction.Fact {
       BucketExtraction.Fact(
         statement: statement,
         identifiers: ["identity"],
-        evidenceText: "evidence",
+        evidenceText: "identity",
         evidenceRefs: ["visit:\(visit)"],
         confidence: 1,
-        notifyWorthiness: worthiness,
-        workstream: workstream)
+        notifyWorthiness: worthiness)
     }
-    // "Omi App" must survive sanitization as "omi-app"; the sibling writes one
-    // poolable fact, one below the worthiness floor, and one scaffolding-shaped
-    // statement that the selector must drop.
+    // Extraction no longer writes workstream tags. Stamp historically tagged
+    // rows so pooling — still wired, now dormant for new facts — stays covered.
     _ = try await ContextBucketStore.shared.writeExtraction(
       BucketExtraction(
         narrative: "own narrative",
-        facts: [fact("own visit fact", workstream: "Omi App", worthiness: 0.7, visit: 1)]),
+        facts: [fact("own visit fact", worthiness: 0.7, visit: 1)]),
       for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
       now: now)
     _ = try await ContextBucketStore.shared.writeExtraction(
       BucketExtraction(
         narrative: "sibling narrative",
         facts: [
-          fact("sibling poolable fact", workstream: "omi app", worthiness: 0.8, visit: 2),
-          fact("sibling weak fact", workstream: "omi-app", worthiness: 0.1, visit: 2),
-          fact(
-            "Identifier proposal: visit:2", workstream: "omi-app", worthiness: 0.9, visit: 2),
+          fact("sibling poolable fact", worthiness: 0.8, visit: 2),
+          fact("sibling weak fact", worthiness: 0.1, visit: 2),
+          fact("Identifier proposal: visit:2", worthiness: 0.9, visit: 2),
         ]),
       for: siblingFence, appName: "Sibling App", rawContextKey: "raw",
       normalizedContextKey: "normalized", now: now.addingTimeInterval(-30))
 
+    let storedStatements = try await pool.read { db in
+      try String.fetchAll(db, sql: "SELECT statement FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(
+      storedStatements,
+      ["own visit fact", "sibling poolable fact", "sibling weak fact"])
+    let tagsBeforeStamp = try await pool.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT workstreamTag FROM bucket_facts WHERE workstreamTag IS NOT NULL")
+    }
+    XCTAssertEqual(tagsBeforeStamp, [])
+
+    try await pool.write { db in
+      try db.execute(sql: "UPDATE bucket_facts SET workstreamTag = 'omi-app'")
+    }
+
     let liveTag = await ContextBucketStore.shared.liveWorkstreamTag(for: fence, now: now)
     XCTAssertEqual(liveTag, "omi-app")
-    let activeTags = await ContextBucketStore.shared.activeWorkstreamTags(now: now)
-    XCTAssertEqual(activeTags, ["omi-app"])
 
     let candidates = await ContextBucketStore.shared.workstreamPool(
       tag: "omi-app", excludingBucketID: "bucket", now: now)
@@ -850,7 +859,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
           BucketExtraction.Fact(
             statement: "validated commitment",
             identifiers: ["deadline"],
-            evidenceText: "evidence",
+            evidenceText: "deadline evidence",
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.6),
@@ -883,7 +892,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
           BucketExtraction.Fact(
             statement: "mild update",
             identifiers: ["status"],
-            evidenceText: "evidence",
+            evidenceText: "status evidence",
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.59)
@@ -897,6 +906,67 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     XCTAssertFalse(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: belowResult.maximumValidatedWorthiness, flagEnabled: true))
+  }
+
+  func testWriteExtractionDropsScaffoldingGatesIdentifiersAndLeavesWorkstreamNull() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      BucketExtraction(
+        narrative: "narrative",
+        facts: [
+          BucketExtraction.Fact(
+            statement: "Ambient narrative: A Finder window labeled Downloads sits in the foreground",
+            identifiers: ["Downloads"],
+            evidenceText: "A Finder window labeled Downloads sits in the foreground",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.9),
+          BucketExtraction.Fact(
+            statement: "Proposed fact 1 — The board was lying",
+            identifiers: ["board"],
+            evidenceText: "The board was lying",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.8),
+          BucketExtraction.Fact(
+            statement: "Nik asked for the demo recording before tomorrow's launch video.",
+            identifiers: ["fact-001", "f-002", "ftn-003", "visit:9", "screenshot:42", "Nik"],
+            evidenceText: "Nik asked for the demo recording before tomorrow's launch video.",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 0.7),
+        ]),
+      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
+      now: now)
+
+    let rows = try await pool.read { db in
+      try Row.fetchAll(
+        db,
+        sql: """
+          SELECT statement, identifiersJson, workstreamTag FROM bucket_facts
+          ORDER BY statement
+          """)
+    }
+    XCTAssertEqual(rows.count, 1)
+    XCTAssertEqual(
+      rows.first?["statement"] as String?,
+      "Nik asked for the demo recording before tomorrow's launch video.")
+    XCTAssertNil(rows.first?["workstreamTag"] as String?)
+    let encoded = try XCTUnwrap(rows.first?["identifiersJson"] as String?)
+    let identifiers = try JSONDecoder().decode([String].self, from: Data(encoded.utf8))
+    XCTAssertEqual(identifiers, ["Nik"])
   }
 
   private func seedBucket(in pool: DatabasePool, now: Date) async throws {
