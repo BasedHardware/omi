@@ -3,7 +3,8 @@
  *
  * Reads carry the server's completeness envelope (never restored from cache).
  * Writes stay create/patch/delete on the four verbs already served. There is
- * no maximum-folder cap. `openFolders()` is NOT repointed here.
+ * no maximum-folder cap. Live Folders open this store by name
+ * (`openPlatformFolders()`); the retired `openFolders()` port is gone.
  */
 
 import type {

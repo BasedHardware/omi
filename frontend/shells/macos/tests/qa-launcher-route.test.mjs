@@ -206,10 +206,9 @@ test("macOS QA launcher freezes origin, URLs, and the eight evidence routes befo
     const legacyMemories = spawnSync(run.launcher, ["--api", "http://127.0.0.1:4851", "--route", "memories", "--generation", "legacy"], {
       encoding: "utf8", env: run.environment,
     });
-    assert.equal(legacyMemories.status, 0, legacyMemories.stderr);
-    const legacyLaunch = run.readActions().trim().split("\n").filter((line) => line.startsWith("launch|")).at(-1);
-    assert.match(legacyLaunch, /launch\|query=route=memories&platform=desktop&generation=legacy\|/);
-    assert.doesNotMatch(legacyLaunch, /generation=platform/);
+    assert.equal(legacyMemories.status, 2, "legacy generation is retired and must refuse");
+    assert.match(`${legacyMemories.stdout}${legacyMemories.stderr}`, /legacy generation is retired/);
+    assert.match(`${legacyMemories.stdout}${legacyMemories.stderr}`, /available: platform/);
 
     for (const [name, value] of [
       ["OMI_SURFACE_URL", "https://stale.example.invalid/"],

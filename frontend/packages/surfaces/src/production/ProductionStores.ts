@@ -24,15 +24,11 @@ import type {
 import type { Env } from "@omi-core/kernel";
 import type { StoreStatus } from "@omi-core/domain";
 import {
-  ConversationsStore,
-  FoldersStore,
-  MemoriesStore,
   MemoryCorrectionStore,
   PlatformConversationsStore,
   PlatformFoldersStore,
   PlatformTasksStore,
   SynthesizedMemoriesStore,
-  TasksStore,
 } from "@omi-core/domain";
 import {
   WRITE_ID_ENTROPY_BYTES,
@@ -56,8 +52,7 @@ import {
  * bundle with no unit-test seam of its own.
  */
 export {
-  LEGACY_ONLY_GENERATION,
-  PLATFORM_MEMORIES_GENERATION,
+  PLATFORM_ONLY_GENERATION,
   PRODUCTION_DOMAINS,
   PRODUCTION_GENERATION_AVAILABILITY,
   describeGenerationRejections,
@@ -81,6 +76,7 @@ type WriteAwareStore = ObservableStore & {
   discardDeadLetter(opId: string): Promise<void>;
 };
 
+/** Fixture port for the retired editable-memories surface (`?qa=memories`). */
 export type ProductionMemoryStore = WriteAwareStore & {
   list(): Promise<Memory[]>;
   create(content: string, opts?: { visibility?: "public" | "private" }): Promise<void>;
@@ -88,48 +84,25 @@ export type ProductionMemoryStore = WriteAwareStore & {
   delete(id: Memory["id"]): Promise<void>;
 };
 
+/** Fixture port for Conversations QA states. Live traffic uses the platform store. */
 export type ProductionConversationStore = WriteAwareStore & {
   list(): Promise<Conversation[]>;
   patch(id: Conversation["id"], patch: ConversationPatch): Promise<void>;
   delete(id: Conversation["id"]): Promise<void>;
 };
 
+/** Fixture port for Folders QA states. Live traffic uses the platform store. */
 export type ProductionFolderStore = ObservableStore & {
   list(): Promise<Folder[]>;
 };
 
+/** Fixture port for Tasks QA states. Live traffic uses the platform store. */
 export type ProductionTaskStore = WriteAwareStore & {
   list(): Promise<Task[]>;
   create(description: string, dueAt?: number): Promise<void>;
   patch(id: Task["id"], patch: TaskPatch): Promise<void>;
   delete(id: Task["id"]): Promise<void>;
 };
-
-/**
- * Composition boundary between production UI and a backend generation.
- * Fixtures and the current legacy adapter satisfy the same surface-facing
- * ports; the rewritten backend can provide another factory without changing
- * product components or their offline/status behavior.
- */
-export type ProductionStoreFactory = {
-  openMemories(): Promise<ProductionMemoryStore>;
-  openConversations(): Promise<ProductionConversationStore>;
-  openFolders(): Promise<ProductionFolderStore>;
-  openTasks(): Promise<ProductionTaskStore>;
-};
-
-export function createLegacyProductionStoreFactory(
-  bridge: StorageBridge,
-  env: Env,
-  http: HttpClient,
-): ProductionStoreFactory {
-  return {
-    openMemories: () => MemoriesStore.open(bridge, env, http),
-    openConversations: () => ConversationsStore.open(bridge, env, http),
-    openFolders: () => FoldersStore.open(bridge, env, http),
-    openTasks: () => TasksStore.open(bridge, env, http),
-  };
-}
 
 /* ── platform generation ─────────────────────────────────────────────────── */
 
@@ -179,8 +152,7 @@ export type ProductionMemoryCorrectionStore = {
  *
  * Writes go through `POST /v1/tasks/ops` — the ratified ops envelope with
  * `write_id` idempotency. Completeness is the server's envelope, never
- * derived. `openTasks()` is NOT repointed at this store; the Tasks route
- * asks for it BY NAME, exactly as Conversations and Folders do.
+ * derived.
  *
  * IT IS AN `ObservableStore`, so `status()`, `subscribe()` and `refresh()`
  * behave identically to every other store and a surface's offline/refresh
@@ -218,57 +190,37 @@ export type ProductionPlatformFolderStore = WriteAwareStore & {
 };
 
 /**
- * A factory that can serve either generation, per domain.
+ * A factory that serves the platform generation, per domain.
  *
- * It IS a `ProductionStoreFactory` — every existing surface keeps working
- * against it unchanged — and adds the platform-only read port plus the
- * resolved selection so a shell can show what it actually got.
+ * Named platform ports stay named: the record classes still differ from the
+ * fixture ports (`ProductionMemoryStore` et al.), and pointing a fixture type
+ * at a synthesized read model would satisfy the type and break every caller
+ * at runtime.
  */
-export type PlatformProductionStoreFactory = ProductionStoreFactory & {
+export type PlatformProductionStoreFactory = {
   readonly selection: GenerationSelection;
   /** Non-empty when the host asked for a generation it did not receive. */
   readonly rejected: readonly GenerationRejection[];
   openSynthesizedMemories(): Promise<ProductionSynthesizedMemoryStore>;
   /**
-   * The correction path: `POST /v1/stm-notes/ops`. Named separately, and
-   * `openMemories()` is not repointed at it. A user-asserted note is not a
-   * patch of a synthesized proposition.
+   * The correction path: `POST /v1/stm-notes/ops`. Named separately from the
+   * synthesized READ store. A user-asserted note is not a patch of a
+   * synthesized proposition.
    */
   openMemoryCorrection(): Promise<ProductionMemoryCorrectionStore>;
-  /**
-   * The platform generation's tasks store.
-   *
-   * NAMED SEPARATELY ON PURPOSE, and `openTasks()` is NOT repointed at it.
-   * David's 2026-08-16 ruling lifted the R7 park: the Tasks *route* branches
-   * to this port when `selection.tasks === "platform"`, the same way Home,
-   * Conversations, and Folders already branch. A factory-level flip of
-   * `openTasks()` remains forbidden — that is what R7 still catches.
-   */
   openPlatformTasks(): Promise<ProductionPlatformTaskStore>;
-  /**
-   * Named platform conversations store. `openConversations()` stays on the
-   * legacy adapter. Routes that want the platform read model ask for this
-   * port by name; they do not repoint `openConversations()`.
-   */
   openPlatformConversations(): Promise<ProductionPlatformConversationStore>;
-  /**
-   * Named platform folders store. `openFolders()` stays on the legacy adapter.
-   * Routes that want the platform read model ask for this port by name; they
-   * do not repoint `openFolders()`.
-   */
   openPlatformFolders(): Promise<ProductionPlatformFolderStore>;
-  /** Named live Chat seam. C3b3 owns routing a production surface to it. */
+  /** Named live Chat seam. */
   openChat(): Promise<ProductionChatStore>;
 };
 
 /**
- * The two transports a dual-generation client needs. Both are bound by the
- * host — base URL and credentials live in the binding, never here (ADR-008
- * §3), which is what lets a shell repoint at a local backend without a
- * rebuild.
+ * The transports a platform-generation client needs. Bound by the host —
+ * base URL and credentials live in the binding, never here (ADR-008 §3),
+ * which is what lets a shell repoint at a local backend without a rebuild.
  */
 export interface ProductionTransports {
-  readonly legacyHttp: HttpClient;
   /**
    * The contracts-native service. Should supply `HttpResponse.text` when it
    * can: the ratified validator is defined over the response bytes, and the
@@ -287,19 +239,11 @@ export interface ProductionTransports {
  * `requestedGenerations` is whatever the launcher had — parsed JSON, a query
  * string lookup, an argv value. It is validated by
  * `resolveGenerationSelection`, and anything unavailable is rejected loudly
- * and falls back to `legacy` rather than being silently downgraded.
+ * rather than being silently downgraded onto a retired generation.
  *
  * David's 2026-08-16 ruling retires memory editing: users correct Omi by
- * adding a fact through consolidation (`POST /v1/stm-notes/ops`). That
- * discharges the earlier note that `openMemories()` returning the legacy
- * *editable* store was "not an oversight."
- *
- * `openMemories()` STILL returns the legacy store and is NOT pointed at
- * `openSynthesizedMemories()`. The record classes still differ — the
- * synthesized projection has no `content` / `locked` / `visibility` — and
- * pointing the port at a read model would satisfy the type and break every
- * caller at runtime. If the legacy store becomes unreferenced, that is the
- * eviction lane's business. The correction path is `openMemoryCorrection()`.
+ * adding a fact through consolidation (`POST /v1/stm-notes/ops`). The
+ * correction path is `openMemoryCorrection()`.
  */
 export function createPlatformProductionStoreFactory(
   bridge: StorageBridge,
@@ -308,7 +252,6 @@ export function createPlatformProductionStoreFactory(
   requestedGenerations?: unknown,
 ): PlatformProductionStoreFactory {
   const { selection, rejected } = resolveGenerationSelection(requestedGenerations);
-  const legacy = createLegacyProductionStoreFactory(bridge, env, transports.legacyHttp);
   const epochs = createDevAccountEpochProvider();
   const entropy = (): Uint8Array => {
     const bytes = new Uint8Array(WRITE_ID_ENTROPY_BYTES);
@@ -316,7 +259,6 @@ export function createPlatformProductionStoreFactory(
     return bytes;
   };
   return {
-    ...legacy,
     selection,
     rejected,
     openSynthesizedMemories: () =>

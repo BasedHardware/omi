@@ -87,22 +87,26 @@ test("an unknown explicit route is unsupported instead of falling through", () =
   // reproduces a truthful-looking page for a destination the host never loaded.
 });
 
-test("a live launcher query without generation selects legacy Memories; generation=platform selects the served door", () => {
+test("a live launcher query without generation selects platform; generation=legacy is rejected", () => {
   const omitted = parseGenerationSelectionFromEntries(new URLSearchParams("route=memories&platform=desktop").entries());
-  assert.equal(omitted.selection.memories, "legacy");
+  assert.equal(omitted.selection.memories, "platform");
+  assert.deepEqual(omitted.rejected, []);
   assert.equal(route("memories", null, omitted.selection.memories), "memories");
   const live = parseGenerationSelectionFromEntries(
     new URLSearchParams("route=memories&platform=desktop&generation=platform").entries(),
   );
   assert.equal(live.selection.memories, "platform");
+  assert.deepEqual(live.rejected, []);
   assert.equal(route("memories", null, live.selection.memories), "memories");
-  const reachableLegacy = parseGenerationSelectionFromEntries(
+  const retired = parseGenerationSelectionFromEntries(
     new URLSearchParams("route=memories&platform=desktop&generation=legacy").entries(),
   );
-  assert.equal(reachableLegacy.selection.memories, "legacy");
-  // red-proof: a plain launch that omits `generation=` lands on the legacy
-  // Memories UI while the platform memories door serves synthesized rows — "Temporarily
-  // unavailable" on screen, 200 with synthesized rows on the wire.
+  assert.equal(retired.selection.memories, "platform", "unavailable generation is not assigned");
+  assert.equal(retired.rejected.length, 4, "a blanket legacy request is rejected on every domain");
+  assert.ok(retired.rejected.every((row) => row.requested === "legacy" && row.reason === "generation-unavailable"));
+  // red-proof: restoring the silent fallback would assign memories=legacy here
+  // and leave rejected empty — a shell that asked for a retired generation
+  // would believe it got it.
 });
 
 test("mobile Settings return routes fail closed to Home", () => {
@@ -203,7 +207,6 @@ test("what actually rendered is observable from outside the bundle", async () =>
     'markRendered("listen", null)',
     'markRendered("chat", null)',
     'markRendered("settings", null)',
-    'markRendered("memories-legacy", "legacy")',
   ]) {
     assert.ok(main.includes(marker), `bootstrap does not record ${marker}`);
   }

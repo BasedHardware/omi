@@ -4,9 +4,8 @@
  * Reads carry the server's completeness envelope (never restored from cache,
  * never derived from item counts). Writes go through `POST /v1/tasks/ops` via
  * Outbox, using the established write envelope (`write_id`, `account_epoch`)
- * and the stamps minted at enqueue. `openTasks()` is NOT repointed here —
- * the Tasks route branches to this store by name, as Conversations and
- * Folders already do.
+ * and the stamps minted at enqueue. Live Tasks open this store by name
+ * (`openPlatformTasks()`); the retired `openTasks()` port is gone.
  *
  * THE HONESTY RULE, carried over from the memories read store: cached items
  * survive a reopen, THE COVERAGE STATE DOES NOT. On open, before any refresh,

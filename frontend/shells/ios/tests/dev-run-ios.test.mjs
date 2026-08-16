@@ -113,10 +113,9 @@ exit 0
     const legacyMemories = spawnSync("/bin/bash", [
       launcher, "--route", "memories", "--generation", "legacy", "--device", "simulator-proof",
     ], { encoding: "utf8", env });
-    assert.equal(legacyMemories.status, 0, legacyMemories.stderr || legacyMemories.stdout);
-    const legacyArgs = readFileSync(argsFile, "utf8");
-    assert.match(legacyArgs, /SURFACE_QUERY=route=memories&platform=mobile&generation=legacy/);
-    assert.doesNotMatch(legacyArgs, /generation=platform/);
+    assert.equal(legacyMemories.status, 2, "legacy generation is retired and must refuse");
+    assert.match(`${legacyMemories.stdout}${legacyMemories.stderr}`, /legacy generation is retired/);
+    assert.match(`${legacyMemories.stdout}${legacyMemories.stderr}`, /available: platform/);
 
     const fixtureCapture = path.join(scratch, "ios-fixture.png");
     const captured = spawnSync("/bin/bash", [

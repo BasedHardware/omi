@@ -1,17 +1,16 @@
 /**
  * Per-domain backend generation selection, driven from OUTSIDE the code.
  *
- * Two backend generations now coexist: `legacy` (the old wire, through
- * `packages/adapters-legacy`) and `platform` (the contracts-native wire,
+ * One backend generation remains: `platform` (the contracts-native wire,
  * through `packages/adapters-platform`). Memories, conversations, folders,
- * and tasks are ratified on platform (David's 2026-08-16 Tasks park lift).
+ * and tasks are ratified on platform. David's 2026-08-16 ruling retired the
+ * legacy generation entirely — there is no fallback wire.
  *
  * The surfaces must not know which generation they are on — that is what the
  * `ProductionStores` ports are for. The SHELL knows, and it must be able to
- * say so without a recompile: David's stated goal is launching the macOS and
- * iOS apps against a local backend and using them, so the knob has to live in
- * host configuration (a launch argument, an injected config object, a query
- * string), not in a constant somebody edits and rebuilds.
+ * say so without a recompile: the knob lives in host configuration (a launch
+ * argument, an injected config object, a query string), not in a constant
+ * somebody edits and rebuilds.
  *
  * Everything here is therefore a pure function of UNTRUSTED input. A host
  * config is a file or an argv string a human typed; it is parsed and
@@ -19,9 +18,8 @@
  *
  * THE DESIGN RULE THAT MATTERS: an unavailable request is REJECTED AND
  * REPORTED, never silently downgraded. A shell that believes it is exercising
- * the new backend while quietly running on the old one produces a night of
- * green tests that prove nothing — and that is the single most expensive
- * failure available to us tonight.
+ * a generation nothing can serve, while quietly running on another, produces
+ * a night of green tests that prove nothing.
  */
 
 export type BackendGeneration = "legacy" | "platform";
@@ -39,39 +37,27 @@ export type GenerationSelection = Readonly<Record<ProductionDomain, BackendGener
 
 /**
  * What each domain can ACTUALLY be served by. This is data about the state of
- * the migration, not a promise: a domain gains `platform` here on the day its
- * contract is ratified and its adapter passes that domain's fixtures, and not
- * before. Editing this table without both is how a shell ends up pointed at an
- * endpoint nobody wrote.
+ * the migration, not a promise. Editing this table without a serving adapter
+ * is how a shell ends up pointed at an endpoint nobody wrote.
+ *
+ * `legacy` is gone: nothing in this tree can serve it. Requesting it is a
+ * rejection that names the domain and the generation, not a silent fallback.
  */
 export const PRODUCTION_GENERATION_AVAILABILITY: Readonly<
   Record<ProductionDomain, readonly BackendGeneration[]>
 > = {
-  // Ratified: @omi-core/ratified-contracts 0.1.1, memory READ path.
-  memories: ["legacy", "platform"],
-  // Ratified: @omi-core/ratified-contracts 0.9.0, conversations READ envelope.
-  conversations: ["legacy", "platform"],
-  // Ratified: @omi-core/ratified-contracts 0.9.0, folders READ envelope.
-  folders: ["legacy", "platform"],
-  // Ratified: @omi-core/ratified-contracts write/ops + tasks READ envelope.
-  // David's 2026-08-16 ruling lifted the R7 park: the write path is the
-  // established ops envelope, not a new one.
-  tasks: ["legacy", "platform"],
+  memories: ["platform"],
+  conversations: ["platform"],
+  folders: ["platform"],
+  tasks: ["platform"],
 };
 
-export const LEGACY_ONLY_GENERATION: GenerationSelection = {
-  memories: "legacy",
-  conversations: "legacy",
-  folders: "legacy",
-  tasks: "legacy",
-};
-
-/** Tonight's intended configuration, per board ruling PR-1. */
-export const PLATFORM_MEMORIES_GENERATION: GenerationSelection = {
+/** The only generation that can still be served, on every production domain. */
+export const PLATFORM_ONLY_GENERATION: GenerationSelection = {
   memories: "platform",
-  conversations: "legacy",
-  folders: "legacy",
-  tasks: "legacy",
+  conversations: "platform",
+  folders: "platform",
+  tasks: "platform",
 };
 
 export interface GenerationRejection {
@@ -105,12 +91,13 @@ export interface ResolvedGenerationSelection {
  * Accepts `unknown` on purpose. The caller is handing us parsed JSON from a
  * config file, a `URLSearchParams` lookup, or an argv value — none of which
  * the type system has ever seen. Anything unrecognized becomes a rejection
- * with the requested value echoed, and the corresponding domain falls back to
- * `legacy`, which is the only generation guaranteed to serve every domain.
+ * with the requested value echoed. An unavailable generation is refused and
+ * reported; the corresponding domain stays on the only generation that can
+ * serve it. There is no silent fallback onto a retired wire.
  */
 export function resolveGenerationSelection(requested: unknown): ResolvedGenerationSelection {
   const rejected: GenerationRejection[] = [];
-  const selection: Record<ProductionDomain, BackendGeneration> = { ...LEGACY_ONLY_GENERATION };
+  const selection: Record<ProductionDomain, BackendGeneration> = { ...PLATFORM_ONLY_GENERATION };
 
   if (requested === undefined || requested === null) return { selection, rejected };
   if (typeof requested !== "object" || Array.isArray(requested)) {
@@ -152,7 +139,9 @@ export function resolveGenerationSelection(requested: unknown): ResolvedGenerati
         domain: key,
         requested: value,
         reason: "generation-unavailable",
-        detail: `${key} has no ${value} generation yet; available: ${available.join(", ")}. Falling back to legacy — this run is NOT exercising the ${value} backend for ${key}.`,
+        detail:
+          `${key} has no ${value} generation; available: ${available.join(", ")}. `
+          + `Refusing to serve ${value} for ${key} — this run is NOT exercising the ${value} backend.`,
       });
       continue;
     }
@@ -169,10 +158,10 @@ export function resolveGenerationSelection(requested: unknown): ResolvedGenerati
  *
  * Recognized keys are `generation.<domain>` and the bare `<domain>`, so a host
  * can namespace or not. `generations=platform` (no domain) is the shorthand
- * for "every domain that HAS this generation uses it" — today every production
- * domain — and which reports a rejection for nothing,
- * because asking for the best available is not the same as asking for
- * something unavailable.
+ * for "every domain uses this generation" — and a blanket request for a
+ * generation a domain cannot serve is rejected per domain, never skipped as a
+ * preference. Skipping an unavailable broadcast was the silent fallback this
+ * function exists to forbid.
  */
 export function parseGenerationSelectionFromEntries(
   entries: Iterable<readonly [string, string]>,
@@ -193,12 +182,10 @@ export function parseGenerationSelectionFromEntries(
 
   if (broadcast !== null && isBackendGeneration(broadcast)) {
     for (const domain of PRODUCTION_DOMAINS) {
-      // Broadcast never overrides an explicit per-domain key, and never asks
-      // for a generation the domain does not have — a blanket "use platform"
-      // is a preference, not an assertion about every domain.
-      if (requested[domain] === undefined && PRODUCTION_GENERATION_AVAILABILITY[domain].includes(broadcast)) {
-        requested[domain] = broadcast;
-      }
+      // Broadcast never overrides an explicit per-domain key. It DOES ask
+      // every other domain for the broadcast generation, so an unavailable
+      // blanket value is rejected by name rather than silently skipped.
+      if (requested[domain] === undefined) requested[domain] = broadcast;
     }
   } else if (broadcast !== null) {
     const resolved = resolveGenerationSelection(requested);

@@ -3,7 +3,8 @@
  *
  * Reads carry the server's completeness envelope (never restored from cache).
  * Writes stay the four per-field PATCHes and delete, via Outbox, using the
- * same codec as the legacy store. `openConversations()` is NOT repointed here.
+ * conversations codec. Live Conversations open this store by name
+ * (`openPlatformConversations()`); the retired `openConversations()` port is gone.
  */
 
 import type {

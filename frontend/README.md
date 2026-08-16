@@ -12,15 +12,15 @@ this directory's shape; ADR-002/004/005/006/007/008 govern its architecture).
 ## The three isolation rules (CI-enforced, no exceptions)
 
 1. **`frontend/` never imports old code.** Not a helper, not a type, not "temporarily". If
-   `frontend/` needs something the old tree has, the knowledge is re-expressed here (usually)
-   in `packages/adapters-legacy/`) with the old code as reference only.
+   `frontend/` needs something the old tree has, the knowledge is re-expressed here
+   (usually in `packages/adapters-platform/`) with the old code as reference only.
 2. **Old code touches `frontend/` only through published entry points** (bridge bindings and
    package public APIs). Every such call site in the old tree carries a `core-seam:`
    marker comment, so per-surface cutover progress is a single grep.
-3. **All old-backend knowledge lives in `packages/adapters-legacy/`.** Domain and sync
-   code target the contracts; adapters make today's backend impersonate them. This
-   directory is the designated graveyard — it only ever shrinks, and its deletion is the
-   definition of "migration finished".
+3. **Raw backend knowledge lives in `packages/adapters-platform/`.** Domain and sync
+   code target the contracts; adapters make the contracts-native service reachable.
+   The retired `adapters-legacy` package is gone — David's 2026-08-16 ruling. A
+   frontend-graph fence (`scripts/check-no-adapters-legacy.mjs`) fails if it returns.
 
 ## Directory map
 
@@ -32,7 +32,7 @@ this directory's shape; ADR-002/004/005/006/007/008 govern its architecture).
 - `packages/domain` — entities, domain rules, view models. Pure TS, dependency-free.
 - `packages/sync` — the ADR-004 layer: durable outbox, projections, reconcile, behind
   `DurableLog`-shaped storage bridges. Never assumes browser storage is durable.
-- `packages/adapters-legacy` — see rule 3.
+- `packages/adapters-platform` — see rule 3.
 - `packages/surfaces` — shared UI, hosted per ADR-008 (webview on mobile/macOS,
   in-process on Windows, direct on web).
 - `packages/testkit` — hermetic harness, failure-class suites (the 15 classes in
@@ -50,8 +50,8 @@ means X's conformance fixtures pass against it — a green suite, not a judgment
 
 ## For agents working here
 
-- The exemplar to imitate is the tasks slice (`packages/domain/src/tasks`,
-  `packages/sync`, `adapters-legacy/src/tasks`, `surfaces`). Copy its patterns; do not
+- The exemplar to imitate is the tasks slice (`packages/domain/src/platform-tasks-store.ts`,
+  `packages/sync`, `adapters-platform/src/tasks.ts`, `surfaces`). Copy its patterns; do not
   invent parallel ones.
 - Old code is reference material, never an import. When old and new behavior disagree,
   the contract wins; if the contract is silent, stop and surface it — do not decide.

@@ -1,26 +1,18 @@
 import type {
   PlatformProductionStoreFactory,
-  ProductionFolderStore,
   ProductionPlatformFolderStore,
 } from "./ProductionStores.js";
 
 /**
- * Open the Folders route store from the host's already-resolved generation
- * selection.
- *
- * Platform folders come from `openPlatformFolders()`, never from
- * `openFolders()` — that port stays the legacy store writable callers depend
- * on. The route does not repoint the shared factory.
+ * Open the Folders route store from `openPlatformFolders()`. There is no
+ * legacy arm: the retired generation is not served.
  */
 export async function openFolderRouteSource(
   stores: PlatformProductionStoreFactory,
 ): Promise<{
-  store: ProductionFolderStore | ProductionPlatformFolderStore;
-  foldersGeneration: "legacy" | "platform";
+  store: ProductionPlatformFolderStore;
+  foldersGeneration: "platform";
 }> {
-  const foldersGeneration = stores.selection.folders;
-  const store = foldersGeneration === "platform"
-    ? await stores.openPlatformFolders()
-    : await stores.openFolders();
-  return { store, foldersGeneration };
+  const store = await stores.openPlatformFolders();
+  return { store, foldersGeneration: "platform" };
 }

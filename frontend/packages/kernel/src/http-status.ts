@@ -1,11 +1,10 @@
 /**
  * The one place an HTTP status becomes taxonomy.
  *
- * Lives in the kernel rather than in `adapters-legacy` because it is not legacy
- * at all: every transport binding — the privileged bridge, the DEV harness, a
- * future desktop net module — needs the same mapping, and `adapters-legacy` is
- * explicitly the graveyard that gets deleted when the rewritten service lands.
- * It cannot live in `contracts/` either: nothing in contracts executes.
+ * Lives in the kernel rather than in an adapter because it is not adapter-
+ * specific at all: every transport binding — the privileged bridge, a future
+ * desktop net module — needs the same mapping. It cannot live in `contracts/`
+ * either: nothing in contracts executes.
  *
  * Kernel is the right home on the other axis too — this is a pure function of
  * its input, with no clock, no randomness, and no I/O.

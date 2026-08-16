@@ -84,15 +84,11 @@ test("live Chat and Settings are composed through their ratified stores and nati
 test("bootstrap chooses backend generation through one production factory", async () => {
   const main = await read("src/production/main.tsx");
   const stores = await read("src/production/ProductionStores.ts");
-  // The bootstrap now builds the PLATFORM factory for every route. It extends the legacy
-  // factory, so `openConversations()` / `openFolders()` / `openTasks()` stay the legacy
-  // writable ports. Home, Conversations, Folders, and Tasks routes branch to the named
-  // platform ports — they do not repoint the shared factory.
-  // The factory receives the ALREADY-RESOLVED selection, not the raw host input: the route
-  // is computed from that same selection, so resolving twice risks the two disagreeing.
+  // The bootstrap builds the PLATFORM factory for every route. Named platform
+  // ports are the only live data path — the legacy generation is retired.
   assert.match(main, /createPlatformProductionStoreFactory\(/);
-  assert.match(main, /legacyHttp: http/);
   assert.match(main, /platformHttp: http/);
+  assert.doesNotMatch(main, /legacyHttp/);
   assert.doesNotMatch(main, /(?:Memories|Conversations|Folders|Tasks)Store\.open/);
 
   // Selection comes from the HOST, never from a bare user-typed URL alone, and a
@@ -104,23 +100,17 @@ test("bootstrap chooses backend generation through one production factory", asyn
   assert.match(main, /openHomeSearchSources\(platform\)/);
   assert.match(main, /markRendered\("home", memoriesGeneration/);
   assert.doesNotMatch(main, /markRendered\("home", "legacy"\)/);
-  assert.doesNotMatch(main, /route === "home"[\s\S]{0,400}openMemories\(\)/);
+  assert.doesNotMatch(main, /openMemories\(\)/);
 
-  // The platform read model is reachable on memories AND on Home. Rendering it
-  // for Tasks would hijack that route with a Memories screen.
-  // Routing itself — including the default that makes a bare `generation=platform` land
-  // here at all — is covered behaviorally in production-routing.test.mjs.
-  assert.match(main, /route === "memories" && platform\.selection\.memories === "platform"/);
+  assert.match(main, /route === "memories"/);
   assert.match(main, /platform\.openMemoryCorrection\(\)/);
   assert.match(stores, /openMemoryCorrection\(\)/);
-  assert.doesNotMatch(stores, /openMemories:\s*\(\)\s*=>[\s\S]{0,120}SynthesizedMemoriesStore/);
+  assert.doesNotMatch(stores, /openMemories:/);
   const homeSources = await read("src/production/home-sources.ts");
   assert.match(homeSources, /openSynthesizedMemories\(\)/);
   assert.match(homeSources, /openPlatformConversations\(\)/);
-  assert.match(homeSources, /stores\.selection\.memories === "platform"/);
-  assert.match(homeSources, /stores\.selection\.conversations === "platform"/);
-  assert.match(homeSources, /openMemories\(\)/);
-  assert.match(homeSources, /openConversations\(\)/);
+  assert.doesNotMatch(homeSources, /openMemories\(\)/);
+  assert.doesNotMatch(homeSources, /openConversations\(\)/);
 
   const conversationSources = await read("src/production/conversation-sources.ts");
   const folderSources = await read("src/production/folder-sources.ts");
@@ -130,18 +120,14 @@ test("bootstrap chooses backend generation through one production factory", asyn
   assert.match(main, /openTaskRouteSource\(platform\)/);
   assert.match(conversationSources, /openPlatformConversations\(\)/);
   assert.match(conversationSources, /openPlatformFolders\(\)/);
-  assert.match(conversationSources, /conversationsGeneration === "platform"/);
-  assert.match(conversationSources, /foldersGeneration === "platform"/);
+  assert.doesNotMatch(conversationSources, /openConversations\(\)/);
   assert.match(folderSources, /openPlatformFolders\(\)/);
-  assert.match(folderSources, /foldersGeneration === "platform"/);
+  assert.doesNotMatch(folderSources, /openFolders\(\)/);
   assert.match(taskSources, /openPlatformTasks\(\)/);
-  assert.match(taskSources, /tasksGeneration === "platform"/);
+  assert.doesNotMatch(taskSources, /openTasks\(\)/);
   assert.doesNotMatch(main, /route === "conversations"[\s\S]{0,400}stores\.openConversations\(\)/);
   assert.doesNotMatch(main, /route === "folders"[\s\S]{0,200}stores\.openFolders\(\)/);
   assert.doesNotMatch(main, /route === "tasks"[\s\S]{0,200}stores\.openTasks\(\)/);
-  // Completeness is the server's envelope, never derived at the route. The
-  // platform adapters already carry `page.completeness.status`; these sources
-  // must not invent a complete flag of their own.
   assert.match(
     await read("../adapters-platform/src/conversations.ts"),
     /complete: page\.completeness\.status === "complete"/,
@@ -157,19 +143,10 @@ test("bootstrap chooses backend generation through one production factory", asyn
   assert.doesNotMatch(conversationSources, /complete:\s*(true|false|items\.length)/);
   assert.doesNotMatch(folderSources, /complete:\s*(true|false|items\.length)/);
   assert.doesNotMatch(taskSources, /complete:\s*(true|false|items\.length)/);
-  // red-proof: dropping the `route === "memories"` conjunct makes `?generation=platform`
-  // render propositions on every route, including Tasks. Dropping the REJECTED log lets a
-  // client believe it is on the new backend while reading the legacy wire — the single
-  // worst outcome available here.
-  // Home calling openMemories() under a platform selection is the other form of that lie.
-  // Conversations/Folders calling openConversations()/openFolders() under a platform
-  // selection is the same lie on those routes.
 
-  assert.match(stores, /export type ProductionStoreFactory/);
-  assert.match(stores, /openMemories\(\)/);
-  assert.match(stores, /openConversations\(\)/);
-  assert.match(stores, /openFolders\(\)/);
-  assert.match(stores, /openTasks\(\)/);
+  assert.match(stores, /export type PlatformProductionStoreFactory/);
+  assert.match(stores, /openPlatformTasks\(\)/);
+  assert.doesNotMatch(stores, /createLegacyProductionStoreFactory/);
   // red-proof: constructing a concrete domain store in main bypasses the
   // single composition seam the rewritten backend must replace.
 });

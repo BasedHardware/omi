@@ -20,22 +20,6 @@ importers:
         specifier: 5.9.3
         version: 5.9.3
 
-  packages/adapters-legacy:
-    dependencies:
-      '@omi-core/contracts':
-        specifier: workspace:*
-        version: link:../../contracts
-      '@omi-core/kernel':
-        specifier: workspace:*
-        version: link:../kernel
-      '@omi-core/sync':
-        specifier: workspace:*
-        version: link:../sync
-    devDependencies:
-      typescript:
-        specifier: ^5.7.2
-        version: 5.9.3
-
   packages/adapters-platform:
     dependencies:
       '@omi-core/contracts':
@@ -83,9 +67,6 @@ importers:
 
   packages/domain:
     dependencies:
-      '@omi-core/adapters-legacy':
-        specifier: workspace:*
-        version: link:../adapters-legacy
       '@omi-core/adapters-platform':
         specifier: workspace:*
         version: link:../adapters-platform
@@ -121,9 +102,6 @@ importers:
 
   packages/surfaces:
     dependencies:
-      '@omi-core/adapters-legacy':
-        specifier: workspace:*
-        version: link:../adapters-legacy
       '@omi-core/adapters-platform':
         specifier: workspace:*
         version: link:../adapters-platform
@@ -195,9 +173,6 @@ importers:
 
   packages/testkit:
     dependencies:
-      '@omi-core/adapters-legacy':
-        specifier: workspace:*
-        version: link:../adapters-legacy
       '@omi-core/adapters-platform':
         specifier: workspace:*
         version: link:../adapters-platform

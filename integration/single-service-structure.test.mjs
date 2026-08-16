@@ -96,8 +96,8 @@ test("RED-PROOF iOS evidence is bounded build-install-launch-collect, never opti
 test("RED-PROOF fixture and headed click-through cannot enter the registered result", () => {
   assert.match(ios, /consumer evidence requires LIVE mode; --fixture is forbidden/);
   assert.doesNotMatch(macos, /--fixture\)/);
-  assert.match(macos, /surface_query="\$\{surface_query\}&generation=platform"/);
-  assert.match(ios, /surface_query="\$\{surface_query\}&generation=platform"/);
+  assert.match(macos, /surface_query="route=\$\{route\}&platform=desktop&generation=platform"/);
+  assert.match(ios, /surface_query="route=\$\{route\}&platform=mobile&generation=platform"/);
   assert.doesNotMatch(stack, /--fixture|--headed|OMI_HEADED|screencapture|screenshot/);
 });
 
