@@ -259,4 +259,20 @@ describe("Listen formation outbox consumer", () => {
       claimCount: 2, formationCount: 2, acknowledgementCount: 2,
     });
   });
+
+  test("exhausted serialization conflicts still record a job failure", async () => {
+    const events: Events = [];
+    const service = consumer(events, {
+      formation: {
+        async accept() { return { kind: "serialization_retryable" }; },
+      },
+    });
+    await expect(service.runNext(context())).resolves.toEqual({
+      kind: "failed", leased: 1, formation_calls: 1,
+    });
+    expect(events.map((event) => event.name)).toEqual(["claim", "load", "failure"]);
+    expect(events.find((event) => event.name === "failure")?.value).toEqual({
+      code: "serialization_retryable",
+    });
+  });
 });

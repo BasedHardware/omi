@@ -291,6 +291,14 @@ const boundedDurationMilliseconds = (started: number | null, finished: number | 
   return Math.min(finished - started, 86_400_000);
 };
 
+/**
+ * Inclusive bound on serializable transaction attempts for SQLSTATE 40001.
+ * The first try counts; two more retries are the expected cost of SERIALIZABLE,
+ * not a job failure. Exhaustion still surfaces as retryable_serialization so
+ * the job budget remains for real failures. Unbounded retry would livelock.
+ */
+export const SERIALIZATION_RETRY_ATTEMPTS = 3 as const;
+
 const databaseOutcomeFor = (error: PostgresRepositoryError): DatabaseOutcome => {
   if (error.code === "retryable_serialization") return "serialization_retryable";
   if ([
@@ -326,6 +334,63 @@ const emitTransactionTelemetry = (
   }
 };
 
+const runAuthorizedSerializableConnectionTransaction = async <Result>(
+  pool: PostgresTransactionPool,
+  suppliedContext: AuthorizedLedgerWriteContext,
+  callback: (transaction: AuthorizedPostgresConnectionTransaction) => Promise<Result>,
+): Promise<Result> => {
+  const context = assertAuthorizedLedgerWriteContext(suppliedContext);
+  const restoreRelease = authorizedRestoreReleaseBinding(context);
+  return pool.withTransaction(
+    { isolationLevel: "serializable", accessMode: "read write" },
+    async (connection: CheckedOutPostgresConnection) => {
+      await connection.query({
+        name: "authority.set_local",
+        text: SET_LOCAL_AUTHORITY_CONTEXT,
+        values: [
+          context.account_id,
+          context.principal_id,
+          context.grant_id,
+          context.account_epoch,
+          context.lifecycle_state,
+          context.capability,
+        ],
+      });
+      const rows = await connection.query<AuthorityStateRow>({
+        name: "authority.lock_and_revalidate",
+        text: restoreRelease === null ? LOCK_AUTHORITY_STATE : LOCK_RESTORED_AUTHORITY_STATE,
+        values: [
+          context.account_id,
+          context.principal_id,
+          context.application_id,
+          context.credential_id,
+          context.credential_generation,
+          context.capability,
+          context.grant_id,
+          ...(restoreRelease === null ? [] : [
+            restoreRelease.database_generation_digest,
+            restoreRelease.restore_release_revision,
+            restoreRelease.restore_release_content_hash,
+          ]),
+        ],
+      });
+      const rawRow = rows[0];
+      if (rows.length !== 1 || !rawRow) {
+        throw new PostgresRepositoryError("authorization_state_denied");
+      }
+      const row = normalizeAuthorityStateRow(rawRow);
+      assertAuthorityState(context, row, restoreRelease);
+      const transaction: AuthorizedPostgresConnectionTransaction = Object.freeze({
+        authority: context,
+        dbNowEpochSeconds: row.db_now_epoch_seconds,
+        lockedControlRevision: row.control_revision,
+        connection,
+      });
+      return callback(transaction);
+    },
+  );
+};
+
 /** @internal Shared implementation for PostgreSQL repositories in this driver. */
 export const withAuthorizedSerializableConnectionTransaction = async <Result>(
   pool: PostgresTransactionPool,
@@ -333,65 +398,26 @@ export const withAuthorizedSerializableConnectionTransaction = async <Result>(
   callback: (transaction: AuthorizedPostgresConnectionTransaction) => Promise<Result>,
   observability: PostgresTransactionObservability = {},
 ): Promise<Result> => {
-  const started = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
-  try {
-    const context = assertAuthorizedLedgerWriteContext(suppliedContext);
-    const restoreRelease = authorizedRestoreReleaseBinding(context);
-    const result = await pool.withTransaction(
-      { isolationLevel: "serializable", accessMode: "read write" },
-      async (connection: CheckedOutPostgresConnection) => {
-        await connection.query({
-          name: "authority.set_local",
-          text: SET_LOCAL_AUTHORITY_CONTEXT,
-          values: [
-            context.account_id,
-            context.principal_id,
-            context.grant_id,
-            context.account_epoch,
-            context.lifecycle_state,
-            context.capability,
-          ],
-        });
-        const rows = await connection.query<AuthorityStateRow>({
-          name: "authority.lock_and_revalidate",
-          text: restoreRelease === null ? LOCK_AUTHORITY_STATE : LOCK_RESTORED_AUTHORITY_STATE,
-          values: [
-            context.account_id,
-            context.principal_id,
-            context.application_id,
-            context.credential_id,
-            context.credential_generation,
-            context.capability,
-            context.grant_id,
-            ...(restoreRelease === null ? [] : [
-              restoreRelease.database_generation_digest,
-              restoreRelease.restore_release_revision,
-              restoreRelease.restore_release_content_hash,
-            ]),
-          ],
-        });
-        const rawRow = rows[0];
-        if (rows.length !== 1 || !rawRow) {
-          throw new PostgresRepositoryError("authorization_state_denied");
-        }
-        const row = normalizeAuthorityStateRow(rawRow);
-        assertAuthorityState(context, row, restoreRelease);
-        const transaction: AuthorizedPostgresConnectionTransaction = Object.freeze({
-          authority: context,
-          dbNowEpochSeconds: row.db_now_epoch_seconds,
-          lockedControlRevision: row.control_revision,
-          connection,
-        });
-        return callback(transaction);
-      },
-    );
-    emitTransactionTelemetry(observability, "success", started);
-    return result;
-  } catch (error) {
-    const mapped = mapPostgresFailure(error);
-    emitTransactionTelemetry(observability, databaseOutcomeFor(mapped), started);
-    throw mapped;
+  // SQLSTATE 40001 aborts the transaction. Retrying is a new BEGIN after
+  // rollback, so the callback is replayed only with no committed effect.
+  for (let attempt = 1; attempt <= SERIALIZATION_RETRY_ATTEMPTS; attempt += 1) {
+    const started = safeNowMilliseconds(observability.nowMilliseconds ?? Date.now);
+    try {
+      const result = await runAuthorizedSerializableConnectionTransaction(
+        pool, suppliedContext, callback,
+      );
+      emitTransactionTelemetry(observability, "success", started);
+      return result;
+    } catch (error) {
+      const mapped = mapPostgresFailure(error);
+      emitTransactionTelemetry(observability, databaseOutcomeFor(mapped), started);
+      if (providerCode(error) === "40001" && attempt < SERIALIZATION_RETRY_ATTEMPTS) {
+        continue;
+      }
+      throw mapped;
+    }
   }
+  throw new PostgresRepositoryError("retryable_serialization", true);
 };
 
 /**
