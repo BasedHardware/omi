@@ -125,6 +125,67 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       "\"car\" inside \"concatenate\" must not count as the word appearing")
   }
 
+  func testGenericLabelsAreRejectedWhileRealProjectNamesAreAccepted() {
+    let requiredNouns = [
+      "api", "dashboard", "config", "meetings", "downloads", "standup", "docs",
+      "chat", "email", "browser", "terminal", "settings", "notifications", "tasks",
+      "calendar", "search", "updates", "release", "testing", "review", "research",
+      "planning", "admin", "ops",
+    ]
+    for noun in requiredNouns {
+      XCTAssertTrue(
+        ContextWorkstreamTagging.genericLabels.contains(noun),
+        "stop-list must include the measured generic noun \(noun)")
+    }
+    for label in ContextWorkstreamTagging.genericLabels {
+      XCTAssertTrue(
+        ContextWorkstreamTagging.isGenericLabel(label),
+        "stop-list entry \(label) must be rejected")
+    }
+    for compound in [
+      "cloud-meetings", "downloads-collection", "team-standups",
+      "telecom-coordination", "config-management",
+    ] {
+      XCTAssertTrue(
+        ContextWorkstreamTagging.isGenericLabel(compound),
+        "every-token-generic compound \(compound) must be rejected")
+    }
+    XCTAssertFalse(ContextWorkstreamTagging.isGenericLabel("omi"))
+    XCTAssertFalse(ContextWorkstreamTagging.isGenericLabel("hermes"))
+    XCTAssertFalse(
+      ContextWorkstreamTagging.isGenericLabel("omi-api"),
+      "a real project name that happens to include a surface noun is not generic")
+
+    let response = ContextWorkstreamTagging.Response(
+      workstreams: [
+        .init(label: "omi", evidence: "the product"),
+        .init(label: "api", evidence: "four groups mentioned the API"),
+        .init(label: "Hermes", evidence: "two groups"),
+      ],
+      assignments: [
+        .init(group: "G1", label: "omi"),
+        .init(group: "G2", label: "omi"),
+        .init(group: "G3", label: "api"),
+        .init(group: "G4", label: "api"),
+        .init(group: "G5", label: "Hermes"),
+        .init(group: "G6", label: "Hermes"),
+        .init(group: "G7", label: "unknown"),
+      ])
+    let accepted = ContextWorkstreamTagging.acceptedAssignments(
+      response: response,
+      batchIDs: ["b1", "b2", "b3", "b4", "b5", "b6", "b7"],
+      existingTags: ["api"],
+      observations: "Omi release blocked on the Hermes PR. API rate limit on /v1/chat.")
+    XCTAssertEqual(
+      Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
+      ["b1:omi", "b2:omi", "b5:hermes", "b6:hermes"])
+    XCTAssertFalse(accepted.contains { $0.tag == "api" })
+    XCTAssertFalse(
+      accepted.contains { $0.bucketID == "b7" },
+      "unknown abstention must still drop the assignment")
+    XCTAssertNil(ContextWorkstreamTag.sanitize("unknown"))
+  }
+
   func testAcceptedAssignmentsLetALaterValidAssignmentWinAfterAnEarlierInvalidOneForTheSameBucket() {
     let response = ContextWorkstreamTagging.Response(
       workstreams: [.init(label: "Hermes", evidence: "two groups")],

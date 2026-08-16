@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-generic-workstream-label-accepted",
+  "violated_contract": "A durable workstream label must name a project, product, or goal. Accepting a technology or activity noun (api, meetings, config) that merely appears in the observations and has two supporting groups lets the same failure the per-visit tagger had — invented surface and activity names — into the vocabulary that routes candidates and pooling.",
+  "canonical_prevention": "Reject generic labels at the tagging acceptance boundary with a deterministic stop-list, including compounds whose every kebab token is generic, independent of the prompt and of the two-group / appears-in-observations gates. Abstention (unknown) stays a drop, not a label.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamReconciler.swift",
+    "desktop/macos/Desktop/Tests/ContextWorkstreamReconcilerTests.swift"
+  ],
+  "evidence_prs": [
+    11634
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
+  ],
+  "status": "open"
+}

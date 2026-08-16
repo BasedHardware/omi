@@ -177,11 +177,31 @@ enum ContextWorkstreamBatchSelection {
   }
 }
 
-/// Label acceptance: sanitize, require an observed term, require two groups
-/// for a brand-new label, cap at six labels, INSERT OR IGNORE.
+/// Label acceptance: sanitize, reject generic nouns, require an observed term,
+/// require two groups for a brand-new label, cap at six labels, INSERT OR IGNORE.
 enum ContextWorkstreamTagging {
   static let maximumLabels = 6
   static let minimumGroupsForNewLabel = 2
+
+  /// Technology and activity nouns that are not project names. A prompt clause
+  /// already failed at this; membership here is the gate. Compounds whose every
+  /// kebab token is in this set (cloud-meetings, config-management) are also
+  /// generic. A mixed label (omi-api) is not: it still names a project.
+  static let genericLabels: Set<String> = [
+    "admin", "api", "browser", "calendar", "chat", "chats", "cloud", "collection",
+    "config", "coordination", "dashboard", "docs", "download", "downloads", "email",
+    "emails", "management", "meeting", "meetings", "notification", "notifications",
+    "ops", "planning", "release", "releases", "research", "review", "reviews",
+    "search", "searches", "setting", "settings", "standup", "standups", "task",
+    "tasks", "team", "telecom", "terminal", "testing", "update", "updates",
+  ]
+
+  static func isGenericLabel(_ tag: String) -> Bool {
+    if genericLabels.contains(tag) { return true }
+    let tokens = tag.split(separator: "-").map(String.init).filter { !$0.isEmpty }
+    guard !tokens.isEmpty else { return true }
+    return tokens.allSatisfy { genericLabels.contains($0) }
+  }
 
   struct Response: Decodable, Equatable {
     struct Workstream: Decodable, Equatable {
@@ -292,6 +312,7 @@ enum ContextWorkstreamTagging {
     for item in firstLabelByBucket { counts[item.tag, default: 0] += 1 }
 
     func isAllowed(_ tag: String) -> Bool {
+      guard !isGenericLabel(tag) else { return false }
       guard labelAppearsInObservations(tag, observations: observations) else { return false }
       if existingTags.contains(tag) { return true }
       return (counts[tag] ?? 0) >= minimumGroupsForNewLabel

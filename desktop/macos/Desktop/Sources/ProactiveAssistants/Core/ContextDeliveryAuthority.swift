@@ -57,6 +57,10 @@ struct ContextBucketRecentDelivery: Equatable, Sendable, Decodable, FetchableRec
 }
 
 enum ContextDeliveryLifecycle {
+  /// Inserted when a delivery attempt begins, and kept when the lane fails
+  /// before a model decision. Not a choice to stay silent.
+  static let unresolvedDecisionType = "pending"
+
   /// Nonterminal ledger states that may still advance. Terminal
   /// `failed`/`suppressed`/`delivered` rows are immutable.
   static let advanceableStates: Set<String> = ["attempted", "model_completed", "policy_approved"]
@@ -267,13 +271,15 @@ extension ContextBucketStore {
       let id = UUID().uuidString.lowercased()
       try db.execute(
         sql: """
-          INSERT INTO proactive_deliveries
-            (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
-             provenanceJson, attemptedAt, expiresAt, createdAt)
-          VALUES (?, ?, ?, ?, 'pending', 'attempted', '{}', ?, ?, ?)
+            INSERT INTO proactive_deliveries
+              (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
+               provenanceJson, attemptedAt, expiresAt, createdAt)
+            VALUES (?, ?, ?, ?, ?, 'attempted', '{}', ?, ?, ?)
           """,
         arguments: [
-          id, fence.visitID, snapshot.bucketID, snapshot.versionID, now, now.addingTimeInterval(30 * 24 * 60 * 60), now,
+          id, fence.visitID, snapshot.bucketID, snapshot.versionID,
+          ContextDeliveryLifecycle.unresolvedDecisionType, now,
+          now.addingTimeInterval(30 * 24 * 60 * 60), now,
         ])
       return ContextDeliveryAttempt(id: id, reason: .allowed)
     }

@@ -569,10 +569,32 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
-    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    XCTAssertEqual(
+      row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType,
+      "a transport failure never produced a director decision")
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "http_error")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
+  }
+
+  func testEngineRecordsHttp502AsUnresolvedRatherThanSilence() async throws {
+    let deliveryID = try await seedAttemptedDelivery()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0)
+
+    await engine.recordDirectorFailure(
+      deliveryID: deliveryID,
+      error: ProactiveLaneClientError.http(status: 502, retryAfterSeconds: nil))
+
+    let row = try await fetchDelivery(id: deliveryID)
+    XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType)
+    XCTAssertNotEqual(row["decisionType"] as String?, "silence")
+    let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
+    XCTAssertEqual(provenance["failure"] as? String, "http_error")
+    XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 502)
   }
 
   func testEngineRecordsQuotaCooldownProvenanceOnSelfSuppressedLaneError() async throws {
@@ -588,7 +610,9 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
-    XCTAssertEqual(row["decisionType"] as String?, "silence")
+    XCTAssertEqual(
+      row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType,
+      "quota cooldown is a lane skip, not a silence decision")
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "quota_cooldown")
     XCTAssertEqual((provenance["status"] as? NSNumber)?.intValue, 429)
@@ -613,6 +637,7 @@ final class ContextProactivityDirectorFailureTests: XCTestCase {
 
     let row = try await fetchDelivery(id: deliveryID)
     XCTAssertEqual(row["lifecycleState"] as String?, "failed")
+    XCTAssertEqual(row["decisionType"] as String?, ContextDeliveryLifecycle.unresolvedDecisionType)
     let provenance = try provenanceObject(try XCTUnwrap(row["provenanceJson"] as String?))
     XCTAssertEqual(provenance["failure"] as? String, "decode")
     XCTAssertNil(provenance["status"])

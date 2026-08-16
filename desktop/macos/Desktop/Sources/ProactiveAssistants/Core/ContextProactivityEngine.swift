@@ -946,7 +946,7 @@ actor ContextProactivityEngine {
       "Context director \(ModelQoS.Proactivity.reasoningOperation) failed: \(classification.logDescription)")
     await terminalize(
       deliveryID: deliveryID,
-      decisionType: "silence",
+      decisionType: ContextDeliveryLifecycle.unresolvedDecisionType,
       provenanceJSON: classification.provenanceJSON,
       state: "failed")
   }
