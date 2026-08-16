@@ -84,12 +84,17 @@ describe('pending suppression matching', () => {
     expect(matchesPendingSuppression([later], row)).toBe(true)
   })
 
-  it('never suppresses on do_now or accept feedback', () => {
+  it('never suppresses on do_now or accept_candidate feedback', () => {
     const doNow = entry({
       idempotencyKey: 'k3',
       request: { ...entry().request, action: 'do_now' }
     })
+    const accept = entry({
+      idempotencyKey: 'k4',
+      request: { ...entry().request, action: 'accept_candidate' }
+    })
     expect(matchesPendingSuppression([doNow], row)).toBe(false)
+    expect(matchesPendingSuppression([accept], row)).toBe(false)
   })
 
   it('does not match an unrelated row', () => {

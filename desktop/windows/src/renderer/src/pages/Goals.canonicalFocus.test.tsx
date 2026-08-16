@@ -131,9 +131,7 @@ describe('canonical focus on the Goals page', () => {
     const focus = vi.spyOn(dashboardIntelligence, 'focus').mockResolvedValue(true)
     mount()
     await waitFor(() => expect(screen.getByText('Replace a focused goal')).toBeTruthy())
-    fireEvent.click(
-      screen.getByLabelText(/Goal a/i, { selector: 'input' }) ?? screen.getAllByRole('radio')[0]
-    )
+    fireEvent.click(screen.getByLabelText(/Goal a/i, { selector: 'input' }))
     fireEvent.click(screen.getByText('Replace focus'))
     await waitFor(() => expect(focus).toHaveBeenCalledWith('g-1', 'a'))
   })

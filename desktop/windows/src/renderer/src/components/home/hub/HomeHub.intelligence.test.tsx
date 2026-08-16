@@ -123,6 +123,8 @@ describe('question prefill', () => {
       const input = screen.getByDisplayValue('What changed this week?')
       expect(document.activeElement).toBe(input)
     })
+    // Prefill is a draft, never a submission.
+    expect(chat.send).not.toHaveBeenCalled()
   })
 })
 

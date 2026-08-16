@@ -65,8 +65,10 @@ export function HomeKnowsRow({
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
-      if (reasonOpen) chooseReason(null)
-      else setMenuAt(null)
+      if (reasonOpen) {
+        setReasonAt(null)
+        onDismiss?.(null)
+      } else setMenuAt(null)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)

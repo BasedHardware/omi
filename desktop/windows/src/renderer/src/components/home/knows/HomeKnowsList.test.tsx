@@ -164,21 +164,24 @@ describe('HomeKnowsList', () => {
     expect(dismiss).not.toHaveBeenCalled()
   })
 
-  it('question rows prefill the ask bar and never auto-send', async () => {
+  it('question rows hand the text to the ask bar exactly once', async () => {
     stubIntelligence()
     fetchAllActionItems.mockResolvedValue([])
     mount()
     const question = await screen.findByText('What should I do today?')
     fireEvent.click(question)
+    expect(onAskPrefill).toHaveBeenCalledTimes(1)
     expect(onAskPrefill).toHaveBeenCalledWith('What should I do today?')
   })
 
   it('an intelligence error renders the retry card wired to load', async () => {
     stubIntelligence({ error: 'Saved feedback will retry automatically.' })
+    const load = vi.spyOn(dashboardIntelligence, 'load').mockResolvedValue()
     mount()
     await waitFor(() => expect(screen.getByTestId('dashboard-intelligence-error')).toBeTruthy())
+    const callsBeforeRetry = load.mock.calls.length
     fireEvent.click(screen.getByText('Retry'))
-    expect(dashboardIntelligence.load).toHaveBeenCalled()
+    expect(load.mock.calls.length).toBe(callsBeforeRetry + 1)
   })
 })
 
