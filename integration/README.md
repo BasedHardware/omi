@@ -13,7 +13,9 @@ node integration/lanes.mjs L2
 # Full two-shell lane; chooses a simulator deterministically
 node integration/lanes.mjs L3
 
-# Listen → conversation → memory → Home → chat retrieval (named tier above L3)
+# Listen → conversation → memory → Home → chat retrieval (named tier above L3).
+# Currently held on CONTROL chat.memory=memory-not-retrieved; the runner still
+# exists: node integration/control-acceptance/run.mjs --journey
 node integration/lanes.mjs L4
 
 # Or name the simulator explicitly
