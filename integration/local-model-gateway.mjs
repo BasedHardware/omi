@@ -217,6 +217,21 @@ const server = Bun.serve({
     if (typeof lane !== "string" || !SAFE_GATEWAY_LANE.test(lane)) {
       return new Response("invalid lane", { status: 400 });
     }
+    if (readyPath) {
+      try {
+        appendFileSync(
+          join(dirname(readyPath), "gateway-requests.jsonl"),
+          `${JSON.stringify({
+            event: "gateway.request",
+            ts: new Date().toISOString(),
+            messages: Array.isArray(inbound.messages) ? inbound.messages : [],
+          })}\n`,
+          { mode: 0o600 },
+        );
+      } catch {
+        // Recording must never change the proxied generation.
+      }
+    }
     const forward = {
       model: modelId,
       messages: inbound.messages,

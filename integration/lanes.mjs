@@ -222,6 +222,17 @@ export const LANES = {
       },
     ],
   },
+  L4: {
+    name: "e2e journey — listen to chat-memory",
+    budgetNote: "named tier above L3; runner prints wall-clock",
+    reason: "one rendered-layer chain: he speaks, a transcript appears, it becomes a conversation, the conversation becomes a memory, Home shows it, and chat retrieval is joined by that memory's id. Too slow to fold into L3 — do not add it there. Canned gateway by default.",
+    steps: [
+      {
+        cwd: PLATFORM_REPO,
+        command: "node integration/control-acceptance/run.mjs --journey",
+      },
+    ],
+  },
 };
 
 /**
@@ -443,7 +454,7 @@ const argv = process.argv.slice(2);
 const laneArg = argv.find((a) => !a.startsWith("--"));
 if (!laneArg || argv.includes("--help")) {
   process.stdout.write(
-    `usage: integration/lanes.mjs <L0|L1|L2|L3> [--json]\n\n${
+    `usage: integration/lanes.mjs <L0|L1|L2|L3|L4> [--json]\n\n${
       Object.entries(LANES)
         .map(([id, l]) => `  ${id}  ${l.name.padEnd(34)} ${l.budgetNote}\n      ${l.reason}`)
         .join("\n")

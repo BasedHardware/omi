@@ -13,6 +13,9 @@ node integration/lanes.mjs L2
 # Full two-shell lane; chooses a simulator deterministically
 node integration/lanes.mjs L3
 
+# Listen → conversation → memory → Home → chat retrieval (named tier above L3)
+node integration/lanes.mjs L4
+
 # Or name the simulator explicitly
 integration/dev-stack.sh --device <simulator-udid> --assert
 

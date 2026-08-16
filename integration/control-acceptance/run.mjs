@@ -16,11 +16,17 @@ import { fileURLToPath } from "node:url";
 
 import { buildDriverSource } from "./driver-source.mjs";
 import {
+  GATEWAY_REQUEST_LOG_NAME,
+  JOURNEY_STEP_SLUGS,
   aggregate,
   applyChatProvenance,
+  applyJourneyChat,
+  lastGatewayRequest,
+  parseServedMemoryProjections,
   PENDING_VALUE,
   readServiceBoot,
   reportFromProbeText,
+  stripServedMemoryRecord,
 } from "./verdict.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +36,7 @@ const PRODUCTION_SERVICE_URL = "http://127.0.0.1:4851";
 const PRODUCTION_GATEWAY_TEST = "http://127.0.0.1:8788";
 const PRODUCTION_GATEWAY_REAL = "http://127.0.0.1:8791";
 const APP_NAME = "omi-on-control-acceptance";
+const JOURNEY_APP_NAME = "omi-on-journey-acceptance";
 
 function fail(message, code = 1) {
   process.stderr.write(`${message}\n`);
@@ -50,16 +57,56 @@ function printReport(report) {
   process.stdout.write(`${report.summary}\n`);
 }
 
+function getJson(url, token) {
+  const result = spawnSync("curl", [
+    "-fsS",
+    "--max-time",
+    "5",
+    "-H",
+    `Authorization: Bearer ${token}`,
+    url,
+  ], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.status !== 0) return null;
+  try {
+    return JSON.parse(result.stdout);
+  } catch {
+    return null;
+  }
+}
+
+function conversationIdsFrom(payload) {
+  const rows = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : [];
+  return rows
+    .map((row) => (row && typeof row.id === "string" ? row.id : null))
+    .filter((id) => typeof id === "string" && id.length > 0);
+}
+
+function memoryRecordsFrom(payload) {
+  const rows = Array.isArray(payload?.items) ? payload.items : [];
+  return rows
+    .filter((row) => row && typeof row.id === "string" && typeof row.text === "string")
+    .map((row) => ({ id: row.id, text: row.text }));
+}
+
 const { REPO_PATHS } = await import("../lib/provenance.mjs");
 const launcher = join(REPO_PATHS["core-foundation"], "frontend/shells/macos/scripts/dev-run-macos.sh");
 const stack = join(PLATFORM_ROOT, "integration/dev-stack.sh");
 
 const SCREEN_PROOF = process.argv.includes("--screen-proof");
+const JOURNEY = process.argv.includes("--journey");
+const SEAM_BREAK = process.argv.includes("--seam-break");
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
   process.stdout.write(
     [
-      "usage: node integration/control-acceptance/run.mjs [--screen-proof]",
+      "usage: node integration/control-acceptance/run.mjs [--screen-proof | --journey [--seam-break]]",
       "",
       "Sibling of integration/dev-app.sh --accept. Drives Home, Chat, Listen,",
       "Rewind, and every chrome route in the built macOS shell against the live",
@@ -69,14 +116,22 @@ if (process.argv.includes("--help") || process.argv.includes("-h")) {
       "--screen-proof  only the Rewind capture control + omiScreenBridge round",
       "                trip. Does not send Chat. Use this when the local service",
       "                is already serving and the canned gateway is not paired with it.",
+      "--journey       listen → conversation → memory → Home → chat retrieval,",
+      "                one chain, no hop stubbed. Held out of L3; run as L4.",
+      "--seam-break    with --journey: leave listen/memory/chat endpoints healthy",
+      "                and drop the identified memory from the served request",
+      "                before judging retrieval. The journey must fail.",
       "",
       "OMI_CHAT_MODEL=real uses the local real-model proxy; default is the canned",
-      "gateway. A full run always boots a leased stack so it does not contend",
+      "gateway. A full or journey run always boots a leased stack so it does not contend",
       "with a long-lived 4851 holder. Never points at api.omi.me.",
     ].join("\n") + "\n",
   );
   process.exit(0);
 }
+
+if (SCREEN_PROOF && JOURNEY) fail("ERROR: --screen-proof and --journey are mutually exclusive.", 2);
+if (SEAM_BREAK && !JOURNEY) fail("ERROR: --seam-break requires --journey.", 2);
 
 switch (process.env.OMI_CHAT_MODEL ?? "") {
   case "":
@@ -158,15 +213,30 @@ if (existsSync(leasePath)) {
   }
 }
 
+let baseline = { conversationIds: [], memoryIds: [] };
+if (JOURNEY) {
+  const conversations = getJson(`${serviceUrl}/v1/conversations?offset=0&limit=100`, token);
+  const memories = getJson(`${serviceUrl}/v1/memories?limit=100`, token);
+  baseline = {
+    conversationIds: conversationIdsFrom(conversations),
+    memoryIds: memoryRecordsFrom(memories).map((row) => row.id),
+  };
+}
+
 // Newlines stay intact: execve carries them through the launcher untouched,
 // and flattening them lets a `//` line comment swallow the rest of the program.
-const driver = buildDriverSource(readFileSync(DRIVER_PATH, "utf8"), { screenProof: SCREEN_PROOF });
+const driver = buildDriverSource(readFileSync(DRIVER_PATH, "utf8"), {
+  screenProof: SCREEN_PROOF,
+  journey: JOURNEY,
+  baseline,
+});
+const appName = JOURNEY ? JOURNEY_APP_NAME : APP_NAME;
 const childEnv = {
   ...process.env,
   OMI_API_TOKEN: token,
   OMI_API_BASE_URL: serviceUrl,
   OMI_SURFACE_PORT: surfacePort,
-  OMI_APP_NAME: APP_NAME,
+  OMI_APP_NAME: appName,
   OMI_BUILD_DIR: buildDir,
   OMI_PROBE_JS: driver,
   OMI_PROBE_EXIT: "1",
@@ -176,7 +246,7 @@ const childEnv = {
   OMI_PROBE_RETRY_INTERVAL: "0.4",
   OMI_PROBE_DELAY: "5",
   OMI_PROBE_SETTLE: "2",
-  OMI_ACCEPTANCE_WAIT_SECONDS: "180",
+  OMI_ACCEPTANCE_WAIT_SECONDS: JOURNEY ? "240" : "180",
   OMI_READY_TIMEOUT_SECONDS: "30",
 };
 delete childEnv.OMI_ACCEPTANCE;
@@ -193,14 +263,14 @@ if (SCREEN_PROOF) {
 }
 
 const started = Date.now();
-const launched = spawnSync(launcher, ["--api", serviceUrl, "--route", "home"], {
+const launched = spawnSync(launcher, ["--api", serviceUrl, "--route", JOURNEY ? "listen" : "home"], {
   cwd: dirname(launcher),
   env: childEnv,
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
 });
 const elapsedMs = Date.now() - started;
-const logPath = join(buildDir, `${APP_NAME}.run.log`);
+const logPath = join(buildDir, `${appName}.run.log`);
 let logText = `${launched.stdout ?? ""}\n${launched.stderr ?? ""}`;
 try {
   logText += `\n${readFileSync(logPath, "utf8")}`;
@@ -213,6 +283,58 @@ if (/api\.omi\.me|\?rig=dev/.test(logText)) {
 }
 
 const report = (() => {
+  if (JOURNEY) {
+    const parsed = reportFromProbeText(logText, { slugs: JOURNEY_STEP_SLUGS, allowSkip: false });
+    if (!parsed.parse?.ok) return parsed;
+    let boot = null;
+    try {
+      boot = readServiceBoot(readFileSync(join(dirname(ownerPath), "logs", "service.jsonl"), "utf8"));
+    } catch {
+      boot = null;
+    }
+    const memoriesAfter = memoryRecordsFrom(getJson(`${serviceUrl}/v1/memories?limit=100`, token));
+    let servedLog = "";
+    try {
+      servedLog = readFileSync(join(dirname(ownerPath), GATEWAY_REQUEST_LOG_NAME), "utf8");
+    } catch {
+      servedLog = "";
+    }
+    const served = lastGatewayRequest(servedLog);
+    const servedItems = parseServedMemoryProjections(served?.messages ?? []);
+    const memoryId = parsed.parse.result.witnesses?.memoryId ?? null;
+    const record = memoriesAfter.find((row) => row.id === memoryId);
+    const retrievalItems = SEAM_BREAK
+      ? stripServedMemoryRecord(servedItems, record?.text)
+      : servedItems;
+    if (SEAM_BREAK) {
+      const bySlug = new Map((parsed.parse.result.steps ?? []).map((step) => [step.slug, step.verdict]));
+      const endpointSteps = [
+        { slug: "mic", verdict: bySlug.get("mic") ?? "missing-step" },
+        { slug: "conversation", verdict: bySlug.get("conversation") ?? "missing-step" },
+        { slug: "memory", verdict: bySlug.get("memory") ?? "missing-step" },
+        { slug: "home.memory", verdict: bySlug.get("home.memory") ?? "missing-step" },
+        { slug: "chat", verdict: "streamed-and-persisted" },
+      ];
+      const endpoints = aggregate(endpointSteps, {
+        slugs: ["mic", "conversation", "memory", "home.memory", "chat"],
+        allowSkip: false,
+      });
+      process.stdout.write("SEAM-BREAK endpoints (hops still healthy; link stripped from served request):\n");
+      printReport(endpoints);
+    }
+    const steps = applyJourneyChat(parsed.parse.result.steps, {
+      intent: process.env.OMI_CHAT_MODEL === "real" ? "real" : "test",
+      boot,
+      rendered: parsed.parse.result.witnesses?.chat ?? null,
+      retrieval: {
+        memoryId,
+        memories: memoriesAfter,
+        servedItems: retrievalItems,
+      },
+    });
+    const next = aggregate(steps, { slugs: JOURNEY_STEP_SLUGS, allowSkip: false });
+    return { ...next, parse: parsed.parse };
+  }
   const parsed = reportFromProbeText(logText);
   if (!parsed.parse?.ok || SCREEN_PROOF) return parsed;
   let boot = null;
@@ -229,7 +351,8 @@ const report = (() => {
   const next = aggregate(steps);
   return { ...next, parse: parsed.parse };
 })();
-process.stdout.write(`control-acceptance wall-clock=${elapsedMs}ms launcher-status=${launched.status ?? "none"}\n`);
+const mode = JOURNEY ? "journey" : SCREEN_PROOF ? "screen-proof" : "full";
+process.stdout.write(`control-acceptance mode=${mode} wall-clock=${elapsedMs}ms launcher-status=${launched.status ?? "none"}\n`);
 printReport(report);
 
 if (launched.status !== 0 && report.parse?.reason === "probe-missing") {

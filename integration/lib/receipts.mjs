@@ -171,6 +171,15 @@ export const LANE_REGISTRY = Object.freeze({
     requiredArbiters: Object.freeze(["runId", "evidenceMatrix"]),
     description: "the full stack via integration/dev-stack.sh.",
   }),
+  L4: Object.freeze({
+    id: "L4",
+    name: "e2e journey",
+    budgetMs: 240000,
+    repos: Object.freeze(["core-foundation", "platform"]),
+    requiredArbiters: Object.freeze([]),
+    description:
+      "listen → conversation → memory → Home → chat retrieval in the built macOS shell. Named tier above L3.",
+  }),
 });
 
 export const LANE_IDS = Object.freeze(Object.keys(LANE_REGISTRY));
@@ -733,7 +742,7 @@ function printHelp() {
       "node integration/lib/receipts.mjs <command> [flags]",
       "",
       "Commands:",
-      '  write --lane <L0|L1|L2|L3> --result <pass|fail> [--duration-ms N]',
+      '  write --lane <L0|L1|L2|L3|L4> --result <pass|fail> [--duration-ms N]',
       "         [--arbiters '<json>'] [--notes <text>] [--command <text>]",
       "  read --lane <lane>",
       "  history --lane <lane>",
