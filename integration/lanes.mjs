@@ -428,7 +428,9 @@ function runLane(laneId, { json = false } = {}) {
       });
     } catch (error) {
       process.stderr.write(`${error.message}\n`);
-      if (l3RunDir !== null) rmSync(l3RunDir, { recursive: true, force: true });
+      // A lease refusal is a lane failure, so it keeps its run dir like any
+      // other. The dir holds the refusal record that names the live holders.
+      disposeL3RunDir(l3RunDir, { passed: false });
       process.exit(1);
     }
     if (!json) {
