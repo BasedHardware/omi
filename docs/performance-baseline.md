@@ -4,9 +4,11 @@
 records the re-measure of those three targets at current trunk, what was
 dropped, what was left, and the one Chat hitch that still reproduced.
 
-**Re-measured here** (felt-latency): dedicated `pageMs` for listen / folders /
-home, in-app `fromClick` for listen / folders, canned-gateway Chat first-turn,
-and service boot after the Chat warmup. Method: `bun scripts/performance-baseline.mjs`.
+**Re-measured here** (felt-latency, this confirmation pass): dedicated
+`pageMs` for listen / folders / home / memories / conversations, in-app
+`fromClick` for listen / folders, canned-gateway Chat first-turn (five
+independent boots before and after), and service boot with the Chat warmup.
+Method: `bun scripts/performance-baseline.mjs`.
 
 **Inherited** (not re-run): launcher skip numbers from `shell-rebuild-cost`,
 and `perf-baseline`'s formation / L1–L4 wall-clock tables.
@@ -15,23 +17,34 @@ and `perf-baseline`'s formation / L1–L4 wall-clock tables.
 
 ## Felt-latency re-measure
 
-**Before ref:** `6a72712ba9` (`6a72712ba9550c4bd4b1a23eab76bec6d270c2b3`) on
-`lane/perf-felt-latency`, tracking `origin/codex/track3-backend-integration`.
-Working tree was dirty only with the measurement harness while UI and Chat
-before-numbers were taken.
+**After ref:** `ed2e2fee3c` (`ed2e2fee3c1acd25ab374bf33e44850a441e4e85`) on
+`lane/perf-felt-latency`, tracking `origin/codex/track3-backend-integration`
+at `6a72712ba9`. Frontend surfaces were not changed. Chat's first-turn path
+was (yield before the authorized page read; long-lived `dev-server` warms
+that path before it listens).
 
-**After:** this commit. Frontend surfaces were not changed. Chat's first-turn
-path was.
+**Chat before** used the three Chat runtime files from `6a72712ba9` checked
+out over that after-tree (dirty=true, disclosed on each boot). UI and boot
+were taken on the clean after-tree.
 
 **Machine:** Apple M5 Max, Darwin 25.6.0 arm64. David's daily app stayed on
-4851/8788/5290 the whole time and was not stopped. That usage is load on
-these numbers. Verification leased its own ports and never bound those three.
+4851/8788/5290 the whole time and was not stopped. A sibling lane
+(`lying-state-sweep`) was also leasing control-acceptance ports. A stuck
+`flutterfire` dartvm at ~99% CPU has been on the machine since Monday. All
+of that is load on these numbers. Verification leased its own ports and
+never bound 4851/5290/8788.
 
 **N = 5.** Median is the middle sample after sorting. Spread is max − min.
 Units are milliseconds. Samples are listed in run order.
 
 Re-run: `bun scripts/performance-baseline.mjs`. Scratch under `os.tmpdir()`,
-never worktree `data/`. Frontend `dist/` must already exist.
+never worktree `data/`. Frontend `dist/` must already exist. Chat first-turn
+median needs five independent process boots (`--only chat` five times); one
+invocation's run 1 is a single first turn.
+
+A quieter pass in this worktree (loadavg ~4.7) saw the same three verdicts
+and Chat first-token 145 → 81. This file's tables are the confirmation pass
+under the load above.
 
 ---
 
@@ -48,34 +61,32 @@ capture kind and stopped mapping transport `connecting` onto store
 unless the transport is `reconnecting` or `failed`. The old hypothesis is
 dead. Do not inherit it.
 
-Re-measure at `6a72712ba9`, loadavg **4.75 / 4.84 / 4.15**, David's ports
-bound, N = 5, same probe (pending while `data-surface-state` is
+Confirmation at `ed2e2fee3c`, loadavg **15.22 / 41.23 / 32.14**, David's
+ports bound, N = 5, same probe (pending while `data-surface-state` is
 `initial-loading` or `refreshing`). Every Listen sample landed `state=ready`.
 
 Dedicated landing (`pageMs`):
 
 | Route | Median | Min | Max | Spread | Samples |
 |---|---:|---:|---:|---:|---|
-| folders | 126 | 124 | 131 | 7 | 124, 125, 126, 126, 131 |
-| listen | 177 | 173 | 182 | 9 | 173, 178, 177, 176, 182 |
-| home | 128 | 104 | 132 | 28 | 132, 128, 104, 128, 132 |
-| memories | 175 | 61 | 182 | 121 | 182, 178, 175, 175, 61 |
-| conversations | 124 | 59 | 129 | 70 | 126, 124, 129, 123, 59 |
+| folders | 133 | 132 | 137 | 5 | 133, 134, 133, 137, 132 |
+| listen | 190 | 156 | 196 | 40 | 196, 196, 190, 156, 186 |
+| home | 133 | 131 | 144 | 13 | 131, 144, 133, 132, 142 |
+| memories | 187 | 183 | 202 | 19 | 185, 193, 187, 183, 202 |
+| conversations | 130 | 107 | 144 | 37 | 130, 127, 134, 107, 144 |
 
 In-app walk (`fromClick`):
 
 | Route | Median | Min | Max | Spread | Samples |
 |---|---:|---:|---:|---:|---|
-| folders | 54 | 52 | 56 | 4 | 54, 56, 54, 54, 52 |
-| listen | 99 | 95 | 109 | 14 | 102, 99, 95, 109, 98 |
+| folders | 54 | 53 | 54 | 1 | 53, 54, 53, 54, 54 |
+| listen | 104 | 94 | 110 | 16 | 104, 110, 94, 96, 104 |
 
-Listen is still ~50 ms above the ~126 ms cluster (and tied with memories),
-not five times folders. Folders itself moved from a bimodal 52 (three samples
-at probe grain) to a tight 126 — quieter machine, no fast-cluster grain hits
-in this batch. The remaining Listen extra is first paint of a heavier route
-(native preflight provider + capture client before `root.render`), not
-`connecting` folded into `refreshing`. Moving schema parse or preflight to
-bundle boot would tax every route. **Dropped.**
+Listen is ~1.4× folders on dedicated landing (190 vs 133) and ~1.9× on
+in-app click (104 vs 54), not five times. The remaining Listen extra is
+first paint of a heavier route (native preflight provider + capture client
+before `root.render`), not `connecting` folded into `refreshing`. Moving
+schema parse or preflight to bundle boot would tax every route. **Dropped.**
 
 ---
 
@@ -90,25 +101,26 @@ median.
 `perf-baseline` had one first-turn sample: admission 127, first-token **180**,
 then subsequent first-token ~53.
 
-Re-measure before the fix, `6a72712ba9`, loadavg **4.74 / 4.92 / 4.07**,
-David's ports bound:
+Confirmation before the fix (`6a72712ba9` Chat runtime files over this
+after-tree), David's ports bound, dirty=true:
 
-| Clock | N | Median | Min | Max | Spread | Samples |
-|---|---:|---:|---:|---:|---:|---|
-| first-token, first turn after boot | 5 | 145 | 138 | 154 | 16 | 145, 150, 154, 139, 138 |
-| admission, first turn | 5 | 93 | 92 | 107 | 15 | 92, 104, 107, 93, 92 |
-| first-token, subsequent | 5 | 45 | 44 | 53 | 9 | 45, 44, 53, 46, 45 |
+| Clock | N | Loadavg (boot 1) | Median | Min | Max | Spread | Samples |
+|---|---:|---|---:|---:|---:|---:|---|
+| first-token, first turn after boot | 5 | 16.82 / 22.66 / 25.80 | 158 | 144 | 209 | 65 | 144, 174, 158, 157, 209 |
+| admission, first turn | 5 | (same batch, load 16.82 → 21.01) | 109 | 96 | 153 | 57 | 96, 121, 108, 109, 153 |
+| first-token, subsequent | 20 | | 48 | 44 | 52 | 8 | 45, 44, 46, 47, 48, 48, 50, 49, 49, 45, 46, 46, 44, 51, 48, 51, 52, 50, 48, 49 |
 
-The hitch reproduced. It is ours, not a provider's.
+The hitch reproduced. It is ours, not a provider's. Subsequent turns stayed
+in a 44–52 ms band even while 1-minute loadavg sat in the 20s.
 
-**Named cost.** First successful POST spends ~78 ms inside
+**Named cost.** First successful POST spends the hitch inside
 `supervisor.onAdmitted` before it returns. `admit()` itself is 0–1 ms.
 `GET /v1/chat-messages`, invalid JSON POST, and validation-failing POST do
 not warm it. Split inside `onAdmitted`: sync snapshot append is 1 ms; the
 remainder is the first execution of `generationContext.load()` /
 `readCanonicalPage` (authorized memory page). That call does not yield until
 the page is built, so fire-and-forget dispatch was not fire-and-forget on a
-cold process. Subsequent `load` is ~17 ms and POST no longer waits for it.
+cold process.
 
 Not a lazy `import()`. The modules are already loaded at boot. It is
 first-execution of the memory-context path, paid on the first user send.
@@ -130,25 +142,31 @@ David's ports bound.
 |---|---|---|---:|---:|---:|---:|---|
 | Cold `/ready` | `perf-baseline` `fc4b3a774d` | 12.33 / 9.87 / 9.74 | 160 | 158 | 270 | 112 | 270, 173, 160, 158, 160 |
 | Warm `/ready` | `perf-baseline` `fc4b3a774d` | 12.33 / 9.87 / 9.74 | 144 | 142 | 161 | 19 | 147, 143, 142, 144, 161 |
-| Cold `/ready` | after warmup, this commit | 7.82 / 10.65 / 8.40 | 250 | 245 | 269 | 24 | 246, 245, 250, 266, 269 |
-| Warm `/ready` | after warmup, this commit | 7.82 / 10.65 / 8.40 | 245 | 226 | 268 | 42 | 226, 268, 231, 245, 258 |
+| Cold `/ready` | after warmup, `ed2e2fee3c` | 25.95 / 25.06 / 26.35 | 266 | 230 | 285 | 55 | 274, 266, 285, 230, 241 |
+| Warm `/ready` | after warmup, `ed2e2fee3c` | 25.95 / 25.06 / 26.35 | 255 | 231 | 264 | 33 | 255, 257, 245, 264, 231 |
 
-Boot rose by ~90 ms. The daily app is already up on 4851; that cost is paid
-when the stack starts, not when David sends. First send is the felt clock.
+Boot is ~100 ms above the pre-warmup `perf-baseline` cold median. The daily
+app is already up on 4851; that cost is paid when the stack starts, not when
+David sends. First send is the felt clock.
 
-After, same Chat method, five independent boots, loadavg 15.94 → 8.39 (David's
-ports still bound; machine busier than the before-batch):
+After, same Chat method, five independent boots on the clean after-tree,
+David's ports still bound:
 
-| Clock | N | Median | Min | Max | Spread | Samples |
-|---|---:|---:|---:|---:|---:|---|
-| first-token, first turn after boot | 5 | 81 | 74 | 96 | 22 | 82, 81, 96, 79, 74 |
-| admission, first turn | 5 | 34 | 31 | 46 | 15 | 34, 37, 46, 31, 32 |
-| first-token, subsequent | 5 | 45 | 43 | 62 | 19 | 43, 50, 62, 45, 45 |
+| Clock | N | Loadavg (boot 1) | Median | Min | Max | Spread | Samples |
+|---|---:|---|---:|---:|---:|---:|---|
+| first-token, first turn after boot | 5 | 7.13 / 24.12 / 26.79 | 94 | 67 | 135 | 68 | 67, 67, 94, 135, 106 |
+| admission, first turn | 5 | (same batch, load 7.13 → 30.72) | 46 | 27 | 57 | 30 | 28, 27, 46, 57, 57 |
+| first-token, subsequent | 20 | | 56 | 43 | 160 | 117 | 43, 44, 44, 46, 46, 44, 47, 46, 56, 57, 59, 59, 116, 154, 116, 160, 54, 54, 56, 57 |
 
-First-token **145 → 81**. Admission **93 → 34**. Subsequent unchanged at ~45.
-A ~35 ms first-vs-later remainder remains (first POST success-path JIT after
-`load` has been warmed). Fake-admitting a message at boot to chase that would
-write user-visible Chat history. Left.
+Boot 4 of the after-batch (loadavg 17.52 / 23.03 / 26.13) made even later
+turns 116–160 ms. That is machine contention, not the hitch: the before-batch
+at similar load kept subsequent turns at 44–52. Including it, first-token
+**158 → 94** and admission **109 → 46**. Subsequent on the uncontended after
+boots stays ~44–59.
+
+A ~30–40 ms first-vs-later remainder remains on quiet boots (first POST
+success-path JIT after `load` has been warmed). Fake-admitting a message at
+boot to chase that would write user-visible Chat history. Left.
 
 ---
 
@@ -162,8 +180,8 @@ each half as it arrives would be a two-step settle and would re-open the
 prevent, unless empty stayed gated on both halves — at which point worst-of
 is back.
 
-Re-measure at `6a72712ba9` (same UI batch as Listen): dedicated home pageMs
-median **128** (104–132). Conversations 124. Memories 175. Home is not as slow
+Confirmation at `ed2e2fee3c` (same UI batch as Listen): dedicated home pageMs
+median **133** (131–144). Conversations 130. Memories 187. Home is not as slow
 as the Memories *page*; Home's two projections become ready in the
 conversations band. The ranked finding "Home is as slow as its slower half"
 does not reproduce as felt slowness at this ref.
@@ -206,18 +224,21 @@ bun scripts/performance-baseline.mjs --n 5 --only boot
 
 Record loadavg, whether 4851/5290/8788 were bound, the git ref, and whether
 the working tree was dirty. Compare medians and spreads, not single runs.
+Chat first-turn median needs five independent boots.
 
 ---
 
 ## Green gates at the after-tree
 
-Taken on this machine. David's app held 4851/5290/8788.
+Taken on this machine at `ed2e2fee3c`. David's app held 4851/5290/8788.
 
 | Gate | Result |
 |---|---|
-| `bun test` | 2358 pass, 36 skip, 0 fail, 2394 tests / 350 files, 51.46 s |
+| `bun test` | 2358 pass, 36 skip, 0 fail, 2394 tests / 350 files, 63.90 s |
 | `bun run lint:imports` | exit 0 |
 | `bun run lint:closure` | exit 0 |
 | `(cd frontend && pnpm -r build)` | exit 0 |
 
-L1–L4 are run after this tree is committed so a ladder cannot see a mid-run hash change. Outcomes belong in the lane report if this section is not yet updated.
+L1–L4 are run after this tree is committed so a ladder cannot see a mid-run
+hash change. Outcomes belong in the lane report if this section is not yet
+updated.
