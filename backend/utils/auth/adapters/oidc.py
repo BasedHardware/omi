@@ -48,6 +48,28 @@ def _jwks_url() -> str:
     return (os.getenv("OIDC_JWKS_URL") or "").strip() or f"{_issuer()}/protocol/openid-connect/certs"
 
 
+def _oidc_http(call: Any) -> Any:
+    """Run an httpx call, translating a transport failure (connect/timeout/DNS) into the neutral
+    ``JWKSUnavailable`` (transient/retryable) so no raw httpx exception escapes the auth port — the
+    introspection and admin-API calls sit outside verify_token's translation block (cubic PR 10887
+    oidc.py:150/186)."""
+    import httpx
+
+    try:
+        return call()
+    except httpx.HTTPError as exc:
+        raise errors.JWKSUnavailable(f"OIDC endpoint unreachable: {exc}")
+
+
+def _oidc_json(resp: Any) -> Any:
+    """Parse a response body, mapping a non-JSON payload to a neutral ``AuthError`` instead of leaking a
+    raw ValueError/JSONDecodeError through the port."""
+    try:
+        return resp.json()
+    except ValueError as exc:
+        raise errors.AuthError(f"OIDC returned a non-JSON response: {exc}")
+
+
 def _signing_algs() -> list[str]:
     """Permitted JWT signing algorithms. Default RS256 (Keycloak/Auth0's default); override via
     ``OIDC_SIGNING_ALGS`` (comma-separated) for a provider that signs with ES256/PS256/EdDSA — otherwise
@@ -147,14 +169,16 @@ class OIDCAuthProvider:
             raise errors.AuthError(
                 "check_revoked requires OIDC introspection credentials (OIDC_ADMIN_CLIENT_ID/OIDC_ADMIN_CLIENT_SECRET)"
             )
-        resp = httpx.post(
-            url,
-            data={"token": token, "client_id": client_id, "client_secret": client_secret},
-            timeout=_HTTP_TIMEOUT_SECONDS,
+        resp = _oidc_http(
+            lambda: httpx.post(
+                url,
+                data={"token": token, "client_id": client_id, "client_secret": client_secret},
+                timeout=_HTTP_TIMEOUT_SECONDS,
+            )
         )
         if resp.status_code != 200:
             raise errors.JWKSUnavailable(f"OIDC introspection failed: status={resp.status_code}")
-        return bool(resp.json().get("active", False))
+        return bool(_oidc_json(resp).get("active", False))
 
     # --- Admin API (Keycloak) ---
     def _admin_token(self) -> str:
@@ -165,14 +189,19 @@ class OIDCAuthProvider:
         client_secret = (os.getenv("OIDC_ADMIN_CLIENT_SECRET") or "").strip()
         if not (token_url and client_id and client_secret):
             raise errors.AuthError("OIDC admin API is not configured (OIDC_ADMIN_TOKEN_URL/CLIENT_ID/CLIENT_SECRET)")
-        resp = httpx.post(
-            token_url,
-            data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
-            timeout=_HTTP_TIMEOUT_SECONDS,
+        resp = _oidc_http(
+            lambda: httpx.post(
+                token_url,
+                data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
+                timeout=_HTTP_TIMEOUT_SECONDS,
+            )
         )
         if resp.status_code != 200:
             raise errors.AuthError(f"OIDC admin token request failed: status={resp.status_code}")
-        return resp.json()["access_token"]
+        token = _oidc_json(resp).get("access_token")
+        if not token:
+            raise errors.AuthError("OIDC admin token response missing access_token")
+        return token
 
     def _admin_api(self) -> str:
         url = (os.getenv("OIDC_ADMIN_API_URL") or "").strip()
@@ -183,14 +212,16 @@ class OIDCAuthProvider:
     def get_user_profile(self, uid: str) -> UserProfile:
         import httpx
 
-        resp = httpx.get(
-            f"{self._admin_api()}/users/{uid}",
-            headers={"Authorization": f"Bearer {self._admin_token()}"},
-            timeout=_HTTP_TIMEOUT_SECONDS,
+        resp = _oidc_http(
+            lambda: httpx.get(
+                f"{self._admin_api()}/users/{uid}",
+                headers={"Authorization": f"Bearer {self._admin_token()}"},
+                timeout=_HTTP_TIMEOUT_SECONDS,
+            )
         )
         if resp.status_code != 200:
             raise errors.AuthError(f"OIDC get_user failed: status={resp.status_code}")
-        rep: Dict[str, Any] = resp.json()
+        rep: Dict[str, Any] = _oidc_json(resp)
         name = " ".join(p for p in [rep.get("firstName"), rep.get("lastName")] if p) or None
         return UserProfile(
             uid=rep.get("id", uid),
@@ -212,11 +243,13 @@ class OIDCAuthProvider:
         if display_name is None:
             return
         first, _, last = display_name.partition(" ")
-        resp = httpx.put(
-            f"{self._admin_api()}/users/{uid}",
-            headers={"Authorization": f"Bearer {self._admin_token()}"},
-            json={"firstName": first, "lastName": last},
-            timeout=_HTTP_TIMEOUT_SECONDS,
+        resp = _oidc_http(
+            lambda: httpx.put(
+                f"{self._admin_api()}/users/{uid}",
+                headers={"Authorization": f"Bearer {self._admin_token()}"},
+                json={"firstName": first, "lastName": last},
+                timeout=_HTTP_TIMEOUT_SECONDS,
+            )
         )
         if resp.status_code not in (200, 204):
             raise errors.AuthError(f"OIDC update_user failed: status={resp.status_code}")
@@ -224,10 +257,12 @@ class OIDCAuthProvider:
     def delete_user(self, uid: str) -> None:
         import httpx
 
-        resp = httpx.delete(
-            f"{self._admin_api()}/users/{uid}",
-            headers={"Authorization": f"Bearer {self._admin_token()}"},
-            timeout=_HTTP_TIMEOUT_SECONDS,
+        resp = _oidc_http(
+            lambda: httpx.delete(
+                f"{self._admin_api()}/users/{uid}",
+                headers={"Authorization": f"Bearer {self._admin_token()}"},
+                timeout=_HTTP_TIMEOUT_SECONDS,
+            )
         )
         # Deletion is idempotent: a 404 means the identity is already gone (a prior attempt succeeded
         # before the wipe marker committed, or the user was removed out-of-band). The account-deletion

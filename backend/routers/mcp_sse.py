@@ -738,9 +738,16 @@ def oauth_protected_resource_metadata():
     else:
         # Non-firebase (OIDC): the built-in authorization server (authorize/consent/token) is unavailable,
         # so point clients at the configured OIDC issuer — they discover the real IdP's own metadata
-        # instead of the built-in /authorize that 501s (cubic PR 10887 mcp_sse.py:1584).
+        # instead of the built-in /authorize that 501s (cubic PR 10887 mcp_sse.py:1584). If OIDC_ISSUER is
+        # not configured, FAIL rather than fall back to the Firebase-only server (which would send clients
+        # to a dead endpoint) — a misconfiguration should surface, not silently mislead (cubic mcp_sse.py:743).
         issuer = (os.getenv("OIDC_ISSUER") or "").strip().rstrip("/")
-        authorization_servers = [issuer] if issuer else [MCP_AUTHORIZATION_SERVER_URL]
+        if not issuer:
+            raise HTTPException(
+                status_code=501,
+                detail="MCP OAuth discovery unavailable: AUTH_BACKEND=oidc requires OIDC_ISSUER to be set",
+            )
+        authorization_servers = [issuer]
     return {
         "resource": MCP_RESOURCE_URL,
         "authorization_servers": authorization_servers,
@@ -1508,7 +1515,9 @@ class McpSseAuthMethodResponse(BaseModel):
 class McpSseAuthenticationResponse(BaseModel):
     methods: list[str]
     api_key: McpSseAuthMethodResponse
-    oauth2: McpSseAuthMethodResponse
+    # Optional: the built-in OAuth flow is Firebase-only, so it is omitted under non-firebase backends
+    # rather than advertising endpoints that 501 under OIDC (cubic PR 10887 mcp_sse.py:1889).
+    oauth2: Optional[McpSseAuthMethodResponse] = None
 
 
 class McpSseInstructionsResponse(BaseModel):
@@ -1892,20 +1901,28 @@ def mcp_sse_info(request: Request):
     Get information about the pre-hosted MCP server.
     """
     base_url = str(request.base_url).rstrip("/")
-    return {
-        "endpoint": "/v1/mcp/sse",
-        "transport": "streamable-http",
-        "protocol_version": "2025-03-26",
-        "authentication": {
+    api_key_method = {"header": "Authorization", "format": "Bearer <api_key>"}
+    if auth_backend_name() == "firebase":
+        authentication: Dict[str, Any] = {
             "methods": ["oauth2", "api_key"],
-            "api_key": {"header": "Authorization", "format": "Bearer <api_key>"},
+            "api_key": api_key_method,
             "oauth2": {
                 "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
                 "token_endpoint": MCP_TOKEN_ENDPOINT,
                 "resource": MCP_RESOURCE_URL,
                 "scopes": MCP_SCOPES_SUPPORTED,
             },
-        },
+        }
+    else:
+        # Non-firebase (OIDC): the built-in OAuth flow is unavailable (authorize/token 501), so advertise
+        # only api_key here — clients use an Omi MCP API key; OIDC discovery lives at the issuer (cubic
+        # PR 10887 mcp_sse.py:1889).
+        authentication = {"methods": ["api_key"], "api_key": api_key_method}
+    return {
+        "endpoint": "/v1/mcp/sse",
+        "transport": "streamable-http",
+        "protocol_version": "2025-03-26",
+        "authentication": authentication,
         "instructions": {
             "step1": "Create an MCP API key in the Omi app (Settings > Developer > MCP)",
             "step2": f"Set Server URL to: {base_url}/v1/mcp/sse",

@@ -54,3 +54,30 @@ def test_protected_resource_uses_builtin_on_firebase(monkeypatch):
     monkeypatch.setenv("AUTH_BACKEND", "firebase")
     meta = oauth_protected_resource_metadata()
     assert meta["authorization_servers"] == [MCP_AUTHORIZATION_SERVER_URL]
+
+
+def test_protected_resource_fails_when_oidc_issuer_missing(monkeypatch):
+    # Under AUTH_BACKEND=oidc with OIDC_ISSUER unset, discovery must FAIL, not fall back to the Firebase-only
+    # server (a dead endpoint) (cubic PR 10887 mcp_sse.py:743).
+    monkeypatch.setenv("AUTH_BACKEND", "oidc")
+    monkeypatch.delenv("OIDC_ISSUER", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        oauth_protected_resource_metadata()
+    assert exc.value.status_code == 501
+
+
+def test_mcp_sse_info_omits_builtin_oauth_under_oidc(monkeypatch):
+    # /v1/mcp/sse/info must not advertise the built-in oauth2 (authorize/token 501 under OIDC); only api_key
+    # (cubic PR 10887 mcp_sse.py:1889).
+    from types import SimpleNamespace
+    from routers.mcp_sse import mcp_sse_info
+
+    req = SimpleNamespace(base_url="https://api.example/")
+    monkeypatch.setenv("AUTH_BACKEND", "oidc")
+    info = mcp_sse_info(req)
+    assert info["authentication"]["methods"] == ["api_key"]
+    assert "oauth2" not in info["authentication"]
+
+    monkeypatch.setenv("AUTH_BACKEND", "firebase")
+    info_fb = mcp_sse_info(req)
+    assert "oauth2" in info_fb["authentication"]

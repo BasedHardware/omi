@@ -76,7 +76,7 @@
       "username": "service-account-omi-backend-admin",
       "enabled": true,
       "serviceAccountClientId": "omi-backend-admin",
-      "clientRoles": { "realm-management": ["view-users"] }
+      "clientRoles": { "realm-management": ["view-users", "manage-users"] }
     },
     {
       "username": "testuser",
