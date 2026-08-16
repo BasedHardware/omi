@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a task prompt customised on one Mac never reaching your other Macs, and reappearing after you reset it to the default"
+}

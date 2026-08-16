@@ -17,7 +17,8 @@ final class APIClientAssistantSettingsTests: XCTestCase {
       SettingsSyncManager.promptForSync(
         TaskAssistantSettings.defaultAnalysisPrompt,
         assistantName: "task",
-        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength))
+        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
+        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt))
   }
 
   @MainActor
@@ -29,7 +30,8 @@ final class APIClientAssistantSettingsTests: XCTestCase {
       SettingsSyncManager.promptForSync(
         customPrompt,
         assistantName: "task",
-        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength))
+        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
+        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt))
     XCTAssertEqual(
       customPrompt.count, TaskAssistantSettings.maximumSyncedAnalysisPromptLength + 1)
   }
@@ -43,7 +45,8 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     XCTAssertEqual(prompt.unicodeScalars.count, 10_002)
     XCTAssertNil(
       SettingsSyncManager.promptForSync(
-        prompt, assistantName: "insight", maximumLength: 10_000))
+        prompt, assistantName: "insight", maximumLength: 10_000,
+        shippedDefault: InsightAssistantSettings.defaultAnalysisPrompt))
   }
 
   @MainActor
@@ -53,12 +56,18 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     let backendMaximum = 10_000
     XCTAssertEqual(TaskAssistantSettings.maximumSyncedAnalysisPromptLength, backendMaximum)
     let prompt = String(repeating: "x", count: backendMaximum + 1)
+    let assistants: [(name: String, shippedDefault: String)] = [
+      ("task", TaskAssistantSettings.defaultAnalysisPrompt),
+      ("insight", InsightAssistantSettings.defaultAnalysisPrompt),
+      ("memory", MemoryAssistantSettings.defaultAnalysisPrompt),
+    ]
 
-    for assistant in ["task", "insight", "memory"] {
+    for assistant in assistants {
       XCTAssertNil(
         SettingsSyncManager.promptForSync(
-          prompt, assistantName: assistant, maximumLength: backendMaximum),
-        "an oversized \(assistant) prompt must be omitted, not truncated or sent")
+          prompt, assistantName: assistant.name, maximumLength: backendMaximum,
+          shippedDefault: assistant.shippedDefault),
+        "an oversized \(assistant.name) prompt must be omitted, not truncated or sent")
     }
   }
 
