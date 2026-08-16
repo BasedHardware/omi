@@ -82,10 +82,10 @@ final class SuggestionGatePolicyTests: XCTestCase {
     XCTAssertEqual(decision, .skippedExcludedApp)
   }
 
-  /// Maximum (5) is the "nudge me in seconds" demo mode: 10 s dwell. Everything below —
+  /// Maximum (5) is the "nudge me in seconds" demo mode: 4 s dwell. Everything below —
   /// including Balanced (3) — keeps the deliberate 30 s so ordinary use is unchanged.
-  func testDwellIsTenSecondsOnlyAtMaximumLevel() {
-    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 10)
+  func testDwellIsFourSecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 5), 4)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 4), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 3), 30)
     XCTAssertEqual(SuggestionGatePolicy.requiredDwell(frequencyLevel: 0), 30)
@@ -93,8 +93,8 @@ final class SuggestionGatePolicyTests: XCTestCase {
 
   /// Maximum caps the between-nudge cooldown at 30 s; other levels keep the user's
   /// configured value (180 s default) untouched.
-  func testCooldownCapsAtThirtySecondsOnlyAtMaximumLevel() {
-    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 30)
+  func testCooldownCapsAtTwentySecondsOnlyAtMaximumLevel() {
+    XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 20, frequencyLevel: 5), 20)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 4), 180)
     XCTAssertEqual(SuggestionGatePolicy.cooldown(base: 180, frequencyLevel: 3), 180)
@@ -271,6 +271,100 @@ final class SuggestionDeduplicationTests: XCTestCase {
   func testEmptyStringsScoreZeroRatherThanCrashing() {
     XCTAssertEqual(SuggestionDeduplication.similarity("", "anything"), 0)
     XCTAssertEqual(SuggestionDeduplication.similarity("", ""), 0)
+  }
+}
+
+/// Field regression, beta 0.12.172: "Lead the call for Nik Shevchenko — it's due today"
+/// was delivered three times in quick succession at Maximum frequency. Dedup ran every
+/// time, but the window it compared against had been trimmed to Maximum's zero screen-nudge
+/// depth right after each delivery, so the identical task nudge escaped as "novel" on every
+/// cycle. These tests drive the same deliver → remember → compare loop the assistant runs.
+final class SuggestionDedupWindowTests: XCTestCase {
+  private let taskNudge = "Lead the call for Nik Shevchenko — it's due today"
+
+  /// One pass of the delivery loop: fire if not a duplicate, then remember what fired.
+  private func deliver(
+    _ text: String,
+    category: SuggestionCategory,
+    window: inout [SuggestionDeduplication.Remembered],
+    level: Int
+  ) -> Bool {
+    guard !SuggestionDeduplication.isDuplicate(text, of: window.map(\.text)) else { return false }
+    window = SuggestionDeduplication.remembering(
+      .init(text: text, category: category), in: window, frequencyLevel: level)
+    return true
+  }
+
+  /// The reproduction: three identical due-today task nudges, ~30s apart, at Maximum.
+  /// Before category-aware retention every one of them fired.
+  func testIdenticalTaskNudgeFiresOnlyOnceAtMaximum() {
+    var window: [SuggestionDeduplication.Remembered] = []
+    var fired = 0
+    for _ in 0..<3 where deliver(taskNudge, category: .commitment, window: &window, level: 5) {
+      fired += 1
+    }
+    XCTAssertEqual(fired, 1, "the same task must not re-fire within its dedup window")
+  }
+
+  /// A genuinely different task is not collateral damage of the repeat suppression.
+  func testDifferentTaskNudgeStillFiresAtMaximum() {
+    var window: [SuggestionDeduplication.Remembered] = []
+    XCTAssertTrue(deliver(taskNudge, category: .commitment, window: &window, level: 5))
+    XCTAssertTrue(
+      deliver(
+        "Send the budget review draft to Adam — due tomorrow",
+        category: .commitment, window: &window, level: 5))
+  }
+
+  /// Maximum's screen-nudge cadence is by design: staying on the feed keeps producing
+  /// repeats, so screen nudges must stay unremembered there — even delivered right after
+  /// a task nudge, which must itself stay remembered.
+  func testMaximumStillRepeatsScreenNudgesAndKeepsTaskMemoryIntact() {
+    var window: [SuggestionDeduplication.Remembered] = []
+    XCTAssertTrue(deliver(taskNudge, category: .commitment, window: &window, level: 5))
+    let screenNudge = "Twenty minutes on the feed — the launch doc is still open"
+    XCTAssertTrue(deliver(screenNudge, category: .opportunity, window: &window, level: 5))
+    XCTAssertTrue(
+      deliver(screenNudge, category: .opportunity, window: &window, level: 5),
+      "Maximum's repeat cadence for screen nudges is the level's contract")
+    XCTAssertFalse(
+      deliver(taskNudge, category: .commitment, window: &window, level: 5),
+      "screen-nudge deliveries must not evict the remembered task")
+  }
+
+  /// Calm levels keep the long-standing 10-deep window for every category.
+  func testCalmLevelsRememberEveryCategory() {
+    for level in [0, 1, 2, 3, 4] {
+      var window: [SuggestionDeduplication.Remembered] = []
+      XCTAssertTrue(deliver(taskNudge, category: .commitment, window: &window, level: level))
+      XCTAssertFalse(deliver(taskNudge, category: .commitment, window: &window, level: level))
+      let screenNudge = "Twenty minutes on the feed — the launch doc is still open"
+      XCTAssertTrue(deliver(screenNudge, category: .opportunity, window: &window, level: level))
+      XCTAssertFalse(deliver(screenNudge, category: .opportunity, window: &window, level: level))
+    }
+  }
+
+  /// The task window is still a window: the eleventh distinct task evicts the first.
+  func testCommitmentMemoryStaysBounded() {
+    var window: [SuggestionDeduplication.Remembered] = []
+    XCTAssertTrue(deliver(taskNudge, category: .commitment, window: &window, level: 5))
+    let distinctTasks = [
+      "Review the quarterly budget spreadsheet before finance sync",
+      "Email Sarah the onboarding checklist",
+      "Renew the office wifi router contract",
+      "Book flights for the Denver conference",
+      "Fix the login crash on older phones",
+      "Water the plants and clean the desk",
+      "Draft a blog post about privacy features",
+      "Schedule the dentist appointment for Thursday",
+      "Upload the podcast episode artwork",
+      "Pay the contractor invoice from July",
+    ]
+    for task in distinctTasks {
+      XCTAssertTrue(deliver(task, category: .commitment, window: &window, level: 5))
+    }
+    XCTAssertEqual(window.count, 10)
+    XCTAssertFalse(window.contains(.init(text: taskNudge, category: .commitment)))
   }
 }
 
@@ -799,5 +893,107 @@ final class SuggestionProbeCaptureRaceTests: XCTestCase {
     XCTAssertTrue(allows(before: nil, after: nil))
     XCTAssertTrue(allows(before: "Google Chrome", after: nil))
     XCTAssertFalse(allows(before: nil, after: "1Password"))
+  }
+}
+
+final class SuggestionPacingTests: XCTestCase {
+  /// Maximum (5) is the demo-grade cadence: nudge within seconds, repeat under half a
+  /// minute. Every other level must keep the long-standing calm defaults untouched.
+  func testMaximumLevelPacesFastEveryOtherLevelStaysCalm() {
+    XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: 5), 4)
+    XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: 5), 2)
+    XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: 5), 20)
+    XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: 5), 600)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: 5), 0.65)
+    // Maximum forgets screen nudges instantly (sustained repeats are the level's point)
+    // but never task nudges — the same task re-firing every cooldown is the 0.12.172 bug.
+    XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: 5, category: .opportunity), 0)
+    XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: 5, category: .commitment), 10)
+
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertEqual(SuggestionPacing.requiredDwell(frequencyLevel: level), 30)
+      XCTAssertEqual(SuggestionPacing.settleInterval(frequencyLevel: level), 6)
+      XCTAssertEqual(SuggestionPacing.cooldown(base: 180, frequencyLevel: level), 180)
+      XCTAssertEqual(SuggestionPacing.dailyEvaluationBudget(frequencyLevel: level), 40)
+      XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.85, frequencyLevel: level), 0.85)
+      XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: level, category: .opportunity), 10)
+      XCTAssertEqual(SuggestionPacing.dedupMemory(frequencyLevel: level, category: .commitment), 10)
+    }
+  }
+
+  /// A user-configured value already below the Maximum cap is respected, not raised.
+  func testMaximumCapsNeverRaiseUserConfiguredValues() {
+    XCTAssertEqual(SuggestionPacing.cooldown(base: 10, frequencyLevel: 5), 10)
+    XCTAssertEqual(SuggestionPacing.minConfidence(base: 0.6, frequencyLevel: 5), 0.6)
+  }
+
+  /// Maximum keeps the context armed after an evaluation so staying on one feed keeps
+  /// nudging; calm levels stay one-shot per arrival.
+  func testOnlyMaximumRearmsAfterEvaluation() {
+    XCTAssertTrue(SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: 5))
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertFalse(SuggestionPacing.rearmsAfterEvaluation(frequencyLevel: level))
+    }
+  }
+
+  /// Maximum forces a real frame every base heartbeat; calm levels keep the preview path.
+  func testOnlyMaximumForcesHeartbeatCapture() {
+    XCTAssertTrue(SuggestionPacing.forcesHeartbeatCapture(frequencyLevel: 5))
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertFalse(SuggestionPacing.forcesHeartbeatCapture(frequencyLevel: level))
+    }
+  }
+
+  /// Fresh context at Maximum waives leftover cooldown; same-context repeats stay paced,
+  /// and calm levels never waive.
+  func testMaximumWaivesCooldownOnlyForFreshContext() {
+    let last = Date(timeIntervalSince1970: 1_000_000)
+    let freshAnchor = last.addingTimeInterval(5)
+    let staleAnchor = last.addingTimeInterval(-40)
+    XCTAssertNil(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: freshAnchor, frequencyLevel: 5))
+    XCTAssertEqual(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: staleAnchor, frequencyLevel: 5), last)
+    XCTAssertEqual(
+      SuggestionPacing.effectiveLastEvaluation(
+        lastEvaluationAt: last, anchor: freshAnchor, frequencyLevel: 3), last)
+  }
+
+  /// The trigger's own idle check must honor the level-aware window: at Maximum with
+  /// 120s of stillness a heartbeat capture is still reachable; calm levels skip at 60s.
+  func testMaximumIdleOverrideReachesHeartbeatCaptureAtTwoMinutesStill() {
+    var trigger = ProactiveCaptureTrigger(idleThreshold: 60, heartbeatInterval: 9)
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    // Prime the context (first sight of the app is a capture).
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 0, now: t0,
+        forceHeartbeatCapture: true,
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60)),
+      .capture)
+    // Two minutes of stillness later: Maximum still captures on heartbeat…
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 120, now: t0.addingTimeInterval(10),
+        forceHeartbeatCapture: true,
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60)),
+      .capture)
+    // …while a calm level's unchanged 60s threshold skips.
+    XCTAssertEqual(
+      trigger.nextDecision(
+        app: "TikTok", windowTitle: "For You", idleSeconds: 120, now: t0.addingTimeInterval(20),
+        idleThresholdOverride: SuggestionPacing.captureIdleThreshold(frequencyLevel: 3, base: 60)),
+      .skip)
+  }
+
+  /// Passive watching produces no input; Maximum keeps capture alive for five minutes of
+  /// stillness while calmer levels keep the long-standing 60s gate.
+  func testMaximumExtendsCaptureIdleWindowOnly() {
+    XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: 5, base: 60), 300)
+    for level in [0, 1, 2, 3, 4] {
+      XCTAssertEqual(SuggestionPacing.captureIdleThreshold(frequencyLevel: level, base: 60), 60)
+    }
   }
 }

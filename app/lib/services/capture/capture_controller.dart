@@ -30,8 +30,6 @@ import 'package:omi/services/capture/capture_metrics_tracker.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
-import 'package:omi/services/capture/capture_foreground_keepalive_sync.dart';
-import 'package:omi/services/capture/capture_keepalive_policy.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -49,7 +47,6 @@ import 'package:omi/utils/image/image_utils.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/app_globals.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
@@ -84,10 +81,6 @@ class CaptureController extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
-  DateTime? _lastAudioFrameAt;
-  DateTime? _captureRecordingStartedAt;
-  final CaptureForegroundKeepAliveSync _captureForegroundKeepAlive = CaptureForegroundKeepAliveSync();
-  Timer? _foregroundLivenessTimer;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -223,7 +216,6 @@ class CaptureController extends ChangeNotifier
     _phoneMicWalActive = true;
     await ServiceManager.instance().phoneMic.start(
           onByteReceived: (bytes) {
-            _noteAudioFrame();
             final frames = _activeSource?.processBytes(bytes) ?? [];
             for (final frame in frames) {
               _wal.getSyncs().phone.onFrameCaptured(frame);
@@ -538,8 +530,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
     // Only re-enable native streaming when turning batch OFF, a device with a
     // native BLE route is connected, and background mode is opted in.
-    final enableNativeStreaming =
-        !enabled && hasNativeBackgroundStreamRoute && SharedPreferencesUtil().backgroundModeEnabled;
+    final enableNativeStreaming = _shouldEnableNativeBackgroundStreaming;
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
     await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
@@ -607,6 +598,7 @@ class CaptureController extends ChangeNotifier
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
     Logger.debug("Transcription settings changed, refreshing socket connection...");
+    await _reconcileNativeBackgroundStreamingPolicy();
 
     // Handle device recording
     if (_recordingDevice != null) {
@@ -741,6 +733,23 @@ class CaptureController extends ChangeNotifier
     // Check codec compatibility for custom STT - fallback to default if incompatible
     CustomSttConfig? effectiveConfig = customSttConfig.isEnabled ? customSttConfig : null;
     if (effectiveConfig != null && !TranscriptSocketServiceFactory.isCodecSupportedForCustomStt(codec)) {
+      if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, effectiveConfig)) {
+        Logger.warning(
+          '[CustomSTT] Codec $codec is unsupported; refusing Omi fallback because raw audio forwarding is disabled',
+        );
+        final previousSocket = _socket;
+        _socket = null;
+        _transcriptServiceReady = false;
+        try {
+          await previousSocket?.stop(reason: 'unsupported custom STT codec with raw audio forwarding disabled');
+        } catch (e, stack) {
+          Logger.error('[CustomSTT] Failed to stop the previous socket after blocking Omi fallback: $e\n$stack');
+        }
+        await _reconcileNativeBackgroundStreamingPolicy();
+        notifyListeners();
+        _startKeepAliveServices();
+        return;
+      }
       Logger.debug('[CustomSTT] Codec $codec not supported, falling back to Omi');
       effectiveConfig = null;
     }
@@ -965,7 +974,6 @@ class CaptureController extends ChangeNotifier
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
-        _noteAudioFrame();
 
         // Command button triggered
         bool voiceCommandSupported = _recordingDevice != null
@@ -1178,7 +1186,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool(
       'nativeBleStreamingEnabled',
-      !batchMode && SharedPreferencesUtil().backgroundModeEnabled && device.type != DeviceType.limitless,
+      _shouldEnableNativeBackgroundStreaming,
     );
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
@@ -1223,6 +1231,24 @@ class CaptureController extends ChangeNotifier
   /// devices: limitless has a route for batch capture (flash drain), but its
   /// background streaming lands with the native drain engine follow-up.
   bool get hasNativeBackgroundStreamRoute => hasNativeBleAudioRoute && _recordingDevice?.type != DeviceType.limitless;
+
+  bool get _nativeOmiRawAudioAllowed {
+    final config = SharedPreferencesUtil().customSttConfig;
+    return !config.isEnabled || config.sendRawAudioToOmi;
+  }
+
+  bool get _shouldEnableNativeBackgroundStreaming =>
+      !SharedPreferencesUtil().batchModeEnabled &&
+      hasNativeBackgroundStreamRoute &&
+      SharedPreferencesUtil().backgroundModeEnabled &&
+      _nativeOmiRawAudioAllowed;
+
+  Future<void> _reconcileNativeBackgroundStreamingPolicy() async {
+    await SharedPreferencesUtil().saveBool(
+      'nativeBleStreamingEnabled',
+      _shouldEnableNativeBackgroundStreaming,
+    );
+  }
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
   /// can validate against the actual native BLE route before committing prefs.
@@ -1399,7 +1425,6 @@ class CaptureController extends ChangeNotifier
     _bleButtonStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
-    _foregroundLivenessTimer?.cancel();
     _inProgressConversationRefreshTimer?.cancel();
     _connectionStateListener?.cancel();
     _metrics.dispose();
@@ -1411,63 +1436,8 @@ class CaptureController extends ChangeNotifier
   }
 
   void updateRecordingState(RecordingState state) {
-    final wasLive = isLiveCaptureRecordingState(recordingState);
-    final isLive = isLiveCaptureRecordingState(state);
     recordingState = state;
-    if (shouldClearCaptureAudioTimestamp(wasLive: wasLive, isLive: isLive)) {
-      _lastAudioFrameAt = null;
-    }
-    if (isLive && !wasLive) {
-      _captureRecordingStartedAt = DateTime.now();
-    } else if (!isLive) {
-      _captureRecordingStartedAt = null;
-    }
-    unawaited(_syncCaptureForegroundKeepAlive());
     notifyListeners();
-  }
-
-  void _noteAudioFrame() {
-    _lastAudioFrameAt = DateTime.now();
-    if (shouldResyncCaptureForegroundOnAudioFrame(
-      currentlyHeld: _captureForegroundKeepAlive.held,
-      recordingState: recordingState,
-    )) {
-      unawaited(_syncCaptureForegroundKeepAlive());
-    }
-  }
-
-  Future<void> _syncCaptureForegroundKeepAlive() async {
-    if (!(Platform.isIOS || Platform.isAndroid)) return;
-    try {
-      await _captureForegroundKeepAlive.apply(
-        desiredHold: () {
-          final hold = shouldHoldCaptureForegroundTask(
-            recordingState: recordingState,
-            lastAudioFrameAt: _lastAudioFrameAt,
-            recordingStartedAt: _captureRecordingStartedAt,
-            now: DateTime.now(),
-          );
-          _foregroundLivenessTimer?.cancel();
-          // Wearable FGS is frame-driven; re-check after the stale window.
-          // Phone-mic / system-audio hold for the whole session.
-          if (hold && isBluetoothCaptureForegroundOwner(recordingState)) {
-            _foregroundLivenessTimer = Timer(captureForegroundAudioStaleAfter, () {
-              unawaited(_syncCaptureForegroundKeepAlive());
-            });
-          }
-          return hold;
-        },
-        bluetoothSessionOwner: () => isBluetoothCaptureForegroundOwner(recordingState),
-        start: () async {
-          await ForegroundUtil.initializeForegroundService();
-          await ForegroundUtil.ensureForegroundTask();
-        },
-        stop: ForegroundUtil.stopForegroundTask,
-        deactivateBluetoothAudioSession: ForegroundUtil.deactivateBluetoothAudioSession,
-      );
-    } catch (e) {
-      Logger.debug('Capture foreground keep-alive sync failed: $e');
-    }
   }
 
   streamRecording() async {
@@ -1513,7 +1483,6 @@ class CaptureController extends ChangeNotifier
       await ServiceManager.instance().phoneMic.start(
             onByteReceived: (bytes) {
               // Process through AudioSource for frame splitting and sync key generation
-              _noteAudioFrame();
               final frames = _activeSource?.processBytes(bytes) ?? [];
 
               for (final frame in frames) {
@@ -1737,7 +1706,6 @@ class CaptureController extends ChangeNotifier
       }
 
       _keepAliveLastExecutedAt = DateTime.now();
-      unawaited(_syncCaptureForegroundKeepAlive());
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
@@ -1746,21 +1714,6 @@ class CaptureController extends ChangeNotifier
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
-        return;
-      }
-
-      final shouldReconnect = shouldReconnectSttKeepAlive(
-        recordingDeviceServiceReady: recordingDeviceServiceReady,
-        socketConnected: _socket?.state == SocketServiceState.connected,
-        signedIn: true,
-        hasRecordingDevice: _recordingDevice != null,
-        isPhoneMicKeepAliveState:
-            recordingState == RecordingState.record || recordingState == RecordingState.interrupted,
-        lastAudioFrameAt: _lastAudioFrameAt,
-        now: DateTime.now(),
-      );
-      if (!shouldReconnect) {
-        Logger.debug("[Provider] keep alive - no recent audio frames, skip websocket reconnect");
         return;
       }
 

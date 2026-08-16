@@ -44,4 +44,15 @@ describe('onboardingGraphModel', () => {
     const { nodes } = buildApps([{ name: '  ' }, { name: 'Figma' }])
     expect(nodes).toEqual([{ id: 'app_figma', label: 'Figma', nodeType: 'thing' }])
   })
+
+  it('dedupes a repeated app and names that slug to the same id', () => {
+    const { nodes, edges } = buildApps([
+      { name: 'Slack' },
+      { name: 'Slack' },
+      { name: 'Node.js' },
+      { name: 'Node js' }
+    ])
+    expect(nodes.map((n) => n.id)).toEqual(['app_slack', 'app_node-js'])
+    expect(edges).toHaveLength(2)
+  })
 })

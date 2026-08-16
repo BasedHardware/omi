@@ -1,0 +1,3 @@
+{
+  "change": "A workstream label now stays attached to the work it was earned from, so a label no longer shows up on another workstream's tasks"
+}

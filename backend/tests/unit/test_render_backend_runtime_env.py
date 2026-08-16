@@ -111,8 +111,10 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
+    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
-    assert 'MEMORY_MODE=off' in memory_env
+    assert 'MEMORY_ENABLED=on' in memory_env
+    assert 'MEMORY_MODE=' not in memory_env
     assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED=false' in memory_env
     assert 'TYPESENSE_HOST_PORT=443' in memory_env
 
@@ -147,6 +149,7 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     notifications_job = cloud_run['jobs']['notifications-job']
     notifications_env = notifications_job['env']
     forbidden_notifications_vars = {
+        'MEMORY_ENABLED',
         'MEMORY_MODE',
         'MEMORY_ENABLED_USERS',
         'MEMORY_V3_GET_ENABLED',
@@ -159,12 +162,24 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
     assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
+    assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert set(notifications_job['secrets']) == {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
+
+
+def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
+    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_notifications_job.yml').read_text(encoding='utf-8')
+
+    assert 'Verify LLM Gateway serving data plane' in workflow
+    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow
+    assert '${{ steps.runtime-env.outputs.cloud_run_flags }}' in workflow
+    assert '--lane omi:auto:x-memory-extraction-flex' in workflow
 
 
 def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
@@ -190,11 +205,16 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert rc == 0
     out = capsys.readouterr().out
     job_env = _job_env_block(out, 'memory_maintenance_job')
-    assert 'MEMORY_MODE=off' in job_env
+    assert 'MEMORY_ENABLED=off' in job_env
+    assert 'MEMORY_MODE=' not in job_env
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
+    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
+    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
+    assert '--task-timeout=3600s' in _MODULE['_render_flags'](prod_memory_job['flags'])
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
+    assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')
 
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env

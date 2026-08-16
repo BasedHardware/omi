@@ -1,7 +1,5 @@
 self-hosted-runner:
   labels:
     - macos
-    - omi-desktop-qualification
-    - omi-qual-m1-studio
 
 config-variables: null

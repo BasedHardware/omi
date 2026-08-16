@@ -148,9 +148,6 @@ jobs:
       - name: Check deployment concurrency policy
         run: python3 .github/scripts/check-deployment-concurrency.py
 
-      - name: Test desktop qualification metadata writer
-        run: python3 desktop/macos/scripts/release-keyvalue.py self-test
-
       - name: Check release process guards
         run: bash scripts/run-release-process-guards.sh
 

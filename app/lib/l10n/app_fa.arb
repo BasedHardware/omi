@@ -10780,5 +10780,7 @@
     "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
-    "accountCutoverOpenStore": "فتح المتجر"
+    "accountCutoverOpenStore": "فتح المتجر",
+    "sendRawAudioToOmi": "ارسال صدای خام به Omi",
+    "sendRawAudioToOmiDescription": "برای جلوگیری از ارسال صدای خام به Omi این گزینه را خاموش کنید. متن پیاده‌شده و داده‌های مورد نیاز قابلیت‌های ابری ممکن است همچنان به Omi ارسال شوند."
 }

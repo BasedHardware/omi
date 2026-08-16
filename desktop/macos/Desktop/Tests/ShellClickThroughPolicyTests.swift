@@ -1,3 +1,4 @@
+import OmiTheme
 import XCTest
 
 @testable import Omi_Computer
@@ -16,7 +17,7 @@ final class ShellClickThroughPolicyTests: XCTestCase {
         windowSize: windowSize,
         isResizable: true,
         contentContains: { _ in false }),
-      "the reserved title-bar band above the top bar must not swallow clicks")
+      "air that is not glass must not swallow clicks")
     XCTAssertFalse(
       ShellClickThroughPolicy.acceptsMouseHit(
         localPoint: NSPoint(x: 480, y: 350),
@@ -43,6 +44,7 @@ final class ShellClickThroughPolicyTests: XCTestCase {
   }
 
   func testResizableWindowKeepsAnInteractiveEdgeRim() {
+    XCTAssertEqual(DesktopWindowLayoutPolicy.windowInset, 0)
     XCTAssertTrue(
       ShellClickThroughPolicy.acceptsMouseHit(
         localPoint: NSPoint(x: 4, y: 350),

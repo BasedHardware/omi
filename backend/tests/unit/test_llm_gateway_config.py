@@ -42,10 +42,7 @@ def test_gateway_route_overrides_do_not_change_the_legacy_model_profile():
     assert config.route_artifacts['route.chat_agent.model_config.001'].primary.provider == 'openai'
     assert config.route_artifacts['route.chat_agent.model_config.001'].primary.model == 'gpt-5.6-luna'
     assert config.route_artifacts['route.memory_l2.model_config.001'].provider_options['reasoning_effort'] == 'medium'
-    assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {
-        'extra_body': {'prompt_cache_retention': '24h'},
-        'reasoning_effort': 'none',
-    }
+    assert config.route_artifacts['route.chat_agent.model_config.001'].provider_options == {'reasoning_effort': 'none'}
     chat_agent_lane = config.lanes['omi:auto:chat-agent']
     assert chat_agent_lane.surface == Surface.OPENAI_CHAT_COMPLETIONS
     assert chat_agent_lane.capabilities.streaming is True
@@ -80,10 +77,7 @@ def test_desktop_proactive_lanes_are_pinned_and_structured():
         'reasoning_effort': 'minimal',
     }
     assert reasoning_route.primary.model == 'gpt-5.6-luna'
-    assert reasoning_route.provider_options == {
-        'extra_body': {'prompt_cache_retention': '24h'},
-        'reasoning_effort': 'low',
-    }
+    assert reasoning_route.provider_options == {'reasoning_effort': 'low'}
 
 
 def test_translation_uses_the_gateway_translation_capability():

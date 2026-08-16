@@ -505,6 +505,70 @@ enum ChatArrivalScrollPolicy {
   }
 }
 
+/// Keeps the same rows on screen after older messages are inserted above the
+/// viewport — "Show older messages" / "Load earlier messages".
+///
+/// Inserting at the top of an NSScrollView leaves the clip origin at zero, which
+/// is the newly loaded oldest row. Restore by the document-height delta, not by
+/// hoping `scrollTo` wins a race with the click that triggered the load.
+enum ChatTranscriptPrependPreservation {
+  struct Snapshot: Equatable {
+    let documentHeight: CGFloat
+    let scrollTop: CGFloat
+  }
+
+  /// A click on the load-earlier control lives inside the transcript, so the
+  /// content-size change that follows looks like the same press moved the clip
+  /// view. That must not cancel the restore.
+  static func shouldAbortRestoreBecauseUserIsScrolling(
+    userIsScrolling: Bool,
+    isPreservingPrepend: Bool
+  ) -> Bool {
+    userIsScrolling && !isPreservingPrepend
+  }
+
+  /// Restore work items clear the latch when they finish. If a later gesture
+  /// cancels them first, that cleanup never runs. The load-more click still
+  /// holds an anchor, so it must not be treated as a cancelled restore.
+  static func shouldReleasePreserveLatchAfterCancellingRestore(
+    isPreservingPrepend: Bool,
+    prependAnchorId: String?
+  ) -> Bool {
+    isPreservingPrepend && prependAnchorId == nil
+  }
+
+  static func restoredScrollTop(
+    previousDocumentHeight: CGFloat,
+    previousScrollTop: CGFloat,
+    newDocumentHeight: CGFloat
+  ) -> CGFloat {
+    previousScrollTop + max(0, newDocumentHeight - previousDocumentHeight)
+  }
+
+  /// Returns whether the clip view actually moved. Call after the new rows have
+  /// been laid out so `documentView.frame.height` includes them.
+  @MainActor
+  @discardableResult
+  static func apply(to scrollView: NSScrollView, snapshot: Snapshot) -> Bool {
+    guard let documentView = scrollView.documentView else { return false }
+    let newHeight = documentView.frame.height
+    guard newHeight > snapshot.documentHeight + 1 else { return false }
+    let newTop = restoredScrollTop(
+      previousDocumentHeight: snapshot.documentHeight,
+      previousScrollTop: snapshot.scrollTop,
+      newDocumentHeight: newHeight
+    )
+    let viewportHeight = scrollView.contentView.bounds.height
+    let originY =
+      documentView.isFlipped
+      ? newTop
+      : newHeight - newTop - viewportHeight
+    scrollView.contentView.scroll(to: NSPoint(x: 0, y: originY))
+    scrollView.reflectScrolledClipView(scrollView.contentView)
+    return true
+  }
+}
+
 /// First-class chat scroll container used by floating/notch transcripts.
 /// It follows streaming content only while the reader is at the live edge.
 struct ChatScrollContainer<Content: View>: View {

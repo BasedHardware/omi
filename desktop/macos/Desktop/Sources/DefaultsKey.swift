@@ -74,8 +74,8 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
-  /// Whether the Suggestions section on the Tasks page is expanded. Shared by the
-  /// view (@AppStorage) and the view model's keyboard-navigation/select-all scope.
+  /// Whether the Suggested candidate section on the Tasks page is expanded.
+  /// Shared by the view (@AppStorage) and deep-link expand-before-scroll.
   case tasksSuggestionsSectionExpanded = "tasksSuggestionsSectionExpanded"
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"

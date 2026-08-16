@@ -43,6 +43,9 @@ ALLOWED_REASONS = frozenset(
         'malformed_doc',
         'capacity_full',
         'allocation_rejected',
+        'private_tool_output_in_context',
+        'not_authorized',
+        'authorization_unavailable',
         'other',
         'none',
     }

@@ -76,8 +76,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Rust chat completions / API client | T0 + T1 |
 | Qualified-beta promotion | signed-artifact digest gate + T0 self-check + T2 + Fault |
 
-Automatic qualification runs this full row on the macOS release worker and fails closed unless its Docker runtime is
-healthy enough to boot the hermetic T2 stack. Stable nomination and production promotion remain manual operations.
+Local T2 and fault suites remain available as engineering QA tools. They do not gate Beta visibility. Stable nomination and production promotion remain manual operations.
 
 ## Flow audit baseline
 

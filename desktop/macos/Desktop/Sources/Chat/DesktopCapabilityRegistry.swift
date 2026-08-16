@@ -177,6 +177,10 @@ enum DesktopCapabilityRegistry {
       "Create/update tasks -> \(toolList(taskWriteTools)); use execute_sql only for exact local inspection or legacy local writes.",
       when: !available(taskWriteTools).isEmpty
     )
+    append(
+      "User explicitly asks to remember/save -> create_memory with a clean standalone fact.",
+      when: has("create_memory")
+    )
     let taskCompletionTools = ["complete_task", "delete_task"]
     append(
       "Complete/delete local tasks -> find the backendId, then \(toolList(taskCompletionTools)).",

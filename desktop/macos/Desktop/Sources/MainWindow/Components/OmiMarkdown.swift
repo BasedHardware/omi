@@ -1014,7 +1014,14 @@ private struct OmiMarkdownCitationContent: View {
         }
       }
     } else {
-      OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
+      // Type-erased on purpose (#11573). `OmiMarkdownContent.body` reaches this view through
+      // `textView` and `OmiMarkdownTableView`, so naming `OmiMarkdownContent` here closes a cycle
+      // in the *static* view-type graph. SwiftUI's `View._viewListCount(inputs:)` walks that graph
+      // by type, never evaluating a body, so no value-level guard bounds it: on macOS 15 a
+      // `ScrollView`/`LazyVStack` host recursed until the main thread wrote past its stack guard
+      // page and died with SIGSEGV. `AnyView` is the terminator — it resolves its count
+      // dynamically, which cuts both cycles here and leaves the graph acyclic.
+      AnyView(OmiMarkdownContent(text: text, style: style, fontScale: fontScale))
     }
   }
 }
@@ -1042,29 +1049,21 @@ enum ChatCitationMask {
   }
 
   static func mask(_ text: String, references: [Int: ChatCitationReference]) -> Masked? {
-    guard !references.isEmpty,
-      let expression = try? NSRegularExpression(
-        pattern: #"\[(\d{1,4})\](?:\(https?://[^\s)]+\))?"#)
-    else { return nil }
-    let codeRanges = OmiMarkdownInlineCode.codeSpanRanges(in: text)
-    let matches = expression.matches(in: text, range: NSRange(text.startIndex..<text.endIndex, in: text))
+    guard !references.isEmpty else { return nil }
     var markdown = ""
     var markers = [Marker]()
     var cursor = text.startIndex
 
-    for match in matches {
-      guard let full = Range(match.range(at: 0), in: text),
-        !codeRanges.contains(where: { $0.overlaps(full) }),
-        let digits = Range(match.range(at: 1), in: text),
-        let ordinal = Int(text[digits]),
-        let reference = references[ordinal]
-      else { continue }
-      markdown += text[cursor..<full.lowerBound]
+    for match in ChatCitationMarkup.markerMatches(
+      in: text, pattern: ChatCitationMarkup.numericMarkerOrMarkdownLinkPattern)
+    {
+      guard let reference = references[match.ordinal] else { continue }
+      markdown += text[cursor..<match.range.lowerBound]
       var placeholder = "omiCitationPlaceholder\(markers.count)"
       while text.contains(placeholder) { placeholder.append("x") }
       markdown += placeholder
       markers.append(Marker(placeholder: placeholder, reference: reference))
-      cursor = full.upperBound
+      cursor = match.range.upperBound
     }
     guard !markers.isEmpty else { return nil }
     markdown += text[cursor...]

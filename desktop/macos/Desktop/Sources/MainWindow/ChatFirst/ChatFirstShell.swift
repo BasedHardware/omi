@@ -65,7 +65,7 @@ struct ChatFirstShell: View {
       destination
         .id(navigation.route.stableName)
     }
-    // The hidden title bar puts the traffic lights over the content view.
+    // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
     .environmentObject(navigation)
     .onAppear {
@@ -580,7 +580,10 @@ private struct ChatFirstRestoredTasksHost: View {
     if let task = tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true }) {
       return task
     }
-    if let task = try? await APIClient.shared.getActionItem(id: id), task.deleted != true {
+    // Straight off the wire, so legacy `deleted` may be absent and retirement
+    // only stated through canonical lifecycle status. Cache reads above and
+    // below are already normalized (`ActionItemRecord.from` stores `isRetired`).
+    if let task = try? await APIClient.shared.getActionItem(id: id), !task.isRetired {
       return task
     }
     await tasksStore.loadCompletedTasks()

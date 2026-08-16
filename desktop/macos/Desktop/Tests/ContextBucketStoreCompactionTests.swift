@@ -77,6 +77,12 @@ final class ContextBucketStoreCompactionTests: XCTestCase {
       XCTAssertTrue(snapshot.tail[index - 1].hasSuffix(" short-\(index)"))
     }
 
+    // Six published versions, one constant header: nothing that changes per
+    // visit may be written above the frozen segment, or the director's cache
+    // prefix is invalidated before it can ever be reused.
+    XCTAssertEqual(snapshot.header, ContextBucketPromptAssembler.stableHeader)
+    XCTAssertFalse(snapshot.header.contains(where: \.isNumber))
+
     let frozen = try XCTUnwrap(String(data: snapshot.frozenRankedSegment, encoding: .utf8))
     XCTAssertTrue(
       frozen.contains("- entry:\(oldestID) short-0\n"),

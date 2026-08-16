@@ -104,6 +104,32 @@ This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
 cadence; the job is the sole host of
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
 
+The scheduled final planner, required L2 normalizer, and six-hour X memory
+extractor share one optional OpenAI Flex switch and use dedicated gateway lanes.
+Manual and post-OAuth X syncs remain Standard. Ordinary `memory_conflict`,
+`memory_l2`, and `memories` traffic keeps its Standard timeout and cannot
+request Flex. `OMI_BACKGROUND_FLEX_CAPABLE` is present only on the two owning
+jobs. The live Firestore control is stage-scoped because dev and prod can share
+the customer Firestore project: dev uses
+`llm_runtime_controls/background_flex_dev`, and prod uses
+`llm_runtime_controls/background_flex_prod`. Each document must contain
+exactly:
+
+```json
+{"enabled":false,"generation":1}
+```
+
+Set `enabled` to `true` to route all three eligible scheduled workloads through
+Flex, and increment `generation` with every control change. Setting it back to
+`false` restores their legacy Standard paths without a redeploy. An in-flight
+response from an older generation is discarded before durable apply. Flex
+resource deferrals release L2/promotion leases for the next scheduled run and
+do not consume model-output quality retry budgets; X raw posts remain pending.
+Flex-mode memory maintenance advances one UID and at most one required L2 item
+per run so its durable cursor cannot jump across work that the 15-minute Flex
+budget could not start. Both owning jobs use verified private gateway endpoints,
+zero SDK retries, and a one-hour Cloud Run task budget.
+
 ## Search, graph, and derived providers
 
 Canonical item state is authoritative. Keyword/vector results are candidates
@@ -139,14 +165,18 @@ fences prevent an old lease or retry from resurrecting a recreated account.
 The supported controls and rollback floor are documented in
 `docs/runbooks/universal-memory-operations.md`.
 
-- `MEMORY_MODE` is a global readiness/incident declaration.
-- `MEMORY_V3_GET_ENABLED` is a deprecated, non-authoritative deployment
-  declaration retained only until manifest cleanup; it cannot affect routing.
-- `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only.
+- `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
+  to off. `on` enables intake and list; it does not enable Gate 3 ST→LT
+  maintenance. `MEMORY_MODE` and `MEMORY_V3_GET_ENABLED` are one-deploy aliases
+  only (`write|read` → on, `off|shadow` → off) and are not written in overlays.
+- `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only and stays a separate ops
+  switch. Do not derive it from `MEMORY_ENABLED=on`.
 - `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and its batch/candidate settings are
   global cost/incident controls.
-- Cursor secret/version/TTL settings are unused by the live memory route and
-  may be removed after confirming no other consumer owns them.
+- `GET /v3/memories` first page uses `read_page`, which 503s
+  `Memory cursor unavailable` when `MEMORY_V3_CURSOR_SECRET` is missing. That is
+  the list fence, not `MEMORY_V3_GET_ENABLED` (unused on the route). First page
+  falls back to offset `read()` for that 503.
 
 The universal dual-format reader is the rollback floor. A rollback may stop new
 canonical intake or L2 maintenance globally, but must keep the universal reader
