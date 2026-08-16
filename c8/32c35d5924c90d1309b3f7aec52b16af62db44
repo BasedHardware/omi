@@ -1,0 +1,19 @@
+.github/failure-classes/FC-durable-state-scoped-to-view-lifetime.json
+  s_31a21db428771c::t_2f2051aa34051b 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c832c35d5924c90d1309b3f7aec52b16af62db44",
+  "prompts": {},
+  "sessions": {
+    "s_31a21db428771c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1bdb0c54-f98d-4b5f-9e7f-cee463cdb235",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
