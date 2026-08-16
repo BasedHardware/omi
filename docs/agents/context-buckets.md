@@ -116,6 +116,41 @@ rather than requiring a migration.
 Expired facts are filtered on read as well as deleted by GC, so a lagging GC never serves
 stale context.
 
+## Consumers
+
+Chat is the first reader. `_get_work_context_section` in `backend/utils/llm/chat.py` renders
+validated facts above a 0.6 confidence floor, capped at 20, into a `<work_context>` block in
+the agentic system prompt.
+
+Three constraints apply to any consumer added later. Chat must never fail because this
+optional context is unavailable, so every read error degrades to an empty section. Fact text
+is model-authored and screen-derived, so it is sanitized before entering a prompt exactly as
+page-context titles are. And the block is additive, so it does not shift the cacheable static
+prompt prefix.
+
+The prompt tells the model this is background awareness and not to recite it back — a user
+told what they were doing on screen experiences surveillance rather than help.
+
+## Device publisher
+
+`ContextBucketSyncClient` posts to the sync and purge routes, mirroring
+`ProactiveLaneClient` for auth, owner fencing, and bounded errors. Its payload logic is pure
+statics so it is testable without a URLProtocol stub.
+
+`ContextBucketSyncSelection` chooses what to publish. It selects only `validated`, unexpired
+facts, and the payload has no field for `evidenceText`, `narrative`, or context keys — quoted
+screen text cannot be published by adding a caller, only by changing the payload shape.
+
+`ContextBucketSyncScheduler` runs a plain 30-minute pass with no local cursor, which is safe
+because the backend skips writes older than what it already holds.
+
+Excluding an app retracts published copies as well as deleting local rows. Exclusion is a
+privacy action, so it must reach every copy; the local delete stays authoritative, and a
+failed retraction retries rather than blocking exclusion.
+
+Sync is gated by `ContextBucketsFeature.isBackendSyncEnabled` — dogfood-only, off in
+production and beta, with the inverted `OMI_FORCE_BUCKET_SYNC=0` override.
+
 ## Local tuning constants
 
 These stay on the device because they govern capture, not readability.
@@ -123,7 +158,8 @@ These stay on the device because they govern capture, not readability.
 | Constant | Value | Source |
 |---|---|---|
 | Dwell before a visit settles | 2 s | `ContextProactivityEngine.swift` |
-| Cold-start gate | 1 prior completed visit within 7 d | `ContextBucketStore.swift` |
+| Cold-start gate | 1 prior completed visit within 7 d | `ContextBucketTuning.swift` |
+| Backend sync cadence | 30 min | `ContextBucketSyncScheduler.swift` |
 | Injection token budget | 7,500 | `ContextBucketRollup.swift` |
 | Departure worthiness threshold | 0.6 | `ContextProactivityEngine.swift` |
 | Bucket GC | 30 d unvisited, newest 250 kept | `ContextBucketStore.swift` |
@@ -132,19 +168,23 @@ These stay on the device because they govern capture, not readability.
 
 ## Known weaknesses
 
-- **Cold start.** A bucket needs a prior completed visit within 7 days before it resolves,
-  so genuinely new work never accumulates context on its first day.
+- **Cold start.** A bucket needs a prior completed visit within 7 days before it is minted.
+  The gate is a deliberate noise filter — most windows are seen once — but work on a cadence
+  slower than the window never accumulates context, because every visit looks like the first.
+  Widening it admits slower work at the cost of more buckets; the constant is now named and
+  documented in `ContextBucketTuning`, but the value is unchanged pending that product call.
 - **One frame per visit.** The whole evidence base for a visit is its last screenshot, so a
   long session is summarized by whatever happened to be on screen at the end.
-- **Constants are scattered.** Roughly 25 thresholds are hardcoded across seven files with
-  no shared configuration surface and no way to tune them without a release.
+- **Constants are only partly gathered.** Delivery budget, pooling, and reconciler values
+  already live in named enums, and the cold-start gate now does too. What remains is that none
+  of them are remotely tunable — changing any threshold still needs a release.
 - **macOS only.** Windows has no implementation; the Flutter app has none either.
-- **No chat consumption.** Even after this migration, chat prompt assembly does not yet read
-  the synced facts.
+- **Sync is dogfood-only.** `isBackendSyncEnabled` is off in production and beta, so no
+  production user's facts reach the backend yet.
 
 ## Migration sequence
 
-1. Backend schema, sync/read/purge API, tests, this document. *(this change)*
-2. Swift sync client: publish validated facts on version publish, purge on app exclusion.
-3. Chat prompt assembly reads validated facts.
-4. Flutter and Windows consumers.
+1. Backend schema, sync/read/purge API, tests, this document. *(done)*
+2. Chat prompt assembly reads validated facts. *(done)*
+3. Device publisher, scheduler, and purge retraction. *(done)*
+4. Flutter and Windows consumers. *(not started)*
