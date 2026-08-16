@@ -8,7 +8,13 @@ import pytest
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from database.store.firestore_facade import NeutralFirestoreClient
+from google.api_core.exceptions import Aborted
+
+from database.store.firestore_facade import (
+    NeutralFirestoreClient,
+    _group_name_filter_value,
+    _name_filter_value,
+)
 from tests.store_fakes import FakeDocumentStore
 
 
@@ -353,6 +359,34 @@ def test_get_all_batches_via_get_many_not_per_ref():
     assert snaps[0].to_dict() == {"v": 1}
     assert calls["get_many"] == 1  # single batched read for the one collection
     assert calls["get"] == 0  # NOT N per-ref point reads
+
+
+def test_txn_write_conflict_at_write_time_translates_to_aborted():
+    # cubic PR 10887 goals.py:635: a MongoDB write conflict can surface at the write op (update_one/insert_one
+    # on the session), not only at commit. The facade transaction's set/update/create/delete must translate a
+    # TransientTransactionError to google's Aborted so @firestore.transactional replays apply(); before this
+    # only _commit did, and .set was not even wrapped, so a write-time conflict escaped raw and never retried.
+    class _ConflictStore(FakeDocumentStore):
+        def _set(self, path, data, *, merge=False, session=None):
+            exc = Exception("WriteConflict")
+            exc.has_error_label = lambda label: label == "TransientTransactionError"
+            raise exc
+
+    c = NeutralFirestoreClient(_ConflictStore())
+    txn = c.transaction()
+    with pytest.raises(Aborted):
+        txn.set(c.document("users/u1/goals/reservation"), {"version": 2})
+
+
+def test_name_filter_normalizes_membership_list_of_refs():
+    # cubic PR 10887 facade:350: a __name__ in/not-in filter carries a LIST of references; each must be
+    # normalized element-wise, else a valid Firestore .where('__name__','in',[ref,...]) matches nothing.
+    c = _client()
+    r1, r2 = c.document("users/u1/goals/g1"), c.document("users/u1/goals/g2")
+    assert _name_filter_value([r1, r2]) == ["g1", "g2"]  # scoped query -> bare ids
+    assert _group_name_filter_value([r1, r2]) == ["users/u1/goals/g1", "users/u1/goals/g2"]  # group -> full paths
+    assert _name_filter_value(r1) == "g1"  # scalar path still works
+    assert _name_filter_value(["g1", "g2"]) == ["g1", "g2"]  # plain strings pass through
 
 
 def test_get_all_in_transaction_reads_through_session():

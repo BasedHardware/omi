@@ -101,7 +101,11 @@ def _name_filter_value(value: Any) -> Any:
     range (`llm_usage_ref.document(...)` bounds) returned zero rows on Mongo, undercounting chat usage
     (cubic PR 10887 #8; the contract test only exercised a bare-string bound, so the seam hid it). A
     plain string id passes through unchanged. Collection-GROUP queries need the FULL path instead —
-    see ``_group_name_filter_value``."""
+    see ``_group_name_filter_value``. A membership filter (``in``/``not-in``) carries a LIST of references,
+    each of which must be normalized element-wise — leaving the list untouched made a valid Firestore
+    ``.where('__name__', 'in', [ref, ...])`` match nothing on the neutral facade (cubic PR 10887 facade:350)."""
+    if isinstance(value, (list, tuple)):
+        return [v.id if isinstance(v, _DocRef) else v for v in value]
     return value.id if isinstance(value, _DocRef) else value
 
 
@@ -114,6 +118,8 @@ def _group_name_filter_value(value: Any) -> Any:
     collection to prefix). Reducing a ``_DocRef`` to its bare ``.id`` here made the group ``__name__``
     filter match nothing on Mongo (cubic PR 10887 #338, a regression from the #8 scoped-query fix). Keep
     the ``_DocRef``'s full ``.path``; a plain string path passes through unchanged."""
+    if isinstance(value, (list, tuple)):
+        return [v.path if isinstance(v, _DocRef) else v for v in value]
     return value.path if isinstance(value, _DocRef) else value
 
 
@@ -163,6 +169,28 @@ def _firestore_errors():
         raise _gexc.AlreadyExists(str(exc)) from exc
     except _StorePreconditionFailed as exc:
         raise _gexc.FailedPrecondition(str(exc)) from exc
+
+
+@contextlib.contextmanager
+def _txn_write_errors():
+    """Like ``_firestore_errors()`` for writes issued INSIDE a transaction, but ALSO maps a write-time
+    MongoDB write conflict to google's ``Aborted`` so ``@firestore.transactional`` replays ``apply()``.
+    A conflict can surface at operation time (the ``update_one``/``insert_one`` on the session), not only
+    at commit — e.g. the goals ``reservation_ref`` write is DESIGNED to conflict with a concurrent focus
+    transaction. Without this the raw pymongo error escapes and the decorator never retries; only ``_commit``
+    translated conflicts before (cubic PR 10887 goals.py:635)."""
+    try:
+        yield
+    except _StoreNotFound as exc:
+        raise _gexc.NotFound(str(exc)) from exc
+    except _StoreAlreadyExists as exc:
+        raise _gexc.AlreadyExists(str(exc)) from exc
+    except _StorePreconditionFailed as exc:
+        raise _gexc.FailedPrecondition(str(exc)) from exc
+    except Exception as exc:
+        if _has_txn_label(exc, "TransientTransactionError"):
+            raise _gexc.Aborted(str(exc)) from exc
+        raise
 
 
 class _Precondition:
@@ -539,20 +567,21 @@ class _FacadeTransaction:
         return _Snapshot(ref, self._read(ref.path))
 
     def set(self, ref: _DocRef, data: Dict[str, Any], merge: bool = False) -> None:
-        self._client._store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
+        with _txn_write_errors():
+            self._client._store._set(ref.path, _neutral_data(data), merge=merge, session=self._session)
 
     def update(self, ref: _DocRef, data: Dict[str, Any], option: Any = None) -> None:
-        with _firestore_errors():
+        with _txn_write_errors():
             self._client._store._update(
                 ref.path, _neutral_data(data), if_updated_at=_precondition_time(option), session=self._session
             )
 
     def create(self, ref: _DocRef, data: Dict[str, Any]) -> None:
-        with _firestore_errors():
+        with _txn_write_errors():
             self._client._store._create(ref.path, _neutral_data(data), session=self._session)
 
     def delete(self, ref: _DocRef, option: Any = None) -> None:
-        with _firestore_errors():
+        with _txn_write_errors():
             self._client._store._delete(
                 ref.path, if_updated_at=_precondition_time(option), session=self._session
             )
