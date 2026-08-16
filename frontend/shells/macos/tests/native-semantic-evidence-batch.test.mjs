@@ -13,13 +13,27 @@ const wrapper = join(root, "probes/native-semantic-evidence-batch.mjs");
 const coreSha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const platformSha = "1".repeat(40);
 
+// This runs at module scope to decide whether the GUI fixtures can run at all,
+// so it must never throw. `foregroundApplicationFromResults` is the probe's
+// strict assertion and is the wrong tool here: it fails on any foreground app
+// whose `LSDisplayName` is empty, and macOS system dialogs have exactly that
+// shape — `com.apple.FollowUpUI` frontmost took this whole file down, all
+// twelve tests including the four that only read source. A precondition
+// detector that cannot identify the session reports that it cannot, and the
+// GUI-dependent tests skip with the reason.
 function lockedSessionSkipReason() {
   const front = spawnSync("/usr/bin/lsappinfo", ["front"], { encoding: "utf8", timeout: 5_000 });
   const identity = front.status === 0 ? front.stdout.trim().match(/ASN:0x[0-9a-f]+-0x[0-9a-f]+:/i)?.[0] : null;
   if (!identity) return false;
   const info = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "name", "-app", identity], { encoding: "utf8", timeout: 5_000 });
   const bundle = spawnSync("/usr/bin/lsappinfo", ["info", "-only", "bundleID", "-app", identity], { encoding: "utf8", timeout: 5_000 });
-  const observed = foregroundApplicationFromResults(front, info, bundle);
+  let observed;
+  try {
+    observed = foregroundApplicationFromResults(front, info, bundle);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return `native semantic fixture execution requires an identifiable foreground application (${detail})`;
+  }
   return observed.name === "loginwindow" && observed.bundleId === "com.apple.loginwindow"
     ? "native semantic fixture execution requires an unlocked GUI session"
     : false;
