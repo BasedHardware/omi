@@ -863,9 +863,6 @@ environments:
           flags:
             --task-timeout: 3600s
           secrets:
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -885,6 +882,9 @@ environments:
           - HOSTED_PUSHER_API_URL
         x-connector-sync-job:
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -1814,9 +1814,6 @@ environments:
           flags:
             --task-timeout: 3600s
           secrets:
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
-              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -1832,6 +1829,9 @@ environments:
               category: runtime_identity
         x-connector-sync-job:
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest

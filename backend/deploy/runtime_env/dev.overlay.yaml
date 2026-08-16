@@ -422,8 +422,6 @@ overlay:
         flags:
           --task-timeout: 3600s
         env:
-          OMI_BACKGROUND_FLEX_CAPABLE:
-            value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
         forbidden_env:
@@ -434,6 +432,8 @@ overlay:
         env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
         forbidden_env:

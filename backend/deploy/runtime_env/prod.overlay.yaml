@@ -367,13 +367,10 @@ overlay:
       notifications-job:
         flags:
           --task-timeout: 3600s
+      x-connector-sync-job:
         env:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
-          PINECONE_INDEX_NAME:
-            value: memories-backend
-      x-connector-sync-job:
-        env:
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:

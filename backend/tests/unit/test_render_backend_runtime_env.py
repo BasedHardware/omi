@@ -177,22 +177,38 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
         'TYPESENSE_HOST',
         'TYPESENSE_HOST_PORT',
         'TYPESENSE_API_KEY',
+        'PINECONE_INDEX_NAME',
+        'OMI_BACKGROUND_FLEX_CAPABLE',
+        'OMI_LLM_GATEWAY_URL',
+        'X_OAUTH_CLIENT_ID',
+        'X_OAUTH_REDIRECT_URI',
+        'RAPID_API_HOST',
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
-    assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
-    assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
-    assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert set(notifications_job['secrets']) == {
+        'SERVICE_ACCOUNT_JSON',
+        'ENCRYPTION_SECRET',
+        'OPENAI_API_KEY',
+    }
+
+    x_sync_job = cloud_run['jobs']['x-connector-sync-job']
+    x_sync_env = x_sync_job['env']
+    assert x_sync_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert x_sync_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
+    assert x_sync_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert set(x_sync_job['secrets']) >= {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'X_OAUTH_CLIENT_SECRET',
+        'RAPID_API_KEY',
     }
 
 
-def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
-    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_notifications_job.yml').read_text(encoding='utf-8')
+def test_x_connector_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
+    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_x_connector_sync_job.yml').read_text(encoding='utf-8')
 
     assert 'Verify LLM Gateway serving data plane' in workflow
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow

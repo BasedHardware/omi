@@ -147,5 +147,6 @@ def test_deploy_workflow_gates_success_on_read_only_scheduler_validation():
     assert "scheduler jobs create" not in workflow
     assert "scheduler jobs update" not in workflow
     assert "scheduler jobs resume" not in workflow
-    assert "verify-llm-gateway-serving" not in workflow
-    assert "probe-llm-gateway-from-cloud-run" not in workflow
+    assert "verify-llm-gateway-serving" in workflow
+    assert "probe-llm-gateway-from-cloud-run" in workflow
+    assert "--lane omi:auto:x-memory-extraction-flex" in workflow
