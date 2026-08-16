@@ -271,11 +271,217 @@ html[data-platform="desktop"][data-color-mode="dark"] .screen-timeline {
   margin: var(--space-sm) 0 0;
 }
 
-.screen-timeline input[type="range"] {
+/*
+ * The time-linear track, ported from `RewindTrackNSView`. Geometry is Swift's:
+ * 56px overall, a 26px bar, 18px badges straddling it, tick marks and hour
+ * labels beneath. Those are structural pixel dimensions of one control, not a
+ * type scale — the badge is 18px because a monogram disc is 18px.
+ */
+.screen-track {
+  position: relative;
+  height: 56px;
+  margin-inline: var(--space-lg);
+  touch-action: none;
+  cursor: pointer;
+}
+
+.screen-track-bar {
+  position: absolute;
+  inset-inline: 0;
+  top: 9px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  /* A faint wash of the label colour, so an empty track reads as empty rather than as a slab. */
+  background: color-mix(in srgb, var(--content-primary) 10%, transparent);
+  overflow: hidden;
+}
+
+.screen-track-block {
+  position: absolute;
+  inset-block: 0;
+}
+
+.screen-track-badges,
+.screen-track-ticks {
+  position: absolute;
+  inset-inline: 0;
+}
+
+.screen-track-badges {
+  top: 13px;
+  height: 18px;
+}
+
+.screen-track-badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-inline-start: -9px;
+  border: 1px solid var(--surface-raised);
+  border-radius: var(--radius-circular);
+  background: var(--surface-raised);
+  font-family: var(--type-label-family);
+  font-size: var(--type-micro-size);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.screen-track-ticks {
+  top: 35px;
+  height: 21px;
+}
+
+.screen-track-tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 4px;
+  background: var(--border);
+}
+
+.screen-track-tick-label {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--content-tertiary);
+  font-size: var(--type-hint-size);
+  white-space: nowrap;
+}
+
+.screen-track-playhead {
+  position: absolute;
+  top: 5px;
+  width: 3px;
+  height: 34px;
+  margin-inline-start: -1.5px;
+  border-radius: 1.5px;
+  background: var(--content-primary);
+  box-shadow: 0 0 0 1px var(--surface-raised);
+}
+
+/*
+ * The range input is what makes the track keyboard-operable and gives it a
+ * name and a value; it is transparent because the track above is the picture
+ * of the same state. Pointer events go to the wrapper instead, whose mapping
+ * is time-linear — the input's own click-to-position is index-linear and would
+ * disagree with what is drawn.
+ */
+.screen-track-input {
+  position: absolute;
+  inset-inline: 0;
+  top: 9px;
   width: 100%;
+  height: 26px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.screen-track:focus-within {
+  outline: var(--focus-ring-width) solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.screen-track-footer {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  justify-content: flex-end;
+  padding-block: var(--space-xs) var(--space-sm);
+  padding-inline: var(--space-lg);
+  color: var(--content-secondary);
+  font-size: var(--type-micro-size);
+}
+
+.screen-track-footer-stamp,
+.screen-track-footer .screen-frame-counter {
+  font-family: var(--type-code-family);
+  font-variant-numeric: tabular-nums;
 }
 
 .screen-frame-counter {
   margin-left: auto;
   color: var(--content-secondary);
+}
+
+.screen-track-footer .screen-frame-counter {
+  margin-left: 0;
+  font-size: var(--type-micro-size);
+}
+
+.screen-track-footer-hint {
+  font-size: var(--type-micro-size);
+}
+
+/*
+ * Chrome that sits **on** the frame rather than above it: the app chevrons on
+ * its edges and the timestamp pill at bottom-left. A control that steps through
+ * the picture belongs on the picture; parked on the stage's margin it reads as
+ * floating on nothing.
+ */
+.screen-stage-chrome {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.screen-stage-chevron,
+.screen-stage-chrome .screen-timestamp-pill {
+  position: absolute;
+  pointer-events: auto;
+  /*
+   * These sit on a photograph of somebody's screen, which can be any colour,
+   * so they carry their own backdrop rather than a flat fill that would vanish
+   * over a white document.
+   */
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  backdrop-filter: blur(12px);
+  color: var(--content-primary);
+}
+
+.screen-stage-chevron {
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 44px;
+  margin-top: -22px;
+  border-radius: var(--radius-element);
+}
+
+.screen-stage-chevron.is-previous {
+  inset-inline-start: 10px;
+}
+
+.screen-stage-chevron.is-next {
+  inset-inline-end: 10px;
+}
+
+.screen-stage-chrome .screen-timestamp-pill {
+  bottom: 14px;
+  inset-inline-start: 14px;
+  gap: var(--space-xs);
+  min-height: 0;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-circular);
+  color: var(--content-primary);
+  font-size: var(--type-row-size);
+  font-weight: var(--type-row-weight);
+}
+
+.screen-app-swatch {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-inline-end: var(--space-xs);
+  border-radius: var(--radius-circular);
 }

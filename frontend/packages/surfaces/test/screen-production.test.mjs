@@ -372,3 +372,103 @@ test("excluded pause names that this app is not being captured", async () => {
   // red-proof: a generic "Capture paused" badge while Rewind is frontmost
   // looks like recording is working.
 });
+
+test("the track lays blocks out by time, not by frame index", async () => {
+  const { rendered } = await renderScreen("ready");
+  try {
+    const blocks = [...rendered.container.querySelectorAll(".screen-track-block")];
+    assert.equal(blocks.length, 2, "two apps in the day are two blocks");
+    assert.deepEqual(
+      blocks.map((node) => node.getAttribute("data-track-app")),
+      ["Safari", "Notes"],
+    );
+
+    // The day holds captures at 11:30 and 11:50, padded by the 20-minute median
+    // sampling interval at each end: a 60-minute span in which the first block
+    // starts one third of the way along. Index-linear spacing — what the range
+    // input this replaces drew — would put it at 0% and the second at 50%,
+    // which is why an eight-hour idle stretch used to look like a busy one.
+    const left = (node) => Number.parseFloat(node.style.left);
+    assert.ok(Math.abs(left(blocks[0]) - 100 / 3) < 0.01, `first block at ${blocks[0].style.left}`);
+    assert.ok(Math.abs(left(blocks[1]) - 200 / 3) < 0.01, `second block at ${blocks[1].style.left}`);
+
+    const playhead = rendered.container.querySelector("[data-track-playhead='true']");
+    assert.ok(playhead, "the selected frame has a playhead on the track");
+    assert.ok(Math.abs(Number.parseFloat(playhead.style.left) - 100 / 3) < 0.01);
+
+    // Each block carries its app's own colour, and two apps do not share one.
+    const fills = blocks.map((node) => node.style.background);
+    assert.ok(fills.every((fill) => /^rgb\(/.test(fill)), `blocks are painted: ${fills.join(" ")}`);
+    assert.equal(new Set(fills).size, 2, "Safari and Notes are told apart by colour");
+
+    assert.ok(rendered.container.querySelector(".screen-track-tick"), "the track carries hour marks");
+    assert.ok(rendered.container.querySelector(".screen-track-badge"), "long stretches earn an app badge");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: before the port the timeline was a bare `input[type=range]`, so
+  // every query above returned null and the first two assertions had nothing
+  // to measure.
+});
+
+test("the track stays keyboard-operable and named after the range input goes transparent", async () => {
+  const { rendered, store } = await renderScreen("ready");
+  try {
+    const input = rendered.container.querySelector(".screen-track-input");
+    assert.ok(input, "a real range input still backs the track");
+    assert.equal(input.getAttribute("aria-label"), EN_MESSAGES["screen.timeline"]);
+    // The slider announces the moment it is sitting on, not a bare index.
+    assert.equal(
+      input.getAttribute("aria-valuetext"),
+      rendered.container.querySelector("[data-timestamp-pill='true']")?.textContent,
+    );
+    assert.equal(input.disabled, false);
+    const setter = Object.getOwnPropertyDescriptor(rendered.window.HTMLInputElement.prototype, "value")?.set;
+    assert.ok(setter, "jsdom input value setter is available");
+    await rendered.act(async () => {
+      setter.call(input, "1");
+      input.dispatchEvent(new rendered.window.Event("input", { bubbles: true }));
+    });
+    assert.equal(store.frameCursor(), 1, "changing the slider still selects a frame");
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("app chevrons sit on the frame and step a whole app stretch at a time", async () => {
+  const { rendered, store } = await renderScreen("ready");
+  try {
+    const stage = rendered.container.querySelector(".screen-frame-stage .screen-stage-chrome");
+    assert.ok(stage, "the chrome is welded to the frame, not parked above it");
+    assert.ok(stage.querySelector("[data-timestamp-pill='true']"), "the timestamp pill moved onto the picture");
+
+    // Frame 0 is the first Safari capture, so there is no earlier app to step
+    // back to and the chevron is absent rather than disabled — a disabled
+    // control still advertises a step that does not exist.
+    assert.equal(stage.querySelector(".screen-stage-chevron.is-previous"), null);
+    const next = stage.querySelector(".screen-stage-chevron.is-next");
+    assert.equal(next?.getAttribute("aria-label"), EN_MESSAGES["screen.nextApp"]);
+    await rendered.act(async () => { next.click(); });
+    assert.equal(store.frameCursor(), 1, "next app lands on the first Notes capture");
+
+    const back = rendered.container.querySelector(".screen-stage-chevron.is-previous");
+    assert.equal(back?.getAttribute("aria-label"), EN_MESSAGES["screen.previousApp"]);
+    await rendered.act(async () => { back.click(); });
+    assert.equal(store.frameCursor(), 0);
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
+test("PRESERVED excluded and idle pause reasons survive the track port", async () => {
+  for (const [reason, key] of [["excluded", "screen.capturePausedExcluded"], ["idle", "screen.capturePausedIdle"]]) {
+    const screenPresentation = await loadProductionExport("screen-presentation.ts", "screenPausedMessageKey");
+    assert.equal(screenPresentation(reason), key);
+  }
+  const { rendered } = await renderScreen("recovered");
+  try {
+    assert.ok(rendered.container.querySelector(".screen-track"), "the recovered day still draws a track");
+  } finally {
+    await rendered.cleanup();
+  }
+});

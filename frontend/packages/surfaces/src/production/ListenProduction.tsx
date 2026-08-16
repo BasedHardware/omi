@@ -8,7 +8,14 @@ import { backlogHours, describeCapture } from "./capture-state.js";
 import { ProductionChrome, productionRouteHref } from "./ProductionChrome.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler, type SurfaceDataSource } from "./ProductionPrimitives.js";
 import { boundedRenderedTranscript } from "./consumer-observation.js";
-import { isScriptedListenTranscript, listenPanelCopy } from "./listen-presentation.js";
+import {
+  isScriptedListenTranscript,
+  listenPanelCopy,
+  listenSegmentClock,
+  listenSpeakerIdentity,
+  listenSpeakerInitial,
+  type ListenSpeakerIdentity,
+} from "./listen-presentation.js";
 import "./listen.css";
 
 type Locale = string;
@@ -111,6 +118,16 @@ function transcriptKey(segment: TranscriptSegment, index: number): string {
   return segment.id && segment.id !== ""
     ? segment.id
     : `anonymous-${segment.start}-${segment.end}-${index}`;
+}
+
+/** `null` when the segment carries no attribution at all — the heading then shows only the clock. */
+function listenSpeakerLabel(locale: Locale, identity: ListenSpeakerIdentity): string | null {
+  if (identity.kind === "self") return t(locale, "listen.speakerYou");
+  if (identity.kind === "named") return identity.name;
+  if (identity.kind === "numbered") {
+    return t(locale, "listen.speakerNumbered", { number: identity.number });
+  }
+  return null;
 }
 
 function transcriptAnnouncement(segments: readonly TranscriptSegment[]): string | null {
@@ -408,7 +425,11 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
         <ProductionLiveAnnouncement message={listenAnnouncement} {...(announcementScheduler ? { scheduler: announcementScheduler } : {})} />
         {presentedCapture.kind === "capturing" && segments.length === 0 && (
           <div className="listen-transcript-waiting">
-            <ProductionEmptyState icon="microphone" title={t(locale, "listen.transcriptWaiting")} />
+            <ProductionEmptyState
+              icon="microphone"
+              title={t(locale, "listen.transcriptWaiting")}
+              detail={t(locale, "listen.transcriptWaitingBody")}
+            />
           </div>
         )}
         {segments.length > 0 && (
@@ -431,16 +452,48 @@ export function ListenProduction({ store, locale = "en", onReady, announcementSc
               if (["ArrowUp", "PageUp", "Home"].includes(event.key)) leaveLiveEdge();
             }}
           >
-            {segments.map((segment, index) => (
-              <article
-                className={`listen-transcript-row${segment.is_user ? " is-user" : ""}`}
-                data-segment-id={segment.id ?? ""}
-                key={transcriptKey(segment, index)}
-              >
-                {segment.speaker && <p className="listen-transcript-speaker">{segment.speaker}</p>}
-                <p className="listen-transcript-text">{segment.text}</p>
-              </article>
-            ))}
+            {segments.map((segment, index) => {
+              const identity = listenSpeakerIdentity(segment);
+              const speakerLabel = listenSpeakerLabel(locale, identity);
+              const initial = listenSpeakerInitial(identity, speakerLabel ?? "");
+              const clock = listenSegmentClock(segment.start);
+              const avatar = initial === null ? null : (
+                <span className="listen-transcript-avatar" aria-hidden="true">{initial}</span>
+              );
+              return (
+                <article
+                  className={`listen-transcript-row${segment.is_user ? " is-user" : ""}`}
+                  data-segment-id={segment.id ?? ""}
+                  data-speaker-kind={identity.kind}
+                  key={transcriptKey(segment, index)}
+                >
+                  <div className="listen-transcript-bubble-group">
+                    <div className="listen-transcript-heading">
+                      {!segment.is_user && avatar}
+                      {speakerLabel !== null && (
+                        <span
+                          className={`listen-transcript-speaker${identity.kind === "named" ? " is-named" : ""}`}
+                        >
+                          {speakerLabel}
+                        </span>
+                      )}
+                      <span className="listen-transcript-clock">{clock}</span>
+                      {segment.is_user && avatar}
+                    </div>
+                    <p className="listen-transcript-text">{segment.text}</p>
+                    {(segment.translations ?? []).map((translation) => (
+                      <p
+                        className="listen-transcript-translation"
+                        data-translation-lang={translation.lang}
+                        key={`${transcriptKey(segment, index)}:${translation.lang}`}
+                      >
+                        {translation.text}
+                      </p>
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
           </section>
         )}
         {showLatest && segments.length > 0 && (

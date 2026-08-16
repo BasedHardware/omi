@@ -24,6 +24,62 @@ export function isScriptedListenTranscript(
   ).includes(segment.text.trim()));
 }
 
+/**
+ * Who said a segment, as a kind rather than a rendered string, so the caller
+ * owns the copy. Mirrors `LiveSegmentView.speakerLabel` in the macOS shell:
+ * the user is answered before any diarisation label, because a segment can
+ * carry both and "You" is the truer of the two.
+ *
+ * `unknown` has no Swift counterpart — its model always holds an integer
+ * speaker. Our wire makes both `speaker` and `speaker_id` optional, so an
+ * anonymous segment gets no attribution rather than an invented one.
+ */
+export type ListenSpeakerIdentity =
+  | { readonly kind: "self" }
+  | { readonly kind: "named"; readonly name: string }
+  | { readonly kind: "numbered"; readonly number: number }
+  | { readonly kind: "unknown" };
+
+export function listenSpeakerIdentity(
+  segment: Pick<TranscriptSegment, "is_user" | "speaker" | "speaker_id">,
+): ListenSpeakerIdentity {
+  if (segment.is_user) return { kind: "self" };
+  const name = segment.speaker?.trim() ?? "";
+  if (name !== "") return { kind: "named", name };
+  const id = segment.speaker_id;
+  if (typeof id === "number" && Number.isFinite(id)) return { kind: "numbered", number: id };
+  return { kind: "unknown" };
+}
+
+/**
+ * The glyph on a speaker's avatar disc. A numbered speaker shows the number
+ * itself, not the "S" of "Speaker 3" — the disc has to distinguish speakers
+ * from each other, and every numbered label starts with the same letter.
+ */
+export function listenSpeakerInitial(
+  identity: ListenSpeakerIdentity,
+  label: string,
+): string | null {
+  if (identity.kind === "unknown") return null;
+  if (identity.kind === "numbered") return String(identity.number);
+  const first = Array.from(label.trim())[0];
+  return first === undefined ? null : first.toLocaleUpperCase();
+}
+
+/**
+ * A segment's offset into the capture, as the `M:SS` clock the macOS shell
+ * sets beside every speaker label (`LiveTranscriptView.formatTime`).
+ *
+ * Deliberately not `formatDuration`: this is a position on a running
+ * recording, which reads as a clock, and the i18n duration formatter answers
+ * a different question ("1m 5s"). Minutes are not wrapped into hours, so a
+ * long capture reads `61:01` exactly as Swift's `%d:%02d` does.
+ */
+export function listenSegmentClock(seconds: number): string {
+  const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
 type CatalogKey<T extends MessageKey> = T;
 
 export type ListenIdleReason =

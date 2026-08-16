@@ -238,6 +238,368 @@ export function followNewestCaptureDay(input: {
   return nextNewest;
 }
 
+/**
+ * Hue bands the app-colour hash may land in, ported from `RewindPalette` in
+ * the macOS shell. Two properties matter and are asserted in the tests:
+ *
+ * 1. Every band ends below hue 220 — the brand blue's own hue — so a generated
+ *    app colour can never be mistaken for an Omi accent (INV-UI-1).
+ * 2. Bands skip 40°–88° (mustard/olive) and 172°–186°, which read as dirty at
+ *    this saturation, and per-band brightness compensates for the eye's
+ *    uneven luminance response so a green badge is not brighter than a blue.
+ */
+const SCREEN_APP_HUE_BANDS: readonly {
+  readonly start: number;
+  readonly end: number;
+  readonly brightness: number;
+}[] = [
+  { start: 2, end: 16, brightness: 1.0 },
+  { start: 26, end: 36, brightness: 0.68 },
+  { start: 90, end: 104, brightness: 0.65 },
+  { start: 126, end: 142, brightness: 0.5 },
+  { start: 156, end: 170, brightness: 0.65 },
+  { start: 188, end: 200, brightness: 0.65 },
+  { start: 206, end: 218, brightness: 0.99 },
+];
+/** No generated hue may reach this — it is the brand accent's hue. */
+export const SCREEN_APP_HUE_CEILING = 220;
+const SCREEN_APP_SATURATION = 0.92;
+/** Prime, so adjacent bundle-id hashes do not alias onto one hue. */
+const SCREEN_APP_HUE_BUCKETS = 2503n;
+const FNV_OFFSET_BASIS = 0xcbf29ce484222325n;
+const FNV_PRIME = 0x100000001b3n;
+const U64_MASK = 0xffffffffffffffffn;
+
+/**
+ * FNV-1a over the UTF-8 bytes of an app's identity. The hash — not a counter
+ * over the order apps happen to appear — is what keeps Slack the same colour
+ * across launches, days, and machines.
+ */
+export function screenAppColorHash(identity: string): bigint {
+  let hash = FNV_OFFSET_BASIS;
+  for (const byte of new TextEncoder().encode(identity)) {
+    hash = ((hash ^ BigInt(byte)) * FNV_PRIME) & U64_MASK;
+  }
+  return hash;
+}
+
+export type ScreenAppColor = {
+  readonly hue: number;
+  readonly saturation: number;
+  readonly brightness: number;
+  readonly css: string;
+};
+
+function hsbToCss(hue: number, saturation: number, brightness: number): string {
+  const sector = (hue % 360) / 60;
+  const index = Math.floor(sector);
+  const fraction = sector - index;
+  const p = brightness * (1 - saturation);
+  const q = brightness * (1 - saturation * fraction);
+  const t = brightness * (1 - saturation * (1 - fraction));
+  const [red, green, blue] = ((): readonly [number, number, number] => {
+    switch (index % 6) {
+      case 0: return [brightness, t, p];
+      case 1: return [q, brightness, p];
+      case 2: return [p, brightness, t];
+      case 3: return [p, q, brightness];
+      case 4: return [t, p, brightness];
+      default: return [brightness, p, q];
+    }
+  })();
+  const channel = (value: number): number => Math.round(Math.min(1, Math.max(0, value)) * 255);
+  return `rgb(${channel(red)}, ${channel(green)}, ${channel(blue)})`;
+}
+
+/** Every bucket this palette can emit — the whole output domain, so a guard can enumerate it. */
+export const SCREEN_APP_BUCKET_COUNT = Number(SCREEN_APP_HUE_BUCKETS);
+
+/**
+ * Where one bucket lands. Buckets spread across the *bands* rather than across
+ * the degrees they cover, so each family gets an equal share of apps — width
+ * weighting would hand the 14°-wide red band two-fifths more apps than the
+ * 10°-wide orange one for no reason anyone looking at the track could name.
+ */
+export function screenAppColorForBucket(bucket: number): ScreenAppColor {
+  const bands = SCREEN_APP_HUE_BANDS;
+  const position = ((bucket % SCREEN_APP_BUCKET_COUNT) / SCREEN_APP_BUCKET_COUNT) * bands.length;
+  const index = Math.min(bands.length - 1, Math.floor(position));
+  const band = bands[index] as { start: number; end: number; brightness: number };
+  const hue = band.start + (position - index) * (band.end - band.start);
+  return {
+    hue,
+    saturation: SCREEN_APP_SATURATION,
+    brightness: band.brightness,
+    css: hsbToCss(hue, SCREEN_APP_SATURATION, band.brightness),
+  };
+}
+
+/**
+ * A stable colour for an app on the Rewind track, ported from
+ * `RewindPalette.swatch(forApp:)`. Same name, same colour, forever — the track
+ * only reads as a shape if yesterday's blue stretch is the same app as today's.
+ *
+ * The key is folded before hashing because "Google Chrome" and "google chrome "
+ * are one app on a timeline, and two colours would split one stretch of a day
+ * in half.
+ */
+export function screenAppColor(appName: string): ScreenAppColor {
+  const key = appName.trim().toLowerCase();
+  const bucket = Number(screenAppColorHash(key) % SCREEN_APP_HUE_BUCKETS);
+  return screenAppColorForBucket(bucket);
+}
+
+export type ScreenActivityBlock = {
+  readonly app: string;
+  readonly appBundleId: string;
+  /** Epoch milliseconds, inclusive. */
+  readonly startedAt: number;
+  /** Epoch milliseconds, exclusive; the block is drawn up to but not at it. */
+  readonly endedAt: number;
+  readonly startIndex: number;
+  readonly endIndex: number;
+};
+
+/** Swift's `RewindTrackWindow.medianInterval`: measured, not assumed — capture rate is a user setting. */
+function medianIntervalMs(instants: readonly number[]): number {
+  if (instants.length < 2) return 60_000;
+  const gaps: number[] = [];
+  for (let index = 1; index < instants.length; index += 1) {
+    const gap = (instants[index] as number) - (instants[index - 1] as number);
+    if (gap > 0) gaps.push(gap);
+  }
+  if (gaps.length === 0) return 60_000;
+  gaps.sort((left, right) => left - right);
+  return gaps[Math.floor(gaps.length / 2)] as number;
+}
+
+/** `RewindTrackWindow.minimumSpan`: a minute across the bar is already finer than any capture interval. */
+const SCREEN_TRACK_MINIMUM_SPAN_MS = 60_000;
+
+/**
+ * Contiguous runs of one app, the shape the Rewind track draws
+ * (`RewindTrackWindow.blocks`). A run ends where the next app's first frame
+ * begins, so the blocks tile the day without gaps; the final run is extended
+ * by one median sampling interval, since its last frame represents a span of
+ * time and not an instant.
+ */
+export function screenActivityBlocks(
+  frames: readonly ScreenTimelineFrame[],
+): readonly ScreenActivityBlock[] {
+  if (frames.length === 0) return [];
+  const instants = frames.map((frame) => Date.parse(frame.captured_at));
+  if (instants.some((instant) => !Number.isFinite(instant))) return [];
+  const tail = medianIntervalMs(instants);
+  const blocks: ScreenActivityBlock[] = [];
+  let startIndex = 0;
+  for (let index = 1; index <= frames.length; index += 1) {
+    const ended = index === frames.length;
+    const start = frames[startIndex] as ScreenTimelineFrame;
+    if (!ended && (frames[index] as ScreenTimelineFrame).app_name === start.app_name) continue;
+    blocks.push({
+      app: start.app_name,
+      appBundleId: start.app_bundle_id,
+      startedAt: instants[startIndex] as number,
+      endedAt: ended
+        ? (instants[frames.length - 1] as number) + tail
+        : (instants[index] as number),
+      startIndex,
+      endIndex: index - 1,
+    });
+    startIndex = index;
+  }
+  return blocks;
+}
+
+/** Inclusive span the track draws, padded so end blocks clear the rounded corners. */
+export function screenTrackRange(
+  frames: readonly ScreenTimelineFrame[],
+): { readonly startedAt: number; readonly endedAt: number } | null {
+  if (frames.length === 0) return null;
+  const instants = frames.map((frame) => Date.parse(frame.captured_at));
+  if (instants.some((instant) => !Number.isFinite(instant))) return null;
+  const pad = Math.max(medianIntervalMs(instants), 30_000);
+  const startedAt = (instants[0] as number) - pad;
+  const endedAt = Math.max((instants.at(-1) as number) + pad, startedAt + SCREEN_TRACK_MINIMUM_SPAN_MS);
+  return { startedAt, endedAt };
+}
+
+const SCREEN_TICK_STEPS_MS: readonly number[] = [
+  60_000, 300_000, 600_000, 900_000, 1_800_000,
+  3_600_000, 7_200_000, 10_800_000, 21_600_000, 43_200_000,
+];
+const SCREEN_TICK_MAX = 12;
+
+/** Coarsest step that keeps the track under `SCREEN_TICK_MAX` labels. */
+export function screenTrackTickStepMs(spanMs: number): number {
+  for (const step of SCREEN_TICK_STEPS_MS) {
+    if (spanMs / step <= SCREEN_TICK_MAX) return step;
+  }
+  return 86_400_000;
+}
+
+/** Tick instants on wall-clock boundaries, so labels read `2 PM` and not `2:07 PM`. */
+export function screenTrackTicks(startedAt: number, endedAt: number): readonly number[] {
+  const span = endedAt - startedAt;
+  if (!(span > 0)) return [];
+  const step = screenTrackTickStepMs(span);
+  const ticks: number[] = [];
+  let instant = Math.ceil(startedAt / step) * step;
+  while (instant <= endedAt && ticks.length <= SCREEN_TICK_MAX + 2) {
+    ticks.push(instant);
+    instant += step;
+  }
+  return ticks;
+}
+
+/** Track geometry, in logical pixels, ported from `RewindTrackNSView`. */
+export const SCREEN_TRACK_HEIGHT = 56;
+export const SCREEN_TRACK_BAR_HEIGHT = 26;
+export const SCREEN_TRACK_BADGE_SIZE = 18;
+/**
+ * Width the track assumes before it has been measured. A badge row that only
+ * appears after a resize observation flashes in on first paint; placing at the
+ * nominal panel width and refining on measurement does not.
+ */
+export const SCREEN_TRACK_ASSUMED_WIDTH = 960;
+const SCREEN_TRACK_BADGE_SPACING = SCREEN_TRACK_BADGE_SIZE + 5;
+/**
+ * Narrowest visible block that may still carry a badge — deliberately smaller
+ * than the badge itself, which is allowed to overhang. Requiring a block to be
+ * wider than its own badge reduces a whole day at day zoom to one badge.
+ */
+const SCREEN_TRACK_MIN_BADGE_WIDTH = 4;
+
+export type ScreenTrackBadge = {
+  readonly app: string;
+  readonly appBundleId: string;
+  readonly blockIndex: number;
+  /** Centre as a 0–1 fraction of the track's width. */
+  readonly centerFraction: number;
+};
+
+/**
+ * Which blocks earn an app badge, and where, ported from
+ * `RewindTrackNSView.badgePlacements`.
+ *
+ * Longest-first with overlap rejection, not "every block wide enough to hold
+ * one". At a full day's zoom even a twenty-minute stretch is about 16px wide,
+ * so the naive rule either badges everything into an unreadable smear or
+ * badges nothing. The stretches worth recognising at a glance are the long
+ * ones; a block is drawn either way, badge or no badge.
+ */
+export function screenTrackBadges(
+  blocks: readonly ScreenActivityBlock[],
+  range: { readonly startedAt: number; readonly endedAt: number },
+  trackWidth: number,
+): readonly ScreenTrackBadge[] {
+  const span = range.endedAt - range.startedAt;
+  const width = trackWidth > 0 ? trackWidth : SCREEN_TRACK_ASSUMED_WIDTH;
+  if (!(span > 0) || blocks.length === 0) return [];
+  const x = (instant: number): number => ((instant - range.startedAt) / span) * width;
+  const ordered = blocks
+    .map((block, index) => ({ block, index }))
+    .sort((left, right) => {
+      const leftSpan = left.block.endedAt - left.block.startedAt;
+      const rightSpan = right.block.endedAt - right.block.startedAt;
+      if (leftSpan !== rightSpan) return rightSpan - leftSpan;
+      return left.index - right.index;
+    });
+  const placed: ScreenTrackBadge[] = [];
+  for (const { block, index } of ordered) {
+    const left = x(block.startedAt);
+    const right = x(block.endedAt);
+    if (right < 0 || left > width) continue;
+    const visibleLeft = Math.max(0, left);
+    const visibleRight = Math.min(width, right);
+    if (visibleRight - visibleLeft < SCREEN_TRACK_MIN_BADGE_WIDTH) continue;
+    const centre = Math.min(
+      Math.max((visibleLeft + visibleRight) / 2, SCREEN_TRACK_BADGE_SIZE / 2 + 1),
+      width - SCREEN_TRACK_BADGE_SIZE / 2 - 1,
+    );
+    if (placed.some((badge) => Math.abs(badge.centerFraction * width - centre) < SCREEN_TRACK_BADGE_SPACING)) {
+      continue;
+    }
+    placed.push({
+      app: block.app,
+      appBundleId: block.appBundleId,
+      blockIndex: index,
+      centerFraction: centre / width,
+    });
+  }
+  return placed.sort((left, right) => left.centerFraction - right.centerFraction);
+}
+
+/** How a tick is labelled, which depends on how far apart the ticks are. */
+export function screenTrackTickFormat(stepMs: number): Intl.DateTimeFormatOptions {
+  if (stepMs >= 86_400_000) return { month: "short", day: "numeric" };
+  if (stepMs >= 3_600_000) return { hour: "numeric" };
+  return { hour: "numeric", minute: "2-digit" };
+}
+
+/**
+ * The capture nearest an instant, by binary search
+ * (`RewindTrackNSView.nearestIndex`). A time-linear track has to answer "which
+ * frame is under the pointer" on every pointer sample of a scrub, and a linear
+ * scan over a day of frames puts that on the frame budget.
+ */
+export function screenNearestFrameIndex(
+  frames: readonly ScreenTimelineFrame[],
+  instant: number,
+): number | null {
+  if (frames.length === 0) return null;
+  const at = (index: number): number => Date.parse((frames[index] as ScreenTimelineFrame).captured_at);
+  let low = 0;
+  let high = frames.length - 1;
+  if (instant <= at(low)) return low;
+  if (instant >= at(high)) return high;
+  while (low + 1 < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (at(mid) <= instant) low = mid;
+    else high = mid;
+  }
+  return instant - at(low) <= at(high) - instant ? low : high;
+}
+
+/** The monogram a badge falls back to when no app icon is available. */
+export function screenAppMonogram(appName: string): string {
+  const first = Array.from(appName.trim())[0];
+  return first === undefined ? "?" : first.toLocaleUpperCase();
+}
+
+/**
+ * The first frame of the previous or next app run, for the chevrons welded to
+ * the frame. Ported from `RewindStageChrome.adjacentSegmentIndex`.
+ *
+ * Stepping back from mid-run skips over the run you are in and lands on the
+ * *start of the one before it* — "previous app" means another app, not an
+ * earlier moment in this one. `null` at either end, and the caller hides the
+ * chevron rather than disabling it: a disabled control still advertises a step
+ * that does not exist.
+ */
+export function screenAdjacentAppIndex(
+  frames: readonly ScreenTimelineFrame[],
+  index: number,
+  direction: "previous" | "next",
+): number | null {
+  if (frames.length === 0) return null;
+  const cursor = Math.min(Math.max(0, index), frames.length - 1);
+  const appAt = (at: number): string => (frames[at] as ScreenTimelineFrame).app_name;
+  if (direction === "next") {
+    for (let probe = cursor + 1; probe < frames.length; probe += 1) {
+      if (appAt(probe) !== appAt(cursor)) return probe;
+    }
+    return null;
+  }
+  let runStart = cursor;
+  while (runStart > 0 && appAt(runStart - 1) === appAt(cursor)) runStart -= 1;
+  if (runStart === 0) return null;
+  const previousApp = appAt(runStart - 1);
+  let previousStart = runStart - 1;
+  while (previousStart > 0 && appAt(previousStart - 1) === previousApp) previousStart -= 1;
+  return previousStart;
+}
+
 export function screenPausedMessageKey(
   reason: string | null,
 ): "screen.capturePausedExcluded" | "screen.capturePausedIdle" | "screen.capturePaused" {

@@ -1157,3 +1157,100 @@ test("scripted STT canned lines render a not-your-speech banner on the Listen pa
   }
   // red-proof: omit the banner and the canned pair still looks like captured speech.
 });
+
+test("transcript rows attribute speech to a speaker with an avatar, a label, and a clock", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const rendered = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      segments: [
+        { id: "s-user", text: "table for two at noon", is_user: true, start: 5, end: 7 },
+        { id: "s-named", text: "the harbour one", is_user: false, speaker: "mira vale", speaker_id: 1, start: 65, end: 68 },
+        { id: "s-numbered", text: "works for me", is_user: false, speaker_id: 3, start: 3661, end: 3663 },
+        { id: "s-anon", text: "unattributed line", is_user: false, start: 12, end: 13 },
+      ],
+    }),
+  });
+  try {
+    const rows = [...rendered.container.querySelectorAll(".listen-transcript-row")];
+    assert.equal(rows.length, 4);
+
+    const [user, named, numbered, anonymous] = rows;
+    assert.equal(user.getAttribute("data-speaker-kind"), "self");
+    assert.equal(user.querySelector(".listen-transcript-speaker")?.textContent, EN_MESSAGES["listen.speakerYou"]);
+    assert.equal(user.querySelector(".listen-transcript-avatar")?.textContent, "Y");
+    assert.equal(user.querySelector(".listen-transcript-clock")?.textContent, "0:05");
+
+    assert.equal(named.getAttribute("data-speaker-kind"), "named");
+    assert.equal(named.querySelector(".listen-transcript-speaker")?.textContent, "mira vale");
+    assert.ok(named.querySelector(".listen-transcript-speaker.is-named"), "a resolved name reads as an identity");
+    assert.equal(named.querySelector(".listen-transcript-avatar")?.textContent, "M");
+    assert.equal(named.querySelector(".listen-transcript-clock")?.textContent, "1:05");
+
+    assert.equal(numbered.getAttribute("data-speaker-kind"), "numbered");
+    assert.equal(
+      numbered.querySelector(".listen-transcript-speaker")?.textContent,
+      t("en", "listen.speakerNumbered", { number: 3 }),
+    );
+    // The number, not the "S" of "Speaker 3": every numbered label shares that letter,
+    // so the disc would stop telling two unnamed speakers apart.
+    assert.equal(numbered.querySelector(".listen-transcript-avatar")?.textContent, "3");
+    assert.equal(numbered.querySelector(".listen-transcript-clock")?.textContent, "61:01");
+    assert.ok(!numbered.querySelector(".listen-transcript-speaker.is-named"));
+
+    assert.equal(anonymous.getAttribute("data-speaker-kind"), "unknown");
+    assert.equal(anonymous.querySelector(".listen-transcript-speaker"), null, "no attribution is invented");
+    assert.equal(anonymous.querySelector(".listen-transcript-avatar"), null);
+    assert.equal(anonymous.querySelector(".listen-transcript-clock")?.textContent, "0:12");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: before the port a row rendered `segment.speaker` alone, so the
+  // user's own speech was unlabelled, an unnamed speaker was anonymous, and no
+  // row carried a clock. Each assertion above fails against that markup.
+});
+
+test("a translated segment renders beside its speech, not in place of it", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const rendered = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "idle" }, {
+      segments: [{
+        id: "s-translated",
+        text: "mesa para dos",
+        is_user: false,
+        speaker: "Mira",
+        start: 0,
+        end: 2,
+        translations: [{ lang: "en", text: "table for two" }],
+      }],
+    }),
+  });
+  try {
+    const row = rendered.container.querySelector(".listen-transcript-row");
+    assert.equal(row?.querySelector(".listen-transcript-text")?.textContent, "mesa para dos");
+    const translation = row?.querySelector(".listen-transcript-translation");
+    assert.equal(translation?.textContent, "table for two");
+    assert.equal(translation?.getAttribute("data-translation-lang"), "en");
+  } finally {
+    await rendered.cleanup();
+  }
+  // red-proof: before the port `translations` was never read, so the rendered
+  // row contained only the original language and this assertion found nothing.
+});
+
+test("PRESERVED an empty transcript still says No transcript yet and never claims speech", async () => {
+  const ListenProduction = await loadProductionExport("ListenProduction.tsx", "ListenProduction");
+  const rendered = await renderComponent(ListenProduction, {
+    store: stateStore({ kind: "capturing", elapsedSeconds: 10, untranscribedSeconds: 0 }, { segments: [] }),
+  });
+  try {
+    const waiting = rendered.container.querySelector(".listen-transcript-waiting");
+    assert.ok(waiting, "the waiting panel survives the speaker-bubble port");
+    assert.equal(waiting.querySelector("h2")?.textContent, EN_MESSAGES["listen.transcriptWaiting"]);
+    assert.equal(EN_MESSAGES["listen.transcriptWaiting"], "No transcript yet");
+    const text = waiting.textContent ?? "";
+    assert.ok(!/[Ll]istening for speech/.test(text), "a silent mic and a broken mic stay indistinguishable on purpose");
+    assert.equal(rendered.container.querySelector(".listen-transcript-row"), null);
+  } finally {
+    await rendered.cleanup();
+  }
+});
