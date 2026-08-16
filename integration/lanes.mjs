@@ -227,32 +227,51 @@ export const LANES = {
     budgetNote: "named tier above L3; runner prints wall-clock",
     reason: "one rendered-layer chain: he speaks, a transcript appears, it becomes a conversation, the conversation becomes a memory, Home shows it, and chat retrieval is joined by that memory's id. Too slow to fold into L3 — do not add it there. Canned gateway by default.",
     /**
-     * NOT YET A GATE, and deliberately not softened into one.
+     * NOW A GATE. Held for exactly one measurement, then discharged by its own
+     * written condition rather than by anyone's judgement.
      *
-     * `node integration/control-acceptance/run.mjs --journey` works and is the
-     * real chain — it reports every hop at the rendered layer. It is held out
-     * of L4 because it is currently RED on one true positive:
+     * The hold named `CONTROL chat.memory=memory-not-retrieved`, and that red
+     * turned out to be the HARNESS, not the product: the runner read
+     * `gateway-requests.jsonl` from the owner-file directory while the canned
+     * gateway writes it to the run-scoped directory. Missing log meant
+     * `servedItems=[]`, and an empty served set cannot contain the memory id,
+     * so retrieval reported not-retrieved while the model had in fact been
+     * served the fact.
+     *
+     * That is worth remembering: this assertion's FALSE side was reachable
+     * without the product being wrong at all. The fix is a path; the lesson is
+     * that "the evidence file was not where the reader looked" reads exactly
+     * like a product defect, and the three candidate causes it was checked
+     * against -- a 25-item page, redaction mangling the text, token truncation
+     * -- were all refuted with measurements before anything was changed.
+     *
+     * Live at d89e897eb5, wall-clock=261066ms:
+     *
+     *     CONTROL mic=transcript-rendered
+     *     CONTROL conversation=row-rendered
+     *     CONTROL memory=card-rendered
+     *     CONTROL home.memory=row-rendered
+     *     CONTROL chat.memory=retrieved-and-streamed
+     *     CONTROL-ACCEPTANCE skips: (none)
+     *     CONTROL-ACCEPTANCE status=PASS passed=5 failed=0 skipped=0
+     *
+     * And the seam red-proof, both endpoints healthy with the fact dropped
+     * from the served set:
      *
      *     CONTROL chat.memory=memory-not-retrieved
+     *     CONTROL-ACCEPTANCE status=FAIL passed=4 failed=1 skipped=0
      *
-     * Live 2026-08-15, wall-clock=263270ms: mic, conversation, memory, and
-     * Home carried the fact; chat streamed and persisted without that
-     * run's memory in the served request. `streamed-and-persisted` is not a
-     * pass for this slug. The four per-domain hops staying green is why this
-     * tier exists.
+     * The four per-domain hops still passing while the chain fails is the
+     * entire argument for this tier existing.
      *
-     * Wire it in as the step below the moment the harness prints
-     * chat.memory=retrieved-and-streamed.
+     * ~260s. It is a named tier ABOVE L3 for that reason. Do not fold it into
+     * L3, and do not soften a hop to make it cheaper.
      */
-    preflight: () => ({
-      ok: false,
-      reason: "NOT YET A GATE: CONTROL chat.memory=memory-not-retrieved",
-      action: "wire in `node integration/control-acceptance/run.mjs --journey` when the harness prints chat.memory=retrieved-and-streamed",
-    }),
     steps: [
-      // Held. Restoring the command without discharging the hold is the
-      // silent-absence fork: the test requires exactly one of (preflight hold
-      // naming a non-pass token) or (a real --journey step).
+      {
+        cwd: PLATFORM_REPO,
+        command: "node integration/control-acceptance/run.mjs --journey",
+      },
     ],
   },
 };
