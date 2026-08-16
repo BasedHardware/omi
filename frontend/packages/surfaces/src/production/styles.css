@@ -22,8 +22,8 @@
 body { margin: 0; min-width: 320px; overflow-x: hidden; color: var(--content-primary); background: var(--surface-canvas); }
 button, input, textarea, select { font: inherit; }
 button, select { min-height: var(--min-tap-target); border: 1px solid var(--border); border-radius: var(--radius-control); padding: var(--space-sm) var(--space-md); color: var(--content-primary); background: var(--surface-raised); cursor: pointer; }
-/* One focus contract for native controls, links, cards, and ARIA custom controls. */
-.production-shell :where(input, textarea, select, button, a, [tabindex]:not([tabindex="-1"]), [role="button"], [role="option"], [role="tab"], [role="menuitem"]):focus-visible {
+/* One focus contract for native controls, links, disclosure summaries, cards, and ARIA custom controls. */
+.production-shell :where(input, textarea, select, button, a, summary, [tabindex]:not([tabindex="-1"]), [role="button"], [role="option"], [role="tab"], [role="menuitem"]):focus-visible {
   outline: var(--focus-ring-width) solid var(--focus);
   outline-offset: 2px;
 }
@@ -34,6 +34,7 @@ button, select { min-height: var(--min-tap-target); border: 1px solid var(--bord
 .production-shell select:focus-visible,
 .production-shell button:focus-visible,
 .production-shell a:focus-visible,
+.production-shell summary:focus-visible,
 .production-shell [tabindex]:not([tabindex="-1"]):focus-visible,
 .production-shell [role="button"]:focus-visible,
 .production-shell [role="option"]:focus-visible,

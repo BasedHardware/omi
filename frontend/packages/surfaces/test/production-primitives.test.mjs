@@ -268,7 +268,8 @@ test("shared primitive/static CSS contract covers provenance, focus, motion, tra
   assert.match(primitives, /aria-busy=\{loading \? "true" : undefined\}/);
   assert.match(primitives, /data-live-region="true"/);
   assert.match(primitives, /aria-describedby/);
-  assert.match(styles, /:where\(input, textarea, select, button, a/);
+  assert.match(styles, /:where\(input, textarea, select, button, a, summary/);
+  assert.match(styles, /\.production-shell summary:focus-visible/);
   assert.match(styles, /\.production-shell input:focus-visible[\s\S]*outline:[^;]+!important/);
   assert.match(styles, /prefers-reduced-motion/);
   assert.match(styles, /prefers-reduced-transparency/);
