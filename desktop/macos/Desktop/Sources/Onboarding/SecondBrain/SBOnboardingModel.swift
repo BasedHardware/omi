@@ -303,8 +303,8 @@ final class SBOnboardingModel: ObservableObject {
       // used to state it in exactly one place the user reaches days later (Rewind's empty state).
       // "Every few seconds" rather than a number: the interval is a setting
       // (`RewindSettings.captureInterval`, 3s by default, tripled on battery). "The pictures" rather
-      // than "it": the images do stay on this Mac, but `ScreenActivitySyncService` syncs their OCR
-      // text and embeddings to the backend, so an unqualified "it stays on this Mac" would be false.
+      // than "it": the images stay on this Mac, and since screen-activity cloud sync was removed so
+      // do their OCR text and embeddings — nothing from Rewind capture leaves the device.
       return
         "Let me see your screen. I'll take a picture every few seconds so you can scrub back to anything you saw — that's Rewind. The pictures stay on this Mac, and you can turn it off anytime in the top bar."
     case .files:
@@ -748,7 +748,6 @@ final class SBOnboardingModel: ObservableObject {
     finishOnboardingHandoff(clearOnboardingChatFlag: true)
 
     Task {
-      await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
     }
     applyLaunchAtLoginSelection()

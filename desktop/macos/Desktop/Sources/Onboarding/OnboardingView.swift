@@ -648,7 +648,6 @@ struct OnboardingView: View {
 
     // Start services AFTER UI transition is queued — failures are non-blocking.
     Task {
-      await AgentVMService.shared.startPipeline()
       await GoalGenerationService.shared.generateNow()
     }
     if LaunchAtLoginManager.shared.setEnabled(true) {

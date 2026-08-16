@@ -5,6 +5,8 @@ import Foundation
 /// less reliable than using each tool's native durable surface directly.
 enum MemoryBankConnector {
   static let marker = "omi-memory-bank"
+  private static let openClawMarker = "omi-memory-bank-openclaw"
+  private static let hermesMarker = "omi-memory-bank-hermes"
   private static let claudeCodeBackupRetentionLimit = 5
   private static var mcpURL: String { MemoryExportDestination.mcpServerURL }
 
@@ -569,12 +571,42 @@ enum MemoryBankConnector {
   private static func ensureOpenClawSoulNote(workspace: URL) throws -> Bool {
     let url = workspace.appendingPathComponent("SOUL.md")
     var soul = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    if soul.contains(marker) { return false }
+    let updatedSoul = upsertSoulBlock(openClawSoulBlock(), marker: openClawMarker, in: soul)
+    if !updatedSoul.changed { return false }
+    soul = updatedSoul.content
     if !soul.isEmpty && !soul.hasSuffix("\n") { soul += "\n" }
-    soul += "\n" + openClawSoulBlock() + "\n"
     let isSymlink = (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil
     try soul.write(to: url, atomically: !isSymlink, encoding: .utf8)
     return true
+  }
+
+  private static func upsertSoulBlock(_ block: String, marker: String, in soul: String) -> (
+    content: String, changed: Bool
+  ) {
+    var markers = [marker]
+    if marker != Self.marker { markers.append(Self.marker) }
+    let existingRange = markers.compactMap { candidate -> (Range<String.Index>, Range<String.Index>)? in
+      let startMarker = "<!-- \(candidate) -->"
+      let endMarker = "<!-- /\(candidate) -->"
+      guard
+        let start = soul.range(of: startMarker),
+        let end = soul.range(of: endMarker, range: start.upperBound..<soul.endIndex)
+      else { return nil }
+      return (start, end)
+    }.first
+    let normalizedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let (start, end) = existingRange {
+      let blockEnd = end.upperBound
+      let existingBlock = String(soul[start.lowerBound..<blockEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+      guard existingBlock != normalizedBlock else { return (soul, false) }
+      var updated = soul
+      updated.replaceSubrange(start.lowerBound..<blockEnd, with: normalizedBlock)
+      return (updated, true)
+    }
+    var updated = soul
+    if !updated.isEmpty && !updated.hasSuffix("\n") { updated += "\n" }
+    updated += "\n" + normalizedBlock + "\n"
+    return (updated, true)
   }
 
   private static func displayPath(for url: URL) -> String {
@@ -589,10 +621,10 @@ enum MemoryBankConnector {
 
   private static func openClawSoulBlock() -> String {
     """
-    <!-- \(marker) -->
+    <!-- \(openClawMarker) -->
     ## OMI memory (search FIRST)
-    Omi is your memory bank. Before any task, call the OpenClaw MCP tool `omi-memory__search_memories` for context. Use `omi-memory__get_conversations`, `omi-memory__get_daily_summaries`, or `omi-memory__get_screen_activity` when the user asks about activity/history. Save durable new facts with `omi-memory__create_memory`. Do not substitute OpenClaw's local `memory_search` or `memory_get` tools for Omi memory.
-    <!-- /\(marker) -->
+    Omi is your memory bank. Before any task, call the OpenClaw MCP tool `omi-memory__search_memories` for context. Use `omi-memory__get_conversations` or `omi-memory__get_daily_summaries` when the user asks about activity/history. Save durable new facts with `omi-memory__create_memory`. Do not substitute OpenClaw's local `memory_search` or `memory_get` tools for Omi memory.
+    <!-- /\(openClawMarker) -->
     """
   }
 
@@ -666,9 +698,10 @@ enum MemoryBankConnector {
     let fm = FileManager.default
     let url = hermesDir.appendingPathComponent("SOUL.md")
     var soul = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-    if soul.contains(marker) { return false }
+    let updatedSoul = upsertSoulBlock(hermesSoulBlock(), marker: hermesMarker, in: soul)
+    if !updatedSoul.changed { return false }
+    soul = updatedSoul.content
     if !soul.isEmpty && !soul.hasSuffix("\n") { soul += "\n" }
-    soul += "\n" + hermesSoulBlock() + "\n"
     let isSymlink = (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil
     try soul.write(to: url, atomically: !isSymlink, encoding: .utf8)
     return true
@@ -676,10 +709,10 @@ enum MemoryBankConnector {
 
   private static func hermesSoulBlock() -> String {
     """
-    <!-- \(marker) -->
+    <!-- \(hermesMarker) -->
     ## OMI memory (search FIRST)
     Omi is your memory bank. Before any task, search Omi memory first for context, then save durable new facts back to it. The `omi-memory` MCP server is configured for you — use it.
-    <!-- /\(marker) -->
+    <!-- /\(hermesMarker) -->
     """
   }
 

@@ -51,7 +51,6 @@ _MCP_STUB_NAMES = [
     'database.fair_use',
     'database.auth',
     'database.dev_api_key',
-    'database.screen_activity',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',
@@ -284,44 +283,3 @@ class TestSseSearchUtcBounds:
         assert captured['due_start'].tzinfo is not None
         assert captured['due_start'] == datetime(2026, 8, 1, tzinfo=timezone.utc)
         assert captured['due_end'] == datetime(2026, 8, 2, 23, 59, 59, 999999, tzinfo=timezone.utc)
-
-    def test_screen_activity_end_bound_includes_full_end_day(self):
-        """get_screen_activity must pass a UTC end bound that covers the whole
-        end day. The DB layer formats the bound via strftime, so the router must
-        apply the end-of-day increment before the parse's UTC midnight reaches it
-        (previously the end bound was 00:00:00.999 of the end day, dropping the
-        rest of the day)."""
-        captured = {}
-
-        def _get_screen_activity(uid, start_date=None, end_date=None, app_filter=None, limit=None):
-            captured.update(start_date=start_date, end_date=end_date)
-            return []
-
-        with patch.object(mcp_sse_router.screen_activity_db, 'get_screen_activity', side_effect=_get_screen_activity):
-            mcp_sse_router.execute_tool(
-                'user-1',
-                'get_screen_activity',
-                {'start_date': '2026-08-01', 'end_date': '2026-08-02'},
-            )
-
-        assert captured['start_date'].tzinfo is not None
-        assert captured['start_date'].utcoffset() == timezone.utc.utcoffset(None)
-        assert captured['end_date'] == datetime(2026, 8, 2, 23, 59, 59, 999999, tzinfo=timezone.utc)
-
-    def test_screen_activity_summary_end_bound_includes_full_end_day(self):
-        captured = {}
-
-        def _get_screen_activity_summary(uid, start_date=None, end_date=None):
-            captured.update(start_date=start_date, end_date=end_date)
-            return []
-
-        with patch.object(
-            mcp_sse_router.screen_activity_db, 'get_screen_activity_summary', side_effect=_get_screen_activity_summary
-        ):
-            mcp_sse_router.execute_tool(
-                'user-1',
-                'get_screen_activity',
-                {'start_date': '2026-08-01', 'end_date': '2026-08-02', 'summary': True},
-            )
-
-        assert captured['end_date'] == datetime(2026, 8, 2, 23, 59, 59, 999999, tzinfo=timezone.utc)

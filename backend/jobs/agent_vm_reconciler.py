@@ -33,6 +33,7 @@ from services.agent_vm_lifecycle import (
     DEFAULT_ZONE,
     LEASE_HEARTBEAT_SECONDS,
     PRE_CUTOVER_BOOT_IMAGE_MIGRATION_STATES,
+    SCREEN_PRIVACY_VERSION,
     AgentVmLeaseLost,
     AgentVmRelease,
     GceAgentVmClient,
@@ -1593,6 +1594,7 @@ async def reconcile_one(
             },
             vm_fields={
                 "status": "ready",
+                "screenPrivacyVersion": SCREEN_PRIVACY_VERSION,
                 "privateIp": private_ip,
                 **({"stateDisk": state_disk_info} if state_disk_info else {}),
                 **({"ip": public_ip} if public_ip else {}),

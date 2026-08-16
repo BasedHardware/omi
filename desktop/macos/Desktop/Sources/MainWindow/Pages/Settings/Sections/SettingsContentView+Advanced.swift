@@ -25,14 +25,22 @@ extension SettingsContentView {
       // The three assistants that read your screen, and the throttle they share. Each card carries
       // the switch that stops its assistant — which, until this pane rendered them, no surface in the
       // app did. `advanced.taskassistant` is also where the Tasks page's gear button deep-links.
-      advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
-      taskAssistantSubsection
-      advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
-      insightAssistantSubsection
-      advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
-      memoryAssistantSubsection
-      advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
-      analysisThrottleSubsection
+      // Hidden while screen frames are not distributed to assistants: all three are frame-driven
+      // only (no transcript or conversation input), so with `assistantFrameProcessingEnabled` off
+      // every one of these controls — the enable switches, intervals, prompts, app lists, and the
+      // throttle they share — would change nothing. A control that cannot affect the product is
+      // worse than an absent one. Persisted `*AssistantEnabled` defaults are left untouched, so
+      // restoring frame processing restores each user's previous choice exactly.
+      if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+        advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
+        taskAssistantSubsection
+        advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
+        insightAssistantSubsection
+        advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
+        memoryAssistantSubsection
+        advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+        analysisThrottleSubsection
+      }
       advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
       profileAndStatsSubsection
       advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")

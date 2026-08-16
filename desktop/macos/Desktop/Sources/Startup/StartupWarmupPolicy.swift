@@ -98,7 +98,6 @@ enum StartupWarmupPolicy {
   static let initialSettingsSyncDelay: TimeInterval = 5.0
   static let apiKeyFetchDelay: TimeInterval = 9.0
   static let chatPromptContextWarmupDelay: TimeInterval = 10.0
-  static let screenActivitySyncInitialDelay: TimeInterval = 10.0
   static let floatingBarPlanFetchDelay: TimeInterval = 0.0
   static let agentVMProvisioningDelay: TimeInterval = 20.0
   static let proactiveAssistantsStartDelay: TimeInterval = 6.0

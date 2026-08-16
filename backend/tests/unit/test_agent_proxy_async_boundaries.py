@@ -221,7 +221,10 @@ async def test_agent_ws_owns_and_closes_connected_websocket_protocol(agent_proxy
     monkeypatch.setattr(
         agent_proxy,
         "_get_user_context",
-        lambda _uid: ({"status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"}, "standard"),
+        lambda _uid: (
+            {"status": "ready", "ip": "127.0.0.1", "authToken": "vm-token", "screenPrivacyVersion": 1},
+            "standard",
+        ),
     )
     monkeypatch.setattr(agent_proxy, "_get_or_create_chat_session", lambda _uid: {"id": "session-1"})
     monkeypatch.setattr(agent_proxy, "_fetch_chat_history", lambda *_args: [])
@@ -275,6 +278,21 @@ async def test_session_admission_queues_recovery_when_a_lifecycle_lease_wins(age
     ensure_running.assert_awaited_once()
     assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
     assert websocket.closed == [(1013, "Agent VM is draining")]
+
+
+@pytest.mark.asyncio
+async def test_legacy_vm_is_migrated_before_session_health_check(agent_proxy, monkeypatch):
+    websocket = _AgentWebSocket()
+    vm = {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"}
+    ensure_running = AsyncMock(return_value=({**vm, "status": "updating", "ip": None}, False))
+    monkeypatch.setattr(agent_proxy, "_ensure_vm_running_or_close", ensure_running)
+
+    prepared = await agent_proxy._prepare_vm_for_session(websocket, "user-1", vm, asyncio.Event())
+
+    assert prepared is None
+    ensure_running.assert_awaited_once_with(websocket, "user-1", vm, health_failed=True)
+    assert json.loads(websocket.sent[-1])["code"] == "agent_vm_draining"
+    assert websocket.closed == [(1013, "Agent VM is updating")]
 
 
 @pytest.mark.asyncio
@@ -353,7 +371,13 @@ async def test_claimed_session_lease_is_released_when_setup_raises(agent_proxy, 
         agent_proxy,
         "_get_user_context",
         lambda _uid: (
-            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            {
+                "vmName": "omi-agent-user",
+                "status": "ready",
+                "ip": "127.0.0.1",
+                "authToken": "vm-token",
+                "screenPrivacyVersion": 1,
+            },
             "standard",
         ),
     )
@@ -405,7 +429,13 @@ async def test_transient_lease_heartbeat_error_retries_then_confirmed_loss_drain
         agent_proxy,
         "_get_user_context",
         lambda _uid: (
-            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            {
+                "vmName": "omi-agent-user",
+                "status": "ready",
+                "ip": "127.0.0.1",
+                "authToken": "vm-token",
+                "screenPrivacyVersion": 1,
+            },
             "standard",
         ),
     )
@@ -470,7 +500,13 @@ async def test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expire
         agent_proxy,
         "_get_user_context",
         lambda _uid: (
-            {"vmName": "omi-agent-user", "status": "ready", "ip": "127.0.0.1", "authToken": "vm-token"},
+            {
+                "vmName": "omi-agent-user",
+                "status": "ready",
+                "ip": "127.0.0.1",
+                "authToken": "vm-token",
+                "screenPrivacyVersion": 1,
+            },
             "standard",
         ),
     )

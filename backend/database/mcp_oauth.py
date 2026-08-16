@@ -34,9 +34,9 @@ SUPPORTED_SCOPES = [
     "action_items.write",
     "goals.read",
     "chat.read",
-    "screen_activity.read",
     "people.read",
 ]
+RETIRED_SCOPES = {"screen_activity.read"}
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
@@ -660,7 +660,10 @@ def _build_token_pair_writes(
     token_family_id: Optional[str] = None,
 ) -> Tuple[str, str, Any, OAuthAccessTokenDict, Any, OAuthRefreshTokenDict, Any]:
     now = _now()
-    issued_scopes: List[str] = sorted(set(scopes or grant.get("scopes") or []))
+    if scopes is not None:
+        issued_scopes: List[str] = sorted(set(scopes).intersection(SUPPORTED_SCOPES))
+    else:
+        issued_scopes = sorted(set(grant.get("scopes") or []).intersection(SUPPORTED_SCOPES))
     access_token = _new_access_token()
     refresh_token = _new_refresh_token()
     access_id = str(uuid.uuid4())
@@ -777,12 +780,19 @@ def rotate_refresh_token(
             transaction.set(ref, {"replay_detected_at": now, "revoked_at": now}, merge=True)
             return None
         try:
+            stored_scopes = sorted(set(data.get("scopes") or []).intersection(SUPPORTED_SCOPES))
+            if not stored_scopes:
+                return None
+            requested_tokens = [item for item in (scope or "").split(" ") if item]
+            requested_scope = " ".join(item for item in requested_tokens if item not in RETIRED_SCOPES)
+            if scope and not requested_scope:
+                return None
             requested_scopes: List[str] = (
-                normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
+                normalize_scopes(requested_scope, {"allowed_scopes": stored_scopes}) if scope else stored_scopes
             )
         except ValueError:
             return None
-        if not set(requested_scopes).issubset(set(data.get("scopes") or [])):
+        if not set(requested_scopes).issubset(set(stored_scopes)):
             return None
         (
             access_token,

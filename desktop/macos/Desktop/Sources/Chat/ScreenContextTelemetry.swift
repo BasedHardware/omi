@@ -180,8 +180,6 @@ enum ScreenContextToolTelemetry {
     "capture_screen",
     "get_screenshot",
     "show_rewind_evidence",
-    "search_screen_history",
-    "semantic_search",
   ]
 
   static func isScreenContextTool(_ toolName: String) -> Bool {
@@ -266,7 +264,7 @@ enum ScreenContextToolTelemetry {
       return ScreenshotUnavailableClassification(
         code: .imageUnavailable,
         reason: "This screenshot row has no stored image.",
-        hint: "Pick a different screenshot_id from a recent search_screen_history result."
+        hint: "Pick a different screenshot_id from the local screenshot data."
       )
     }
     if error as? RewindError != nil {

@@ -105,10 +105,3 @@ def test_get_goals_non_bool_include_inactive_returns_invalid_params(mcp):
     with pytest.raises(mcp.ToolExecutionError) as exc:
         mcp.execute_tool("test-uid", "get_goals", {"include_inactive": "maybe"})
     assert exc.value.code == -32602
-
-
-def test_get_screen_activity_non_bool_summary_returns_invalid_params(mcp):
-    """A non-boolean summary must return a clean -32602, not crash in parse_mcp_bool (same gap)."""
-    with pytest.raises(mcp.ToolExecutionError) as exc:
-        mcp.execute_tool("test-uid", "get_screen_activity", {"summary": "maybe"})
-    assert exc.value.code == -32602

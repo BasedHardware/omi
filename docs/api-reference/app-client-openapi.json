@@ -44503,6 +44503,7 @@
     },
     "/v1/mcp/screen-activity": {
       "get": {
+        "deprecated": true,
         "operationId": "get_screen_activity_v1_mcp_screen_activity_get",
         "parameters": [
           {
@@ -46567,7 +46568,8 @@
     },
     "/v1/screen-activity/sync": {
       "post": {
-        "operationId": "sync_screen_activity_v1_screen_activity_sync_post",
+        "description": "Tombstone for the retired screen-activity sync route. Stores nothing, ever.\n\nLIFECYCLE: one-time\nDELETE-AFTER: https://github.com/BasedHardware/omi/issues/11018\n\nThe shipped desktop client treats only HTTP 200 as success and never\nadvances its cursor otherwise. It has no terminal-status handling, no\nmax-attempt limit, and no server-driven kill switch, so a 404/410 makes it\nre-POST the *same* OCR batch every five minutes forever: more transmitted\nscreen text and more battery burn than before the change, on installs that\ncannot be updated. Returning 200 with the released response shape lets\nthose clients advance past their backlog and go quiet.\n\n`request` is accepted only so a released app-client contract keeps its body\nand response schema (FastAPI still validates both, which lets an\nun-updated client drain); the body is then discarded and never read,\nparsed, logged, or written: no Firestore document, no Pinecone vector, no\nlog line derived from the payload. Nothing is stored, so the response's\nreleased `0 synced` counts are always zero. This endpoint is a drain, not\na sink.\n\nThis does not fully close the egress — the un-updated client that transmits\nthe OCR payload is still answered. Only a client that stops uploading does\nthat, which is why this is temporary and paired with a client change.",
+        "operationId": "retire_screen_activity_sync_v1_screen_activity_sync_post",
         "parameters": [
           {
             "in": "header",
@@ -46624,7 +46626,7 @@
                   "additionalProperties": {
                     "type": "integer"
                   },
-                  "title": "Response Sync Screen Activity V1 Screen Activity Sync Post",
+                  "title": "Response Retire Screen Activity Sync V1 Screen Activity Sync Post",
                   "type": "object"
                 }
               }
@@ -46650,7 +46652,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Sync Screen Activity"
+        "summary": "Retire Screen Activity Sync"
       }
     },
     "/v1/stripe/connect-accounts": {

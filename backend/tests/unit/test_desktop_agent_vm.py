@@ -38,6 +38,70 @@ def test_vm_publish_transaction_refuses_deletion_admitted_before_commit():
     assert user_ref.reads == 0
 
 
+def test_vm_publish_records_the_screen_privacy_version():
+    """Every published VM state records the screen-privacy generation it was written under.
+
+    Desktop-driven restart migration is gone (the reconciler owns lifecycle), so this
+    marker is what lets a later policy identify VMs published before the screen-egress
+    removal. The desktop is fail-closed independently: it refuses to start a session,
+    sync, or hand over a backend token unless ``/screen-activity-status`` reports that
+    the VM holds no screen data. Existing data is reported, never deleted.
+    """
+    writes = []
+
+    class Ref:
+        def __init__(self, snapshot):
+            self.snapshot = snapshot
+
+        def get(self, transaction=None):
+            return self.snapshot
+
+    deletion_ref = Ref(type('Snapshot', (), {'exists': False, 'to_dict': lambda self: {}})())
+    user_ref = Ref(
+        type(
+            'Snapshot',
+            (),
+            {
+                'exists': True,
+                'to_dict': lambda self: {'agentVm': {'vmName': 'vm', 'authToken': 'token'}},
+            },
+        )()
+    )
+    transaction = type('Transaction', (), {'set': lambda _self, _ref, payload, **kwargs: writes.append(payload)})()
+    raw = getattr(desktop_agent_vm._set_vm_if_current_txn, 'to_wrap', desktop_agent_vm._set_vm_if_current_txn)
+
+    assert raw(transaction, deletion_ref, user_ref, 'vm', 'token', 'ready', '34.1.2.3', 'zone') is True
+    assert writes[0]['agentVm']['screenPrivacyVersion'] == desktop_agent_vm._SCREEN_PRIVACY_VERSION
+
+
+def test_vm_publish_does_not_mark_failed_state_as_screen_private():
+    writes = []
+
+    class Ref:
+        def __init__(self, snapshot):
+            self.snapshot = snapshot
+
+        def get(self, transaction=None):
+            return self.snapshot
+
+    deletion_ref = Ref(type('Snapshot', (), {'exists': False, 'to_dict': lambda self: {}})())
+    user_ref = Ref(
+        type(
+            'Snapshot',
+            (),
+            {
+                'exists': True,
+                'to_dict': lambda self: {'agentVm': {'vmName': 'vm', 'authToken': 'token'}},
+            },
+        )()
+    )
+    transaction = type('Transaction', (), {'set': lambda _self, _ref, payload, **kwargs: writes.append(payload)})()
+    raw = getattr(desktop_agent_vm._set_vm_if_current_txn, 'to_wrap', desktop_agent_vm._set_vm_if_current_txn)
+
+    assert raw(transaction, deletion_ref, user_ref, 'vm', 'token', 'error', None, 'zone') is True
+    assert 'screenPrivacyVersion' not in writes[0]['agentVm']
+
+
 @pytest.mark.asyncio
 async def test_provision_returns_existing_vm_without_scheduling(monkeypatch):
     vm = {"vmName": "omi-agent-user", "ip": "1.2.3.4", "authToken": "omi-token", "status": "ready"}
@@ -1202,6 +1266,10 @@ async def test_health_readiness_rejects_incomplete_runtime_identity_or_state(mon
 
 async def _stopped_instance():
     return "TERMINATED", None
+
+
+async def _running_instance():
+    return "RUNNING", {"networkInterfaces": [{"accessConfigs": [{"natIP": "1.2.3.4"}]}]}
 
 
 async def _async_result(value):

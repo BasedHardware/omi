@@ -425,7 +425,6 @@ enum ChatContentBlock: Identifiable {
 
     switch cleanName {
     case "execute_sql": return "Querying database"
-    case "semantic_search": return "Searching conversations"
     case "spawn_agent": return "Starting agent"
     case "run_agent_and_wait": return "Running agent"
     case "search_tasks": return "Searching tasks"
@@ -458,7 +457,7 @@ enum ChatContentBlock: Identifiable {
     let slowPrefixes = ["bash", "write", "edit", "multiedit", "webfetch", "websearch", "task", "notebookedit"]
     if slowPrefixes.contains(where: { lower.hasPrefix($0) }) { return true }
     let slowExact: Set<String> = [
-      "execute_sql", "semantic_search", "spawn_agent",
+      "execute_sql", "spawn_agent",
       "search_tasks", "run_attempt", "run_agent_and_wait", "send_agent_message",
     ]
     // Strip any embedded summary suffix ("Bash: cmd" style) before matching.
@@ -503,8 +502,6 @@ enum ChatContentBlock: Identifiable {
       } else {
         summary = nil
       }
-    case "semantic_search":
-      summary = input["query"] as? String
     case "spawn_agent":
       summary = (input["objective"] ?? input["brief"] ?? input["query"]) as? String
     case "run_agent_and_wait":

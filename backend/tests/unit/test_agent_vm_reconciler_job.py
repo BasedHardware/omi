@@ -159,7 +159,12 @@ def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypat
     assert StartRequestedApi.starts == 1
     assert StartRequestedApi.waits == [("10.128.0.9", "token", RELEASE)]
     assert updates[-1][0][4]["state"] == "ready"
-    assert updates[-1][1]["vm_fields"] == {"status": "ready", "privateIp": "10.128.0.9", "ip": "34.1.2.3"}
+    assert updates[-1][1]["vm_fields"] == {
+        "status": "ready",
+        "screenPrivacyVersion": reconciler.SCREEN_PRIVACY_VERSION,
+        "privateIp": "10.128.0.9",
+        "ip": "34.1.2.3",
+    }
 
 
 def test_boot_image_drift_requires_operator_recreate_without_mutating_vm(monkeypatch):

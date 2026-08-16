@@ -10,13 +10,6 @@ final class StartupWarmupPolicyTests: XCTestCase {
     )
   }
 
-  func testScreenActivitySyncWaitsUntilAfterDeferredWarmupStarts() {
-    XCTAssertGreaterThan(
-      StartupWarmupPolicy.screenActivitySyncInitialDelay,
-      StartupWarmupPolicy.deferredWarmupDelay
-    )
-  }
-
   func testAgentVMProvisioningWaitsUntilAfterDeferredWarmupStarts() {
     XCTAssertGreaterThan(
       StartupWarmupPolicy.agentVMProvisioningDelay,
@@ -286,13 +279,17 @@ final class StartupWarmupPolicyTests: XCTestCase {
       .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("id: .agentVMProvisioning"))
     XCTAssertTrue(source.contains("id: .conversationWarmup"))
     XCTAssertTrue(source.contains("id: .initialFileIndexing"))
     XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
     XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
     XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups()"))
     XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
+    XCTAssertTrue(source.contains("AgentVMService.shared.ensureProvisioned()"))
+    // The view no longer starts sync directly; AgentVMService owns that step so
+    // it can only run after the VM's screen activity is purged. Static
+    // checker — the behavioral contract lives in AgentVMSessionStartupTests.
+    XCTAssertFalse(source.contains("AgentSyncService.shared.start"))
   }
 
   @MainActor

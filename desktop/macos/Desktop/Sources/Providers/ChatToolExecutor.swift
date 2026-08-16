@@ -237,13 +237,6 @@ class ChatToolExecutor {
     case .executeSql:
       return await executeSQL(toolCall.arguments, expectedOwnerID: expectedOwnerID)
 
-    case .semanticSearch:
-      return await executeSemanticSearch(
-        toolCall.arguments,
-        runID: originatingRunId,
-        attemptID: originatingAttemptId,
-        expectedOwnerID: expectedOwnerID)
-
     case .getDailyRecap:
       return await executeDailyRecap(
         toolCall.arguments,
@@ -1392,7 +1385,6 @@ class ChatToolExecutor {
         "latest_capture_at": stats.newestDate.map { formatter.string(from: $0) } ?? NSNull(),
         "local_affordances": localAffordances,
         "recommended_first_tools": [
-          "search_screen_history for fuzzy Rewind/OCR questions",
           "get_screenshot after a search result returns a screenshot_id",
           "get_daily_recap for today/yesterday/this week",
           "execute_sql for exact read-only local database questions",
@@ -1421,7 +1413,7 @@ class ChatToolExecutor {
   }
 
   private static let localAffordances = [
-    "Rewind screen history and OCR search",
+    "Rewind screen history and OCR data",
     "raw screenshot image retrieval by screenshot_id",
     "local transcription and conversation tables",
     "read-only SQL over the local Omi Desktop database",
