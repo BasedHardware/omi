@@ -29,9 +29,24 @@ export type ViralMetricsSummary = {
 
 export type ViralMetricsPayload = {
   activation: ViralActivationPoint[];
+  /** Preserved daily telemetry so `/dashboard/classic` can still roll weeks. */
+  activationDaily?: ViralActivationPoint[];
+  /** `week` when `activation[]` is the Firestore weekly overlay. */
+  activationBucket?: "day" | "week";
   summary: ViralMetricsSummary;
   [key: string]: unknown;
 };
+
+export type FirestoreActivationCompat = ActivationSeries & {
+  erroredUsers?: number;
+  partial?: boolean;
+};
+
+export function isPartialFirestoreActivation(
+  firestore: FirestoreActivationCompat,
+): boolean {
+  return (firestore.erroredUsers ?? 0) > 0 || firestore.partial === true;
+}
 
 /** Grafana omi-tv selectors: top-level `rate`, `weeks[]` with week/date. */
 export type GrafanaActivationPayload = ActivationSeries & {
@@ -49,12 +64,15 @@ export function toGrafanaActivationPayload(
 
 export function applyFirestoreActivationCompat(
   viral: ViralMetricsPayload,
-  firestore: ActivationSeries | null,
+  firestore: FirestoreActivationCompat | null,
 ): ViralMetricsPayload {
   if (!firestore) return viral;
+  if (isPartialFirestoreActivation(firestore)) return viral;
 
   return {
     ...viral,
+    activationDaily: viral.activationDaily ?? viral.activation,
+    activationBucket: "week",
     activation: firestore.weeks.map((week) => ({
       date: week.week,
       week: week.week,

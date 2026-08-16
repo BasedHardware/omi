@@ -15,9 +15,12 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
+
+ZERO_SHA = re.compile(r"^0+$")
 
 GENERATED_ADMIN_CLIENT_PATTERNS = (
     "web/admin/**/*.generated.ts",
@@ -93,38 +96,54 @@ def admin_deploy_applies(
     return any(path_can_affect_admin_deploy(path) for path in changed_files)
 
 
-def _git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["git", *args], check=False, capture_output=True, text=True)
+def _git(*args: str, cwd: str | Path | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], check=False, capture_output=True, text=True, cwd=cwd)
 
 
-def decide_from_git(*, event_name: str, sha: str | None = None) -> tuple[bool, str]:
+def is_missing_or_zero_sha(value: str | None) -> bool:
+    if value is None:
+        return True
+    stripped = value.strip()
+    return not stripped or bool(ZERO_SHA.fullmatch(stripped))
+
+
+def decide_from_git(
+    *,
+    event_name: str,
+    sha: str | None = None,
+    before: str | None = None,
+    repo: str | Path | None = None,
+) -> tuple[bool, str]:
     if event_name == "workflow_dispatch":
         return True, "workflow_dispatch is always in scope."
 
     target = sha or "HEAD"
-    if _git("cat-file", "-e", f"{target}^{{commit}}").returncode != 0:
+    if _git("cat-file", "-e", f"{target}^{{commit}}", cwd=repo).returncode != 0:
         return True, f"could not resolve triggering commit {target}; deploying fail-closed."
 
-    parent = _git("rev-parse", f"{target}^")
-    if parent.returncode != 0:
-        return True, "could not resolve the triggering commit parent; deploying fail-closed."
+    if is_missing_or_zero_sha(before):
+        return True, "push before SHA is missing or zero; deploying fail-closed."
 
-    parent_sha = parent.stdout.strip()
-    diff = _git("diff", "--name-only", parent_sha, target)
+    before_sha = before.strip()
+    if _git("cat-file", "-e", f"{before_sha}^{{commit}}", cwd=repo).returncode != 0:
+        return True, f"could not resolve push before SHA {before_sha}; deploying fail-closed."
+
+    diff = _git("diff", "--name-only", before_sha, target, cwd=repo)
     if diff.returncode != 0:
-        return True, "could not diff the triggering commit against its parent; deploying fail-closed."
+        return True, "could not diff the full push range; deploying fail-closed."
 
     changed = [line for line in diff.stdout.splitlines() if line.strip()]
     applies = admin_deploy_applies(changed, event_name=event_name, parent_available=True)
     if applies:
-        return True, "the triggering commit can affect admin runtime or deployment inputs."
-    return False, "the triggering commit cannot affect admin runtime or deployment inputs."
+        return True, "the push range can affect admin runtime or deployment inputs."
+    return False, "the push range cannot affect admin runtime or deployment inputs."
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--event-name", default=os.environ.get("EVENT_NAME", ""))
     parser.add_argument("--sha", default=os.environ.get("ADMIN_SCOPE_SHA", ""))
+    parser.add_argument("--before", default=os.environ.get("ADMIN_SCOPE_BEFORE", ""))
     parser.add_argument("--github-output", action="store_true")
     args = parser.parse_args()
 
@@ -133,7 +152,11 @@ def main() -> int:
         print("ERROR: event name is required", file=sys.stderr)
         return 1
 
-    applies, reason = decide_from_git(event_name=event_name, sha=args.sha or None)
+    applies, reason = decide_from_git(
+        event_name=event_name,
+        sha=args.sha or None,
+        before=args.before or None,
+    )
     applies_value = "true" if applies else "false"
     print(f"applies={applies_value}")
     print(reason)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -108,6 +109,110 @@ class AdminDeployScopeClassifierTests(unittest.TestCase):
         )
         self.assertTrue(CLASSIFIER.admin_deploy_applies(None, event_name="push"))
 
+    def test_generated_client_plus_public_build_helper_still_deploys(self) -> None:
+        self.assertTrue(
+            CLASSIFIER.admin_deploy_applies(
+                [
+                    "web/admin/lib/services/omi-api/omiApi.generated.ts",
+                    ".github/actions/deploy-public-build/action.yml",
+                ],
+                event_name="push",
+            )
+        )
+
+
+class AdminDeployPushRangeTests(unittest.TestCase):
+    def git(self, repo: Path, *args: str) -> str:
+        completed = subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=admin-scope-fixture",
+                "-c",
+                "user.email=admin-scope-fixture@example.com",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return completed.stdout.strip()
+
+    def write(self, repo: Path, relative: str, contents: str) -> None:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+
+    def commit(self, repo: Path, message: str) -> str:
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-m", message)
+        return self.git(repo, "rev-parse", "HEAD")
+
+    def repo_with_push_range(self) -> tuple[Path, str, str, str]:
+        temp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp)
+        self.git(temp, "init", "-b", "main")
+        self.write(temp, "README.md", "base\n")
+        before = self.commit(temp, "base")
+        self.write(temp, "web/admin/app/api/omi/stats/activation/route.ts", "export const runtime = true;\n")
+        runtime = self.commit(temp, "admin runtime")
+        self.write(
+            temp,
+            "web/admin/lib/services/omi-api/omiApi.generated.ts",
+            "export const generated = true;\n",
+        )
+        tip = self.commit(temp, "generated client only")
+        return temp, before, runtime, tip
+
+    def test_multi_commit_push_with_earlier_runtime_change_deploys(self) -> None:
+        repo, before, _runtime, tip = self.repo_with_push_range()
+        applies, reason = CLASSIFIER.decide_from_git(
+            event_name="push",
+            sha=tip,
+            before=before,
+            repo=repo,
+        )
+        self.assertTrue(applies)
+        self.assertIn("push range", reason)
+
+    def test_generated_only_tip_skips_when_range_is_also_generated_only(self) -> None:
+        repo, before, runtime, tip = self.repo_with_push_range()
+        applies, _reason = CLASSIFIER.decide_from_git(
+            event_name="push",
+            sha=tip,
+            before=runtime,
+            repo=repo,
+        )
+        self.assertFalse(applies)
+        self.assertNotEqual(before, runtime)
+
+    def test_missing_or_zero_before_deploys_fail_closed(self) -> None:
+        repo, _before, _runtime, tip = self.repo_with_push_range()
+        for before in (None, "", "0" * 40):
+            with self.subTest(before=before):
+                applies, reason = CLASSIFIER.decide_from_git(
+                    event_name="push",
+                    sha=tip,
+                    before=before,
+                    repo=repo,
+                )
+                self.assertTrue(applies)
+                self.assertIn("fail-closed", reason)
+
+    def test_workflow_dispatch_ignores_push_range(self) -> None:
+        repo, before, _runtime, tip = self.repo_with_push_range()
+        applies, reason = CLASSIFIER.decide_from_git(
+            event_name="workflow_dispatch",
+            sha=tip,
+            before=before,
+            repo=repo,
+        )
+        self.assertTrue(applies)
+        self.assertIn("workflow_dispatch", reason)
+
 
 class AdminDeployScopeAdmissionTests(unittest.TestCase):
     def fixture_root(self) -> Path:
@@ -171,6 +276,48 @@ class AdminDeployScopeAdmissionTests(unittest.TestCase):
                 ".github/scripts/check_admin_deploy_scope.py --github-output",
                 "echo applies=true >> \"$GITHUB_OUTPUT\"",
                 "admin scope decision must use the shared admin deploy classifier",
+            ),
+            (
+                "commented needs",
+                "    needs: scope\n",
+                "    # needs: scope\n",
+                "admin deploy job must depend on the scope decision",
+            ),
+            (
+                "commented if",
+                "    if: needs.scope.outputs.applies == 'true'\n",
+                "    # if: needs.scope.outputs.applies == 'true'\n",
+                "admin deploy job must take the environment slot only when scope applies",
+            ),
+            (
+                "commented environment",
+                "    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}\n",
+                "    # environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}\n",
+                "admin deploy job must keep the existing environment: prod expression",
+            ),
+            (
+                "scope step id",
+                "        id: scope\n",
+                "        id: classify\n",
+                "admin scope classifier step must keep id: scope",
+            ),
+            (
+                "scope job output",
+                "      applies: ${{ steps.scope.outputs.applies }}\n",
+                "      applies: 'true'\n",
+                "admin scope job must export applies from steps.scope.outputs.applies",
+            ),
+            (
+                "workflow_dispatch",
+                "  workflow_dispatch:\n    inputs:\n      environment:\n        description: 'Environment to deploy to'\n        required: false\n        default: 'prod'\n        type: choice\n        options: [development, prod]\n",
+                "",
+                "admin deploy must keep workflow_dispatch so manual recovery stays available",
+            ),
+            (
+                "dispatch environment input",
+                "      environment:\n        description: 'Environment to deploy to'\n        required: false\n        default: 'prod'\n        type: choice\n        options: [development, prod]\n",
+                "      branch:\n        description: 'Branch to deploy'\n        required: false\n        default: 'main'\n        type: string\n",
+                "admin deploy workflow_dispatch must expose the environment input",
             ),
         )
         for name, old, new, expected in cases:

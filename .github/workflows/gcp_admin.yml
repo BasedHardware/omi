@@ -48,8 +48,14 @@ jobs:
         id: scope
         env:
           EVENT_NAME: ${{ github.event_name }}
+          ADMIN_SCOPE_SHA: ${{ github.sha }}
+          ADMIN_SCOPE_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
+          before="${ADMIN_SCOPE_BEFORE:-}"
+          if [ -n "$before" ] && ! [[ "$before" =~ ^0+$ ]] && ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$before" || true
+          fi
           python3 .github/scripts/check_admin_deploy_scope.py --github-output
 
   deploy:

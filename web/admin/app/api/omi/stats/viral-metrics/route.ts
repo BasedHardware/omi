@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
-import { applyFirestoreActivationCompat } from "@/lib/activation-compat";
+import {
+  applyFirestoreActivationCompat,
+  type FirestoreActivationCompat,
+} from "@/lib/activation-compat";
 import { activationCacheKey } from "@/app/api/omi/stats/activation/route";
 import { getPayload } from "@/lib/payload-cache";
 import { posthogResults } from "@/lib/posthog";
 import {
   summarizeActivation,
-  type ActivationSeries,
   type DailyActivationPoint,
 } from "@/lib/growth-metrics";
 
@@ -49,8 +51,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         applyFirestoreActivationCompat(
           cache.data,
-          (await getPayload<ActivationSeries>(activationCacheKey(days)))?.data ??
-            null,
+          (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
+            ?.data ?? null,
         ),
       );
     }
@@ -385,7 +387,8 @@ export async function GET(request: NextRequest) {
           totalUsers: totalPowerUsers,
         },
       },
-      (await getPayload<ActivationSeries>(activationCacheKey(days)))?.data ?? null,
+      (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
+        ?.data ?? null,
     );
 
     cache = { data: result, days, timestamp: Date.now() };

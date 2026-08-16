@@ -335,7 +335,7 @@ checks:
     reason: "admin Cloud Run deploys must decide scope before taking the shared prod environment slot"
   - id: admin-deploy-scope-fixtures
     command: ["python3", ".github/scripts/test_check_admin_deploy_scope.py"]
-    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", "web/admin/grafana/dashboards/omi-tv.json", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", "web/admin/grafana/dashboards/omi-tv.json", "web/admin/grafana/apply_omi_tv_dashboard.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "generated-client-only diffs must skip admin deploy; real admin runtime diffs and workflow_dispatch must still deploy"
   - id: web-llm-gateway-only

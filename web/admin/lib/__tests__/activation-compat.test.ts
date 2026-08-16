@@ -59,11 +59,14 @@ describe("applyFirestoreActivationCompat", () => {
   });
 
   it("serves Firestore rate and wall series while keeping telemetry coverage", () => {
-    const result = applyFirestoreActivationCompat(viralPayload(), firestore);
+    const viral = viralPayload();
+    const result = applyFirestoreActivationCompat(viral, firestore);
 
     expect(result.summary.activationRate).toBe(66.7);
     expect(result.summary.activationTelemetryCoverage).toBe(0);
     expect(result.summary.dau).toBe(12);
+    expect(result.activationBucket).toBe("week");
+    expect(result.activationDaily).toEqual(viral.activation);
     expect(result.activation).toEqual([
       {
         date: "2026-08-03",
@@ -73,5 +76,17 @@ describe("applyFirestoreActivationCompat", () => {
         rate: 66.7,
       },
     ]);
+  });
+
+  it("fails open to telemetry when the Firestore cache is partial", () => {
+    const viral = viralPayload();
+    const result = applyFirestoreActivationCompat(viral, {
+      ...firestore,
+      erroredUsers: 2,
+    });
+
+    expect(result).toEqual(viral);
+    expect(result.summary.activationRate).toBeNull();
+    expect(result.activationDaily).toBeUndefined();
   });
 });
