@@ -23,7 +23,17 @@ test("macOS evidence driver authors through the rendered composer and waits for 
   assert.match(driver, /consumerChatAdmissionCount/);
   assert.ok(driver.includes("admitted <= \\#(baseline)"));
   assert.match(driver, /routeDriveState\.chatAdmissionBaseline = number\.intValue/);
-  assert.match(driver, /routeDriveState\.chatSubmitted = value as\? Bool == true/);
+  assert.match(driver, /chatSubmitted = submitted/);
+  assert.match(driver, /listenStartRequested = clicked/);
+  assert.match(driver, /let clicked = Self\.jsFlag\(value\)/);
+  assert.match(driver, /let submitted = Self\.jsFlag\(value\)/);
+  assert.match(driver, /listen-click poll=/);
+  assert.match(driver, /chat-author poll=/);
+  assert.match(driver, /chat-submit poll=/);
+  assert.match(driver, /wait=transcript-after-click/);
+  assert.match(driver, /wait=start-listen-selector/);
+  assert.match(driver, /pollsSinceLatch/);
+  assert.match(driver, /describeJSResult/);
   assert.match(driver, /pageDidFinish\(_ navigation: WKNavigation\?\)/);
   assert.match(driver, /routeDriveState\.acceptFinished\(navigation\)/);
   assert.match(driver, /routeDriveState\.begin\(navigation\)/);
@@ -88,6 +98,8 @@ check("owned Listen navigation begins", routeDriveState.begin(listenNavigation))
 listenNavigation = nil
 check("caller-released owned navigation remains live", retainedListenNavigation.value != nil)
 routeDriveState.listenStartRequested = true
+routeDriveState.listenClickLatchPoll = 4
+routeDriveState.chatSubmitLatchPoll = 9
 let unrelatedNavigation = NSObject()
 check("different navigation is rejected", !routeDriveState.acceptFinished(unrelatedNavigation))
 check("rejected navigation preserves exact ownership", retainedListenNavigation.value != nil)
@@ -102,6 +114,7 @@ if let exactListenNavigation = retainedListenNavigation.value {
 check("accepted navigation releases ownership", retainedListenNavigation.value == nil)
 check("owned Chat navigation begins", routeDriveState.begin(chatNavigation))
 check("new owned route resets prior action state", !routeDriveState.listenStartRequested)
+check("new owned route resets listen latch poll", routeDriveState.listenClickLatchPoll == nil)
 routeDriveState.chatAdmissionBaseline = 2
 routeDriveState.chatSubmitted = true
 check("late Listen completion cannot reset Chat", !routeDriveState.acceptFinished(listenNavigation))
