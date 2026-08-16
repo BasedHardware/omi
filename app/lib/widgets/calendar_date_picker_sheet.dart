@@ -1,7 +1,12 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'package:provider/provider.dart';
 
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
 typedef CalendarYearBuilder = Widget Function({
@@ -36,5 +41,107 @@ CalendarDatePicker2Config getDefaultCalendarConfig({
     weekdayLabelTextStyle: const TextStyle(color: ResponsiveHelper.textTertiary, fontWeight: FontWeight.w500),
     controlsTextStyle: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
     disabledDayTextStyle: const TextStyle(color: ResponsiveHelper.textQuaternary),
+  );
+}
+
+/// Shared date-range picker sheet for filtering the conversation list.
+///
+/// Extracted from two near-identical inline copies (search widget + home
+/// page shortcut button) so the range-picker behavior only needs to be
+/// correct in one place. The "Done" action intentionally uses a neutral
+/// (white) color per INV-UI-1 (see docs/product/invariants/brand-ui.md)
+/// rather than the off-brand accent the two originals used, since this file
+/// already references that accent color for calendar highlighting.
+Future<void> showConversationDateRangePicker(BuildContext context) async {
+  final provider = Provider.of<ConversationProvider>(context, listen: false);
+  final hasExistingFilter = provider.selectedStartDate != null;
+  List<DateTime?> range = [
+    provider.selectedStartDate ?? DateTime.now(),
+    provider.selectedEndDate ?? provider.selectedStartDate ?? DateTime.now(),
+  ];
+
+  await showCupertinoModalPopup<void>(
+    context: context,
+    builder: (BuildContext context) {
+      return Container(
+        height: 420,
+        padding: const EdgeInsets.only(top: 6.0),
+        margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        color: const Color(0xFF1F1F25),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              // Header with Cancel/Remove Filter and Done buttons
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1F1F25),
+                  border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: () async {
+                        if (hasExistingFilter) {
+                          Navigator.of(context).pop();
+                          await provider.clearDateFilter();
+                          PlatformManager.instance.analytics.calendarFilterCleared();
+                        } else {
+                          Navigator.of(context).pop();
+                        }
+                      },
+                      child: Text(
+                        hasExistingFilter ? context.l10n.removeFilter : context.l10n.cancel,
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                    ),
+                    const Spacer(),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      onPressed: () async {
+                        final start = range.isNotEmpty ? range[0] : null;
+                        if (start == null) {
+                          Navigator.of(context).pop();
+                          return;
+                        }
+                        final end = range.length > 1 ? (range[1] ?? start) : start;
+                        Navigator.of(context).pop();
+                        await provider.filterConversationsByDateRange(start, end);
+                        PlatformManager.instance.analytics.calendarFilterApplied(start, end);
+                      },
+                      child: Text(
+                        context.l10n.done,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Date range picker
+              Expanded(
+                child: Material(
+                  color: ResponsiveHelper.backgroundSecondary,
+                  child: CalendarDatePicker2(
+                    config: getDefaultCalendarConfig(
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      currentDate: DateTime.now(),
+                      calendarType: CalendarDatePicker2Type.range,
+                    ),
+                    value: range,
+                    onValueChanged: (dates) {
+                      range = dates;
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
   );
 }
