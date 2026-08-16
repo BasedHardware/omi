@@ -106,8 +106,12 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     let originalPrompt = TaskAssistantSettings.shared.analysisPrompt
     let originalOwner = UserDefaults.standard.string(forKey: .authUserId)
     defer {
-      TaskAssistantSettings.shared.analysisPrompt = originalPrompt
+      // Restore the owner *before* the prompt. The `analysisPrompt` setter records prompt
+      // ownership, which reads whoever is the current owner, so restoring the prompt first
+      // would stamp the shared ownership key with this test's synthetic id and leak it into
+      // the app's real UserDefaults and into whichever test runs next.
       UserDefaults.standard.set(originalOwner, forKey: .authUserId)
+      TaskAssistantSettings.shared.analysisPrompt = originalPrompt
     }
     UserDefaults.standard.set(owner, forKey: .authUserId)
     body()
