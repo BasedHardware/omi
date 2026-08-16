@@ -52,10 +52,14 @@ class MainActivity: FlutterActivity() {
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
-            if (call.method == "drain") {
-                result.success(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages())
-            } else {
-                result.notImplemented()
+            when (call.method) {
+                "drain" -> result.success(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages())
+                "reconcile" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    OmiBleForegroundService.reconcileBackgroundAudioStreaming(enabled)
+                    result.success(true)
+                }
+                else -> result.notImplemented()
             }
         }
 

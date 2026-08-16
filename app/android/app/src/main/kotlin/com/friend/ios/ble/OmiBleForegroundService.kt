@@ -140,6 +140,15 @@ class OmiBleForegroundService : Service() {
                 Log.e(TAG, "Failed to stop service", e)
             }
         }
+
+        /**
+         * Reconcile Flutter's native Omi-audio policy without creating a
+         * streamer just to stop it. The existing streamer owns its pending
+         * frame queue and closes it synchronously when disabled.
+         */
+        fun reconcileBackgroundAudioStreaming(enabled: Boolean, reason: String = "flutter_policy_disabled") {
+            if (!enabled) instance?.stopBackgroundAudioStreamingIfInitialized(reason)
+        }
     }
 
     // ── Per-device state ──
@@ -169,10 +178,16 @@ class OmiBleForegroundService : Service() {
     private var isBluetoothEnabled = true
     private val syncLock = Any()
     private val bleManager get() = OmiBleManager.instance
-    private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
+    private val backgroundAudioStreamer = LazyResourceHandle {
+        OmiBackgroundAudioStreamer(applicationContext)
+    }
     private val batchAudioWriter by lazy { OmiBatchAudioWriter(applicationContext) }
     private val limitlessBatchWriter by lazy { LimitlessBatchAudioWriter(applicationContext) }
     private val limitlessDrainEngine by lazy { LimitlessFlashDrainEngine(applicationContext, limitlessBatchWriter) }
+
+    private fun stopBackgroundAudioStreamingIfInitialized(reason: String) {
+        backgroundAudioStreamer.stopIfInitialized { it.stop(reason) }
+    }
 
     // ── Connection listener — receives GATT events from OmiBleManager ──
 
@@ -286,7 +301,7 @@ class OmiBleForegroundService : Service() {
         // so native keeps receiving audio after the Flutter engine is gone. Never deferred
         // to Dart: enabling notifications is idempotent, and waiting on an engine that is
         // gone left the characteristic subscribed by nobody (issue #10847).
-        val target = backgroundAudioStreamer.configuredAudioTargetFor(address)
+        val target = backgroundAudioStreamer.getOrCreate().configuredAudioTargetFor(address)
             ?: batchAudioWriter.configuredAudioTargetFor(address)
             ?: return
         val hasTarget = services.any { service ->
@@ -700,7 +715,7 @@ class OmiBleForegroundService : Service() {
                 // Batch mode and background streaming are mutually exclusive (gated by
                 // their respective prefs); calling all sinks is safe — each self-gates.
                 batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
-                backgroundAudioStreamer.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
+                backgroundAudioStreamer.getOrCreate().handleCharacteristic(address, serviceUuid, characteristicUuid, value)
                 limitlessDrainEngine.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
             }
         }
@@ -760,7 +775,8 @@ class OmiBleForegroundService : Service() {
     override fun onDestroy() {
         Log.d(TAG, "Service destroying")
         isDestroying = true
-        backgroundAudioStreamer.stop("service_destroyed")
+        backgroundAudioStreamer.stopIfInitialized { it.stop("service_destroyed") }
+        backgroundAudioStreamer.clear()
         batchAudioWriter.stop("service_destroyed")
         limitlessDrainEngine.stop("service_destroyed")
 

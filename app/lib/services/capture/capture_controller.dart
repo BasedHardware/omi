@@ -219,8 +219,7 @@ class CaptureController extends ChangeNotifier
             final frames = _activeSource?.processBytes(bytes) ?? [];
             for (final frame in frames) {
               _wal.getSyncs().phone.onFrameCaptured(frame);
-              if (_socket?.state == SocketServiceState.connected) {
-                _socket?.send(frame.payload);
+              if (_sendAudioIfPolicyCurrent(frame.payload)) {
                 _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
               }
             }
@@ -598,11 +597,25 @@ class CaptureController extends ChangeNotifier
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
     Logger.debug("Transcription settings changed, refreshing socket connection...");
+    // Detach the old socket synchronously, before any awaited native or speech-
+    // profile reconciliation. Phone-mic and BLE callbacks must not get another
+    // chance to send through the previous policy while this method yields.
+    final previousSocket = _socket;
+    _socket = null;
+    _transcriptServiceReady = false;
+    await previousSocket?.stop(reason: 'transcription settings changed');
+
+    final customSttConfig = SharedPreferencesUtil().customSttConfig;
+    if (customSttConfig.isEnabled && customSttConfig.isLocalOnlyPolicy) {
+      // This awaited operation shares SocketServicePool's creation mutex, so
+      // an already-connected speech-profile socket cannot survive the policy
+      // transition or race with a new one.
+      await ServiceManager.instance().socket.stopSpeechProfile();
+    }
     await _reconcileNativeBackgroundStreamingPolicy();
 
     // Handle device recording
     if (_recordingDevice != null) {
-      await _socket?.stop(reason: 'transcription settings changed');
       BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
       return;
@@ -610,7 +623,6 @@ class CaptureController extends ChangeNotifier
 
     // Handle phone mic recording
     if (recordingState == RecordingState.record) {
-      await _socket?.stop(reason: 'transcription settings changed');
       await _initiateWebsocket(
         audioCodec: BleAudioCodec.pcm16,
         sampleRate: 16000,
@@ -962,6 +974,20 @@ class CaptureController extends ChangeNotifier
     );
   }
 
+  /// Final Dart audio-egress boundary shared by BLE and phone-mic paths.
+  /// Returns true only when the payload was sent through a socket created for
+  /// the currently persisted STT policy.
+  bool _sendAudioIfPolicyCurrent(List<int> payload) {
+    final activeSocket = _socket;
+    final persistedConfig = SharedPreferencesUtil().customSttConfig;
+    final persistedSttConfigId = persistedConfig.isEnabled ? persistedConfig.sttConfigId : 'omi:default';
+    if (activeSocket?.state != SocketServiceState.connected || activeSocket?.sttConfigId != persistedSttConfigId) {
+      return false;
+    }
+    activeSocket?.send(payload);
+    return true;
+  }
+
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
@@ -1002,10 +1028,8 @@ class CaptureController extends ChangeNotifier
           }
         }
 
-        // Send WS
-        if (_socket?.state == SocketServiceState.connected) {
-          final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
-          _socket?.send(socketPayload);
+        final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
+        if (_sendAudioIfPolicyCurrent(socketPayload)) {
 
           // Track bytes sent to websocket
           _metrics.addSocketBytes(socketPayload.length);
@@ -1234,7 +1258,7 @@ class CaptureController extends ChangeNotifier
 
   bool get _nativeOmiRawAudioAllowed {
     final config = SharedPreferencesUtil().customSttConfig;
-    return !config.isEnabled || config.sendRawAudioToOmi;
+    return !config.isEnabled || config.forwardsRawAudioToOmi;
   }
 
   bool get _shouldEnableNativeBackgroundStreaming =>
@@ -1244,10 +1268,24 @@ class CaptureController extends ChangeNotifier
       _nativeOmiRawAudioAllowed;
 
   Future<void> _reconcileNativeBackgroundStreamingPolicy() async {
+    final shouldEnable = _shouldEnableNativeBackgroundStreaming;
     await SharedPreferencesUtil().saveBool(
       'nativeBleStreamingEnabled',
-      _shouldEnableNativeBackgroundStreaming,
+      shouldEnable,
     );
+
+    if (shouldEnable || !Platform.isAndroid) return;
+
+    // The native foreground service can outlive this Flutter engine. Await the
+    // bridge so an existing native Omi streamer is closed before this policy
+    // transition returns; the native side is a no-op when no streamer exists.
+    try {
+      await _nativeBleTranscriptChannel.invokeMethod<void>('reconcile', {'enabled': false});
+    } on MissingPluginException {
+      return;
+    } catch (e) {
+      Logger.debug('Failed to reconcile native BLE transcript streaming: $e');
+    }
   }
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
@@ -1488,8 +1526,7 @@ class CaptureController extends ChangeNotifier
               for (final frame in frames) {
                 _wal.getSyncs().phone.onFrameCaptured(frame);
 
-                if (_socket?.state == SocketServiceState.connected) {
-                  _socket?.send(frame.payload);
+                if (_sendAudioIfPolicyCurrent(frame.payload)) {
                   _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
                 }
               }
@@ -1538,8 +1575,7 @@ class CaptureController extends ChangeNotifier
       final flushed = _activeSource?.flush() ?? [];
       for (final frame in flushed) {
         _wal.getSyncs().phone.onFrameCaptured(frame);
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(frame.payload);
+        if (_sendAudioIfPolicyCurrent(frame.payload)) {
           _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
         }
       }

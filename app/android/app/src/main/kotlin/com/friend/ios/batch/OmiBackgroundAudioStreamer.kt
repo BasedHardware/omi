@@ -57,7 +57,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         .connectTimeout(15, TimeUnit.SECONDS)
         .build()
     private val lock = Any()
-    private val pendingFrames = ArrayDeque<ByteArray>()
+    private val pendingFrames = OmiBackgroundAudioStreamingLifecycle(MAX_PENDING_FRAMES)
     private var socket: WebSocket? = null
     private var connecting = false
     private var connected = false
@@ -90,19 +90,30 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             connected = false
             activeUrl = null
             activeConfig = null
-            pendingFrames.clear()
+            pendingFrames.invalidateSession()
         }
+        clearCachedTranscriptMessages()
         socketToClose?.close(1000, reason)
     }
 
     fun handleCharacteristic(address: String, serviceUuid: String, characteristicUuid: String, value: ByteArray) {
+        // Capture before parsing or transforming. stop()/reconfigure invalidates
+        // this generation, so a callback already in flight cannot attach its
+        // old BLE payload to a later re-enabled stream with the same config.
+        val callbackGeneration = synchronized(lock) { pendingFrames.currentGeneration() }
         val config = loadConfig()
         if (config == null) {
-            if (socket != null) stop("disabled")
+            val hasActiveStream = synchronized(lock) {
+                socket != null || connecting || connected || activeConfig != null
+            }
+            if (hasActiveStream) stop("disabled")
             return
         }
         if (OmiBleManager.isFlutterAlive && boolPref("nativeBleForegroundReady", false)) {
-            if (socket != null) stop("foreground_ready")
+            val hasActiveStream = synchronized(lock) {
+                socket != null || connecting || connected || activeConfig != null
+            }
+            if (hasActiveStream) stop("foreground_ready")
             return
         }
         if (!config.deviceId.equals(address, ignoreCase = true)) return
@@ -111,10 +122,10 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         val frames = transformFrames(config, value)
         if (frames.isEmpty()) return
 
-        ensureSocket(config)
+        val session = ensureSocket(config, callbackGeneration) ?: return
 
         for (frame in frames) {
-            sendOrQueue(frame)
+            sendOrQueue(config, session, frame)
         }
     }
 
@@ -147,16 +158,26 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             }
         }
 
-    private fun ensureSocket(config: Config) {
-        val now = System.currentTimeMillis()
-        if (now - lastFailureAtMs < RECONNECT_BACKOFF_MS) return
-
-        val url = buildUrl(config) ?: return
-        val request = buildRequest(url) ?: return
-
+    private fun ensureSocket(
+        config: Config,
+        callbackGeneration: Long
+    ): OmiBackgroundAudioStreamingLifecycle.Session? {
         synchronized(lock) {
+            // The callback may have loaded this config before a concurrent
+            // policy transition. Re-read it under the stream monitor before
+            // opening anything, including after the reconnect backoff check.
+            if (!pendingFrames.isGenerationCurrent(callbackGeneration)) return null
+            val currentConfig = loadConfig()
+            if (currentConfig == null || currentConfig != config) return null
+
+            val now = System.currentTimeMillis()
+            if (now - lastFailureAtMs < RECONNECT_BACKOFF_MS) return null
+
+            val url = buildUrl(currentConfig) ?: return null
+            val request = buildRequest(url) ?: return null
+
             if ((connecting || connected) && activeUrl == url && activeConfig == config && socket != null) {
-                return
+                return pendingFrames.currentSession()
             }
 
             socket?.close(1000, "reconfigure")
@@ -164,24 +185,46 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             connecting = true
             connected = false
             activeUrl = url
-            activeConfig = config
+            val configChanged = activeConfig != currentConfig
+            activeConfig = currentConfig
             sentFrames = 0
+            if (configChanged) {
+                pendingFrames.invalidateSession()
+            }
+            val session = pendingFrames.beginSession()
 
-            Log.i(TAG, "Opening background transcription websocket (codec=${config.codec}, source=${config.source})")
-            socket = client.newWebSocket(request, listener())
+            Log.i(TAG, "Opening background transcription websocket (codec=${currentConfig.codec}, source=${currentConfig.source})")
+            socket = client.newWebSocket(request, listener(session))
+            return session
         }
     }
 
-    private fun listener(): WebSocketListener = object : WebSocketListener() {
+    private fun listener(session: OmiBackgroundAudioStreamingLifecycle.Session): WebSocketListener = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            val queued = mutableListOf<ByteArray>()
+            var queued = emptyList<ByteArray>()
+            var closeReason: String? = null
             synchronized(lock) {
-                if (webSocket != socket) return
-                connecting = false
-                connected = true
-                while (pendingFrames.isNotEmpty()) {
-                    queued.add(pendingFrames.removeFirst())
+                if (webSocket != socket || !pendingFrames.isCurrent(session)) return
+                val currentConfig = loadConfig()
+                val policyAllowsStreaming = currentConfig != null && currentConfig == activeConfig
+                if (!policyAllowsStreaming) {
+                    pendingFrames.drainOnOpen(session, policyAllowsStreaming = false)
+                    socket = null
+                    connecting = false
+                    connected = false
+                    activeUrl = null
+                    activeConfig = null
+                    closeReason = "policy_disabled"
+                } else {
+                    connecting = false
+                    connected = true
+                    queued = pendingFrames.drainOnOpen(session, policyAllowsStreaming = true)
                 }
+            }
+            closeReason?.let { reason ->
+                Log.i(TAG, "Discarding queued background audio after policy changed")
+                webSocket.close(1000, reason)
+                return
             }
             Log.i(TAG, "Background transcription socket connected")
             for (frame in queued) {
@@ -190,7 +233,15 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            cacheTranscriptMessage(text)
+            synchronized(lock) {
+                val currentConfig = loadConfig()
+                if (webSocket != socket || !connected || !pendingFrames.isCurrent(session) ||
+                    currentConfig == null || currentConfig != activeConfig
+                ) {
+                    return
+                }
+                cacheTranscriptMessage(text)
+            }
             Log.d(TAG, "Background transcription message received (${text.length} chars)")
         }
 
@@ -200,55 +251,80 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             synchronized(lock) {
-                if (webSocket != socket) return
+                if (webSocket != socket || !pendingFrames.isCurrent(session)) return
                 socket = null
                 connecting = false
                 connected = false
+                activeUrl = null
+                activeConfig = null
+                pendingFrames.invalidateSession()
+                sentFrames = 0
             }
             Log.i(TAG, "Background transcription socket closed (code=$code)")
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             synchronized(lock) {
-                if (webSocket != socket) return
+                if (webSocket != socket || !pendingFrames.isCurrent(session)) return
                 socket = null
                 connecting = false
                 connected = false
+                activeUrl = null
+                activeConfig = null
+                pendingFrames.invalidateSession()
+                sentFrames = 0
                 lastFailureAtMs = System.currentTimeMillis()
             }
             Log.w(TAG, "Background transcription socket failed: ${t.message}")
         }
     }
 
-    private fun sendOrQueue(frame: ByteArray) {
+    private fun sendOrQueue(
+        config: Config,
+        session: OmiBackgroundAudioStreamingLifecycle.Session,
+        frame: ByteArray
+    ) {
         var target: WebSocket? = null
         synchronized(lock) {
-            target = if (connected) socket else null
+            // A callback can reach this method after stop() or after the
+            // persisted policy/config changed. Never queue that stale audio.
+            val currentConfig = loadConfig()
+            if (currentConfig == null || currentConfig != config || !pendingFrames.isCurrent(session)) return
+
+            target = if (connected && activeConfig == currentConfig) socket else null
             if (target == null) {
-                queueFrameLocked(frame)
+                queueFrameLocked(session, frame)
                 return
             }
         }
         val webSocket = target ?: return
         if (!sendFrame(webSocket, frame)) {
             synchronized(lock) {
-                queueFrameLocked(frame)
+                val currentConfig = loadConfig()
+                if (currentConfig == config && currentConfig == activeConfig && pendingFrames.isCurrent(session)) {
+                    queueFrameLocked(session, frame)
+                }
             }
         }
     }
 
-    private fun sendFrame(webSocket: WebSocket, frame: ByteArray): Boolean {
+    private fun sendFrame(webSocket: WebSocket, frame: ByteArray): Boolean = synchronized(lock) {
+        // Serialize sends with stop(). Once a disabling reconcile has acquired
+        // this lock and returned, no stale frame can be written to the old
+        // socket. Revalidate persisted policy at the final send boundary too.
+        val currentConfig = loadConfig()
+        if (webSocket != socket || !connected || currentConfig == null || currentConfig != activeConfig) {
+            return@synchronized false
+        }
+
         val sent = webSocket.send(frame.toByteString())
         if (sent) {
-            val totalSent = synchronized(lock) {
-                sentFrames += 1
-                sentFrames
-            }
-            if (totalSent % 100 == 0) {
-                Log.i(TAG, "Sent $totalSent background BLE audio frames")
+            sentFrames += 1
+            if (sentFrames % 100 == 0) {
+                Log.i(TAG, "Sent $sentFrames background BLE audio frames")
             }
         }
-        return sent
+        sent
     }
 
     private fun cacheTranscriptMessage(text: String) {
@@ -263,11 +339,14 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         }
     }
 
-    private fun queueFrameLocked(frame: ByteArray) {
-        if (pendingFrames.size >= MAX_PENDING_FRAMES) {
-            pendingFrames.removeFirst()
+    private fun clearCachedTranscriptMessages() {
+        synchronized(transcriptCacheLock) {
+            cachedTranscriptMessages.clear()
         }
-        pendingFrames.addLast(frame.copyOf())
+    }
+
+    private fun queueFrameLocked(session: OmiBackgroundAudioStreamingLifecycle.Session, frame: ByteArray) {
+        pendingFrames.queueFrameIfCurrent(session, frame)
     }
 
     private fun loadConfig(): Config? {

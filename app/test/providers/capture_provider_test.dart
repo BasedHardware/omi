@@ -980,7 +980,7 @@ void main() {
       await SharedPreferencesUtil().saveCustomSttConfig(
         const CustomSttConfig(
           provider: SttProvider.onDeviceWhisper,
-          sendRawAudioToOmi: false,
+          privacyPolicy: SttPrivacyPolicy.transcriptOnly,
         ),
       );
       final provider = CaptureProvider();
@@ -1087,7 +1087,7 @@ void main() {
       await SharedPreferencesUtil().saveCustomSttConfig(
         const CustomSttConfig(
           provider: SttProvider.onDeviceWhisper,
-          sendRawAudioToOmi: false,
+          privacyPolicy: SttPrivacyPolicy.transcriptOnly,
         ),
       );
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);

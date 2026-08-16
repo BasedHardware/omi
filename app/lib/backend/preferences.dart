@@ -182,7 +182,7 @@ class SharedPreferencesUtil {
     } catch (e, stack) {
       Logger.debug('Error parsing customSttConfig: $e');
       Logger.debug('Stack: $stack');
-      return CustomSttConfig.defaultConfig;
+      return CustomSttConfig.privacySafeFallbackConfig;
     }
   }
 
