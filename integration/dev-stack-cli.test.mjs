@@ -128,13 +128,25 @@ test("RED-PROOF occupied 5290 is named and never killed or replaced", async () =
   for (const pid of listenerPids) assert.doesNotThrow(() => process.kill(pid, 0));
 });
 
-test("RED-PROOF --assert --lease still refuses an occupied 5290 and does not drift", async () => {
+test("RED-PROOF --lease takes a verification origin and leaves 5290 alone", async () => {
+  const rootPair = roots();
+  writeService(rootPair, "process.env.OMI_RUN_ID");
   const listenerPids = await occupy(5290);
-  const result = run(["--assert", "--lease", "--run-id", "run-occupied-5290-lease"]);
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /required port 5290 is occupied/);
-  assert.doesNotMatch(result.stdout + result.stderr, /service-ready/);
+  const result = run(["--up", "--lease", "--run-id", "run-lease-beside-5290"], rootPair);
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  assert.match(result.stdout, /service-ready/);
+  assert.match(result.stdout, /lease service=\d+ gateway=\d+ surface=\d+/);
+  assert.doesNotMatch(result.stdout + result.stderr, /required port 5290 is occupied/);
+  const lease = JSON.parse(readFileSync(join(scratch, "run-root", "port-lease.json"), "utf8"));
+  assert.notEqual(lease.ports.surface, 5290);
+  assert.ok(lease.ports.surface >= 15290 && lease.ports.surface <= 15309);
+  assert.notEqual(lease.ports.service, 4851);
   for (const pid of listenerPids) assert.doesNotThrow(() => process.kill(pid, 0));
+  assert.ok(listenerPids.every((pid) => portPids(5290).includes(pid)));
+  const stop = run(["--stop"], rootPair);
+  assert.equal(stop.status, 0, `${stop.stdout}${stop.stderr}`);
+  for (const pid of listenerPids) assert.doesNotThrow(() => process.kill(pid, 0));
+  assert.ok(listenerPids.every((pid) => portPids(5290).includes(pid)));
 });
 
 test("RED-PROOF occupied 4851 refuses a second service listener and preserves its owner", async () => {
@@ -224,6 +236,8 @@ test("RED-PROOF --stop frees the local test gateway this harness started", () =>
   const lease = JSON.parse(readFileSync(join(scratch, "run-root", "port-lease.json"), "utf8"));
   assert.notEqual(lease.ports.gateway, 8788);
   assert.notEqual(lease.ports.service, 4851);
+  assert.notEqual(lease.ports.surface, 5290);
+  assert.ok(lease.ports.surface >= 15290 && lease.ports.surface <= 15309);
   assert.ok(portPids(lease.ports.gateway).length > 0);
 
   const stop = run(["--stop"], rootPair);
@@ -299,6 +313,9 @@ test("RED-PROOF two --up --lease stacks reach green concurrently on distinct por
   const leaseB = JSON.parse(readFileSync(join(runB, "port-lease.json"), "utf8"));
   assert.notEqual(leaseA.ports.service, leaseB.ports.service);
   assert.notEqual(leaseA.ports.gateway, leaseB.ports.gateway);
+  assert.notEqual(leaseA.ports.surface, leaseB.ports.surface);
+  assert.ok(leaseA.ports.surface >= 15290 && leaseA.ports.surface <= 15309);
+  assert.ok(leaseB.ports.surface >= 15290 && leaseB.ports.surface <= 15309);
   assert.ok(portPids(leaseA.ports.service).length > 0);
   assert.ok(portPids(leaseB.ports.service).length > 0);
   assert.ok(portPids(leaseA.ports.gateway).length > 0);

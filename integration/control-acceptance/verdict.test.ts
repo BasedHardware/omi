@@ -248,6 +248,7 @@ test("the runner is a sibling of --accept and never aims at production", () => {
   assert.match(run, /Does not send Chat/);
   assert.match(run, /real-model proxy is bound on 8791/);
   assert.match(run, /"--up", "--lease"/);
+  assert.match(run, /refusing to use the pinned app origin 5290/);
   assert.doesNotMatch(run, /if \(!SCREEN_PROOF && !serviceUp && !gatewayUp\)/);
   assert.match(run, /OMI_PROBE_MAX_ATTEMPTS: "100"/);
   assert.doesNotMatch(run, /OMI_PROBE_MAX_ATTEMPTS: "150"/);

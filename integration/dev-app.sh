@@ -14,6 +14,9 @@ STACK="$HERE/dev-stack.sh"
 MACOS_LAUNCHER="$CORE_REPO/frontend/shells/macos/scripts/dev-run-macos.sh"
 SERVICE_URL="http://127.0.0.1:4851"
 GATEWAY_URL="http://127.0.0.1:8788"
+# Pinned app origin. Verification runs lease 15290-15309 instead.
+# Persistence across relaunch is a property only this path needs.
+# Do not point this launcher at a leased port to "share code" with L3.
 SURFACE_URL="http://127.0.0.1:5290"
 RUNDIR="${OMI_DEV_STACK_RUNDIR:-/tmp/omi-dev-stack}"
 OWNERFILE="$RUNDIR/service-owner.json"

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -11,7 +11,11 @@ import {
   parseLsofListenOutput,
 } from "./loopback";
 import {
+  PORT_LEASE_SCHEMA,
+  PRODUCTION_SURFACE_PORT,
+  PORT_LEASE_RANGES,
   acquirePortLease,
+  isSurfaceTestPort,
   listenerPids,
   portLeaseLockPath,
 } from "./port-lease";
@@ -56,6 +60,21 @@ async function occupy(port: number): Promise<number> {
   }
   throw new Error(`test listener did not bind ${port}`);
 }
+
+describe("surface verification range is not the pinned app origin", () => {
+  test("5290 is outside the leased surface range", () => {
+    expect(PRODUCTION_SURFACE_PORT).toBe(5290);
+    expect(isSurfaceTestPort(5290)).toBe(false);
+    expect(isSurfaceTestPort(PORT_LEASE_RANGES.surface.min)).toBe(true);
+    expect(isSurfaceTestPort(PORT_LEASE_RANGES.surface.max)).toBe(true);
+    expect(PORT_LEASE_RANGES.surface.min).toBe(15_290);
+    expect(PORT_LEASE_RANGES.surface.max).toBe(15_309);
+    expect(
+      PRODUCTION_SURFACE_PORT < PORT_LEASE_RANGES.surface.min
+      || PRODUCTION_SURFACE_PORT > PORT_LEASE_RANGES.surface.max,
+    ).toBe(true);
+  });
+});
 
 describe("production assertPortInRange is unchanged", () => {
   test("allows port 4851", () => {
@@ -205,6 +224,73 @@ describe("port lease is run-scoped and self-releasing", () => {
     try {
       expect(next.record.port).toBe(24_921);
       expect(next.record.runId).toBe("run-after-kill");
+    } finally {
+      next.release();
+    }
+  });
+
+  test.serial("surface acquire stays in 15290-15309 and never returns 5290", () => {
+    const leaseRoot = scratch();
+    const lease = acquirePortLease({ role: "surface", runId: "run-surface-range", leaseRoot });
+    try {
+      expect(lease.record.role).toBe("surface");
+      expect(isSurfaceTestPort(lease.record.port)).toBe(true);
+      expect(lease.record.port).not.toBe(PRODUCTION_SURFACE_PORT);
+    } finally {
+      lease.release();
+    }
+  });
+
+  test.serial("a live listener on a stale surface lock is skipped, never evicted", async () => {
+    const leaseRoot = scratch();
+    const occupiedPort = 24_930;
+    const freePort = 24_931;
+    const lockPath = portLeaseLockPath("surface", occupiedPort, leaseRoot);
+    writeFileSync(lockPath, `${JSON.stringify({
+      schema: PORT_LEASE_SCHEMA,
+      role: "surface",
+      port: occupiedPort,
+      pid: 999_999_999,
+      startIdentity: "dead-holder-start-identity",
+      runId: "run-stale-surface",
+    })}\n`);
+    const occupant = await occupy(occupiedPort);
+    const lease = acquirePortLease({
+      role: "surface",
+      runId: "run-skip-stale-surface-listener",
+      leaseRoot,
+      range: { min: occupiedPort, max: freePort },
+    });
+    try {
+      expect(lease.record.port).toBe(freePort);
+      expect(() => process.kill(occupant, 0)).not.toThrow();
+      expect(listenerPids(occupiedPort)).toContain(occupant);
+    } finally {
+      lease.release();
+    }
+  });
+
+  test.serial("a dead surface holder with no listener yields the stale lock", () => {
+    const leaseRoot = scratch();
+    const port = 24_932;
+    const lockPath = portLeaseLockPath("surface", port, leaseRoot);
+    writeFileSync(lockPath, `${JSON.stringify({
+      schema: PORT_LEASE_SCHEMA,
+      role: "surface",
+      port,
+      pid: 999_999_999,
+      startIdentity: "dead-holder-start-identity",
+      runId: "run-dead-surface",
+    })}\n`);
+    const next = acquirePortLease({
+      role: "surface",
+      runId: "run-after-dead-surface",
+      leaseRoot,
+      range: { min: port, max: port },
+    });
+    try {
+      expect(next.record.port).toBe(port);
+      expect(next.record.runId).toBe("run-after-dead-surface");
     } finally {
       next.release();
     }

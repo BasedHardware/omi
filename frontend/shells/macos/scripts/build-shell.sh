@@ -159,4 +159,10 @@ fi
 
 echo "built: ${app/#$here/.}"
 echo "surface: $OMI_SURFACES_DIST -> Contents/Resources/surface/"
-echo "origin: http://127.0.0.1:5290/ (fixed; IndexedDB persists across relaunch)"
+pinned_origin_port=5290
+origin_port="${OMI_SURFACE_PORT:-$pinned_origin_port}"
+if [[ "$origin_port" == "$pinned_origin_port" ]]; then
+  echo "origin: http://127.0.0.1:${origin_port}/ (pinned app origin; IndexedDB persists across relaunch)"
+else
+  echo "origin: http://127.0.0.1:${origin_port}/ (verification origin; clean IndexedDB is the point — do not fold this back into ${pinned_origin_port})"
+fi

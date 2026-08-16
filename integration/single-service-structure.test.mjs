@@ -44,12 +44,25 @@ test("RED-PROOF L3 has no no-ios, generation split, attach, or soft shell skip",
   assert.match(stack, /iOS launcher is absent or not executable/);
 });
 
-test("RED-PROOF macOS registered evidence is a loopback origin from the run lease", () => {
+test("RED-PROOF the pinned app origin and the leased verification origin stay distinct", () => {
+  // red-proof: fold verification back onto 5290, or drop the lease-path
+  // refusal and let a lane report green against the app's IndexedDB.
+  const lease = read("../apps/service/net/port-lease.ts");
+  const app = read("./dev-app.sh");
   assert.match(stack, /MACOS_ORIGIN="http:\/\/127\.0\.0\.1:5290"/);
   assert.match(stack, /held="\$\(listener 5290\)"/);
   assert.match(stack, /required port 5290 is occupied/);
-  assert.match(macos, /port="\$\{OMI_SURFACE_PORT:-5290\}"/);
-  assert.match(macos, /"\$port" != "5290"/);
+  assert.match(stack, /LEASE_ROLES="service,gateway,surface"/);
+  assert.match(stack, /refusing to use or fall back to the pinned app origin 5290/);
+  assert.match(lease, /SURFACE_TEST_PORT_MIN = 15_290/);
+  assert.match(lease, /SURFACE_TEST_PORT_MAX = 15_309/);
+  assert.match(macos, /PINNED_APP_ORIGIN_PORT=5290/);
+  assert.match(macos, /VERIFICATION_SURFACE_PORT_MIN=15290/);
+  assert.match(macos, /do not fold this path back into/);
+  assert.match(app, /OMI_SURFACE_PORT=5290/);
+  assert.match(app, /SURFACE_URL="http:\/\/127\.0\.0\.1:5290"/);
+  assert.doesNotMatch(app, /OMI_SURFACE_PORT=15290|OMI_SURFACE_PORT="\$|--lease/);
+  assert.match(control, /refusing to use the pinned app origin 5290/);
   assert.doesNotMatch(`${lanes}\n${doctor}`, /529[1-9]/);
   assert.doesNotMatch(stack, /for candidate|free_port|kill.*5290/);
   assert.match(stack, /--lease/);
