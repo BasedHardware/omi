@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Mic,
   Monitor,
+  Paperclip,
   Plus,
   RefreshCw,
   Search,
@@ -32,6 +33,7 @@ import {
 export type ProductionIconName =
   | "alert"
   | "apps"
+  | "attach"
   | "back"
   | "calendar"
   | "check"
@@ -56,6 +58,7 @@ export type ProductionIconName =
 const productionIcons: Readonly<Record<ProductionIconName, LucideIcon>> = {
   alert: CircleAlert,
   apps: LayoutGrid,
+  attach: Paperclip,
   back: ChevronLeft,
   calendar: CalendarDays,
   check: CircleCheck,

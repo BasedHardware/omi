@@ -339,10 +339,10 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   font-size: var(--type-label-size);
 }
 
-/* Input first, then the two controls that act on it. */
+/* Attach, input, send — the order Swift's ChatInputView HStack uses. */
 .chat-composer-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-sm);
   align-items: end;
 }
@@ -367,8 +367,16 @@ html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
   cursor: not-allowed;
 }
 
+/* Square, so the leading slot is a glyph's worth of chrome rather than a word's
+   worth of button. Swift draws this at 32pt; the tap target is the floor here
+   and does not come down to match it. */
 .chat-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--min-tap-target);
   min-height: var(--min-tap-target);
+  padding-inline: 0;
 }
 
 html[data-platform="mobile"] .chat-header > div:first-child {
@@ -388,9 +396,9 @@ html[data-platform="mobile"] .chat-composer {
 }
 
 /* Two columns here, with Send on its own full-width row below. Follows the
-   desktop order: the input takes the wide column, attach the narrow one. */
+   desktop order: attach takes the narrow column, the input the wide one. */
 html[data-platform="mobile"] .chat-composer-row {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
 html[data-platform="mobile"] .chat-send {

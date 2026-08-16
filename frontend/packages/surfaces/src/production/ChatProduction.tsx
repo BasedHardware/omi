@@ -24,6 +24,7 @@ import {
   reconcileMessages,
 } from "./chat-reconcile.js";
 import { ProductionChrome } from "./ProductionChrome.js";
+import { ProductionIcon } from "./ProductionIcon.js";
 import { ProductionDataSourceBadge, ProductionEmptyState, ProductionLifecycleRegion, ProductionLiveAnnouncement, ProductionPageHeader, type ProductionAnnouncementScheduler } from "./ProductionPrimitives.js";
 import "./chat.css";
 
@@ -867,19 +868,15 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
           )}
           {attachmentHint && <p id="chat-attachment-hint" className="chat-attachment-hint">{attachmentHint}</p>}
           {/*
-            The field the reader came to type in leads the row; attaching and
-            sending follow it. A secondary control between the composer's edge
-            and the input made the textarea the middle of three things.
+            Attach leads the row as a compact glyph, then the input, then Send —
+            Swift's order and Swift's weight (ChatInputView: `HStack { paperclip
+            Button; ...; input }`, a plain 32pt `Image(systemName: "paperclip")`
+            in secondary ink whose name lives in `.help("Attach files")`, not in
+            visible text). A word-width secondary button in that slot was the
+            third answer; the glyph is why the leading position reads as chrome
+            rather than as competition for the field.
           */}
           <div className="chat-composer-row">
-            <textarea
-              ref={draftRef}
-              className="chat-draft"
-              value={draft}
-              placeholder={t(locale, "chat.composerPlaceholder")}
-              aria-label={t(locale, "chat.composerLabel")}
-              onChange={(event) => setDraft(event.target.value)}
-            />
             <button
               type="button"
               className="chat-attach control-tertiary"
@@ -889,8 +886,16 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               title={attachmentTitle}
               onClick={() => void attach()}
             >
-              {t(locale, "chat.attach")}
+              <ProductionIcon name="attach" />
             </button>
+            <textarea
+              ref={draftRef}
+              className="chat-draft"
+              value={draft}
+              placeholder={t(locale, "chat.composerPlaceholder")}
+              aria-label={t(locale, "chat.composerLabel")}
+              onChange={(event) => setDraft(event.target.value)}
+            />
             <button type="submit" className="chat-send control-primary" disabled={!canSend} aria-busy={sending || undefined} aria-label={sending ? t(locale, "chat.pending") : t(locale, "chat.send")}>
               {sending ? t(locale, "chat.pending") : t(locale, "chat.send")}
             </button>
