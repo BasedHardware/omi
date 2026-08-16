@@ -143,6 +143,24 @@ enum ContextBucketPromptAssembler {
   /// billed at cached rates.
   static let frozenRankedByteBudget = 16_000
 
+  /// Eviction drops the *oldest* lines, which live at the head — exactly the bytes
+  /// the cache prefix is made of. Trimming to the budget on every publish therefore
+  /// moved the head every time a saturated bucket published, and `publishVersion`
+  /// runs on every completed visit.
+  ///
+  /// Measured on live dogfood data before this change: across 138 version
+  /// transitions the frozen prefix survived into the next version only 59% of the
+  /// time, and for the two buckets actually at the budget the median surviving
+  /// share was 0.00 — consecutive versions shared 8 bytes, the length of
+  /// `"- entry:"`. Those are the largest buckets, so caching failed precisely
+  /// where it was worth the most: 0 cached tokens across 91 recorded director calls.
+  ///
+  /// Evicting down to a low-water mark instead spends one prefix break to buy many
+  /// stable publishes. The gap is refilled at roughly 500 bytes per compaction, so
+  /// a 4_000-byte gap holds the prefix steady for about eight publishes rather than
+  /// breaking it on every one.
+  static let frozenRankedLowWaterMark = 12_000
+
   /// Deliberately constant. Everything above the frozen segment is part of the
   /// longest-common-prefix the gateway matches on, so a per-visit counter here
   /// made a cross-visit cache hit structurally impossible — it changed bytes
@@ -422,6 +440,24 @@ enum ContextBucketCompactionPolicy {
     // short, so context cannot disappear between the tail and frozen segment.
     return uncompressedCount > retainedTailCount
   }
+
+  /// Drop the oldest ranked lines when the frozen segment is over budget.
+  ///
+  /// Eviction takes from the head, where the oldest lines are and where the cache
+  /// prefix also is, so this is the one operation that can invalidate the prefix.
+  /// It therefore evicts only when the budget is genuinely exceeded, and then all
+  /// the way to the low-water mark, so the head stays put across the publishes that
+  /// follow. Trimming to exactly the budget instead moved the head on every publish
+  /// of a saturated bucket.
+  static func evictToLowWaterMark(_ lines: [String]) -> [String] {
+    func bytes(_ lines: [String]) -> Int { lines.reduce(0) { $0 + $1.utf8.count } }
+    guard bytes(lines) > ContextBucketPromptAssembler.frozenRankedByteBudget else { return lines }
+    var kept = lines
+    while bytes(kept) > ContextBucketPromptAssembler.frozenRankedLowWaterMark, kept.count > 1 {
+      kept.removeFirst()
+    }
+    return kept
+  }
 }
 
 /// What a departure extraction just persisted, beyond the published version:
@@ -646,11 +682,7 @@ extension ContextBucketStore {
         try db.execute(
           sql: "UPDATE bucket_entries SET isCompacted = 1 WHERE id = ?", arguments: [row["id"] as String])
       }
-      while rankedLines.reduce(0, { $0 + $1.utf8.count }) > ContextBucketPromptAssembler.frozenRankedByteBudget,
-        rankedLines.count > 1
-      {
-        rankedLines.removeFirst()
-      }
+      rankedLines = ContextBucketCompactionPolicy.evictToLowWaterMark(rankedLines)
       frozen = Data(rankedLines.joined().utf8)
     }
     // Constant on purpose: this string is published above the frozen segment on
