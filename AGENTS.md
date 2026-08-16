@@ -20,6 +20,7 @@ These rules apply to every AI agent working in this repository. This file is **h
 | A rule shared across app/macOS/Windows (buckets, day grouping, wire decode) | `contracts/parity/README.md` — shared fixtures, per-platform conformance suites, divergence register |
 | Fallback/fail-open branches | `docs/agents/fallback-telemetry.md` — when to call `record_fallback` |
 | Mobile/desktop plan catalog | `docs/agents/plan-catalog.md` — who sees Plus/Neo/Operator/Architect |
+| Screen-derived work memory | `docs/agents/context-buckets.md` — capture/sync boundary, what never leaves the device |
 | App flows / E2E | `app/e2e/SKILL.md`, `desktop/macos/e2e/SKILL.md` |
 | Cursor Cloud VM (Linux x86) | `.cursor/cloud-agent-environment.md` — hermetic E2E harness, known failures |
 
