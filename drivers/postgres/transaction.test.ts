@@ -12,6 +12,7 @@ import {
   authorizationStateDigest,
   mapPostgresFailure,
   PostgresRepositoryError,
+  SERIALIZATION_RETRY_ATTEMPTS,
   withAuthorizedSerializableTransaction,
   type AuthorityStateRow,
 } from "./transaction";
@@ -287,6 +288,83 @@ test("emits one content-safe transaction outcome after durable success", async (
   expect(JSON.stringify(events)).not.toContain("principal");
 });
 
+class CountingSerializationPool implements PostgresTransactionPool {
+  calls = 0;
+
+  constructor(
+    readonly failTimes: number,
+    readonly connection: FakeConnection | null = null,
+    readonly failCode = "40001",
+  ) {}
+
+  async withTransaction<Result>(
+    options: SerializableTransactionOptions,
+    callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+  ): Promise<Result> {
+    this.calls += 1;
+    if (this.calls <= this.failTimes) {
+      throw { code: this.failCode, message: "private provider body" };
+    }
+    if (!this.connection) {
+      throw new Error("success path requires a connection");
+    }
+    return new FakePool(this.connection).withTransaction(options, callback);
+  }
+}
+
+test("retries SQLSTATE 40001 inside the named bound and then succeeds", async () => {
+  const row = authorityRow();
+  const pool = new CountingSerializationPool(1, new FakeConnection(row));
+  const events: unknown[] = [];
+  const result = await withAuthorizedSerializableTransaction(
+    pool,
+    context(row),
+    async () => "committed-after-conflict",
+    {
+      telemetry: createOperationalTelemetryEmitter((event) => events.push(event)),
+      nowMilliseconds: () => 10,
+    },
+  );
+
+  expect(result).toBe("committed-after-conflict");
+  expect(pool.calls).toBe(2);
+  expect(events).toEqual([
+    expect.objectContaining({ family: "database", outcome: "serialization_retryable" }),
+    expect.objectContaining({ family: "database", outcome: "success" }),
+  ]);
+  expect(JSON.stringify(events)).not.toContain("private provider body");
+});
+
+test("exhausting the named 40001 bound still surfaces retryable_serialization", async () => {
+  const pool = new CountingSerializationPool(SERIALIZATION_RETRY_ATTEMPTS);
+  const events: unknown[] = [];
+  await expect(withAuthorizedSerializableTransaction(
+    pool,
+    context(),
+    async () => "never",
+    {
+      telemetry: createOperationalTelemetryEmitter((event) => events.push(event)),
+      nowMilliseconds: () => 10,
+    },
+  )).rejects.toEqual(new PostgresRepositoryError("retryable_serialization", true));
+
+  expect(SERIALIZATION_RETRY_ATTEMPTS).toBe(3);
+  expect(pool.calls).toBe(SERIALIZATION_RETRY_ATTEMPTS);
+  expect(events).toEqual(Array.from({ length: SERIALIZATION_RETRY_ATTEMPTS }, () =>
+    expect.objectContaining({ family: "database", outcome: "serialization_retryable" })));
+  expect(JSON.stringify(events)).not.toContain("private provider body");
+});
+
+test("does not retry a non-40001 provider failure", async () => {
+  const pool = new CountingSerializationPool(1, new FakeConnection(authorityRow()), "40P01");
+  await expect(withAuthorizedSerializableTransaction(
+    pool,
+    context(),
+    async () => "never",
+  )).rejects.toEqual(new PostgresRepositoryError("persistence_failed"));
+  expect(pool.calls).toBe(1);
+});
+
 test("classifies serialization and stale authority at the transaction boundary", async () => {
   const events: unknown[] = [];
   const telemetry = createOperationalTelemetryEmitter((event) => events.push(event));
@@ -311,7 +389,8 @@ test("classifies serialization and stale authority at the transaction boundary",
   )).rejects.toEqual(new PostgresRepositoryError("stale_epoch"));
 
   expect(events).toEqual([
-    expect.objectContaining({ family: "database", outcome: "serialization_retryable" }),
+    ...Array.from({ length: SERIALIZATION_RETRY_ATTEMPTS }, () =>
+      expect.objectContaining({ family: "database", outcome: "serialization_retryable" })),
     expect.objectContaining({ family: "database", outcome: "stale_authority" }),
   ]);
   expect(JSON.stringify(events)).not.toContain("private provider body");

@@ -19,7 +19,11 @@ import type {
   SqlStatement,
 } from "./connection";
 import { createPostgresDurableMemoryWorkExecutionRepository } from "./durable-memory-work-execution";
-import { authorizationStateDigest, type AuthorityStateRow } from "./transaction";
+import {
+  authorizationStateDigest,
+  SERIALIZATION_RETRY_ATTEMPTS,
+  type AuthorityStateRow,
+} from "./transaction";
 
 const digest = (character: string): string => character.repeat(64);
 const owner = "account:alice";
@@ -209,6 +213,22 @@ class FakePool implements PostgresTransactionPool {
   }
 }
 
+class SerializationConflictPool implements PostgresTransactionPool {
+  calls = 0;
+  constructor(readonly inner: FakePool, readonly failTimes: number) {}
+
+  async withTransaction<Result>(
+    options: SerializableTransactionOptions,
+    callback: (connection: CheckedOutPostgresConnection) => Promise<Result>,
+  ): Promise<Result> {
+    this.calls += 1;
+    if (this.calls <= this.failTimes) {
+      throw { code: "40001", message: "could not serialize access due to concurrent update" };
+    }
+    return this.inner.withTransaction(options, callback);
+  }
+}
+
 describe("PostgreSQL durable work execution", () => {
   test("leases one eligible job with database time and the exact persisted lease duration", async () => {
     const connection = new FakeConnection();
@@ -310,6 +330,67 @@ describe("PostgreSQL durable work execution", () => {
       code: "persistence_failed", message: "persistence_failed",
     });
     expect(JSON.stringify(connection.statements)).not.toContain("secret transcript");
+  });
+
+  test("one 40001 during leaseNext is retried and the job is leased without a failure record", async () => {
+    const connection = new FakeConnection();
+    const pool = new SerializationConflictPool(new FakePool(connection), 1);
+    const repository = createPostgresDurableMemoryWorkExecutionRepository({ pool });
+    const before = structuredClone(connection.row);
+
+    await expect(repository.leaseNext(context(), { work_kinds: ["formation"] }))
+      .resolves.toMatchObject({
+        kind: "leased",
+        job: { state: "leased", attempt: 1, lease_fence: 1 },
+      });
+
+    expect(pool.calls).toBe(2);
+    expect(before).toMatchObject({ state: "pending", attempt: 0 });
+    expect(connection.row).toMatchObject({ state: "leased", attempt: 1, error_code: null });
+    expect(connection.outboxRows).toBe(0);
+  });
+
+  test("exhausting 40001 retries leaves the pending job unmutated", async () => {
+    const connection = new FakeConnection();
+    const pool = new SerializationConflictPool(
+      new FakePool(connection),
+      SERIALIZATION_RETRY_ATTEMPTS,
+    );
+    const repository = createPostgresDurableMemoryWorkExecutionRepository({ pool });
+    const before = structuredClone(connection.row);
+
+    await expect(repository.leaseNext(context(), { work_kinds: ["formation"] }))
+      .resolves.toEqual({ kind: "serialization_retryable" });
+
+    expect(pool.calls).toBe(SERIALIZATION_RETRY_ATTEMPTS);
+    expect(connection.row).toEqual(before);
+    expect(connection.row).toMatchObject({ state: "pending", attempt: 0 });
+  });
+
+  test("recorded serialization_retryable still dead-letters when the job budget is exhausted", async () => {
+    const connection = new FakeConnection();
+    const repository = createPostgresDurableMemoryWorkExecutionRepository({
+      pool: new FakePool(connection),
+    });
+    const authorized = context();
+    await expect(repository.leaseNext(authorized, { work_kinds: ["formation"] }))
+      .resolves.toMatchObject({ kind: "leased", job: { attempt: 1 } });
+    await expect(repository.recordFailure(authorized, {
+      job_id: accepted.job_id, lease_fence: 1, error_code: "serialization_retryable",
+    })).resolves.toMatchObject({
+      kind: "recorded",
+      job: { state: "retryable_failed", attempt: 1, outcome: { error_code: "serialization_retryable" } },
+    });
+    connection.now = 110;
+    await expect(repository.leaseNext(authorized, { work_kinds: ["formation"] }))
+      .resolves.toMatchObject({ kind: "leased", job: { attempt: 2, lease_fence: 2 } });
+    await expect(repository.recordFailure(authorized, {
+      job_id: accepted.job_id, lease_fence: 2, error_code: "serialization_retryable",
+    })).resolves.toMatchObject({
+      kind: "recorded",
+      job: { state: "dead_letter", attempt: 2, outcome: { error_code: "serialization_retryable", attempts: 2 } },
+    });
+    expect(connection.outboxRows).toBe(1);
   });
 });
 
