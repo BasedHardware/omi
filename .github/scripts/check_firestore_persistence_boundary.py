@@ -4,10 +4,13 @@
 Outside ``backend/database/`` (and the documented exceptions below) no module may:
   * construct a RAW SDK client — ``firestore.Client()`` / ``firestore.AsyncClient()`` /
     ``firestore_v1.Client()`` / ``firebase_admin.firestore.client()``; or
-  * import ``database._client`` — the raw client builder (callers receive an injected ``db_client``
-    facade, ADR-0044, or go through ``database.store``); or
   * import ``database.sentinels`` — it re-exports Firestore SDK sentinels (``DELETE_FIELD``, …)
     that do not translate on the Mongo adapter; neutral ``database.store.sentinels`` is the port.
+
+Note (ADR-0044): importing ``database._client`` (``from database._client import db /
+get_firestore_client``) is ALLOWED — ``db`` is the neutral facade on Mongo and that import is the
+sanctioned way callers obtain the injected ``db_client``. The forbidden leak is building your own SDK
+client, caught by the raw-construction check.
 
 ADR-0044: importing the Firestore SDK for constants/decorators/``FieldFilter`` (``from google.cloud
 import firestore``) and running ``.document()``/``.collection()``/``.transaction()`` on the injected
@@ -15,9 +18,9 @@ import firestore``) and running ``.document()``/``.collection()``/``.transaction
 database/ port. The only remaining leak is building your own SDK client, caught above.
 
 Blessed database/ ports (``database.document_store``, ``database.store`` and its
-``database.store.sentinels``, ``database.firestore_errors``, ``database.document_ids`` and every
-other ``database.*`` module except ``database._client`` / ``database.sentinels``) are allowed
-everywhere — that is how callers reach persistence now.
+``database.store.sentinels``, ``database.firestore_errors``, ``database.document_ids``, ``database._client``
+and every other ``database.*`` module except ``database.sentinels``) are allowed everywhere — that is how
+callers reach persistence now.
 
 Ratchets against a baseline (WP1 target: empty). Companion of ADR-0001/0002/0004/0044: this is the
 seal that makes the storage layer swappable (Firestore | Mongo | ArcadeDB) in WP2.
