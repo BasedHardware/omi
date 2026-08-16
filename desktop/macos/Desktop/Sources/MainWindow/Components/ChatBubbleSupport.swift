@@ -19,6 +19,49 @@ enum ChatBubbleTruncation {
   }
 }
 
+/// Assistant `text_delta` before the first tool call is commentary, not the answer.
+/// The host still concatenates every delta into `message.text`; this projection is
+/// what the bubble, copy affordance, and truncation must use instead.
+enum ChatAssistantAnswerText {
+  static func visible(
+    contentBlocks: [ChatContentBlock],
+    fallback: String,
+    isStreaming: Bool
+  ) -> String {
+    func texts(in slice: ArraySlice<ChatContentBlock>) -> [String] {
+      slice.compactMap { block in
+        guard case .text(_, let text) = block else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+      }
+    }
+
+    let fallbackText = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard
+      let lastTool = contentBlocks.lastIndex(where: { block in
+        if case .toolCall = block { return true }
+        return false
+      })
+    else {
+      let fromBlocks = texts(in: contentBlocks[...]).joined(separator: "\n")
+      return fromBlocks.isEmpty ? fallbackText : fromBlocks
+    }
+
+    let afterTools = texts(in: contentBlocks[(lastTool + 1)...])
+    if !afterTools.isEmpty {
+      return afterTools.joined(separator: "\n")
+    }
+    if isStreaming {
+      return ""
+    }
+    let beforeTools = texts(in: contentBlocks[..<lastTool])
+    if !beforeTools.isEmpty {
+      return beforeTools.joined(separator: "\n")
+    }
+    return fallbackText
+  }
+}
+
 /// Shared understated date treatment for a transcript row and its prompt-rail
 /// preview. Keeping this outside the bubble makes the time contextual rather
 /// than part of the message itself.

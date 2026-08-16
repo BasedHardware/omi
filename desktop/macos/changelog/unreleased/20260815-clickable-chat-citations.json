@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat source citations so numbered markers and kind-only labels such as [memory] stay tappable and open the matching conversation, memory, task, or Rewind moment"
+}
