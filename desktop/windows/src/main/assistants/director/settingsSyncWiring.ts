@@ -71,7 +71,8 @@ export function createSettingsSyncCoordinator(
 }
 
 const SESSION_POLL_INTERVAL_MS = 5_000
-const SESSION_POLL_MAX_TRIES = 60
+const SESSION_POLL_FAST_TRIES = 60
+const SESSION_POLL_SLOW_INTERVAL_MS = 60_000
 
 let wired = false
 
@@ -107,7 +108,8 @@ export function wireNotificationSettingsSync(http: SettingsSyncHttp): void {
     )
   })
 
-  // Startup reconcile once a session is relayed (the tasks bring-up idiom).
+  // Startup reconcile once a session is relayed (the tasks bring-up idiom),
+  // degrading to a slow poll so a late sign-in still reconciles.
   let tries = 0
   const poll = (): void => {
     if (getBackendSession() !== null) {
@@ -115,7 +117,10 @@ export function wireNotificationSettingsSync(http: SettingsSyncHttp): void {
       return
     }
     tries += 1
-    if (tries < SESSION_POLL_MAX_TRIES) setTimeout(poll, SESSION_POLL_INTERVAL_MS)
+    setTimeout(
+      poll,
+      tries < SESSION_POLL_FAST_TRIES ? SESSION_POLL_INTERVAL_MS : SESSION_POLL_SLOW_INTERVAL_MS
+    )
   }
   poll()
 }

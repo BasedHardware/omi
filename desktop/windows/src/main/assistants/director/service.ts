@@ -15,7 +15,7 @@
  */
 
 import { net, BrowserWindow } from 'electron'
-import { getAppSettings } from '../../appSettings'
+import { getAppSettings, onAppSettingsChanged } from '../../appSettings'
 import {
   contextDirectorDb,
   getRecentActiveActionItems,
@@ -35,7 +35,9 @@ import {
   getBackendSession,
   getSessionEpoch,
   fetchWithFreshToken,
-  onSessionReset
+  isSessionExpired,
+  onSessionReset,
+  pullFreshSession
 } from '../core/session'
 import {
   notificationsActive,
@@ -57,6 +59,20 @@ import { EXTRACTION_MAX_COMPLETION_TOKENS, EXTRACTION_SCHEMA, extractionPrompt }
 import { sanitizeDestination, isBrowser } from './destinationKey'
 import { applyDestinationOn } from '../../ipc/contextBucketStore'
 import { retrieveForQuery, type RetrievalSource } from './retrieval'
+import {
+  liveTag,
+  selectPooledFacts,
+  selectRecentContextFacts,
+  workstreamPromptSection,
+  recentContextPromptSection,
+  POOL_WORTHINESS_FLOOR,
+  RECENT_CONTEXT_WORTHINESS_FLOOR
+} from './workstreamPooling'
+import {
+  recentContextPoolOn,
+  workstreamPoolOn,
+  workstreamTagCountsOn
+} from '../../ipc/proactivityLedger'
 import { TaskContextualResurfacingService, sha256Hex, type TaskContextSubject } from './tcrs'
 import { ContextSubjectBindingService } from './subjectBinding'
 
@@ -204,6 +220,9 @@ async function graduateFacts(
   bucketID: string
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (factIDs.length === 0) return { ok: false, reason: 'no_fact_ids' }
+  // Pin the session epoch: the facts and bucket were read under this owner,
+  // and no candidate may be created or disposition flipped under another.
+  const epoch = getSessionEpoch()
   const db = contextDirectorDb()
   const now = Date.now()
   const facts: Array<{
@@ -231,6 +250,7 @@ async function graduateFacts(
   let generation: number | null = null
   if (needsCreate) {
     const control = await getWorkflowControl()
+    if (getSessionEpoch() !== epoch) return { ok: false, reason: 'owner_changed' }
     if (control.workflowMode !== 'read' || control.accountGeneration === null) {
       return { ok: false, reason: 'workflow_not_readable' }
     }
@@ -241,6 +261,7 @@ async function graduateFacts(
   for (const fact of facts) {
     if (fact.dispositionState !== 'none') continue
     if (generation === null) return { ok: false, reason: 'workflow_not_readable' }
+    if (getSessionEpoch() !== epoch) return { ok: false, reason: 'owner_changed' }
     const body = {
       subject_kind: 'task',
       proposed_action: 'create',
@@ -268,6 +289,7 @@ async function graduateFacts(
       body: JSON.stringify(body)
     })
     if (!res.ok) return { ok: false, reason: `create_failed_${res.status}` }
+    if (getSessionEpoch() !== epoch) return { ok: false, reason: 'owner_changed' }
     const flipped = db
       .prepare(
         `UPDATE bucket_facts SET dispositionState = 'candidate_pending', updatedAt = ?
@@ -294,6 +316,9 @@ export const directorLane = createLaneClient({
   getSession: () => {
     const session = getBackendSession()
     return session ? { desktopApiBase: session.desktopApiBase, token: session.token } : null
+  },
+  ensureFreshSession: async () => {
+    if (isSessionExpired()) await pullFreshSession()
   },
   getAbortSignal: () => getAbortSignal()
 })
@@ -359,9 +384,12 @@ export const directorEngine = new ContextProactivityEngine({
     if (trackedFrame === null || trackedFrame.captureTime < sinceStartedAt) return null
     return trackedFrame
   },
-  readFrameImage: async () => {
-    if (trackedFrame === null || trackedFrame.imagePath === null) return null
-    return readFrameImageBase64({ imagePath: trackedFrame.imagePath } as RewindFrame)
+  readFrameImage: async (frameId) => {
+    // The requested frame must still be the tracked one: a later window's
+    // screenshot must never ground an earlier visit's decision.
+    const frame = trackedFrame
+    if (frame === null || frame.imagePath === null || frame.frameId !== frameId) return null
+    return readFrameImageBase64({ imagePath: frame.imagePath } as RewindFrame)
   },
   incompleteTasks: () =>
     getRecentActiveActionItems(200).map((t) => ({
@@ -383,7 +411,37 @@ export const directorEngine = new ContextProactivityEngine({
         toolSearch('/v1/tools/conversations/search-chunks', { query: q, limit }),
       memories: (q, limit) => toolSearch('/v1/tools/memories/search', { query: q, limit })
     }),
-  graduate: graduateFacts
+  graduate: graduateFacts,
+  poolPromptSections: (bucketID, visitID) => {
+    const sections: string[] = []
+    const now = Date.now()
+    const db = contextDirectorDb()
+    const pooledIds = new Set<string>()
+    if (directorFlags.workstreamPooling()) {
+      const counts = workstreamTagCountsOn(db, bucketID, visitID, now)
+      const tag = liveTag(counts.own, counts.bucket)
+      if (tag !== null) {
+        const pool = selectPooledFacts(
+          workstreamPoolOn(db, tag, bucketID, now, POOL_WORTHINESS_FLOOR),
+          now
+        )
+        for (const fact of pool) pooledIds.add(fact.factID)
+        const section = workstreamPromptSection(tag, pool, now)
+        if (section !== null) sections.push(section)
+      }
+    }
+    if (directorFlags.candidates()) {
+      const recent = selectRecentContextFacts(
+        recentContextPoolOn(db, bucketID, now, RECENT_CONTEXT_WORTHINESS_FLOOR).filter(
+          (fact) => !pooledIds.has(fact.factID)
+        ),
+        now
+      )
+      const section = recentContextPromptSection(recent, now)
+      if (section !== null) sections.push(section)
+    }
+    return sections
+  }
 })
 
 export const directorVisits = new ContextVisitCoordinator({
@@ -402,7 +460,8 @@ export const directorVisits = new ContextVisitCoordinator({
 export const directorSubjectBinding = new ContextSubjectBindingService({
   db: () => contextDirectorDb(),
   sessionEpoch: () => getSessionEpoch(),
-  now: () => Date.now()
+  now: () => Date.now(),
+  hasOwner: () => ownerUid() !== null
 })
 
 export const directorTcrs = new TaskContextualResurfacingService({
@@ -531,6 +590,10 @@ export async function runDepartureExtraction(
 
 // --- session hygiene ---------------------------------------------------------
 
+export function currentTrackedFrame(): DirectorFrame | null {
+  return trackedFrame
+}
+
 let resetWired = false
 
 export function wireDirectorSessionReset(): void {
@@ -542,5 +605,15 @@ export function wireDirectorSessionReset(): void {
     directorSubjectBinding.reset()
     clearTrackedFrame()
     void directorVisits.reset()
+  })
+  // Turning the pipeline OFF closes the active visit (as leaving to an
+  // excluded context) so it cannot absorb contexts observed while TCRS owns
+  // the world. Tracks the effective pipeline state, so an env force that keeps
+  // the pipeline on regardless of the setting never triggers a close.
+  let pipelineWasEnabled = directorPipelineEnabled()
+  onAppSettingsChanged(() => {
+    const enabled = directorPipelineEnabled()
+    if (pipelineWasEnabled && !enabled) void directorVisits.leaveForExcludedContext(null)
+    pipelineWasEnabled = enabled
   })
 }

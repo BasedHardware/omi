@@ -219,7 +219,7 @@ export function directorVolatilePrompt(args: {
   })
 
   let out = `== OPEN OR OVERDUE TASKS ==\n${taskLines.join('\n')}`
-  out += `\n\n== CURRENT FRAME METADATA ==\nApp: ${args.frame.appName}\nWindow: ${args.frame.windowTitle ?? ''}\nCaptured at: ${ts(args.frame.captureTime)}`
+  out += `\n\n== CURRENT FRAME METADATA ==\nApp: ${args.frame.appName}\nWindow: ${singleLine(args.frame.windowTitle ?? '', 160)}\nCaptured at: ${ts(args.frame.captureTime)}`
   if (args.visitCount > 0) {
     out += `\nQualifying visits to this context: ${args.visitCount}`
   }

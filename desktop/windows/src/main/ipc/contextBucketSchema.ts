@@ -181,6 +181,7 @@ export const CONTEXT_BUCKET_SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_context_visits_context ON context_visits(normalizedContextKey);
+  CREATE INDEX IF NOT EXISTS idx_context_visits_reference ON context_visits(referenceHash, outcome, endedAt);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_context_buckets_subject
     ON context_buckets(subjectKind, subjectID, COALESCE(workstreamID, ''));
   CREATE INDEX IF NOT EXISTS idx_context_visits_open ON context_visits(outcome, endedAt);

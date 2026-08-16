@@ -296,6 +296,11 @@ export class TaskContextualResurfacingService {
         this.resetOwnerState()
         return
       }
+      // The device id must exist BEFORE draining: a flush during the startup
+      // relay race keeps its events accumulated instead of dropping them.
+      const deviceId = this.deps.deviceId()
+      if (deviceId === null) return
+
       const now = this.deps.now()
       const events = this.accumulator.drain(now)
       if (events.length === 0) return
@@ -309,9 +314,6 @@ export class TaskContextualResurfacingService {
       ) {
         return
       }
-
-      const deviceId = this.deps.deviceId()
-      if (deviceId === null) return
 
       const control = await this.deps.client.getControl()
       if (!this.leaseCurrent(lease)) return

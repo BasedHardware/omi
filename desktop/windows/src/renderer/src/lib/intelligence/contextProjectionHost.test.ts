@@ -44,7 +44,8 @@ afterEach(() => {
 describe('startContextProjectionHost', () => {
   it('relays the device-id hash and applies valid projections once loaded', async () => {
     vi.spyOn(dashboardIntelligence, 'getState').mockReturnValue({
-      hasLoadedOnce: true
+      hasLoadedOnce: true,
+      accountGeneration: 3
     } as ReturnType<typeof dashboardIntelligence.getState>)
     const apply = vi
       .spyOn(dashboardIntelligence, 'applyContextProjection')
@@ -63,7 +64,7 @@ describe('startContextProjectionHost', () => {
   it('drops malformed payloads and projections before the first load', () => {
     const getState = vi
       .spyOn(dashboardIntelligence, 'getState')
-      .mockReturnValue({ hasLoadedOnce: false } as ReturnType<
+      .mockReturnValue({ hasLoadedOnce: false, accountGeneration: null } as ReturnType<
         typeof dashboardIntelligence.getState
       >)
     const apply = vi
@@ -77,7 +78,14 @@ describe('startContextProjectionHost', () => {
     projectionListener?.(wireProjection())
     expect(apply).not.toHaveBeenCalled()
 
-    getState.mockReturnValue({ hasLoadedOnce: true } as ReturnType<
+    // Loaded but out-of-rollout (generation null) still rejects.
+    getState.mockReturnValue({ hasLoadedOnce: true, accountGeneration: null } as ReturnType<
+      typeof dashboardIntelligence.getState
+    >)
+    projectionListener?.(wireProjection())
+    expect(apply).not.toHaveBeenCalled()
+
+    getState.mockReturnValue({ hasLoadedOnce: true, accountGeneration: 3 } as ReturnType<
       typeof dashboardIntelligence.getState
     >)
     projectionListener?.(wireProjection())

@@ -26,7 +26,7 @@ let db: ContextBucketDb
 let nowMs: number
 let epoch: number
 let laneCalls: LaneRequest[]
-let laneQueue: Array<LaneResult | Error>
+let laneQueue: Array<LaneResult | Error | (() => LaneResult)>
 let presented: Array<{ title: string; decisionType: string }>
 let presentOutcome: PresentationOutcome
 let dropInsteadOfPresent: boolean
@@ -49,6 +49,7 @@ const lane: LaneClient = {
     const next = laneQueue.shift()
     if (next === undefined) throw new Error('lane queue empty')
     if (next instanceof Error) throw next
+    if (typeof next === 'function') return next()
     return next
   },
   cooldownRemainingMs: () => 0,
@@ -377,6 +378,35 @@ describe('contextEntered', () => {
     expect(rows[0].provenanceJson).toBe('{"failure":"notification_dropped"}')
   })
 
+  it('a gate change during the image read terminalizes before paying for the model', async () => {
+    const { fence } = seedEligibleVisit()
+    const engine = new ContextProactivityEngine(
+      makeDeps({
+        readFrameImage: async () => {
+          gate = { ...gate, frequencyLevel: 0 }
+          return 'JPEGBASE64'
+        }
+      })
+    )
+    await engine.contextEntered(fence)
+    expect(laneCalls).toEqual([])
+    const rows = deliveryRows()
+    expect(rows[0]).toMatchObject({ decisionType: 'silence', lifecycleState: 'failed' })
+    expect(rows[0].provenanceJson).toBe('{"failure":"pre_model_gate"}')
+  })
+
+  it('appends flag-gated pool sections to the volatile prompt', async () => {
+    const { fence, entryId, factId } = seedEligibleVisit()
+    laneQueue = [laneResult(groundedDecision(entryId, factId))]
+    const engine = new ContextProactivityEngine(
+      makeDeps({
+        poolPromptSections: () => ['== RELATED WORKSTREAM CONTEXT (omi) ==\npooled line']
+      })
+    )
+    await engine.contextEntered(fence)
+    expect(laneCalls[0].uncachedPrompt).toContain('== RELATED WORKSTREAM CONTEXT (omi) ==')
+  })
+
   it('lane failures terminalize the row with the bounded failure class', async () => {
     const { fence } = seedEligibleVisit()
     const { LaneError } = await import('./laneClient')
@@ -495,6 +525,37 @@ describe('the candidate fast path', () => {
       state: string
     }
     expect(candidate.state).toBe('consumed')
+  })
+
+  it('a lost consume race suppresses instead of presenting a candidate we do not own', async () => {
+    const { fence, factId } = seedEligibleVisit()
+    const candidateId = insertCandidateOn(
+      db,
+      {
+        bucketID: fence.bucketID as string,
+        workstreamTag: null,
+        message: 'Racy candidate message.',
+        groundingFactIDs: [factId],
+        triggerNote: 't'
+      },
+      nowMs
+    ) as string
+    // Another visit consumes the candidate while the gate call is in flight.
+    laneQueue = [
+      () => {
+        db.prepare(`UPDATE proactive_candidates SET state = 'consumed' WHERE id = ?`).run(
+          candidateId
+        )
+        return laneResult({ show: true, reason: 'accurate' })
+      }
+    ]
+    const engine = new ContextProactivityEngine(makeDeps({ candidatesEnabled: () => true }))
+    await engine.contextEntered(fence)
+    expect(presented).toEqual([])
+    expect(deliveryRows().at(-1)).toMatchObject({
+      decisionType: 'silence',
+      lifecycleState: 'suppressed'
+    })
   })
 
   it('a declined gate suppresses without presenting and retires the candidate', async () => {

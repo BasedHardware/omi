@@ -10,6 +10,7 @@ const T0 = 1_760_000_000_000
 let db: ContextBucketDb
 let nowMs: number
 let epoch: number
+let hasOwner: boolean
 let service: ContextSubjectBindingService
 
 beforeEach(() => {
@@ -17,10 +18,12 @@ beforeEach(() => {
   db.exec(CONTEXT_BUCKET_SCHEMA)
   nowMs = T0
   epoch = 1
+  hasOwner = true
   service = new ContextSubjectBindingService({
     db: () => db,
     sessionEpoch: () => epoch,
-    now: () => nowMs
+    now: () => nowMs,
+    hasOwner: () => hasOwner
   })
 })
 
@@ -83,6 +86,23 @@ describe('ContextSubjectBindingService', () => {
 
     service.resolve(windowEvent())
     epoch = 2
+    expect(service.bindRecentContext({ kind: 'candidate', id: 'c-1', workstreamID: null })).toBe(
+      false
+    )
+  })
+
+  it('signed-out sessions learn nothing and bind nothing', () => {
+    hasOwner = false
+    const withSubject = {
+      ...windowEvent(),
+      subject: { kind: 'task', id: 't-1', workstreamID: null }
+    }
+    service.resolve(withSubject)
+    expect(db.prepare(`SELECT COUNT(*) AS n FROM subject_bindings`).get()).toEqual({ n: 0 })
+
+    hasOwner = true
+    service.resolve(windowEvent())
+    hasOwner = false
     expect(service.bindRecentContext({ kind: 'candidate', id: 'c-1', workstreamID: null })).toBe(
       false
     )

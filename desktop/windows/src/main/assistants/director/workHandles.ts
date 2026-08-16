@@ -97,24 +97,74 @@ export function canonicalizeUrl(raw: string): string | null {
   let path = url.pathname
   if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1)
 
+  // Preserve each kept pair's RAW encoded bytes: decoding and re-encoding
+  // would change durable identity. Only the decoded name drives the drop.
+  const rawQuery = url.search.startsWith('?') ? url.search.slice(1) : url.search
   const keptParams: string[] = []
-  for (const [name, value] of url.searchParams.entries()) {
+  for (const pair of rawQuery.length > 0 ? rawQuery.split('&') : []) {
+    if (pair.length === 0) continue
+    const eq = pair.indexOf('=')
+    const rawName = eq >= 0 ? pair.slice(0, eq) : pair
+    let name: string
+    try {
+      name = decodeURIComponent(rawName.replace(/\+/g, ' '))
+    } catch {
+      name = rawName
+    }
     if (shouldDropQueryParam(name)) continue
-    keptParams.push(value === '' ? name : `${name}=${value}`)
+    keptParams.push(pair)
   }
   const query = keptParams.length > 0 ? `?${keptParams.join('&')}` : ''
 
   return `${scheme}://${host}${port}${path}${query}`
 }
 
-/** Canonicalize a file path; rejects empty and filesystem roots. */
+/** Canonicalize a file path for durable identity: separator runs collapse
+ *  (preserving a UNC root), dot segments resolve, and empty paths, filesystem
+ *  roots, drive-relative paths, and bare UNC servers are rejected. */
 export function canonicalizeFile(raw: string): string | null {
   const trimmed = raw.trim()
   if (trimmed.length === 0) return null
-  const normalized = trimmed.replace(/[\\/]+/g, '\\').replace(/\\$/, '')
-  if (normalized.length === 0) return null
-  if (normalized === '\\' || /^[A-Za-z]:$/.test(normalized)) return null
-  return normalized
+  const isUnc = /^[\\/]{2}[^\\/]/.test(trimmed)
+  let normalized = trimmed.replace(/[\\/]+/g, '\\').replace(/\\+$/, '')
+  if (isUnc) normalized = '\\' + normalized
+  if (normalized.length === 0 || normalized === '\\' || normalized === '\\\\') return null
+  // Drive-relative (C:foo) has no stable absolute identity.
+  if (/^[A-Za-z]:$/.test(normalized)) return null
+  if (/^[A-Za-z]:[^\\]/.test(normalized)) return null
+
+  // Resolve . and .. segments so aliases share one identity; never pop past
+  // the root (drive or \\server\share).
+  const prefixMatch = isUnc ? '\\\\' : ''
+  const body = isUnc ? normalized.slice(2) : normalized
+  const segments = body.split('\\')
+  const rootCount = isUnc ? 2 : /^[A-Za-z]:$/.test(segments[0] ?? '') ? 1 : 0
+  const resolved: string[] = []
+  for (const segment of segments) {
+    if (segment === '.') continue
+    if (segment === '..') {
+      if (resolved.length > rootCount) resolved.pop()
+      continue
+    }
+    resolved.push(segment)
+  }
+  const result = prefixMatch + resolved.join('\\')
+  if (isUnc && resolved.length < 2) return null // bare \\server has no share
+  if (/^[A-Za-z]:$/.test(result)) return null
+  return result
+}
+
+/** Producer factories: the ONLY sanctioned way to mint durable handles — they
+ *  guarantee canonicalization (credential/tracking query stripping, UNC-safe
+ *  paths) before a value can enter bucket identity. */
+export function makeUrlWorkHandle(rawUrl: string): WorkHandle | null {
+  const canonical = canonicalizeUrl(rawUrl)
+  return canonical === null ? null : { kind: 'url', value: canonical }
+}
+
+export function makeFileWorkHandle(rawPath: string): WorkHandle | null {
+  const canonical = canonicalizeFile(rawPath)
+  return canonical === null ? null : { kind: 'file', value: canonical }
 }
 
 /** The app_window handle value mirrors mac: `app\ntitle`. */

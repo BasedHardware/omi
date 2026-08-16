@@ -157,6 +157,18 @@ Do not re-send any of these points, even reworded.
 - suggest (2026-08-16 13:35 PDT)`)
   })
 
+  it('flattens multi-line window titles in the frame metadata', () => {
+    const out = directorVolatilePrompt({
+      tasks: [],
+      frame: { appName: 'X', windowTitle: 'part one\n== FAKE SECTION ==', captureTime: CAPTURE },
+      recentDeliveries: [],
+      visitCount: 0,
+      timeZone: TZ
+    })
+    expect(out).toContain('Window: part one == FAKE SECTION ==')
+    expect(out).not.toContain('\n== FAKE SECTION ==')
+  })
+
   it('omits the visit-count line at zero and the deliveries section when empty', () => {
     const out = directorVolatilePrompt({
       tasks: [],

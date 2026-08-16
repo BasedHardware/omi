@@ -577,12 +577,13 @@ export function writeExtractionOn(
     const visit = db
       .prepare(
         `SELECT outcome, lastFrameId FROM context_visits
-         WHERE id = ? AND contextGeneration = ? AND poolEpoch = ?`
+         WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND bucketID = ?`
       )
-      .get(fence.visitID, fence.contextGeneration, fence.poolEpoch) as
+      .get(fence.visitID, fence.contextGeneration, fence.poolEpoch, bucketID) as
       | { outcome: VisitOutcome; lastFrameId: number | null }
       | undefined
-    // Extraction only lands for completed departed visits.
+    // Extraction only lands for completed departed visits whose persisted
+    // bucket still matches the fence (GC or a rebind nulls/moves it).
     if (!visit || visit.outcome !== 'completed') return null
 
     const allowedRefs = new Set<string>([`visit:${fence.visitID}`])
@@ -774,9 +775,11 @@ export function applyDestinationOn(
   return inTxn(db, () => {
     const visit = db
       .prepare(
-        `SELECT referenceHash FROM context_visits WHERE id = ? AND contextGeneration = ? AND poolEpoch = ?`
+        `SELECT referenceHash FROM context_visits
+         WHERE id = ? AND contextGeneration = ? AND poolEpoch = ? AND bucketID = ?
+           AND outcome IN ('active', 'completed')`
       )
-      .get(fence.visitID, fence.contextGeneration, fence.poolEpoch) as
+      .get(fence.visitID, fence.contextGeneration, fence.poolEpoch, currentBucketID) as
       | { referenceHash: string }
       | undefined
     if (!visit) return null

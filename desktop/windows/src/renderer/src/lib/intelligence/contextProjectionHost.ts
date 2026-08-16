@@ -24,7 +24,11 @@ export function startContextProjectionHost(): void {
   window.omi?.onContextProjection?.((raw) => {
     const projection = readWmnProjection(raw)
     if (projection === null) return
-    if (!dashboardIntelligence.getState().hasLoadedOnce) return
+    // Apply only after a load established the rollout state, and only while
+    // the account is in-rollout (generation present): a projection must never
+    // repopulate a surface the control gate has cleared.
+    const state = dashboardIntelligence.getState()
+    if (!state.hasLoadedOnce || state.accountGeneration === null) return
     dashboardIntelligence.applyContextProjection(projection)
   })
 }

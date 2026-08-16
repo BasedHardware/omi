@@ -109,6 +109,9 @@ export interface EngineDeps {
     factIDs: string[],
     bucketID: string
   ): Promise<{ ok: true } | { ok: false; reason: string }>
+  /** Flag-gated workstream/recent-context prompt sections (non-citable pools),
+   *  appended after the volatile frame metadata. Empty when pooling is off. */
+  poolPromptSections?(bucketID: string, visitID: number): string[]
   timeZone?: string
   log?(message: string): void
 }
@@ -234,7 +237,7 @@ export class ContextProactivityEngine {
 
     const allowLookup = this.deps.retrievalHopEnabled()
     const stablePrompt = directorStablePrompt(snapshot, allowLookup)
-    const volatilePrompt = directorVolatilePrompt({
+    let volatilePrompt = directorVolatilePrompt({
       tasks: selectDirectorTasks(this.deps.incompleteTasks(), frame.captureTime),
       frame: {
         appName: frame.appName,
@@ -245,7 +248,23 @@ export class ContextProactivityEngine {
       visitCount: snapshot.visitCount,
       timeZone: this.deps.timeZone
     })
+    // Flag-gated workstream/recent-context sections (non-citable pools) append
+    // after the frame metadata, matching mac's volatile-suffix order.
+    for (const section of this.deps.poolPromptSections?.(bucketID, fence.visitID) ?? []) {
+      volatilePrompt += `\n\n${section}`
+    }
     const image = frame.frameId !== null ? await this.deps.readFrameImage(frame.frameId) : null
+
+    // Pre-model stage (mac's pre_model gate): the image read is an await
+    // boundary, so re-check scope and the free gate before the paid call.
+    if (!this.scopeStillCurrent(fence, epoch)) {
+      this.terminalize(rowId, 'stale_visit')
+      return
+    }
+    if (freeGate(this.deps.gateInput()) !== 'allowed') {
+      this.terminalize(rowId, 'pre_model_gate')
+      return
+    }
 
     let first: DirectorDecision
     let firstResult: LaneResult
@@ -459,6 +478,16 @@ export class ContextProactivityEngine {
     const visitFacts = snapshot?.validatedFacts ?? []
     const image = frame.frameId !== null ? await this.deps.readFrameImage(frame.frameId) : null
 
+    // Pre-model stage: same re-checks as the director call after the image await.
+    if (!this.scopeStillCurrent(fence, epoch)) {
+      this.terminalize(rowId, 'stale_visit')
+      return
+    }
+    if (freeGate(this.deps.gateInput()) !== 'allowed') {
+      this.terminalize(rowId, 'pre_model_gate')
+      return
+    }
+
     let show = false
     let reason = ''
     try {
@@ -533,8 +562,19 @@ export class ContextProactivityEngine {
     })
     advanceDeliveryOn(db, { id: rowId, state: 'policy_approved', at: this.deps.now() })
 
-    // Consume only after every pre-presentation gate has passed; restore on drop.
-    consumeCandidateOn(db, candidate.id, this.deps.now())
+    // Consume only after every pre-presentation gate has passed; restore on
+    // drop. A lost consume race (another visit claimed it, or it expired after
+    // lookup) suppresses instead of presenting a candidate we do not own.
+    if (!consumeCandidateOn(db, candidate.id, this.deps.now())) {
+      advanceDeliveryOn(db, {
+        id: rowId,
+        state: 'suppressed',
+        decisionType: 'silence',
+        provenanceJson: provenance,
+        at: this.deps.now()
+      })
+      return
+    }
     const outcome = this.deps.present({
       title: [...candidate.message].slice(0, 120).join(''),
       message: [...candidate.message].slice(0, 600).join(''),

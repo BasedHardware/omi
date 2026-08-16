@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   canonicalizeUrl,
   canonicalizeFile,
+  makeUrlWorkHandle,
+  makeFileWorkHandle,
   primaryHandle,
   isDurable,
   handleIdentityKey,
@@ -34,6 +36,15 @@ describe('canonicalizeUrl', () => {
       'https://example.com/a?keep=3'
     )
   })
+
+  it('preserves kept pairs raw: percent-encoding is identity, never re-encoded', () => {
+    expect(canonicalizeUrl('https://example.com/a?q=a%2Fb%20c&utm_source=x')).toBe(
+      'https://example.com/a?q=a%2Fb%20c'
+    )
+    expect(canonicalizeUrl('https://example.com/a?flag&access_token=s')).toBe(
+      'https://example.com/a?flag'
+    )
+  })
 })
 
 describe('canonicalizeFile', () => {
@@ -42,6 +53,32 @@ describe('canonicalizeFile', () => {
     expect(canonicalizeFile('')).toBeNull()
     expect(canonicalizeFile('\\')).toBeNull()
     expect(canonicalizeFile('C:\\')).toBeNull()
+  })
+
+  it('preserves UNC roots, rejects bare servers and drive-relative paths', () => {
+    expect(canonicalizeFile('\\\\server\\share\\doc.txt')).toBe('\\\\server\\share\\doc.txt')
+    expect(canonicalizeFile('//server/share/doc.txt')).toBe('\\\\server\\share\\doc.txt')
+    expect(canonicalizeFile('\\\\server')).toBeNull()
+    expect(canonicalizeFile('C:foo\\bar.txt')).toBeNull()
+  })
+
+  it('resolves dot segments so aliases share one identity, never past the root', () => {
+    expect(canonicalizeFile('C:\\Users\\zach\\..\\zach\\.\\notes.txt')).toBe(
+      'C:\\Users\\zach\\notes.txt'
+    )
+    expect(canonicalizeFile('C:\\..\\..\\notes.txt')).toBe('C:\\notes.txt')
+  })
+})
+
+describe('producer factories', () => {
+  it('mint canonicalized handles and refuse uncanonicalizable input', () => {
+    expect(makeUrlWorkHandle('HTTPS://Example.com/a/?access_token=s')).toEqual({
+      kind: 'url',
+      value: 'https://example.com/a'
+    })
+    expect(makeUrlWorkHandle('ftp://x/y')).toBeNull()
+    expect(makeFileWorkHandle('C:/a/b.txt')).toEqual({ kind: 'file', value: 'C:\\a\\b.txt' })
+    expect(makeFileWorkHandle('C:\\')).toBeNull()
   })
 })
 

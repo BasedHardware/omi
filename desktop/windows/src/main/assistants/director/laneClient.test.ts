@@ -65,7 +65,9 @@ describe('createLaneClient', () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, envelope()))
     const client = createLaneClient({ fetchImpl, getSession: session })
     await client.complete(request({ uncachedPrompt: undefined, cacheKey: undefined }))
-    const body = JSON.parse((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].body as string)
+    const body = JSON.parse(
+      (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].body as string
+    )
     expect(body.messages[0].content).toEqual([{ type: 'text', text: 'stable' }])
     expect('cache_key' in body).toBe(false)
   })

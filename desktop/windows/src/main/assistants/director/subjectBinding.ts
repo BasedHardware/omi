@@ -28,6 +28,10 @@ export interface SubjectBindingDeps {
   db(): ContextBucketDb
   sessionEpoch(): number
   now(): number
+  /** Signed-in check: without an owner, nothing may be learned or bound (a
+   *  late renderer call after the sign-out wipe must not seed the next
+   *  account's table). */
+  hasOwner(): boolean
 }
 
 export class ContextSubjectBindingService {
@@ -42,6 +46,7 @@ export class ContextSubjectBindingService {
    *  subject-carrying events as explicit bindings; else attach a stored,
    *  fresh (30-day) binding when its kind is known. */
   resolve(event: TaskLocalContextEvent): TaskLocalContextEvent {
+    if (!this.deps.hasOwner()) return event
     if (LEARNABLE_KINDS.has(event.kind)) {
       this.recent = {
         referenceHash: event.referenceHash,
@@ -76,6 +81,7 @@ export class ContextSubjectBindingService {
   bindRecentContext(subject: TaskContextSubject): boolean {
     const recent = this.recent
     this.recent = null
+    if (!this.deps.hasOwner()) return false
     if (recent === null) return false
     if (this.deps.now() - recent.occurredAt > BIND_RECENT_CONTEXT_WINDOW_MS) return false
     if (recent.epoch !== this.deps.sessionEpoch()) return false

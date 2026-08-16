@@ -112,13 +112,14 @@ describe('flush pipeline', () => {
   let published: unknown[]
   let snapshots: Array<{ snapshot_id: string; matches: unknown[] }>
   let pendingDebounce: (() => void) | null
+  let deviceIdValue: string | null
 
   function makeService(): TaskContextualResurfacingService {
     deps = {
       bucketsEnabled: () => bucketsOn,
       ownerId: () => owner,
       sessionEpoch: () => epoch,
-      deviceId: () => 'windows_abcd1234',
+      deviceId: () => deviceIdValue,
       client: {
         getControl: async () => {
           calls.push('control')
@@ -160,6 +161,7 @@ describe('flush pipeline', () => {
     published = []
     snapshots = []
     pendingDebounce = null
+    deviceIdValue = 'windows_abcd1234'
   })
 
   it('debounces, gates on control, PUTs with idempotency headers, evaluates, publishes', async () => {
@@ -213,6 +215,20 @@ describe('flush pipeline', () => {
     }
     await service.flush()
     expect(published).toEqual([])
+  })
+
+  it('a flush before the device relay lands keeps events accumulated for retry', async () => {
+    deviceIdValue = null
+    const service = makeService()
+    service.observe(event())
+    await service.flush()
+    expect(calls).toEqual([])
+    expect(service.pendingKeyCount()).toBe(1)
+
+    // Once the relay lands, the retained events flush normally.
+    deviceIdValue = 'windows_abcd1234'
+    await service.flush()
+    expect(calls).toContain('evaluate:true')
   })
 
   it('resets and drops events when the buckets engine owns the world', () => {

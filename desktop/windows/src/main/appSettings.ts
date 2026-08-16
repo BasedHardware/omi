@@ -332,7 +332,7 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     // an explicit true so a corrupt file cannot trap the retry loop on.
     notificationSettingsSyncRevision:
       typeof r.notificationSettingsSyncRevision === 'number' &&
-      Number.isInteger(r.notificationSettingsSyncRevision) &&
+      Number.isSafeInteger(r.notificationSettingsSyncRevision) &&
       r.notificationSettingsSyncRevision >= 0
         ? r.notificationSettingsSyncRevision
         : 0,

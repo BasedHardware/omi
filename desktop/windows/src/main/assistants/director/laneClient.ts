@@ -68,6 +68,10 @@ export const QUOTA_COOLDOWN_MAX_MS = 3_600_000
 export interface LaneClientDeps {
   fetchImpl: (url: string, init: RequestInit) => Promise<Response>
   getSession: () => { desktopApiBase: string; token: string } | null
+  /** Pre-call token freshness hook (wire to session.pullFreshSession when the
+   *  cached token is near expiry) so a throttled hidden renderer cannot leave
+   *  the lane sending dead tokens. Best-effort: failures fall through. */
+  ensureFreshSession?: () => Promise<void>
   getAbortSignal?: () => AbortSignal | undefined
   now?: () => number
 }
@@ -95,6 +99,11 @@ export function createLaneClient(deps: LaneClientDeps): LaneClient {
     const cooling = cooldownUntil.get(request.operation) ?? 0
     if (cooling > now()) throw new LaneError('quota_cooldown', 'operation cooling down after 429')
 
+    try {
+      await deps.ensureFreshSession?.()
+    } catch {
+      // Freshness is best-effort; the request may still succeed or 401.
+    }
     const session = deps.getSession()
     if (!session) throw new LaneError('network', 'no backend session')
 
@@ -127,7 +136,7 @@ export function createLaneClient(deps: LaneClientDeps): LaneClient {
     let response: Response
     try {
       response = await deps.fetchImpl(
-        `${session.desktopApiBase}/v1/desktop/proactivity/completions`,
+        `${session.desktopApiBase.replace(/\/+$/, '')}/v1/desktop/proactivity/completions`,
         {
           method: 'POST',
           headers: {

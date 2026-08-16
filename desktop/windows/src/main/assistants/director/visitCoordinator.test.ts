@@ -120,7 +120,7 @@ describe('ContextVisitCoordinator', () => {
     expect(fence.contextGeneration).toBe(2)
   })
 
-  it('a stale finalize drops state and forces re-reconcile on the next turn', async () => {
+  it('a stale finalize re-reconciles in the SAME turn so the replacement survives', async () => {
     const coordinator = new ContextVisitCoordinator(makeDeps())
     await coordinator.transition(input('A'))
     calls = []
@@ -128,12 +128,21 @@ describe('ContextVisitCoordinator', () => {
     nowMs += 5_000
     const result = await coordinator.transition(input('B'))
     expect(result.departed).toBeNull()
+    // The sweep ran BEFORE the replacement opened, so the fresh visit is not
+    // the sweep's next victim.
+    expect(calls).toEqual([
+      'finalize:1:completed:context_switch',
+      'reconcileVisits',
+      'reconcileDeliveries',
+      'gc',
+      'start:B:gen2'
+    ])
     finalizeResult = true
     calls = []
     nowMs += 5_000
     await coordinator.transition(input('C'))
-    // The stale fence cleared `reconciled`, so this turn re-reconciles.
-    expect(calls.slice(0, 3)).toEqual(['reconcileVisits', 'reconcileDeliveries', 'gc'])
+    // Already reconciled: the next turn goes straight to finalize+start.
+    expect(calls).toEqual(['finalize:2:completed:context_switch', 'start:C:gen3'])
   })
 
   it('serializes concurrent transitions in order', async () => {

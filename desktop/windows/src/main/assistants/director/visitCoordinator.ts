@@ -111,6 +111,9 @@ export class ContextVisitCoordinator {
       this.ensureReconciled(now)
       this.maybeGC(now)
       const departed = this.finalizeActive('context_switch', now, input.departingFrameId)
+      // A stale finalize dropped `reconciled`; sweep NOW so the replacement we
+      // are about to open is not the sweep's next victim on the next turn.
+      if (!this.reconciled) this.ensureReconciled(now)
       this.generation += 1
       const arriving = this.deps.startVisit({
         contextGeneration: this.generation,
@@ -160,6 +163,7 @@ export class ContextVisitCoordinator {
       const now = this.deps.now()
       this.ensureReconciled(now)
       this.finalizeActive('system_resume', now, input.departingFrameId)
+      if (!this.reconciled) this.ensureReconciled(now)
       this.generation += 1
       const arriving = this.deps.startVisit({
         contextGeneration: this.generation,
