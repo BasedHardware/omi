@@ -577,6 +577,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ note: Notification) {
     let fixtureCapture = env["OMI_PROBE_EXIT"] != nil
     let semanticWindow = env["OMI_SEMANTIC_WINDOW"] == "1"
+    // Evidence launches set OMI_CONSUMER_EVIDENCE_PATH but not OMI_PROBE_EXIT, so
+    // fixtureCapture is false and the default WKWebsiteDataStore persists. Sequential
+    // L3s re-lease 15290 and macos chat:messages climbed 66,68,…,84 (+2 per run).
+    let verificationOrigin = LoopbackServer.isVerificationOrigin(loopbackPort)
     if let server = surfaceLoad.server {
       do {
         try server.start()
@@ -671,7 +675,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       handlers: handlers, frame: contentRect, loadURL: surfaceLoad.url,
       http: httpHandler, listen: listenSocketHandler,
       chatStream: chatStreamHandler, chatAttachmentStaging: chatAttachmentStagingHandler,
-      ephemeral: fixtureCapture || semanticWindow,
+      ephemeral: fixtureCapture || semanticWindow || verificationOrigin,
       promptForScreenPermissionOnStart: env["OMI_CONSUMER_EVIDENCE_PATH"]?.isEmpty != false)
     Task {
       await screenEngine.setStatusSink { [weak controller] event in
