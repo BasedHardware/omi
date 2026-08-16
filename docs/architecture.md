@@ -136,8 +136,10 @@ Two different words, both in this tree. Do not collapse them.
 `rolled_back_stranded`) is control-plane state. Application admission
 denies every value except activated `new`
 (`core/control/application-admission.ts:34-51`). The local headed app does
-not walk that cutover through `/v1/qa/control`; `bin/dev-server.ts:342-365`
-calls `ensureLocalOwnerWriteReady` once at process boot. That is still live.
+not walk that cutover through `/v1/qa/control`; `bin/dev-server.ts` calls
+`ensureLocalOwnerWriteReady` after `createLocalDevService` and again from
+the process-registered `afterReset` hook on `/v1/qa/reset`. That is still
+process-owned, never factory-owned.
 
 **Backend generation** is the client knob: `legacy` (old wire, through
 `packages/adapters-legacy`) versus `platform` (contracts-native wire,

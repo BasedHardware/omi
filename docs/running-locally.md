@@ -101,43 +101,28 @@ this backend.
 
 Copy the bearer from the boot banner. Do not commit it.
 
-## Known sharp edge: reset wipes the account epoch
+## Reset restores a write-ready seed
 
-This is current behaviour. A sibling lane may fix it. This paragraph
-describes the tree today, not the fix.
+`POST /v1/qa/reset` is a total restore of the deterministic seed. It wipes
+the account-control projection along with every other store
+(`stores.control.reset()` in `app-facing.ts`). Missing control state denies
+writes (`core/control/write-fence.ts:134-147` maps that to
+`control_unavailable`).
 
-`stores.control.reset()` returns every account to "never told about"
-(`apps/service/control/projection-store.ts:41-64`). Missing control state
-denies writes (`projection-store.ts:13-17`;
-`core/control/write-fence.ts:134-147` maps that to `control_unavailable`).
-
-`reseed` does not restage the projection. `seedServiceStores` writes
+The factory does not restage the projection. `seedServiceStores` writes
 lifecycle, folders, a conversation, and settings; it does not observe or
-activate an epoch (`app-facing.ts:578-599`).
+activate an epoch. In-process tests keep that missing row so they can
+restage through `/v1/qa/control/observe` from revision 1. The sqlite-reset
+proof asserts that path: after `/v1/qa/reset`, `stores.control.read(OWNER)`
+is `null` and `POST /v1/tasks/ops` returns
+`{"error":"maintenance","refusal_outcome":"control_unavailable"}`.
 
-The headed process restages exactly once, after
-`createLocalDevService`, in `bin/dev-server.ts:342-365`
-(`ensureLocalOwnerWriteReady` in `apps/service/qa/local-owner-cutover.ts`).
-The helper is deliberately not inside the factory, so in-process tests keep
-a missing projection to restage (`local-owner-cutover.ts:7-11`).
-`POST /v1/qa/reset` therefore leaves the running process with no
-account-control row.
-
-What the user sees next:
-
-- `GET /v1/tasks` omits `accountEpoch` when the projection is null
-  (`routes/tasks-read.ts:184-194`).
-- The platform Tasks store refuses to journal a create without an observed
-  epoch (`frontend/packages/testkit/src/test/platform-tasks-store.test.ts:215-221`).
-- The write door, if reached, fails closed on `control_unavailable`.
-
-Only a process restart recreates the projection, because that is the only
-call site of `ensureLocalOwnerWriteReady`. The sqlite-reset proof asserts
-the wipe: after `/v1/qa/reset`, `stores.control.read(OWNER)` is `null`
-(`apps/service/app-facing-sqlite-reset.test.ts:161-174`).
-
-Until a fix lands: after a QA reset, stop and boot the stack again before
-expecting Tasks writes to apply.
+The headed process re-admits the local owner through
+`ensureLocalOwnerWriteReady` (`apps/service/qa/local-owner-cutover.ts`).
+`bin/dev-server.ts` calls it after `createLocalDevService`, and again from
+the process-registered `afterReset` hook — never from inside the factory.
+Absent → admit. Already write-ready → no-op. Any other durable state →
+refuse. After a QA reset, platform task writes apply without a restart.
 
 ## Opt-in real Chat model
 
