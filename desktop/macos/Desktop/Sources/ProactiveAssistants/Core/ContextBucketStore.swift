@@ -557,8 +557,9 @@ actor ContextBucketStore {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return [] }
     return
-      (try? await pool.read { db in
-        try ContextProactiveCandidateLookup.lookupArmed(
+      (try? await pool.write { db in
+        try ContextProactiveCandidateLookup.expireStale(now: now, in: db)
+        return try ContextProactiveCandidateLookup.lookupArmed(
           bucketID: bucketID, tags: tags, now: now, in: db)
       }) ?? []
   }

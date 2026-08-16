@@ -1,0 +1,3 @@
+{
+  "change": "A workstream label now has to appear in the facts of the bucket it is applied to, so one bucket's label no longer gets pinned to another"
+}
