@@ -227,7 +227,11 @@ interface ViralMetrics {
   activation: { date: string; signups: number; activated: number; rate: number }[];
   summary: {
     quickRatio: number | null;
+    /** Telemetry-derived; unreliable while the fleet is mid-rollout. Prefer `ActivationStats`. */
     activationRate: number | null;
+    activationTelemetryCoverage: number | null;
+    activationSignups: number;
+    activationPooledRate: number | null;
     dauMau: number;
     dauWau: number;
     dau: number;
@@ -236,6 +240,15 @@ interface ViralMetrics {
     l5PlusPct: number;
     totalUsers: number;
   };
+}
+
+interface ActivationStats {
+  weeks: { week: string; signups: number; activated: number; rate: number }[];
+  signups: number;
+  activated: number;
+  rate: number | null;
+  erroredUsers: number;
+  freshAt?: number;
 }
 
 interface KFactorData {
@@ -468,6 +481,12 @@ export default function AnalyticsPage() {
   const { data: kFactorData, isLoading: kFactorLoading } =
     useSWR<KFactorData>(token ? ["/api/omi/stats/k-factor/posthog?days=30", token] : null, authFetcher, swrOpts);
 
+  // Activation comes from Firestore conversation records, not from the desktop
+  // `Memory Created` event in viral-metrics: older builds cannot emit that
+  // event, so the PostHog figure tracks build age rather than behaviour.
+  const { data: activationStats } =
+    useSWR<ActivationStats>(token ? ["/api/omi/stats/activation?days=60", token] : null, authFetcher, swrOpts);
+
   const { data: macosVersionStats, isLoading: macosVersionStatsLoading } =
     useSWR<MacosVersionStatsData>(token ? ["/api/omi/stats/macos-versions", token] : null, authFetcher, swrOpts);
 
@@ -656,9 +675,14 @@ export default function AnalyticsPage() {
     () => completedWeeklyNewUsers(allDailyData).slice(-12),
     [allDailyData],
   );
+  // Firestore-derived when available; the telemetry series is only a fallback
+  // for the window before the activation route has a cached payload.
   const weeklyActivationData = useMemo(
-    () => maturedWeeklyActivation(activationData).slice(-12),
-    [activationData],
+    () =>
+      activationStats
+        ? activationStats.weeks.slice(-12)
+        : maturedWeeklyActivation(activationData).slice(-12),
+    [activationStats, activationData],
   );
   const latestWeeklyNewUsers = weeklyNewUsersData.at(-1) ?? null;
   const latestWeeklyActivation = weeklyActivationData.at(-1) ?? null;
@@ -1689,7 +1713,7 @@ export default function AnalyticsPage() {
         id: "viral-activation",
         title: "New Activated Users / Week",
         periodChange: latestPeriodChange(weeklyActivationData, (point) => point.activated, "vs previous mature cohort week"),
-        subtitle: "Memory created within 7 days of signup · fully matured cohorts only",
+        subtitle: "Conversation created within 7 days of signup · fully matured cohorts only",
         icon: <Target className="h-4 w-4" />,
         initialLayout: { cols: 12, rows: 4 },
         render: () => (
@@ -1887,8 +1911,8 @@ export default function AnalyticsPage() {
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {latestWeeklyActivation
-                ? `${latestWeeklyActivation.rate.toFixed(1)}% activation · Memory in 7d`
-                : "Memory within 7 days of signup"}
+                ? `${latestWeeklyActivation.rate.toFixed(1)}% activation · conversation in 7d`
+                : "Conversation within 7 days of signup"}
             </p>
           </div>
         ),
@@ -2278,14 +2302,23 @@ export default function AnalyticsPage() {
       initialLayout: { cols: 2, rows: 1 },
       render: () => (
         <div>
-          <div className={`text-2xl font-bold ${(vm?.summary.activationRate ?? 0) >= 50 ? "text-green-600" : ""}`}>
-            {vm?.summary.activationRate != null ? `${vm.summary.activationRate}%` : "--"}
+          <div className={`text-2xl font-bold ${(activationStats?.rate ?? 0) >= 50 ? "text-green-600" : ""}`}>
+            {activationStats?.rate != null ? `${activationStats.rate}%` : "--"}
           </div>
-          <p className="text-xs text-muted-foreground">Memory within 7d</p>
+          <p className="text-xs text-muted-foreground">
+            {activationStats?.rate != null
+              ? `Conversation within 7d · n=${activationStats.signups.toLocaleString()}`
+              : "Conversation within 7 days of signup"}
+          </p>
+          {(activationStats?.erroredUsers ?? 0) > 0 && (
+            <p className="text-xs text-amber-600">
+              {activationStats?.erroredUsers} users unreadable this run
+            </p>
+          )}
         </div>
       ),
     },
-  ], [vm, profitability]);
+  ], [vm, profitability, activationStats]);
 
   const notificationsHeader: ChartItem = {
     id: "header-notifications",
