@@ -44,3 +44,14 @@ data:
   OIDC_JWKS_URL: "http://keycloak:8090/realms/omi/protocol/openid-connect/certs"
   OIDC_AUDIENCE: {{ .Values.auth.audience | quote }}
   {{- end }}
+  {{- if .Values.inference.enabled }}
+  # inference profile: external OpenAI-compatible endpoint(s), OUTSIDE the cluster (ADR-0035). Keys live
+  # in the Secret. Empty base URLs are omitted so the cloud defaults stand.
+  {{- with .Values.inference.openai.baseUrl }}
+  OPENAI_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.inference.embeddings.baseUrl }}
+  OMI_EMBEDDINGS_BASE_URL: {{ . | quote }}
+  OMI_EMBEDDINGS_MODEL: {{ $.Values.inference.embeddings.model | quote }}
+  {{- end }}
+  {{- end }}

@@ -106,7 +106,17 @@ push:
     storage: 1Gi
     resources: {}
 inference:
+  # LLM + embeddings via an EXTERNAL OpenAI-compatible endpoint, OUTSIDE the cluster (ADR-0035) — NOT
+  # in-cluster GPU pods (GPU on Kind is fragile; that stays a k0s concern). The operator points these at
+  # their own OpenAI/vLLM/Ollama/TEI endpoint. Empty values are simply not rendered.
   enabled: false
+  openai:
+    baseUrl: ""   # e.g. https://api.openai.com/v1  OR  an operator vLLM/Ollama /v1 endpoint
+    apiKey: ""
+  embeddings:
+    baseUrl: ""   # OpenAI-compatible embeddings endpoint; dim MUST equal chat.vectorDim
+    model: ""     # e.g. bge-m3
+    apiKey: ""
 
 # Edge ingress. Default type "gateway" = Gateway API via Envoy Gateway (ADR-0049 Q3): the modern
 # replacement for the compose TLS reverse-proxies. Envoy Gateway itself is a cluster-level prerequisite
