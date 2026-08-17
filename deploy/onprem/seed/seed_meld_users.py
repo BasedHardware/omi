@@ -193,15 +193,49 @@ def kc_user_token(kc_url: str, realm: str, client_id: str, username: str, passwo
 
 
 # --- Backend API --------------------------------------------------------------------------------
-def api_get_or_create_person(api_url: str, token: str, name: str) -> str:
-    _, person = _http(
-        "POST", f"{api_url}/v1/users/people", headers={"Authorization": f"Bearer {token}"},
+class _KcToken:
+    """A Keycloak user access token that re-mints itself on demand.
+
+    A single per-user seed pass (profile conversation + N dialogues, each polled up to ~60s by
+    api_wait_enriched) can outlive the realm's access-token lifespan (Keycloak default is 5 min).
+    Minting once and reusing the raw string then dies mid-run with a 401. Holding the mint args and
+    reacquiring on a 401 (see _api) keeps a long run alive instead of failing on an expired bearer."""
+
+    def __init__(self, kc_url: str, realm: str, client_id: str, username: str, password: str) -> None:
+        self._args = (kc_url, realm, client_id, username, password)
+        self._value = kc_user_token(*self._args)
+
+    @property
+    def value(self) -> str:
+        return self._value
+
+    def refresh(self) -> str:
+        self._value = kc_user_token(*self._args)
+        return self._value
+
+
+def _api(method: str, url: str, token: "_KcToken", *, data=None, expect=(200, 201)):
+    """`_http` with a Bearer from `token`, re-minting the token once on a 401 (expired access token).
+
+    Only 401 triggers the re-mint+retry; any other non-expected status propagates unchanged, so the
+    500-retry loop in api_create_conversation still sees its own errors."""
+    try:
+        return _http(method, url, headers={"Authorization": f"Bearer {token.value}"}, data=data, expect=expect)
+    except RuntimeError as e:
+        if "-> 401" not in str(e):
+            raise
+        return _http(method, url, headers={"Authorization": f"Bearer {token.refresh()}"}, data=data, expect=expect)
+
+
+def api_get_or_create_person(api_url: str, token: "_KcToken", name: str) -> str:
+    _, person = _api(
+        "POST", f"{api_url}/v1/users/people", token,
         data={"name": name[:40]}, expect=(200, 201),
     )
     return person["id"]
 
 
-def api_create_conversation(api_url: str, token: str, segments: list, started_at: datetime,
+def api_create_conversation(api_url: str, token: "_KcToken", segments: list, started_at: datetime,
                             source="omi", language="en", *, retries=3) -> dict:
     # source=omi (mobile-like) processes EAGERLY: full LLM enrichment (overview, action_items,
     # memories) + Qdrant vectors at creation. source=desktop would defer enrichment to first open
@@ -215,8 +249,8 @@ def api_create_conversation(api_url: str, token: str, segments: list, started_at
     last = None
     for attempt in range(1, retries + 1):
         try:
-            _, conv = _http("POST", f"{api_url}/v1/conversations/from-segments",
-                            headers={"Authorization": f"Bearer {token}"}, data=payload, expect=(200, 201))
+            _, conv = _api("POST", f"{api_url}/v1/conversations/from-segments", token,
+                           data=payload, expect=(200, 201))
             return conv
         except RuntimeError as e:
             last = e
@@ -226,7 +260,7 @@ def api_create_conversation(api_url: str, token: str, segments: list, started_at
     raise last  # unreachable
 
 
-def api_wait_enriched(api_url: str, token: str, conv_id: str, *, attempts=30, delay=2.0) -> dict:
+def api_wait_enriched(api_url: str, token: "_KcToken", conv_id: str, *, attempts=30, delay=2.0) -> dict:
     """Poll until the conversation's async enrichment (LLM structured + memories + vectors) finishes.
 
     Also paces the seed to one in-flight conversation at a time, which keeps concurrent embed+LLM
@@ -235,8 +269,7 @@ def api_wait_enriched(api_url: str, token: str, conv_id: str, *, attempts=30, de
 
     conv = {}
     for _ in range(attempts):
-        _, conv = _http("GET", f"{api_url}/v1/conversations/{conv_id}",
-                        headers={"Authorization": f"Bearer {token}"}, expect=(200,))
+        _, conv = _api("GET", f"{api_url}/v1/conversations/{conv_id}", token, expect=(200,))
         st = (conv.get("structured") or {}) if isinstance(conv, dict) else {}
         if isinstance(conv, dict) and conv.get("status") == "completed" and not conv.get("deferred") and st.get("overview"):
             return conv
@@ -354,7 +387,7 @@ def main() -> int:
             grand_total += len(picks)
             continue
 
-        token = kc_user_token(args.kc_url, args.realm, args.client_id, u["username"], args.password)
+        token = _KcToken(args.kc_url, args.realm, args.client_id, u["username"], args.password)
         # Pre-create People (by name) for every non-primary speaker across this user's dialogues.
         names = sorted({_norm_speaker(r["Speaker"]) for did in picks for r in dialogues[did]
                         if _norm_speaker(r["Speaker"]).lower() != character.lower()
