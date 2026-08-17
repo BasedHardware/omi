@@ -5,13 +5,13 @@ from typing import Any, Dict, Optional
 
 from models.memory_evidence import SourceState
 from models.product_memory import (
-    DEFAULT_SHORT_TERM_TTL,
-    DEFAULT_SHORT_TERM_TTL_DAYS,
+    DEFAULT_SHORT_TERM_TTL as DEFAULT_SHORT_TERM_TTL,
+    DEFAULT_SHORT_TERM_TTL_DAYS as DEFAULT_SHORT_TERM_TTL_DAYS,
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
     MemoryItem,
-    default_short_term_expiry,
+    default_short_term_expiry as default_short_term_expiry,
     effective_short_term_expiry,
 )
 

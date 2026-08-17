@@ -181,7 +181,7 @@ def count_active_short_term(uid: str, *, db_client: Any, cap: int = ACTIVE_SHORT
     if not callable(collection):
         return None
     try:
-        query = collection(MemoryCollections(uid=uid).memory_items)
+        query: Any = collection(MemoryCollections(uid=uid).memory_items)
         where = getattr(query, "where", None)
         if callable(where):
             query = where("tier", "==", MemoryLayer.short_term.value)
