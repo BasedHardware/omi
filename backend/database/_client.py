@@ -138,6 +138,13 @@ def _build_customer_firestore_client() -> Any:
     Compute-local state (``agentVm``, GCE) keeps using ``get_firestore_client()``
     so development Cloud Run ADC can stay on ``based-hardware-dev``.
     """
+    # On-prem (ADR-0044): when the storage backend is not Firestore, customer data (identity/subscription/
+    # usage, realtime sessions, LLM usage — see routers/desktop_realtime.py, utils/subscription.py) must ALSO
+    # go through the neutral facade. The gate in _build_firestore_client only covered get_firestore_client();
+    # without the same gate here, a configured entitlement/customer SA still built a REAL Firestore client
+    # under STORAGE_BACKEND=mongo, breaking the no-Google guarantee (cubic PR 10887 _client.py:95).
+    if (os.environ.get("STORAGE_BACKEND") or "firestore").strip().lower() != "firestore":
+        return get_firestore_client()
     if os.environ.get("FIRESTORE_EMULATOR_HOST"):
         return _build_firestore_client()
 

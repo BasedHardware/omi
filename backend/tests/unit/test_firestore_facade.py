@@ -377,6 +377,20 @@ def test_txn_write_conflict_at_write_time_translates_to_aborted():
         txn.set(c.document("users/u1/goals/reservation"), {"version": 2})
 
 
+def test_get_all_binds_positional_transaction():
+    # cubic PR 10887 firestore_facade.py:658: real Firestore is get_all(references, field_paths, transaction);
+    # a positional transaction must BIND (read through the session), not be swallowed by *_ (read outside it).
+    c = _client()
+    c.document("users/u1/goals/g1").set({"v": 1})
+    txn = c.transaction()
+    reads: list = []
+    orig_read = txn._read
+    txn._read = lambda path, **kw: (reads.append(path), orig_read(path, **kw))[1]
+    snaps = list(c.get_all([c.document("users/u1/goals/g1")], None, txn))  # positional field_paths + transaction
+    assert [s.to_dict() for s in snaps] == [{"v": 1}]
+    assert reads == ["users/u1/goals/g1"]  # the read went THROUGH the transaction, not the batched get_many
+
+
 def test_select_projects_fields_to_the_store():
     # cubic PR 10887 facade:258: .select() must propagate the projection to the store instead of fetching
     # every field. select(['f']) returns only f; select([]) is ids-only; no select returns the full doc.

@@ -655,8 +655,18 @@ class NeutralFirestoreClient:
         return _Precondition(last_update_time)
 
     def get_all(
-        self, references: Iterable[_DocRef], *_: Any, transaction: Optional["_FacadeTransaction"] = None, **__: Any
+        self,
+        references: Iterable[_DocRef],
+        field_paths: Any = None,  # mirror Firestore's positional (references, field_paths, transaction) order
+        transaction: Optional["_FacadeTransaction"] = None,
+        **_: Any,
     ) -> Iterable[_Snapshot]:
+        # Real Firestore get_all is get_all(references, field_paths=None, transaction=None, ...). A prior
+        # ``*_`` swallowed a POSITIONAL transaction, so `get_all(refs, field_paths, txn)` read OUTSIDE the
+        # transaction (lost read-your-writes/atomicity). Name the params so a positional transaction binds
+        # (cubic PR 10887 firestore_facade.py:658). ``field_paths`` (projection) is accepted for signature
+        # parity; the batched get_many is not projection-aware, so it is not applied (over-fetch, as before).
+        del field_paths
         refs = list(references)
         if transaction is not None:
             # Inside a transaction, get_all must read through the session for read-your-writes; the
