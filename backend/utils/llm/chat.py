@@ -1,6 +1,8 @@
 import json
 import re
 from datetime import datetime, timezone
+
+_MAX_WORDS_HINT = "Use a maximum of 2 words per item."
 from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
@@ -35,13 +37,8 @@ def _content_str(response: Any) -> str:
 
 
 def normalize_filter(value: str) -> str:
-    # Convert to lowercase and strip whitespace
-    value = value.lower().strip()
-
-    # Remove special characters and extra spaces
-    value = re.sub(r'[^\w\s-]', '', value)
+    value = re.sub(r'[^a-z0-9\s]', '', value.lower()).strip()
     value = re.sub(r'\s+', ' ', value)
-
     # Remove common filler words
     filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'of'}
     value = ' '.join(word for word in value.split() if word not in filler_words)
@@ -1057,17 +1054,17 @@ class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
         examples=[['John Doe', 'Jane Doe']],
-        description='Identify all the people names who were mentioned during the conversation. Use a maximum of 2 words per item.',
+        description=f'Identify all the people names who were mentioned during the conversation. {_MAX_WORDS_HINT}',
     )
     topics: List[str] = Field(
         default=[],
         examples=[['Artificial Intelligence', 'Machine Learning']],
-        description='List all the main topics and subtopics that were discussed. Use a maximum of 2 words per item.',
+        description=f'List all the main topics and subtopics that were discussed. {_MAX_WORDS_HINT}',
     )
     entities: List[str] = Field(
         default=[],
         examples=[['OpenAI', 'GPT-4']],
-        description='List any products, technologies, places, or other entities that are relevant to the conversation. Use a maximum of 2 words per item.',
+        description=f'List any products, technologies, places, or other entities that are relevant to the conversation. {_MAX_WORDS_HINT}',
     )
     dates: List[str] = Field(
         default=[],
@@ -1197,7 +1194,7 @@ def retrieve_metadata_fields_from_transcript(
     prompt = f'''
     You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
 
-    Your task is to extract the most accurate information from the content in the output object indicated below. Use a maximum of 2 words per item to have more standardization possibilities.
+    Your task is to extract the most accurate information from the content in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
@@ -1252,7 +1249,7 @@ def retrieve_metadata_from_message(
     prompt = f'''
     You will be given the content of a message or conversation {source_context}.
 
-    Your task is to extract the most accurate information from the message in the output object indicated below. Use a maximum of 2 words per item to have more standardization possibilities.
+    Your task is to extract the most accurate information from the message in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the message (sender, recipients, and anyone referenced)
@@ -1287,7 +1284,7 @@ def retrieve_metadata_from_text(
     prompt = f'''
     You will be given the content of a text {source_context}.
 
-    Your task is to extract the most accurate information from the text in the output object indicated below. Use a maximum of 2 words per item to have more standardization possibilities.
+    Your task is to extract the most accurate information from the text in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the text (author, recipients, and anyone referenced)
