@@ -5,7 +5,7 @@ retried or reordered sync cannot regress state. Reads are fenced by account gene
 and filter expired facts, so a lagging collector never serves stale context.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, cast
 
 from google.cloud import firestore
@@ -25,6 +25,12 @@ from models.context_bucket import (
 
 BUCKETS_COLLECTION = 'context_buckets'
 FACTS_COLLECTION = 'context_bucket_facts'
+
+# Ordering trusts the publishing device's clock, so a device running fast could
+# stamp a far-future time and lock every other device out of that row until wall
+# clock caught up. Clamping rather than rejecting keeps a mildly skewed clock
+# syncing normally while bounding how far ahead any device can place itself.
+MAX_DEVICE_CLOCK_SKEW = timedelta(hours=1)
 
 
 def _get_db(firestore_client: Any = None) -> Any:
@@ -69,9 +75,32 @@ def _as_aware(value: Any) -> Optional[datetime]:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-def _is_stale(stored: dict[str, Any], incoming_device_updated_at: datetime) -> bool:
-    """Report whether a stored row already reflects a device write at least this new."""
+def _clamped_device_time(value: datetime, *, now: datetime) -> datetime:
+    """Bound how far ahead of the server a device may place itself."""
 
+    aware = _as_aware(value)
+    if aware is None:
+        return now
+    ceiling = now + MAX_DEVICE_CLOCK_SKEW
+    return ceiling if aware > ceiling else aware
+
+
+def _is_stale(
+    stored: dict[str, Any],
+    incoming_device_updated_at: datetime,
+    *,
+    account_generation: int,
+) -> bool:
+    """Report whether a stored row already reflects a device write at least this new.
+
+    A row from a different account generation is never stale. Generation fences
+    every read, so a row left behind at the old generation is invisible; skipping
+    its rewrite as "already current" would strand it permanently, because the
+    device has no reason to bump a device clock that did not change.
+    """
+
+    if int(stored.get('account_generation', 0)) != account_generation:
+        return False
     stored_at = _as_aware(stored.get('device_updated_at'))
     if stored_at is None:
         return False
@@ -97,7 +126,7 @@ def _bucket_storage(
         'visit_count': bucket.visit_count,
         'last_visited_at': bucket.last_visited_at,
         'device_id': device_id,
-        'device_updated_at': bucket.device_updated_at,
+        'device_updated_at': _clamped_device_time(bucket.device_updated_at, now=now),
         'account_generation': account_generation,
         'created_at': created_at,
         'updated_at': now,
@@ -125,7 +154,7 @@ def _fact_storage(
         'evidence_refs': [ref.model_dump(mode='python') for ref in fact.evidence_refs],
         'expires_at': fact.expires_at,
         'device_id': device_id,
-        'device_updated_at': fact.device_updated_at,
+        'device_updated_at': _clamped_device_time(fact.device_updated_at, now=now),
         'account_generation': account_generation,
         'created_at': created_at,
         'updated_at': now,
@@ -147,46 +176,71 @@ def sync_context_buckets(
     buckets_skipped = 0
     facts_written = 0
     facts_skipped = 0
+    facts_ref = _facts_collection(uid, firestore_client=client)
 
     for bucket in request.buckets:
         bucket_ref = _bucket_ref(uid, bucket.bucket_id, firestore_client=client)
-        batch = client.batch()
-        stored_bucket = _snapshot_dict(bucket_ref.get())
-        if stored_bucket and _is_stale(stored_bucket, bucket.device_updated_at):
-            buckets_skipped += 1
-        else:
-            batch.set(
-                bucket_ref,
-                _bucket_storage(
-                    bucket,
-                    device_id=request.device_id,
-                    account_generation=account_generation,
-                    now=now,
-                    created_at=_as_aware(stored_bucket.get('created_at')) or now,
-                ),
-            )
-            buckets_written += 1
+        fact_refs = [(fact, facts_ref.document(fact.fact_id)) for fact in bucket.facts]
+        transaction = client.transaction()
 
-        facts_ref = _facts_collection(uid, firestore_client=client)
-        for fact in bucket.facts:
-            fact_ref = facts_ref.document(fact.fact_id)
-            stored_fact = _snapshot_dict(fact_ref.get())
-            if stored_fact and _is_stale(stored_fact, fact.device_updated_at):
-                facts_skipped += 1
-                continue
-            batch.set(
-                fact_ref,
-                _fact_storage(
-                    fact,
-                    bucket_id=bucket.bucket_id,
-                    device_id=request.device_id,
+        @firestore.transactional
+        def apply(write_transaction, bucket=bucket, bucket_ref=bucket_ref, fact_refs=fact_refs):
+            """Re-read every row inside the transaction so the staleness test commits atomically.
+
+            Reading outside the transaction and writing after would let two
+            concurrent syncs both observe an old row and both write, so the
+            loser's older device clock could overwrite the newer state.
+            """
+
+            written = skipped = fact_written = fact_skipped = 0
+            stored_bucket = _snapshot_dict(bucket_ref.get(transaction=write_transaction))
+            if stored_bucket and _is_stale(
+                stored_bucket,
+                _clamped_device_time(bucket.device_updated_at, now=now),
+                account_generation=account_generation,
+            ):
+                skipped += 1
+            else:
+                write_transaction.set(
+                    bucket_ref,
+                    _bucket_storage(
+                        bucket,
+                        device_id=request.device_id,
+                        account_generation=account_generation,
+                        now=now,
+                        created_at=_as_aware(stored_bucket.get('created_at')) or now,
+                    ),
+                )
+                written += 1
+
+            for fact, fact_ref in fact_refs:
+                stored_fact = _snapshot_dict(fact_ref.get(transaction=write_transaction))
+                if stored_fact and _is_stale(
+                    stored_fact,
+                    _clamped_device_time(fact.device_updated_at, now=now),
                     account_generation=account_generation,
-                    now=now,
-                    created_at=_as_aware(stored_fact.get('created_at')) or now,
-                ),
-            )
-            facts_written += 1
-        batch.commit()
+                ):
+                    fact_skipped += 1
+                    continue
+                write_transaction.set(
+                    fact_ref,
+                    _fact_storage(
+                        fact,
+                        bucket_id=bucket.bucket_id,
+                        device_id=request.device_id,
+                        account_generation=account_generation,
+                        now=now,
+                        created_at=_as_aware(stored_fact.get('created_at')) or now,
+                    ),
+                )
+                fact_written += 1
+            return written, skipped, fact_written, fact_skipped
+
+        written, skipped, fact_written, fact_skipped = apply(transaction)
+        buckets_written += written
+        buckets_skipped += skipped
+        facts_written += fact_written
+        facts_skipped += fact_skipped
 
     return ContextBucketSyncReport(
         buckets_written=buckets_written,

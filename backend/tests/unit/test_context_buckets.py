@@ -92,6 +92,17 @@ class FakeCollection(FakeQuery):
         return FakeRef(self.database, (*self.path, name))
 
 
+class FakeTransaction:
+    def __init__(self, database):
+        self.database = database
+
+    def set(self, ref, payload):
+        ref.set(payload)
+
+    def delete(self, ref):
+        ref.delete()
+
+
 class FakeBatch:
     def __init__(self, database):
         self.database = database
@@ -122,9 +133,19 @@ class FakeDB:
     def batch(self):
         return FakeBatch(self)
 
+    def transaction(self):
+        return FakeTransaction(self)
+
 
 @pytest.fixture
-def fake_db():
+def fake_db(monkeypatch):
+    def transactional(function):
+        def run(transaction):
+            return function(transaction)
+
+        return run
+
+    monkeypatch.setattr(context_buckets_db.firestore, 'transactional', transactional)
     return FakeDB()
 
 
@@ -278,3 +299,40 @@ def test_sync_contract_rejects_duplicate_ids():
                 build_bucket('bucket-2', facts=[build_fact('fact-1')]),
             ],
         )
+
+
+def test_generation_change_republishes_rather_than_skipping_as_stale(fake_db):
+    """A row stranded at the old generation is invisible, so it must not read as current."""
+
+    sync(fake_db, [build_bucket()], generation=3)
+
+    report = sync(fake_db, [build_bucket()], generation=4)
+
+    assert (report.buckets_skipped_stale, report.facts_skipped_stale) == (0, 0)
+    assert (report.buckets_written, report.facts_written) == (1, 1)
+    facts = context_buckets_db.list_context_facts('u1', account_generation=4, now=NOW, firestore_client=fake_db)
+    buckets = context_buckets_db.list_context_buckets('u1', account_generation=4, firestore_client=fake_db)
+    assert [fact.fact_id for fact in facts] == ['fact-1']
+    assert [bucket.bucket_id for bucket in buckets] == ['bucket-1']
+
+
+def test_a_fast_device_clock_cannot_lock_out_later_writes(fake_db):
+    far_future = NOW + timedelta(days=365)
+    sync(fake_db, [build_bucket(facts=[build_fact('fact-1', statement='Skewed', device_updated_at=far_future)])])
+
+    stored = fake_db.rows[('users', 'u1', 'context_bucket_facts', 'fact-1')]['device_updated_at']
+    assert stored <= datetime.now(timezone.utc) + context_buckets_db.MAX_DEVICE_CLOCK_SKEW
+
+    later = datetime.now(timezone.utc) + context_buckets_db.MAX_DEVICE_CLOCK_SKEW + timedelta(minutes=1)
+    sync(
+        fake_db,
+        [
+            build_bucket(
+                device_updated_at=later,
+                facts=[build_fact('fact-1', statement='Recovered', device_updated_at=later)],
+            )
+        ],
+    )
+
+    facts = context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db)
+    assert [fact.statement for fact in facts] == ['Recovered']
