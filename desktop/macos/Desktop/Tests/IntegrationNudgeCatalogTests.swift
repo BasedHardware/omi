@@ -82,38 +82,71 @@ final class IntegrationNudgeCatalogTests: XCTestCase {
     }
   }
 
-  /// Every trigger the catalog declares must be reachable by the matcher. A
-  /// browser keyword that no longer survives token-boundary matching, or an
-  /// entry whose triggers were emptied, would silently stop nudging.
-  func testEveryDeclaredTriggerActuallyMatchesSomething() {
+  /// Real window titles, observed from the actual sites. Synthesizing a title
+  /// out of the keyword ("Some Page — \(keyword)") would match by construction
+  /// and prove nothing — which is exactly how a round of domain-style keywords
+  /// (`chatgpt.com`, `claude.ai`, `notion.so`) passed while matching nothing a
+  /// browser ever puts in a window title.
+  private static let observedBrowserTitles: [String: [String]] = [
+    "gmail_web": ["Inbox (12) - me@corp.com - Gmail", "Omi launch - me@corp.com - Gmail"],
+    "x_web": ["Home / X", "(3) Home / X", "Archit on X: \"shipping\" / X"],
+    "chatgpt_web": ["ChatGPT", "Swift concurrency question - ChatGPT"],
+    "claude_web": ["Claude", "Reviewing a diff \\ Claude"],
+    "gemini_web": ["Gemini", "Trip planning - Gemini"],
+  ]
+
+  /// Every browser trigger must match a title a browser actually produces, and
+  /// every native trigger must resolve back to its own entry.
+  func testEveryDeclaredTriggerMatchesSomethingReal() {
     for entry in IntegrationNudgeCatalog.all {
       for trigger in entry.triggers {
         switch trigger.match {
         case .application(let identifiers):
           XCTAssertFalse(identifiers.isEmpty, "\(trigger.id) declares no bundle identifiers")
           for identifier in identifiers {
-            let window = IntegrationNudgeMatcher.Window(bundleIdentifier: identifier)
             XCTAssertEqual(
-              IntegrationNudgeMatcher.match(window)?.entry.telemetryID,
+              IntegrationNudgeMatcher.match(.init(bundleIdentifier: identifier))?.entry.telemetryID,
               entry.telemetryID,
               "\(identifier) does not resolve back to \(entry.telemetryID)"
             )
           }
-        case .browserTitle(let keywords):
-          XCTAssertFalse(keywords.isEmpty, "\(trigger.id) declares no keywords")
-          for keyword in keywords {
-            let window = IntegrationNudgeMatcher.Window(
-              bundleIdentifier: "com.google.Chrome",
-              windowTitle: "Some Page — \(keyword)"
-            )
+
+        case .browserTitleSuffix(let suffixes):
+          XCTAssertFalse(suffixes.isEmpty, "\(trigger.id) declares no suffixes")
+          guard let titles = Self.observedBrowserTitles[trigger.id] else {
+            return XCTFail(
+              "browser trigger '\(trigger.id)' has no observed real titles to test against")
+          }
+          for title in titles {
             XCTAssertEqual(
-              IntegrationNudgeMatcher.match(window)?.entry.telemetryID,
+              IntegrationNudgeMatcher.match(
+                .init(bundleIdentifier: "com.google.Chrome", windowTitle: title)
+              )?.entry.telemetryID,
               entry.telemetryID,
-              "keyword '\(keyword)' does not resolve back to \(entry.telemetryID)"
+              "real title '\(title)' does not resolve to \(entry.telemetryID)"
             )
           }
         }
       }
+    }
+  }
+
+  /// Pages *about* a tool are the false positive that matters, because a wrong
+  /// nudge is worse than a missing one.
+  func testPagesAboutAToolAreNotThatTool() {
+    for title in [
+      "ChatGPT vs Claude — a comparison",
+      "anthropics/claude-code: the CLI",
+      "Notion alternatives in 2026 — Blog",
+      "Google Calendar tips for 2026 — Blog",
+      "Why I quit Twitter — Substack",
+      "Gmail is down again - Hacker News",
+    ] {
+      XCTAssertNil(
+        IntegrationNudgeMatcher.match(
+          .init(bundleIdentifier: "com.google.Chrome", windowTitle: title)),
+        "'\(title)' should not match any integration"
+      )
     }
   }
 

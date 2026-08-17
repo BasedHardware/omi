@@ -18,29 +18,6 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
     XCTAssertEqual(result?.trigger.kind, .nativeApp)
   }
 
-  /// A bare product name fires on any page that merely mentions the tool, so
-  /// browser keywords are domains wherever the real title carries one.
-  func testAPageAboutAToolIsNotThatTool() {
-    XCTAssertNil(match(bundle: "com.google.Chrome", title: "ChatGPT vs Claude — a comparison"))
-    XCTAssertNil(match(bundle: "com.google.Chrome", title: "anthropics/claude-code: the CLI"))
-    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Notion alternatives in 2026 — Blog"))
-  }
-
-  func testTheRealSiteTitlesStillMatch() {
-    XCTAssertEqual(
-      match(bundle: "com.google.Chrome", title: "Omi — chatgpt.com")?.entry.route,
-      .exportDestination("chatgpt")
-    )
-    XCTAssertEqual(
-      match(bundle: "com.google.Chrome", title: "New chat \\ claude.ai")?.entry.route,
-      .exportDestination("claude")
-    )
-    XCTAssertEqual(
-      match(bundle: "com.google.Chrome", title: "Roadmap — notion.so")?.entry.route,
-      .exportDestination("notion")
-    )
-  }
-
   func testBrowserTitleMatchesASite() {
     let result = match(bundle: "com.google.Chrome", title: "Inbox (42) - me@example.com - Gmail")
     XCTAssertEqual(result?.entry.route, .importConnector("email"))
@@ -49,8 +26,8 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
 
   func testBrowserTitleMatchIsCaseInsensitive() {
     XCTAssertEqual(
-      match(bundle: "com.apple.Safari", title: "Roadmap – NOTION.SO")?.entry.route,
-      .exportDestination("notion")
+      match(bundle: "com.apple.Safari", title: "Swift concurrency - CHATGPT")?.entry.route,
+      .exportDestination("chatgpt")
     )
   }
 
@@ -82,40 +59,28 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
     XCTAssertNil(match(bundle: nil))
   }
 
-  /// A plain substring match makes every short keyword claim a neighbourhood of
-  /// unrelated sites — `x.com` matching `max.com` is the worst case, because a
-  /// wrong nudge is worse than a missing one.
-  func testAKeywordInsideALongerWordIsNotAMatch() {
-    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Max — max.com"))
-    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Watch on hbomax.com"))
-  }
-
-  func testTheSameKeywordStillMatchesAsItsOwnToken() {
+  /// The site's own name lives at the end of a real title, so anchoring there
+  /// is what separates "Home / X" from "Why I quit Twitter — Substack".
+  func testMatchingIsAnchoredToTheEndOfTheTitle() {
     XCTAssertEqual(
-      match(bundle: "com.google.Chrome", title: "Home / x.com")?.entry.route,
+      match(bundle: "com.google.Chrome", title: "(3) Home / X")?.entry.route,
       .importConnector("x")
     )
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "X marks the spot — Blog"))
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "ChatGPT vs Claude — a comparison"))
+  }
+
+  /// Browsers append their own product name to the window title; the site name
+  /// is still the end of the page's title.
+  func testBrowserChromeSuffixIsStripped() {
     XCTAssertEqual(
-      match(bundle: "com.google.Chrome", title: "(3) twitter.com")?.entry.route,
-      .importConnector("x")
+      match(bundle: "com.google.Chrome", title: "ChatGPT - Google Chrome")?.entry.route,
+      .exportDestination("chatgpt")
     )
+    XCTAssertEqual(
+      IntegrationNudgeMatcher.normalizedTitle("Home / X - Google Chrome"), "home / x")
   }
 
-  /// "Twitter" as a bare word matched any page that merely discussed Twitter.
-  func testAPageAboutASiteIsNotThatSite() {
-    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Why I quit Twitter — Substack"))
-  }
-
-  func testTokenMatchingRules() {
-    XCTAssertTrue(IntegrationNudgeMatcher.containsWholeToken("x.com", in: "home / x.com"))
-    XCTAssertFalse(IntegrationNudgeMatcher.containsWholeToken("x.com", in: "max.com"))
-    XCTAssertTrue(IntegrationNudgeMatcher.containsWholeToken("gmail", in: "inbox - gmail"))
-    XCTAssertFalse(IntegrationNudgeMatcher.containsWholeToken("gmail", in: "gmailify settings"))
-    XCTAssertFalse(IntegrationNudgeMatcher.containsWholeToken("", in: "anything"))
-  }
-
-  /// The browser allowlist decides whether a title is read at all, so a variant
-  /// missing from it silently disables browser nudges for those users.
   func testBrowserVariantsAreRecognized() {
     for identifier in [
       "com.microsoft.edgemac.Beta", "com.brave.Browser.nightly",

@@ -57,7 +57,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let presented = Box(0)
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
-    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
+    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
     XCTAssertEqual(presented.value, 1)
 
     let store = IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
@@ -71,7 +71,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
     XCTAssertEqual(
-      coordinator.offer(match: try match(), isConnected: true, dwell: 3),
+      coordinator.offer(match: try match(), isConnected: true),
       .settled(.alreadyConnected))
     XCTAssertEqual(presented.value, 0)
     XCTAssertEqual(
@@ -94,7 +94,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
 
-    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
     XCTAssertEqual(
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
         .state(for: try match().entry.telemetryID).shownCount,
@@ -116,7 +116,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
 
-    _ = coordinator.offer(match: try match(), isConnected: false, dwell: 3)
+    _ = coordinator.offer(match: try match(), isConnected: false)
 
     XCTAssertEqual(
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
@@ -140,7 +140,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
 
-    _ = coordinator.offer(match: try match(), isConnected: false, dwell: 3)
+    _ = coordinator.offer(match: try match(), isConnected: false)
     present.value?()
 
     XCTAssertEqual(
@@ -160,7 +160,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       ownerID: nil
     )
 
-    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
     XCTAssertEqual(presented.value, 0)
   }
 
@@ -171,11 +171,11 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let presented = Box(0)
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
-    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
+    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
 
     let second = try match(.exportDestination("notion"))
     XCTAssertEqual(
-      coordinator.offer(match: second, isConnected: false, dwell: 3),
+      coordinator.offer(match: second, isConnected: false),
       .settled(.globalCooldown))
     XCTAssertEqual(presented.value, 1)
   }
@@ -197,7 +197,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
         presentedCount: presented,
         environment: environment
       )
-      XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
+      XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
       XCTAssertEqual(presented.value, 0)
     }
   }
@@ -211,104 +211,8 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       presentedCount: presented,
       environment: .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: false)
     )
-    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false), .delivered)
     XCTAssertEqual(presented.value, 0)
-  }
-
-  func testShortDwellNeverPresents() throws {
-    let defaults = makeDefaults()
-    let presented = Box(0)
-    let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
-
-    XCTAssertEqual(
-      coordinator.offer(
-        match: try match(),
-        isConnected: false,
-        dwell: IntegrationNudgePolicy.requiredDwell - 0.5
-      ),
-      .settled(.dwellTooShort)
-    )
-    XCTAssertEqual(presented.value, 0)
-  }
-
-  // MARK: - Identity across awaits
-
-  /// Reading the active window title and inspecting a connector are both slow
-  /// enough for the user to switch apps mid-flight. A card that says "Connect
-  /// Apple Notes" delivered while the user is now in Slack is worse than no
-  /// card, and cancelling the task does not help — cancellation never
-  /// interrupts an `await` already in progress.
-  ///
-  /// These drive the real `evaluate` and move the frontmost app *during* each
-  /// await, which is the only way to reach the window the bug lives in.
-  func testAnAppSwitchDuringTheWindowTitleLookupCancelsTheOffer() async {
-    let presented = Box(0)
-    let frontmost = Box("com.apple.Notes")
-    let coordinator = makeEvaluatingCoordinator(
-      presented: presented,
-      frontmost: frontmost,
-      onWindowTitleLookup: { frontmost.value = "com.tinyspeck.slackmacgap" }
-    )
-
-    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
-
-    XCTAssertEqual(presented.value, 0)
-  }
-
-  func testAnAppSwitchDuringTheConnectionLookupCancelsTheOffer() async {
-    let presented = Box(0)
-    let frontmost = Box("com.apple.Notes")
-    let coordinator = makeEvaluatingCoordinator(
-      presented: presented,
-      frontmost: frontmost,
-      onConnectionLookup: { frontmost.value = "com.tinyspeck.slackmacgap" }
-    )
-
-    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
-
-    XCTAssertEqual(presented.value, 0)
-  }
-
-  /// A sign-out mid-evaluation must not deliver the previous person's nudge.
-  func testAnOwnerChangeDuringLookupCancelsTheOffer() async {
-    let presented = Box(0)
-    let frontmost = Box("com.apple.Notes")
-    let owner = Box<String?>("user-a")
-    let coordinator = IntegrationNudgeCoordinator(
-      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
-      now: { self.now },
-      presenter: { _, _, onPresented in
-        presented.value += 1
-        onPresented()
-        return .presented
-      },
-      ownerID: { owner.value },
-      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) },
-      frontmostBundleID: { frontmost.value },
-      windowTitleProvider: { _, _ in
-        owner.value = "user-b"
-        return nil
-      },
-      connectionInspector: { _ in false }
-    )
-
-    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
-
-    XCTAssertEqual(presented.value, 0)
-  }
-
-  /// The same path with nothing changing underneath still delivers, so the
-  /// guards above cannot pass by suppressing everything.
-  func testAStableWindowStillDelivers() async {
-    let presented = Box(0)
-    let coordinator = makeEvaluatingCoordinator(
-      presented: presented,
-      frontmost: Box("com.apple.Notes")
-    )
-
-    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
-
-    XCTAssertEqual(presented.value, 1)
   }
 
   // MARK: - Feature off means no work at all
@@ -382,7 +286,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     )
 
     let outcome = await coordinator.evaluate(
-      bundleIdentifier: "com.google.Chrome", appName: "Google Chrome", dwell: 3)
+      bundleIdentifier: "com.google.Chrome", appName: "Google Chrome")
 
     XCTAssertEqual(outcome, .noMatchYet)
     XCTAssertTrue(outcome.shouldKeepWatching)

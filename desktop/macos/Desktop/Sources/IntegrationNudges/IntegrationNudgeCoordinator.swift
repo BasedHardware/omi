@@ -199,22 +199,13 @@ final class IntegrationNudgeCoordinator {
     // discarding the answer.
     guard isEnabledNow else { return }
 
-    let activatedAt = now()
     pendingEvaluation = Task { [weak self] in
       try? await Task.sleep(
         nanoseconds: UInt64(IntegrationNudgePolicy.requiredDwell * 1_000_000_000))
       guard !Task.isCancelled, let self else { return }
-      let outcome = await self.evaluate(
-        bundleIdentifier: bundleIdentifier,
-        appName: appName,
-        dwell: self.now().timeIntervalSince(activatedAt)
-      )
+      let outcome = await self.evaluate(bundleIdentifier: bundleIdentifier, appName: appName)
       guard !Task.isCancelled, outcome.shouldKeepWatching else { return }
-      self.startBrowserRecheckIfNeeded(
-        bundleIdentifier: bundleIdentifier,
-        appName: appName,
-        activatedAt: activatedAt
-      )
+      self.startBrowserRecheckIfNeeded(bundleIdentifier: bundleIdentifier, appName: appName)
     }
   }
 
@@ -227,11 +218,7 @@ final class IntegrationNudgeCoordinator {
   /// used to run all six rounds regardless, which multiplied the suppressed
   /// event (documented as the funnel's denominator) by six per activation and
   /// re-read the window title for a decision already made.
-  private func startBrowserRecheckIfNeeded(
-    bundleIdentifier: String,
-    appName: String?,
-    activatedAt: Date
-  ) {
+  private func startBrowserRecheckIfNeeded(bundleIdentifier: String, appName: String?) {
     guard IntegrationNudgeMatcher.isBrowser(bundleIdentifier: bundleIdentifier) else { return }
     browserRecheck = Task { [weak self] in
       for _ in 0..<Self.browserRecheckLimit {
@@ -239,11 +226,7 @@ final class IntegrationNudgeCoordinator {
         guard !Task.isCancelled, let self, self.isEnabledNow,
           self.frontmostBundleID() == bundleIdentifier
         else { return }
-        let outcome = await self.evaluate(
-          bundleIdentifier: bundleIdentifier,
-          appName: appName,
-          dwell: self.now().timeIntervalSince(activatedAt)
-        )
+        let outcome = await self.evaluate(bundleIdentifier: bundleIdentifier, appName: appName)
         guard outcome.shouldKeepWatching else { return }
       }
     }
@@ -267,7 +250,7 @@ final class IntegrationNudgeCoordinator {
   /// task cancellation alone cannot prevent it, because cancelling a task does
   /// not interrupt an `await` already in progress.
   @discardableResult
-  func evaluate(bundleIdentifier: String, appName: String?, dwell: TimeInterval) async -> Outcome {
+  func evaluate(bundleIdentifier: String, appName: String?) async -> Outcome {
     let expectedOwner = ownerID()
     guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
 
@@ -285,14 +268,14 @@ final class IntegrationNudgeCoordinator {
     // Settle everything that does not need the connection state first. For an
     // export destination the inspection is a local MCP config scan, and a user
     // who pressed "Never" should not pay for it on every activation.
-    if let settled = decideWithoutConnectionState(entry: match.entry, dwell: dwell) {
+    if let settled = decideWithoutConnectionState(entry: match.entry) {
       return report(settled, for: match)
     }
 
     let isConnected = await connectionInspector(match.entry.route)
     guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
 
-    return offer(match: match, isConnected: isConnected, dwell: dwell)
+    return offer(match: match, isConnected: isConnected)
   }
 
   /// What one evaluation concluded, and whether re-checking this window could
@@ -336,11 +319,10 @@ final class IntegrationNudgeCoordinator {
   /// The gates that do not need the connection state, evaluated against the
   /// same live inputs `decide` uses.
   private func decideWithoutConnectionState(
-    entry: IntegrationNudgeCatalogEntry,
-    dwell: TimeInterval
+    entry: IntegrationNudgeCatalogEntry
   ) -> IntegrationNudgePolicy.Suppression? {
     IntegrationNudgePolicy.decideWithoutConnectionState(
-      policyInput(entry: entry, isConnected: false, dwell: dwell)
+      policyInput(entry: entry, isConnected: false)
     )?.suppression
   }
 
@@ -357,10 +339,9 @@ final class IntegrationNudgeCoordinator {
   @discardableResult
   func offer(
     match: IntegrationNudgeMatcher.Match,
-    isConnected: Bool,
-    dwell: TimeInterval
+    isConnected: Bool
   ) -> Outcome {
-    let decision = decide(entry: match.entry, isConnected: isConnected, dwell: dwell)
+    let decision = decide(entry: match.entry, isConnected: isConnected)
     log(
       "IntegrationNudgeCoordinator: \(match.entry.telemetryID) trigger=\(match.trigger.id) "
         + "connected=\(isConnected) decision=\(decision.suppression?.rawValue ?? "deliver")"
@@ -370,7 +351,7 @@ final class IntegrationNudgeCoordinator {
       return report(reason, for: match)
     }
 
-    guard let ownerID = ownerID() else { return .settled(.notSignedIn) }
+    guard let ownerID = ownerID() else { return report(.notSignedIn, for: match) }
 
     // The budget is spent from the bar's presentation callback, not from the
     // return value. A `.queued` card has been admitted to a queue, not shown,
@@ -396,8 +377,9 @@ final class IntegrationNudgeCoordinator {
     // the card now and this window's answer is settled.
     guard recorded || result == .queued else {
       // The bar refused it — a changed owner, or no window to draw in. Neither
-      // gets better by re-reading the title in ten seconds.
-      return .abandoned
+      // gets better by re-reading the title in ten seconds, and a nudge that was
+      // owed but never drawn has to be visible in the funnel.
+      return report(.barUnavailable, for: match)
     }
     return .delivered
   }
@@ -425,16 +407,14 @@ final class IntegrationNudgeCoordinator {
 
   func decide(
     entry: IntegrationNudgeCatalogEntry,
-    isConnected: Bool,
-    dwell: TimeInterval
+    isConnected: Bool
   ) -> IntegrationNudgePolicy.Decision {
-    IntegrationNudgePolicy.decide(policyInput(entry: entry, isConnected: isConnected, dwell: dwell))
+    IntegrationNudgePolicy.decide(policyInput(entry: entry, isConnected: isConnected))
   }
 
   private func policyInput(
     entry: IntegrationNudgeCatalogEntry,
-    isConnected: Bool,
-    dwell: TimeInterval
+    isConnected: Bool
   ) -> IntegrationNudgePolicy.Input {
     let timestamp = now()
     let environment = environment()
@@ -446,7 +426,6 @@ final class IntegrationNudgeCoordinator {
       connector: store.state(for: entry.telemetryID),
       lastAnyNudgeAt: store.lastAnyNudgeAt(),
       nudgesInCurrentDay: store.nudgesInCurrentDay(now: timestamp),
-      dwell: dwell,
       now: timestamp
     )
   }

@@ -53,11 +53,11 @@ enum IntegrationNudgeMatcher {
       !title.isEmpty
     else { return nil }
 
-    let haystack = title.lowercased()
+    let haystack = normalizedTitle(title)
     for entry in catalog {
       for trigger in entry.triggers {
-        guard case .browserTitle(let keywords) = trigger.match else { continue }
-        if keywords.contains(where: { containsWholeToken($0.lowercased(), in: haystack) }) {
+        guard case .browserTitleSuffix(let suffixes) = trigger.match else { continue }
+        if suffixes.contains(where: { haystack.hasSuffix($0.lowercased()) }) {
           return Match(entry: entry, trigger: trigger)
         }
       }
@@ -66,42 +66,17 @@ enum IntegrationNudgeMatcher {
     return nil
   }
 
-  /// Whether `needle` appears in `haystack` as a whole token rather than as a
-  /// fragment of a longer word.
-  ///
-  /// A plain `contains` is wrong here in a way that produces the feature's worst
-  /// failure: `"x.com"` matches `max.com`, and every short keyword has a
-  /// neighbourhood of unrelated sites it would claim. A token boundary is any
-  /// character that is not a letter or digit, so `"x.com"` still matches
-  /// `"Home / X.com"` and `"(3) x.com"` but no longer matches `"max.com"`.
-  /// Boundaries are computed on the keyword's own ends, so a keyword that
-  /// already starts with punctuation (`"/ X"`) is unaffected.
-  static func containsWholeToken(_ needle: String, in haystack: String) -> Bool {
-    guard !needle.isEmpty else { return false }
-
-    var searchRange = haystack.startIndex..<haystack.endIndex
-    while let found = haystack.range(of: needle, range: searchRange) {
-      let precededByToken =
-        found.lowerBound > haystack.startIndex
-        && isTokenCharacter(haystack[haystack.index(before: found.lowerBound)])
-      let followedByToken =
-        found.upperBound < haystack.endIndex && isTokenCharacter(haystack[found.upperBound])
-
-      // Only guard the ends that are themselves token characters; a keyword
-      // beginning or ending in punctuation carries its own boundary.
-      let leadingOK = !precededByToken || !isTokenCharacter(needle[needle.startIndex])
-      let trailingOK =
-        !followedByToken || !isTokenCharacter(needle[needle.index(before: needle.endIndex)])
-      if leadingOK && trailingOK { return true }
-
-      guard found.upperBound < haystack.endIndex else { break }
-      searchRange = haystack.index(after: found.lowerBound)..<haystack.endIndex
+  /// Lowercased, trimmed, and stripped of the browser's own trailing chrome so
+  /// a site name that a browser appended its product name after still reads as
+  /// the end of the title.
+  static func normalizedTitle(_ title: String) -> String {
+    var value = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    for chrome in [" - google chrome", " — google chrome", " - brave", " - microsoft edge"] {
+      if value.hasSuffix(chrome) {
+        value = String(value.dropLast(chrome.count)).trimmingCharacters(in: .whitespaces)
+      }
     }
-    return false
-  }
-
-  private static func isTokenCharacter(_ character: Character) -> Bool {
-    character.isLetter || character.isNumber
+    return value
   }
 
   static func isBrowser(bundleIdentifier: String?) -> Bool {

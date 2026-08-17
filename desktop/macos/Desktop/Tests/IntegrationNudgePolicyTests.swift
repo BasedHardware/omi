@@ -18,7 +18,6 @@ final class IntegrationNudgePolicyTests: XCTestCase {
     connector: IntegrationNudgePolicy.ConnectorState = .init(),
     lastAnyNudgeAt: Date? = nil,
     nudgesInCurrentDay: Int = 0,
-    dwell: TimeInterval = IntegrationNudgePolicy.requiredDwell,
     at instant: Date? = nil
   ) -> IntegrationNudgePolicy.Decision {
     IntegrationNudgePolicy.decide(
@@ -30,7 +29,6 @@ final class IntegrationNudgePolicyTests: XCTestCase {
         connector: connector,
         lastAnyNudgeAt: lastAnyNudgeAt,
         nudgesInCurrentDay: nudgesInCurrentDay,
-        dwell: dwell,
         now: instant ?? now
       )
     )
@@ -108,14 +106,6 @@ final class IntegrationNudgePolicyTests: XCTestCase {
     XCTAssertEqual(decide(connector: .init(shownCount: 1, lastShownAt: elapsed)), .deliver)
   }
 
-  func testShortDwellIsNotAnAppTheUserOpened() {
-    XCTAssertEqual(
-      decide(dwell: IntegrationNudgePolicy.requiredDwell - 0.1),
-      .suppress(.dwellTooShort)
-    )
-    XCTAssertEqual(decide(dwell: IntegrationNudgePolicy.requiredDwell), .deliver)
-  }
-
   func testDailyCapStopsNudgesAcrossIntegrations() {
     XCTAssertEqual(
       decide(nudgesInCurrentDay: IntegrationNudgePolicy.dailyCap),
@@ -148,7 +138,7 @@ final class IntegrationNudgePolicyTests: XCTestCase {
     }
     for reason in [
       IntegrationNudgePolicy.Suppression.snoozed, .connectorCooldown, .globalCooldown, .dailyCap,
-      .dwellTooShort, .notSignedIn, .onboardingIncomplete,
+      .barUnavailable, .notSignedIn, .onboardingIncomplete,
     ] {
       XCTAssertFalse(IntegrationNudgePolicy.isPermanent(reason), "\(reason) can change")
     }

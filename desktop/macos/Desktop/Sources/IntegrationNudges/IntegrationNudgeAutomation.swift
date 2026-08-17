@@ -26,8 +26,7 @@ enum IntegrationNudgeAutomation {
     let isConnected = await IntegrationConnectionInspector.isConnected(match.entry.route)
     let decision = IntegrationNudgeCoordinator.shared.decide(
       entry: match.entry,
-      isConnected: isConnected,
-      dwell: IntegrationNudgePolicy.requiredDwell
+      isConnected: isConnected
     )
 
     return [
@@ -66,8 +65,7 @@ enum IntegrationNudgeAutomation {
       ?? IntegrationNudgeTrigger(id: "automation", match: .application(bundleIdentifiers: []))
     let outcome = IntegrationNudgeCoordinator.shared.offer(
       match: IntegrationNudgeMatcher.Match(entry: entry, trigger: trigger),
-      isConnected: false,
-      dwell: IntegrationNudgePolicy.requiredDwell
+      isConnected: false
     )
     return [
       "presented": outcome == .delivered ? "true" : "false",

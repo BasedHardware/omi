@@ -37,9 +37,12 @@ enum IntegrationNudgePolicy {
     case globalCooldown = "global_cooldown"
     /// The per-day budget across all integrations is spent.
     case dailyCap = "daily_cap"
-    /// The app was foregrounded but left again before the dwell threshold — an
-    /// alt-tab flick past the window, not a session of work in it.
-    case dwellTooShort = "dwell_too_short"
+    /// The floating bar could not take the card — no window, or the owner
+    /// changed between the decision and the presentation. Distinct from the
+    /// policy's own refusals: nothing about the user's history caused it, and it
+    /// would otherwise be a class of never-delivered nudges that is invisible in
+    /// the funnel.
+    case barUnavailable = "bar_unavailable"
   }
 
   enum Decision: Equatable {
@@ -86,8 +89,6 @@ enum IntegrationNudgePolicy {
     var lastAnyNudgeAt: Date?
     /// Integration nudges already delivered inside the current day window.
     var nudgesInCurrentDay: Int
-    /// How long the triggering app has been continuously frontmost.
-    var dwell: TimeInterval
     var now: Date
 
     init(
@@ -98,7 +99,6 @@ enum IntegrationNudgePolicy {
       connector: ConnectorState = ConnectorState(),
       lastAnyNudgeAt: Date? = nil,
       nudgesInCurrentDay: Int = 0,
-      dwell: TimeInterval = IntegrationNudgePolicy.requiredDwell,
       now: Date = Date()
     ) {
       self.isConnected = isConnected
@@ -108,7 +108,6 @@ enum IntegrationNudgePolicy {
       self.connector = connector
       self.lastAnyNudgeAt = lastAnyNudgeAt
       self.nudgesInCurrentDay = nudgesInCurrentDay
-      self.dwell = dwell
       self.now = now
     }
   }
@@ -119,6 +118,11 @@ enum IntegrationNudgePolicy {
   /// it". Short on purpose — the nudge is supposed to land while the user is
   /// still looking at the app that prompted it — but long enough that cycling
   /// through windows with ⌘-Tab does not fire one.
+  ///
+  /// Enforced by the coordinator, which sleeps this long and re-verifies the
+  /// frontmost app afterwards. It is deliberately not a policy gate: the policy
+  /// would only ever see a dwell that had already elapsed, so the gate could
+  /// never fire and its telemetry reason could never appear.
   static let requiredDwell: TimeInterval = 3
 
   /// Minimum gap before the *same* integration may be nudged again.
@@ -180,8 +184,6 @@ enum IntegrationNudgePolicy {
       return .suppress(.connectorCooldown)
     }
 
-    if input.dwell < requiredDwell { return .suppress(.dwellTooShort) }
-
     if input.nudgesInCurrentDay >= dailyCap { return .suppress(.dailyCap) }
 
     if let lastAnyNudgeAt = input.lastAnyNudgeAt,
@@ -202,7 +204,7 @@ enum IntegrationNudgePolicy {
     case .alreadyConnected, .featureDisabled, .optedOut, .connectorLifetimeCap:
       return true
     case .notSignedIn, .onboardingIncomplete, .snoozed, .connectorCooldown,
-      .globalCooldown, .dailyCap, .dwellTooShort:
+      .globalCooldown, .dailyCap, .barUnavailable:
       return false
     }
   }
