@@ -89,6 +89,14 @@ Don't.
 1. **Airgap Mode drops events, it does not defer them.** Every other `NetworkEgress.Client` queues
    its work and sends when the switch goes off. An analytics event doing that would mean Airgap Mode
    delayed the disclosure rather than preventing it. Those days are simply not measured.
+
+   Note that **the Settings switch for Airgap Mode no longer exists** — it was removed in 1.0.9 and
+   `ExclusionEngine.setAirgapMode` has had no caller since. The flag is still reachable two ways, and
+   both are why the guard stays: an `exclusions.json` written before 1.0.9 (or by hand) still carries
+   it, and `ExclusionSet.make` forces it on whenever the exclusion configuration **fails closed** — a
+   config we cannot parse may carry exclusions we cannot express. The second case is the one that
+   matters in practice: it means a machine with a corrupt config stops reporting rather than
+   reporting from a state where it cannot honour the user's exclusions.
 2. **Development builds report nothing.** `ContextPaths.isDevelopmentBuild` gates the whole path. This
    is not tidiness: for this app's first three weeks the Cloud Run logs show a `Context for Claude/1`
    user agent from up to twenty machines a day — the team's own builds, indistinguishable in

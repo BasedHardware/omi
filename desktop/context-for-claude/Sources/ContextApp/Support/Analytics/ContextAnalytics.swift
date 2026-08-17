@@ -10,9 +10,17 @@ import Foundation
 ///
 /// ## The three refusals
 ///
-/// 1. **Airgap Mode.** Checked on every single event, and the event is *dropped*, not deferred. The
-///    switch means "nothing leaves this Mac"; a spooled event that flies the moment the switch goes
-///    off would honour the letter of that and break it entirely.
+/// 1. **Airgap Mode.** Checked on every single event, and the event is *dropped*, not deferred. It
+///    means "nothing leaves this Mac"; a spooled event that flew the moment it was lifted would
+///    honour the letter of that and break it entirely.
+///
+///    There is no Settings switch for it any more — it was removed in 1.0.9 and
+///    `ExclusionEngine.setAirgapMode` has had no caller since. The state still occurs, which is why
+///    this check is not dead code: an `exclusions.json` predating that release still carries it, and
+///    `ExclusionSet.make` forces it on whenever the exclusion configuration fails closed. That last
+///    case is the one to design for — a machine whose config cannot be parsed may be under
+///    exclusions we cannot express, and reporting from it would be reporting from a state where we
+///    cannot honour what the user asked to hide.
 /// 2. **Development builds.** A locally built app reports nothing. This is not tidiness: the Cloud
 ///    Run logs for the first three weeks of this app show a `Context for Claude/1` user agent from up
 ///    to twenty machines a day — the team's own builds, indistinguishable in aggregate from users.

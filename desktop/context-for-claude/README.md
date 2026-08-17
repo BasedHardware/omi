@@ -82,7 +82,10 @@ be read in one file rather than grepped for.
 
 Airgap Mode **drops** these events rather than deferring them: every other remote client queues its
 work and sends when the switch goes off, which for analytics would delay the disclosure instead of
-preventing it. Locally built copies report nothing at all.
+preventing it. There is no longer a switch for it in Settings — the flag survives on installs whose
+`exclusions.json` already carries it, and is forced on when the exclusion configuration fails closed
+— so in practice this guard matters most for the fail-closed case. Locally built copies report
+nothing at all.
 
 [`docs/analytics.md`](docs/analytics.md).
 
