@@ -1,4 +1,3 @@
-import re
 import asyncio
 import json
 import os
@@ -31,7 +30,6 @@ logger = logging.getLogger(__name__)
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
 _AUDIO_BYTES_WEBHOOK_DEFAULT_SECONDS = 5
 _AUDIO_BYTES_WEBHOOK_LOCK_MIN_TTL_SECONDS = 180
-_AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS = 3
 _WEBHOOK_REQUEST_TIMEOUT_SECONDS = 30
 
 
@@ -347,7 +345,11 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             if not webhook_url:
                 return
             webhook_url, configured_seconds = _parse_audio_bytes_webhook_config(webhook_url)
-            if not webhook_url or not re.match(r"^https?://", webhook_url) or not urlsplit(webhook_url).netloc:
+            if (
+                not webhook_url
+                or not webhook_url.startswith(("http://", "https://"))
+                or not urlsplit(webhook_url).netloc
+            ):
                 return
 
             webhook_url = _append_query_params(webhook_url, {'sample_rate': sample_rate, 'uid': uid})
