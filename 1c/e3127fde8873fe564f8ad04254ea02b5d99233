@@ -1,0 +1,36 @@
+desktop/context-for-claude/Tests/ContextCoreTests/ToolCallLedgerTests.swift
+  s_7f7d27f6caa06a::t_b373edd6225d71 136-141,144-146
+  s_7f7d27f6caa06a::t_3fced3b14b5d2c 1-135,142-143,147-148
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_7f7d27f6caa06a::t_fb474d5449a14f 189-211
+desktop/context-for-claude/Sources/ContextCore/QueryStamp.swift
+  s_7f7d27f6caa06a::t_0575a15020582d 156-159
+  s_7f7d27f6caa06a::t_725b3b5d917014 77
+  s_7f7d27f6caa06a::t_41476379514a05 62-65,68-69
+  s_7f7d27f6caa06a::t_2459d3a699bded 91
+desktop/context-for-claude/Sources/ContextMCPKit/MCPServer.swift
+  s_7f7d27f6caa06a::t_1eaa02bb9e79a6 300-305,312
+  s_7f7d27f6caa06a::t_bcf51e920e0f1b 136-138
+  s_7f7d27f6caa06a::t_7d22d451ce7dab 146-151,157-159
+desktop/context-for-claude/Sources/ContextCore/FileLock.swift
+  s_7f7d27f6caa06a::t_1320dbceec9eb1 1-79
+desktop/context-for-claude/Sources/ContextCore/ToolCallLedger.swift
+  s_7f7d27f6caa06a::t_66f4ed376a2d19 142-146
+  s_7f7d27f6caa06a::t_2d6c091d7d19c7 1-141,147-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1ce3127fde8873fe564f8ad04254ea02b5d99233",
+  "prompts": {},
+  "sessions": {
+    "s_7f7d27f6caa06a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d50e47a-f4b3-410c-bc7d-154822e9c288",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
