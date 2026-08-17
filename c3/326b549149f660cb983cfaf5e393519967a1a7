@@ -1,0 +1,71 @@
+desktop/context-for-claude/Sources/ContextApp/Backend/NetworkEgress.swift
+  s_7f7d27f6caa06a::t_b7184c3ac06c95 159-164
+  s_7f7d27f6caa06a::t_12042645c9cab2 62-71
+  s_7f7d27f6caa06a::t_816a980826842b 86-89
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/AnalyticsSink.swift
+  s_7f7d27f6caa06a::t_e4537c4dbc3f09 99-105
+  s_7f7d27f6caa06a::t_6636744178a389 1-98,106-173,176-177,179-181,194-235
+  s_7f7d27f6caa06a::t_e34c992b2a6162 174-175,178,182-193
+desktop/context-for-claude/Sources/ContextApp/Account/OmiAuth.swift
+  s_7f7d27f6caa06a::t_cd077103bf8b7b 648-651
+  s_7f7d27f6caa06a::t_0621b389a26316 257
+desktop/context-for-claude/README.md
+  s_7f7d27f6caa06a::t_aac87a21d40165 75-88
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/AnalyticsEvent.swift
+  s_7f7d27f6caa06a::t_c619522a1b23d4 1-65,68-89,93-95,97,107-110,112,117-119,136-236,239-332
+  s_7f7d27f6caa06a::t_9508edc056354b 120-135
+  s_7f7d27f6caa06a::t_9461d80d994ab3 90-92,96,98-106,111,113-116
+  s_7f7d27f6caa06a::t_ac28f2c6a7fa77 66-67
+  s_7f7d27f6caa06a::t_239d125cdd7b75 237-238
+desktop/context-for-claude/docs/analytics.md
+  s_7f7d27f6caa06a::t_14e87ceaf3c33b 1-147
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsSinkTests.swift
+  s_7f7d27f6caa06a::t_b1ca3be075d5e1 80-83
+  s_7f7d27f6caa06a::t_46458f21a48ee2 1-79,84-149
+  s_7f7d27f6caa06a::t_56318062ac3f9f 150-154
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsLiveDeliveryTests.swift
+  s_7f7d27f6caa06a::t_c5f42aa4029553 1-77
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/AnalyticsPayload.swift
+  s_7f7d27f6caa06a::t_814c67c81e5d3d 1-107
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/ContextAnalytics.swift
+  s_7f7d27f6caa06a::t_8cd36d7fd3043c 283-294
+  s_7f7d27f6caa06a::t_ee60ee643777f6 264-265
+  s_7f7d27f6caa06a::t_8492346d4ea9c2 1-54,66-105,128-202,207-210,220-221,226-228,231,234,246-263,266-282,295
+  s_7f7d27f6caa06a::t_f9388217278dad 55-65
+  s_7f7d27f6caa06a::t_697d6c7284f5d4 106-127
+  s_7f7d27f6caa06a::t_aa172a29e0c243 203-206,211-219,222-225,229-230,232-233,235-245
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsTests.swift
+  s_7f7d27f6caa06a::t_7b0d2627166dbf 270-273,277
+  s_7f7d27f6caa06a::t_ea73f5c2f0a23f 164-176
+  s_7f7d27f6caa06a::t_b2e86e0aaf6221 1-111,124-163,177-269,274-276,278-306,308-328,332-333
+  s_7f7d27f6caa06a::t_4f99ec9656eb0c 329-331
+  s_7f7d27f6caa06a::t_a16b0abe22e9d4 307
+  s_7f7d27f6caa06a::t_0e863cbe46d6b0 112-123
+desktop/context-for-claude/Sources/ContextApp/ContextApp.swift
+  s_7f7d27f6caa06a::t_fcb2a624be4aa6 275-280
+  s_7f7d27f6caa06a::t_bf3f5cacf82aca 352-355
+desktop/context-for-claude/Sources/ContextApp/Update/ContextUpdater.swift
+  s_7f7d27f6caa06a::t_564d57f63037aa 256
+  s_7f7d27f6caa06a::t_888b9842f99015 336
+  s_7f7d27f6caa06a::t_23cb1f19b16d8a 347-349
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_7f7d27f6caa06a::t_353d7e94d34b53 1033,1035-1045
+desktop/context-for-claude/Sources/ContextApp/Support/Telemetry.swift
+  s_7f7d27f6caa06a::t_0f7b74df919f8b 19,29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c3326b549149f660cb983cfaf5e393519967a1a7",
+  "prompts": {},
+  "sessions": {
+    "s_7f7d27f6caa06a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d50e47a-f4b3-410c-bc7d-154822e9c288",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
