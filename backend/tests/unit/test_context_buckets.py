@@ -362,3 +362,21 @@ def test_fact_read_never_exceeds_the_requested_limit(fake_db):
     live = context_buckets_db.list_context_facts('u1', account_generation=3, limit=2, now=NOW, firestore_client=fake_db)
 
     assert len(live) == 2
+
+
+def test_non_screen_evidence_is_rejected_even_when_device_local():
+    with pytest.raises(ValidationError):
+        ContextFactSync(
+            fact_id='fact-1',
+            statement='Ship the parity pack',
+            confidence=0.9,
+            device_updated_at=NOW,
+            evidence_refs=[
+                EvidenceRef(
+                    kind=EvidenceKind.conversation,
+                    id='conv-1',
+                    scope=EvidenceScope.device_local,
+                    device_id='mac-1',
+                )
+            ],
+        )

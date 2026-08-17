@@ -11,7 +11,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from models.action_item import EvidenceRef, EvidenceScope
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.task_intelligence import StableId
 
 
@@ -46,10 +46,19 @@ class ContextFactSync(BaseModel):
     device_updated_at: datetime
 
     @model_validator(mode='after')
-    def require_device_local_evidence(self):
+    def require_local_screen_evidence(self):
+        """Bucket facts are extracted from the screen, so their evidence is too.
+
+        Scope alone is not enough: a device_local ref of any other kind would
+        claim a conversation or artifact as this fact's provenance, which the
+        device cannot vouch for and no consumer could resolve.
+        """
+
         for ref in self.evidence_refs:
             if ref.scope != EvidenceScope.device_local:
                 raise ValueError('context fact evidence must stay device_local')
+            if ref.kind != EvidenceKind.local_screen:
+                raise ValueError('context fact evidence must be local_screen')
         for identifier in self.identifiers:
             if not identifier.strip():
                 raise ValueError('identifiers cannot be blank')
