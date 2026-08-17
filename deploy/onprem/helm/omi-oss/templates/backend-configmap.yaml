@@ -40,7 +40,7 @@ data:
   # (token `iss`); OIDC_JWKS_URL is the INTERNAL keycloak endpoint (keys fetched in-cluster, no edge
   # hairpin) — the two are deliberately decoupled.
   AUTH_BACKEND: "oidc"
-  OIDC_ISSUER: "{{ .Values.auth.hostname }}/realms/omi"
+  OIDC_ISSUER: "{{ include "omi-oss.authHostname" . }}/realms/omi"
   OIDC_JWKS_URL: "http://keycloak:8090/realms/omi/protocol/openid-connect/certs"
   OIDC_AUDIENCE: {{ .Values.auth.audience | quote }}
   {{- end }}
@@ -53,5 +53,16 @@ data:
   {{- with .Values.inference.embeddings.baseUrl }}
   OMI_EMBEDDINGS_BASE_URL: {{ . | quote }}
   OMI_EMBEDDINGS_MODEL: {{ $.Values.inference.embeddings.model | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.inference.inCluster.enabled }}
+  # in-cluster inference (GPU pods): each enabled service auto-wires its HOSTED_*_API_URL so the backend
+  # reaches STT/diarization/translation in-cluster instead of an external endpoint (LLM+embeddings stay external).
+  {{- range $name, $svc := .Values.inference.inCluster.services }}
+  {{- if $svc.enabled }}
+  {{- range $k, $v := $svc.backendEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
   {{- end }}
   {{- end }}

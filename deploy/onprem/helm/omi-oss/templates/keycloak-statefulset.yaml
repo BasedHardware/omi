@@ -37,7 +37,7 @@ spec:
             - --http-enabled=true
             - --http-port=8090
             - --proxy-headers=xforwarded
-            - --hostname={{ .Values.auth.hostname }}
+            - --hostname={{ include "omi-oss.authHostname" . }}
             - --hostname-backchannel-dynamic=false
             - --import-realm
           env:

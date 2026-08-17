@@ -1,138 +1,63 @@
 # omi-oss — Helm chart (Kubernetes on-prem target)
 
-The Helm mirror of the compose stack (ADR-0049; study
-`docs/analysis/kubernetes-onprem-helm-kind-k0s.md`). Same images, same config philosophy — a target
-**in addition to** compose, not a replacement. One chart runs on **Kind** (dev/CI) and **k0s** (prod);
-only the `values-<env>.yaml` differ.
+The Helm mirror of the compose stack. Same images, same configuration philosophy — a deployment target
+**in addition to** compose, not a replacement. One chart runs on **Kind** (local dev) and **k0s**
+(production); only the `values-<env>.yaml` differ.
 
-Milestone status: all seven profiles are validated live on Kind — **core** (backend + valkey + mongo
-replica-set), **chat** (Qdrant), **objstore** (RustFS), **push** (ntfy), **ingress** (Gateway API / Envoy
-Gateway), **auth** (Keycloak OIDC + Gateway TLS) and **inference** (external OpenAI-compatible endpoint).
-Validated live on a real **k0s** node too (`values-k0s.yaml`), in phases: **A** core (backend image pulled
-from a local registry, OpenEBS storage), **B** ingress + auth (MetalLB LoadBalancer on a real LAN IP, Envoy
-Gateway, Keycloak-on-Postgres OIDC/TLS, real-token 200 / invalid-token 401), **C** in-cluster **GPU**
-inference (`inference.inCluster`, ADR-0053 — nllb on `nvidia.com/gpu`, real EN→IT translation reached by the
-backend at `http://nllb:8080`).
+## Install — follow a manual (step-by-step, all prerequisites included)
 
-## Prerequisites
+- **[`MANUAL-dev-kind.md`](MANUAL-dev-kind.md)** — local development on your laptop (Kind). Full prod
+  topology; inference (speech/translation) is external.
+- **[`MANUAL-prod-k0s.md`](MANUAL-prod-k0s.md)** — production on a real GPU server (k0s). **Speech-to-text,
+  diarization and translation run on the GPU inside the cluster**; only the chat LLM and embeddings are
+  external. This is the on-prem default.
 
-`kind`, `kubectl`, `helm`, `openssl` on PATH. The backend image built locally (`omi-oss-backend:latest`);
-public images are pulled by the node. `values-dev.yaml` replicates the **prod topology** on Kind (phase B):
-so it needs three cluster add-ons — **Envoy Gateway** (ingress), **OpenEBS** (storage class), **MetalLB**
-(LoadBalancer). For a bare Kind without them, override to the simple path (see the note after the recipe).
+Both manuals start from a bare machine (install Kind/k0s, the GPU stack, the registry, everything) and end
+with a working, verified stack.
 
-## Dev on Kind (reproducible, prod-topology)
+## What runs where
 
-```bash
-cd deploy/onprem/helm
+Always in the cluster: the API (`backend`), datastore (`mongo`, a replica set), cache (`valkey`). Optional
+profiles add the rest; the on-prem default (prod) turns them all on:
 
-# 1. Cluster — ONLY via the declarative config (never ad-hoc `kind create cluster`)
-kind create cluster --config kind-cluster.yaml
-
-# 2. Load the local backend image (no registry; public images the node pulls itself)
-kind load docker-image omi-oss-backend:latest --name omi-dev
-
-# 3. Cluster add-ons (like the app, installed once):
-#    3a. Envoy Gateway — Gateway API controller + CRDs
-helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.1 \
-  -n envoy-gateway-system --create-namespace --wait
-#    3b. OpenEBS — provides the `openebs-hostpath` storage class
-helm repo add openebs https://openebs.github.io/openebs && helm repo update openebs
-helm install openebs openebs/openebs -n openebs --create-namespace --wait \
-  --set loki.enabled=false --set minio.enabled=false \
-  --set engines.replicated.mayastor.enabled=false \
-  --set engines.local.lvm.enabled=false --set engines.local.zfs.enabled=false
-#    3c. MetalLB — LoadBalancer IPs, then the address pool (from the kind network subnet)
-helm repo add metallb https://metallb.github.io/metallb && helm repo update metallb
-helm install metallb metallb/metallb -n metallb-system --create-namespace --wait
-kubectl apply -f metallb-pool.yaml
-
-# 4. TLS Secret for the Gateway HTTPS listener. SAN must carry the LoadBalancer IP (values-dev pins it):
-kubectl create namespace omi-dev --dry-run=client -o yaml | kubectl apply -f -
-HOST_IP=172.18.255.200 ./gen-certs.sh omi-dev omi-tls localhost
-
-# 5. Install the stack (all profiles enabled in values-dev)
-helm install omi ./omi-oss -n omi-dev --create-namespace -f omi-oss/values-dev.yaml --wait
-
-# 6. Reach it through the LoadBalancer IP (Keycloak issuer + API over HTTPS):
-LBIP=172.18.255.200
-curl -k https://$LBIP/v1/health                # {"status":"ok"}
-TOK=$(curl -k -s -X POST https://$LBIP/realms/omi/protocol/openid-connect/token \
-  -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -k https://$LBIP/v1/users/people -H "Authorization: Bearer $TOK"
-```
-
-**Simple path (bare Kind, no OpenEBS/MetalLB):** `helm install ... -f values-dev.yaml
---set storageClassName= --set ingress.service.type=NodePort --set ingress.loadBalancerIP=
---set auth.hostname=https://localhost:8443 --set auth.keycloak.db=dev-file` — then reach it on
-`http://localhost:8080` / `https://localhost:8443` (the kind port-mappings). gen-certs with `localhost`.
-
-Teardown: `kind delete cluster --name omi-dev` (and `helm uninstall eg -n envoy-gateway-system`).
-
-## Prod on k0s (real bare-metal)
-
-Same chart, `values-k0s.yaml` (the concrete counterpart to the generic `values-prod.yaml`). Differences
-from Kind: the backend image is pulled from a **local registry** (there is no `kind load`), the MetalLB pool
-is a **free LAN IP** the operator owns (`metallb-pool-k0s.yaml`), and phase C runs **in-cluster GPU**
-inference (needs the NVIDIA device plugin on the node).
-
-```bash
-# 0. Registry the node can pull from (containerd hosts.toml -> your registry, skip_verify), then push:
-docker tag omi-oss-backend:latest <registry>/omi-oss-backend:latest && docker push <registry>/omi-oss-backend:latest
-docker tag omi-oss-nllb:latest    <registry>/omi-oss-nllb:latest    && docker push <registry>/omi-oss-nllb:latest   # phase C
-
-# 1. Add-ons: Envoy Gateway + OpenEBS as on Kind; MetalLB with the LAN pool:
-kubectl apply -f metallb-pool-k0s.yaml           # edit the address to a FREE IP on your LAN first
-kubectl create namespace omi --dry-run=client -o yaml | kubectl apply -f -
-HOST_IP=<lan-ip> ./gen-certs.sh omi omi-tls <lan-ip>
-
-# 2. Install (edit values-k0s.yaml: registry host, loadBalancerIP, auth.hostname, modelsHostPath):
-helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
-  --set backend.encryptionSecret="$(openssl rand -hex 32)"   # never store the secret in the values file
-
-# 3. Verify (LAN IP): health, OIDC 200/401, and the in-cluster GPU translation:
-LBIP=<lan-ip>
-curl -k https://$LBIP/v1/health
-TOK=$(curl -k -s -X POST https://$LBIP/realms/omi/protocol/openid-connect/token \
-  -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -k -o /dev/null -w '%{http_code}\n' https://$LBIP/v1/users/people -H "Authorization: Bearer $TOK"   # 200
-```
-
-Add a GPU inference engine (whisper/diarizer/parakeet) by pushing its image and adding one entry under
-`inference.inCluster.services` (same shape as `nllb`) — no new template. On a single-GPU node enable only
-what fits at once. Teardown: `helm uninstall omi -n omi`.
-
-## Profiles (compose parity)
-
-`core` is always on. Toggle the rest in `values-<env>.yaml`:
-
-| Value | Brings up | Backend wiring |
+| Profile | Brings up | Notes |
 |---|---|---|
-| `chat.enabled` | Qdrant vector store | `VECTOR_STORE_BACKEND=qdrant` |
-| `objstore.enabled` | RustFS S3 + bucket-init | `OBJECT_STORE_BACKEND=s3` |
-| `push.enabled` | ntfy UnifiedPush | `PUSH_NOTIFICATION_BACKEND=unifiedpush` |
-| `ingress.enabled` | Gateway API edge (Envoy) | GatewayClass/Gateway/HTTPRoute → backend |
-| `auth.enabled` | Keycloak OIDC + Gateway HTTPS (TLS from `omi-tls` Secret) | `AUTH_BACKEND=oidc`, `OIDC_ISSUER`/`OIDC_JWKS_URL` |
-| `inference.enabled` | nothing in-cluster — wires an **external** OpenAI-compatible endpoint | `OPENAI_BASE_URL`, `OMI_EMBEDDINGS_BASE_URL`/`MODEL` (keys in Secret) |
+| `chat` | Qdrant vector store | vector dim defaults to 1024 (= `bge-m3`); set `chat.vectorDim` for another model |
+| `objstore` | RustFS (S3) + bucket-init | on-prem object storage |
+| `push` | ntfy (UnifiedPush) | on-prem push |
+| `ingress` | Envoy Gateway (Gateway API) | HTTPS entry point; a LoadBalancer IP (MetalLB) in prod |
+| `auth` | Keycloak (+ Postgres) | OIDC login; issuer + TLS pinned to the entry-point IP |
+| `inference` | wires an **external** OpenAI-compatible LLM + embeddings | operator-provided endpoint |
+| `inference.inCluster` | STT (whisper + parakeet gateway), diarization, translation (nllb) as **GPU pods** | the on-prem default (prod); needs the NVIDIA device plugin |
 
-`inference` runs no GPU pods (ADR-0035): set `inference.openai.baseUrl` / `inference.embeddings.baseUrl` to
-the operator's OpenAI/vLLM/Ollama endpoint (outside the cluster). GPU services stay on k0s in prod.
+Only the LLM and embeddings are external in the on-prem default; everything else — including STT,
+diarization and translation — runs on your hardware.
+
+## Key parameters (passed at install, never committed)
+
+| `--set` | What |
+|---|---|
+| `imageRegistry=<host:port>` | registry the node pulls our images from (empty on Kind, which uses `kind load`) |
+| `ingress.loadBalancerIP=<free LAN IP>` | the entry-point IP (MetalLB); the OIDC issuer + TLS SAN derive from it |
+| `backend.encryptionSecret=<32-byte hex>` | `openssl rand -hex 32` |
+| `inference.openai.baseUrl` / `inference.embeddings.baseUrl` / `.model` | your external LLM + embeddings |
+| `inference.inCluster.modelsHostPath` | where the GPU model weights live on the node (has a sensible default) |
+
+## Files
+
+- `omi-oss/` — the chart. `values.yaml` (defaults) + `values-dev.yaml` (Kind) / `values-prod.yaml` (generic
+  prod template) / `values-k0s.yaml` (concrete k0s prod).
+- `kind-cluster.yaml` — declarative Kind cluster. `metallb-pool.yaml` (Kind) / `metallb-pool-k0s.yaml` (LAN).
+- `nvidia-device-plugin-k0s.yaml` — GPU device plugin with time-slicing (share one GPU across inference pods).
+- `gen-certs.sh` — self-signed TLS Secret for the HTTPS entry point.
 
 ## Notes
 
-- **Mongo replica-set**: StatefulSet + PVC + an idempotent init Job (self-contained, §6.1). Init Jobs are
-  named per release revision (+ ttl) so `helm upgrade` re-runs a fresh idempotent Job instead of patching
-  an immutable one.
-- **Ingress**: Gateway API via Envoy Gateway (ADR-0049 Q3). On Kind the Envoy proxy Service is a NodePort
-  pinned to 30080 (mapped to host 8080 by `kind-cluster.yaml`); on k0s/bare-metal use MetalLB + a
-  LoadBalancer instead.
-- **Images**: `kind load docker-image` cannot import Docker's multi-arch/containerd-store images (public
-  ones are pulled by the node); a fully air-gapped node needs a pre-seeded local registry.
-- **Storage**: the chart is **provisioner-agnostic** — every PVC declares only `storageClassName` +
-  a size, nothing provisioner-specific. On dev/Kind we inherit the cluster default (`standard` =
-  `rancher.io/local-path`; single-node, `reclaim=Delete`, gone with the cluster). For a real cluster
-  install the storage provisioner as a prerequisite (like Envoy Gateway) and set `storageClassName`.
-  Reference example: **OpenEBS** on both Kind and k0s (e.g. `openebs-hostpath` for local PV, or a
-  replicated OpenEBS class for HA).
+- **Mongo replica-set**: StatefulSet + PVC + an idempotent init Job (named per release revision so
+  `helm upgrade` re-runs a fresh Job instead of patching an immutable one).
+- **One GPU, several models**: the device plugin advertises multiple GPU units (time-slicing) so whisper,
+  diarizer and nllb share one card. Tune the replica count in `nvidia-device-plugin-k0s.yaml`.
+- **Storage**: the chart is provisioner-agnostic — every PVC sets only `storageClassName` + a size. Install a
+  provisioner (the manuals use OpenEBS) and point `storageClassName` at it.
+- **Turn inference engines on/off**: `--set inference.inCluster.services.<name>.enabled=false`, or switch the
+  whole posture to external with `--set inference.inCluster.enabled=false`.

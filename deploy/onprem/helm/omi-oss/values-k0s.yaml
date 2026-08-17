@@ -1,32 +1,29 @@
-# k0s (real single-node bare-metal) overlay — the concrete counterpart to values-prod.yaml's generic
-# template. Validated live on a real k0s cluster (not Kind). Built up by phase (K8s roadmap, docs/BACKLOG):
-#   A core        — backend + mongo + valkey, backend image pulled from the local registry
-#   B ingress+auth — MetalLB LoadBalancer + Envoy Gateway + Keycloak OIDC/TLS (added below when done)
-#   C GPU inference — in-cluster inference on the GPU node (added when the chart grows the profile)
+# k0s (real single-node bare-metal) overlay — the on-prem PROD posture. Same chart as Kind; this turns on
+# what a real cluster provides that Kind fakes: images pulled from a local registry, a MetalLB LoadBalancer,
+# and IN-CLUSTER GPU inference — the on-prem default: STT (whisper + parakeet gateway), speaker diarization
+# and translation (nllb) run inside the cluster; only the LLM + embeddings are external. The 4 inference
+# services and their backend wiring live in values.yaml; here we just switch the posture on.
 #
-# Images: this node pulls the backend from the LOCAL registry (containerd hosts.toml points
-# 192.168.100.122:5000 with skip_verify). Change the host:port to your registry. Public images
-# (mongo/valkey/…) are pulled from their upstream registries as usual.
-#
-# The ENCRYPTION_SECRET is NOT stored here — pass it at install so it never lands in git:
-#   helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
-#     --set backend.encryptionSecret="$(openssl rand -hex 32)"
+# Parameters YOU pass at install (kept OUT of this file so no site IP or secret is committed) — see
+# MANUAL-prod-k0s.md for the full step-by-step:
+#   --set imageRegistry=<host:port>                       registry the node pulls our images from
+#   --set ingress.loadBalancerIP=<free LAN IP>            MetalLB gives the edge this IP (OIDC issuer + TLS SAN)
+#   --set backend.encryptionSecret="$(openssl rand -hex 32)"
+#   --set inference.openai.baseUrl=<http://your-llm/v1>   external LLM (operator-provided)
+#   --set inference.embeddings.baseUrl=<http://your-llm/v1> --set inference.embeddings.model=<bge-m3>
+# (admin/db/S3 below are throwaway DEV values, like values-dev.yaml — replace for real production.)
 
 storageClassName: "openebs-hostpath"
 
 backend:
-  image: 192.168.100.122:5000/omi-oss-backend:latest
   imagePullPolicy: IfNotPresent
   replicas: 1
   resources:
     requests: { cpu: "500m", memory: "1Gi" }
     limits: { memory: "2Gi" }
   env:
-    # auth profile is on (real Keycloak OIDC) -> NO dev-auth bypass; the backend validates real tokens.
+    # auth is on (real Keycloak OIDC) -> NO dev-auth bypass; the backend validates real tokens.
     LOCAL_DEVELOPMENT: "false"
-    # Phase C: point translation at the IN-CLUSTER nllb GPU service (below) instead of an external endpoint.
-    HOSTED_TRANSLATION_API_URL: "http://nllb:8080"
-    TRANSLATION_SERVICE_MODELS: "nllb"
 
 mongo:
   imagePullPolicy: IfNotPresent
@@ -36,9 +33,6 @@ valkey:
   imagePullPolicy: IfNotPresent
   storage: 5Gi
 
-# ---- Phase B: ingress (MetalLB LoadBalancer) + auth (Keycloak OIDC/TLS on Postgres) + the on-prem
-# data-plane profiles (chat/objstore/push). Inference stays external/off here; phase C runs it in-cluster.
-
 chat:
   enabled: true
   qdrant:
@@ -47,8 +41,8 @@ chat:
 
 objstore:
   enabled: true
-  accessKey: "rustfsadmin"
-  secretKey: "rustfsadmin"
+  accessKey: "rustfsadmin"      # throwaway dev
+  secretKey: "rustfsadmin"      # throwaway dev
   rustfs:
     imagePullPolicy: IfNotPresent
     storage: 20Gi
@@ -58,38 +52,31 @@ push:
   ntfy:
     imagePullPolicy: IfNotPresent
 
-# Edge: MetalLB LoadBalancer pinned to a free LAN IP (metallb-pool-k0s.yaml), so the OIDC issuer host +
-# TLS SAN are fixed before install (like the Kind values-dev.yaml, but a real LAN address).
+# Edge: MetalLB LoadBalancer. The IP is passed at install (--set ingress.loadBalancerIP=...) so no address
+# is committed here; auth.hostname (OIDC issuer) + the TLS SAN derive from it.
 ingress:
   enabled: true
   service:
     type: LoadBalancer
-  loadBalancerIP: "192.168.100.190"
+  loadBalancerIP: ""            # REQUIRED via --set (a FREE address on the node's LAN)
 
-# Keycloak OIDC issuer on the LoadBalancer IP (HTTPS :443). gen-certs.sh must put 192.168.100.190 in the
-# SAN. Keycloak on Postgres (B5). Throwaway dev admin password.
 auth:
   enabled: true
-  adminPassword: "admin"
-  hostname: "https://192.168.100.190"
+  adminPassword: "admin"        # throwaway dev
   keycloak:
     db: postgres
     postgres:
-      password: "keycloak-dev"
+      password: "keycloak-dev"  # throwaway dev
 
-# ---- Phase C: in-cluster GPU inference (ADR-0053). nllb (translation) runs as a GPU pod pulling from the
-# local registry; model weights are reused read-only from the compose models volume on the host (this is a
-# single-node k0s). The backend points at the nllb Service via backend.env above. Single GPU here, so only
-# nllb is enabled; whisper/diarizer/parakeet are the same shape (add a services entry when the GPU is free).
+# Inference: LLM + embeddings EXTERNAL (operator-provided, set via --set below); everything else IN-CLUSTER
+# on GPU (inCluster.enabled). Needs the NVIDIA device plugin (+ time-slicing on a single card) and the model
+# weights present at inference.inCluster.modelsHostPath (default = the compose models volume on the host).
 inference:
+  enabled: true
+  openai:
+    baseUrl: ""                 # REQUIRED via --set (external OpenAI-compatible LLM)
+  embeddings:
+    baseUrl: ""                 # REQUIRED via --set
+    model: ""                   # REQUIRED via --set (e.g. bge-m3)
   inCluster:
-    enabled: true
-    modelsHostPath: "/var/lib/docker/volumes/omi-oss_inference-models/_data"
-    services:
-      nllb:
-        enabled: true
-        image: 192.168.100.122:5000/omi-oss-nllb:latest
-        port: 8080
-        gpu: 1
-        env:
-          NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8
+    enabled: true               # STT (whisper+parakeet) · diarization · translation (nllb) as GPU pods

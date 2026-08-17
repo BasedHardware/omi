@@ -38,7 +38,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ $name }}
-          image: {{ required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image }}
+          image: {{ include "omi-oss.image" (dict "root" $root "repo" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
           imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
@@ -62,12 +62,16 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
           {{- end }}
+          {{- if $svc.gpu }}
+          # GPU services request `nvidia.com/gpu` units (time-sliced on a shared card, see
+          # nvidia-device-plugin-k0s.yaml). A CPU-only service (e.g. the parakeet NIM gateway) sets no gpu.
           resources:
             limits:
-              nvidia.com/gpu: {{ $svc.gpu | default 1 }}
-            {{- with $svc.resources }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+              nvidia.com/gpu: {{ $svc.gpu }}
+          {{- else if $svc.resources }}
+          resources:
+            {{- toYaml $svc.resources | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: models
               mountPath: /models
