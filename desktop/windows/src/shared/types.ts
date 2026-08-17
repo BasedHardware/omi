@@ -2058,8 +2058,10 @@ export type RewindFrame = {
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
 }
 
-/** Which corpus a local search hit came from. */
-export type CorpusKind = 'memory' | 'task' | 'screen'
+/** Which corpus a search hit came from. `conversation` is produced only in the
+ *  renderer: conversations live in the cloud, so they are searched against the
+ *  backend rather than the local index. */
+export type CorpusKind = 'conversation' | 'memory' | 'task' | 'screen'
 
 export type CorpusHit = {
   kind: CorpusKind
