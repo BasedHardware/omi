@@ -1102,7 +1102,7 @@ def _apply_one_legacy_row(
         updated_at = _coerce_optional_legacy_datetime(legacy_row.get("updated_at")) or captured_at
         if updated_at < captured_at:
             updated_at = captured_at
-        expires_at = default_short_term_expiry(captured_at)
+        expires_at = default_short_term_expiry(now)
         promotion.update(
             {
                 "migration_strategy": "bucketed_legacy_backfill",
