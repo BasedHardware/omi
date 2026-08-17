@@ -1,16 +1,25 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
+import {
+  parseChatGenerationEventStream,
+  wireToChatAdmissionEnvelope,
+  wireToChatHistoryEnvelope,
+} from "@omi-core/adapters-platform";
 
-import { isChatCreate } from "../src/wire";
+import type { AccountBackend } from "../src/account";
+import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
 
 let handler: typeof import("../src/index")["default"];
+let accountBackend: typeof AccountBackend;
 
 beforeAll(async () => {
   void mock.module("cloudflare:workers", () => ({
     DurableObject: class {},
   }));
-  handler = (await import("../src/index")).default;
+  const worker = await import("../src/index");
+  handler = worker.default;
+  accountBackend = worker.AccountBackend;
 });
 
 const accountCalls: string[] = [];
@@ -32,11 +41,37 @@ const admissions = new Map<
     generation: { id: string };
   }
 >();
+const canonicalMessage = (
+  input: Record<string, unknown>,
+  sender: "human" | "ai" = "human"
+) => ({
+  id: input["id"],
+  text: input["text"],
+  sender,
+  type: input["type"] ?? "text",
+  createdAt: input["at"],
+  updatedAt: input["at"],
+  chatSessionId: input["chatSessionId"] ?? null,
+  appId: input["appId"] ?? null,
+  journalRevision: input["journalRevision"],
+  payloadHash: "sha256:test",
+  messageSource: input["messageSource"] ?? "desktop_chat",
+  rating: null,
+  reported: false,
+  generationOutcome: sender === "human" ? null : "completed",
+  revision: "1",
+  attachments: [],
+});
+let cancellation: "accepted" | "terminal" | "not_found" = "accepted";
 const accountStub = {
   configure: async () => undefined,
   history: async (limit: number) => {
     accountCalls.push(`history:${limit}`);
-    return { messages: [], page: { olderCursor: null, hasOlder: false } };
+    return {
+      messages: [],
+      page: { olderCursor: null, hasOlder: false },
+      capabilities: CHAT_CAPABILITIES,
+    };
   },
   settings: async () => ({ identity, entitlement: { ...entitlement } }),
   admit: async (input: Record<string, unknown>) => {
@@ -55,13 +90,7 @@ const accountStub = {
     };
     const admission = {
       payload,
-      message: {
-        id: input["id"],
-        text: input["text"],
-        sender: "human",
-        createdAt: input["at"],
-        generationOutcome: null,
-      },
+      message: canonicalMessage(input),
       generation: { id: `generation-${String(input["id"])}` },
     };
     admissions.set(String(input["id"]), admission);
@@ -69,11 +98,17 @@ const accountStub = {
   },
   complete: async () => undefined,
   fail: async () => undefined,
+  cancel: async () => cancellation,
+  fetch: async () =>
+    new Response(
+      'id: 1\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n'
+    ),
 };
 
 const env = {
   ENVIRONMENT: "test",
   API_TOKEN: "test-token",
+  STAGING_ACCOUNT_ID: "test-account",
   ACCOUNTS: {
     getByName: (name: string) => {
       accountCalls.push(`account:${name}`);
@@ -122,6 +157,7 @@ const chatCreate = (id: string) => ({
 beforeEach(() => {
   entitlement = { ...initialEntitlement };
   admissions.clear();
+  cancellation = "accepted";
 });
 
 describe("worker request contract", () => {
@@ -143,6 +179,23 @@ describe("worker request contract", () => {
     });
     expect(health.headers.get("cache-control")).toBe("no-store");
     expect(accountCalls).toEqual([]);
+  });
+
+  test("readiness fails closed when required configuration is absent", async () => {
+    const response = await handler.fetch(
+      new Request("https://worker.test/ready"),
+      { ...env, API_TOKEN: "" } as never,
+      executionContext as never
+    );
+
+    expect(response.status).toBe(503);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "service_unavailable",
+        retryable: true,
+        action: "retry",
+      },
+    });
   });
 
   test("protected routes reject absent credentials before account access", async () => {
@@ -248,7 +301,7 @@ describe("worker request contract", () => {
       headers: authenticatedHeaders,
     });
     const unsupportedCursor = await fetchWorker(
-      "/v1/chat-messages?olderCursor=cursor",
+      "/v1/chat-messages?olderCursor=",
       {
         headers: authenticatedHeaders,
       }
@@ -270,10 +323,35 @@ describe("worker request contract", () => {
     expect((await response.json()) as unknown).toEqual({
       messages: [],
       page: { olderCursor: null, hasOlder: false },
+      capabilities: CHAT_CAPABILITIES,
     });
+    expect(
+      wireToChatHistoryEnvelope({
+        messages: [],
+        page: { olderCursor: null, hasOlder: false },
+        capabilities: CHAT_CAPABILITIES,
+      })
+    ).not.toBeNull();
     expect(accountCalls).toHaveLength(2);
-    expect(accountCalls[0]).toMatch(/^account:token:[a-f0-9]{64}$/);
+    expect(accountCalls[0]).toBe("account:test-account");
     expect(accountCalls[1]).toBe("history:100");
+  });
+
+  test("credential rotation preserves the configured account identity", async () => {
+    accountCalls.length = 0;
+    const response = await handler.fetch(
+      new Request("https://worker.test/v1/chat-messages?limit=10", {
+        headers: {
+          authorization: "Bearer rotated-token",
+          "x-omi-client-id": "test-client",
+        },
+      }),
+      { ...env, API_TOKEN: "rotated-token" } as never,
+      executionContext as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(accountCalls[0]).toBe("account:test-account");
   });
 
   test("unknown routes use the stable backend error envelope", async () => {
@@ -283,6 +361,37 @@ describe("worker request contract", () => {
     expect((await response.json()) as unknown).toEqual({
       error: { code: "not_found", retryable: false, action: "edit_request" },
     });
+  });
+
+  test("chat history rejects repeated and unknown query parameters", async () => {
+    const repeated = await fetchWorker("/v1/chat-messages?limit=1&limit=2", {
+      headers: authenticatedHeaders,
+    });
+    const unknown = await fetchWorker("/v1/chat-messages?extra=1", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(repeated.status).toBe(400);
+    expect(unknown.status).toBe(400);
+  });
+
+  test("cancellation distinguishes accepted from already terminal", async () => {
+    const accepted = await fetchWorker("/v1/chat-generations/generation-id", {
+      method: "DELETE",
+      headers: authenticatedHeaders,
+    });
+    cancellation = "terminal";
+    const terminal = await fetchWorker("/v1/chat-generations/generation-id", {
+      method: "DELETE",
+      headers: authenticatedHeaders,
+    });
+
+    expect(accepted.status).toBe(202);
+    expect((await accepted.json()) as unknown).toEqual({
+      cancellation: { state: "accepted" },
+    });
+    expect(terminal.status).toBe(204);
+    expect(await terminal.text()).toBe("");
   });
 });
 
@@ -328,6 +437,7 @@ describe("settings entitlement admission contract", () => {
     });
 
     expect(first.status).toBe(201);
+    expect(wireToChatAdmissionEnvelope(JSON.parse(firstBody))).not.toBeNull();
     expect(replay.status).toBe(200);
     expect(await replay.text()).toBe(firstBody);
     expect(await settings.json()).toMatchObject({
@@ -380,6 +490,113 @@ describe("settings entitlement admission contract", () => {
       entitlement: { used: 1, limit: 1, limitReached: true },
     });
   });
+
+  test("nonempty attachment sends fail until attachment staging exists", async () => {
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("attachment-rejected"),
+        attachmentIds: ["attachment-id"],
+      }),
+    });
+
+    expect(response.status).toBe(422);
+    expect((await response.json()) as unknown).toEqual({
+      error: {
+        code: "attachment_rejected",
+        retryable: false,
+        action: "edit_request",
+      },
+    });
+  });
+
+  test("oversized send bodies fail before account storage", async () => {
+    accountCalls.length = 0;
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify({
+        ...chatCreate("oversized-body"),
+        text: "x".repeat(70_000),
+      }),
+    });
+
+    expect(response.status).toBe(413);
+    expect(accountCalls).toEqual([]);
+  });
+});
+
+describe("ratified generation wire", () => {
+  test("worker event encoding is accepted by the frontend parser", () => {
+    const encode = (
+      accountBackend.prototype as unknown as {
+        encode(event: { id: string; kind: "snapshot"; text: string }): string;
+      }
+    ).encode;
+    const transcript = encode.call(accountBackend.prototype, {
+      id: "event-1",
+      kind: "snapshot",
+      text: "hello",
+    });
+
+    expect(parseChatGenerationEventStream(transcript)).toEqual([
+      { kind: "snapshot", text: "hello" },
+    ]);
+    expect(transcript).toContain("event: snapshot\n");
+    expect(transcript).not.toContain('"id":"event-1"');
+  });
+
+  test("generation endpoint emits a parser-compatible leading snapshot", async () => {
+    const response = await fetchWorker(
+      "/v1/chat-generations/generation-id/events",
+      { headers: authenticatedHeaders }
+    );
+
+    expect(response.status).toBe(200);
+    expect(parseChatGenerationEventStream(await response.text())).toEqual([
+      { kind: "snapshot", text: "" },
+    ]);
+  });
+
+  test("resume replays strictly after the cursor and heals terminal reconnects", () => {
+    const selectReplay = (
+      accountBackend.prototype as unknown as {
+        selectReplay(
+          events: Array<
+            | { id: string; kind: "snapshot"; text: string }
+            | { id: string; kind: "done"; message: Record<string, unknown> }
+          >,
+          lastEventId: string | null
+        ): unknown;
+      }
+    ).selectReplay;
+    const done = {
+      id: "event-2",
+      kind: "done" as const,
+      message: canonicalMessage({
+        id: "assistant-id",
+        text: "complete",
+        type: "text",
+        at: 2,
+        journalRevision: 0,
+      }),
+    };
+    const events = [
+      { id: "event-1", kind: "snapshot" as const, text: "" },
+      done,
+    ];
+
+    expect(
+      selectReplay.call(accountBackend.prototype, events, "event-1")
+    ).toEqual([done]);
+    expect(
+      selectReplay.call(accountBackend.prototype, events, "event-2")
+    ).toEqual([done]);
+    expect(
+      selectReplay.call(accountBackend.prototype, events.slice(0, 1), "expired")
+    ).toBe("expired");
+  });
 });
 
 describe("chat create wire validator", () => {
@@ -400,6 +617,16 @@ describe("chat create wire validator", () => {
     expect(isChatCreate(valid)).toBe(true);
   });
 
+  test("accepts bounded canonical scope identifiers", () => {
+    expect(
+      isChatCreate({
+        ...valid,
+        appId: "legacy-app",
+        chatSessionId: "session-1",
+      })
+    ).toBe(true);
+  });
+
   test.each([
     [null],
     [[]],
@@ -409,7 +636,8 @@ describe("chat create wire validator", () => {
     [{ ...valid, text: "" }],
     [{ ...valid, sender: "ai" }],
     [{ ...valid, journalRevision: 0.5 }],
-    [{ ...valid, appId: "legacy-app" }],
+    [{ ...valid, appId: "" }],
+    [{ ...valid, chatSessionId: "s".repeat(129) }],
     [{ ...valid, attachmentIds: [""] }],
   ])("rejects malformed create envelopes", (value: unknown) => {
     expect(isChatCreate(value)).toBe(false);

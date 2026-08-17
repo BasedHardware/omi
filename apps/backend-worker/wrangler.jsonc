@@ -7,6 +7,7 @@
   "vars": {
     "ENVIRONMENT": "staging",
     "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "STAGING_ACCOUNT_ID": "staging-primary",
     "STAGING_DISPLAY_NAME": "Omi Staging",
     "STAGING_EMAIL": "staging@omi.invalid",
     "STAGING_PLAN_LABEL": "Staging",

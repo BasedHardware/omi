@@ -15,7 +15,9 @@ app.get("/health", (context) =>
   json({ status: "ok", environment: context.env.ENVIRONMENT })
 );
 app.get("/ready", (context) =>
-  json({ status: "ready", environment: context.env.ENVIRONMENT })
+  configurationReady(context.env)
+    ? json({ status: "ready", environment: context.env.ENVIRONMENT })
+    : backendError("service_unavailable", "retry", 503, true)
 );
 
 app.use("/v1/*", async (context, next) => {
@@ -34,7 +36,7 @@ app.use("/v1/*", async (context, next) => {
   if (clientId === undefined || clientId.length === 0) {
     return backendError("bad_request", "edit_request", 400);
   }
-  context.set("accountId", `token:${await digest(context.env.API_TOKEN)}`);
+  context.set("accountId", context.env.STAGING_ACCOUNT_ID);
   await next();
 });
 
@@ -45,24 +47,37 @@ app.get("/v1/settings", async (context) => {
 });
 
 app.get("/v1/chat-messages", async (context) => {
-  const limit = parseLimit(context.req.query("limit"));
-  if (limit === null || context.req.query("olderCursor") !== undefined) {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "olderCursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("olderCursor").length > 1
+  ) {
     return backendError("bad_request", "edit_request", 400);
   }
+  const limit = parseLimit(query.get("limit") ?? undefined);
+  const olderCursor = query.get("olderCursor") ?? undefined;
+  if (limit === null || olderCursor === "")
+    return backendError("bad_request", "edit_request", 400);
   const stub = account(context);
   await configureAccount(context.env, stub);
-  return json(await stub.history(limit));
+  const history = await stub.history(limit, olderCursor);
+  return history === "invalid_cursor"
+    ? backendError("bad_request", "edit_request", 400)
+    : json(history);
 });
 
 app.post("/v1/chat-messages", async (context) => {
-  let body: unknown;
-  try {
-    body = await context.req.json();
-  } catch {
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
     return backendError("bad_request", "edit_request", 400);
-  }
+  const body = parsed.value;
   if (!isChatCreate(body))
     return backendError("validation", "edit_request", 422);
+  if ((body.attachmentIds?.length ?? 0) > 0)
+    return backendError("attachment_rejected", "edit_request", 422);
   const stub = account(context);
   await configureAccount(context.env, stub);
   const admission = await stub.admit(body);
@@ -71,11 +86,6 @@ app.post("/v1/chat-messages", async (context) => {
   }
   if (admission === "entitlement") {
     return backendError("entitlement", "upgrade", 402);
-  }
-  if (admission.created) {
-    context.executionCtx.waitUntil(
-      generate(context.env, stub, admission.generation.id, body.text)
-    );
   }
   return json(
     { message: admission.message, generation: admission.generation },
@@ -93,10 +103,15 @@ app.get("/v1/chat-generations/:id/events", (context) => {
 });
 
 app.delete("/v1/chat-generations/:id", async (context) => {
-  const cancelled = await account(context).cancel(context.req.param("id"));
-  return cancelled
-    ? new Response(null, { status: 202 })
-    : backendError("not_found", "refresh_history", 404);
+  const cancellation = await account(context).cancel(context.req.param("id"));
+  if (cancellation === "not_found")
+    return backendError("not_found", "refresh_history", 404);
+  return cancellation === "terminal"
+    ? new Response(null, {
+        status: 204,
+        headers: { "cache-control": "no-store" },
+      })
+    : json({ cancellation: { state: "accepted" } }, 202);
 });
 
 app.get("/v1/conversations", () => json([]));
@@ -126,16 +141,6 @@ function account(context: { env: WorkerEnv; get(key: "accountId"): string }) {
   return context.env.ACCOUNTS.getByName(context.get("accountId"));
 }
 
-async function digest(value: string): Promise<string> {
-  const bytes = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value)
-  );
-  return [...new Uint8Array(bytes)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function constantTimeEqual(
   supplied: Uint8Array,
   expected: Uint8Array
@@ -146,6 +151,21 @@ function constantTimeEqual(
     difference |= (supplied[index] ?? 0) ^ (expected[index] ?? 0);
   }
   return difference === 0;
+}
+
+function configurationReady(env: WorkerEnv): boolean {
+  return (
+    typeof env.API_TOKEN === "string" &&
+    env.API_TOKEN.length > 0 &&
+    typeof env.STAGING_ACCOUNT_ID === "string" &&
+    env.STAGING_ACCOUNT_ID.length > 0 &&
+    typeof env.AI_MODEL === "string" &&
+    env.AI_MODEL.length > 0 &&
+    Number.isSafeInteger(env.STAGING_CHAT_LIMIT) &&
+    env.STAGING_CHAT_LIMIT >= 0 &&
+    env.ACCOUNTS !== undefined &&
+    env.AI !== undefined
+  );
 }
 
 async function configureAccount(
@@ -164,6 +184,51 @@ function parseLimit(value: string | undefined): number | null {
   if (value === undefined) return 50;
   if (!/^(?:[1-9]|[1-9][0-9]|100)$/.test(value)) return null;
   return Number(value);
+}
+
+async function readBoundedJson(
+  request: Request,
+  maxBytes: number
+): Promise<
+  { kind: "ok"; value: unknown } | { kind: "invalid" } | { kind: "too_large" }
+> {
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes)
+  ) {
+    return { kind: "too_large" };
+  }
+  if (request.body === null) return { kind: "invalid" };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > maxBytes) {
+      await reader.cancel();
+      return { kind: "too_large" };
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return {
+      kind: "ok",
+      value: JSON.parse(
+        new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+      ) as unknown,
+    };
+  } catch {
+    return { kind: "invalid" };
+  }
 }
 
 function emptyPage(
@@ -199,35 +264,4 @@ function emptyPage(
     },
     absence: { kind: "query_gap" },
   };
-}
-
-async function generate(
-  env: WorkerEnv,
-  accountStub: DurableObjectStub<AccountBackend>,
-  generationId: string,
-  prompt: string
-): Promise<void> {
-  try {
-    const result = await env.AI.run(env.AI_MODEL as keyof AiModels, {
-      messages: [
-        {
-          role: "system",
-          content: "You are Omi, a concise and helpful personal assistant.",
-        },
-        { role: "user", content: prompt },
-      ],
-      max_tokens: 768,
-    });
-    const response = result as { response?: unknown };
-    if (
-      typeof response.response !== "string" ||
-      response.response.length === 0
-    ) {
-      await accountStub.fail(generationId);
-      return;
-    }
-    await accountStub.complete(generationId, response.response);
-  } catch {
-    await accountStub.fail(generationId);
-  }
 }
