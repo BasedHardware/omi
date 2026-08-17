@@ -50,6 +50,7 @@ from utils.stt.streaming import (
     connect_stt_socket_with_fallback,
     make_stream_callback,
     modulate_is_configured_fallback,
+    parakeet_is_configured_fallback,
     process_audio_dg,
     process_audio_modulate,
     process_audio_parakeet,
@@ -238,6 +239,18 @@ class ListenReceiver:
 
             if not modulate_is_configured_fallback(self.host.stt_language):
                 return await connect_deepgram()
+
+            def connect_parakeet() -> Any:
+                return process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model='parakeet',
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
             socket, actual_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.deepgram,
                 connect_primary=connect_deepgram,
@@ -246,10 +259,15 @@ class ListenReceiver:
                     sample_rate,
                     self.host.stt_language,
                 ),
+                connect_parakeet=(
+                    connect_parakeet if parakeet_is_configured_fallback(self.host.stt_language) else None
+                ),
             )
             self.host.stt_service = actual_service
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
+            elif actual_service == STTService.parakeet:
+                self.host.stt_model = 'parakeet'
             return socket
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
