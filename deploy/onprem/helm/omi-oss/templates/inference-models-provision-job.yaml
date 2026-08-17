@@ -9,6 +9,7 @@ model is license-gated). Enable with inference.inCluster.models.provision.enable
 {{- $root := . }}
 {{- $ic := .Values.inference.inCluster }}
 {{- $claim := $ic.models.existingClaim | default (printf "%s-inference-models" .Release.Name) }}
+{{- $hftok := required "inference.inCluster.models.provision.huggingFaceToken is required to download the gated pyannote model" $ic.models.provision.huggingFaceToken }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -17,7 +18,7 @@ metadata:
     {{- include "omi-oss.labels" . | nindent 4 }}
     app.kubernetes.io/component: inference-models-provision
 spec:
-  backoffLimit: 2
+  backoffLimit: 4
   ttlSecondsAfterFinished: 900
   template:
     metadata:
@@ -38,8 +39,11 @@ spec:
           env:
             - name: HF_HOME
               value: /models/hf
+            - name: HF_TOKEN               # authenticated downloads (higher rate limits than anonymous)
+              value: {{ $hftok | quote }}
+          # The whisper image installs faster_whisper for python3.11 (its server runs `python3.11 -m uvicorn`).
           command:
-            - python3
+            - python3.11
             - -c
             - |
               from faster_whisper import WhisperModel
@@ -54,8 +58,10 @@ spec:
           env:
             - name: HF_HOME
               value: /models/hf
-            - name: HUGGINGFACE_TOKEN
-              value: {{ required "inference.inCluster.models.provision.huggingFaceToken is required to download the gated pyannote model" $ic.models.provision.huggingFaceToken | quote }}
+            - name: HUGGINGFACE_TOKEN     # pyannote reads this specific var
+              value: {{ $hftok | quote }}
+            - name: HF_TOKEN              # huggingface_hub reads this (authenticated download)
+              value: {{ $hftok | quote }}
           command:
             - python3
             - -c
@@ -73,13 +79,25 @@ spec:
         - name: nllb
           image: {{ include "omi-oss.image" (dict "root" $root "repo" $ic.services.nllb.image) }}
           imagePullPolicy: {{ $ic.services.nllb.imagePullPolicy | default "IfNotPresent" }}
+          env:
+            - name: HF_HOME
+              value: /models/hf
+            - name: HF_TOKEN               # authenticated download of facebook/nllb-200-distilled-600M
+              value: {{ $hftok | quote }}
           command:
             - sh
             - -c
             - |
-              test -d /models/nllb-200-distilled-600M-ct2-int8 || \
-              ct2-transformers-converter --model facebook/nllb-200-distilled-600M --quantization int8 \
-                --output_dir /models/nllb-200-distilled-600M-ct2-int8 --copy_files sentencepiece.bpe.model
+              set -e
+              if [ ! -d /models/nllb-200-distilled-600M-ct2-int8 ]; then
+                # ct2-transformers-converter needs BOTH transformers and torch — converter-only deps that the
+                # lean nllb runtime image (ctranslate2 only) doesn't ship. It imports them together in one
+                # try-block, so both must be present. Install them here, just for this Job (CPU torch).
+                pip install --no-cache-dir transformers
+                pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+                ct2-transformers-converter --model facebook/nllb-200-distilled-600M --quantization int8 \
+                  --output_dir /models/nllb-200-distilled-600M-ct2-int8 --copy_files sentencepiece.bpe.model
+              fi
               echo "nllb ct2 model ready"
           volumeMounts:
             - { name: models, mountPath: /models }
@@ -87,7 +105,9 @@ spec:
         - name: done
           image: {{ include "omi-oss.image" (dict "root" $root "repo" $ic.services.nllb.image) }}
           imagePullPolicy: {{ $ic.services.nllb.imagePullPolicy | default "IfNotPresent" }}
-          command: ["sh", "-c", "echo 'model weights provisioned:'; ls -la /models"]
+          # Write the readiness marker the inference pods wait for (see inference-incluster.yaml), so they
+          # start only once every model is present instead of crash-looping against an empty volume.
+          command: ["sh", "-c", "echo done > /models/.provisioned; echo 'model weights provisioned:'; ls -la /models"]
           volumeMounts:
-            - { name: models, mountPath: /models, readOnly: true }
+            - { name: models, mountPath: /models }
 {{- end }}

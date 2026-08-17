@@ -23,6 +23,11 @@ metadata:
     app.kubernetes.io/component: {{ $name }}
 spec:
   replicas: 1
+  # One GPU per service, time-sliced on a shared card: use Recreate so an upgrade terminates the old pod
+  # before starting the new one. A rolling update would need 2x the GPU units at once and deadlock (the new
+  # pod stays Pending on insufficient nvidia.com/gpu while the old one holds it).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/component: {{ $name }}
@@ -35,6 +40,18 @@ spec:
       {{- with $ic.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $ic.models.provision.enabled }}
+      # When the chart provisions the weights, wait for the Job's marker so the server starts only once its
+      # model is on the volume — no crash-loop while the download is still running. (With a pre-populated
+      # existingClaim, provisioning is off and this wait is skipped.)
+      initContainers:
+        - name: wait-for-models
+          image: {{ include "omi-oss.image" (dict "root" $root "repo" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
+          imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
+          command: ["sh", "-c", "until [ -f /models/.provisioned ]; do echo 'waiting for model weights...'; sleep 5; done"]
+          volumeMounts:
+            - { name: models, mountPath: /models, readOnly: true }
       {{- end }}
       containers:
         - name: {{ $name }}
