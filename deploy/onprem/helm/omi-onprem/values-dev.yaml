@@ -8,3 +8,8 @@ backend:
     # Dev-auth bypass (Bearer dev -> uid 123), same as compose.dev — lets the core smoke hit the API
     # without wiring OIDC (the auth profile is off in the core milestone).
     LOCAL_DEVELOPMENT: "true"
+
+# chat profile: bring up the on-prem vector store (Qdrant). Full RAG also needs an embeddings endpoint
+# (external, ADR-0035) + the LLM gateway; here we validate the Qdrant vector-store path itself.
+chat:
+  enabled: true

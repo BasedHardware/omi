@@ -12,3 +12,10 @@ data:
   {{- end }}
   # Derived from the in-cluster mongo service — seeds the replica set at the same stable member host.
   MONGO_URI: "mongodb://{{ include "omi-onprem.mongoHost" . }}:27017/?replicaSet={{ .Values.mongo.replicaSetName }}"
+  {{- if .Values.chat.enabled }}
+  # chat profile: on-prem vector store (Qdrant) instead of Pinecone (ADR-0033). Collections are
+  # auto-created at QDRANT_VECTOR_DIM on first upsert.
+  VECTOR_STORE_BACKEND: "qdrant"
+  QDRANT_URL: "http://qdrant:6333"
+  QDRANT_VECTOR_DIM: {{ .Values.chat.vectorDim | quote }}
+  {{- end }}

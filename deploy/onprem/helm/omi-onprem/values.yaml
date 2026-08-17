@@ -50,6 +50,13 @@ auth:
   enabled: false
 chat:
   enabled: false
+  # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
+  vectorDim: 1024
+  qdrant:
+    image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # 1.19.0
+    imagePullPolicy: IfNotPresent
+    storage: 2Gi
+    resources: {}
 objstore:
   enabled: false
 push:
