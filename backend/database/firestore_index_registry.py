@@ -210,30 +210,6 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('account_generation'), _asc('status'), _asc('__name__')),
     ),
-    FirestoreIndexRequirement(
-        'context_buckets_generation_updated',
-        'context_buckets',
-        'COLLECTION',
-        (_asc('account_generation'), _desc('updated_at'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'context_buckets_generation_workstream_updated',
-        'context_buckets',
-        'COLLECTION',
-        (_asc('account_generation'), _asc('workstream_id'), _desc('updated_at'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'context_bucket_facts_generation_updated',
-        'context_bucket_facts',
-        'COLLECTION',
-        (_asc('account_generation'), _desc('updated_at'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'context_bucket_facts_generation_workstream_updated',
-        'context_bucket_facts',
-        'COLLECTION',
-        (_asc('account_generation'), _asc('workstream_tag'), _desc('updated_at'), _desc('__name__')),
-    ),
 )
 
 
@@ -607,6 +583,54 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CONTEXT_BUCKETS_BY_GENERATION_QUERY = FirestoreQuerySpec(
+    identifier='context_buckets_generation_updated',
+    collection_group='context_buckets',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
+    index_fields=(_asc('account_generation'), _desc('updated_at'), _asc('__name__')),
+)
+
+CONTEXT_BUCKETS_BY_WORKSTREAM_QUERY = FirestoreQuerySpec(
+    identifier='context_buckets_generation_workstream_updated',
+    collection_group='context_buckets',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('workstream_id', '==', 'workstream_id'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('workstream_id'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+
+CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY = FirestoreQuerySpec(
+    identifier='context_bucket_facts_generation_updated',
+    collection_group='context_bucket_facts',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
+    index_fields=(_asc('account_generation'), _desc('updated_at'), _asc('__name__')),
+)
+
+CONTEXT_BUCKET_FACTS_BY_WORKSTREAM_QUERY = FirestoreQuerySpec(
+    identifier='context_bucket_facts_generation_workstream_updated',
+    collection_group='context_bucket_facts',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('workstream_tag', '==', 'workstream_tag'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('workstream_tag'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -633,6 +657,10 @@ QUERY_SPECS = (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CONTEXT_BUCKETS_BY_GENERATION_QUERY,
+    CONTEXT_BUCKETS_BY_WORKSTREAM_QUERY,
+    CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY,
+    CONTEXT_BUCKET_FACTS_BY_WORKSTREAM_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

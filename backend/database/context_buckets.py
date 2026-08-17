@@ -12,6 +12,12 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
+from database.firestore_index_registry import (
+    CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY,
+    CONTEXT_BUCKET_FACTS_BY_WORKSTREAM_QUERY,
+    CONTEXT_BUCKETS_BY_GENERATION_QUERY,
+    CONTEXT_BUCKETS_BY_WORKSTREAM_QUERY,
+)
 from database.read_boundary import parse_snapshots
 from models.context_bucket import (
     ContextBucket,
@@ -37,6 +43,10 @@ FACT_OVERFETCH_CEILING = 1000
 # clock caught up. Clamping rather than rejecting keeps a mildly skewed clock
 # syncing normally while bounding how far ahead any device can place itself.
 MAX_DEVICE_CLOCK_SKEW = timedelta(hours=1)
+
+
+def _field_filter(field_path: str, operator: str, value: Any) -> Any:
+    return FieldFilter(field_path, operator, value)
 
 
 def _get_db(firestore_client: Any = None) -> Any:
@@ -264,13 +274,13 @@ def list_context_buckets(
     limit: int = 100,
     firestore_client: Any = None,
 ) -> list[ContextBucket]:
-    query = (
-        _user_ref(uid, firestore_client=firestore_client)
-        .collection(BUCKETS_COLLECTION)
-        .where(filter=FieldFilter('account_generation', '==', account_generation))
+    collection = _user_ref(uid, firestore_client=firestore_client).collection(BUCKETS_COLLECTION)
+    spec = CONTEXT_BUCKETS_BY_GENERATION_QUERY if workstream_id is None else CONTEXT_BUCKETS_BY_WORKSTREAM_QUERY
+    query = spec.build(
+        collection,
+        {'account_generation': account_generation, 'workstream_id': workstream_id},
+        field_filter_factory=_field_filter,
     )
-    if workstream_id is not None:
-        query = query.where(filter=FieldFilter('workstream_id', '==', workstream_id))
     query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit)
     return parse_snapshots(ContextBucket, query.stream(), payload_from_snapshot=_readable_payload)
 
@@ -298,11 +308,14 @@ def list_context_facts(
     """
 
     moment = now or datetime.now(timezone.utc)
-    query = _facts_collection(uid, firestore_client=firestore_client).where(
-        filter=FieldFilter('account_generation', '==', account_generation)
+    spec = (
+        CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY if workstream_id is None else CONTEXT_BUCKET_FACTS_BY_WORKSTREAM_QUERY
     )
-    if workstream_id is not None:
-        query = query.where(filter=FieldFilter('workstream_tag', '==', workstream_id))
+    query = spec.build(
+        _facts_collection(uid, firestore_client=firestore_client),
+        {'account_generation': account_generation, 'workstream_tag': workstream_id},
+        field_filter_factory=_field_filter,
+    )
     fetch_limit = min(limit * FACT_OVERFETCH_FACTOR, FACT_OVERFETCH_CEILING)
     snapshots = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(fetch_limit).stream()
     facts = parse_snapshots(ContextFact, snapshots, payload_from_snapshot=_readable_payload)
