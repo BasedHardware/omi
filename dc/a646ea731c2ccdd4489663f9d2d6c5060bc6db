@@ -1,0 +1,92 @@
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeMatcher.swift
+  s_ff8aeb5a36f5b8::t_89ef972bf901d0 1-73
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeTelemetry.swift
+  s_ff8aeb5a36f5b8::t_86611fe6c12820 1-104
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectionInspector.swift
+  s_ff8aeb5a36f5b8::t_f10d9b33acf600 1-28
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  s_ff8aeb5a36f5b8::t_40f3b76a7cc11b 204-208
+desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  s_ff8aeb5a36f5b8::t_00b67248a7487b 276-325
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_ff8aeb5a36f5b8::t_bc061d21b5a8d4 1045-1049
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_ff8aeb5a36f5b8::t_8a94ac6bd5e3be 2408-2478
+desktop/macos/Desktop/Tests/IntegrationNudgeStoreTests.swift
+  s_ff8aeb5a36f5b8::t_6d3d7560ca0524 10-17,20-23
+  s_ff8aeb5a36f5b8::t_cbafce2b324718 1-9,18-19,24-149
+  s_ff8aeb5a36f5b8::t_efaf178a125660 150-158
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgePolicy.swift
+  s_ff8aeb5a36f5b8::t_7fe25ffab8a3f3 1-223
+desktop/macos/Desktop/Tests/IntegrationNudgeTelemetryTests.swift
+  s_ff8aeb5a36f5b8::t_88059f39a8e754 1-88
+desktop/macos/Desktop/Tests/IntegrationNudgePolicyTests.swift
+  s_ff8aeb5a36f5b8::t_33e78c054df273 1-187
+desktop/macos/Desktop/Tests/IntegrationNudgeMatcherTests.swift
+  s_ff8aeb5a36f5b8::t_bf49c20a89139d 1-89
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeStore.swift
+  s_ff8aeb5a36f5b8::t_0f88f2d3834b88 1-10,14-20,29-40,42-43,48-51,54-57,60-65,67,74-75,77-78,80,82-83,85,87-88,90,92-94,96,98,104,107-110,116-118,121-127,129-133,135-141,144-145,149-157
+  s_ff8aeb5a36f5b8::t_15df86f1f0c321 11-13,21-28,41,44-47,52-53,58-59,66,68-73,76,79,81,84,86,89,91,95,97,99-103,105-106,111-115,119-120,128,134,142-143,146-148
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCatalog.swift
+  s_ff8aeb5a36f5b8::t_c251f67bf5216f 1-222,256-461
+  s_ff8aeb5a36f5b8::t_1fc85ed6d4ec00 223-255
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_ff8aeb5a36f5b8::t_e6230e1058a3a5 4064-4065,4068-4072
+  s_ff8aeb5a36f5b8::t_72cc7554d5a51b 4037-4047
+  s_ff8aeb5a36f5b8::t_cbde895f615b95 4154-4157
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_ff8aeb5a36f5b8::t_be4b4e09347ca8 950-952
+  s_ff8aeb5a36f5b8::t_a7c82d54de6bc9 1739-1740
+  s_ff8aeb5a36f5b8::t_8185c7d104eac0 1494-1497
+  s_ff8aeb5a36f5b8::t_ed90bbff9dab24 1159-1171
+desktop/macos/Desktop/Sources/Integrations/IntegrationConnectTelemetry.swift
+  s_ff8aeb5a36f5b8::t_ee890f72dec6ad 50-54
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  s_ff8aeb5a36f5b8::t_30c11b84525831 262-264
+  s_ff8aeb5a36f5b8::t_d4af2b0e11bd40 1-261,265-318
+  s_ff8aeb5a36f5b8::t_a9cfd05ba0aea1 319
+desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  s_ff8aeb5a36f5b8::t_9e234c0451ffd9 363
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_ff8aeb5a36f5b8::t_91e965da3674d8 110-149
+desktop/macos/Desktop/Tests/IntegrationNudgeCardPresentationTests.swift
+  s_ff8aeb5a36f5b8::t_b6be5dc7466cbd 1-37
+desktop/macos/Desktop/Tests/IntegrationNudgeCatalogTests.swift
+  s_ff8aeb5a36f5b8::t_299177f1772ab3 1-129
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
+  s_ff8aeb5a36f5b8::t_b9d89fdda1269a 530-533
+desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift
+  s_ff8aeb5a36f5b8::t_bb997efbbf13c7 35-44
+  s_ff8aeb5a36f5b8::t_4cf7c6214dd81a 80-89
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_ff8aeb5a36f5b8::t_44b6cd0cef0c28 576-580,586-653
+  s_ff8aeb5a36f5b8::t_7bfbd59c36f35c 654-655
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectOrigin.swift
+  s_ff8aeb5a36f5b8::t_e253a3425a1df3 1-49
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_ff8aeb5a36f5b8::t_d838fc44f17084 549-553
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationValueSection.swift
+  s_ff8aeb5a36f5b8::t_5290329de8d302 1-55
+desktop/macos/Desktop/Sources/DefaultsKey.swift
+  s_ff8aeb5a36f5b8::t_c3cbdb39398ae2 171-173
+  s_ff8aeb5a36f5b8::t_d7cf8ae81aaa64 130-144
+  s_ff8aeb5a36f5b8::t_0db89b12ad2fc2 45-48
+desktop/macos/Desktop/Tests/IntegrationConnectOriginTests.swift
+  s_ff8aeb5a36f5b8::t_e4f71de05b8f42 1-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dca646ea731c2ccdd4489663f9d2d6c5060bc6db",
+  "prompts": {},
+  "sessions": {
+    "s_ff8aeb5a36f5b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cee6b50-5d24-4cd7-ba03-5499c4e7d8a5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
