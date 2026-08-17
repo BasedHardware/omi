@@ -581,6 +581,52 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
     XCTAssertNil(ContextProactiveCandidateGate.parse("{"))
     XCTAssertNil(ContextProactiveCandidateGate.parse(#"{"show":"yes","reason":"nope"}"#))
     XCTAssertNil(ContextProactiveCandidateGate.parse(#"{"reason":"missing show"}"#))
+    // Empty content is what a completion-token budget exhausted by reasoning
+    // returns. It must parse to nil — *not* to a decision — so the delivery
+    // path can tell "the model did not answer" apart from "the model said no".
+    XCTAssertNil(ContextProactiveCandidateGate.parse(""))
+  }
+
+  /// Strict-equality golden, to the same standard as the extraction and
+  /// director prompts. The gate's previous contract shipped with mutually
+  /// exclusive clauses and rejected 66 of 69 live candidates; a substring
+  /// assertion would not have caught a clause drifting back in.
+  func testGatePromptIsExact() {
+    let prompt = ContextProactiveCandidateGate.prompt(
+      message: "Nik is waiting on the demo recording.",
+      groundingFacts: ["Nik asked for the recording before the launch video."],
+      validatedFacts: ["The release checklist is on screen."],
+      recentDeliveries: [])
+    let expected = """
+      \(ScreenDerivedContent.untrustedPreamble)
+      You are a yes/no delivery gate for one pre-written notification. Do not rewrite it.
+      The notification was written earlier, from the stored evidence below, not from the
+      current screen. The current screen is not expected to mention it.
+      Answer show=false only for one of these three reasons:
+      1. The current screen clearly shows that the very matter this notification is about
+         is already resolved, completed, or changed, so the notification is now wrong or
+         moot. A different task, pull request, or topic being resolved on screen is not
+         this reason.
+      2. The notification repeats a point in the recently-delivered list, even reworded.
+      3. The notification only tells the user what they are already looking at right now.
+      Otherwise answer show=true.
+      The current screen not mentioning or confirming the notification is normal and is
+      never a reason to answer false.
+      Keep reason to one short sentence.
+
+      == CANDIDATE NOTIFICATION ==
+      Nik is waiting on the demo recording.
+
+      == STORED EVIDENCE THE NOTIFICATION WAS WRITTEN FROM ==
+      - Nik asked for the recording before the launch video.
+
+      == VALIDATED FACTS ON THIS VISIT (current screen) ==
+      The release checklist is on screen.
+
+      == RECENTLY DELIVERED FOR THIS BUCKET ==
+      (none)
+      """
+    XCTAssertEqual(prompt, expected)
   }
 
   func testCandidateWriterDropsGroundingThatIsNotPresentAndValidated() throws {

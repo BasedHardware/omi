@@ -238,7 +238,7 @@ def _claim_retry_state_transaction(
     item = MemoryItem(**item_payload)
     if item.item_revision != expected_item.item_revision or item.content_hash != expected_item.content_hash:
         return RequiredProcessingClaim(state=None, item=item, claimed=False, reason="newer_revision_pending")
-    if not _is_pending_required_processing(item):
+    if not is_pending_required_processing(item):
         return RequiredProcessingClaim(
             state=None,
             item=item,
@@ -456,7 +456,7 @@ def _delete_retry_state(
     _delete_retry_state_transaction(db_client.transaction(), db_client, uid, item, lease_owner)
 
 
-def _is_pending_required_processing(item: MemoryItem) -> bool:
+def is_pending_required_processing(item: MemoryItem) -> bool:
     promotion = item.promotion or {}
     return (
         item.tier == MemoryLayer.short_term
@@ -505,7 +505,7 @@ def list_pending_required_processing_items(
         if not payload:
             continue
         item = MemoryItem(**payload)
-        if _is_pending_required_processing(item):
+        if is_pending_required_processing(item):
             pending.append(item)
     pending.sort(key=lambda item: (item.captured_at, item.memory_id))
     return pending[:requested_limit]
@@ -931,7 +931,7 @@ def process_required_memory_item(
     if not payload:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="memory_not_found")
     item = MemoryItem(**payload)
-    if not _is_pending_required_processing(item):
+    if not is_pending_required_processing(item):
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="not_pending_required_processing")
     if processor is None:
         return RequiredMemoryProcessingResult(memory_id=memory_id, skipped_reason="processor_not_configured")
@@ -1044,6 +1044,35 @@ def process_required_memory_item(
     return RequiredMemoryProcessingResult(memory_id=memory_id, processed=True, attempted=True)
 
 
+def commit_required_processing(
+    item: MemoryItem,
+    processed: ProcessedRequiredMemory,
+    *,
+    db_client: Any,
+    now: datetime,
+    attempt_count: int = 1,
+) -> MemoryItem:
+    """Persist L2 normalization without a second LLM call.
+
+    Consolidation uses this so an explicit submission is receipted and routed
+    from one planner decision. Conversation Short-term rows are already
+    processed and never enter this path.
+    """
+    status = _apply_processed_result(
+        item,
+        processed,
+        attempt_count=attempt_count,
+        db_client=db_client,
+        now=now,
+    )
+    if status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
+        raise ValueError(f"required processing apply failed: {status}")
+    current = _read_current_item(item, db_client=db_client)
+    if current is None:
+        raise ValueError("required processing apply lost the item")
+    return current
+
+
 def run_required_memory_processing(
     uid: str,
     *,
@@ -1056,6 +1085,8 @@ def run_required_memory_processing(
 ) -> RequiredMemoryProcessingReport:
     client = db_client if db_client is not None else default_db_client
     report = RequiredMemoryProcessingReport(uid=uid)
+    if limit <= 0:
+        return report
     attempt_limit = max(1, min(limit, MAX_REQUIRED_PROCESSING_ITEMS_PER_PASS))
     items = list_pending_required_processing_items(
         uid,
@@ -1094,7 +1125,9 @@ __all__ = [
     "RequiredProcessingSubjectContradiction",
     "RequiredMemoryProcessingReport",
     "RequiredMemoryProcessingResult",
+    "commit_required_processing",
     "invoke_required_memory_processor",
+    "is_pending_required_processing",
     "list_pending_required_processing_items",
     "process_required_memory_item",
     "run_required_memory_processing",

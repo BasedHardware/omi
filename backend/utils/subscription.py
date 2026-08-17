@@ -486,7 +486,8 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     Mobile sells Plus + Unlimited; desktop sells Operator + Architect; web sells
     all four. Neo is deprecated everywhere and hidden on every platform. A
     subscriber on a hidden plan still sees it via `filter_plans_for_user`'s
-    current-plan / ever-purchased escapes.
+    current-plan escape (Neo) or the mobile manage-only fast path (Operator /
+    Architect). See docs/agents/plan-catalog.md.
     """
     p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
@@ -498,51 +499,55 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     return set()
 
 
-def has_ever_purchased(uid: str, subscription: Optional[Subscription] = None) -> bool:
-    """True if the user has ever gone through subscription checkout.
+def desktop_to_consumer_plan_change_error(current_plan: PlanType, target_plan: PlanType) -> Optional[str]:
+    """Error text if a desktop-entitled plan would be swapped onto a consumer tier.
 
-    Used to keep the deprecated Neo plan visible on mobile to lapsed/returning
-    subscribers (so they can resubscribe) while hiding it from brand-new users
-    who never bought a plan. A Stripe customer id is created at first checkout
-    and persists across cancellations and plan changes; a current paid plan or
-    a stored stripe_subscription_id are cheaper positive signals checked first.
+    Operator and Architect are manage-only from mobile: cancel or wait out the
+    period. Immediate proration onto Plus / Unlimited / Neo strips desktop.
+    Same-family desktop changes (Operator ↔ Architect) stay allowed for the
+    desktop and web storefronts. Do not add a "user confirmed in the app"
+    exception — confirmation is not this boundary. See docs/agents/plan-catalog.md.
     """
-    if subscription is not None:
-        if is_paid_plan(subscription.plan):
-            return True
-        if subscription.stripe_subscription_id:
-            return True
-    return bool(users_db.get_stripe_customer_id(uid))
+    if current_plan in DESKTOP_ENTITLED_PLAN_TYPES and target_plan not in DESKTOP_ENTITLED_PLAN_TYPES:
+        return (
+            "This plan is managed from desktop. Switching to a mobile plan is not "
+            "available here. Cancel at period end or contact support."
+        )
+    return None
 
 
 def filter_plans_for_user(
     definitions: List[Dict[str, Any]],
     current_plan: PlanType,
     platform: Optional[str] = None,
-    ever_purchased: bool = False,
 ) -> List[Dict[str, Any]]:
     """Drop legacy / platform-hidden plans from the purchase catalog.
 
-    Subscribers already on a "wrong-platform" plan (e.g. a Neo subscriber
-    opening the desktop app) still see their current plan so the management UI
-    works. On mobile, Neo also stays visible to anyone who has ever purchased a
-    plan (`ever_purchased`) so lapsed subscribers can resubscribe — new /
-    never-paid users don't see it. Only the *purchase* catalog is filtered.
+    Locked audience rules (docs/agents/plan-catalog.md) — do not re-widen:
+
+    1. Neo (`unlimited`) is shown only when `current_plan` is already Neo
+       (active or cancel-at-period-end). Never gate it on "has ever paid".
+    2. On mobile, Operator / Architect are manage-only: return *only* the
+       current desktop plan so cheaper mobile tiers cannot be purchased
+       from the phone. Desktop and web keep selling both.
+    3. Fully churned ex-Neo users are `basic` and receive Plus + Unlimited,
+       the replacement catalog, not the deprecated Neo SKU.
+
+    The current-plan escape still applies on desktop/web so a Neo subscriber
+    opening those surfaces can manage/cancel.
     """
-    hidden = _platform_hidden_plans(platform)
     is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
+    if is_mobile and current_plan in DESKTOP_ENTITLED_PLAN_TYPES:
+        return [d for d in definitions if d.get('plan_type') == current_plan]
+
+    hidden = _platform_hidden_plans(platform)
     out: List[Dict[str, Any]] = []
     for d in definitions:
         plan_type = d.get('plan_type')
         if d.get('legacy') and plan_type != current_plan:
             continue
         if plan_type in hidden and plan_type != current_plan:
-            # Mobile-only escape: keep the deprecated Neo plan visible to users
-            # who have bought a plan before (so they can resubscribe/manage).
-            if is_mobile and plan_type == PlanType.unlimited and ever_purchased:
-                pass
-            else:
-                continue
+            continue
         out.append(d)
     return out
 

@@ -19,3 +19,7 @@ Subscription metrics use `lib/stripe-subscriptions.ts`; never list subscriptions
 - Marketplace apps are excluded by `metadata.app_id`, stamped by the backend on app checkout.
 - MRR includes `active` and `past_due`; report `trialing` separately.
 - Normalize amounts with each price's `interval` and `interval_count`; never assume monthly or annual pricing.
+
+## Grafana
+
+`/dashboard` embeds uid `omi-tv` from `grafana/`; see `grafana/README.md`.
