@@ -49,6 +49,7 @@ from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
     make_stream_callback,
+    modulate_is_configured_fallback,
     process_audio_dg,
     process_audio_modulate,
     process_audio_parakeet,
@@ -183,15 +184,33 @@ class ListenReceiver:
         if self.host.stt_service == STTService.modulate:
             return await process_audio_modulate(modulate_callback or callback, sample_rate, self.host.stt_language)
         if self.host.stt_service == STTService.deepgram:
-            return await process_audio_dg(
-                callback,
-                self.host.stt_language,
-                sample_rate,
-                1,
-                model=self.host.stt_model,
-                keywords=keywords,
-                is_active=lambda: self.host.state.active,
+
+            def connect_deepgram() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=self.host.stt_model,
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            if not modulate_is_configured_fallback(self.host.stt_language):
+                return await connect_deepgram()
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                primary_service=STTService.deepgram,
+                connect_primary=connect_deepgram,
+                connect_modulate=lambda: process_audio_modulate(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
             )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.modulate:
+                self.host.stt_model = 'velma-2'
+            return socket
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
     async def _drain_stt_sockets(self) -> None:

@@ -49,12 +49,33 @@ from utils.memory.canonical_consolidation import (
     format_consolidation_llm_context,
     gather_consolidation_candidates,
     invoke_consolidation_agent,
+    build_consolidation_llm_messages,
     run_canonical_consolidation,
 )
 from utils.memory.memory_system import MemorySystem
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 UID = "uid-canonical"
+
+
+def _llm_payload_text(payload) -> str:
+    if isinstance(payload, str):
+        return payload
+    chunks: list[str] = []
+    for message in payload:
+        content = getattr(message, "content", "")
+        if isinstance(content, str):
+            chunks.append(content)
+            continue
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    chunks.append(str(part.get("text") or ""))
+                else:
+                    chunks.append(str(part))
+            continue
+        chunks.append(str(content))
+    return "\n".join(chunks)
 
 
 def _item(
@@ -428,11 +449,57 @@ def test_llm_prompt_exposes_candidate_sensitivity_and_promotion_safety_rules():
     payload = json.loads(format_consolidation_llm_context(context))
     assert payload["candidate_groups"][0]["candidates"][0]["sensitivity_labels"] == ["health"]
     assert parsed.decisions[0].route == "archive"
-    assert '"sensitivity_labels":["credential"]' in prompts[0]
-    assert "MUST NOT route promote" in prompts[0]
-    assert "aboutness=third_party or unclear MUST NOT route promote" in prompts[0]
-    assert "ambient media dialogue, quoted characters" in prompts[0]
-    assert "adopted user preference or commitment" in prompts[0]
+    blob = _llm_payload_text(prompts[0])
+    assert '"sensitivity_labels":["credential"]' in blob
+    assert "MUST NOT route promote" in blob
+    assert "aboutness=third_party or unclear MUST NOT route promote" in blob
+    assert "ambient media dialogue, quoted characters" in blob
+    assert "adopted user preference or commitment" in blob
+    assert "requires_normalization=true" in blob
+
+
+def test_pending_required_items_are_flagged_for_inline_normalization():
+    processed = _item("mem_processed", "Enjoys hiking")
+    required = processed.model_copy(
+        update={
+            "memory_id": "mem_required",
+            "processing_state": ProcessingState.pending,
+            "promotion": {
+                "required": True,
+                "processing_status": "pending_processing",
+                "source_attribution": {
+                    "subject_entity_id": "user",
+                    "subject_attribution": "user",
+                },
+            },
+        }
+    )
+    payload = json.loads(format_consolidation_llm_context(_context([processed, required], {})))
+    by_id = {row["memory_id"]: row for row in payload["memories"]}
+    assert by_id["mem_processed"]["requires_normalization"] is False
+    assert by_id["mem_required"]["requires_normalization"] is True
+
+
+def test_consolidation_batch_threshold_defaults_to_twenty(monkeypatch):
+    monkeypatch.delenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD", raising=False)
+    monkeypatch.delenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP", raising=False)
+    assert consolidation.DEFAULT_CONSOLIDATION_BATCH_THRESHOLD == 20
+    assert consolidation.consolidation_batch_threshold() == 20
+    assert consolidation.consolidation_batch_cap() == 20
+
+
+def test_consolidation_messages_cache_the_planner_prefix_not_the_batch_json():
+    item = _item("mem_a", "Enjoys hiking")
+    messages = build_consolidation_llm_messages(_context([item], {}))
+    prefix = messages[0].content[0]
+    suffix = messages[1].content
+
+    assert prefix["prompt_cache_breakpoint"] == {"mode": "explicit"}
+    assert "MUST NOT route promote" in prefix["text"]
+    assert "mem_a" not in prefix["text"]
+    assert "Enjoys hiking" not in prefix["text"]
+    assert '"memory_id":"mem_a"' in suffix
+    assert "Enjoys hiking" in suffix
 
 
 def test_promote_decision_requires_structured_graph_and_durable_basis():

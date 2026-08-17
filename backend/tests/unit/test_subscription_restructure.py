@@ -148,9 +148,7 @@ def test_filter_plans_mobile_new_user_sees_only_plus_and_unlimited_v2(load_subsc
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         for platform in ('ios', 'android'):
-            filtered = sub_mod.filter_plans_for_user(
-                definitions, PlanType.basic, platform=platform, ever_purchased=False
-            )
+            filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=platform)
             plan_ids = [d['plan_id'] for d in filtered]
             assert plan_ids == ['plus', 'unlimited_v2'], (platform, plan_ids)
 
@@ -164,24 +162,60 @@ def test_filter_plans_desktop_hides_mobile_tiers(load_subscription):
         assert plan_ids == ['operator', 'architect'], plan_ids
 
 
-def test_filter_plans_shows_neo_on_mobile_for_past_purchaser(load_subscription):
-    """Mobile users who have bought a plan before still see Neo (resubscribe)."""
+def test_filter_plans_hides_neo_on_mobile_for_non_neo_subscribers(load_subscription):
+    """Neo is current-Neo only. Architect/Plus/Unlimited/basic must not see it.
+
+    Regression: `ever_purchased` was any paid plan, so Architect subscribers
+    saw Neo on the phone sheet next to cheaper Plus. Do not restore that leak.
+    """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='ios', ever_purchased=True)
+        for plan in (PlanType.basic, PlanType.plus, PlanType.unlimited_v2):
+            filtered = sub_mod.filter_plans_for_user(definitions, plan, platform='ios')
+            plan_ids = [d['plan_id'] for d in filtered]
+            assert 'unlimited' not in plan_ids, (plan, plan_ids)
+            assert plan_ids == ['plus', 'unlimited_v2'], (plan, plan_ids)
 
-    assert 'unlimited' in [d['plan_id'] for d in filtered]
+
+def test_filter_plans_mobile_desktop_plans_are_manage_only(load_subscription):
+    """Operator/Architect on iOS/Android see only their current plan.
+
+    Cheaper mobile SKUs must not appear: Continue onto them is an immediate
+    prorated swap that strips desktop. Desktop/web keep the full desktop catalog.
+    """
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        for platform in ('ios', 'android'):
+            architect = [
+                d['plan_id'] for d in sub_mod.filter_plans_for_user(definitions, PlanType.architect, platform=platform)
+            ]
+            operator = [
+                d['plan_id'] for d in sub_mod.filter_plans_for_user(definitions, PlanType.operator, platform=platform)
+            ]
+            assert architect == ['architect'], (platform, architect)
+            assert operator == ['operator'], (platform, operator)
+
+        desktop = [
+            d['plan_id'] for d in sub_mod.filter_plans_for_user(definitions, PlanType.architect, platform='macos')
+        ]
+        assert desktop == ['operator', 'architect'], desktop
 
 
 def test_filter_plans_shows_neo_on_mobile_for_current_neo_subscriber(load_subscription):
-    """Current Neo subscribers always see Neo even without ever_purchased flag."""
+    """Current Neo subscribers (including cancel-at-period-end) still see Neo to manage it.
+
+    Plus + Unlimited stay visible so they can migrate off the deprecated SKU.
+    """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(
-            definitions, PlanType.unlimited, platform='android', ever_purchased=False
-        )
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform='android')
 
-    assert 'unlimited' in [d['plan_id'] for d in filtered]
+    plan_ids = [d['plan_id'] for d in filtered]
+    assert 'unlimited' in plan_ids
+    assert 'plus' in plan_ids
+    assert 'unlimited_v2' in plan_ids
+    assert 'architect' not in plan_ids
+    assert 'operator' not in plan_ids
 
 
 def test_filter_plans_hides_neo_on_web_for_new_user(load_subscription):
@@ -194,7 +228,7 @@ def test_filter_plans_hides_neo_on_web_for_new_user(load_subscription):
     """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web', ever_purchased=False)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'unlimited' not in plan_ids  # Neo hidden
     assert 'plus' in plan_ids
@@ -207,7 +241,7 @@ def test_filter_plans_shows_neo_on_web_for_current_neo_subscriber(load_subscript
     """Existing Neo subscribers still see Neo on web so they can manage/cancel."""
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform='web', ever_purchased=True)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform='web')
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
@@ -215,7 +249,7 @@ def test_filter_plans_keeps_neo_for_unknown_platform(load_subscription):
     """A header-less / unknown platform is still unfiltered — Neo stays visible."""
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None, ever_purchased=False)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None)
 
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
@@ -228,7 +262,7 @@ def test_filter_plans_hides_neo_on_windows_for_new_user(load_subscription):
     """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows', ever_purchased=False)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows')
     plan_ids = [d['plan_id'] for d in filtered]
     assert 'unlimited' not in plan_ids
     assert 'operator' in plan_ids
@@ -247,9 +281,7 @@ def test_neo_hidden_from_purchase_on_every_client_platform(load_subscription):
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         for platform in ('ios', 'android', 'macos', 'windows', 'web'):
-            filtered = sub_mod.filter_plans_for_user(
-                definitions, PlanType.basic, platform=platform, ever_purchased=False
-            )
+            filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=platform)
             plan_ids = [d['plan_id'] for d in filtered]
             assert 'unlimited' not in plan_ids, (platform, plan_ids)
             assert plan_ids, platform  # never an empty catalog
@@ -267,7 +299,7 @@ def test_windows_full_catalog_matches_macos_canonical(load_subscription):
         # Windows is a modern desktop client → new catalog, no legacy adaptation.
         assert sub_mod.should_show_new_plans('windows', '0.1.0') is True
         definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows', ever_purchased=False)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='windows')
     by_id = {d['plan_id']: d for d in filtered}
     assert 'operator' in by_id
     assert 'architect' in by_id
@@ -291,23 +323,17 @@ def test_windows_is_a_desktop_platform(load_subscription):
         assert 'android' not in sub_mod.DESKTOP_PLATFORMS
 
 
-def test_has_ever_purchased_signals(monkeypatch, load_subscription):
-    """Paid plan, stored stripe sub id, or a stripe customer id each count as purchased."""
+def test_desktop_to_consumer_plan_change_is_blocked(load_subscription):
+    """Architect/Operator cannot swap onto Plus/Unlimited/Neo. Operator ↔ Architect stays open."""
     with load_subscription() as sub_mod:
-        monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: None, raising=False)
-
-        paid = Subscription(plan=PlanType.operator, limits=PlanLimits())
-        assert sub_mod.has_ever_purchased('u', paid)
-
-        lapsed = Subscription(plan=PlanType.basic, stripe_subscription_id='sub_123', limits=PlanLimits())
-        assert sub_mod.has_ever_purchased('u', lapsed)
-
-        new_user = Subscription(plan=PlanType.basic, limits=PlanLimits())
-        assert not sub_mod.has_ever_purchased('u', new_user)
-
-        # No cheap signal on the subscription, but a stored Stripe customer id exists.
-        monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: 'cus_123', raising=False)
-        assert sub_mod.has_ever_purchased('u', new_user)
+        err = sub_mod.desktop_to_consumer_plan_change_error
+        for current in (PlanType.architect, PlanType.operator):
+            for target in (PlanType.plus, PlanType.unlimited_v2, PlanType.unlimited, PlanType.basic):
+                assert err(current, target), (current, target)
+        assert err(PlanType.architect, PlanType.operator) is None
+        assert err(PlanType.operator, PlanType.architect) is None
+        assert err(PlanType.plus, PlanType.unlimited_v2) is None
+        assert err(PlanType.unlimited, PlanType.plus) is None
 
 
 def test_legacy_client_adaptation(load_subscription):
@@ -377,7 +403,7 @@ def test_web_full_catalog_shows_new_plans_and_hides_neo(load_subscription):
         assert new_plans_enabled is True
         definitions = sub_mod.get_paid_plan_definitions()
         # No legacy adaptation for web (new_plans_enabled) → raw canonical catalog.
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web', ever_purchased=False)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='web')
     by_id = {d['plan_id']: d for d in filtered}
     assert set(by_id) == {'plus', 'unlimited_v2', 'operator', 'architect'}, by_id
     assert 'unlimited' not in by_id  # Neo hidden

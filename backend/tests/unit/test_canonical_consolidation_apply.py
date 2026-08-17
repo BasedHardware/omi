@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import os
 import sys
@@ -47,6 +48,12 @@ def _consolidation_apply_import_isolation():
 
 
 from models.memory_apply import MemoryControlState, memory_content_hash
+from models.memory_admission import (
+    REQUIRED_PROCESSING_RECEIPT_VERSION,
+    REQUIRED_PROCESSOR_ID,
+    REQUIRED_PROCESSOR_VERSION,
+    valid_required_processing_receipt,
+)
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
@@ -381,3 +388,109 @@ def test_same_route_retry_is_idempotent_and_does_not_increment_revision_twice():
 
     assert second.item_revision == first.item_revision
     assert second.ledger_commit_id == first.ledger_commit_id
+
+
+def test_pending_required_promote_stamps_processing_receipt_then_routes():
+    content = "Remember I enjoy hiking in Seattle."
+    source = _item("mem_required", content)
+    source = source.model_copy(
+        update={
+            "processing_state": ProcessingState.pending,
+            "user_asserted": True,
+            "promotion": {
+                "required": True,
+                "status": "pending",
+                "processing_status": "pending_processing",
+                "processor_id": REQUIRED_PROCESSOR_ID,
+                "processor_version": REQUIRED_PROCESSOR_VERSION,
+                "submission": {
+                    "submission_id": source.memory_id,
+                    "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+                },
+                "source_attribution": {
+                    "subject_entity_id": "user",
+                    "subject_attribution": "user",
+                },
+            },
+        }
+    )
+    db = _db_for_items(source)
+
+    applied_ids = _apply(source, _promote_decision(source), db)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    operations = [
+        MemoryOperation(**payload)
+        for path, payload in db.docs.items()
+        if path.startswith(f"users/{UID}/memory_operations/")
+    ]
+    assert applied_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.content == "The user enjoys hiking in Seattle."
+    assert stored.processing_state == ProcessingState.processed
+    assert stored.promotion is not None
+    assert stored.promotion.get("required") is True
+    assert valid_required_processing_receipt(
+        content=stored.content,
+        item_revision=stored.item_revision,
+        promotion=stored.promotion,
+    )
+    assert (
+        stored.promotion["processing_receipt"]["output_hash"]
+        == hashlib.sha256(stored.content.encode("utf-8")).hexdigest()
+    )
+    assert len(operations) == 2
+    assert {op.operation_type for op in operations} == {MemoryOperationType.synthesis}
+
+
+def test_already_processed_required_promote_rebinds_memory_text_to_l2_content():
+    l2_content = "The user enjoys hiking in Seattle."
+    raw = "Remember I enjoy hiking in Seattle."
+    source = _item("mem_required_processed", l2_content)
+    source = source.model_copy(
+        update={
+            "user_asserted": True,
+            "promotion": {
+                "required": True,
+                "status": "pending",
+                "processing_status": "processed",
+                "processor_id": REQUIRED_PROCESSOR_ID,
+                "processor_version": REQUIRED_PROCESSOR_VERSION,
+                "submission": {
+                    "submission_id": source.memory_id,
+                    "content_hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                },
+                "processing_receipt": {
+                    "receipt_version": REQUIRED_PROCESSING_RECEIPT_VERSION,
+                    "processor_id": REQUIRED_PROCESSOR_ID,
+                    "processor_version": REQUIRED_PROCESSOR_VERSION,
+                    "decision": "durable_required",
+                    "processed_at": NOW.isoformat(),
+                    "input_hash": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                    "output_hash": hashlib.sha256(l2_content.encode("utf-8")).hexdigest(),
+                    "input_item_revision": source.item_revision - 1,
+                    "output_item_revision": source.item_revision,
+                    "source_submission_id": source.memory_id,
+                    "rationale": "normalized during consolidation",
+                },
+                "source_attribution": {
+                    "subject_entity_id": "user",
+                    "subject_attribution": "user",
+                },
+            },
+        }
+    )
+    db = _db_for_items(source)
+    decision = _promote_decision(source).model_copy(update={"memory_text": "The user loves backpacking instead."})
+
+    applied_ids = _apply(source, decision, db)
+
+    stored = MemoryItem(**db.docs[f"users/{UID}/memory_items/{source.memory_id}"])
+    assert applied_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.content == l2_content
+    assert valid_required_processing_receipt(
+        content=stored.content,
+        item_revision=stored.item_revision,
+        promotion=stored.promotion or {},
+    )

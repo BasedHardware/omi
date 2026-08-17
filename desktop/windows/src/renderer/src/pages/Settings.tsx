@@ -15,6 +15,7 @@ import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
 import { AgentsTab } from '../components/settings/tabs/AgentsTab'
 import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
 import { DeviceTab } from '../components/settings/tabs/DeviceTab'
+import { OfflineAudioTab } from '../components/settings/tabs/OfflineAudioTab'
 import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
 import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { AboutTab } from '../components/settings/tabs/AboutTab'
@@ -28,6 +29,7 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   agents: AgentsTab,
   transcription: TranscriptionTab,
   device: DeviceTab,
+  'offline-audio': OfflineAudioTab,
   rewind: RewindTab,
   notifications: NotificationsTab,
   privacy: PrivacyTab,

@@ -282,6 +282,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(ValidationError(scope, 'missing env MEMORY_ENABLED'))
     for required_env in (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'OMI_BACKGROUND_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
@@ -351,6 +352,14 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                         'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
                     )
                 )
+        job_flex = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_FLEX') or '').strip().lower()
+        if job_flex != 'true':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled',
+                )
+            )
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():
@@ -415,14 +424,8 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         return errors
 
     if job_state == 'on':
-        # Product on = intake + list. ST→LT cron stays off until an explicit Gate 3 GO.
-        if job_cron == 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_ENABLED is on',
-                )
-            )
+        # Product on = intake + list. ST→LT cron remains a separate job-only
+        # switch; both overlays pin it on with Flex.
         for surface_scope, _surface_env, surface_state in enabled_surfaces:
             if surface_state != 'on':
                 errors.append(

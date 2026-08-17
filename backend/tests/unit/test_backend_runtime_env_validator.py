@@ -188,6 +188,10 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> d
             'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
             'MEMORY_ENABLED': {'value': 'off' if mode == 'off' else 'on', 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
+            'MEMORY_CANONICAL_MAINTENANCE_FLEX': {
+                'value': 'true' if cron == 'true' else 'false',
+                'category': 'memory_rollout',
+            },
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
             'OMI_BACKGROUND_FLEX_CAPABLE': {'value': 'false', 'category': 'memory_rollout'},
         },
@@ -1899,6 +1903,7 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
         'MEMORY_MODE',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -1951,10 +1956,11 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
 
 def test_memory_maintenance_job_contract_allows_write_without_job_cron():
     validator = load_validator()
-    errors = validator._validate_memory_maintenance_job_contract(
-        'prod',
-        validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'],
-    )
+    env_config = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'])
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
     assert errors == []
 
 
@@ -2033,6 +2039,28 @@ def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_en
             'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
         )
         in errors
+    )
+
+
+def test_memory_maintenance_job_contract_allows_prod_on_with_job_cron():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod']
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
+    assert errors == []
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED']['value'] == 'true'
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX']['value'] == 'true'
+
+
+def test_memory_maintenance_job_contract_requires_flex_when_cron_enabled():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['dev']
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('dev', env_config)
+    assert any(
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled' in error.message
+        for error in errors
     )
 
 
