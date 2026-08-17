@@ -14,13 +14,14 @@ desktop agent leaves a permanent disk (~$5/mo).
 | Target | Rule (defaults) |
 |--------|-----------------|
 | `TERMINATED` | `lastStopTimestamp` older than **12h** |
-| `RUNNING` | **Never deleted here.** The fleet reconciler is the RUNNING authority: a healthy VM with no session lease past `AGENT_VM_IDLE_STOP_SECONDS` (default 1h) is stopped; this reaper then deletes the TERMINATED leftover. Do not reap RUNNING by creation age — that would delete live sessions (review #10390). |
+| `RUNNING` | **Never deleted here.** The fleet reconciler is the RUNNING authority: a healthy VM with no session lease past `AGENT_VM_IDLE_TEARDOWN_SECONDS` (default 30m) is **deleted** by the reconciler itself (disks reclaimed via `autoDelete`); this reaper covers TERMINATED leftovers the reconciler cannot reach (e.g. ownerless records). Do not reap RUNNING by creation age — that would delete live sessions (review #10390). |
 
 After a TERMINATED VM is deleted, `GET /v2/agent/status` sees `NOT_FOUND`,
-demotes the client-facing status to `updating`, records `reconcile.state=missing`
-(when no reconciler lease/quarantine owns the pointer), and queues fenced
-reconciler demand. Desktop `ensureExistingOrProvision` can then claim a
-replacement immediately because missing pointers are replaceable; the
+demotes the client-facing status to `updating`, and records
+`reconcile.state=missing` (when no reconciler lease/quarantine owns the
+pointer). Status never queues reconciler demand — waking a VM requires a real
+session or an explicit ensure call. Desktop `ensureExistingOrProvision` can
+claim a replacement immediately because missing pointers are replaceable; the
 reconciler's grace/session clear remains the backstop when the request path
 does not replace first.
 

@@ -306,6 +306,7 @@ jobs:
             AGENT_VM_IMAGE_DIGEST=${{ steps.agent-vm-release.outputs.image_digest }}
             AGENT_VM_STARTUP_SHA256=${{ steps.agent-vm-release.outputs.startup_sha256 }}
             AGENT_VM_STOP_AUDIENCE=${{ steps.desktop-base-api-url.outputs.base_api_url }}
+            AGENT_VM_PROVISIONING_ENABLED=true
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest

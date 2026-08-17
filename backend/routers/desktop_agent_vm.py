@@ -28,7 +28,6 @@ from services.agent_vm_lifecycle import (
     STATE_SOURCE_REQUIRED_METADATA,
     claim_vm_lease,
     clear_vm_reconcile_lease_fields,
-    request_vm_start,
     startup_wrapper,
     update_vm_reconcile,
 )
@@ -102,6 +101,17 @@ class ProvisionAgentResponse(BaseModel):
 
 def _agent_disabled() -> bool:
     return os.getenv("ENVIRONMENT") == "local-dev-harness"
+
+
+def _provisioning_enabled() -> bool:
+    """Creating (or replacing) Agent VMs is explicit opt-in per deployment.
+
+    Dark by default: an environment that does not set
+    ``AGENT_VM_PROVISIONING_ENABLED=true`` serves existing VM owners but never
+    creates new capacity. Cost policy 2026-08-17: the fleet billed
+    ~$3.7k/week against zero successful sessions in the trailing four days.
+    """
+    return os.getenv("AGENT_VM_PROVISIONING_ENABLED", "").strip().lower() in {"1", "true", "on"}
 
 
 async def _authorized_desktop_user(uid: str = Depends(get_current_user_uid)) -> str:
@@ -809,6 +819,15 @@ async def provision_agent_vm(
 ) -> ProvisionAgentResponse:
     if _agent_disabled():
         raise HTTPException(status_code=503, detail="Agent VM provisioning is disabled")
+    if not _provisioning_enabled():
+        # Creation is gated, not the whole endpoint: an existing live owner
+        # record still takes the idempotent "exists" path below. Without one
+        # (no record, or a provider-confirmed missing record that a claim
+        # would replace with a new VM), refuse to create.
+        existing = await run_blocking(db_executor, _get_vm, uid)
+        existing_reconcile = existing.get("reconcile") if isinstance(existing, dict) else None
+        if existing is None or (isinstance(existing_reconcile, dict) and existing_reconcile.get("state") == "missing"):
+            raise HTTPException(status_code=503, detail="agent_vm_provisioning_disabled")
     try:
         project = _project()
         source_image = _source_image(project)
@@ -905,8 +924,8 @@ async def get_agent_status(
                 str(vm.get("authToken") or ""),
             )
         except Exception as exc:
-            # Marker persistence is best-effort; still queue start demand so the
-            # reconciler can observe the 404 and persist missing itself.
+            # Marker persistence is best-effort; the reconciler observes the
+            # 404 on its next pass and persists missing itself.
             logger.warning(
                 "Agent VM missing-state marker failed for uid=%s: %s",
                 uid,
@@ -915,31 +934,11 @@ async def get_agent_status(
             record_fallback(
                 component="other",
                 from_mode="missing_marker",
-                to_mode="reconciler_demand",
+                to_mode="reconciler_observation",
                 reason="other",
                 outcome="degraded",
             )
-    if decision.queue_start:
-        # Provider 404 / stopped / repairable running: queue fenced reconciler
-        # demand. Status also records ``missing`` (when allowed) so desktop
-        # provision can replace immediately; the reconciler still owns
-        # lease/quarantine fences and grace-period terminal cleanup as backstop.
-        requested = await run_blocking(
-            db_executor,
-            request_vm_start,
-            uid,
-            str(vm["vmName"]),
-            str(vm.get("authToken") or ""),
-        )
-        if not requested:
-            latest = await run_blocking(db_executor, _get_vm, uid)
-            if not latest:
-                return None
-            if str(latest.get("vmName") or "") != str(vm.get("vmName") or "") or str(
-                latest.get("authToken") or ""
-            ) != str(vm.get("authToken") or ""):
-                return _response(latest)
-            # Same owner lost the race (deletion fence / concurrent claim): still
-            # demote the confirmed-stale ready view for this generation.
-            return _response(apply_agent_vm_read_decision(latest, decision))
+    # Status is read-only: it never queues reconciler start demand. Waking or
+    # repairing a VM requires a real session (agent-proxy connect) or an
+    # explicit ensure call — status polling must not keep undemanded VMs alive.
     return _response(apply_agent_vm_read_decision(vm, decision))
