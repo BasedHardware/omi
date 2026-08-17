@@ -1,10 +1,11 @@
 """People CRUD in database.users, migrated to the WP2 storage port (ADR-0002).
 
-Hermetic: injects the real Mongo adapter over a mongomock client (no server), so the migrated
-path-based code paths run end to end without stubbing the Firestore SDK. ``update_person`` itself is a
-plain get+update (not transactional); the transactional path is ``add_person_speech_sample`` /
-``_add_sample_transaction``, which the live dual-backend contract test covers (mongomock has no
-replica-set transactions). Everything runnable without a replica set is covered here.
+Hermetic: runs the migrated path-based people CRUD against the neutral FakeDocumentStore (the
+contract-faithful store fake), so database.users' facade calls execute end to end without a server or a
+stubbed Firestore SDK. This previously used mongomock over the real Mongo adapter, but the adapter now
+writes monotonic revisions via an aggregation pipeline ($add on a date) that mongomock cannot evaluate;
+the REAL Mongo adapter (path model, pipeline, transactions) is covered by the live dual-backend contract
+test, so here we exercise database.users' own logic against the faithful fake.
 """
 
 import os
@@ -16,24 +17,18 @@ os.environ.setdefault(
 
 import pytest
 
-# pymongo + mongomock are on-prem (Mongo backend) deps, present in the offline test image but not in the
-# upstream requirements/pyproject manifests. Skip the whole module where they are absent (a clean upstream
-# CI checkout) instead of failing collection with ModuleNotFoundError (cubic PR 10887).
-pytest.importorskip('pymongo')
-mongomock = pytest.importorskip('mongomock')
-
 import database.users as users
-from database.store.adapters.mongo import MongoDocumentStore
-from tests.store_fakes import install_fake_db_client
+from tests.store_fakes import FakeDocumentStore, install_fake_db_client
 
 
 @pytest.fixture
 def store(monkeypatch):
-    # ADR-0044: users threads the raw db client; wire the neutral facade over the REAL Mongo adapter
-    # (mongomock, no server) so the migrated path-based people CRUD runs end to end on Mongo (was the
-    # retired _store seam). The transactional _add_sample path stays on the live contract test
-    # (mongomock has no replica-set transactions).
-    s = MongoDocumentStore(client=mongomock.MongoClient(), db_name='test')
+    # ADR-0044: users threads the raw db client; wire the neutral facade over the FakeDocumentStore so the
+    # migrated path-based people CRUD runs end to end through the port. This used mongomock over the REAL
+    # Mongo adapter, but the adapter now writes monotonic revisions via an aggregation pipeline ($add on a
+    # date) that mongomock cannot evaluate; the real adapter (path model, pipeline, transactions) is covered
+    # by the live dual-backend contract test, so here we exercise database.users' logic on the faithful fake.
+    s = FakeDocumentStore()
     install_fake_db_client(monkeypatch, store=s)
     return s
 
