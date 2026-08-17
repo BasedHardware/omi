@@ -10,7 +10,7 @@ under --network host. Run:
 
   docker run --rm --network host \
     -e HOSTED_TRANSLATION_API_URL=http://127.0.0.1:8080 -e TRANSLATION_SERVICE_MODELS=nllb \
-    -v /work/omi/src/omi:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+    -v /work/omi/src/omi:/repo -w /repo/backend omi-oss-backend-test:v2 \
     python -m pytest tests/contract/test_translation_nllb_live_contract.py -q -p no:cacheprovider
 """
 

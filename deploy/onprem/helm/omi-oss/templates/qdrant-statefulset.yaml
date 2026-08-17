@@ -1,0 +1,68 @@
+{{- if .Values.chat.enabled }}
+# Self-hosted vector store (ADR-0033), the on-prem alternative to Pinecone. Opt-in via the `chat`
+# profile (parity with compose). The Qdrant adapter auto-creates each collection at QDRANT_VECTOR_DIM
+# (cosine) on first upsert — no provisioning Job needed. The LLM gateway (the other half of compose's
+# `chat` profile) is operator-provided (external model, ADR-0035) and lands separately.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: qdrant
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: qdrant
+    spec:
+      containers:
+        - name: qdrant
+          image: {{ .Values.chat.qdrant.image }}
+          imagePullPolicy: {{ .Values.chat.qdrant.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 6333
+            - name: grpc
+              containerPort: 6334
+          volumeMounts:
+            - name: storage
+              mountPath: /qdrant/storage
+          # /readyz, not a bare TCP open: Qdrant accepts connections before storage is ready to serve,
+          # so a TCP check reports healthy too early and the first writes can fail transiently.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+          {{- with .Values.chat.qdrant.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.chat.qdrant.storage }}
+{{- end }}

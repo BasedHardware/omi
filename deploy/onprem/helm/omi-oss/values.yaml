@@ -1,0 +1,163 @@
+# omi-oss — default values (= compose "base" posture: backend + valkey + mongo replica-set).
+# Overlays: values-dev.yaml (Kind) / values-prod.yaml (k0s). Feature profiles mirror compose profiles
+# and are OFF here; each guards its own templates with `{{- if .Values.<feature>.enabled }}`.
+
+# Secrets: dev lets the chart build `backend-secret` from values. Prod sets create=false and supplies a
+# Secret named `backend-secret` out-of-band (External Secrets / Sealed Secrets / vault) — see A2.
+secrets:
+  create: true
+
+# NetworkPolicy air-gap posture (study §6.5): default-deny egress + targeted allows. OFF by default; needs
+# a policy-enforcing CNI (Calico/Cilium on k0s — kindnet on Kind does NOT enforce it).
+networkPolicy:
+  enabled: false
+
+# Optional storage class for every PVC (empty = the cluster default; Kind uses local-path). Set on k0s.
+storageClassName: ""
+
+backend:
+  image: omi-oss-backend:latest
+  # Kind loads images with `kind load docker-image` (no registry, study §4.3) — Never avoids any pull.
+  imagePullPolicy: Never
+  replicas: 1
+  service:
+    port: 8080
+  # ENCRYPTION_SECRET lives in a Secret; the dev overlay sets a throwaway value, prod injects a real one.
+  encryptionSecret: ""
+  # Plain (non-secret) backend env — the Helm mirror of backend.env.base. MONGO_URI/REDIS host are
+  # derived from the in-cluster service names by the configmap template, not set here.
+  env:
+    PROVIDER_MODE: offline
+    OMI_ENV_STAGE: offline
+    STORAGE_BACKEND: mongo
+    FIREBASE_PROJECT_ID: demo-omi-local
+    FIREBASE_AUTH_PROJECT_ID: demo-omi-local
+    GOOGLE_CLOUD_PROJECT: demo-omi-local
+    REDIS_DB_HOST: valkey
+    REDIS_DB_PORT: "6379"
+    CORS_ALLOWED_ORIGINS: ""
+  resources: {}
+
+valkey:
+  image: valkey/valkey:8-alpine
+  # Public image: the node pulls it once from the registry. (Only the locally-built backend image, which
+  # is on no registry, needs `kind load` + Never.) For a fully air-gapped node, pre-seed a local registry.
+  imagePullPolicy: IfNotPresent
+  # Durable, NOT pure cache (username ownership / webhook / subscription state) — AOF + a PVC, same
+  # reason as compose.base.yaml.
+  storage: 1Gi
+  resources: {}
+
+mongo:
+  image: mongo:7
+  # Public image: pulled by the node (see valkey note). backend stays Never (local-only image).
+  imagePullPolicy: IfNotPresent
+  replicaSetName: rs0
+  # Stable identity via StatefulSet + PVC so the single-member replica set survives pod restarts (§6.1).
+  storage: 2Gi
+  resources: {}
+
+# Feature profiles (compose parity) — OFF for the core milestone. Enabling them lands with their
+# templates in later steps (auth=Keycloak, chat=Qdrant, objstore=RustFS, push=ntfy, inference=GPU/k0s).
+auth:
+  enabled: false
+  # Public HTTPS issuer base (the Gateway's HTTPS host) — the token `iss` is this + /realms/omi.
+  hostname: "https://localhost:8443"
+  audience: omi-backend
+  adminUser: admin
+  # Keycloak bootstrap admin password — set per environment (dev overlay uses a throwaway value).
+  adminPassword: ""
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    imagePullPolicy: IfNotPresent
+    storage: 1Gi
+    resources: {}
+    # Backing DB: "dev-file" (single-node H2, simple) or "postgres" (production-grade, B5). With postgres
+    # a keycloak-postgres StatefulSet is created and Keycloak runs --db=postgres.
+    db: dev-file
+    postgres:
+      image: postgres:16-alpine
+      storage: 2Gi
+      password: ""   # required when db=postgres (dev overlay sets a throwaway value)
+chat:
+  enabled: false
+  # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
+  vectorDim: 1024
+  qdrant:
+    image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # 1.19.0
+    imagePullPolicy: IfNotPresent
+    storage: 2Gi
+    resources: {}
+objstore:
+  enabled: false
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
+    imagePullPolicy: IfNotPresent
+    storage: 5Gi
+    resources: {}
+  # S3 client image for the bucket-provisioning Job (pinned by digest, like the others).
+  mcImage: minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+  # S3 credentials, shared by the RustFS server and the backend client. Set per environment; dev
+  # overlay uses throwaway values.
+  accessKey: ""
+  secretKey: ""
+  # Public base for object URLs — the s3 adapter requires it (no fallback). Dev = the internal endpoint
+  # (public URLs aren't exercised in-cluster yet; the ingress phase gives it a real host).
+  publicEndpoint: "http://rustfs:9000"
+  # Buckets to provision, keyed by the BUCKET_<KEY> env-var suffix the backend reads.
+  buckets:
+    SPEECH_PROFILES: speech-profiles
+    POSTPROCESSING: postprocessing
+    PRIVATE_CLOUD_SYNC: private-cloud-sync
+    TEMPORAL_SYNC_LOCAL: sync-temporal
+    MEMORIES_RECORDINGS: memories-recordings
+    APP_THUMBNAILS: app-thumbnails
+    CHAT_FILES: chat-files
+    DESKTOP_UPDATES: desktop-updates
+    PLUGINS_LOGOS: plugins-logos
+push:
+  enabled: false
+  # Device-facing public URL (used by the phone's UnifiedPush distributor). Internal-only until the
+  # ingress/TLS phase gives ntfy a real host; the backend reaches ntfy via http://ntfy:80 regardless.
+  baseUrl: "http://ntfy"
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    imagePullPolicy: IfNotPresent
+    storage: 1Gi
+    resources: {}
+inference:
+  # LLM + embeddings via an EXTERNAL OpenAI-compatible endpoint, OUTSIDE the cluster (ADR-0035) — NOT
+  # in-cluster GPU pods (GPU on Kind is fragile; that stays a k0s concern). The operator points these at
+  # their own OpenAI/vLLM/Ollama/TEI endpoint. Empty values are simply not rendered.
+  enabled: false
+  openai:
+    baseUrl: ""   # e.g. https://api.openai.com/v1  OR  an operator vLLM/Ollama /v1 endpoint
+    apiKey: ""
+  embeddings:
+    baseUrl: ""   # OpenAI-compatible embeddings endpoint; dim MUST equal chat.vectorDim
+    model: ""     # e.g. bge-m3
+    apiKey: ""
+
+# Edge ingress. Default type "gateway" = Gateway API via Envoy Gateway (ADR-0049 Q3): the modern
+# replacement for the compose TLS reverse-proxies. Envoy Gateway itself is a cluster-level prerequisite
+# (installed separately); this chart provides the GatewayClass/Gateway/HTTPRoute. The classic Ingress
+# path (type "ingress") is a later fallback.
+ingress:
+  enabled: false
+  type: gateway
+  gatewayClassName: omi-envoy
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  # Envoy proxy Service exposure: NodePort (plain Kind + host port-mappings) or LoadBalancer (MetalLB on
+  # Kind/bare-metal, or a cloud LB). LoadBalancer ignores the nodePort pins below.
+  service:
+    type: NodePort
+  # When service.type=LoadBalancer, request a specific IP (MetalLB metallb.io/loadBalancerIPs). Empty =
+  # let the LB assign one. Pinning lets the OIDC issuer host + TLS SAN be fixed before install.
+  loadBalancerIP: ""
+  # The Envoy proxy Service is exposed as NodePort; kind-cluster.yaml maps containerPort 30080 -> host
+  # 8080 (and 30443 -> 8443), so `curl http://localhost:8080` reaches the gateway. On k0s/bare-metal use
+  # MetalLB + a LoadBalancer instead (later phase).
+  httpNodePort: 30080
+  # HTTPS edge (used when auth.enabled): nodePort mapped by kind-cluster.yaml to host 8443.
+  httpsNodePort: 30443
+  tlsSecretName: omi-tls

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "omi-oss values",
+  "type": "object",
+  "properties": {
+    "secrets": {
+      "type": "object",
+      "properties": { "create": { "type": "boolean" } }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "storageClassName": { "type": "string" },
+    "backend": {
+      "type": "object",
+      "properties": {
+        "image": { "type": "string", "minLength": 1 },
+        "replicas": { "type": "integer", "minimum": 1 },
+        "encryptionSecret": { "type": "string" }
+      }
+    },
+    "chat": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "vectorDim": { "type": "integer", "minimum": 1 } } },
+    "objstore": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "push": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hostname": { "type": "string" },
+        "audience": { "type": "string" }
+      }
+    },
+    "inference": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "type": { "type": "string", "enum": ["gateway", "ingress"] },
+        "httpNodePort": { "type": "integer" },
+        "httpsNodePort": { "type": "integer" }
+      }
+    }
+  }
+}

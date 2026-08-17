@@ -20,18 +20,18 @@
 #   - Inference model weights already provisioned into the `inference-models` volume
 #     (the services won't reach HuggingFace on the internal network). If a service never
 #     turns healthy, that provisioning is missing.
-#   - The offline test image (default omi-onprem-backend-test:v2); built here if absent.
+#   - The offline test image (default omi-oss-backend-test); built here if absent.
 #
 # Usage:  deploy/onprem/run-inference-live-tests.sh [diarizer|nllb|whisper ...]
 #   (no args = all three). Override defaults via env: COMPOSE_PROJECT, TEST_IMAGE,
 #   ITALIAN_AUDIO, ENCRYPTION_SECRET.
 set -euo pipefail
 
-PROJECT="${COMPOSE_PROJECT:-omi-onprem}"
+PROJECT="${COMPOSE_PROJECT:-omi-oss}"
 COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMPOSE_DIR/../.." && pwd)"
-TEST_IMAGE="${TEST_IMAGE:-omi-onprem-backend-test:v2}"
-ITALIAN_AUDIO="${ITALIAN_AUDIO:-$HOME/.cache/omi-onprem/audio/italian.wav}"
+TEST_IMAGE="${TEST_IMAGE:-omi-oss-backend-test}"
+ITALIAN_AUDIO="${ITALIAN_AUDIO:-$HOME/.cache/omi-oss/audio/italian.wav}"
 # Dev-only test secret; the live tests only need a non-empty, well-formed value.
 ENC_SECRET="${ENCRYPTION_SECRET:-omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv}"
 

@@ -1,0 +1,49 @@
+# Dev overlay (Kind). Use with:
+#   helm install omi ./omi-oss -n omi-dev --create-namespace -f omi-oss/values-dev.yaml
+# All images are `kind load`-ed, so imagePullPolicy stays Never (no registry, no egress from the node).
+
+# Dev on Kind now REPLICATES the prod topology (phase B): OpenEBS storage class, a MetalLB LoadBalancer
+# edge, and Keycloak on Postgres. Prereqs installed like Envoy Gateway (see README): OpenEBS + MetalLB.
+storageClassName: openebs-hostpath
+
+backend:
+  encryptionSecret: "dev-encryption-secret-not-for-production-32c"
+  env:
+    # Real OIDC auth (auth profile is on below), so NO dev-auth bypass — the backend validates real
+    # Keycloak tokens. Set "true" only for an auth-off stack to accept "Bearer dev".
+    LOCAL_DEVELOPMENT: "false"
+
+# chat profile: bring up the on-prem vector store (Qdrant). Full RAG also needs an embeddings endpoint
+# (external, ADR-0035) + the LLM gateway; here we validate the Qdrant vector-store path itself.
+chat:
+  enabled: true
+
+# objstore profile: on-prem S3 object store (RustFS) + bucket provisioning. Throwaway dev credentials.
+objstore:
+  enabled: true
+  accessKey: "rustfsadmin"
+  secretKey: "rustfsadmin"
+
+# push profile: on-prem UnifiedPush server (ntfy). Reached internally by the backend at http://ntfy:80.
+push:
+  enabled: true
+
+# edge: Gateway API via Envoy Gateway (prerequisite installed separately). The proxy is a NodePort on
+# 30080 -> host 8080 (kind-cluster.yaml), so `curl http://localhost:8080/v1/health` reaches the backend.
+# With auth on, the HTTPS listener is on 30443 -> host 8443 (the OIDC issuer).
+ingress:
+  enabled: true
+  service:
+    type: LoadBalancer      # MetalLB (phase B3)
+  loadBalancerIP: "172.18.255.200"   # pinned from the MetalLB pool so the issuer host + TLS SAN are fixed
+
+# auth profile: Keycloak OIDC issuer on the LoadBalancer IP (HTTPS :443). gen-certs.sh must put that IP in
+# the SAN. Keycloak on Postgres (phase B5). Throwaway dev admin password.
+auth:
+  enabled: true
+  adminPassword: "admin"
+  hostname: "https://172.18.255.200"
+  keycloak:
+    db: postgres
+    postgres:
+      password: "keycloak-dev"

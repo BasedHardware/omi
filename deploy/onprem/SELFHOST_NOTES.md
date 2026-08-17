@@ -246,7 +246,7 @@ hermetic guard; skips when the env is unset, so it is CI-safe):
 docker run --rm --network host \
   -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 \
   -e OMI_EMBEDDINGS_MODEL=bge-m3 -e OMI_EMBEDDINGS_EXPECTED_DIM=1024 \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
+  -v $PWD/../..:/repo -w /repo/backend omi-oss-backend-test \
   python -m pytest tests/contract/test_embeddings_live_contract.py -q -p no:cacheprovider
 # expected: 3 passed  (real vector, correct dim, deterministic, no OpenAI/Google egress)
 ```
@@ -296,7 +296,7 @@ docker run -d --name qdrant --network host qdrant/qdrant:latest    # 127.0.0.1:6
 docker run --rm --network host \
   -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 -e OMI_EMBEDDINGS_MODEL=bge-m3 \
   -e VECTOR_STORE_BACKEND=qdrant -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=1024 \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
+  -v $PWD/../..:/repo -w /repo/backend omi-oss-backend-test \
   python -m pytest tests/contract/test_onprem_search_roundtrip.py -q -p no:cacheprovider
 # expected: 5 passed  (embed -> upsert -> query ranks the right doc first; metadata round-trips)
 ```
@@ -310,7 +310,7 @@ docker run -d --name nllb --network host -e CT2_DEVICE=cpu -e CT2_COMPUTE_TYPE=i
   -e NLLB_MODEL_DIR=/models/nllb-200-distilled-600M-ct2-int8 -v $MODELS:/models omi-nllb:test
 docker run --rm --network host \
   -e HOSTED_TRANSLATION_API_URL=http://127.0.0.1:8080 -e TRANSLATION_SERVICE_MODELS=nllb \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
+  -v $PWD/../..:/repo -w /repo/backend omi-oss-backend-test \
   python -m pytest tests/contract/test_translation_nllb_live_contract.py -q -p no:cacheprovider
 # expected: 4 passed  (en->it/fr/es real translations + en->it->en round-trip via TranslationService)
 ```
@@ -322,12 +322,12 @@ model page once and click *Agree and access*). Then:
 
 ```
 # Build the slim on-prem image (skips the redundant system CUDA — see "Diarizer image is slimmed" below):
-docker build -f backend/diarizer/Dockerfile -t omi-diarizer:onprem-lean \
+docker build -f backend/diarizer/Dockerfile -t omi-oss-diarizer:latest \
   --build-arg PYTHON_BASE_IMAGE=python:3.11-slim --build-arg INSTALL_SYSTEM_CUDA=0 .
 docker run -d --name diarizer --network host --device nvidia.com/gpu=all \
-  -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-diarizer:onprem-lean
+  -e HUGGINGFACE_TOKEN=hf_xxx -e HF_HOME=/models/hf -v $MODELS:/models omi-oss-diarizer:latest
 docker run --rm --network host -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8080 \
-  -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
+  -v $PWD/../..:/repo -w /repo/backend omi-oss-backend-test \
   python -m pytest tests/contract/test_speaker_embedding_live_contract.py -q -p no:cacheprovider
 # expected: 2 passed  (real 256-dim wespeaker embedding, deterministic, discriminates two signals)
 # verified 2026-08-03 on the slim image, RTX 5060 Ti (Blackwell sm_120): 2 passed.
@@ -353,7 +353,7 @@ Official quality gates against the running server (WER on LibriSpeech, DER on sy
 # WER: pre-download the tarball outside the hermetic guard, then run (transcribes over loopback)
 python3 -c "import urllib.request;urllib.request.urlretrieve('https://www.openslr.org/resources/12/test-clean.tar.gz','$CACHE/test-clean.tar.gz')"
 docker run --rm --network host -e PARAKEET_URL=http://127.0.0.1:8080 -e LIBRISPEECH_CACHE=/cache \
-  -e WER_MAX_SAMPLES=10 -v $CACHE:/cache -v $PWD/../..:/repo -w /repo/backend omi-onprem-backend-test \
+  -e WER_MAX_SAMPLES=10 -v $CACHE:/cache -v $PWD/../..:/repo -w /repo/backend omi-oss-backend-test \
   python -m pytest tests/container/test_parakeet_wer_gate.py -q -p no:cacheprovider
 # expected: 4 passed  (aggregate WER 13.0% <= 15% on 10 LibriSpeech samples, ~0.1s each)
 
@@ -386,10 +386,11 @@ and no per-deployment streaming-model override. So on-prem live streaming/PTT se
 non-English live session falls back to Deepgram-self-hosted (or the configured cloud STT) per the
 policy, and prerecorded transcription is what serves the other 25 languages.
 
-> Planned (NOT wired yet): the multilingual model `nvidia/parakeet-1-1b-rnnt-multilingual` is referenced
-> only as a comment target in `backend/parakeet/Dockerfile.nim`. Making live streaming multilingual would
-> require registering it in `stt_provider_policy.py` (a supported-languages entry + a deploy-time surface
-> override) and the matching NIM deployment — neither exists at this revision.
+> Planned (NOT wired yet): the multilingual model `nvidia/parakeet-1-1b-rnnt-multilingual` is no longer
+> referenced by any Dockerfile (the early NIM-sidecar sketch that named it was dropped in the slim
+> consolidation — the on-prem posture forwards to whisper instead, ADR-0037). Making live streaming
+> multilingual would require registering it in `stt_provider_policy.py` (a supported-languages entry + a
+> deploy-time surface override) and the matching NIM deployment — neither exists at this revision.
 
 ### Full live pipeline E2E (all inference services + backend + pusher)
 
@@ -475,7 +476,7 @@ committed [`Dockerfile.test`](Dockerfile.test):
 ```bash
 cd deploy/onprem
 docker compose -f compose.prod.yaml build                                            # WP0 images (once)
-docker build -t omi-onprem-backend-test -f Dockerfile.test .    # test image
+docker build -t omi-oss-backend-test -f Dockerfile.test .    # test image
 ```
 
 ### Mount the REPO ROOT, not just `backend/`
@@ -503,7 +504,7 @@ Run **one process per file**:
 docker run --rm -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
   -e PYTHONUTF8=1 -e OMP_NUM_THREADS=1 -e LOCAL_DEVELOPMENT=true \
-  omi-onprem-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" tests/unit/<file>.py
+  omi-oss-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" tests/unit/<file>.py
 ```
 
 Use `/opt/venv/bin/python` (not `bash -l`, which resets PATH and loses the venv).
@@ -520,7 +521,7 @@ brings the contamination back. Self-contained runner:
 docker run --rm -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test -e PYTHONUTF8=1 \
   -e OMP_NUM_THREADS=1 -e LOCAL_DEVELOPMENT=true \
-  omi-onprem-backend-test bash -c '
+  omi-oss-backend-test bash -c '
     ls tests/unit/test_*.py tests/unit/utils/test_*.py testing/e2e/test_*.py | \
     xargs -P 16 -I{} sh -c '\''out=$(/opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "{}" 2>&1 | tail -1);
       echo "$out" | grep -qiE "failed|error" && echo "FAIL | {} | $out" || echo "PASS | {} | $out"'\'' '
@@ -560,13 +561,13 @@ docker run -d --name wp2-mongo mongo:latest --replSet rs0 --bind_ip_all
 docker exec wp2-mongo mongosh --quiet --eval \
   "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"   # wait for isWritablePrimary
 # 2. Firestore emulator in the same netns
-docker run -d --name wp2-emu --network container:wp2-mongo omi-onprem-firestore-emulator:latest
+docker run -d --name wp2-emu --network container:wp2-mongo omi-oss-firestore-emulator:latest
 # 3. Contract suite (same netns)
 docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 -e MONGO_URI="mongodb://127.0.0.1:27017/?replicaSet=rs0" \
   -e FIREBASE_PROJECT_ID=demo-omi-local -e GOOGLE_CLOUD_PROJECT=demo-omi-local \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
-  omi-onprem-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" \
+  omi-oss-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" \
   tests/contract/test_document_store_contract.py
 docker rm -f wp2-mongo wp2-emu    # cleanup
 ```
@@ -592,7 +593,7 @@ docker run -d --name oc-gcs --network host \
 docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
   -e S3_ENDPOINT=http://127.0.0.1:9000 -e S3_ACCESS_KEY=testkey -e S3_SECRET_KEY=testsecret -e S3_REGION=us-east-1 \
   -e STORAGE_EMULATOR_HOST=http://127.0.0.1:4443 \
-  omi-onprem-backend-test -m pytest -q tests/contract/test_object_store_contract.py
+  omi-oss-backend-test -m pytest -q tests/contract/test_object_store_contract.py
 # expected: 33 passed, 1 skipped (presign_get[gcs]: fake-gcs-server has no signing key; GCS V4
 # signing is covered by the hermetic delegation unit test in the same file)
 docker rm -f oc-rustfs oc-gcs    # cleanup
@@ -609,7 +610,7 @@ The `fake` backend always runs (hermetic); `qdrant` runs against a real Qdrant o
 docker run -d --name vc-qdrant --network host qdrant/qdrant:latest   # wait: curl 127.0.0.1:6333/readyz -> 200
 docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
   -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=8 \
-  omi-onprem-backend-test -m pytest -q tests/contract/test_vector_store_contract.py
+  omi-oss-backend-test -m pytest -q tests/contract/test_vector_store_contract.py
 # expected: 24 passed, 12 skipped
 docker rm -f vc-qdrant    # cleanup
 ```
@@ -636,7 +637,7 @@ docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app 
   -e OIDC_TEST_TOKEN_URL=http://127.0.0.1:8080/realms/omi/protocol/openid-connect/token \
   -e OIDC_TEST_CLIENT_ID=omi-test -e OIDC_TEST_USERNAME=testuser -e OIDC_TEST_PASSWORD=testpass \
   -e OIDC_AUDIENCE=omi-backend \
-  omi-onprem-backend-test -m pytest -q tests/contract/test_auth_provider_contract.py
+  omi-oss-backend-test -m pytest -q tests/contract/test_auth_provider_contract.py
 # expected: 5 passed, 4 skipped (firebase cases skipped — no emulator)
 docker rm -f kc-contract    # cleanup
 ```
@@ -672,7 +673,7 @@ mount**, not ad-hoc `docker run` on a stray Flutter image. The image is
 
 ```bash
 cd deploy/onprem
-docker build -t omi-appbuild:cached --build-arg FLUTTER_VERSION=3.44.5 -f Dockerfile.appbuild ../..
+docker build -t omi-oss-flutter-appbuild:cached --build-arg FLUTTER_VERSION=3.44.5 -f Dockerfile.appbuild ../..
 ```
 
 Mount the repo root, use persistent gradle/pub caches (first run compiles the webcrypto native asset
@@ -680,8 +681,8 @@ Mount the repo root, use persistent gradle/pub caches (first run compiles the we
 
 ```bash
 docker run --rm -v "$(git rev-parse --show-toplevel)":/repo -w /repo/app \
-  -v omi-appbuild-gradle:/root/.gradle -v omi-appbuild-pub:/root/.pub-cache \
-  omi-appbuild:cached bash -lc '
+  -v omi-oss-flutter-appbuild-gradle:/root/.gradle -v omi-oss-flutter-appbuild-pub:/root/.pub-cache \
+  omi-oss-flutter-appbuild:cached bash -lc '
     git config --global --add safe.directory /repo
     flutter pub get
     bash scripts/analyze_ratchet.sh                 # analyzer gate: ERROR=0, WARNING/INFO ratcheted vs analysis_baseline.json

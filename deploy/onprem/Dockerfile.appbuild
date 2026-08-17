@@ -6,12 +6,12 @@
 # wrapper), AGP 8.10.1, Java 21 toolchain. Flutter is pinned via FLUTTER_VERSION (Dart >=3.0 <4.0);
 # it must be recent enough to support compileSdk 36.
 #
-# Build: docker build -t omi-appbuild:cached \
+# Build: docker build -t omi-oss-flutter-appbuild:cached \
 #          --build-arg FLUTTER_VERSION=stable -f deploy/onprem/Dockerfile.appbuild .
 # Use (persistent gradle/pub caches -> fast rebuilds):
 #   docker run --rm -v $PWD/app:/app -w /app \
 #     -v /tmp/omi-gradle-home:/root/.gradle -v /tmp/omi-pub-cache:/root/.pub-cache \
-#     omi-appbuild:cached bash -lc \
+#     omi-oss-flutter-appbuild:cached bash -lc \
 #     "flutter pub get && dart run build_runner build --delete-conflicting-outputs \
 #      && flutter build apk --debug --flavor dev"
 # Prereq: the app's Firebase config files are gitignored — provide them before building

@@ -1,4 +1,4 @@
-name: omi-onprem
+name: omi-oss
 # Omi self-host — PROD. On-prem = LOCAL services on a BRIDGED `omi` network (ADR-0048): the host may reach
 # the internet for image/dep/model provisioning and the operator's LLM/embeddings host; data sovereignty
 # is guaranteed by CONFIGURATION (every port bound to a local backend), not by network isolation. (Not an

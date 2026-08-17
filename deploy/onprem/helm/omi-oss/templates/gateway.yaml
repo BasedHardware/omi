@@ -1,0 +1,86 @@
+{{- if and .Values.ingress.enabled (eq .Values.ingress.type "gateway") }}
+# Gateway API edge via Envoy Gateway (ADR-0049 Q3), the modern replacement for the compose TLS
+# reverse-proxies. Envoy Gateway (the controller + CRDs) is a cluster-level prerequisite installed
+# separately; this chart declares the GatewayClass + Gateway + the EnvoyProxy that shapes the
+# provisioned proxy Service (NodePort on Kind, mapped to the host by kind-cluster.yaml).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: omi-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        # NodePort for a plain Kind (host port-mappings) or LoadBalancer for MetalLB/cloud. For NodePort
+        # we pin the listener nodePorts (kind maps 30080->8080, 30443->8443); a StrategicMerge patch keys
+        # Service ports by `port` (the number), NOT `name` — merging on name adds an invalid entry and
+        # breaks Service creation, so match the listener port here. LoadBalancer needs no port pin.
+        type: {{ .Values.ingress.service.type }}
+        {{- if and (eq .Values.ingress.service.type "LoadBalancer") .Values.ingress.loadBalancerIP }}
+        # Pin the LoadBalancer IP (MetalLB) so the OIDC issuer host + TLS SAN can be fixed before install.
+        annotations:
+          metallb.io/loadBalancerIPs: {{ .Values.ingress.loadBalancerIP | quote }}
+        {{- end }}
+        {{- if eq .Values.ingress.service.type "NodePort" }}
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: 80
+                  nodePort: {{ .Values.ingress.httpNodePort }}
+                {{- if .Values.auth.enabled }}
+                - port: 443
+                  nodePort: {{ .Values.ingress.httpsNodePort }}
+                {{- end }}
+        {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.ingress.gatewayClassName }}
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+spec:
+  controllerName: {{ .Values.ingress.controllerName }}
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: omi-proxy
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: omi-gateway
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.ingress.gatewayClassName }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- if .Values.auth.enabled }}
+    # HTTPS edge for the OIDC issuer (Keycloak needs an https issuer) and the app API. TLS terminated
+    # here from the omi-tls Secret (Q4: a Secret from gen-certs.sh, not cert-manager).
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.ingress.tlsSecretName }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
+{{- end }}

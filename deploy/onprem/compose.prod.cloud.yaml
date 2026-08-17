@@ -1,4 +1,4 @@
-name: omi-onprem
+name: omi-oss
 # PROD CLOUD posture (ADR-0003/0046): the reference/cloud stack — Firestore + Pinecone + Firebase +
 # GCS — instead of the self-hosted on-prem services. This is NOT the hermetic ADR-0001 proof: the
 # backend needs EGRESS to reach the cloud providers, so the `omi` network stays non-internal (unlike

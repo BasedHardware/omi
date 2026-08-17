@@ -13,7 +13,7 @@ the vector/auth contract tests. Reaches the endpoint on loopback under
     -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 \
     -e OMI_EMBEDDINGS_MODEL=bge-m3 \
     -e OMI_EMBEDDINGS_EXPECTED_DIM=1024 \
-    -v /work/omi/src/omi:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+    -v /work/omi/src/omi:/repo -w /repo/backend omi-oss-backend-test:v2 \
     python -m pytest tests/contract/test_embeddings_live_contract.py -q -p no:cacheprovider
 """
 

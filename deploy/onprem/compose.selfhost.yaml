@@ -1,4 +1,4 @@
-name: omi-onprem
+name: omi-oss
 # Self-hosted datastore overlay (ADR-0046). The durable, no-Google on-prem store (Mongo, ADR-0002).
 # Included by the on-prem postures — compose.prod.yaml (hermetic) and compose.dev.yaml — on top of
 # compose.base.yaml, so the backend waits for a healthy Mongo. The CLOUD posture
@@ -134,7 +134,7 @@ services:
   # Point the backend at it in backend.env: OMI_LLM_GATEWAY_FEATURE_MODE=gateway +
   # OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 + a matching OMI_LLM_GATEWAY_SERVICE_TOKEN.
   llm_gateway:
-    image: omi-onprem-backend:latest
+    image: omi-oss-backend:latest
     build:
       context: ../../
       dockerfile: backend/Dockerfile
@@ -220,9 +220,9 @@ services:
     build:
       context: ../../
       # On-prem SLIM build: NIM gateway (forwards to whisper), no NeMo, no GPU -> ~2.9GB instead of 76GB
-      # (backend/parakeet/Dockerfile.onprem). The NeMo `Dockerfile` stays for the datacenter direct-NeMo
+      # (backend/parakeet/Dockerfile.oss). The NeMo `Dockerfile` stays for the datacenter direct-NeMo
       # STT path (mode != nim), which on-prem does not use.
-      dockerfile: backend/parakeet/Dockerfile.onprem
+      dockerfile: backend/parakeet/Dockerfile.oss
     profiles: ["inference"]
     # NIM mode forwards to whisper — wait until whisper's model is resident (its /health readiness), so the
     # first /v3/stream transcriptions don't fail against a not-yet-ready backend (cubic PR 10887 :207).

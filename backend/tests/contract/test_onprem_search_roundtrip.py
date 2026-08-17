@@ -11,7 +11,7 @@ reached on loopback under --network host. Run:
   docker run --rm --network host \
     -e OMI_EMBEDDINGS_BASE_URL=http://127.0.0.1:11434/v1 -e OMI_EMBEDDINGS_MODEL=bge-m3 \
     -e VECTOR_STORE_BACKEND=qdrant -e QDRANT_URL=http://127.0.0.1:6333 -e QDRANT_VECTOR_DIM=1024 \
-    -v /work/omi/src/omi:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+    -v /work/omi/src/omi:/repo -w /repo/backend omi-oss-backend-test:v2 \
     python -m pytest tests/contract/test_onprem_search_roundtrip.py -q -p no:cacheprovider
 """
 

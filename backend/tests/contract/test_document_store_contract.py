@@ -6,7 +6,7 @@ the proof that ``database.store`` abstracts the backend rather than leaking one:
 written to the port behaves identically whichever ``STORAGE_BACKEND`` is configured.
 
 Live services required (both provided by the offline harness — see docs/BACKLOG.md §Handoff):
-  * ``FIRESTORE_EMULATOR_HOST`` — the emulator (image ``omi-onprem-firestore-emulator``).
+  * ``FIRESTORE_EMULATOR_HOST`` — the emulator (image ``omi-oss-firestore-emulator``).
   * ``MONGO_URI`` — a Mongo replica set (image ``mongo``); transactions require the replica set.
 A backend whose env is absent is skipped, so the file is safe to collect anywhere. It is NOT a
 hermetic unit test (it needs live services) and is not run by ``backend/test.sh``.

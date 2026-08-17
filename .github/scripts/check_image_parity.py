@@ -6,7 +6,7 @@ The image pins live in two places by design (compose files + Helm values). Rathe
 manifest file (which would need both consumers to read a third format), this check is the source of
 truth for parity: it extracts the pin of every SHARED component from both and fails on any mismatch.
 
-Components that exist in only one target (the built ``omi-onprem-backend`` image; the CI's minio/mc
+Components that exist in only one target (the built ``omi-oss-backend`` image; the CI's minio/mc
 bucket-init helper) are not shared and are ignored. Stdlib only (regex), like the other guards.
 
 Run:  python3 .github/scripts/check_image_parity.py   # exit 0 = in sync
@@ -19,7 +19,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPOSE = [ROOT / "deploy/onprem/compose.base.yaml", ROOT / "deploy/onprem/compose.selfhost.yaml"]
-VALUES = ROOT / "deploy/onprem/helm/omi-onprem/values.yaml"
+VALUES = ROOT / "deploy/onprem/helm/omi-oss/values.yaml"
 
 # Shared components: a stable substring that identifies the image in BOTH files.
 SHARED = {
@@ -62,7 +62,7 @@ def main() -> int:
 
     if problems:
         print("Image parity check FAILED (compose <-> Helm):\n  " + "\n  ".join(problems))
-        print("\nFix: pin the same ref in deploy/onprem/compose.*.yaml and deploy/onprem/helm/omi-onprem/values.yaml")
+        print("\nFix: pin the same ref in deploy/onprem/compose.*.yaml and deploy/onprem/helm/omi-oss/values.yaml")
         return 1
     print(f"Image parity OK — {len(SHARED)} shared components pinned identically in compose and Helm.")
     return 0

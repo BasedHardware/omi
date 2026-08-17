@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-env
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+data:
+  # Plain env mirror of backend.env.base (values.backend.env).
+  {{- range $k, $v := .Values.backend.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  # Derived from the in-cluster mongo service — seeds the replica set at the same stable member host.
+  MONGO_URI: "mongodb://{{ include "omi-oss.mongoHost" . }}:27017/?replicaSet={{ .Values.mongo.replicaSetName }}"
+  {{- if .Values.chat.enabled }}
+  # chat profile: on-prem vector store (Qdrant) instead of Pinecone (ADR-0033). Collections are
+  # auto-created at QDRANT_VECTOR_DIM on first upsert.
+  VECTOR_STORE_BACKEND: "qdrant"
+  QDRANT_URL: "http://qdrant:6333"
+  QDRANT_VECTOR_DIM: {{ .Values.chat.vectorDim | quote }}
+  {{- end }}
+  {{- if .Values.objstore.enabled }}
+  # objstore profile: on-prem S3 object store (RustFS) instead of GCS (ADR-0032). S3_PUBLIC_ENDPOINT is
+  # required for public object URLs (the s3 adapter has no fallback); the credentials live in the Secret.
+  OBJECT_STORE_BACKEND: "s3"
+  S3_ENDPOINT: "http://rustfs:9000"
+  S3_PUBLIC_ENDPOINT: {{ .Values.objstore.publicEndpoint | quote }}
+  {{- range $k, $v := .Values.objstore.buckets }}
+  BUCKET_{{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.push.enabled }}
+  # push profile: on-prem UnifiedPush via ntfy instead of FCM (ADR-0011/0041). The backend POSTs to ntfy
+  # internally; only the path of a registered endpoint is used (no egress).
+  PUSH_NOTIFICATION_BACKEND: "unifiedpush"
+  UNIFIEDPUSH_INTERNAL_BASE_URL: "http://ntfy:80"
+  {{- end }}
+  {{- if .Values.auth.enabled }}
+  # auth profile: OIDC (Keycloak) instead of Firebase (ADR-0034). OIDC_ISSUER is the public HTTPS issuer
+  # (token `iss`); OIDC_JWKS_URL is the INTERNAL keycloak endpoint (keys fetched in-cluster, no edge
+  # hairpin) — the two are deliberately decoupled.
+  AUTH_BACKEND: "oidc"
+  OIDC_ISSUER: "{{ .Values.auth.hostname }}/realms/omi"
+  OIDC_JWKS_URL: "http://keycloak:8090/realms/omi/protocol/openid-connect/certs"
+  OIDC_AUDIENCE: {{ .Values.auth.audience | quote }}
+  {{- end }}
+  {{- if .Values.inference.enabled }}
+  # inference profile: external OpenAI-compatible endpoint(s), OUTSIDE the cluster (ADR-0035). Keys live
+  # in the Secret. Empty base URLs are omitted so the cloud defaults stand.
+  {{- with .Values.inference.openai.baseUrl }}
+  OPENAI_BASE_URL: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.inference.embeddings.baseUrl }}
+  OMI_EMBEDDINGS_BASE_URL: {{ . | quote }}
+  OMI_EMBEDDINGS_MODEL: {{ $.Values.inference.embeddings.model | quote }}
+  {{- end }}
+  {{- end }}

@@ -1,0 +1,14 @@
+{{- if .Values.auth.enabled }}
+# The omi realm (dev): realm "omi" + clients omi-app / omi-test / omi-backend-admin + testuser, with the
+# omi-backend audience mapper. Mounted into Keycloak's import dir; --import-realm seeds it on a fresh
+# data volume. This is a copy of deploy/onprem/keycloak/omi-realm.dev.example.json — keep in sync.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: keycloak
+data:
+{{ (.Files.Glob "files/omi-realm.dev.json").AsConfig | indent 2 }}
+{{- end }}

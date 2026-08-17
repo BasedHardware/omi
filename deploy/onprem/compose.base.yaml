@@ -8,7 +8,7 @@
 # auth, feature toggles selected per-run) live here. See docs studio compose-environments-onprem.
 # The build (liblc3, deps, emulator jar) runs on the daemon network, so it works offline at runtime.
 
-name: omi-onprem
+name: omi-oss
 
 services:
 

@@ -24,18 +24,18 @@ jobs:
 
       - name: helm lint (dev + prod overlays)
         run: |
-          helm lint deploy/onprem/helm/omi-onprem -f deploy/onprem/helm/omi-onprem/values-dev.yaml
-          helm lint deploy/onprem/helm/omi-onprem -f deploy/onprem/helm/omi-onprem/values-prod.yaml
+          helm lint deploy/onprem/helm/omi-oss -f deploy/onprem/helm/omi-oss/values-dev.yaml
+          helm lint deploy/onprem/helm/omi-oss -f deploy/onprem/helm/omi-oss/values-prod.yaml
 
       - name: helm template (render both overlays; values.schema.json validates inputs)
         run: |
-          helm template omi deploy/onprem/helm/omi-onprem -n omi-dev \
-            -f deploy/onprem/helm/omi-onprem/values-dev.yaml > /dev/null
-          helm template omi deploy/onprem/helm/omi-onprem -n omi-prod \
-            -f deploy/onprem/helm/omi-onprem/values-prod.yaml > /dev/null
+          helm template omi deploy/onprem/helm/omi-oss -n omi-dev \
+            -f deploy/onprem/helm/omi-oss/values-dev.yaml > /dev/null
+          helm template omi deploy/onprem/helm/omi-oss -n omi-prod \
+            -f deploy/onprem/helm/omi-oss/values-prod.yaml > /dev/null
 
       - name: image parity (compose <-> Helm)
         run: python3 .github/scripts/check_image_parity.py
 
       - name: helm package (installable .tgz artifact — ADR-0049 §4.3)
-        run: helm package deploy/onprem/helm/omi-onprem -d /tmp/helm-out
+        run: helm package deploy/onprem/helm/omi-oss -d /tmp/helm-out

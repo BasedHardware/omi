@@ -1,0 +1,55 @@
+# Idempotent replica-set initiator (§6.1, the self-contained init-Job). A regular resource (NOT a helm
+# hook) so `helm install --wait` applies it alongside the StatefulSet + backend and waits for all three
+# to converge — a post-install hook would deadlock, since --wait blocks on the backend (whose
+# initContainer waits for the RS primary) before hooks run.
+#
+# Named per release revision (+ ttlSecondsAfterFinished) so each `helm upgrade` creates a FRESH Job
+# instead of patching this one: a Job's pod template is immutable AND the Job controller mutates the
+# live object (adds selector/labels), so re-applying the same name fails on upgrade. The re-run is a
+# cheap no-op (rs.status already ok); the finished Job self-cleans via ttl.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongo-rs-init-r{{ .Release.Revision }}
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongo-rs-init
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 20
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" . | nindent 8 }}
+        app.kubernetes.io/component: mongo-rs-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: {{ .Values.mongo.image }}
+          imagePullPolicy: {{ .Values.mongo.imagePullPolicy }}
+          env:
+            - name: MONGO_HOST
+              value: {{ include "omi-oss.mongoHost" . | quote }}
+            - name: RS_NAME
+              value: {{ .Values.mongo.replicaSetName | quote }}
+          command:
+            - bash
+            - -c
+            - |
+              set -eu
+              echo "waiting for mongod at ${MONGO_HOST}..."
+              until mongosh --quiet --host "${MONGO_HOST}" --eval 'db.adminCommand("ping")' >/dev/null 2>&1; do
+                sleep 3
+              done
+              echo "mongod up; initiating replica set ${RS_NAME} (idempotent)..."
+              mongosh --quiet --host "${MONGO_HOST}" --eval '
+                try { rs.status().ok }
+                catch (e) {
+                  rs.initiate({_id: process.env.RS_NAME, members: [{_id: 0, host: process.env.MONGO_HOST + ":27017"}]})
+                }'
+              echo "waiting for a writable primary..."
+              until mongosh --quiet --host "${MONGO_HOST}" --eval 'db.hello().isWritablePrimary' 2>/dev/null | grep -q true; do
+                sleep 2
+              done
+              echo "replica set ${RS_NAME} ready."

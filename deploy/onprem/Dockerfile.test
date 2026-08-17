@@ -1,8 +1,8 @@
 # Offline unit/contract test image = the WP0 backend image + additive test-only tooling.
 # Build the base first (`docker compose build` in this directory), then:
-#   docker build -t omi-onprem-backend-test -f Dockerfile.test .
+#   docker build -t omi-oss-backend-test -f Dockerfile.test .
 # The build needs internet (apt + helm download); the resulting image runs tests offline.
-FROM omi-onprem-backend:latest
+FROM omi-oss-backend:latest
 USER root
 
 # git + helm + jq + gettext-base(envsubst): a set of repo-root contract tests shell out to them

@@ -1,4 +1,4 @@
-# omi-onprem — Helm chart (Kubernetes on-prem target)
+# omi-oss — Helm chart (Kubernetes on-prem target)
 
 The Helm mirror of the compose stack (ADR-0049; study
 `docs/analysis/kubernetes-onprem-helm-kind-k0s.md`). Same images, same config philosophy — a target
@@ -12,7 +12,7 @@ Prod/k0s hardening (MetalLB, real-SAN TLS, Keycloak on Postgres, a GPU inference
 
 ## Prerequisites
 
-`kind`, `kubectl`, `helm`, `openssl` on PATH. The backend image built locally (`omi-onprem-backend:latest`);
+`kind`, `kubectl`, `helm`, `openssl` on PATH. The backend image built locally (`omi-oss-backend:latest`);
 public images are pulled by the node. `values-dev.yaml` replicates the **prod topology** on Kind (phase B):
 so it needs three cluster add-ons — **Envoy Gateway** (ingress), **OpenEBS** (storage class), **MetalLB**
 (LoadBalancer). For a bare Kind without them, override to the simple path (see the note after the recipe).
@@ -26,7 +26,7 @@ cd deploy/onprem/helm
 kind create cluster --config kind-cluster.yaml
 
 # 2. Load the local backend image (no registry; public images the node pulls itself)
-kind load docker-image omi-onprem-backend:latest --name omi-dev
+kind load docker-image omi-oss-backend:latest --name omi-dev
 
 # 3. Cluster add-ons (like the app, installed once):
 #    3a. Envoy Gateway — Gateway API controller + CRDs
@@ -48,7 +48,7 @@ kubectl create namespace omi-dev --dry-run=client -o yaml | kubectl apply -f -
 HOST_IP=172.18.255.200 ./gen-certs.sh omi-dev omi-tls localhost
 
 # 5. Install the stack (all profiles enabled in values-dev)
-helm install omi ./omi-onprem -n omi-dev --create-namespace -f omi-onprem/values-dev.yaml --wait
+helm install omi ./omi-oss -n omi-dev --create-namespace -f omi-oss/values-dev.yaml --wait
 
 # 6. Reach it through the LoadBalancer IP (Keycloak issuer + API over HTTPS):
 LBIP=172.18.255.200

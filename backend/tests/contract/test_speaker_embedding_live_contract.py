@@ -9,7 +9,7 @@ Gated on HOSTED_SPEAKER_EMBEDDING_API_URL (skips in CI). Reaches the server on l
 
   docker run --rm --network host \
     -e HOSTED_SPEAKER_EMBEDDING_API_URL=http://127.0.0.1:8080 \
-    -v /work/omi/src/omi:/repo -w /repo/backend omi-onprem-backend-test:v2 \
+    -v /work/omi/src/omi:/repo -w /repo/backend omi-oss-backend-test:v2 \
     python -m pytest tests/contract/test_speaker_embedding_live_contract.py -q -p no:cacheprovider
 """
 

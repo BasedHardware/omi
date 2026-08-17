@@ -1,4 +1,4 @@
-name: omi-onprem
+name: omi-oss
 # Omi self-host — SEED (dev-posture + OIDC auth). Same non-hermetic posture as compose.dev.yaml (the
 # backend reaches HOST inference via host.docker.internal for LLM/embeddings), but the backend runs
 # with AUTH_BACKEND=oidc + LOCAL_DEVELOPMENT=false so multiple REAL Keycloak users can drive the API as

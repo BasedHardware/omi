@@ -27,7 +27,7 @@
 #   Override: COMPOSE_PROJECT.
 set -euo pipefail
 
-PROJECT="${COMPOSE_PROJECT:-omi-onprem}"
+PROJECT="${COMPOSE_PROJECT:-omi-oss}"
 COMPOSE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OVERRIDES="$COMPOSE_DIR/llm_gateway/generated_route_overrides.yaml"
 
@@ -60,7 +60,6 @@ ANSWER="$(printf '%s' "$OUT" | grep -m1 '^done: ' | sed 's/^done: //' \
 printf '  ANSWER: %s\n' "$ANSWER"
 
 log "answer came from the LOCAL model (no cloud): the gateway loaded $MODEL on the operator endpoint"
-docker exec omi-onprem-ollama ollama ps >/dev/null 2>&1 || true   # host Ollama, if containerized
 curl -fsS http://127.0.0.1:11434/api/ps 2>/dev/null | grep -q "$MODEL" \
   && echo "  OK: host inference served $MODEL for this chat" \
   || echo "  NOTE: could not confirm $MODEL on the host endpoint (best-effort); the streamed answer above is the proof."
