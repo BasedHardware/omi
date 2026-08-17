@@ -565,6 +565,8 @@ export const createChatGenerationSupervisor = (
     const elapsedMs = Math.max(0, deps.nowEpochMilliseconds() - startedAt);
     // Named heartbeat/progress frames are not in the ratified generation SSE
     // grammar the surface observer accepts. Log them; do not append them.
+    // The live socket is kept alive by SSE *comments* on the events stream
+    // (`: heartbeat`), not by these ledger rows.
     chatLog("info", "heartbeat", {
       generationId: state.generationId,
       attemptId: state.attemptId,

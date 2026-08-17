@@ -1,6 +1,6 @@
 import { writeFileSync, readFileSync } from "node:fs";
 
-import { LOOPBACK_HOST, type LoopbackServeOptions } from "./loopback";
+import { LOOPBACK_HOST, LOOPBACK_IDLE_TIMEOUT_SECONDS, type LoopbackServeOptions } from "./loopback";
 import {
   APP_FACING_TEST_PORT_MAX,
   APP_FACING_TEST_PORT_MIN,
@@ -182,5 +182,6 @@ export function loopbackServeOptionsForTestLease(lease: AppFacingTestLease): Loo
   return {
     hostname: LOOPBACK_HOST,
     port: lease.port,
+    idleTimeout: LOOPBACK_IDLE_TIMEOUT_SECONDS,
   };
 }

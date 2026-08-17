@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   LOOPBACK_HOST,
+  LOOPBACK_IDLE_TIMEOUT_SECONDS,
   assertPortInRange,
   loopbackServeOptions,
   parseLsofListenOutput,
@@ -11,7 +12,12 @@ describe("loopbackServeOptions", () => {
   test("returns hostname 127.0.0.1 for an allowed port", () => {
     const options = loopbackServeOptions(4851);
     // red-proof: omit hostname or set it to 0.0.0.0 and this test fails
-    expect(options).toEqual({ hostname: LOOPBACK_HOST, port: 4851 });
+    expect(options).toEqual({
+      hostname: LOOPBACK_HOST,
+      port: 4851,
+      idleTimeout: LOOPBACK_IDLE_TIMEOUT_SECONDS,
+    });
+    expect(options.idleTimeout).toBeGreaterThan(10);
   });
 
   test("accepts the default app-facing service port", () => {

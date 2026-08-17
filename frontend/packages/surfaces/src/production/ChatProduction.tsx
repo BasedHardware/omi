@@ -49,8 +49,15 @@ function roleLabel(role: ChatMessage["role"], locale: Locale): string {
   return role === "user" ? t(locale, "chat.roleUser") : t(locale, "chat.roleAssistant");
 }
 
+function streamingProgress(message: ChatMessage): "thinking" | "responding" | null {
+  if (message.delivery.kind !== "streaming") return null;
+  return message.text.length === 0 ? "thinking" : "responding";
+}
+
 function deliveryLabel(message: ChatMessage, locale: Locale): string | null {
-  if (message.delivery.kind === "streaming") return t(locale, "chat.streaming");
+  const progress = streamingProgress(message);
+  if (progress === "thinking") return t(locale, "chat.thinking");
+  if (progress === "responding") return t(locale, "chat.streaming");
   if (
     message.delivery.kind === "canonical" &&
     message.delivery.generationOutcome === "cancelled"
@@ -91,7 +98,9 @@ function chatAnnouncement(messages: readonly ChatMessage[], locale: Locale): str
   if (!latest) return null;
   const agentUpdate = latest.agentRun?.events.at(-1)?.safeSummary;
   if (agentUpdate) return agentUpdate;
-  if (latest.delivery.kind === "streaming") return t(locale, "chat.streaming");
+  if (latest.delivery.kind === "streaming") {
+    return latest.text.length === 0 ? t(locale, "chat.thinking") : t(locale, "chat.streaming");
+  }
   if (latest.delivery.kind === "echo") return t(locale, "chat.pending");
   if (latest.delivery.kind === "failed") return t(locale, "chat.failed");
   if (latest.delivery.kind === "canonical") {
@@ -674,6 +683,7 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
               {messages.map((message) => {
                 const statusLabel = deliveryLabel(message, locale);
                 const busy = message.delivery.kind === "streaming";
+                const progress = streamingProgress(message);
                 const streamingGenerationId = message.delivery.kind === "streaming"
                   ? message.delivery.generationId
                   : null;
@@ -695,16 +705,19 @@ export function ChatProduction({ store, fixture, locale = "en", onReady, announc
                     className={`chat-message is-${message.role}${message.delivery.kind === "failed" ? " is-failed" : ""}${message.delivery.kind === "echo" ? " is-pending" : ""}${busy ? " is-streaming" : ""}${cancelled ? " is-cancelled" : ""}`}
                     data-delivery={message.delivery.kind}
                     data-failure-class={failureClass ?? undefined}
+                    data-streaming-progress={progress ?? undefined}
                     aria-busy={busy || undefined}
                   >
                     <div className="chat-message-meta">
                       <span className="chat-role">{roleLabel(message.role, locale)}</span>
                       {statusLabel && <span className="chat-delivery-label">{statusLabel}</span>}
                     </div>
-                    <p className="chat-message-text">
+                    <p className={`chat-message-text${progress === "thinking" ? " is-placeholder" : ""}`}>
                       {message.delivery.kind === "failed"
                         ? failedMessageText(message, locale)
-                        : message.text}
+                        : progress === "thinking"
+                          ? t(locale, "chat.thinking")
+                          : message.text}
                     </p>
                     {failedDelivery?.source === "transport" && (
                       <div className="chat-failure-recovery" data-recovery="unsupported-stream">

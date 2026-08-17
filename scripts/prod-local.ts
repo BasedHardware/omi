@@ -374,8 +374,7 @@ const main = async (): Promise<void> => {
   let server: ReturnType<typeof Bun.serve>;
   try {
     server = Bun.serve({
-      hostname: bind.hostname,
-      port: bind.port,
+      ...bind,
       fetch: (request) => memoryProcess.fetch(request),
     });
   } catch (error) {

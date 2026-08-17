@@ -86,7 +86,7 @@ export interface ChatMessagesRouteDependencies {
     journalRevision: number,
     payloadHash: string,
   ) => string;
-  /** Optional bounded SSE delivery policy; defaults preserve the existing wire cadence. */
+  /** Optional bounded SSE delivery policy; default comments keep a quiet generation socket alive. */
   readonly streamPolicy?: ChatGenerationStreamPolicy;
   readonly streamScheduler?: ChatGenerationScheduler;
   readonly retentionPolicy?: ChatGenerationRetentionPolicy;
@@ -100,13 +100,26 @@ export interface ChatGenerationStreamPolicy {
   readonly backpressurePollIntervalMs: number;
 }
 
-const DEFAULT_STREAM_POLICY: ChatGenerationStreamPolicy = Object.freeze({
+/**
+ * SSE comment cadence for a live generation stream. Named heartbeat/progress
+ * frames are not in the ratified grammar; comments (`: heartbeat`) are.
+ * 5s is shorter than Bun's default 10s `idleTimeout`, which is what reaped
+ * the glm-4.7 reasoning preamble (10.7s of dropped reasoning frames, no
+ * content). Raising `idleTimeout` alone would still fail silently at the
+ * new ceiling; comments keep the socket alive and the supervisor can still
+ * finalize `generation_timeout` when `maxRunDurationMs` elapses.
+ */
+export const CHAT_GENERATION_SSE_HEARTBEAT_INTERVAL_MS = 5_000;
+
+export const DEFAULT_CHAT_GENERATION_STREAM_POLICY: ChatGenerationStreamPolicy = Object.freeze({
   pollIntervalMs: 5,
-  heartbeatIntervalMs: 0,
+  heartbeatIntervalMs: CHAT_GENERATION_SSE_HEARTBEAT_INTERVAL_MS,
   maxBatchEvents: 16,
   maxBufferedEvents: 128,
   backpressurePollIntervalMs: 25,
 });
+
+const DEFAULT_STREAM_POLICY = DEFAULT_CHAT_GENERATION_STREAM_POLICY;
 
 /** Internal policy seam; zero-delay polling is rejected to avoid unbounded scheduler churn. */
 export const normalizeChatGenerationStreamPolicy = (

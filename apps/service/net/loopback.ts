@@ -10,9 +10,19 @@ export type LsofListenVerdict = {
   readonly reason?: string;
 };
 
+/**
+ * Hung-socket ceiling for loopback `Bun.serve`. Bun's default is 10s, which
+ * reaped a quiet Chat SSE during a reasoning preamble. SSE comment heartbeats
+ * (5s) keep a live generation under this bound; 30s is the reap if heartbeats
+ * stop. Generations that exceed the supervisor `maxRunDurationMs` still fail
+ * with `generation_timeout` on the open stream. Maximum Bun allows is 255.
+ */
+export const LOOPBACK_IDLE_TIMEOUT_SECONDS = 30;
+
 export type LoopbackServeOptions = {
   readonly hostname: typeof LOOPBACK_HOST;
   readonly port: number;
+  readonly idleTimeout: typeof LOOPBACK_IDLE_TIMEOUT_SECONDS;
 };
 
 /**
@@ -26,6 +36,7 @@ export function loopbackServeOptions(port: number): LoopbackServeOptions {
   return {
     hostname: LOOPBACK_HOST,
     port,
+    idleTimeout: LOOPBACK_IDLE_TIMEOUT_SECONDS,
   };
 }
 
