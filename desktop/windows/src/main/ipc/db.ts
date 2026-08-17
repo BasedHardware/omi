@@ -8,6 +8,12 @@ import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigration
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
 import {
+  MEMORY_SEARCH_SCHEMA,
+  searchMemoriesFts,
+  type MemorySearchDb,
+  type MemorySearchRow
+} from '../search/memorySearchStore'
+import {
   clearCorruptionFlags,
   isCorruptionError,
   isCorruptionSuspected,
@@ -656,6 +662,12 @@ function get(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at);
   `)
+  // Full-text index over the memories just created. DDL lives in
+  // search/memorySearchStore.ts so prod and the node:sqlite tests run the same
+  // SQL; the index is external-content + trigger-maintained, so it is
+  // deliberately absent from USER_DATA_TABLES (see dbWipe.ts) and is backfilled
+  // for existing installs by migration v3.
+  db.exec(MEMORY_SEARCH_SCHEMA)
   // Track 3 local task storage (action_items + staged_tasks + their FTS indexes).
   // DDL lives in taskStore.ts so prod and the node:sqlite CRUD tests run the same
   // SQL; both tables are user-scoped (see USER_DATA_TABLES in dbWipe.ts).
@@ -702,7 +714,12 @@ function get(): Database.Database {
     // Rebuild every external-content FTS index from its recovered base rows (salvage
     // skips virtual tables, leaving the shadow tables empty). Same 'rebuild' idiom as
     // migration v2. Each is independent — one failing must not skip the others.
-    for (const fts of ['rewind_frames_fts', 'action_items_fts', 'staged_tasks_fts']) {
+    for (const fts of [
+      'rewind_frames_fts',
+      'action_items_fts',
+      'staged_tasks_fts',
+      'memories_fts'
+    ]) {
       try {
         db.exec(`INSERT INTO ${fts}(${fts}) VALUES('rebuild')`)
       } catch (e) {
@@ -1475,6 +1492,15 @@ export function listRewindFramesSampled(
     const step = rewindSampleStep(n, target)
     return d.prepare(buildRewindSampledSql(REWIND_COLUMNS)).all(from, to, step) as RewindFrame[]
   })
+}
+
+/** BM25-ranked memories for an already-built FTS5 MATCH expression. Thin
+ *  get()-bound wrapper over search/memorySearchStore.ts, which owns the SQL so
+ *  production and the node:sqlite tests run the same statement. */
+export function searchMemories(match: string, limit = 50): MemorySearchRow[] {
+  return timed('searchMemories', () =>
+    searchMemoriesFts(get() as unknown as MemorySearchDb, match, limit)
+  )
 }
 
 // --- Track 4: Rewind FTS5 search ---
