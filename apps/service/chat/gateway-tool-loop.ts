@@ -27,6 +27,9 @@ import {
 } from "./gateway-sse";
 
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$/u;
+/** OpenAI `tools[].function.name` charset. Not SAFE_TOKEN: call ids, property
+ * names, and stored event tokens legitimately contain `.` `:` `/` `@` `+`. */
+const ADVERTISED_FUNCTION_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
 const SAFE_TEXT = /^[^\u0000-\u001f\u007f]{1,240}$/u;
 const MAX_TOOL_ARGUMENT_BYTES = 16_384;
 
@@ -120,10 +123,15 @@ const validateAdvertisedToolSchema = (
   if (tool === null || parameters === null || properties === null
     || !exactKeys(tool, ["description", "name", "parameters"])
     || !exactKeys(parameters, ["additionalProperties", "properties", "required", "type"])
-    || !SAFE_TOKEN.test(schema.name) || !SAFE_TEXT.test(schema.description)
+    || !SAFE_TEXT.test(schema.description)
     || schema.parameters.type !== "object" || schema.parameters.additionalProperties !== false
     || !Array.isArray(schema.parameters.required)) {
     throw new TypeError("invalid gateway tool configuration");
+  }
+  if (!ADVERTISED_FUNCTION_NAME.test(schema.name)) {
+    throw new TypeError(
+      `invalid advertised tool name ${JSON.stringify(schema.name)}; expected a string matching ^[a-zA-Z0-9_-]{1,64}$`,
+    );
   }
   const definition = registry.resolve(schema.name);
   if (definition === null

@@ -21,7 +21,7 @@ export interface ProductionGatewayToolLoopRuntime extends GetActionItemsToolRunt
   readonly approvalCoordinator: AgentApprovalCoordinator;
 }
 
-/** Production-shaped gateway lane: safe read-only tasks plus approval-required safe.write. */
+/** Production-shaped gateway lane: safe read-only tasks plus approval-required safe_write. */
 export const createProductionGatewayToolLoop = (
   runtime: ProductionGatewayToolLoopRuntime,
 ): GatewayReadOnlyToolLoopOptions => Object.freeze({
