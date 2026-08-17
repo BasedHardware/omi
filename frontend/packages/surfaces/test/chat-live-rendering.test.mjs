@@ -407,6 +407,69 @@ test("rendered live Chat streams changing assistant text and converges without d
   }
 });
 
+test("empty streaming assistant row renders thinking, not a blank body", async () => {
+  // red-proof: ChatProduction.tsx streaming with empty text rendering
+  // message.text (blank) instead of chat.thinking. The glm-4.7 preamble
+  // left a composer that had accepted the turn and a transcript that
+  // showed nothing. A helper that returns thinking while this JSX still
+  // emits message.text is the wrong-altitude proof.
+  const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
+  const createProductionChatStore = await loadProductionExport(
+    "ProductionChatStore.ts",
+    "createProductionChatStore",
+  );
+  const domain = new RenderedDomainChat();
+  domain.rows = [row("think-human", "human", "Is Harborline open?")];
+  domain.active = [{
+    generationId: "thinking-generation",
+    clientMessageId: "think-human",
+    text: "",
+    lastEventId: "event-snapshot",
+    observationState: "streaming",
+    failure: null,
+  }];
+  const rendered = await renderComponent(ChatProduction, {
+    store: createProductionChatStore(domain),
+  });
+  try {
+    const thinking = rendered.container.querySelector(".chat-message.is-streaming");
+    assert.ok(thinking, "empty streaming row is visible");
+    assert.equal(thinking.getAttribute("data-streaming-progress"), "thinking");
+    assert.equal(
+      thinking.querySelector(".chat-message-text")?.textContent,
+      EN_MESSAGES["chat.thinking"],
+    );
+    assert.equal(
+      thinking.querySelector(".chat-delivery-label")?.textContent,
+      EN_MESSAGES["chat.thinking"],
+    );
+    assert.ok(thinking.querySelector(".chat-message-text")?.className.includes("is-placeholder"));
+
+    await rendered.act(async () => {
+      domain.active = [{ ...domain.active[0], text: "Harborline is open." }];
+      domain.notify();
+      await Promise.resolve();
+    });
+    const responding = rendered.container.querySelector(".chat-message.is-streaming");
+    assert.ok(responding);
+    assert.equal(responding.getAttribute("data-streaming-progress"), "responding");
+    assert.equal(
+      responding.querySelector(".chat-message-text")?.textContent,
+      "Harborline is open.",
+    );
+    assert.equal(
+      responding.querySelector(".chat-delivery-label")?.textContent,
+      EN_MESSAGES["chat.streaming"],
+    );
+    assert.equal(
+      responding.querySelector(".chat-message-text")?.className.includes("is-placeholder"),
+      false,
+    );
+  } finally {
+    await rendered.cleanup();
+  }
+});
+
 test("RED-PROOF older async history cannot overwrite a newer canonical admission", async () => {
   const ChatProduction = await loadProductionExport("ChatProduction.tsx", "ChatProduction");
   const store = new JournalFirstRaceChatStore();

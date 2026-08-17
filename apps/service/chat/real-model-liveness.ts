@@ -15,7 +15,11 @@ import type { ChatGenerationLivenessPolicy } from "./generation-supervisor";
  * These deadlines bound a slow provider without pretending a hung one is fine:
  * 60s to the first observed content covers a long reasoning preamble, 5
  * minutes caps the run, and a 5s heartbeat keeps the surface's stream alive
- * while the model thinks. The canned default is untouched.
+ * while the model thinks. The canned default is untouched. SSE comment
+ * heartbeats on the events stream (same 5s cadence) are what keep Bun from
+ * reaping a quiet socket during that preamble; this policy is the attributed
+ * ceiling once the socket is alive. A generation that exceeds `maxRunDurationMs`
+ * finalizes `generation_timeout`.
  */
 export const REAL_MODEL_GENERATION_LIVENESS: ChatGenerationLivenessPolicy = Object.freeze({
   firstEventDeadlineMs: 60_000,

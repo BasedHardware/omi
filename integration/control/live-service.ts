@@ -34,7 +34,7 @@
 import { Database } from "bun:sqlite";
 
 import { createLocalDevService } from "../../apps/service/app-facing";
-import { LOOPBACK_HOST } from "../../apps/service/net/loopback";
+import { LOOPBACK_HOST, LOOPBACK_IDLE_TIMEOUT_SECONDS } from "../../apps/service/net/loopback";
 
 /** Fixed, non-secret dev key material — the same label the dev server uses. */
 const DEV_KEY_MATERIAL_LABEL = "omi-local-dev-token-not-a-secret-v1";
@@ -53,6 +53,7 @@ const server = Bun.serve({
   // and that a loopback curl does not catch, because it succeeds either way.
   hostname: LOOPBACK_HOST,
   port: 0,
+  idleTimeout: LOOPBACK_IDLE_TIMEOUT_SECONDS,
   fetch: service.app.fetch,
 });
 

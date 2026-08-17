@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   LOOPBACK_HOST,
+  LOOPBACK_IDLE_TIMEOUT_SECONDS,
   assertPortInRange,
   loopbackServeOptions,
   parseLsofListenOutput,
@@ -119,7 +120,11 @@ describe("test allocation is a named seam, not a widened default", () => {
     let server: { stop: (closeActive?: boolean) => void; port: number } | null = null;
     try {
       const options = loopbackServeOptionsForTestLease(lease);
-      expect(options).toEqual({ hostname: LOOPBACK_HOST, port: lease.port });
+      expect(options).toEqual({
+        hostname: LOOPBACK_HOST,
+        port: lease.port,
+        idleTimeout: LOOPBACK_IDLE_TIMEOUT_SECONDS,
+      });
       server = Bun.serve({
         ...options,
         fetch: () => new Response("ok"),
@@ -310,6 +315,7 @@ describe("loadAppFacingTestLease", () => {
       expect(loopbackServeOptionsForTestLease(loaded)).toEqual({
         hostname: LOOPBACK_HOST,
         port: lease.port,
+        idleTimeout: LOOPBACK_IDLE_TIMEOUT_SECONDS,
       });
       loaded.release();
     } finally {

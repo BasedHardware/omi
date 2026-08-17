@@ -298,6 +298,9 @@ const applyGatewayRecord = (
 ): void => {
   if (gatewayDeltaReasoning(record) !== null && !liveness.signaledReasoning) {
     liveness.signaledReasoning = true;
+    // Reasoning frames are not in the ratified generation SSE grammar.
+    // Signal liveness once so firstEventDeadline does not fire; do not
+    // forward the tokens. SSE comment heartbeats keep the client socket.
     input.onDelta("");
   }
   const content = gatewayDeltaContent(record);

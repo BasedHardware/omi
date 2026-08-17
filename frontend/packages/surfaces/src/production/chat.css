@@ -119,6 +119,10 @@ html[data-platform="mobile"] .chat-jump-latest {
   color: var(--content-primary);
 }
 
+.chat-message-text.is-placeholder {
+  color: var(--content-secondary);
+}
+
 /* Provenance, at the weight of a footnote rather than a panel.
  *
  * Every answer carried a full-width bordered card on a raised fill, so a
