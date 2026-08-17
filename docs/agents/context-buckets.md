@@ -104,10 +104,31 @@ Routes in `backend/routers/context_buckets.py`:
 | `GET /v1/context-buckets/facts` | Flat validated-fact read for consumers |
 | `POST /v1/context-buckets/purge` | Device-initiated deletion of synced copies |
 
-Ordering is enforced by `device_updated_at`: a write whose device timestamp is older than
-the stored one is skipped, so retries and out-of-order delivery cannot regress state. A
-device may only overwrite rows it owns unless the incoming write is strictly newer, which
-keeps two Macs syncing the same bucket from flapping.
+**Write ordering** is enforced by `device_updated_at`: a write whose device timestamp is
+older than the stored one is skipped, so retries and out-of-order delivery cannot regress
+state. This governs which write wins, not how reads sort — reads order by the server's
+`updated_at`, because a consumer wants the most recently *known* state, and a device clock
+is not a source consumers should sort by. Each bucket and its facts commit in one
+transaction that re-reads inside the transaction, so concurrent syncs cannot both observe
+the same old row and both write.
+
+Device times are clamped to one hour ahead of the server. Ordering trusts a clock the
+server does not control, so without a bound a device running fast could stamp a far-future
+timestamp and lock every other device out of that row. Clamping rather than rejecting keeps
+a mildly skewed clock syncing normally, instead of failing closed on something the user
+cannot see or fix.
+
+A row from a different `account_generation` is never stale. Generation fences every read,
+so a row left behind at the old generation is already invisible; treating its republish as
+redundant would strand it forever, because the device has no reason to bump a device clock
+that did not change.
+
+**Purge is account-wide by design.** It deletes every synced copy of a bucket, not only the
+rows the calling device published. Excluding an app is a privacy action: the user is saying
+this app's activity should not be retained, and honoring that on one device while leaving
+the same content readable by chat and every other device would defeat the point. Bucket ids
+are locally-minted UUIDs, so in practice two devices do not share one, but the account-wide
+semantics are the intended contract either way.
 
 `account_generation` comes from the `X-Account-Generation` header, is stored on every
 document, and filters every read. Data from a superseded generation becomes invisible

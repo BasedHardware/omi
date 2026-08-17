@@ -380,3 +380,21 @@ def test_non_screen_evidence_is_rejected_even_when_device_local():
                 )
             ],
         )
+
+
+def test_purge_is_account_wide_and_not_scoped_to_the_calling_device(fake_db):
+    """Excluding an app is a privacy action, so it must reach copies from every device.
+
+    Retracting only the caller's rows would leave the same content readable by
+    chat and by the user's other devices, which is the opposite of what asking
+    to exclude an app means.
+    """
+
+    sync(fake_db, [build_bucket('bucket-1', facts=[build_fact('from-mac')])], device_id='macos_one')
+    sync(fake_db, [build_bucket('bucket-1', facts=[build_fact('from-other')])], device_id='macos_two')
+
+    report = context_buckets_db.purge_context_buckets('u1', ['bucket-1'], firestore_client=fake_db)
+
+    assert report.buckets_deleted == 1
+    assert report.facts_deleted == 2
+    assert context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db) == []
