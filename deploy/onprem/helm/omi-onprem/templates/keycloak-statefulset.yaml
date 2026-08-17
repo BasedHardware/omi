@@ -29,7 +29,11 @@ spec:
           imagePullPolicy: {{ .Values.auth.keycloak.imagePullPolicy }}
           args:
             - start
+            {{- if eq .Values.auth.keycloak.db "postgres" }}
+            - --db=postgres
+            {{- else }}
             - --db=dev-file
+            {{- end }}
             - --http-enabled=true
             - --http-port=8090
             - --proxy-headers=xforwarded
@@ -44,6 +48,17 @@ spec:
                 secretKeyRef:
                   name: backend-secret
                   key: KC_ADMIN_PASSWORD
+            {{- if eq .Values.auth.keycloak.db "postgres" }}
+            - name: KC_DB_URL
+              value: "jdbc:postgresql://keycloak-postgres:5432/keycloak"
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: KC_DB_PASSWORD
+            {{- end }}
           ports:
             - name: http
               containerPort: 8090
