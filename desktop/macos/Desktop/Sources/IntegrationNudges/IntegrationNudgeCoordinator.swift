@@ -99,6 +99,11 @@ final class IntegrationNudgeCoordinator {
   private let frontmostBundleID: @MainActor () -> String?
   private let windowTitleProvider: @MainActor (_ bundleIdentifier: String, _ appName: String?) async -> String?
   private let connectionInspector: @MainActor (IntegrationNudgeRoute) async -> Bool
+  /// Suppression reasons already reported for the window currently being
+  /// watched. A browser re-check can legitimately re-reach the same answer —
+  /// "Gmail is snoozed" stays true while the user sits on the tab — and the
+  /// funnel wants one event per activation, not one per ten seconds.
+  private var reportedThisSession: Set<String> = []
   private var activationObserver: NSObjectProtocol?
   private var ownerObserver: NSObjectProtocol?
   private var pendingEvaluation: Task<Void, Never>?
@@ -177,10 +182,19 @@ final class IntegrationNudgeCoordinator {
 
   private func handleOwnerChange() {
     cancelPendingWork()
-    store.setOwnerID(ownerID())
+    // `runtimeOwnerDidChange` is posted while the revocation is still in
+    // progress, and the owner resolves to nil for that window. Re-scoping
+    // synchronously would leave the store permanently unscoped — every read and
+    // write a no-op for the rest of the session — so the re-scope waits for the
+    // transition to finish.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.store.setOwnerID(self.ownerID())
+    }
   }
 
   private func cancelPendingWork() {
+    reportedThisSession.removeAll()
     pendingEvaluation?.cancel()
     pendingEvaluation = nil
     browserRecheck?.cancel()
@@ -326,7 +340,8 @@ final class IntegrationNudgeCoordinator {
     _ reason: IntegrationNudgePolicy.Suppression,
     for match: IntegrationNudgeMatcher.Match
   ) -> Outcome {
-    if !IntegrationNudgePolicy.isAmbient(reason) {
+    let key = "\(match.entry.telemetryID)|\(reason.rawValue)"
+    if !IntegrationNudgePolicy.isAmbient(reason), reportedThisSession.insert(key).inserted {
       AnalyticsManager.shared.integrationNudgeSuppressed(
         entry: match.entry,
         trigger: match.trigger,
@@ -380,10 +395,12 @@ final class IntegrationNudgeCoordinator {
     // as the screen-capture-reset defect (see
     // `NotificationService.screenCaptureResetShownKey`).
     var recorded = false
+    var dropped = false
     let onDropped: @MainActor () -> Void = { [weak self] in
       // Queue eviction or a stale owner: the budget correctly stays unspent, but
       // a nudge that was owed and never drawn still has to be visible.
       guard let self else { return }
+      dropped = true
       _ = self.report(.barUnavailable, for: match)
     }
     let result = presenter(
@@ -405,9 +422,10 @@ final class IntegrationNudgeCoordinator {
     // the card now and this window's answer is settled.
     guard recorded || result == .queued else {
       // The bar refused it — a changed owner, or no window to draw in. Neither
-      // gets better by re-reading the title in ten seconds, and a nudge that was
-      // owed but never drawn has to be visible in the funnel.
-      return report(.barUnavailable, for: match)
+      // gets better by re-reading the title in ten seconds. `showNotification`
+      // calls `onDropped` *and then* returns the refusal, so only report here
+      // when it did not already.
+      return dropped ? .settled(.barUnavailable) : report(.barUnavailable, for: match)
     }
     return .delivered
   }

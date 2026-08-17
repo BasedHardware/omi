@@ -1052,9 +1052,14 @@ actor MemoryExportService {
   /// Clear this integration's nudge history so a later disconnect is allowed to
   /// make the pitch again instead of finding a spent lifetime budget.
   ///
-  /// The owner is captured here, before the main-actor hop, and re-checked
-  /// there: an account switch racing this callback would otherwise clear the
-  /// wrong person's history.
+  /// The only guard is that an owner exists on the far side of the hop. Carrying
+  /// the connecting owner across would mean comparing a raw `authUserId` default
+  /// against `RuntimeOwnerIdentity`, which differ by trimming, the
+  /// non-production automation override, and the nil returned mid-transition —
+  /// a comparison that misfires on exactly the builds this runs on. The residual
+  /// risk is small and self-correcting: the store is itself owner-scoped, so the
+  /// worst case is clearing the current owner's history for one integration,
+  /// which costs them one extra offer.
   private func clearIntegrationNudgeHistory(for destination: MemoryExportDestination) {
     Task { @MainActor in
       // Both sides resolve through `RuntimeOwnerIdentity`, so the comparison is

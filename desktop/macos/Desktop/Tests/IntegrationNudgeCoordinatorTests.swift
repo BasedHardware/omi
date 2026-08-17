@@ -89,7 +89,12 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _, _, _ in .rejectedOwnerChange },
+      presenter: { _, _, _, onDropped in
+        // The real bar calls `onDropped` and *then* returns the refusal; a stub
+        // that skips it cannot exercise the coordinator's dual-report path.
+        onDropped()
+        return .rejectedOwnerChange
+      },
       ownerID: { "user-a" },
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
@@ -123,6 +128,61 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
         .state(for: try match().entry.telemetryID).shownCount,
       0
     )
+  }
+
+  /// The bar invokes `onDropped` and then returns the refusal, so a naive
+  /// implementation reports the suppression twice for one refused card.
+  func testARefusedCardReportsBarUnavailableOnlyOnce() throws {
+    let captured = Box<[(String, [String: Any])]>([])
+    AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
+      captured.value.append((event, properties))
+    }
+    addTeardownBlock {
+      await MainActor.run { AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests(nil) }
+    }
+
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, _, onDropped in
+        onDropped()
+        return .windowUnavailable
+      },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
+    )
+
+    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false), .settled(.barUnavailable))
+
+    let barEvents = captured.value.filter {
+      $0.1["suppression_reason"] as? String == "bar_unavailable"
+    }
+    XCTAssertEqual(barEvents.count, 1)
+  }
+
+  /// A browser re-check legitimately re-reaches the same answer while the user
+  /// sits on the tab; the funnel wants one event per activation, not one every
+  /// ten seconds.
+  func testARepeatedSuppressionIsReportedOncePerSession() throws {
+    let captured = Box<[(String, [String: Any])]>([])
+    AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
+      captured.value.append((event, properties))
+    }
+    addTeardownBlock {
+      await MainActor.run { AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests(nil) }
+    }
+
+    let defaults = makeDefaults()
+    let store = IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
+    store.recordSnooze(telemetryID: try match().entry.telemetryID, now: now)
+    let coordinator = makeCoordinator(defaults: defaults, result: .presented)
+
+    for _ in 0..<4 {
+      XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false), .settled(.snoozed))
+    }
+
+    let snoozeEvents = captured.value.filter { $0.1["suppression_reason"] as? String == "snoozed" }
+    XCTAssertEqual(snoozeEvents.count, 1)
   }
 
   /// The same queued card, once the bar actually presents it, does spend it.
