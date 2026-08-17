@@ -29,3 +29,9 @@ data:
   BUCKET_{{ $k }}: {{ $v | quote }}
   {{- end }}
   {{- end }}
+  {{- if .Values.push.enabled }}
+  # push profile: on-prem UnifiedPush via ntfy instead of FCM (ADR-0011/0041). The backend POSTs to ntfy
+  # internally; only the path of a registered endpoint is used (no egress).
+  PUSH_NOTIFICATION_BACKEND: "unifiedpush"
+  UNIFIEDPUSH_INTERNAL_BASE_URL: "http://ntfy:80"
+  {{- end }}

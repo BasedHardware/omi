@@ -86,5 +86,13 @@ objstore:
     PLUGINS_LOGOS: plugins-logos
 push:
   enabled: false
+  # Device-facing public URL (used by the phone's UnifiedPush distributor). Internal-only until the
+  # ingress/TLS phase gives ntfy a real host; the backend reaches ntfy via http://ntfy:80 regardless.
+  baseUrl: "http://ntfy"
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    imagePullPolicy: IfNotPresent
+    storage: 1Gi
+    resources: {}
 inference:
   enabled: false
