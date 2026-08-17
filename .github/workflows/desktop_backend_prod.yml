@@ -70,8 +70,10 @@ jobs:
           cp .workflow-source/.github/scripts/verify_desktop_backend_image_lineage.py "$controls/.github/scripts/"
           cp .workflow-source/backend/scripts/firebase_release_probe_token.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/agent_vm_release.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/resolve_agent_vm_sha_release.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/wait_cloud_run_candidate_readiness.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py "$controls/backend/scripts/"
           cp .workflow-source/scripts/voice-provider-probe.sh "$controls/scripts/"
           rm -rf .workflow-source
           echo "DESKTOP_BACKEND_CONTROLS=$controls" >> "$GITHUB_ENV"
@@ -276,20 +278,42 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$AGENT_GCS_BUCKET"
-          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.admitted-source.outputs.image_tag }}"
-          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
-          python3 backend/scripts/runtime_image_contracts.py smoke \
-            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
-          docker push "$agent_image"
-          agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
-          [[ "$agent_digest" == sha256:* ]]
-          agent_image_digest="$agent_image@$agent_digest"
-          boot_image_name="$(gcloud compute images describe-from-family omi-agent --project="$PROJECT_ID" --format='value(name)')"
-          test -n "$boot_image_name"
-          AGENT_VM_BOOT_IMAGE="projects/$PROJECT_ID/global/images/$boot_image_name"
           source_sha="${{ steps.admitted-source.outputs.source_sha }}"
           startup_uri_gs="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
           startup_uri_https="https://storage.googleapis.com/$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
+          manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/manifest.json"
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/resolve_agent_vm_sha_release.py" \
+            --startup-uri "$startup_uri_gs" \
+            --manifest-uri "$manifest_uri" \
+            --expected-source-sha "$source_sha" \
+            --workdir "$RUNNER_TEMP/agent-vm-sha-release" \
+            --output "$RUNNER_TEMP/agent-vm-sha-release.json"
+          reuse="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+          if [[ "$reuse" == "true" ]]; then
+            agent_image_digest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["image_digest"])' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+            reused_boot_image="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("boot_image") or "")' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+            [[ "$agent_image_digest" == *@sha256:* ]]
+            echo "Reusing SHA-keyed Agent VM release artifacts for $source_sha ($agent_image_digest)."
+            if [[ -n "$reused_boot_image" ]]; then
+              AGENT_VM_BOOT_IMAGE="$reused_boot_image"
+            else
+              boot_image_name="$(gcloud compute images describe-from-family omi-agent --project="$PROJECT_ID" --format='value(name)')"
+              test -n "$boot_image_name"
+              AGENT_VM_BOOT_IMAGE="projects/$PROJECT_ID/global/images/$boot_image_name"
+            fi
+          else
+            agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.admitted-source.outputs.image_tag }}"
+            docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
+            docker push "$agent_image"
+            agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
+            [[ "$agent_digest" == sha256:* ]]
+            agent_image_digest="$agent_image@$agent_digest"
+            boot_image_name="$(gcloud compute images describe-from-family omi-agent --project="$PROJECT_ID" --format='value(name)')"
+            test -n "$boot_image_name"
+            AGENT_VM_BOOT_IMAGE="projects/$PROJECT_ID/global/images/$boot_image_name"
+          fi
           # Legacy VMs may still reference gs://$AGENT_GCS_BUCKET/startup.sh; do not update it before acceptance.
           rendered_startup="$RUNNER_TEMP/agent-vm-startup.sh"
           AGENT_VM_IMAGE="$agent_image_digest" AGENT_VM_GEMINI_SECRET_NAME="$AGENT_VM_GEMINI_SECRET_NAME" \
@@ -352,6 +376,9 @@ jobs:
             --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
           env_vars: |
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
+            USE_VERTEX_AI=true
+            GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            GCP_LOCATION=us-central1
             GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
@@ -472,6 +499,16 @@ jobs:
               sleep 5
             done
           done
+
+      - name: Preflight Agent VM reconciler deploy identity
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py" \
+            --project="$PROJECT_ID" \
+            --deployer=josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com \
+            --runtime-service-account=agent-vm-reconciler@based-hardware.iam.gserviceaccount.com
 
       - name: Route traffic to accepted production revision
         id: route-traffic

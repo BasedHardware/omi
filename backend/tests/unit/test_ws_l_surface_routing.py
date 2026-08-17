@@ -116,7 +116,7 @@ class TestSharedCanonicalVisibilityFilter:
     def test_processed_short_term_stays_default_visible(self):
         item = _processed_short_term_item()
         policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-        now = datetime(2026, 6, 15, tzinfo=timezone.utc)
+        now = datetime(2026, 6, 2, tzinfo=timezone.utc)
 
         visible = filter_canonical_default_visible_items([item], policy=policy, now=now)
 

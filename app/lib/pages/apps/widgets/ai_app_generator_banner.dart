@@ -25,12 +25,12 @@ class AiAppGeneratorBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [const Color(0xFF6366F1).withValues(alpha: 0.3), const Color(0xFF8B5CF6).withValues(alpha: 0.3)],
+            colors: [const Color(0xFF6366F1).withValues(alpha: 0.3), const Color(0xFF4F46E5).withValues(alpha: 0.3)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(18.0),
-          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3), width: 1),
+          border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3), width: 1),
         ),
         child: Row(
           children: [
@@ -39,7 +39,7 @@ class AiAppGeneratorBanner extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                gradient: const LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF4F46E5)]),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Center(child: FaIcon(FontAwesomeIcons.wandMagicSparkles, color: Colors.white, size: 16)),

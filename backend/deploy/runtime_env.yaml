@@ -334,6 +334,14 @@ environments:
           X_OAUTH_REDIRECT_URI:
             source: environment
     region: us-central1
+    desktop_backend:
+      env:
+        USE_VERTEX_AI:
+          value: 'true'
+        GOOGLE_CLOUD_PROJECT:
+          value: based-hardware-dev
+        GCP_LOCATION:
+          value: us-central1
     cloud_run:
       network:
         flags:
@@ -976,7 +984,10 @@ environments:
               category: rollout
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
-              value: 'false'
+              value: 'true'
+            MEMORY_CANONICAL_MAINTENANCE_FLEX:
+              category: memory_rollout
+              value: 'true'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
@@ -1149,7 +1160,7 @@ environments:
               key: TWILIO_ACCOUNT_SID
           MEMORY_ENABLED:
             category: memory_rollout
-            value: 'off'
+            value: 'on'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -1272,6 +1283,14 @@ environments:
           SYNC_TASKS_INVOKER_SA:
             source: environment
     region: us-central1
+    desktop_backend:
+      env:
+        USE_VERTEX_AI:
+          value: 'true'
+        GOOGLE_CLOUD_PROJECT:
+          value: based-hardware
+        GCP_LOCATION:
+          value: us-central1
     cloud_run:
       network:
         flags:
@@ -1372,7 +1391,7 @@ environments:
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
@@ -1528,7 +1547,7 @@ environments:
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1665,7 +1684,7 @@ environments:
               category: rollout
             MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1768,7 +1787,7 @@ environments:
               category: reliability
             MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -1915,7 +1934,10 @@ environments:
               category: rollout
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
-              value: 'false'
+              value: 'true'
+            MEMORY_CANONICAL_MAINTENANCE_FLEX:
+              category: memory_rollout
+              value: 'true'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
@@ -1930,7 +1952,7 @@ environments:
               value: memories-backend
             MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
