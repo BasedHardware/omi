@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+exec python3 .github/scripts/preflight_runner.py --name pre-push -- scripts/pre-push "$@"

@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "1.0.0",
+  "completenessVersion": "tasks-completeness-v1",
+  "route": "/v1/tasks",
+  "itemFields": [
+    "id",
+    "description",
+    "completed",
+    "completedAt",
+    "dueAt",
+    "owner",
+    "source",
+    "provenance",
+    "sortOrder",
+    "indentLevel",
+    "createdAt",
+    "updatedAt",
+    "revision"
+  ],
+  "windowStates": [
+    "complete",
+    "more",
+    "incomplete"
+  ],
+  "completenessStatuses": [
+    "complete",
+    "incomplete",
+    "degraded",
+    "partial"
+  ],
+  "limitationReasons": [
+    "pending_writes",
+    "projection_stale",
+    "projection_unavailable",
+    "projection_bypassed",
+    "source_bound",
+    "time_bound",
+    "policy_bound"
+  ],
+  "missingAppliedFrontierReasons": [
+    "no_applied_writes",
+    "pending_writes",
+    "projection_stale",
+    "projection_unavailable",
+    "projection_bypassed",
+    "source_bound",
+    "time_bound",
+    "policy_bound"
+  ],
+  "cases": [
+    {
+      "case": "absence:query_gap"
+    },
+    {
+      "case": "completeness:complete"
+    },
+    {
+      "case": "completeness:degraded"
+    },
+    {
+      "case": "completeness:incomplete"
+    },
+    {
+      "case": "completeness:partial"
+    },
+    {
+      "case": "item:full_field_parity"
+    },
+    {
+      "case": "item:nullable_fields_null"
+    },
+    {
+      "case": "reason:no_applied_writes"
+    },
+    {
+      "case": "reason:pending_writes"
+    },
+    {
+      "case": "reason:policy_bound"
+    },
+    {
+      "case": "reason:projection_bypassed"
+    },
+    {
+      "case": "reason:projection_stale"
+    },
+    {
+      "case": "reason:projection_unavailable"
+    },
+    {
+      "case": "reason:source_bound"
+    },
+    {
+      "case": "reason:time_bound"
+    },
+    {
+      "case": "window:complete_terminal"
+    },
+    {
+      "case": "window:incomplete_continuation"
+    },
+    {
+      "case": "window:incomplete_terminal"
+    },
+    {
+      "case": "window:more_continuation"
+    }
+  ],
+  "refusalLaws": [
+    {
+      "case": "refusal:absence_on_nonempty_page"
+    },
+    {
+      "case": "refusal:complete_window_with_more"
+    },
+    {
+      "case": "refusal:dishonest_window"
+    },
+    {
+      "case": "refusal:duplicate_item_id"
+    },
+    {
+      "case": "refusal:duplicate_reasons"
+    },
+    {
+      "case": "refusal:empty_page_without_absence"
+    },
+    {
+      "case": "refusal:extra_item_field"
+    },
+    {
+      "case": "refusal:lagging_frontier_claims_complete"
+    },
+    {
+      "case": "refusal:memories_completeness_version"
+    },
+    {
+      "case": "refusal:missing_item_field"
+    },
+    {
+      "case": "refusal:negative_indent"
+    },
+    {
+      "case": "refusal:non_integer_timestamp"
+    },
+    {
+      "case": "refusal:pending_writes_omitted"
+    },
+    {
+      "case": "refusal:pending_writes_unfounded"
+    },
+    {
+      "case": "refusal:provenance_not_strings"
+    },
+    {
+      "case": "refusal:status_contradicts_reasons"
+    },
+    {
+      "case": "refusal:unknown_reason"
+    },
+    {
+      "case": "refusal:whitespace_in_item_id"
+    },
+    {
+      "case": "refusal:wrong_contract_version"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+/* Subresource probe. --accent is patched per bundle version by
+   tools/build-scheme.mjs so a bundle swap is visible in one glance. */
+:root { color-scheme: dark; --accent: #0a84ff; }
+html, body { margin: 0; background: #0b0b0f; color: #f2f2f7;
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+main { padding: calc(env(safe-area-inset-top) + 12px) 14px 24px; }
+h1 { font-size: 15px; color: var(--accent); }
+#bundle-tag { color: var(--accent); padding-bottom: 6px; }
+#log div { border-bottom: 1px solid #26262b; padding: 3px 0; word-break: break-all; }
+.fail { color: #ff453a; } .ok { color: #30d158; }

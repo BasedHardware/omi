@@ -1,0 +1,40 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f7; --panel: #fff; --fg: #17171a; --muted: #6b6b74; --line: #e2e2e6; --accent: #4f46e5;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #17171a; --panel: #1f1f23; --fg: #f2f2f4; --muted: #9b9ba4; --line: #2c2c32; --accent: #8b85ff; }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.titlebar {
+  height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 80px;
+  font-weight: 590; border-bottom: 1px solid var(--line); -webkit-user-select: none; user-select: none;
+  -webkit-app-region: drag;
+}
+.titlebar em { color: var(--muted); font-style: normal; font-weight: 400; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.recording { background: #e5484d; }
+main { padding: 16px; display: grid; gap: 14px; grid-template-columns: 320px 1fr; align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+h2 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+button {
+  font: inherit; font-weight: 590; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--accent); color: #fff; cursor: default;
+}
+button.secondary { background: transparent; color: var(--fg); }
+button:active { filter: brightness(.92); }
+input { font: inherit; padding: 6px 8px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); width: 100%; }
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--accent); transition: width .18s ease-out; }
+.log { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; max-height: 240px; overflow: auto; overscroll-behavior: contain; }
+.log div { padding: 2px 0; border-bottom: 1px solid var(--line); color: var(--muted); }
+.scroller { height: 300px; overflow: auto; }
+.scroller p { margin: 0; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }

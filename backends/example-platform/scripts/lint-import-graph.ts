@@ -1,0 +1,1030 @@
+import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { join, relative, dirname, normalize } from "node:path";
+
+const root = new URL("..", import.meta.url).pathname;
+// Assemble these tokens so this checker itself remains inside the fence it enforces.
+const forbiddenParentTargets = ["." + "private", "bench" + "mark", "omi" + "-real-djz-dev-v1", "hold" + "out-v1"];
+// Path-shaped only. The bare word is ordinary vocabulary here — the ratified contract's
+// own fixture sets are called corpora — so matching it as a word banned prose, comments
+// and identifiers while catching no actual data reference. What must stay forbidden is a
+// *path* into an evaluation corpus: a trailing separator, or the bare word quoted as a
+// standalone path segment. Narrowed 2026-08-08 after it false-positived four integration
+// files; the dataset names above remain unambiguous substring matches.
+const corpusRoot = new RegExp(`${"corp" + "ora"}[/\\\\]|["'\`]${"corp" + "ora"}["'\`]`);
+const sourceExtensions = new Set([".ts", ".tsx", ".js", ".json"]);
+const skipDirectoryNames = new Set(["node_modules", "dist", ".build", ".git", ".dart_tool", ".turbo"]);
+const files = (directory: string, skipTopLevel: ReadonlySet<string> = new Set()): string[] =>
+  readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      if (entry.isDirectory()) {
+        if (skipDirectoryNames.has(entry.name) || skipTopLevel.has(entry.name)) return [];
+        return files(join(directory, entry.name));
+      }
+      return sourceExtensions.has(entry.name.slice(entry.name.lastIndexOf(".")))
+        ? [join(directory, entry.name)]
+        : [];
+    });
+
+/**
+ * THE VISIBLE-DERIVATION FENCE.
+ *
+ * Every value that can reach the wire must be derived from the AUTHORIZED
+ * PROJECTION, never from raw storage.
+ *
+ * This is not a style preference. A real authorization oracle shipped in this
+ * repo on 2026-08-08: the declared frontier (emitted in the page body) and three
+ * signed cursor bindings were derived from the SQLite loader's
+ * `coherent_snapshot_digest` and from `internal_coverage.durable.ledger_head`.
+ * Both cover rows the reader is not authorized to see, so a record hidden by
+ * policy produced different bytes than a record that never existed — publishing
+ * the existence of hidden data. Measured: digests 3ad6626b… vs 1441b306…, ledger
+ * sequence 6 vs 5.
+ *
+ * The leaking version looked entirely reasonable in review: the snapshot digest
+ * is stable, honestly named, and right there. Nothing about it reads as a
+ * security decision, which is exactly why a convention is not enough and this is
+ * a fence.
+ *
+ * Safe provenance: `projected.graph_generation`,
+ * `projected.projected_content_digest`, and anything computed purely from the
+ * visible closure. `core/` is already fenced off from `drivers/` by the rule
+ * above, so the exposure lives in composition code under `apps/`.
+ *
+ * Escape hatch, mirroring the repo's `// domain-pending(<ID>)` idiom: a genuine
+ * internal-coherence use must justify itself inline with
+ * `// storage-provenance-ok(<reason>)` on the same line. Comments are exempt
+ * wholesale — prose cannot leak a byte, and documenting why the fence exists is
+ * worth more than a grep-clean file.
+ */
+/**
+ * Widened 2026-08-08 after an audit showed the fence was narrower than the rule:
+ * a composition could emit `durable_snapshot.claims.length` under another name,
+ * pass lint, and republish hidden-row cardinality. Verified by experiment — lint
+ * stayed green while proof 6 failed. Proof 6 is the backstop, but a fence that
+ * only catches the one instance already fixed is not a ratchet.
+ *
+ * These are the loader's storage-scoped surfaces. Legitimate uses exist (the
+ * durable snapshot IS the input to the authorization boundary), and they carry
+ * an inline justification — which is the point: a reviewer sees every place
+ * storage state enters composition code.
+ */
+/**
+ * ── RULE 16: THE PORT REGISTRY ───────────────────────────────────────────────
+ *
+ * **A registered port has exactly ONE composition.** Two modules independently
+ * constructing the same port type are two implementations, not two adapters.
+ *
+ * PROVISIONAL — landed 2026-08-08. It runs immediately; it has been red-proofed
+ * and its false positives audited across `platform/` and `core-foundation/`
+ * (see `core-foundation/docs/agents/rule-16-port-registry.md`), but it is new,
+ * so if it fires on another lane that is a swarm-wide blocker, never something
+ * to route around.
+ *
+ * WHY THIS IS A FENCE AND NOT A CONVENTION. `ApplicationReadPorts` was
+ * constructed independently by the REST door (`apps/service/composition/
+ * memory-read.ts`) and the MCP door (`apps/qa/recall-service.ts`). Both were
+ * green. Both were reviewed. They disagreed on the digest scheme, the
+ * declared-frontier derivation, the coverage default and the opaque-ref codecs,
+ * and the result was measured: over ONE snapshot and ONE principal the two doors
+ * returned the SAME memory — byte-identical text, identical render hash — under
+ * DIFFERENT public item ids (`mem1_eca59618fff27e10…` vs
+ * `mem1_dd73274cc9b1a9ac…`). Every node-level cross-door assertion passed the
+ * whole time, because the divergence sat one layer below where anyone looked.
+ *
+ * OPT-IN, DELIBERATELY. A row is added when a port acquires a SECOND
+ * construction site, not before. A registry that tried to cover every port the
+ * moment it was declared would fire constantly on ordinary single-implementation
+ * code and be routed around within a day, and a routed-around guardrail is worse
+ * than none. The small, boring edit of adding a row is the ratchet.
+ *
+ * WHAT COUNTS AS A CONSTRUCTION SITE — three syntactic forms, matched on
+ * COMMENT-STRIPPED text:
+ *   `: Port = {`        an annotated binding to an object literal
+ *   `): Port =>`        a function declaring the port as its return type
+ *   `satisfies Port`    a satisfies-checked literal
+ * Casts (`as Port`) are deliberately NOT construction: a cast is how a hostile
+ * or partial value is fed to the port's own defensive checks, and banning it
+ * would ban the tests that prove those checks work.
+ *
+ * COMMENTS ARE EXEMPT WHOLESALE. This repo has already shipped a fence that
+ * banned an ordinary English word and fired on prose while catching no real
+ * reference. Prose cannot construct anything, and documenting why a port has one
+ * composition is worth more than a grep-clean file — the module header of the
+ * one registered composition names the port type five times.
+ *
+ * TESTS ARE EXEMPT. A test double is a second implementation ON PURPOSE: the
+ * port's own contract test builds hostile, partial and lookalike port records to
+ * prove the core rejects them, which is the opposite of the defect this rule
+ * exists for. A test cannot serve a user a divergent id. What the exemption
+ * gives up — "do the two doors actually agree?" — is not a fence question at
+ * all; it is an assertion, and it lives in
+ * `apps/service/composition/cross-door-identity.test.ts`.
+ *
+ * ESCAPE HATCH: a row in `PORT_COMPOSITION_HATCHES` below, keyed by (file,
+ * LINE). There is no marker, no comment, and no text to parse.
+ *
+ * IT USED TO BE A COMMENT MARKER (`// port-composition-ok(<reason>)`), and it
+ * carried the identical bug class rule 17's own comment-marker hatch did —
+ * they are the same primitive, `withoutComments()`-derived, answering the
+ * same question ("is this marker really inside a comment?") badly in the same
+ * two ways in sequence:
+ *
+ *   AUDIT-16 round 1  a bare substring search over RAW text, so
+ *                      `bannerNotAComment: "port-composition-ok(fake)"` on the
+ *                      construction line hatched it — no pre-existing hatch
+ *                      needed (`data/run-2026-08-09/AUDIT-rule16-promotion-round1.md`)
+ *   AUDIT-16 round 2  the round-1 fix made "is this a comment" mean "does
+ *                      `withoutComments()` blank this line", which is
+ *                      string-blind: `banner: "/* port-composition-ok(fake) *​/"`
+ *                      as a STRING VALUE satisfied "present raw, absent
+ *                      stripped" (`data/run-2026-08-09/AUDIT-rule16-promotion-round2.md`)
+ *
+ * Both are rule 17's own round-2 and round-3 findings, ported here one round
+ * later each time because the round-1 fix copied rule 17's round-2 fix
+ * (`b9e0c9a915`) rather than its final, post-round-5 form. Rule 17 eventually
+ * spent FOUR rounds converging toward a real lexer (`commentMask`, which
+ * round 4 then found its OWN bypass in — an unmatched backtick desyncing
+ * template-depth tracking) before round 5 concluded there is no bound short
+ * of a real lexer that is not arbitrary, and replaced the entire marker
+ * apparatus with this registry instead of shrinking the hole further. Rule 16
+ * goes straight to that end state rather than re-walking rounds 2 through 4
+ * a third time.
+ *
+ * KEYED BY LINE, NOT BY FILE, same reasoning as `WIRE_PATH_HATCHES`: a
+ * file-keyed table would silently reopen round 1 (rule 17's round 1, the
+ * SAME class as AUDIT-16 round 1 above), because rule 16's subject is a
+ * specific composition SITE and one file may legitimately hold several
+ * unrelated ports.
+ *
+ * KNOWN, NAMED, DATED RESIDUAL LIMIT (2026-08-09), carried over rather than
+ * chased this round: rule 17's own round-6 audit found that line-keying
+ * conflates "this line is exempt" with "this construction is exempt" — two
+ * independent constructions sharing one physical line share one hatch key,
+ * because `serverSites`/`portConstructionSites` below records EXISTENCE per
+ * line via `.some(...)`, not a count. Rule 17 closed this for itself in a
+ * later round (the two-constructions-on-one-line ambiguity check); rule 16
+ * inherits the identical structural gap and does not close it here — doing
+ * so was not what this round's finding asked for, and inventing it
+ * unreviewed would be exactly the scope creep the coordinator's "pick one, do
+ * not invent a third" instruction warns against. No file in the tree today
+ * writes two port constructions on one physical line (checked); this is a
+ * gap for a future round, not a theoretical shrug.
+ */
+interface PortRegistryRow {
+  readonly portType: string;
+  /** Paths, relative to the platform root, allowed to construct this port. */
+  readonly composedIn: readonly string[];
+  readonly reason: string;
+}
+const PORT_REGISTRY: readonly PortRegistryRow[] = [
+  {
+    portType: "ApplicationReadPorts",
+    composedIn: ["apps/service/composition/memory-read.ts"],
+    reason:
+      "The REST and MCP doors both read through this port. Two compositions minted "
+      + "different public item ids for the same memory; the transports "
+      + "(apps/mcp/protocol.ts, apps/service/routes/memories.ts) stay separate, "
+      + "everything below them is shared.",
+  },
+  {
+    portType: "TasksReadPorts",
+    composedIn: ["apps/service/composition/tasks-read.ts"],
+    reason:
+      "Registered on the FIRST construction site rather than the second, which is a "
+      + "deliberate departure from this registry's opt-in default and is fable's call, "
+      + "not the lane's (R8: the tasks read gets \"its own composition/tasks-read.ts as "
+      + "the ONE construction site for its ports, with its own PORT_REGISTRY row\"). The "
+      + "default exists so the registry does not fire on ordinary single-implementation "
+      + "code; it is overridden here because this is the night\u2019s largest new surface, "
+      + "the write door and the read door already share the store beneath it, and the "
+      + "measured cost of discovering a second composition after the fact was one memory "
+      + "served under two different public ids with every assertion green.",
+  },
+  {
+    portType: "ConversationsReadPorts",
+    composedIn: ["apps/service/composition/conversations-read.ts"],
+    reason:
+      "Registered on the first construction site. Conversations share the HMAC cursor "
+      + "module and completeness discipline with tasks, but item ids are storage ids "
+      + "already served — a second composition would mint different cursor bindings "
+      + "for the same rows.",
+  },
+  {
+    portType: "FoldersReadPorts",
+    composedIn: ["apps/service/composition/folders-read.ts"],
+    reason:
+      "Registered on the first construction site. Folders share the cursor module with "
+      + "conversations and must not grow a second construction that would bind the "
+      + "same ingest sequence under different reader codecs.",
+  },
+  {
+    portType: "AuthorizedSourceImpactReader",
+    composedIn: ["apps/service/composition/source-impact.ts"],
+    reason:
+      "Source-impact final authorization, coherent graph/product loading, and reader-scoped "
+      + "cursor codecs must remain one operation. Routes and QA callers import this reader "
+      + "instead of assembling a second path with weaker revocation or cursor semantics.",
+  },
+  {
+    portType: "ConsolidationWorkService",
+    composedIn: ["apps/service/workers/consolidation-work-service.ts"],
+    reason:
+      "Promotion, identity-cluster, predicate-batch, and derived-group dream work must share "
+      + "the durable result, replay, lease, and atomic-success path. Semantic workers inject "
+      + "sealed adapters into this one composition; routes never assemble or invoke the "
+      + "generic runner directly.",
+  },
+];
+/**
+ * Port-composition sites exempted from rule 16. Keyed by (file, 1-indexed
+ * line), exactly `WIRE_PATH_HATCHES`'s shape. A stale row — one whose line no
+ * longer holds a registered-port construction — is itself a failure,
+ * symmetric with a stale `composedIn` path: a registry row that has quietly
+ * stopped describing reality disables a fence silently.
+ *
+ * Empty today: no file in the tree carries a legitimate second composition
+ * (checked, `data/run-2026-08-09/AUDIT-rule16-promotion-round2.md`'s blast-
+ * radius note) — this migration changes nothing about existing behavior, only
+ * what a rogue construction can hide behind.
+ */
+interface PortCompositionHatchRow {
+  /** Path relative to the platform root, exactly as the checker reports it. */
+  readonly file: string;
+  /** 1-indexed line of the port construction being exempted. */
+  readonly line: number;
+  readonly reason: string;
+}
+const PORT_COMPOSITION_HATCHES: readonly PortCompositionHatchRow[] = [];
+/**
+ * ── RULE 17: THE WIRE-PATH FENCE ─────────────────────────────────────────────
+ *
+ * **A settled wire path is SERVED by exactly one route module.** A file that
+ * both stands up an HTTP server and names a registered wire path in code must
+ * reach that path through the registered route module — it may not answer the
+ * path itself.
+ *
+ * PROVISIONAL — landed 2026-08-08 with the W4 rebuild. Per §8 it runs
+ * immediately and is PROVISIONAL until a NON-AUTHOR has read it against the
+ * English statement above and audited its false positives. If it fires on
+ * another lane, that is a swarm-wide blocker, never something to route around.
+ *
+ * WHY RULE 16 COULD NOT SEE THE DEFECT THIS EXISTS FOR. Rule 16 keys on
+ * REGISTERED PORT TYPES. `integration/server/serve.ts` answered `/v1/memories`
+ * — the settled client recall route — from a hand-rolled handler over a
+ * hand-rolled `McpProtocolPorts`. It
+ * composed no registered port, so it was invisible to rule 16 BY
+ * CONSTRUCTION, and the checker was green the entire time the door was serving
+ * raw fixture row ids as public item ids. A door that composes nothing
+ * registered is exactly the door a port registry cannot see; the wire path is
+ * the coordinate that catches it. (fable, W4: "key the fence on the wire path
+ * as well as the port type".)
+ *
+ * WHAT TRIGGERS IT — BOTH halves, on COMMENT-STRIPPED text:
+ *   1. the file constructs an HTTP server (`Bun.serve(`, `new Hono(`,
+ *      `Deno.serve(`, `createServer(`), AND
+ *   2. it names a registered wire path.
+ * A file that only CALLS the path is a client, not a door, and is not the
+ * defect class: `apps/service/bin/boot-acceptance.ts` fetches `/v1/memories`
+ * all day and can never serve anyone a divergent id.
+ *
+ * WHAT SATISFIES IT: being the registered route module itself, or importing it
+ * (directly, or through a server factory registered in `boundVia`). That is
+ * deliberately an IMPORT check rather than a behavioural one — a pin on
+ * behaviour is rule 16's rejected alternative restated one layer up, and the
+ * W4 ruling rejected it again for exactly this door.
+ *
+ * COMMENTS ARE EXEMPT WHOLESALE, and TESTS ARE EXEMPT — same reasons as rule
+ * 16. Prose cannot serve a byte, and a test double is a second implementation
+ * on purpose. Whether the doors actually agree is an assertion, not a fence
+ * question, and it lives in
+ * `integration/adversarial/cross-door-identity.test.ts`.
+ *
+ * ESCAPE HATCH: a row in `WIRE_PATH_HATCHES` below, keyed by (file, LINE).
+ * There is no marker, no comment, and no text to parse.
+ *
+ * IT USED TO BE A COMMENT MARKER, and four rounds of non-author audit found four
+ * working bypasses in it, each one the same question — *is this marker really
+ * inside a comment?* — answered a little better and broken again:
+ *
+ *   round 1  the marker was file-wide, so one legitimate hatch made the whole
+ *            file a permanent blind spot for every server added to it later
+ *   round 2  a bare substring search, so `banner: "wire-path-ok(fake)"` on the
+ *            construction line hatched it — no pre-existing hatch needed
+ *   round 3  `withoutComments` is string-blind, so `"/* wire-path-ok(fake) *​/"`
+ *            as a STRING VALUE satisfied "present raw, absent stripped"
+ *   round 4  the comment scanner tracked template literals but not `${…}` DEPTH,
+ *            so an unmatched backtick desynced it — and the proof type-checked
+ *
+ * Every fix was correct and every one left a smaller hole. That is convergence
+ * toward a real lexer, written to guard the mechanism whose entire job is to
+ * SWITCH A FENCE OFF. The audit's ruling, and it is right: there is no bound
+ * short of a real lexer that is not arbitrary, and "we stopped finding bypasses"
+ * is the specific failure mode this program exists to catch, not a stopping
+ * condition.
+ *
+ * So the exemption stops being text. To exempt a construction site you edit this
+ * file, which is a visible diff in the one file everybody already watches.
+ *
+ * KEYED BY LINE, NOT BY FILE — and this is not a detail. A file-keyed table would
+ * be correct for rule 16 ("one module owns this port's composition" is naturally
+ * a per-file question) and would silently REOPEN ROUND 1 here, because rule 17's
+ * subject is a specific HTTP server instance and one file may legitimately hold
+ * several unrelated ones.
+ *
+ * The locality cost is real and was accepted with eyes open: the justification no
+ * longer sits beside the code it justifies. A short pointer comment at the site
+ * keeps a reader oriented, and it is deliberately NOT read by this checker — a
+ * comment that does no work cannot be forged into doing any.
+ */
+interface WirePathRegistryRow {
+  /** The settled path, spelled exactly as the route registers it. */
+  readonly wirePath: string;
+  /** The one module that owns this path's request handling. */
+  readonly servedBy: string;
+  /**
+   * Import-specifier fragments that count as reaching the registered route:
+   * the route module itself, plus the server factories that mount it.
+   */
+  readonly boundVia: readonly string[];
+  readonly reason: string;
+}
+const WIRE_PATH_REGISTRY: readonly WirePathRegistryRow[] = [
+  {
+    wirePath: "/v1/memories",
+    servedBy: "apps/service/routes/memories.ts",
+    boundVia: ["routes/memories", "app-facing"],
+    reason:
+      "The integration harness served this path from a hand-rolled handler that minted "
+      + "public item ids from raw fixture row ids, while the registered route minted "
+      + "reader-scoped opaque refs. Both were green; the harness was the door humans "
+      + "dogfooded. Rule 16 could not see it because it composed no registered port.",
+  },
+  {
+    wirePath: "/v1/tasks/ops",
+    servedBy: "apps/service/routes/tasks-ops.ts",
+    boundVia: ["routes/tasks-ops", "app-facing"],
+    reason:
+      "The ratified write wire (ruling B4) on the first writable domain (B6). It was "
+      + "served by a harness before it was served by the app, and that harness answered "
+      + "an admitted write with a placeholder that touched no record — so a door that "
+      + "APPLIED nothing was the only door anybody could point a test at. One route "
+      + "module owns this path now; a second would put the epoch fence, the write_id "
+      + "registry and the straggler table in two places at once.",
+  },
+  {
+    wirePath: "/v1/tasks",
+    servedBy: "apps/service/routes/tasks-read.ts",
+    boundVia: ["routes/tasks-read", "app-facing"],
+    reason:
+      "The ratified tasks READ wire (DAVID-tasks-read-epoch-and-ci D1/D2). It reads out "
+      + "of the same store /v1/tasks/ops applies into, so a second door answering this "
+      + "path would serve the same record under a different public id than the one the "
+      + "write door\u2019s own replay reports \u2014 the exact divergence rule 17 exists for, and "
+      + "the one already measured once when a hand-rolled harness served /v1/memories "
+      + "with raw fixture row ids as public item ids while the registered route minted "
+      + "reader-scoped opaque refs. Both were green. It is also the surface D3 will ride "
+      + "the account epoch on, which makes a second, unregistered door a place an epoch "
+      + "could reach a caller without authority over the account.",
+  },
+  {
+    wirePath: "/v1/stm-notes/ops",
+    servedBy: "apps/service/routes/stm-notes.ts",
+    boundVia: ["routes/stm-notes", "app-facing"],
+    reason:
+      "The HTTP write door for user-asserted STM notes. Memories stays read-only "
+      + "(POST /v1/memories/ops remains 422). A second door answering this path would "
+      + "duplicate the epoch fence, write_id registry, and ledger-write authorization "
+      + "that this route already composes.",
+  },
+];
+/**
+ * Server-construction sites exempted from rule 17. Keyed by (file, 1-indexed
+ * line). There are no live exemptions today; every current server site is
+ * checked. If a future bounded harness genuinely needs one, a stale row — one
+ * whose line no longer holds a server construction — is itself a failure,
+ * symmetric with `servedBy` and `composedIn`, because a registry row that has
+ * quietly stopped describing reality disables a fence silently.
+ */
+interface WirePathHatchRow {
+  /** Path relative to the platform root, exactly as the checker reports it. */
+  readonly file: string;
+  /** 1-indexed line of the server construction being exempted. */
+  readonly line: number;
+  readonly reason: string;
+}
+const WIRE_PATH_HATCHES: readonly WirePathHatchRow[] = [];
+/**
+ * `code.includes("/v1/memories")` also matches `/v1/memories-legacy-export`,
+ * which is a DIFFERENT route that merely starts with the registered one. Found
+ * by the non-author audit, which built the collision rather than assuming it.
+ * No such path exists in the tree today; the check is here so the first one
+ * added does not arrive as a mystery failure in an unrelated file.
+ *
+ * A trailing `/` still counts as the same path — `/v1/memories/` is the
+ * registered route's own trailing-slash case, which the real route answers 404
+ * and a rogue door might answer 200. Exempting it would exempt a real defect.
+ */
+const namesWirePath = (code: string, wirePath: string): boolean => {
+  let from = 0;
+  for (;;) {
+    const at = code.indexOf(wirePath, from);
+    if (at < 0) return false;
+    const next = code[at + wirePath.length];
+    if (next === undefined || !/[A-Za-z0-9_-]/.test(next)) return true;
+    from = at + 1;
+  }
+};
+/**
+ * Anything that means "a server lives here" for DETECTION purposes. `new Hono(`
+ * belongs: a router carrying the path is the door, whoever binds it.
+ */
+const serverConstructionPatterns: readonly RegExp[] = [
+  /\bBun\.serve\s*\(/,
+  /\bDeno\.serve\s*\(/,
+  /\bnew\s+Hono\s*\(/,
+  /\bcreateServer\s*\(/,
+];
+
+/**
+ * The subset that actually BINDS A SOCKET — and the distinction is load-bearing
+ * for counting, not for detection.
+ *
+ * `new Hono(` constructs a router VALUE. It opens nothing; something else binds
+ * it, and `Bun.serve({ fetch: new Hono().fetch })` is the ordinary way to write
+ * that. On one line it matches two patterns, so a naive count says "two servers"
+ * about a file containing exactly one. The round-6 fix did precisely that, and
+ * the round-7 audit caught it: an unconditional check, firing on working code,
+ * anywhere in `platform/` — not even scoped to files that name a wire path.
+ *
+ * That is the failure this repo has already shipped once, in a fence that banned
+ * an ordinary English word and fired on prose while catching no real reference.
+ * A guard that fires on ordinary code gets routed around, and a routed-around
+ * guardrail is worse than none.
+ *
+ * Two independent SOCKET BINDS on one line still has no ordinary explanation and
+ * still fails.
+ */
+const socketBindPatterns: readonly RegExp[] = [
+  /\bBun\.serve\s*\(/,
+  /\bDeno\.serve\s*\(/,
+  /\bcreateServer\s*\(/,
+];
+
+const portConstructionPatterns = (portType: string): readonly RegExp[] => [
+  new RegExp(`:\\s*${portType}\\s*=\\s*\\{`),
+  new RegExp(`\\)\\s*:\\s*${portType}\\s*=>`),
+  new RegExp(`\\bsatisfies\\s+${portType}\\b`),
+];
+
+const storageProvenanceIdentifiers = [
+  "coherent_snapshot_digest",
+  "internal_coverage",
+  "ledger_head",
+  "durable_snapshot",
+  "stm_rows",
+  "graph_heads",
+  "eligible_items",
+  "scan_ceiling",
+];
+const storageProvenanceAllowMarker = "storage-provenance-ok(";
+
+const queryEvaluationCompositionRoot = "apps/service/composition/memory-query-evaluation.ts";
+const memoryRecallKernelCompositionRoot = "apps/service/composition/memory-recall-kernel.ts";
+const authorizedLedgerContextCompositionRoots = new Set([
+  "apps/service/auth/firebase-application-authorization.ts",
+  "apps/service/auth/local-application-authorization.ts",
+]);
+const externallyAuthorizedProjectionOwner = "drivers/postgres/firebase-authorized-graph-snapshot-runtime.ts";
+const memoryExportRuntimeOwner = "drivers/postgres/firebase-authorized-memory-export-runtime.ts";
+const sourceImpactCompositionRoot = "apps/service/composition/source-impact.ts";
+const sourceImpactCodecModule = "apps/service/codecs/opaque-refs.ts";
+const durableWorkRunnerImporters = new Set([
+  "apps/service/workers/durable-memory-work-runner.test.ts",
+  "apps/service/workers/formation-work-service.ts",
+  "apps/service/workers/derived-group-dream-work-service.ts",
+  "apps/service/workers/consolidation-work-service.ts",
+]);
+const queryEvaluationInternalImporters = new Set([
+  queryEvaluationCompositionRoot,
+  memoryRecallKernelCompositionRoot,
+  "apps/service/workers/memory-owner-query-evidence-source.ts",
+  "apps/service/workers/memory-authorized-query-grounding-producer.ts",
+  "apps/service/workers/memory-paired-query-grounding-coordinator.ts",
+]);
+const queryEvaluationLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*memory-(?:owner-query-evidence-source|authorized-query-grounding-producer|paired-query-grounding-coordinator)(?:\.ts)?["']/;
+const sourceImpactLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/source-impact(?:\.ts)?["']/;
+const durableWorkRunnerLowLevelImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/durable-memory-work-runner(?:\.ts)?["']/;
+const consolidationWorkServiceImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/consolidation-work-service(?:\.ts)?["']/;
+const productProjectionMaterializerImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*workers\/product-projection-materialization(?:\.ts)?["']/;
+const productConflictCoreImport = /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)["'][^"']*core\/retrieve\/product-conflict(?:\.ts)?["']/;
+const authorizedPostgresConnectionCapability = /\b(?:withAuthorizedSerializableConnectionTransaction|AuthorizedPostgresConnectionTransaction|appendAuthoritativeLedgerWithinTransaction)\b/;
+const modelPipelineAdmissionOwner = "apps/service/workers/model-pipeline-resource-admission.ts";
+const postgresModelPipelineOwner = "drivers/postgres/model-pipeline-exclusivity.ts";
+const rawModelPipelineAdmissionConstruction = /\b(?:defineModelPipelineResourceAdmission|bindModelPipelineResourceAdmission)\b/;
+
+/** Blank out comments so documentation of the fence does not trip the fence. */
+const withoutComments = (text: string): string => text
+  .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, " "))
+  .replace(/(^|[^:])\/\/[^\n]*/g, (match, lead: string) => lead + " ".repeat(match.length - lead.length));
+
+const failures: string[] = [];
+/** Rule 16 bookkeeping: which registered rows were seen constructed, and where. */
+const portConstructionSites = new Map<string, string[]>(
+  PORT_REGISTRY.map((row) => [row.portType, []]),
+);
+/** Rule 17 bookkeeping: whether each registered path was seen in its own route module. */
+const wirePathServedBySeen = new Set<string>();
+for (const file of files(root, new Set(["frontend"]))) {
+  const text = readFileSync(file, "utf8");
+  const shown = relative(root, file);
+  if (shown.startsWith("core/") && /from\s+["'][^"']*drivers\//.test(text)) {
+    failures.push(`${shown}: core may not import drivers`);
+  }
+  if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
+    const code = withoutComments(text);
+    if (shown !== "apps/service/auth/authorized-context-internal.ts"
+      && !authorizedLedgerContextCompositionRoots.has(shown)
+      && /\bcreateAuthorizedLedgerWriteContextIssuer\b/.test(code)) {
+      failures.push(
+        `${shown}: only the auth authority module may construct an authorized ledger context issuer; `
+        + "future activation must add one reviewed auth-composition seam to this fence",
+      );
+    }
+    if (shown !== "apps/service/auth/authorized-context.ts"
+      && !authorizedLedgerContextCompositionRoots.has(shown)
+      && shown !== "scripts/lint-import-graph.ts"
+      && /["'][^"']*authorized-context-internal(?:\.ts)?["']/.test(code)) {
+      failures.push(
+        `${shown}: the ledger context minting module is private to the public validation facade; `
+        + "future activation must add one reviewed auth-composition seam to this path fence",
+      );
+    }
+    if (shown !== "core/retrieve/authorization-boundary.ts"
+      && shown !== externallyAuthorizedProjectionOwner
+      && /\bprojectApplicationDefaultReadTreeInputFromAuthorizationEvidence\b/.test(code)) {
+      failures.push(
+        `${shown}: externally authorized projection evidence is private to ${externallyAuthorizedProjectionOwner}; `
+        + "consume the sealed Firebase/PostgreSQL product-read runtime instead",
+      );
+    }
+    if (shown !== externallyAuthorizedProjectionOwner
+      && shown !== memoryExportRuntimeOwner
+      && shown !== "scripts/lint-import-graph.ts"
+      && /\bcreatePostgresFirebaseAuthorizedGraphSnapshotRuntimeForCapability\b/.test(code)) {
+      failures.push(
+        `${shown}: capability-selecting graph authorization is private to the sealed memory export runtime`,
+      );
+    }
+    if (shown.startsWith("apps/")
+      && /from\s+["'][^"']*drivers\/postgres\/(?:connection|transaction)["']/.test(code)) {
+      failures.push(
+        `${shown}: application code may not import the raw PostgreSQL connection/transaction capability; `
+        + "compose only the sealed authoritative repository adapter",
+      );
+    }
+    if (shown !== modelPipelineAdmissionOwner
+      && shown !== postgresModelPipelineOwner
+      && shown !== "scripts/lint-import-graph.ts"
+      && rawModelPipelineAdmissionConstruction.test(code)) {
+      failures.push(
+        `${shown}: raw model-pipeline admission is private to the parser-verified PostgreSQL composition; `
+        + "production workers must consume its admitted exclusivity capability",
+      );
+    }
+    if (shown.startsWith("drivers/postgres/")
+      && shown !== postgresModelPipelineOwner
+      && /\bdefineModelPipelineExclusivity\b/.test(code)) {
+      failures.push(
+        `${shown}: PostgreSQL model-pipeline exclusivity must be constructed from a parser-minted production qualification manifest`,
+      );
+    }
+    if (shown !== "scripts/lint-import-graph.ts"
+      && shown !== "drivers/postgres/transaction.ts"
+      && shown !== "drivers/postgres/authoritative-ledger-repository.ts"
+      && shown !== "drivers/postgres/authoritative-graph-snapshot.ts"
+      && shown !== "drivers/postgres/durable-memory-work-acceptance.ts"
+      && shown !== "drivers/postgres/durable-memory-work-execution.ts"
+      && shown !== "drivers/postgres/durable-memory-work-backlog.ts"
+      && shown !== "drivers/postgres/durable-memory-work-result.ts"
+      && shown !== "drivers/postgres/durable-memory-work-success.ts"
+      && shown !== "drivers/postgres/formation-work-input.ts"
+      && shown !== "drivers/postgres/predicate-batch-work-input.ts"
+      && shown !== "drivers/postgres/derived-group-dream-work-input.ts"
+      && shown !== "drivers/postgres/derived-group-recall-read.ts"
+      && shown !== "drivers/postgres/product-projection-repository.ts"
+      && shown !== "drivers/postgres/legacy-proposition-migration-repository.ts"
+      && shown !== "drivers/postgres/memory-experiment-repository.ts"
+      && shown !== "drivers/postgres/memory-query-evaluation-source.ts"
+      && shown !== "drivers/postgres/listen-finalization-repository.ts"
+      && shown !== "drivers/postgres/listen-formation-outbox.ts"
+      && shown !== "drivers/postgres/listen-attribution-belief-input.ts"
+      && authorizedPostgresConnectionCapability.test(code)) {
+      failures.push(
+        `${shown}: the authorized raw PostgreSQL connection capability is private to the sealed ledger adapters`,
+      );
+    }
+    if (!queryEvaluationInternalImporters.has(shown) && queryEvaluationLowLevelImport.test(code)) {
+      failures.push(
+        `${shown}: low-level query-evaluation constructors are private to ${queryEvaluationCompositionRoot}; `
+        + "import the registered composition root instead of assembling a parallel grounded or ungrounded path",
+      );
+    }
+    if (shown.startsWith("apps/")
+      && shown !== sourceImpactCompositionRoot
+      && shown !== sourceImpactCodecModule
+      && sourceImpactLowLevelImport.test(code)) {
+      failures.push(
+        `${shown}: source-impact core is private to ${sourceImpactCompositionRoot}; `
+        + "import the registered reader instead of bypassing its final authorization fence",
+      );
+    }
+    if (shown.startsWith("apps/")
+      && !durableWorkRunnerImporters.has(shown)
+      && durableWorkRunnerLowLevelImport.test(code)) {
+      failures.push(
+        `${shown}: durable work runner is private to registered work-service compositions; `
+        + "inject a sealed semantic adapter or import the registered work service",
+      );
+    }
+    if (shown.startsWith("apps/service/routes/") && consolidationWorkServiceImport.test(code)) {
+      failures.push(
+        `${shown}: consolidation work is worker-only; routes cannot import its service or adapters`,
+      );
+    }
+    if (shown.startsWith("apps/service/routes/") && productProjectionMaterializerImport.test(code)) {
+      failures.push(
+        `${shown}: product projection materialization is worker-only; routes consume authorized projections through the registered read composition`,
+      );
+    }
+    if (shown.startsWith("apps/") && productConflictCoreImport.test(code)) {
+      failures.push(
+        `${shown}: product conflict references are internal structural records; no application composition, route, or public lifecycle is ratified`,
+      );
+    }
+  }
+
+  // ── Rule 16: a registered port has exactly one composition ────────────────
+  if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
+    const codeLines = withoutComments(text).split("\n");
+    // No text is consulted. A site is exempt iff this file declares it, by
+    // line — see the registry's own header for AUDIT-16 rounds 1 and 2, the
+    // two comment-marker bypasses this replaces rather than patches further.
+    const hatched = (index: number): boolean =>
+      PORT_COMPOSITION_HATCHES.some((row) => row.file === shown && row.line === index + 1);
+
+    /** Every line in THIS file where a registered port's construction pattern matched, across all rows. */
+    const matchedIndices = new Set<number>();
+    for (const row of PORT_REGISTRY) {
+      const patterns = portConstructionPatterns(row.portType);
+      codeLines.forEach((line, index) => {
+        if (!patterns.some((pattern) => pattern.test(line))) return;
+        portConstructionSites.get(row.portType)!.push(shown);
+        matchedIndices.add(index);
+        if (row.composedIn.includes(shown) || hatched(index)) return;
+        failures.push(
+          `${shown}:${index + 1}: second composition of registered port \`${row.portType}\`. `
+          + `A registered port has exactly ONE composition (rule 16); this one lives in `
+          + `${row.composedIn.join(", ")}. ${row.reason} `
+          + `Call the registered composition instead of building a parallel one. If this `
+          + `genuinely is not a second implementation, add a row to PORT_COMPOSITION_HATCHES `
+          + `in scripts/lint-import-graph.ts keyed by (file, line).`,
+        );
+      });
+    }
+
+    // A hatch row that no longer names a port construction has silently
+    // stopped exempting anything — or worse, is exempting a line that moved.
+    // Symmetric with a stale `composedIn` path: a registry row that has
+    // quietly stopped describing reality disables a fence silently.
+    for (const row of PORT_COMPOSITION_HATCHES) {
+      if (row.file !== shown) continue;
+      if (matchedIndices.has(row.line - 1)) continue;
+      failures.push(
+        `${shown}:${row.line}: stale PORT_COMPOSITION_HATCHES row — no registered port composition `
+        + `is constructed here. A hatch that has stopped describing reality disables a fence `
+        + `silently. Move the row to the construction's current line, or delete it.`,
+      );
+    }
+  }
+  // ── Rule 17: a settled wire path is served by exactly one route module ────
+  if (/\.tsx?$/.test(shown) && !/\.test\.tsx?$/.test(shown)) {
+    const code = withoutComments(text);
+    const codeLines = code.split("\n");
+
+    // Every line that stands up a server. The hatch is judged against each of
+    // these, not against the file, so one justified server cannot exempt the
+    // next one somebody adds.
+    /**
+     * Matches per line, not merely whether a line matches. `(file, line)` is the
+     * hatch's key, so a line holding TWO constructions has one entry and one
+     * exemption covering both — a row written for a legitimate server would also
+     * cover an unrelated rogue one sharing its line. Found by the round-6 audit,
+     * demonstrated against a future hatched file, lint green.
+     */
+    const constructionsOn = (line: string): number =>
+      socketBindPatterns.reduce(
+        (total, pattern) => total + (line.match(new RegExp(pattern.source, "g")) ?? []).length,
+        0,
+      );
+    const serverSites = codeLines
+      .map((line, index) => (serverConstructionPatterns.some((p) => p.test(line)) ? index : -1))
+      .filter((index) => index >= 0);
+
+    // Two constructions on one line is ALWAYS a failure, hatch or no hatch. The
+    // registry's safety property assumes one line, one construction, and nothing
+    // was checking that assumption. Removing the ambiguity beats patching around
+    // it — the same reasoning that replaced the comment marker with this table.
+    /**
+     * Unbound routers, counted separately. Round 7 narrowed the ambiguity check
+     * to socket binds — correct, because a router nested inside its own binder's
+     * call is not a second server. But `serverSites` still detects on all four
+     * patterns, so two independent, UNBOUND `new Hono(` calls on one line
+     * collapsed to a single site with no socket bind to count, reopening round
+     * 6's class at exactly the seam round 7 left open.
+     *
+     * Only when there is no socket bind on the line: with one present, the
+     * router is overwhelmingly its argument, which is the case round 7 exists to
+     * permit.
+     */
+    const routersOn = (line: string): number =>
+      (line.match(/\bnew\s+Hono\s*\(/g) ?? []).length;
+    const ambiguousSiteCount = (line: string): number => {
+      const binds = constructionsOn(line);
+      return binds > 0 ? binds : routersOn(line);
+    };
+    /**
+     * SCOPE, and this is the root rounds 7 and 8 each patched a symptom of.
+     *
+     * The ambiguity check exists to protect `WIRE_PATH_HATCHES`, whose key is
+     * (file, line). A file that names no registered wire path can never hold a
+     * hatch row, so it has nothing to protect — and running the check there made
+     * it an unconditional, tree-wide gate that twice fired on ordinary code
+     * (round 7: a router and its binder; round 9: two plain router declarations).
+     *
+     * Both fixes narrowed WHICH PATTERNS COUNT. Neither narrowed WHERE THE CHECK
+     * RUNS, so the same shape recurred through whatever the last fix added, and
+     * the next framework pattern anyone registers would have reopened it a third
+     * time. Gating on relevance ends the class rather than the instance.
+     *
+     * `live-server.ts` stays in scope — it names the path as a client call — so
+     * round 6's protection is unaffected.
+     */
+    const fileNamesARegisteredPath = WIRE_PATH_REGISTRY.some(
+      (row) => namesWirePath(code, row.wirePath),
+    );
+    for (const index of fileNamesARegisteredPath ? serverSites : []) {
+      if (ambiguousSiteCount(codeLines[index] ?? "") < 2) continue;
+      failures.push(
+        `${shown}:${index + 1}: two HTTP servers are constructed on one line. `
+        + `WIRE_PATH_HATCHES is keyed by (file, line), so a single exemption would `
+        + `cover both — including one nobody justified. Put each construction on `
+        + `its own line.`,
+      );
+    }
+
+    /**
+     * No text is consulted. A site is exempt iff this file declares it, by
+     * line. The registry is empty in the current tree, so every server site is
+     * unhatched; the explicit lookup keeps a future bounded exemption scoped to
+     * its one construction.
+     */
+    const hatchedAt = (index: number): boolean =>
+      WIRE_PATH_HATCHES.some((row) => row.file === shown && row.line === index + 1);
+
+    // A hatch row that no longer names a server construction has silently stopped
+    // exempting anything — or worse, is exempting a line that moved. Same
+    // treatment as a stale `servedBy` or `composedIn`: say so, loudly.
+    for (const row of WIRE_PATH_HATCHES) {
+      if (row.file !== shown) continue;
+      if (serverSites.includes(row.line - 1)) continue;
+      failures.push(
+        `${shown}:${row.line}: stale WIRE_PATH_HATCHES row — no server is constructed here. `
+        + `A hatch that has stopped describing reality disables a fence silently. `
+        + `Move the row to the construction's current line, or delete it.`,
+      );
+    }
+
+    const unhatchedSite = serverSites.find((index) => !hatchedAt(index));
+    const standsUpAServer = serverSites.length > 0;
+    for (const row of WIRE_PATH_REGISTRY) {
+      if (shown === row.servedBy && namesWirePath(code, row.wirePath)) {
+        wirePathServedBySeen.add(row.wirePath);
+      }
+      if (!standsUpAServer || !namesWirePath(code, row.wirePath)) continue;
+      if (shown === row.servedBy || unhatchedSite === undefined) continue;
+      const reachesRegisteredRoute = row.boundVia.some((specifier) =>
+        new RegExp(`from\\s+["'][^"']*${specifier}["']`).test(code));
+      if (reachesRegisteredRoute) continue;
+      failures.push(
+        `${shown}:${unhatchedSite + 1}: stands up an HTTP server and names the registered wire path `
+        + `\`${row.wirePath}\` without reaching its registered route module `
+        + `(${row.servedBy}). A settled wire path is SERVED by exactly one route module `
+        + `(rule 17). ${row.reason} `
+        + `Import and register the real route instead of answering the path here. If THIS `
+        + `server genuinely does not serve that path, add a row to WIRE_PATH_HATCHES in `
+        + `scripts/lint-import-graph.ts keyed by (file, line). The hatch is per `
+        + `construction site, not per file: a file-wide one would exempt the next server `
+        + `somebody adds here.`,
+      );
+    }
+  }
+
+  // The fence protects WIRE COMPOSITION. Two exemptions, both principled rather
+  // than convenient:
+  //
+  //  - Type declarations. An `interface CoherentQaLoad { … internal_coverage … }`
+  //    describes the SHAPE of the loader's output; no value flows and nothing can
+  //    reach a client. Firing there produced six markers whose only honest reason
+  //    would have been "this is a type", which trains people to mark reflexively
+  //    and destroys the signal.
+  //  - Test files. A test asserting the loader's own output is exactly where
+  //    referencing storage internals is correct, and a test cannot ship a leak.
+  //
+  // Everything else under apps/ is composition and stays fenced.
+  const isTestFile = /\.test\.tsx?$/.test(shown);
+  if (shown.startsWith("apps/") && !isTestFile) {
+    // Identifiers are matched on the comment-stripped text; the allow marker is
+    // matched on the ORIGINAL line, because the marker itself is a comment and
+    // stripping first would make it permanently unfindable. Accepted either
+    // trailing on the same line or on the line immediately above, since the
+    // justified expressions are often too long for a trailing comment.
+    const rawLines = text.split("\n");
+    const lines = withoutComments(text).split("\n");
+    // Blank out `interface X { … }` / `type X = { … }` bodies by brace balance,
+    // so a declaration cannot trip a fence about values.
+    let typeDepth = 0;
+    let inTypeDeclaration = false;
+    const typeLines = lines.map((line) => {
+      if (!inTypeDeclaration && /^\s*(export\s+)?(declare\s+)?(interface|type)\s+\w/.test(line)) {
+        inTypeDeclaration = true;
+        typeDepth = 0;
+      }
+      if (!inTypeDeclaration) return line;
+      const opens = (line.match(/\{/g) ?? []).length;
+      const closes = (line.match(/\}/g) ?? []).length;
+      typeDepth += opens - closes;
+      const terminates = (typeDepth <= 0 && (closes > 0 || /;\s*$/.test(line) || /^\s*type\s+\w+\s*=\s*[^{]+;/.test(line)));
+      if (terminates) inTypeDeclaration = false;
+      return "";
+    });
+    const justified = (index: number): boolean =>
+      (rawLines[index] ?? "").includes(storageProvenanceAllowMarker)
+      || (rawLines[index - 1] ?? "").includes(storageProvenanceAllowMarker);
+    typeLines.forEach((line, index) => {
+      if (justified(index)) return;
+      for (const identifier of storageProvenanceIdentifiers) {
+        if (line.includes(identifier)) {
+          failures.push(
+            `${shown}:${index + 1}: storage-provenance value \`${identifier}\` in wire-composition code. `
+            + "Everything reaching the wire must derive from the authorized projection "
+            + "(projected.graph_generation / projected.projected_content_digest), never raw storage. "
+            + "If this is a genuine internal-coherence use, justify it with "
+            + "// storage-provenance-ok(<reason>) on this line.",
+          );
+        }
+      }
+    });
+  }
+  if (forbiddenParentTargets.some((target) => text.includes(target)) || corpusRoot.test(text)) {
+    failures.push(`${shown}: prohibited corpus path reference`);
+  }
+}
+// A row whose declared composition no longer constructs the port is a STALE row,
+// and a stale row silently disables the rule for that port — the failure mode
+// the wire-seam registry calls "the selector is probably stale". Fail on it.
+for (const row of PORT_REGISTRY) {
+  const seen = portConstructionSites.get(row.portType) ?? [];
+  for (const declared of row.composedIn) {
+    if (!seen.includes(declared)) {
+      failures.push(
+        `PORT_REGISTRY row \`${row.portType}\` declares ${declared} as its composition, `
+        + "but no construction site was found there. Either the composition moved (update the "
+        + "row) or the port is no longer composed (delete the row) — a stale row silently "
+        + "disables rule 16 for this port.",
+      );
+    }
+  }
+}
+
+// Same staleness rule as rule 16's, for the same reason: a row whose declared
+// route module no longer names the path silently disables the fence for that
+// path, and a fence that has quietly stopped fencing is worse than none.
+for (const row of WIRE_PATH_REGISTRY) {
+  if (!wirePathServedBySeen.has(row.wirePath)) {
+    failures.push(
+      `WIRE_PATH_REGISTRY row \`${row.wirePath}\` declares ${row.servedBy} as its route `
+      + "module, but that file does not name the path. Either the route moved (update the "
+      + "row) or the path is gone (delete the row) — a stale row silently disables rule 17 "
+      + "for this path.",
+    );
+  }
+}
+
+/**
+ * Colocation fences (ruling 8). Frontend stays pnpm; backend stays bun.
+ * Source on either side may not import the other tree — the vendored
+ * `@omi-core/ratified-contracts` package is the only crossing. The integration
+ * harness is allowed to import both; it is the join, not a side.
+ */
+const importSpecPattern =
+  /(?:from\s+|import\s*\(\s*|export\s+(?:type\s+)?(?:\*(?:\s+as\s+\w+)?|\{[^}]*\})\s+from\s+)["']([^"']+)["']/g;
+const backendImportRoots = ["core/", "drivers/", "apps/", "migration/"];
+const backendSourcePrefixes = ["apps/", "core/", "drivers/", "harness/", "contract-tests/", "spikes/", "migration/"];
+const resolveRelativeImport = (fromShown: string, spec: string): string | null => {
+  if (!spec.startsWith(".")) return null;
+  const fromDir = dirname(fromShown);
+  return normalize(join(fromDir, spec)).replaceAll("\\", "/");
+};
+const importSpecsIn = (text: string): string[] =>
+  [...withoutComments(text).matchAll(importSpecPattern)].map((match) => match[1]);
+
+const frontendRoot = join(root, "frontend");
+if (existsSync(frontendRoot)) {
+  for (const file of files(frontendRoot)) {
+    const shown = relative(root, file);
+    const text = readFileSync(file, "utf8");
+    for (const spec of importSpecsIn(text)) {
+      const dest = resolveRelativeImport(shown, spec);
+      if (!dest) continue;
+      const hit = backendImportRoots.find((prefix) => dest === prefix.slice(0, -1) || dest.startsWith(prefix));
+      if (hit) {
+        failures.push(
+          `${shown}: frontend source may not import backend ${hit} directly; `
+          + "the vendored @omi-core/ratified-contracts package is the only crossing",
+        );
+      }
+    }
+  }
+  const scanFrontendToolchain = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === ".git" || entry.name === "dist" || entry.name === ".build" || entry.name === ".dart_tool") {
+        continue;
+      }
+      const full = join(directory, entry.name);
+      const shown = relative(root, full);
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules") {
+          if (existsSync(join(full, ".bun"))) {
+            failures.push(`${shown}/.bun: bun toolchain is forbidden under frontend/; this tree stays pnpm`);
+          }
+          continue;
+        }
+        scanFrontendToolchain(full);
+        continue;
+      }
+      if (entry.name === "bun.lock" || entry.name === "bun.lockb") {
+        failures.push(`${shown}: bun lockfile is forbidden under frontend/; this tree stays pnpm`);
+      }
+    }
+  };
+  scanFrontendToolchain(frontendRoot);
+}
+
+for (const file of files(root, new Set(["frontend"]))) {
+  const shown = relative(root, file);
+  if (!backendSourcePrefixes.some((prefix) => shown.startsWith(prefix))) continue;
+  const text = readFileSync(file, "utf8");
+  for (const spec of importSpecsIn(text)) {
+    const dest = resolveRelativeImport(shown, spec);
+    if (dest === "frontend" || dest?.startsWith("frontend/")) {
+      failures.push(
+        `${shown}: backend source may not import frontend/ directly; `
+        + "the vendored @omi-core/ratified-contracts package is the only crossing",
+      );
+    }
+  }
+}
+
+/**
+ * THE MIGRATION FENCE.
+ *
+ * The four legacy-cloud deletion clients, their participant contracts, and the
+ * postgres receipt adapters that record their teardown live under `migration/`.
+ * They scrub; they do not read or serve. `apps/service` or `drivers/` importing
+ * them would put teardown back on the product graph — the leak this workspace
+ * exists to end. Comments are exempt (importSpecsIn strips them); tests are
+ * not: a test in `apps/service` or `drivers/` that reaches `migration/` is
+ * still a product-tree edge.
+ */
+for (const file of files(root, new Set(["frontend"]))) {
+  const shown = relative(root, file);
+  if (
+    (!shown.startsWith("apps/service/") && !shown.startsWith("drivers/"))
+    || !/\.tsx?$/.test(shown)
+  ) continue;
+  const text = readFileSync(file, "utf8");
+  for (const spec of importSpecsIn(text)) {
+    const dest = resolveRelativeImport(shown, spec);
+    const hitsMigration = spec === "@platform/migration"
+      || spec.startsWith("@platform/migration/")
+      || (dest !== null && (dest === "migration" || dest.startsWith("migration/")));
+    if (hitsMigration) {
+      failures.push(
+        `${shown}: apps/service and drivers/ may not import migration/; `
+        + "legacy cloud deletion is teardown, not a product storage backend",
+      );
+    }
+  }
+}
+
+if (failures.length) throw new Error(failures.join("\n"));

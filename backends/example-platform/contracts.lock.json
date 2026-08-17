@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "publicationStatus": "local-qa-evidence",
+  "package": {
+    "name": "@omi-core/ratified-contracts",
+    "version": "0.9.0",
+    "dependency": "file:./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz"
+  },
+  "artifact": {
+    "compatibility": "additive",
+    "path": "vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz",
+    "sha256": "e44625ebc09889c3190ca6c3a16dd9944fc98abceb8b6727a7568dbcd56d161f",
+    "sha512": "e3e5b49ae9318ef346f812930ac4664ac9c0ba2ab6998152b33d09602eb221e6a24d531bc6e198dfdfda6f17d4a24240ba8b20d7e942ed3b8741c7ef3dad5ddf",
+    "integrity": "sha512-4+W0mukxjvNG+BKTCsRmSsnAuiq2mYFSsz0JYC6yIeaiTVMbxuGY39/abxfUokJAuosg1+lC7TuHQcfvPa1d3w==",
+    "metadataPath": "vendor/contracts/ARTIFACT.json",
+    "metadataSha256": "69903e330a0030c4db3b2918ee79bbef21347b33f652c225ddd77ef256967a80",
+    "provenancePath": "vendor/contracts/PROVENANCE.json",
+    "provenanceSha256": "229ad8c9ce119b782cc9961d7ae996f81bfc5ac75a7045e3287313db097ffb9b",
+    "sourceDigest": "b524fe3af1075ad5e10e2a627503eb8ab9274772494996df1d95216c66221e47",
+    "files": [
+      "package/PROVENANCE.json",
+      "package/README.md",
+      "package/dist/pagination/cursor.d.ts",
+      "package/dist/pagination/cursor.js",
+      "package/dist/projections/conversations.d.ts",
+      "package/dist/projections/conversations.js",
+      "package/dist/projections/folders.d.ts",
+      "package/dist/projections/folders.js",
+      "package/dist/projections/synthesized.d.ts",
+      "package/dist/projections/synthesized.js",
+      "package/dist/projections/tasks.d.ts",
+      "package/dist/projections/tasks.js",
+      "package/dist/recall/trace.d.ts",
+      "package/dist/recall/trace.js",
+      "package/dist/wire/json.d.ts",
+      "package/dist/wire/json.js",
+      "package/dist/write/ops.d.ts",
+      "package/dist/write/ops.js",
+      "package/fixtures/conversations-read-conformance.json",
+      "package/fixtures/conversations-read-shape.json",
+      "package/fixtures/folders-read-conformance.json",
+      "package/fixtures/folders-read-shape.json",
+      "package/fixtures/manifest.json",
+      "package/fixtures/page-conformance.json",
+      "package/fixtures/read-page-windows.json",
+      "package/fixtures/recall-completeness.json",
+      "package/fixtures/recall-trace.json",
+      "package/fixtures/status-matrix.json",
+      "package/fixtures/tasks-read-conformance.json",
+      "package/fixtures/tasks-read-shape.json",
+      "package/fixtures/write-ops-conformance.json",
+      "package/fixtures/write-ops-outcomes.json",
+      "package/package.json"
+    ]
+  },
+  "source": {
+    "repository": "BasedHardware/omi",
+    "path": "frontend/contracts/ratified",
+    "ref": "refs/heads/lane/platform-conversations",
+    "commit": "f17a5dd94eb62cf20a1787e2a621265a34430a8c",
+    "baselineCommit": "e5deec43d8814191b90d3e3db46e99bec29ae724",
+    "upstreamBranchPushed": false,
+    "mergedToMain": false,
+    "registryPublished": false,
+    "evidence": "0.9.0 is authored in this worktree under frontend/contracts/ratified and vendored here. The lane brief (DAVID-platform-conversations) authorizes changing vendor/contracts/** and the ratified corpus for conversations and folders only. The bump is additive \u2014 two new export subpaths and their fixture corpora; no existing export, type, validator, or prior-client obligation changes \u2014 so rollback is a re-vendor of 0.8.0. It is not merged to main, registry-published, or adopted in production."
+  },
+  "toolchain": {
+    "artifactBuild": {
+      "node": "24.12.0",
+      "npm": "11.14.1",
+      "pnpm": "10.0.0",
+      "typescript": "5.9.3"
+    },
+    "adoptionVerification": {
+      "bun": "1.3.14",
+      "typescript": "5.9.3"
+    }
+  }
+}

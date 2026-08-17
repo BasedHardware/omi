@@ -1,0 +1,40 @@
+{
+  "name": "@omi-core/surfaces",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared UI surfaces (React 19 + Vite, matching the shipping Windows renderer). Ship mode: static bundle served by the shell (ADR-009), all privileged calls via bridge.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "dev": "vite --port 4650",
+    "dev:lab": "vite --port 4650 --open '/?lab=1'",
+    "harness": "node scripts/ui-harness.mjs",
+    "harness:manifest": "node scripts/ui-harness.mjs manifest",
+    "harness:capture": "node scripts/ui-harness.mjs capture",
+    "harness:diff": "node scripts/ui-harness.mjs diff",
+    "test": "node ../../scripts/run-node-test.mjs test/*.test.mjs",
+    "lint": "echo surfaces:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/adapters-platform": "workspace:*",
+    "@omi-core/bridge-web": "workspace:*",
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/domain": "workspace:*",
+    "@omi-core/i18n": "workspace:*",
+    "@omi-core/kernel": "workspace:*",
+    "@omi-core/sync": "workspace:*",
+    "@omi-core/tokens": "workspace:*",
+    "@omi-core/wire-listen": "workspace:*",
+    "lucide-react": "1.24.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.7.2",
+    "vite": "^7.2.6"
+  }
+}

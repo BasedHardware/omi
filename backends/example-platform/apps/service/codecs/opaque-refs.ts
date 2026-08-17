@@ -1,0 +1,269 @@
+// Markers name only the terms this module actually uses: the memory/item
+// concept, the citation/evidence concept, and the keyed-digest concept.
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+// domain-pending(DIV-DOMX-001)
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { isProxy } from "node:util/types";
+
+import type { SourceImpactItemKind } from "../../../core/retrieve/source-impact";
+
+/**
+ * Reader-scoped opaque reference codecs for ApplicationReadPorts.
+ *
+ * Outputs are content-free handles only: never raw internal coordinates.
+ * Hermetic — no wall clock, randomness, network, or process env.
+ */
+const MIN_ROOT_SECRET_BYTES = 32;
+const MAX_ROOT_SECRET_BYTES = 4_096;
+const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
+const STABLE_VISIBLE_KEY = /^vk1_[a-f0-9]{64}$/;
+const ITEM_REF = /^mem1_[a-f0-9]{64}$/;
+const CITATION_REF = /^cit1_[a-f0-9]{64}$/;
+const TRACE_REF = /^tr1_[a-f0-9]{64}$/;
+const SOURCE_IMPACT_REF = /^si1_[a-f0-9]{64}$/;
+const SOURCE_IMPACT_CURSOR = /^sic1_[a-f0-9]{64}$/;
+const MEMORY_EXPORT_REF = /^mxr1_[a-f0-9]{64}$/;
+const SOURCE_IMPACT_AFTER_KEY = /^[0-4]:[a-f0-9]{64}$/;
+/**
+ * The tasks read wire's public item handle.
+ *
+ * A DISTINCT PREFIX AND A DISTINCT DOMAIN LABEL, both deliberate. Fable's R8
+ * says to reuse this module with a tasks domain label and never fork it, and the
+ * two halves of that are load-bearing for different reasons:
+ *
+ * - the LABEL keeps the keying separate, so the same internal coordinate under
+ *   the same reader cannot produce the same handle in two domains. Without it, a
+ *   task and a memory that happened to share a storage id would share a public
+ *   id, and a client joining on that id would join across domains;
+ * - the PREFIX makes the domain visible in the value, so a handle that leaks
+ *   into the wrong request is refused by grammar rather than by luck.
+ *
+ * Forking the module was the alternative and it is exactly rule 16's defect one
+ * layer down: two modules deriving reader-scoped handles is two implementations,
+ * and the measured cost of that was one memory served under two public ids.
+ */
+const TASK_ITEM_REF = /^task1_[a-f0-9]{64}$/;
+/** The tasks coverage envelope's frontier handle. Content-free, reader-scoped. */
+const TASK_FRONTIER_REF = /^frontier-v1:[a-f0-9]{64}$/;
+
+/** Key-derivation label for the per-reader subkey. */
+const READER_SUBKEY_LABEL = "omi.service.opaque-reader-subkey.v1";
+/** Distinct domain labels so identical inputs cannot collide across codecs. */
+const DOMAIN_VISIBLE_KEY = "omi.service.opaque-visible-key.v1";
+const DOMAIN_ITEM_REF = "omi.service.opaque-item-ref.v1";
+const DOMAIN_CITATION_REF = "omi.service.opaque-citation-ref.v1";
+const DOMAIN_TRACE_REF = "omi.service.opaque-trace-ref.v1";
+const DOMAIN_TASK_ITEM_REF = "omi.service.opaque-task-item-ref.v1";
+const DOMAIN_TASK_FRONTIER = "omi.service.opaque-task-frontier.v1";
+const DOMAIN_SOURCE_IMPACT_REF = "omi.service.opaque-source-impact-ref.v1";
+const DOMAIN_SOURCE_IMPACT_CURSOR = "omi.service.opaque-source-impact-cursor.v1";
+const DOMAIN_MEMORY_EXPORT_REF = "omi.service.opaque-memory-export-ref.v1";
+
+export type MemoryExportRefKind =
+  | "memory"
+  | "lineage"
+  | "revision"
+  | "evidence"
+  | "event"
+  | "capture";
+
+const MEMORY_EXPORT_REF_KINDS = new Set<MemoryExportRefKind>([
+  "memory", "lineage", "revision", "evidence", "event", "capture",
+]);
+
+const SOURCE_IMPACT_KINDS = new Set<SourceImpactItemKind>([
+  "event", "evidence", "provisional_claim", "canonical_claim", "product_projection",
+]);
+
+const CONFIG_KEYS = Object.freeze(["reader_projection_digest", "root_secret"] as const);
+
+export interface ReaderScopedOpaqueCodecConfig {
+  /** Root HMAC secret; must be at least 32 bytes. Copied at factory time. */
+  readonly root_secret: Uint8Array;
+  /** Reader identity digest that scopes every opaque handle. */
+  readonly reader_projection_digest: string;
+}
+
+export interface ReaderScopedOpaqueCodecs {
+  readonly encodeVisibleKey: (input: string) => string;
+  readonly encodeItemRef: (input: string) => string;
+  readonly encodeCitationRef: (input: string) => string;
+  readonly encodeTraceRef: (input: string) => string;
+  readonly encodeMemoryExportRef: (kind: MemoryExportRefKind, input: string) => string;
+  /**
+   * The ratified tasks read wire's public item id
+   * (`DAVID-tasks-read-epoch-and-ci` D2: "`id` is the ratified opaque ref, not
+   * the legacy server id"). Same construction as the four above, different
+   * domain label and prefix — see TASK_ITEM_REF.
+   */
+  readonly encodeTaskItemRef: (input: string) => string;
+  /** The tasks coverage envelope's reader-scoped frontier handle. */
+  readonly encodeTaskFrontier: (input: string) => string;
+  readonly encodeSourceImpactRef: (kind: SourceImpactItemKind, internalRef: string) => string;
+  readonly issueSourceImpactCursor: (bindingDigest: string, afterKey: string) => string;
+  readonly verifySourceImpactCursor: (
+    cursor: string,
+    bindingDigest: string,
+    afterKey: string,
+  ) => boolean;
+}
+
+const configurationError = (message: string): never => {
+  throw new TypeError(message);
+};
+
+const snapshotExactDataDescriptors = (
+  value: unknown,
+  expectedKeys: readonly string[],
+): Readonly<Record<string, PropertyDescriptor & { readonly value: unknown }>> => {
+  if (value === null || typeof value !== "object" || isProxy(value) || Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Object.prototype) {
+    return configurationError("opaque codec config requires an exact plain object");
+  }
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.some((key) => typeof key === "symbol")) {
+    return configurationError("opaque codec config rejects symbol keys");
+  }
+  const keys = (ownKeys as string[]).sort();
+  const expected = [...expectedKeys].sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+    return configurationError("opaque codec config has unexpected fields");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !("value" in descriptor) || !descriptor.enumerable) {
+      return configurationError("opaque codec config allows only enumerable own data properties");
+    }
+  }
+  return descriptors as Readonly<Record<string, PropertyDescriptor & { readonly value: unknown }>>;
+};
+
+const copyRootSecret = (value: unknown): Uint8Array => {
+  if (!(value instanceof Uint8Array) || isProxy(value)
+    || (Object.getPrototypeOf(value) !== Uint8Array.prototype && !Buffer.isBuffer(value))
+    || value.buffer instanceof SharedArrayBuffer
+    || value.byteLength < MIN_ROOT_SECRET_BYTES
+    || value.byteLength > MAX_ROOT_SECRET_BYTES) {
+    return configurationError("opaque codec root_secret must be a 32..4096 byte Uint8Array");
+  }
+  return new Uint8Array(value);
+};
+
+const deriveReaderSubkey = (rootSecret: Uint8Array, readerProjectionDigest: string): Buffer =>
+  createHmac("sha256", Buffer.from(rootSecret))
+    .update(READER_SUBKEY_LABEL, "ascii")
+    .update("\0", "ascii")
+    .update(readerProjectionDigest, "ascii")
+    .digest();
+
+const encodeOpaque = (
+  readerSubkey: Buffer,
+  domainLabel: string,
+  prefix: string,
+  pattern: RegExp,
+  input: string,
+): string => {
+  if (typeof input !== "string") {
+    return configurationError("opaque codec input must be a string");
+  }
+  const hex = createHmac("sha256", readerSubkey)
+    .update(domainLabel, "ascii")
+    .update("\0", "ascii")
+    .update(input, "utf8")
+    .digest("hex");
+  const encoded = `${prefix}${hex}`;
+  if (!pattern.test(encoded) || !DIGEST_PATTERN.test(hex)) {
+    return configurationError("opaque codec produced an invalid handle");
+  }
+  return encoded;
+};
+
+const sourceImpactCursorInput = (bindingDigest: string, afterKey: string): string => {
+  if (!DIGEST_PATTERN.test(bindingDigest) || !SOURCE_IMPACT_AFTER_KEY.test(afterKey)) {
+    return configurationError("source impact cursor coordinates are invalid");
+  }
+  return `${bindingDigest}\0${afterKey}`;
+};
+
+/**
+ * Builds the four ApplicationReadPorts opaque codecs, keyed to one reader.
+ * Same reader + same input is deterministic; different readers never share
+ * opaque values for the same internal coordinate.
+ */
+export const createReaderScopedOpaqueCodecs = (
+  config: ReaderScopedOpaqueCodecConfig,
+): Readonly<ReaderScopedOpaqueCodecs> => {
+  const descriptors = snapshotExactDataDescriptors(config, CONFIG_KEYS);
+  const readerProjectionDigest = descriptors["reader_projection_digest"]!.value;
+  if (typeof readerProjectionDigest !== "string" || !DIGEST_PATTERN.test(readerProjectionDigest)) {
+    return configurationError("opaque codec reader_projection_digest must be a lowercase SHA-256 hex digest");
+  }
+  const rootSecret = copyRootSecret(descriptors["root_secret"]!.value);
+  const readerSubkey = deriveReaderSubkey(rootSecret, readerProjectionDigest);
+  // Drop the copied root material from the closure surface; only the derived
+  // reader subkey is retained for encoding.
+  rootSecret.fill(0);
+
+  return Object.freeze({
+    encodeVisibleKey: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_VISIBLE_KEY, "vk1_", STABLE_VISIBLE_KEY, input),
+    encodeItemRef: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_ITEM_REF, "mem1_", ITEM_REF, input),
+    encodeCitationRef: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_CITATION_REF, "cit1_", CITATION_REF, input),
+    encodeTraceRef: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_TRACE_REF, "tr1_", TRACE_REF, input),
+    encodeMemoryExportRef: (kind: MemoryExportRefKind, input: string): string => {
+      if (!MEMORY_EXPORT_REF_KINDS.has(kind)) {
+        return configurationError("memory export reference kind is invalid");
+      }
+      return encodeOpaque(
+        readerSubkey,
+        DOMAIN_MEMORY_EXPORT_REF,
+        "mxr1_",
+        MEMORY_EXPORT_REF,
+        `${kind}\0${input}`,
+      );
+    },
+    encodeTaskItemRef: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_TASK_ITEM_REF, "task1_", TASK_ITEM_REF, input),
+    encodeTaskFrontier: (input: string): string =>
+      encodeOpaque(readerSubkey, DOMAIN_TASK_FRONTIER, "frontier-v1:", TASK_FRONTIER_REF, input),
+    encodeSourceImpactRef: (kind: SourceImpactItemKind, internalRef: string): string => {
+      if (!SOURCE_IMPACT_KINDS.has(kind)) {
+        return configurationError("source impact kind is invalid");
+      }
+      return encodeOpaque(
+        readerSubkey,
+        DOMAIN_SOURCE_IMPACT_REF,
+        "si1_",
+        SOURCE_IMPACT_REF,
+        `${kind}\0${internalRef}`,
+      );
+    },
+    issueSourceImpactCursor: (bindingDigest: string, afterKey: string): string =>
+      encodeOpaque(
+        readerSubkey,
+        DOMAIN_SOURCE_IMPACT_CURSOR,
+        "sic1_",
+        SOURCE_IMPACT_CURSOR,
+        sourceImpactCursorInput(bindingDigest, afterKey),
+      ),
+    verifySourceImpactCursor: (cursor: string, bindingDigest: string, afterKey: string): boolean => {
+      if (typeof cursor !== "string" || !SOURCE_IMPACT_CURSOR.test(cursor)) return false;
+      const expected = encodeOpaque(
+        readerSubkey,
+        DOMAIN_SOURCE_IMPACT_CURSOR,
+        "sic1_",
+        SOURCE_IMPACT_CURSOR,
+        sourceImpactCursorInput(bindingDigest, afterKey),
+      );
+      return timingSafeEqual(
+        Buffer.from(cursor.slice("sic1_".length), "hex"),
+        Buffer.from(expected.slice("sic1_".length), "hex"),
+      );
+    },
+  });
+};

@@ -1,0 +1,1212 @@
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(UNK-DOMCORE-002)
+// domain-pending(DIV-DOMAPPS-001)
+// domain-pending(DIV-DOMAPPS-006)
+// domain-pending(DIV-DOMAPPS-007)
+// domain-pending(DIV-CHAT-REV-001)
+// domain-pending(DIV-CHAT-HASH-001)
+// domain-pending(DIV-DOMTASK-001)
+import { createHash, randomUUID } from "node:crypto";
+import type { Database } from "bun:sqlite";
+import { Hono } from "hono";
+import { websocket } from "hono/bun";
+
+import { createSqliteQaRecallLoader } from "../../drivers/sqlite/application-recall-read";
+import {
+  createDevTokenIssuer,
+  devPrincipalToAuthorizationRequest,
+  type DevPrincipal,
+} from "./auth/dev-token";
+import {
+  createInMemoryAccountLifecycleStore,
+  type AccountLifecycleStore,
+} from "./auth/account-lifecycle";
+import {
+  createInMemoryCurrentSessionPort,
+  type CurrentSessionPort,
+} from "./auth/current-session";
+import {
+  QA_MEMORY_READ_CURSOR_BINDINGS,
+  qaMemoryReadProduceRenders,
+} from "../qa/memory-read-bindings";
+import { prepareMemoryRead, type CoherentQaLoad } from "./composition/memory-read";
+import { createListenConversationFinalizer } from "./listen/conversation-finalizer";
+import {
+  createDeterministicListenConversationProcessor,
+  type ListenConversationProcessorFactory,
+} from "./listen/conversation-processor";
+import {
+  createScriptedTranscriptionSource,
+  type TranscriptionSource,
+} from "./listen/transcription-source";
+import { createWriteFenceCounter, type WriteFenceCounter } from "./control/fence-counter";
+import {
+  createInMemoryAccountControlProjectionStore,
+  type AccountControlProjectionStore,
+} from "./control/projection-store";
+import {
+  createInMemorySettingsProjectionStore,
+  type InMemorySettingsProjectionStore,
+  type SettingsProjectionStore,
+} from "./control/settings-projection";
+import { DEFAULT_READ_ITEM_GRANULARITY } from "../../core/retrieve/granularity";
+import { createServedCounter, type ServedCounter } from "./observability/served-count";
+import {
+  attachServiceRequestLog,
+  bearerTokenFromAuthorization,
+} from "./observability/request-log";
+import {
+  attributeServedReads,
+  createServedReadAttribution,
+  READ_CLIENT_ID_HEADER,
+} from "./observability/served-read-attribution";
+import { createWriteOpsCounter, type WriteOpsCounter } from "./observability/write-ops-counter";
+import {
+  createQaProducerEvidence,
+  QA_CLIENT_ID_HEADER,
+  QA_RUN_ID_HEADER,
+  type QaEvidenceDomain,
+  type QaProducerEvidence,
+} from "./observability/producer-evidence";
+import { QA_FIXTURE_TIME_ANCHOR_UTC, seedQaSnapshot } from "./qa/seed";
+import {
+  createChatGenerationSupervisor,
+  DEFAULT_CHAT_GENERATION_LIVENESS,
+  type ChatGenerationLivenessPolicy,
+  type ChatGenerationSupervisor,
+} from "./chat/generation-supervisor";
+import {
+  createMemoryReadChatGenerationContextSource,
+  type ChatGenerationContextSource,
+} from "./chat/generation-context";
+import {
+  createGatewayRequiredChatGenerationSource,
+  type ChatGenerationSource,
+} from "./chat/generation-source";
+import { createChatHistoryCursorCodec } from "./chat/history-cursor";
+import {
+  CHAT_MESSAGES_PATH,
+  type ChatGenerationStreamPolicy,
+  registerChatMessagesRoutes,
+} from "./routes/chat-messages";
+import type { ChatGenerationRetentionPolicy } from "./stores/chat-generation-events-store";
+import {
+  createAgentRunEventSupervisor,
+  createInMemoryAgentRunEventStore,
+  type AgentRunEventStore,
+} from "./chat/agent-run-events";
+import { createAgentApprovalCoordinator, type AgentApprovalCoordinator } from "./chat/agent-approval-coordinator";
+import { createSafeWriteToolRegistry } from "./chat/safe-write-tool";
+import { registerChatAgentRunRoutes } from "./routes/chat-agent-runs";
+import { registerChatAgentApprovalRoutes } from "./routes/chat-agent-approvals";
+import { registerChatAttachmentsRoute } from "./routes/chat-attachments";
+import {
+  isActionItemsCompatInvocation,
+  registerActionItemsCompatRoutes,
+} from "./routes/action-items-compat";
+import { CONVERSATIONS_PATH, registerConversationRoutes } from "./routes/conversations";
+import { registerCurrentSessionRoutes } from "./routes/current-session";
+import { FOLDERS_PATH, registerFolderRoutes } from "./routes/folders";
+import {
+  createPreparedMemoryRouteReadPort,
+  MEMORY_READ_PATH,
+  MEMORY_READ_TRANSITIONAL_ALIAS_PATH,
+  registerMemoryRoutes,
+} from "./routes/memories";
+import { snapshotMemoryRouteReadOutcome } from "./routes/memory-read-port";
+import {
+  LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
+  registerListenRoutes,
+} from "./routes/listen";
+import {
+  SCREEN_DAYS_PATH,
+  SCREEN_FRAMES_PATH,
+  SCREEN_RETENTION_PATH,
+  SCREEN_RETIRED_PATH,
+  SCREEN_SEARCH_PATH,
+  SCREEN_TIMELINE_PATH,
+  registerScreenRoutes,
+} from "./routes/screen";
+import {
+  createUnconfiguredScreenEmbeddingSource,
+  type ScreenEmbeddingSource,
+} from "./screen/embedding-source";
+import { createScreenRetentionWorker } from "./screen/retention-worker";
+import { registerQaRoutes } from "./routes/qa";
+import { registerQaEvidenceRoutes } from "./routes/qa-evidence";
+import { registerQaControlRoutes } from "./routes/qa-control";
+import { registerSettingsRoutes, SETTINGS_PATH } from "./routes/settings";
+import { registerTasksOpsRoutes, TASKS_OPS_PATH } from "./routes/tasks-ops";
+import { registerStmNotesOpsRoutes } from "./routes/stm-notes";
+import { composeLocalMemoryFormation, type LocalMemoryFormation, type LocalMemoryFormationMode } from "./composition/memory-formation";
+
+export type { LocalMemoryFormation, LocalMemoryFormationMode } from "./composition/memory-formation";
+import { registerTasksReadRoutes, TASKS_READ_PATH } from "./routes/tasks-read";
+import { prepareTasksRead, resolveTasksWriteRecordId } from "./composition/tasks-read";
+import { prepareConversationsRead } from "./composition/conversations-read";
+import { prepareFoldersRead } from "./composition/folders-read";
+import {
+  createInMemoryConversationsStore,
+  type ConversationRecord,
+  type ConversationsStore,
+} from "./stores/conversations-store";
+import {
+  createInMemoryFoldersStore,
+  type FolderRecord,
+  type FoldersStore,
+} from "./stores/folders-store";
+import {
+  createInMemoryFolderDeletionUnitOfWork,
+  type FolderDeletionUnitOfWork,
+} from "./stores/folder-deletion-unit-of-work";
+import { createInMemoryStragglerTable, type StragglerTable } from "./stores/straggler-table";
+import { createInMemoryListenStore, type ListenStore } from "./stores/listen-store";
+import { createInMemoryScreenStore, type ScreenStore } from "./stores/screen-store";
+import {
+  defineListenSegmentUnitOfWork,
+  type ListenSegmentUnitOfWork,
+} from "./stores/listen-segment-unit-of-work";
+import { createUnitOfWorkContext, type UnitOfWorkContext } from "./stores/unit-of-work-context";
+import { createInMemoryTasksStore, type TasksReadStore, type TasksStore } from "./stores/tasks-store";
+import { createInMemoryWriteIdRegistry, type WriteIdRegistry } from "./stores/write-id-registry";
+import { createInMemoryWriteUnitOfWork, type WriteUnitOfWork } from "./stores/write-unit-of-work";
+import { createInMemoryChatAdmission, type ChatAdmission } from "./stores/chat-admission";
+import {
+  createInMemoryChatGenerationFinalization,
+  type ChatGenerationFinalization,
+} from "./stores/chat-generation-finalization";
+import {
+  createInMemoryChatGenerationEventsStore,
+  type ChatGenerationEventsStore,
+  type InMemoryChatGenerationEventsStore,
+} from "./stores/chat-generation-events-store";
+import {
+  createInMemoryChatMessagesStore,
+  type InMemoryChatMessagesStore,
+  type ChatMessagesStore,
+  type StoredChatMessage,
+} from "./stores/chat-messages-store";
+import {
+  createInMemoryChatAttachmentsStore,
+  type ChatAttachmentsStore,
+  type InMemoryChatAttachmentsStore,
+} from "./stores/chat-attachments-store";
+
+/**
+ * Builds the complete app-facing service.
+ *
+ * This factory exists so that TESTS EXERCISE THE REAL APP. If the dev server
+ * assembled its own routes inline and tests assembled a lookalike, both could
+ * agree perfectly while the shipped binding was wrong - which is precisely how
+ * a green hermetic suite once accompanied a bridge that served zero requests.
+ * There is one wiring, here, and `bin/dev-server.ts` only adds process concerns
+ * (config parsing, socket binding, printing).
+ *
+ * The `db` option is the local recall-fixture database. Write-path persistence
+ * is supplied independently through the service store ports and their unit of
+ * work; omitting it preserves the historical in-memory test/dev composition.
+ */
+
+const DEV_KEY_ID = "dev-local";
+const DEV_TOKEN_TTL_SECONDS = 86_400;
+const CURSOR_TTL_SECONDS = 3_600;
+const JSON_HEADERS = Object.freeze({
+  "cache-control": "no-store",
+  "content-type": "application/json",
+});
+
+const derive32 = (label: string): Uint8Array =>
+  new Uint8Array(createHash("sha256").update(label, "utf8").digest());
+
+export interface LocalServiceOptions {
+  readonly db: Database;
+  readonly ownerAccountId: string;
+  readonly memoryCount: number;
+  readonly accountTimezone: string;
+  /** Non-secret dev label; a loopback fixture service has no real credential. */
+  readonly devSecretLabel: string;
+  /**
+   * Write-path adapters. Omit for the historical in-memory local/test wiring.
+   * The caller owns their lifecycle, including any SQLite Database handle.
+   */
+  readonly stores?: LocalServiceStores;
+  /**
+   * Dev-server mode: preserve an already initialized external store set across
+   * process restart, while seeding a brand-new set exactly once.
+   */
+  readonly persistentQaStores?: boolean;
+  /** Required fail-closed adapter for production-shaped composition. */
+  readonly transcriptionSource: TranscriptionSource;
+  /**
+   * Live Listen engine label reported on `/v1/qa/status`. Defaults to
+   * scripted. The headed launcher refuses to attach when this is not the
+   * on-device engine — canned STT lines look like captured speech.
+   */
+  readonly sttEngine?: string;
+  /**
+   * Live chat generation tier reported on `/v1/qa/status`. Defaults to none.
+   * This is the SAME capability tier the Chat transcript stamps on an answer
+   * (`stampForGatewayEngine`), so the headed launcher's gate and the chip a
+   * reader sees cannot disagree — the canned gateway answering
+   * "Local test gateway answered." is exactly what this lets the launcher
+   * refuse.
+   */
+  readonly chatGateway?: string;
+  /** Model id the chat gateway declared, for display. Never a credential. */
+  readonly chatModel?: string;
+  /** Required downstream processing adapter factory, bound to this composition's store. */
+  readonly conversationProcessorFactory: ListenConversationProcessorFactory;
+  /** Dev-server-only seed. Existing Settings fixtures keep entitlement absent. */
+  readonly listenDefaultUnmetered?: boolean;
+  /**
+   * Optional post-seed overlay. The demo persona installs this from
+   * `bin/dev-server.ts`; production compositions omit it. The callback must
+   * not be imported from a production entrypoint.
+   */
+  readonly overlaySeed?: (input: {
+    readonly db: Database;
+    readonly stores: LocalServiceStores;
+    readonly ownerAccountId: string;
+    readonly accountTimezone: string;
+  }) => void;
+  /** Reported in seed identity when a persona overlay is installed. */
+  readonly seedPersona?: "demo";
+  /** Required provider seam; production LLM integration is a later adapter. */
+  readonly generationSource: ChatGenerationSource;
+  /** Optional consultation override; omission adapts the existing authorized memory read. */
+  readonly generationContext?: ChatGenerationContextSource;
+  readonly generationLiveness?: ChatGenerationLivenessPolicy;
+  readonly generationStreamPolicy?: ChatGenerationStreamPolicy;
+  readonly generationStreamScheduler?: import("./chat/generation-source").ChatGenerationScheduler;
+  readonly generationRetentionPolicy?: ChatGenerationRetentionPolicy;
+  /** Internal run-event ledger; callers can inject a snapshot-backed adapter. */
+  readonly agentRunEvents?: AgentRunEventStore;
+  /** Test-only complete supervisor override. */
+  readonly chatSupervisor?: ChatGenerationSupervisor;
+  /** Test override; production-shaped listen authentication is rechecked at least once per second. */
+  readonly listenCredentialLeaseMilliseconds?: number;
+  readonly listenCredentialNowMilliseconds?: () => number;
+  /** Optional semantic-search seam; omission is the not-configured default. */
+  readonly screenEmbeddings?: ScreenEmbeddingSource;
+  /** 0 disables the repeating retention timer; boot sweep still runs. Default 6h. */
+  readonly screenRetentionIntervalMs?: number;
+  /**
+   * Local memory-formation wiring. `accept-only` queues work and does not drain
+   * (red-proof). `formation-without-promotion` runs formation but skips the
+   * local visible-promotion step.
+   */
+  readonly memoryFormationMode?: LocalMemoryFormationMode;
+  /** Deterministic attachment lifecycle seams for tests. */
+  readonly nowEpochMilliseconds?: () => number;
+  readonly attachmentId?: () => string;
+  readonly attachmentContentReference?: () => string;
+  /** Server-owned id seam for the dated legacy action-items create route. */
+  readonly actionItemId?: () => string;
+  /** Override the JSONL request log directory. Tests isolate here; production uses OMI_DEV_STACK_RUNDIR. */
+  readonly runtimeLogDir?: string;
+  /**
+   * Process-owned work after a total seed restore. The factory never admits
+   * the local owner; `bin/dev-server.ts` registers that here so in-process
+   * tests keep a missing projection to restage from revision 1.
+   */
+  readonly afterReset?: () => void;
+}
+
+/** The service stores and the tasks atomic write boundary, grouped at composition. */
+export interface LocalServiceStores {
+  readonly conversations: ConversationsStore;
+  readonly folders: FoldersStore;
+  readonly folderDeletion: FolderDeletionUnitOfWork;
+  readonly tasks: TasksStore;
+  readonly registry: WriteIdRegistry;
+  readonly unitOfWork: WriteUnitOfWork;
+  readonly stragglers: StragglerTable;
+  readonly control: AccountControlProjectionStore;
+  readonly settings: SettingsProjectionStore;
+  readonly currentSession: CurrentSessionPort;
+  readonly accountLifecycle: AccountLifecycleStore;
+  readonly listen: ListenStore;
+  readonly listenSegments: ListenSegmentUnitOfWork;
+  readonly screen: ScreenStore;
+  readonly chatMessages: ChatMessagesStore;
+  readonly chatAttachments: ChatAttachmentsStore;
+  readonly chatEvents: ChatGenerationEventsStore;
+  readonly chatAdmission: ChatAdmission;
+  readonly chatFinalization: ChatGenerationFinalization;
+  /** Durable compositions may supply the SQLite-backed agent ledger. */
+  readonly agentRunEvents?: AgentRunEventStore;
+}
+
+export interface InMemoryLocalServiceStores extends LocalServiceStores {
+  readonly settings: InMemorySettingsProjectionStore;
+  readonly chatMessages: InMemoryChatMessagesStore;
+  readonly chatAttachments: InMemoryChatAttachmentsStore;
+  readonly chatEvents: InMemoryChatGenerationEventsStore;
+}
+
+const QA_FOLDER_SEED: readonly FolderRecord[] = Object.freeze([
+  Object.freeze({
+    id: "default-folder-qa",
+    name: "Other",
+    description: null,
+    color: "#6B7280",
+    icon: "folder",
+    created_at: "2026-08-03T12:00:00.000Z",
+    updated_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+    order: 0,
+    is_default: true,
+    is_system: true,
+  }),
+  Object.freeze({
+    id: "work-folder-qa",
+    name: "Work",
+    description: "QA work items",
+    color: "#007AFF",
+    icon: "briefcase",
+    created_at: "2026-08-03T12:00:00.000Z",
+    updated_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+    order: 1,
+    is_default: false,
+    is_system: false,
+  }),
+]);
+
+const QA_CONVERSATION_SEED: ConversationRecord = Object.freeze({
+  id: "quiet-chat-qa",
+  structured: Object.freeze({
+    title: "QA bridge check",
+    overview: "A deterministic conversation for shell acceptance.",
+  }),
+  created_at: "2026-08-03T12:00:00.000Z",
+  updated_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+  started_at: "2026-08-07T11:50:00.000Z",
+  finished_at: QA_FIXTURE_TIME_ANCHOR_UTC,
+  source: "omi",
+  status: "completed",
+  discarded: false,
+  starred: false,
+  visibility: "private",
+  is_locked: false,
+  folder_id: "work-folder-qa",
+});
+
+export const createInMemoryLocalServiceStores = (): InMemoryLocalServiceStores => {
+  const tasks = createInMemoryTasksStore();
+  const registry = createInMemoryWriteIdRegistry();
+  const folders = createInMemoryFoldersStore();
+  const conversations = createInMemoryConversationsStore({
+    hasFolder: (accountId, folderId) => folders.hasFolder(accountId, folderId),
+  });
+  const listen = createInMemoryListenStore();
+  const screen = createInMemoryScreenStore();
+  const settings = createInMemorySettingsProjectionStore();
+  const listenConnection = Object.freeze({ listen, settings });
+  const listenContext = createUnitOfWorkContext(listenConnection);
+  const listenSegments = defineListenSegmentUnitOfWork({
+    execute<Result>(
+      _input,
+      operation: (context: UnitOfWorkContext<typeof listenConnection>) => Result,
+    ): Promise<Result> {
+      return Promise.resolve(operation(listenContext));
+    },
+  }, {
+    readEntitlement: (context, input) => context.perform(listenConnection, ({ settings }) =>
+      settings.readEntitlement(input.accountId)),
+    appendSegment: (context, input) => context.perform(listenConnection, ({ listen }) =>
+      listen.appendSegment(input.accountId, input.sessionId, input.segment, input.at)),
+    consumeTranscriptionSeconds: (context, input) => context.perform(listenConnection, ({ settings }) =>
+      settings.consumeTranscriptionSeconds(input.accountId, input.consumedSeconds)),
+  });
+  const chatMessages = createInMemoryChatMessagesStore();
+  const chatEvents = createInMemoryChatGenerationEventsStore();
+  const chatAttachments = createInMemoryChatAttachmentsStore();
+  return Object.freeze({
+    conversations,
+    folders,
+    folderDeletion: createInMemoryFolderDeletionUnitOfWork(folders, conversations),
+    tasks,
+    registry,
+    unitOfWork: createInMemoryWriteUnitOfWork(tasks, registry),
+    stragglers: createInMemoryStragglerTable(),
+    control: createInMemoryAccountControlProjectionStore(),
+    settings,
+    currentSession: createInMemoryCurrentSessionPort(),
+    accountLifecycle: createInMemoryAccountLifecycleStore(),
+    listen,
+    listenSegments,
+    screen,
+    chatMessages,
+    chatAttachments,
+    chatEvents,
+    chatAdmission: createInMemoryChatAdmission(
+      chatMessages,
+      chatEvents,
+      settings,
+      chatAttachments,
+    ),
+    chatFinalization: createInMemoryChatGenerationFinalization(chatMessages, chatEvents),
+  });
+};
+
+export interface LocalService {
+  readonly app: Hono;
+  /** The Bun handler paired with `app.fetch` for real WebSocket upgrades. */
+  readonly websocket: typeof websocket;
+  readonly devToken: string;
+  readonly counter: ServedCounter;
+  readonly evidence: QaProducerEvidence;
+  readonly reseed: () => void;
+  readonly seedIdentity: () => Readonly<Record<string, string | number>>;
+  /**
+   * Compiles the Chat memory-context path without admitting a message.
+   * Long-lived `dev-server` awaits this before it listens so the first user
+   * send does not pay first-execution cost. Tests do not have to call it.
+   */
+  readonly warmupChatGenerationContext: () => Promise<void>;
+  readonly memoryFormation: LocalMemoryFormation;
+  /**
+   * The write path's stores and arbiters, exposed so a test or a booted stack
+   * can drive and read them WITHOUT standing up a second server. The fence
+   * harness existed because there was nowhere else to reach these; there is
+   * now, which is what R5 asked for.
+   *
+   * `tasksRead` is deliberately typed as the READ interface: the read route
+   * consumes this store read-only (R11), and the type is where that stays true.
+   */
+  readonly writePath: {
+    readonly conversations: ConversationsStore;
+    readonly folders: FoldersStore;
+    readonly folderDeletion: FolderDeletionUnitOfWork;
+    readonly tasks: TasksStore;
+    readonly tasksRead: TasksReadStore;
+    readonly registry: WriteIdRegistry;
+    readonly unitOfWork: WriteUnitOfWork;
+    readonly stragglers: StragglerTable;
+    readonly control: AccountControlProjectionStore;
+    readonly fenceCounter: WriteFenceCounter;
+    readonly opsCounter: WriteOpsCounter;
+    readonly settings: SettingsProjectionStore;
+    readonly listen: ListenStore;
+    readonly screen: ScreenStore;
+    readonly chatMessages: ChatMessagesStore;
+    readonly chatAttachments: ChatAttachmentsStore;
+    readonly chatEvents: ChatGenerationEventsStore;
+    readonly chatAdmission: ChatAdmission;
+    readonly agentRunEvents: AgentRunEventStore;
+    readonly agentApprovalCoordinator: AgentApprovalCoordinator;
+  };
+}
+
+export type LocalDevServiceOptions = Omit<
+  LocalServiceOptions,
+  | "conversationProcessorFactory"
+  | "transcriptionSource"
+  | "generationSource"
+  | "generationContext"
+> & {
+  /** Explicit dev/test override; omission fails Chat closed until a gateway is configured. */
+  readonly transcriptionSource?: TranscriptionSource;
+  readonly conversationProcessorFactory?: ListenConversationProcessorFactory;
+  readonly generationSource?: ChatGenerationSource;
+  readonly generationContext?: ChatGenerationContextSource;
+};
+
+export const createLocalDevService = (options: LocalDevServiceOptions): LocalService => {
+  // An injected local/QA store set owns its fixtures, so seed only a missing
+  // configured owner. Explicit deletion states survive composition unchanged.
+  if (options.stores !== undefined
+    && options.stores.accountLifecycle.readLifecycle(options.ownerAccountId) === null) {
+    options.stores.accountLifecycle.setLifecycle(options.ownerAccountId, "active");
+  }
+  return createLocalService({
+    ...options,
+    transcriptionSource: options.transcriptionSource ?? createScriptedTranscriptionSource(),
+    conversationProcessorFactory: options.conversationProcessorFactory
+      ?? createDeterministicListenConversationProcessor,
+    generationSource: options.generationSource ?? createGatewayRequiredChatGenerationSource(),
+    generationContext: options.generationContext,
+  });
+};
+
+type HttpEvidenceDomain = Exclude<QaEvidenceDomain, "listen">;
+
+const successfulHttpDomain = (
+  method: string,
+  path: string,
+  status: number,
+): HttpEvidenceDomain | null => {
+  if (status < 200 || status >= 300) return null;
+  if (method === "GET"
+    && (path === MEMORY_READ_PATH || path === MEMORY_READ_TRANSITIONAL_ALIAS_PATH)) {
+    return "memories";
+  }
+  if ((method === "GET" && path === TASKS_READ_PATH)
+    || (method === "POST" && path === TASKS_OPS_PATH)) return "tasks";
+  if (isActionItemsCompatInvocation(method, path)) return "tasks";
+  if (["GET", "PATCH", "DELETE"].includes(method)
+    && (path === CONVERSATIONS_PATH || path.startsWith(`${CONVERSATIONS_PATH}/`))) {
+    return "conversations";
+  }
+  if (["GET", "POST", "PATCH", "DELETE"].includes(method)
+    && (path === FOLDERS_PATH || path.startsWith(`${FOLDERS_PATH}/`))) return "folders";
+  if (method === "GET" && path === SETTINGS_PATH) return "settings";
+  if (method === "POST" && path === CHAT_MESSAGES_PATH) return "chat";
+  if (method === "GET" && (
+    path === SCREEN_DAYS_PATH
+    || path === SCREEN_TIMELINE_PATH
+    || path === SCREEN_SEARCH_PATH
+    || path === SCREEN_RETENTION_PATH
+    || path === SCREEN_RETIRED_PATH
+  )) return "screen";
+  if (method === "POST" && path === SCREEN_FRAMES_PATH) return "screen";
+  if (method === "PUT" && path === SCREEN_RETENTION_PATH) return "screen";
+  return null;
+};
+
+export const createLocalService = (options: LocalServiceOptions): LocalService => {
+  if (options.transcriptionSource === undefined) {
+    throw new TypeError("transcriptionSource is required");
+  }
+  if (options.conversationProcessorFactory === undefined) {
+    throw new TypeError("conversationProcessorFactory is required");
+  }
+  if (options.generationSource === undefined) {
+    throw new TypeError("generationSource is required");
+  }
+  const ownsStores = options.stores === undefined;
+  if (options.persistentQaStores === true && ownsStores) {
+    throw new TypeError("persistentQaStores requires an externally owned store set");
+  }
+  const stores = options.stores ?? createInMemoryLocalServiceStores();
+  const agentRunEvents = options.agentRunEvents
+    ?? stores.agentRunEvents
+    ?? createInMemoryAgentRunEventStore();
+  const conversations = stores.conversations;
+  const folders = stores.folders;
+  const folderDeletion = stores.folderDeletion;
+  const producerEvidence = createQaProducerEvidence();
+  let nextFolderId = 1;
+
+  const resetServiceStores = (): void => {
+    stores.chatEvents.reset();
+    stores.chatAttachments.reset();
+    stores.chatMessages.reset();
+    stores.listen.reset();
+    stores.screen.reset();
+    conversations.reset();
+    folders.reset();
+    stores.tasks.reset();
+    stores.registry.reset();
+    stores.stragglers.reset();
+    stores.control.reset();
+    stores.settings.reset();
+    stores.currentSession.reset();
+    stores.accountLifecycle.reset();
+    agentRunEvents.reset();
+  };
+
+  const seedServiceStores = (): void => {
+    // Local/QA composition admits the configured owner by writing an explicit
+    // lifecycle row. Absence is never interpreted as active by the auth port.
+    stores.accountLifecycle.setLifecycle(options.ownerAccountId, "active");
+    for (const folder of QA_FOLDER_SEED) folders.upsert(options.ownerAccountId, folder);
+    const seeded = conversations.upsert(options.ownerAccountId, QA_CONVERSATION_SEED);
+    if (!seeded.stored) throw new TypeError("QA conversation seed references an unknown folder");
+    stores.settings.putIdentity(options.ownerAccountId, {
+      displayName: options.ownerAccountId,
+      email: "",
+    });
+    stores.settings.putEntitlement(options.ownerAccountId, null);
+    if (options.listenDefaultUnmetered === true) {
+      stores.settings.putEntitlement(options.ownerAccountId, {
+        planLabel: "Omi Plus",
+        limitKey: "transcription_seconds",
+        used: 0,
+        limit: null,
+        limitReached: false,
+        upgradeAvailable: false,
+      });
+    }
+  };
+
+  let invokeAfterReset = false;
+  const reseed = (): void => {
+    nextFolderId = 1;
+    resetServiceStores();
+    seedQaSnapshot(options.db, {
+      owner_account_id: options.ownerAccountId,
+      memory_count: options.memoryCount,
+      account_timezone: options.accountTimezone,
+    });
+    seedServiceStores();
+    options.overlaySeed?.({
+      db: options.db,
+      stores,
+      ownerAccountId: options.ownerAccountId,
+      accountTimezone: options.accountTimezone,
+    });
+    producerEvidence.reset();
+    // Initial composition leaves the projection absent so in-process tests
+    // can restage from revision 1. Subsequent reseeds (HTTP `/v1/qa/reset`)
+    // invoke the process-registered hook, never a factory-owned cutover.
+    if (invokeAfterReset) options.afterReset?.();
+  };
+
+  if (ownsStores) {
+    reseed();
+  } else if (options.persistentQaStores === true) {
+    if (stores.settings.readSettings(options.ownerAccountId).status === "unavailable") {
+      reseed();
+    } else {
+      const createdIds = folders.listFolders(options.ownerAccountId)
+        .map((folder) => /^qa-folder-created-([0-9]+)$/.exec(folder.id)?.[1])
+        .filter((value): value is string => value !== undefined)
+        .map(Number);
+      nextFolderId = Math.max(0, ...createdIds) + 1;
+    }
+  } else {
+    // Historical injected-store tests own their starting rows. Only the recall
+    // fixture is initialized on composition; explicit QA reset is still total.
+    seedQaSnapshot(options.db, {
+      owner_account_id: options.ownerAccountId,
+      memory_count: options.memoryCount,
+      account_timezone: options.accountTimezone,
+    });
+  }
+  invokeAfterReset = true;
+
+  const tasks = stores.tasks;
+  const writeIdRegistry = stores.registry;
+  const unitOfWork = stores.unitOfWork;
+  const stragglers = stores.stragglers;
+  const controlStore = stores.control;
+
+  const memoryFormation = composeLocalMemoryFormation({
+    db: options.db,
+    ownerAccountId: options.ownerAccountId,
+    accountTimezone: options.accountTimezone,
+    control: controlStore,
+    listen: stores.listen,
+    ...(options.memoryFormationMode === undefined ? {} : { mode: options.memoryFormationMode }),
+  });
+
+  const readAttribution = createServedReadAttribution();
+  const counter = attributeServedReads(createServedCounter(), readAttribution);
+  const issuer = createDevTokenIssuer({
+    signing_keyset: {
+      active_key_id: DEV_KEY_ID,
+      keys: [{ key_id: DEV_KEY_ID, secret: derive32(options.devSecretLabel) }],
+    },
+    ttl_seconds: DEV_TOKEN_TTL_SECONDS,
+  });
+
+  // A fixed instant keeps the token stable across restarts and keeps the whole
+  // read path hermetic - no wall clock anywhere in the flow.
+  const anchorEpochSeconds = Math.floor(Date.parse(QA_FIXTURE_TIME_ANCHOR_UTC) / 1000);
+  const devToken = issuer.issue(options.ownerAccountId, anchorEpochSeconds);
+  const resolveDevToken = (token: string): DevPrincipal | null =>
+    issuer.resolve(token, anchorEpochSeconds);
+  // Signature, TTL, revocation, and account existence are one authentication
+  // result. Routes receive only the resolved principal/null boundary, so a
+  // later production lifecycle source is an adapter swap rather than a route
+  // retrofit.
+  const resolveActiveDevToken = (token: string): DevPrincipal | null => {
+    const principal = resolveDevToken(token);
+    if (principal === null) return null;
+    return stores.accountLifecycle.readLifecycle(principal.uid) === "active"
+      ? principal
+      : null;
+  };
+  const resolvePrincipal = (token: string): DevPrincipal | null =>
+    stores.currentSession.authenticate(token, resolveActiveDevToken);
+
+  const codecRootSecret = derive32(`${options.devSecretLabel}:codec-root`);
+  const cursorSigningKeyset = {
+    active_key_id: DEV_KEY_ID,
+    keys: [{ key_id: DEV_KEY_ID, secret: derive32(`${options.devSecretLabel}:cursor`) }],
+  };
+  const chatCursor = createChatHistoryCursorCodec({
+    activeId: DEV_KEY_ID,
+    keys: [{ id: DEV_KEY_ID, secret: derive32(`${options.devSecretLabel}:chat-cursor`) }],
+  });
+  const opaqueChatId = (kind: string, ...parts: readonly string[]): string =>
+    `${kind}_${createHash("sha256")
+      .update(`${options.devSecretLabel}:chat:${kind}\0${parts.join("\0")}`, "utf8")
+      .digest("hex")}`;
+  const chatNowEpochMilliseconds = options.nowEpochMilliseconds
+    ?? (() => anchorEpochSeconds * 1_000);
+  const prepareRead = async (principal: DevPrincipal) => {
+    const loader = createSqliteQaRecallLoader({
+      db: options.db,
+      owner_account_id: principal.uid,
+      account_timezone: options.accountTimezone,
+      limits: { max_items: 512, max_bytes: 4_000_000 },
+      // The seeder owns the whole corpus and writes no accepted work, so
+      // "no eligible accepted work" is declared evidence here, not a guess.
+      accepted_fixture_state: {
+        state: "no_eligible",
+        declared_frontier: null,
+        searched_frontier: null,
+        candidates: [],
+      },
+    });
+    return prepareMemoryRead({
+      cursorBindings: QA_MEMORY_READ_CURSOR_BINDINGS,
+      produceRenders: qaMemoryReadProduceRenders,
+      loadCoherent: loader as unknown as () => CoherentQaLoad,
+      // A thunk, not a value: the read core crosses the authorization boundary
+      // twice per page, and passing a captured request meant a grant revoked
+      // between the two loads was never observed.
+      resolveAuthorization: () => devPrincipalToAuthorizationRequest(principal, {
+        app_id: "omi-local-dev-app",
+        key_id: DEV_KEY_ID,
+      }),
+      codecRootSecret,
+      cursorSigningKeyset,
+      cursorTtlSeconds: CURSOR_TTL_SECONDS,
+      // Passed EXPLICITLY, never left to be implied by which handler is
+      // running. The value is the app-facing default, but the read is told
+      // which granularity it is serving rather than inferring it.
+      // domain-pending(DIV-DOMCORE-008)
+      granularity: DEFAULT_READ_ITEM_GRANULARITY,
+      // DECLARED coverage, not counted at request time.
+      //
+      // This service owns its entire fixture: `reseed()` runs on construction
+      // and on every /v1/qa/reset, `resetQaSnapshot` clears `stm_items`, and the
+      // seeder never inserts an STM row. So "no eligible short-term material" is
+      // true by construction here, and `app-facing.test.ts` asserts that
+      // property of the seeder rather than trusting this comment.
+      //
+      // The distinction matters: deriving these from a row count would make a
+      // wire-visible completeness field vary with rows outside the authorized
+      // closure. A static declaration cannot.
+      // domain-pending(DIV-DOMCORE-006)
+      acceptedCoverageState: "no_eligible",
+      // domain-pending(DIV-DOMCORE-006)
+      stmCoverageState: "no_eligible",
+      readTimestampEpochSeconds: anchorEpochSeconds,
+      // Opaque references only, and this server has no reason to retain even those.
+      traceSink: () => {},
+    });
+  };
+
+  const memoryReadPort = createPreparedMemoryRouteReadPort({ resolvePrincipal, prepareRead });
+  const generationContext = options.generationContext
+    ?? createMemoryReadChatGenerationContextSource({
+      readCanonicalPage: async (input) => {
+        const principal = resolvePrincipal(input.bearerToken);
+        if (principal === null || principal.uid !== input.accountId) return null;
+        const outcome = snapshotMemoryRouteReadOutcome(await memoryReadPort.read({
+          bearer_token: input.bearerToken,
+          now_epoch_seconds: Math.floor(
+            (input.nowEpochMilliseconds ?? chatNowEpochMilliseconds()) / 1_000,
+          ),
+          request: { limit: 25, cursor: null },
+        })) ?? Object.freeze({ kind: "unavailable" as const });
+        if (outcome.kind !== "loaded") return null;
+        return outcome.canonical_json;
+      },
+    });
+  const chatSupervisor = options.chatSupervisor ?? createChatGenerationSupervisor({
+    source: options.generationSource,
+    context: generationContext,
+    messages: stores.chatMessages,
+    events: stores.chatEvents,
+    finalization: stores.chatFinalization,
+    attachments: stores.chatAttachments,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    liveness: options.generationLiveness ?? DEFAULT_CHAT_GENERATION_LIVENESS,
+    scheduler: options.generationStreamScheduler,
+    assistantMessageId: (accountId, generationId) =>
+      opaqueChatId("assistant", accountId, generationId),
+    eventId: (accountId, generationId, kind, sequence) =>
+      opaqueChatId("event", accountId, generationId, kind, String(sequence)),
+    revision: (accountId, messageId, payloadHash) =>
+      opaqueChatId("revision", accountId, messageId, payloadHash),
+    agentRunEvents,
+  });
+  chatSupervisor.recoverInterrupted();
+
+  const agentApprovalEvents = createAgentRunEventSupervisor({
+    events: agentRunEvents,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    eventId: (runId, sequence, kind) => `${runId}:event:${sequence}:${kind}`,
+  });
+  const agentApprovalCoordinator = createAgentApprovalCoordinator({
+    registry: createSafeWriteToolRegistry(),
+    events: agentApprovalEvents,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+  });
+
+  /**
+   * The tasks read's prepared ports, per principal.
+   *
+   * `appliedFrontierState` is DECLARED here, and this call site is where the
+   * declaration is earned rather than asserted: `registerTasksOpsRoutes` applies
+   * into `tasks` SYNCHRONOUSLY, in-process, before it answers — so at the moment
+   * this read runs there is no applied write that is not already in the store it
+   * serves from. `caught_up` is therefore a property of this wiring, not a
+   * guess, and `no_applied_writes` is the honest answer for an account the write
+   * door has never touched. Deriving either from a row count would be the oracle
+   * `composition/tasks-read.ts` refuses: a count varies with rows the reader is
+   * not authorized to see.
+   *
+   * A deployment that ever applies writes ASYNCHRONOUSLY must declare `lagging`
+   * here instead. That is the whole reason the state is a caller declaration and
+   * not something the composition works out for itself.
+   */
+  const prepareTasksReadFor = (principal: DevPrincipal) => prepareTasksRead({
+    store: tasks as TasksReadStore,
+    resolveAuthorization: () => ({
+      owner_account_id: principal.uid,
+      app_id: "omi-local-dev-app",
+      key_id: DEV_KEY_ID,
+    }),
+    codecRootSecret,
+    cursorSigningKeyset,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    readTimestampEpochSeconds: anchorEpochSeconds,
+    appliedFrontierState: tasks.listRecords(principal.uid).length === 0
+      ? "no_applied_writes"
+      : "caught_up",
+  });
+
+  const prepareConversationsReadFor = (principal: DevPrincipal) => prepareConversationsRead({
+    store: conversations,
+    resolveAuthorization: () => ({
+      owner_account_id: principal.uid,
+      app_id: "omi-local-dev-app",
+      key_id: DEV_KEY_ID,
+    }),
+    codecRootSecret,
+    cursorSigningKeyset,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    readTimestampEpochSeconds: anchorEpochSeconds,
+    // Client mutations apply synchronously. Upsert from the finalizer does not
+    // bump revision, so revision 0 is the honest "no applied writes" even when
+    // finalized rows exist.
+    appliedFrontierState: conversations.readStateRevision(principal.uid) === 0
+      ? "no_applied_writes"
+      : "caught_up",
+  });
+
+  const prepareFoldersReadFor = (principal: DevPrincipal) => prepareFoldersRead({
+    store: folders,
+    resolveAuthorization: () => ({
+      owner_account_id: principal.uid,
+      app_id: "omi-local-dev-app",
+      key_id: DEV_KEY_ID,
+    }),
+    codecRootSecret,
+    cursorSigningKeyset,
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    readTimestampEpochSeconds: anchorEpochSeconds,
+    appliedFrontierState: folders.listFolders(principal.uid).length === 0
+      ? "no_applied_writes"
+      : "caught_up",
+  });
+
+  const seedIdentity = () => Object.freeze({
+    owner_account_id: options.ownerAccountId,
+    memory_count: options.memoryCount,
+    account_timezone: options.accountTimezone,
+    fixture_time_anchor_utc: QA_FIXTURE_TIME_ANCHOR_UTC,
+    ...(options.seedPersona === "demo" ? { persona: "demo" as const } : {}),
+  });
+
+  // ── The write path ────────────────────────────────────────────────────────
+  //
+  // Constructed here for the same reason everything else is: TESTS EXERCISE THE
+  // REAL APP. There is one wiring of the write door, and it is this one.
+  //
+  // The control projection starts EMPTY on purpose. Nothing in platform mints
+  // control state (`EPOCH-fence-interface.md`), so every write denies
+  // `control_unavailable` until a dev account is seeded through
+  // `/v1/qa/control/*` (R3). Seeding it here by default would make the local
+  // service disagree with the fail-closed posture the fence is built on.
+  const fenceCounter = createWriteFenceCounter();
+  const opsCounter = createWriteOpsCounter();
+
+  const app = new Hono({ strict: true });
+  app.use("*", (context, next) => producerEvidence.withRequestIdentity({
+    clientId: context.req.header(QA_CLIENT_ID_HEADER),
+    runId: context.req.header(QA_RUN_ID_HEADER),
+  }, async () => {
+    await readAttribution.withRun(context.req.header(READ_CLIENT_ID_HEADER), next);
+    const domain = successfulHttpDomain(context.req.method, context.req.path, context.res.status);
+    if (domain !== null) producerEvidence.recordHttpSuccess(domain);
+  }));
+  app.get("/health", () => {
+    counter.recordNonDomainRequest();
+    return new Response(JSON.stringify({ status: "ok" }), { status: 200, headers: JSON_HEADERS });
+  });
+  app.get("/ready", () => {
+    counter.recordNonDomainRequest();
+    return new Response(JSON.stringify({ status: "ready" }), { status: 200, headers: JSON_HEADERS });
+  });
+  registerMemoryRoutes(app, {
+    readPort: memoryReadPort,
+    nowEpochSeconds: () => anchorEpochSeconds,
+    counter,
+  });
+  registerConversationRoutes(app, {
+    resolvePrincipal,
+    store: conversations,
+    counter,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    prepareRead: prepareConversationsReadFor,
+  });
+  registerFolderRoutes(app, {
+    resolvePrincipal,
+    store: folders,
+    deletion: folderDeletion,
+    counter,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    createId: () => `qa-folder-created-${String(nextFolderId++).padStart(3, "0")}`,
+    prepareRead: prepareFoldersReadFor,
+  });
+  registerStmNotesOpsRoutes(app, {
+    resolvePrincipal,
+    registry: writeIdRegistry,
+    stragglers,
+    fence: {
+      store: controlStore,
+      entitlement: stores.settings,
+      counter: fenceCounter,
+    },
+    counter: opsCounter,
+    now: () => anchorEpochSeconds,
+    formation: memoryFormation,
+  });
+  registerTasksOpsRoutes(app, {
+    resolvePrincipal,
+    unitOfWork,
+    stragglers,
+    fence: {
+      store: controlStore,
+      entitlement: stores.settings,
+      counter: fenceCounter,
+    },
+    counter: opsCounter,
+    // The same fixed instant the read path uses. No wall clock anywhere.
+    now: () => anchorEpochSeconds,
+    resolveWriteRecordId: (principal, recordId) => {
+      const prepared = prepareTasksReadFor(principal);
+      return resolveTasksWriteRecordId(prepared.ports, principal.uid, recordId);
+    },
+  });
+  registerTasksReadRoutes(app, {
+    resolvePrincipal,
+    prepareRead: prepareTasksReadFor,
+    fence: { store: controlStore },
+    counter,
+  });
+  registerActionItemsCompatRoutes(app, {
+    resolvePrincipal,
+    store: tasks,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    createId: options.actionItemId ?? (() => `action-item_${randomUUID()}`),
+  });
+  registerSettingsRoutes(app, {
+    resolvePrincipal,
+    projections: stores.settings,
+    counter,
+  });
+  const listenConversationFinalizer = createListenConversationFinalizer(
+    conversations,
+    options.conversationProcessorFactory(conversations),
+  );
+  registerListenRoutes(app, {
+    resolvePrincipal,
+    entitlement: stores.settings,
+    store: stores.listen,
+    segments: stores.listenSegments,
+    transcription: options.transcriptionSource,
+    conversations: Object.freeze({
+      finalize(input: Parameters<typeof listenConversationFinalizer.finalize>[0]) {
+        listenConversationFinalizer.finalize(input);
+        memoryFormation.enqueueListenFinalization({
+          accountId: input.accountId,
+          session: input.session,
+        });
+      },
+    }),
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    credentialLeaseMilliseconds: options.listenCredentialLeaseMilliseconds
+      ?? LISTEN_MAX_CREDENTIAL_LEASE_MILLISECONDS,
+    credentialNowMilliseconds: options.listenCredentialNowMilliseconds ?? Date.now,
+    resolveEvidenceIdentity: producerEvidence.resolveIdentity,
+    recordProtocolReady: producerEvidence.recordProtocolReady,
+    recordAcceptedBinary: producerEvidence.recordAcceptedBinary,
+  });
+  registerScreenRoutes(app, {
+    resolvePrincipal,
+    store: stores.screen,
+    embeddings: options.screenEmbeddings ?? createUnconfiguredScreenEmbeddingSource(),
+    counter,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    accountTimezone: options.accountTimezone,
+  });
+  createScreenRetentionWorker({
+    store: stores.screen,
+    now: () => QA_FIXTURE_TIME_ANCHOR_UTC,
+    intervalMs: options.screenRetentionIntervalMs ?? 0,
+  });
+  registerChatMessagesRoutes(app, {
+    resolvePrincipal,
+    messages: stores.chatMessages,
+    attachments: stores.chatAttachments,
+    control: controlStore,
+    admission: stores.chatAdmission,
+    supervisor: chatSupervisor,
+    events: stores.chatEvents,
+    cursor: chatCursor,
+    counter,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    nowEpochSeconds: () => Math.floor(chatNowEpochMilliseconds() / 1_000),
+    cursorTtlSeconds: CURSOR_TTL_SECONDS,
+    generationId: (accountId, messageId) => opaqueChatId("generation", accountId, messageId),
+    acceptedEventId: (accountId, generationId) =>
+      opaqueChatId("event", accountId, generationId, "accepted"),
+    recordAcceptedAdmission: producerEvidence.recordAcceptedAdmission,
+    revision: (accountId, messageId, journalRevision, payloadHash) =>
+      opaqueChatId("revision", accountId, messageId, String(journalRevision), payloadHash),
+    streamPolicy: options.generationStreamPolicy,
+    streamScheduler: options.generationStreamScheduler,
+    retentionPolicy: options.generationRetentionPolicy,
+  });
+  registerChatAgentRunRoutes(app, {
+    resolvePrincipal,
+    events: agentRunEvents,
+    resolveGenerationOwner: (accountId, generationId) =>
+      stores.chatMessages.readHumanByGeneration(accountId, generationId) !== null,
+    scheduler: options.generationStreamScheduler,
+  });
+  registerChatAgentApprovalRoutes(app, {
+    resolvePrincipal,
+    coordinator: agentApprovalCoordinator,
+    resolveGenerationOwner: (accountId, generationId) =>
+      stores.chatMessages.readHumanByGeneration(accountId, generationId) !== null,
+  });
+  registerChatAttachmentsRoute(app, {
+    resolvePrincipal,
+    attachments: stores.chatAttachments,
+    nowEpochMilliseconds: chatNowEpochMilliseconds,
+    attachmentId: options.attachmentId ?? (() => `attachment_${randomUUID()}`),
+    contentReference: options.attachmentContentReference
+      ?? (() => `attachment-content_${randomUUID()}`),
+  });
+  registerCurrentSessionRoutes(app, {
+    sessions: stores.currentSession,
+    resolveDevToken: resolveActiveDevToken,
+  });
+  registerQaControlRoutes(app, {
+    resolvePrincipal,
+    fence: { store: controlStore, counter: fenceCounter },
+    writeOpsCounter: opsCounter,
+    readAttribution,
+    stragglers,
+    tasksRead: tasks,
+    collectWriteIdsBelowEpoch: (accountId, activeEpoch) =>
+      writeIdRegistry.collectBelowEpoch(accountId, activeEpoch),
+    resetWriteState: () => {
+      tasks.reset();
+      writeIdRegistry.reset();
+      stragglers.reset();
+    },
+  });
+  registerQaRoutes(app, {
+    counter,
+    resetSeed: reseed,
+    isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
+    seedIdentity,
+    sttEngine: () => options.sttEngine ?? "scripted",
+    chatGateway: () => options.chatGateway ?? "none",
+    chatModel: () => options.chatModel ?? null,
+  });
+  registerQaEvidenceRoutes(app, {
+    evidence: producerEvidence,
+    isAuthorizedControlToken: (token) => resolvePrincipal(token) !== null,
+  });
+  app.notFound(() => {
+    counter.recordNonDomainRequest();
+    return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: JSON_HEADERS });
+  });
+  attachServiceRequestLog(app, {
+    ...(options.runtimeLogDir === undefined ? {} : { dir: options.runtimeLogDir }),
+    resolveOwnerAccountId: (request) => {
+      const token = bearerTokenFromAuthorization(request.headers.get("authorization"));
+      return token === null ? null : resolvePrincipal(token)?.uid ?? null;
+    },
+  });
+
+  const warmupAdmitted: StoredChatMessage = Object.freeze({
+    generationId: "warmup:chat-generation-context",
+    message: Object.freeze({
+      id: "warmup:chat-generation-context",
+      text: "",
+      sender: "human",
+      type: "text",
+      createdAt: 0,
+      updatedAt: 0,
+      chatSessionId: null,
+      appId: null,
+      journalRevision: 1,
+      payloadHash: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      messageSource: "desktop_chat",
+      rating: null,
+      reported: false,
+      revision: "warmup",
+      attachments: Object.freeze([]),
+    }),
+  });
+  const warmupChatGenerationContext = async (): Promise<void> => {
+    try {
+      await generationContext.load({
+        accountId: options.ownerAccountId,
+        generationId: "warmup:chat-generation-context",
+        admitted: warmupAdmitted,
+        nowEpochMilliseconds: 0,
+        history: [],
+        bearerToken: devToken,
+      });
+    } catch {
+      // Boot still serves Chat; the first user send pays first-execution cost.
+    }
+  };
+
+  return Object.freeze({
+    app,
+    websocket,
+    devToken,
+    counter,
+    evidence: producerEvidence,
+    reseed,
+    seedIdentity,
+    warmupChatGenerationContext,
+    memoryFormation,
+    writePath: Object.freeze({
+      conversations,
+      folders,
+      folderDeletion,
+      tasks,
+      tasksRead: tasks,
+      registry: writeIdRegistry,
+      unitOfWork,
+      stragglers,
+      control: controlStore,
+      fenceCounter,
+      opsCounter,
+      settings: stores.settings,
+      listen: stores.listen,
+      screen: stores.screen,
+      chatMessages: stores.chatMessages,
+      chatAttachments: stores.chatAttachments,
+      chatEvents: stores.chatEvents,
+      chatAdmission: stores.chatAdmission,
+      chatFinalization: stores.chatFinalization,
+      agentRunEvents,
+      agentApprovalCoordinator,
+    }),
+  });
+};

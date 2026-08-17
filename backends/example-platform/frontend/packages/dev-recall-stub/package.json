@@ -1,0 +1,28 @@
+{
+  "name": "@omi-core/dev-recall-stub",
+  "version": "0.0.0",
+  "private": true,
+  "description": "DEV ONLY local fixture server for ratified synthesized-memory recall pages. Never production authority.",
+  "type": "module",
+  "main": "./dist/create_dev_recall_stub_server.js",
+  "types": "./dist/create_dev_recall_stub_server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/create_dev_recall_stub_server.d.ts",
+      "import": "./dist/create_dev_recall_stub_server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/create_dev_recall_stub_server.js",
+    "test": "echo dev-recall-stub:tested-via-manual-curl",
+    "lint": "echo dev-recall-stub:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/ratified-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.7.2"
+  }
+}
