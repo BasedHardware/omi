@@ -16,8 +16,6 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/utils/logger.dart';
 
-typedef AuthTokenRetryDelay = Future<void> Function(Duration duration);
-
 abstract interface class AuthTokenStorage {
   Future<String?> read();
 
@@ -46,14 +44,12 @@ class SharedPreferencesUtil {
   static SharedPreferences? _preferences;
   static AuthTokenStorage? _authTokenStorage;
   static AuthTokenStorage? _authTokenStorageOverride;
-  static AuthTokenRetryDelay _authTokenRetryDelay = _defaultAuthTokenRetryDelay;
   static Future<bool> _authTokenPersistenceTail = Future<bool>.value(true);
   static String _authToken = '';
 
   static const _authTokenKey = 'authToken';
   static const _nativeAuthTokenKey = 'nativeAuthToken';
   static const _authTokenDeletePendingKey = 'authTokenDeletePending';
-  static const _authTokenStorageRetryDelays = <Duration>[Duration(milliseconds: 100), Duration(milliseconds: 500)];
 
   factory SharedPreferencesUtil() {
     return _instance;
@@ -95,154 +91,132 @@ class SharedPreferencesUtil {
     }
   }
 
-  static Future<void> _defaultAuthTokenRetryDelay(Duration duration) => Future<void>.delayed(duration);
-
-  static void setAuthTokenStorageForTesting(AuthTokenStorage storage, {AuthTokenRetryDelay? retryDelay}) {
+  static void setAuthTokenStorageForTesting(AuthTokenStorage storage) {
     _authTokenStorageOverride = storage;
-    _authTokenRetryDelay = retryDelay ?? _defaultAuthTokenRetryDelay;
   }
 
   static void resetAuthTokenStorageForTesting() {
     _authTokenStorageOverride = null;
     _authTokenStorage = null;
-    _authTokenRetryDelay = _defaultAuthTokenRetryDelay;
     _authTokenPersistenceTail = Future<bool>.value(true);
     _authToken = '';
+  }
+
+  static Future<T> _withRetry<T>(Future<T> Function() operation, String label, {int maxAttempts = 3}) async {
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await operation();
+      } catch (e) {
+        if (attempt == maxAttempts) rethrow;
+        await Future.delayed(Duration(milliseconds: 100 * attempt));
+      }
+    }
+    throw StateError('unreachable');
   }
 
   static Future<String?> _readSecureAuthToken() async {
     final storage = _authTokenStorage;
     if (storage == null) return null;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
-        return await storage.read();
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to read authToken from secure storage: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+    try {
+      return await _withRetry(() => storage.read(), 'readAuthToken from secure storage');
+    } catch (e) {
+      Logger.error('Failed to read authToken from secure storage: ${e.runtimeType}');
+      return null;
     }
-    return null;
   }
 
   static Future<bool> _writeSecureAuthToken(String value) async {
     final storage = _authTokenStorage;
     if (storage == null) return false;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
+    try {
+      return await _withRetry(() async {
         await storage.write(value);
         if (await storage.read() == value) return true;
         throw StateError('secure authToken verification failed');
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to write authToken to secure storage: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+      }, 'writeAuthToken to secure storage');
+    } catch (e) {
+      Logger.error('Failed to write authToken to secure storage: ${e.runtimeType}');
+      return false;
     }
-    return false;
   }
 
   static Future<bool> _deleteSecureAuthToken() async {
     final storage = _authTokenStorage;
     if (storage == null) return false;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
+    try {
+      return await _withRetry(() async {
         await storage.delete();
         if (await storage.read() == null) return true;
         throw StateError('secure authToken deletion verification failed');
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to delete authToken from secure storage: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+      }, 'deleteAuthToken from secure storage');
+    } catch (e) {
+      Logger.error('Failed to delete authToken from secure storage: ${e.runtimeType}');
+      return false;
     }
-    return false;
   }
 
   static Future<bool> _removeLegacyAuthToken() async {
     final preferences = _preferences;
     if (preferences == null) return false;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
+    try {
+      return await _withRetry(() async {
         if (!preferences.containsKey(_authTokenKey)) return true;
         final removed = await preferences.remove(_authTokenKey);
         if (removed) return true;
         throw StateError('legacy authToken removal was not committed');
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to remove legacy authToken: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+      }, 'removeLegacyAuthToken');
+    } catch (e) {
+      Logger.error('Failed to remove legacy authToken: ${e.runtimeType}');
+      return false;
     }
-    return false;
   }
 
   static Future<bool> _writeNativeAuthToken(String value) async {
     if (defaultTargetPlatform != TargetPlatform.android) return true;
     final preferences = _preferences;
     if (preferences == null) return false;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
+    try {
+      return await _withRetry(() async {
         final saved = await preferences.setString(_nativeAuthTokenKey, value);
         if (saved) return true;
         throw StateError('native authToken mirror was not committed');
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to mirror authToken for native Android audio: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+      }, 'writeNativeAuthToken');
+    } catch (e) {
+      Logger.error('Failed to mirror authToken for native Android audio: ${e.runtimeType}');
+      return false;
     }
-    return false;
   }
 
   static Future<bool> _removeNativeAuthToken() async {
     if (defaultTargetPlatform != TargetPlatform.android) return true;
     final preferences = _preferences;
     if (preferences == null) return false;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
+    try {
+      return await _withRetry(() async {
         if (!preferences.containsKey(_nativeAuthTokenKey)) return true;
         final removed = await preferences.remove(_nativeAuthTokenKey);
         if (removed) return true;
         throw StateError('native authToken mirror removal was not committed');
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to remove native authToken mirror: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+      }, 'removeNativeAuthToken');
+    } catch (e) {
+      Logger.error('Failed to remove native authToken mirror: ${e.runtimeType}');
+      return false;
     }
-    return false;
   }
 
   static Future<bool> _markAuthTokenDeletePending() async {
     final preferences = _preferences;
     if (preferences == null) return false;
-    for (var attempt = 0; attempt < _authTokenStorageRetryDelays.length + 1; attempt++) {
-      try {
+    try {
+      return await _withRetry(() async {
         final saved = await preferences.setBool(_authTokenDeletePendingKey, true);
         if (saved) return true;
         throw StateError('authToken deletion marker was not committed');
-      } catch (e) {
-        if (attempt == _authTokenStorageRetryDelays.length) {
-          Logger.error('Failed to mark authToken deletion pending: ${e.runtimeType}');
-        } else {
-          await _authTokenRetryDelay(_authTokenStorageRetryDelays[attempt]);
-        }
-      }
+      }, 'markAuthTokenDeletePending');
+    } catch (e) {
+      Logger.error('Failed to mark authToken deletion pending: ${e.runtimeType}');
+      return false;
     }
-    return false;
   }
 
   static Future<bool> _clearAuthTokenDeletePending() async {

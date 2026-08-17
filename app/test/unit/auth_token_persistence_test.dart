@@ -13,7 +13,7 @@ void main() {
 
   test('migrates the legacy token and removes plaintext storage', () async {
     final storage = _FakeAuthTokenStorage();
-    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage, retryDelay: (_) async {});
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
     SharedPreferences.setMockInitialValues({'authToken': 'legacy-token'});
 
     await SharedPreferencesUtil.init();
@@ -26,7 +26,7 @@ void main() {
 
   test('a failed migration does not fail startup and retries on the next init', () async {
     final storage = _FakeAuthTokenStorage(failWrites: 3);
-    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage, retryDelay: (_) async {});
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
     SharedPreferences.setMockInitialValues({'authToken': 'legacy-token'});
 
     await SharedPreferencesUtil.init();
@@ -45,7 +45,7 @@ void main() {
 
   test('secure token startup retries legacy plaintext cleanup', () async {
     final storage = _FakeAuthTokenStorage()..value = 'secure-token';
-    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage, retryDelay: (_) async {});
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
     SharedPreferences.setMockInitialValues({'authToken': 'legacy-token'});
 
     await SharedPreferencesUtil.init();
@@ -61,7 +61,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
       final storage = _FakeAuthTokenStorage();
-      SharedPreferencesUtil.setAuthTokenStorageForTesting(storage, retryDelay: (_) async {});
+      SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       await SharedPreferencesUtil().persistAuthToken('android-token');
@@ -79,7 +79,7 @@ void main() {
 
   test('refresh succeeds with an in-memory token when secure persistence fails', () async {
     final storage = _FakeAuthTokenStorage(failWrites: 3);
-    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage, retryDelay: (_) async {});
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     storage.failWrites = 3;
@@ -93,7 +93,7 @@ void main() {
 
   test('sign out completes when secure deletion fails and retries after restart', () async {
     final storage = _FakeAuthTokenStorage();
-    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage, retryDelay: (_) async {});
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     await SharedPreferencesUtil().persistAuthToken('cached-token');
