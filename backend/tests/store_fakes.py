@@ -78,6 +78,19 @@ def _apply(data: Dict[str, Any], patch: Dict[str, Any]) -> None:
             _set_path(data, key, value)
 
 
+def _deep_merge(data: Dict[str, Any], patch: Dict[str, Any]) -> None:
+    """Firestore ``set(merge=True)`` deep-merges nested maps to the LEAF (parity with the Mongo adapter's
+    dotted-path merge, cubic PR 10887 mongo.py:389): recurse into nested plain-dict values so sibling
+    fields survive; a sentinel/scalar/list applies at its leaf; an empty map is a no-op (nothing to merge)."""
+    for key, value in patch.items():
+        if isinstance(value, dict):
+            if not isinstance(data.get(key), dict):
+                data[key] = {}
+            _deep_merge(data[key], value)
+        else:
+            _apply(data, {key: value})  # sentinel/scalar/list at this leaf
+
+
 class _FakeBatch:
     def __init__(self, store: "FakeDocumentStore"):
         self._store = store
@@ -164,11 +177,15 @@ class FakeDocumentStore:
         return path in self._docs
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
-        # Resolve neutral sentinels (ArrayUnion/DELETE/SERVER_TIMESTAMP/...) like the real adapters,
-        # merging shallowly at the top level when merge=True.
-        target = self._docs[path] if (merge and path in self._docs) else {}
-        _apply(target, copy.deepcopy(data))
-        self._docs[path] = target
+        # Resolve neutral sentinels (ArrayUnion/DELETE/SERVER_TIMESTAMP/...) like the real adapters. When
+        # merge=True, DEEP-merge nested maps to the leaf (Firestore parity, cubic PR 10887 mongo.py:389);
+        # a fresh set replaces the whole document.
+        if merge and path in self._docs:
+            _deep_merge(self._docs[path], copy.deepcopy(data))
+        else:
+            target: Dict[str, Any] = {}
+            _apply(target, copy.deepcopy(data))
+            self._docs[path] = target
         self._stamp(path)
 
     def create(self, path: str, data: Dict[str, Any]) -> None:

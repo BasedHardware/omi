@@ -82,6 +82,40 @@ def test_set_merge_writes_and_preserves(store, uid):
     assert data == {"a": 1, "b": 20, "c": 3}
 
 
+def test_set_merge_deep_merges_nested_maps(store, uid):
+    # cubic PR 10887 mongo.py:389: Firestore merge=True deep-merges nested maps to the LEAF; a shallow
+    # replace erased sibling grants (adding a 2nd API-key grant dropped the 1st). Both backends must
+    # preserve siblings at every nesting level.
+    base = f"users/{uid}/state/grants"
+    store.set(base, {"grants": {"c1": {"apps": {"a1": {"keys": {"k1": {"role": "r1"}}}}}}})
+    # merge a sibling consumer, a sibling app under the SAME consumer, and a sibling key under the SAME app
+    store.set(base, {"grants": {"c2": {"apps": {"a2": {"keys": {"k2": {"role": "r2"}}}}}}}, merge=True)
+    store.set(base, {"grants": {"c1": {"apps": {"a3": {"keys": {"k3": {"role": "r3"}}}}}}}, merge=True)
+    store.set(base, {"grants": {"c1": {"apps": {"a1": {"keys": {"k4": {"role": "r4"}}}}}}}, merge=True)
+    got = store.get(base).to_dict()
+    assert got == {
+        "grants": {
+            "c1": {"apps": {
+                "a1": {"keys": {"k1": {"role": "r1"}, "k4": {"role": "r4"}}},  # k1 survived the k4 merge
+                "a3": {"keys": {"k3": {"role": "r3"}}},                          # a1 survived the a3 merge
+            }},
+            "c2": {"apps": {"a2": {"keys": {"k2": {"role": "r2"}}}}},            # c1 survived the c2 merge
+        }
+    }
+
+
+def test_query_group_excludes_docs_missing_ordered_field(store, uid):
+    # cubic PR 10887 mongo.py:641: Firestore's order_by returns only docs that HAVE the ordered field; a
+    # collection-group query on Mongo must add the same $exists so it doesn't include a doc missing it.
+    # Scope the collection-group query to THIS test's rows (uid as the stage marker) — the group spans all
+    # parents and the doc-ids are reused across invocations, so filter on the unique uid, not a shared value.
+    store.set(f"users/{uid}/fair/x1", {"stage": uid, "updated_at": 2})
+    store.set(f"users/{uid}/fair/x2", {"stage": uid, "updated_at": 1})
+    store.set(f"users/{uid}/fair/x3", {"stage": uid})  # no updated_at -> excluded by an ordered query
+    ids = [d.path.rsplit("/", 1)[1] for d in store.query_group("fair", filters=[("stage", "==", uid)], order_by="updated_at", direction="asc")]
+    assert ids == ["x2", "x1"]  # x3 (missing the order field) is excluded, both backends
+
+
 def test_set_no_merge_replaces_whole_document(store, uid):
     store.set(f"users/{uid}", {"a": 1, "b": 2})
     store.set(f"users/{uid}", {"c": 3})

@@ -108,19 +108,46 @@ def _build_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     ops: Dict[str, Dict[str, Any]] = {}
     for key, value in data.items():
-        field = "d." + key
-        if value is DELETE:
-            ops.setdefault("$unset", {})[field] = ""
-        elif value is SERVER_TIMESTAMP:
-            ops.setdefault("$currentDate", {})[field] = True
-        elif isinstance(value, ArrayUnion):
-            ops.setdefault("$addToSet", {})[field] = {"$each": list(value.values)}
-        elif isinstance(value, ArrayRemove):
-            ops.setdefault("$pull", {})[field] = {"$in": list(value.values)}
-        elif isinstance(value, Increment):
-            ops.setdefault("$inc", {})[field] = value.amount
+        _apply_field_op(ops, "d." + key, value)
+    return ops
+
+
+def _apply_field_op(ops: Dict[str, Dict[str, Any]], field: str, value: Any) -> None:
+    """Map one (dotted field, neutral value) into the right Mongo update operator on ``ops``."""
+    if value is DELETE:
+        ops.setdefault("$unset", {})[field] = ""
+    elif value is SERVER_TIMESTAMP:
+        ops.setdefault("$currentDate", {})[field] = True
+    elif isinstance(value, ArrayUnion):
+        ops.setdefault("$addToSet", {})[field] = {"$each": list(value.values)}
+    elif isinstance(value, ArrayRemove):
+        ops.setdefault("$pull", {})[field] = {"$in": list(value.values)}
+    elif isinstance(value, Increment):
+        ops.setdefault("$inc", {})[field] = value.amount
+    else:
+        ops.setdefault("$set", {})[field] = value
+
+
+def _build_merge_update_ops(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Build the update ops for ``set(merge=True)`` with Firestore deep-merge semantics.
+
+    Firestore's ``merge=True`` recursively merges nested maps to the LEAF; a plain Mongo ``$set`` of a whole
+    sub-map would REPLACE it and drop sibling fields (cubic PR 10887 mongo.py:389 — seeding a second API-key
+    grant erased the first). Recurse into nested plain-dict values and emit a dotted-path op per leaf, so
+    existing siblings under a nested map survive. A nested sentinel applies at its leaf; a non-dict
+    (scalar/list) replaces at its path (Firestore merge replaces arrays too); an empty map contributes no
+    leaf, so it is a no-op that preserves any existing value (matching merge — nothing to merge, no change)."""
+    ops: Dict[str, Dict[str, Any]] = {}
+
+    def _emit(field: str, value: Any) -> None:
+        if isinstance(value, dict):
+            for sub_key, sub_value in value.items():
+                _emit(f"{field}.{sub_key}", sub_value)
         else:
-            ops.setdefault("$set", {})[field] = value
+            _apply_field_op(ops, field, value)
+
+    for key, value in data.items():
+        _emit("d." + key, value)
     return ops
 
 
@@ -172,7 +199,7 @@ class _MongoBatch:
         now = _now()
         if merge:
             # Operator-based merge can't compute a monotonic _updated_at inline -> stamp via a bump op.
-            update: Dict[str, Any] = _build_update_ops(data)
+            update: Dict[str, Any] = _build_merge_update_ops(data)  # deep-merge nested maps (cubic mongo.py:389)
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
             self._append(
                 collection_name,
@@ -384,7 +411,7 @@ class MongoDocumentStore:
         if merge:
             # Operator-based merge (dotted $set / $inc / array ops) cannot compute a monotonic _updated_at
             # in one update, so stamp it via a second pipeline bump (below) rather than a colliding raw now.
-            update: Dict[str, Any] = _build_update_ops(data)
+            update: Dict[str, Any] = _build_merge_update_ops(data)  # deep-merge nested maps (cubic mongo.py:389)
             update.setdefault("$setOnInsert", {}).update({"_parent": parent, "_key": key, "_created_at": now})
             collection.update_one({"_id": path}, update, upsert=True, session=session)
             self._bump_updated_at(collection, path, now, session)
@@ -638,6 +665,13 @@ class MongoDocumentStore:
             # dict dropped that bound, so later pages escaped the requested name range (cubic PR 10887
             # mongo.py:541).
             mongo_filter.setdefault("_id", {})["$gt"] = start_after
+        # Firestore's order_by returns only documents that HAVE every ordered field; Mongo's sort includes a
+        # doc missing one (null-sorted first). Add an existence predicate per ordered payload field so the
+        # group query matches Firestore (cubic PR 10887 mongo.py:641; parity with query()). ``specs`` already
+        # dropped __name__, and an explicit order is mutually exclusive with the start_after keyset above.
+        exists_clauses = [{"d." + f: {"$exists": True}} for f, _ in specs]
+        if exists_clauses:
+            mongo_filter = {"$and": [mongo_filter, *exists_clauses]}
         cursor = self._db[group].find(mongo_filter)
         if specs:
             sort_spec = [("d." + f, ASCENDING if d == "asc" else DESCENDING) for f, d in specs]
