@@ -138,6 +138,7 @@
     "offlineSync": "Offline szinkronizálás",
     "autoSync": "Automatikus szinkronizálás",
     "autoSyncDescription": "Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor",
+    "omiButtonActions": "Omi gombműveletek",
     "deviceSettings": "Eszköz beállításai",
     "integrations": "Integrációk",
     "feedbackBug": "Visszajelzés / hiba",

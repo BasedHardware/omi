@@ -442,6 +442,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get autoSyncDescription => 'Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird';
 
   @override
+  String get omiButtonActions => 'Omi-Tastenaktionen';
+
+  @override
   String get deviceSettings => 'Geräteeinstellungen';
 
   @override

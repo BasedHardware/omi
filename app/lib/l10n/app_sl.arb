@@ -557,6 +557,7 @@
     "offlineSync": "Sinhroniziranje brez povezave",
     "autoSync": "Samodejna sinhronizacija",
     "autoSyncDescription": "Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže",
+    "omiButtonActions": "Dejanja gumba Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

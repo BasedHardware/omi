@@ -119,6 +119,10 @@ class SharedPreferencesUtil {
 
   set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
 
+  bool get omiButtonActionsEnabled => getBool('omiButtonActionsEnabled', defaultValue: true);
+
+  set omiButtonActionsEnabled(bool value) => saveBool('omiButtonActionsEnabled', value);
+
   bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);

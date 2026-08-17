@@ -138,6 +138,7 @@
     "offlineSync": "Võrguühenduseta sünkroonimine",
     "autoSync": "Automaatne sünkroonimine",
     "autoSyncDescription": "Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse",
+    "omiButtonActions": "Omi nupu toimingud",
     "deviceSettings": "Seadme seaded",
     "integrations": "Integratsioonid",
     "feedbackBug": "Tagasiside / viga",

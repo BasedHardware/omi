@@ -437,6 +437,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
 
   @override
+  String get omiButtonActions => 'Omi بٹن کے اعمال';
+
+  @override
   String get deviceSettings => 'ڈیوائس کی ترتیبات';
 
   @override
