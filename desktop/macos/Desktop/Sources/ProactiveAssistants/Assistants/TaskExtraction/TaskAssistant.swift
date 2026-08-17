@@ -153,7 +153,6 @@ actor TaskAssistant: ProactiveAssistant {
     let startOfDay = calendar.startOfDay(for: Date())
     return calendar.date(bySettingHour: 23, minute: 59, second: 0, of: startOfDay) ?? startOfDay
   }
-
   /// Get the current system prompt from settings (accessed on MainActor for thread safety)
   private var systemPrompt: String {
     get async {
@@ -162,7 +161,6 @@ actor TaskAssistant: ProactiveAssistant {
       }
     }
   }
-
   /// Get the extraction interval from settings
   private var extractionInterval: TimeInterval {
     get async {
@@ -171,7 +169,6 @@ actor TaskAssistant: ProactiveAssistant {
       }
     }
   }
-
   /// Get the minimum confidence threshold from settings
   private var minConfidence: Double {
     get async {
@@ -185,7 +182,10 @@ actor TaskAssistant: ProactiveAssistant {
 
   init(apiKey: String? = nil) throws {
     self.geminiClient = try GeminiClient(
-      apiKey: apiKey, model: ModelQoS.Gemini.taskExtraction, fallbackModel: "gemini-2.5-flash")
+      apiKey: apiKey,
+      model: ModelQoS.Gemini.taskExtraction,
+      fallbackModel: "gemini-2.5-flash",
+      workload: .extraction)
 
     let (stream, continuation) = AsyncStream.makeStream(of: TriggerEvent.self, bufferingPolicy: .bufferingNewest(1))
     self.triggerStream = stream
