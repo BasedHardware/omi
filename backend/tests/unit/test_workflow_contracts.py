@@ -77,6 +77,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         ".github/workflows/desktop_backend_auto_dev.yml": "tests/unit/test_voice_provider_probe.py",
         ".github/workflows/desktop_backend_prod.yml": "tests/unit/test_preflight_agent_vm_reconciler_deploy_identity.py",
         "backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py": "tests/unit/test_preflight_agent_vm_reconciler_deploy_identity.py",
+        "backend/scripts/resolve_agent_vm_sha_release.py": "tests/unit/test_resolve_agent_vm_sha_release.py",
         "backend/charts/pusher/templates/deployment.yaml": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_pusher.yml": "tests/unit/test_verify_pusher_rollout_budget.py",
         "backend/scripts/verify_pusher_rollout_budget.py": "tests/unit/test_verify_pusher_rollout_budget.py",

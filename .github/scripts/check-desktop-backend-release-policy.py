@@ -208,6 +208,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "EXPECTED_GCP_PROJECT_ID: based-hardware",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
             "preflight_agent_vm_reconciler_deploy_identity.py",
+            "resolve_agent_vm_sha_release.py",
             "josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com",
             "agent-vm-reconciler@based-hardware.iam.gserviceaccount.com",
             'python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py"',

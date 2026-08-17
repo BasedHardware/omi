@@ -515,6 +515,25 @@
       ]
     },
     {
+      "id": "desktop_backend_agent_vm_sha_release",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/desktop_backend_prod.yml",
+        ".github/workflows/desktop_backend_auto_dev.yml",
+        "backend/scripts/resolve_agent_vm_sha_release.py"
+      ],
+      "tests": [
+        "tests/unit/test_resolve_agent_vm_sha_release.py",
+        "tests/unit/test_agent_vm_startup.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "a source-SHA Agent VM startup.sh and manifest are immutable; reruns reuse that digest instead of rebuilding a competing image",
+        "gcloud storage cp --no-clobber and cmp remain the publish gate",
+        "a same-SHA rebuild must not fail cmp against the first published startup.sh"
+      ]
+    },
+    {
       "id": "desktop_backend_reconciler_deploy_identity",
       "risk": "high",
       "sources": [
