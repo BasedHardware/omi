@@ -29,6 +29,7 @@ import { registerCaptureBridge } from './ipc/captureBridge'
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
+import { registerSpineHandlers } from './ipc/spine'
 import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
@@ -855,6 +856,7 @@ app.whenReady().then(async () => {
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
   registerSoak()
   registerFileIndexHandlers()
+  registerSpineHandlers()
   registerLocalGraphHandlers()
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()

@@ -351,6 +351,10 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('rewind:captured', listener)
   },
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
+  /** Local days holding screen capture, newest first (Activity spine). */
+  spineScreenDays: (limit?: number) => ipcRenderer.invoke('omi-spine:screen-days', limit),
+  /** One local day's exact totals plus a bounded sample of its frames. */
+  spineScreenDay: (dayId: number) => ipcRenderer.invoke('omi-spine:screen-day', dayId),
   // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
   // with semantic hits merged in, pushed if/when the embedding round-trip lands.
   // Keyword results are already on screen by then — see the rewind:search handler.

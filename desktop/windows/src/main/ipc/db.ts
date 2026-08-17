@@ -8,6 +8,12 @@ import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigration
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
 import {
+  projectScreenDay,
+  screenDaysWithCapture,
+  type ScreenDayProjection,
+  type ScreenIndexDb
+} from '../spine/screenIndex'
+import {
   clearCorruptionFlags,
   isCorruptionError,
   isCorruptionSuspected,
@@ -1475,6 +1481,19 @@ export function listRewindFramesSampled(
     const step = rewindSampleStep(n, target)
     return d.prepare(buildRewindSampledSql(REWIND_COLUMNS)).all(from, to, step) as RewindFrame[]
   })
+}
+
+/** Activity spine screen projections. Thin get()-bound wrappers over
+ *  spine/screenIndex.ts, which owns the SQL so production and the node:sqlite
+ *  tests run the same statements. */
+export function spineScreenDays(limit: number): number[] {
+  return timed('spineScreenDays', () =>
+    screenDaysWithCapture(get() as unknown as ScreenIndexDb, limit)
+  )
+}
+
+export function spineScreenDay(dayId: number): ScreenDayProjection {
+  return timed('spineScreenDay', () => projectScreenDay(get() as unknown as ScreenIndexDb, dayId))
 }
 
 // --- Track 4: Rewind FTS5 search ---
