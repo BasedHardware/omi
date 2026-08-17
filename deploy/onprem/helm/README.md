@@ -57,7 +57,10 @@ Teardown: `kind delete cluster --name omi-dev` (and `helm uninstall eg -n envoy-
 | `push.enabled` | ntfy UnifiedPush | `PUSH_NOTIFICATION_BACKEND=unifiedpush` |
 | `ingress.enabled` | Gateway API edge (Envoy) | GatewayClass/Gateway/HTTPRoute → backend |
 | `auth.enabled` | Keycloak OIDC + Gateway HTTPS (TLS from `omi-tls` Secret) | `AUTH_BACKEND=oidc`, `OIDC_ISSUER`/`OIDC_JWKS_URL` |
-| `inference` | later phase (GPU on k0s) | — |
+| `inference.enabled` | nothing in-cluster — wires an **external** OpenAI-compatible endpoint | `OPENAI_BASE_URL`, `OMI_EMBEDDINGS_BASE_URL`/`MODEL` (keys in Secret) |
+
+`inference` runs no GPU pods (ADR-0035): set `inference.openai.baseUrl` / `inference.embeddings.baseUrl` to
+the operator's OpenAI/vLLM/Ollama endpoint (outside the cluster). GPU services stay on k0s in prod.
 
 ## Notes
 
