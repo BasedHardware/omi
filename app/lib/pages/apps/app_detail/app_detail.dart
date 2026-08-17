@@ -795,7 +795,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         const FaIcon(
                                           FontAwesomeIcons.solidCircleCheck,
                                           size: 14,
-                                          color: Colors.deepPurpleAccent,
+                                          color: Colors.white,
                                         ),
                                       ],
                                     ],
@@ -815,7 +815,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     child: Row(
                                       children: [
                                         if (app.ratingCount > 0) ...[
-                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Colors.white),
                                           const SizedBox(width: 4),
                                           Text(
                                             '${app.getRatingAvg()} (${app.ratingCount})',
@@ -877,7 +877,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   await _toggleApp(app.id, true);
                                                 }
                                               },
-                                              color: const Color(0xFF8B5CF6),
+                                              color: Colors.white,
+                                              // AnimatedLoadingButton defaults both to white; on a
+                                              // white surface the label and spinner vanish.
+                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                              loaderColor: Colors.black,
                                             )
                                           : AnimatedLoadingButton(
                                               width: 75,
@@ -909,7 +913,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                   _toggleApp(app.id, true);
                                                 }
                                               },
-                                              color: const Color(0xFF8B5CF6),
+                                              color: Colors.white,
+                                              // AnimatedLoadingButton defaults both to white; on a
+                                              // white surface the label and spinner vanish.
+                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                              loaderColor: Colors.black,
                                             )),
                             ],
                           ),
@@ -1607,7 +1615,7 @@ class RatingDistributionWidget extends StatelessWidget {
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 14,
-                    color: index < ratingAvg.round() ? Colors.deepPurple : Colors.grey.shade700,
+                    color: index < ratingAvg.round() ? Colors.white : Colors.grey.shade700,
                   ),
                 );
               }),
@@ -1794,9 +1802,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withValues(alpha: 0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1834,7 +1842,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 24,
-                    color: index < editRating ? Colors.deepPurple : Colors.grey.shade600,
+                    color: index < editRating ? Colors.white : Colors.grey.shade600,
                   ),
                 ),
               );
@@ -1865,8 +1873,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               key: const ValueKey('app_detail_submit_review_button'),
               onPressed: isSubmitting ? null : _submitReview,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
@@ -1876,7 +1884,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       width: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        // The button surface is now white, so a white spinner would be invisible.
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                       ),
                     )
                   : Text(
@@ -1910,8 +1919,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 seed: avatarSeed,
                 username: review.username,
                 size: 36,
-                backgroundColor: isUserReview ? Colors.deepPurple.withValues(alpha: 0.2) : null,
-                foregroundColor: isUserReview ? Colors.deepPurple : null,
+                backgroundColor: isUserReview ? Colors.white.withValues(alpha: 0.2) : null,
+                foregroundColor: isUserReview ? Colors.white : null,
               ),
               const SizedBox(width: 12),
               // Name, date, and stars
@@ -1924,7 +1933,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         Text(
                           displayName,
                           style: TextStyle(
-                            color: isUserReview ? Colors.deepPurple : Colors.grey,
+                            color: isUserReview ? Colors.white : Colors.grey,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1946,7 +1955,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
                           ),
                         );
                       }),
