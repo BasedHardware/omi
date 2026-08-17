@@ -166,6 +166,9 @@ class MemoryGraphViewModel: ObservableObject {
   /// canonical graph revision. The SwiftUI Brain Map can re-render freely
   /// without rebuilding the relationship layout or losing its gesture cache.
   @Published private(set) var canonicalAtlasProjection: MemoryAtlasProjection?
+  /// False until `prepareCanonicalAtlas` finishes once, so the tab can show a
+  /// loader instead of a synthetic owner node on the first visit.
+  @Published private(set) var hasAttemptedCanonicalAtlasLoad = false
 
   let scene = SCNScene()
   let cameraNode = SCNNode()
@@ -294,9 +297,18 @@ class MemoryGraphViewModel: ObservableObject {
       graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
       canonicalAtlasProjection = nil
       isEmpty = true
+      isLoading = true
+    }
+    defer {
+      if generation == sessionGeneration {
+        hasAttemptedCanonicalAtlasLoad = true
+      }
     }
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       log("Memory atlas: canonical load skipped while owner authorization is unavailable")
+      if generation == sessionGeneration, !hasLoadedCanonicalAtlas {
+        isLoading = false
+      }
       return
     }
     isPreparing = true
@@ -717,6 +729,7 @@ class MemoryGraphViewModel: ObservableObject {
     isPreparing = false
     hasRunEmptyBootstrap = false
     hasLoadedCanonicalAtlas = false
+    hasAttemptedCanonicalAtlasLoad = false
     loadedGraphSignature = nil
     cameraNode.position = SCNVector3(0, 0, 2000)
   }

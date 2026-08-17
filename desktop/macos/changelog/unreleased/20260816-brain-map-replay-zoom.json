@@ -1,0 +1,3 @@
+{
+  "change": "Made Brain Map replay skip quiet stretches, finish in about four seconds, zoom to a selected entity and its connections, and keep Escape from leaving the map while something is selected"
+}
