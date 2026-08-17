@@ -167,54 +167,33 @@ sudo k0s stop && sudo k0s start
 At install (step 7) you pass `--set imageRegistry=$REG`; the chart prefixes it onto the five names, so the
 pods pull `$REG/omi-oss-backend`, `$REG/omi-oss-whisper`, and so on.
 
-### 5c. Provide the model weights (one time, needs internet)
+### 5c. Provide the model weights
 
-The GPU servers load their models **from a plain directory on the node** — they do NOT download anything at
-run time (that keeps them working with no internet). So you download the weights **once**, into a folder you
-choose. It is an ordinary host directory — not a Docker volume, not anything k0s-specific.
+The GPU servers read their models from a **persistent volume** (a Kubernetes PVC) that the chart mounts
+**read-only** into every inference pod. This is the portable, cluster-native way — it works on any Kubernetes,
+including multi-node. There is no host directory to manage and nothing k0s-specific.
 
-Pick the directory and download the three models into it. This must run on a network that can reach Hugging
-Face; after this the cluster needs no internet for inference.
+The models are downloaded into that volume **once**; after that inference needs no internet. The easiest way
+is to let the chart do it for you at install: it creates the PVC and runs a one-time Job that fetches whisper
++ pyannote and converts nllb into it. You only need a **Hugging Face token**, because one of the diarization
+models (pyannote) is license-gated:
 
 ```bash
-export MODELS=/opt/omi/models                    # your models directory (remember it for step 7)
-sudo mkdir -p $MODELS/hf && sudo chown -R $USER $MODELS
-export HF_TOKEN=hf_xxxxxxxx                       # from https://huggingface.co/settings/tokens
-
-# On the pyannote model pages, click "Agree and access" once (the token's account needs the licenses):
-#   huggingface.co/pyannote/speaker-diarization-community-1 · /pyannote/embedding · /pyannote/wespeaker-voxceleb-resnet34-LM
-
-# whisper — downloads faster-whisper large-v3 (public) into $MODELS/hf. Start it, wait until it logs the
-# model is loaded (a "ready"/startup line), then stop it. Nothing is served during provisioning.
-docker run -d --name prov-whisper -e HF_HOME=/models/hf -e WHISPER_MODEL=large-v3 \
-  -e WHISPER_COMPUTE_TYPE=int8_float16 -v $MODELS:/models $REG/omi-oss-whisper:latest
-docker logs -f prov-whisper        # wait for the model to finish loading, then Ctrl-C
-docker rm -f prov-whisper
-
-# diarizer — downloads the (gated) pyannote models into $MODELS/hf using your token. Same pattern.
-docker run -d --name prov-diar -e HF_HOME=/models/hf -e HUGGINGFACE_TOKEN=$HF_TOKEN \
-  -v $MODELS:/models $REG/omi-oss-diarizer:latest
-docker logs -f prov-diar           # wait until it is ready, then Ctrl-C
-docker rm -f prov-diar
-
-# nllb — convert facebook/nllb-200-distilled-600M to the CTranslate2 int8 format the server expects,
-# into $MODELS/nllb-200-distilled-600M-ct2-int8 (this is a one-shot converter, not a server).
-docker run --rm -v $MODELS:/models $REG/omi-oss-nllb:latest \
-  ct2-transformers-converter --model facebook/nllb-200-distilled-600M --quantization int8 \
-  --output_dir /models/nllb-200-distilled-600M-ct2-int8 --copy_files sentencepiece.bpe.model
-
-# You should now have: $MODELS/hf/... (whisper + pyannote) and $MODELS/nllb-200-distilled-600M-ct2-int8/
-ls $MODELS $MODELS/nllb-200-distilled-600M-ct2-int8
+# 1. Create a token at https://huggingface.co/settings/tokens
+# 2. On each pyannote model page, click "Agree and access" once (the token's account needs the licenses):
+#    huggingface.co/pyannote/speaker-diarization-community-1 · /pyannote/embedding · /pyannote/wespeaker-voxceleb-resnet34-LM
+export HF_TOKEN=hf_xxxxxxxx
 ```
 
-(The parakeet service needs no model — it is a thin gateway that forwards speech to whisper.)
+You pass this token in step 7 (two `--set` flags) and the chart handles the download. The provisioning Job
+runs on **CPU** — it doesn't compete with the GPU — and skips any model already present, so it's cheap to
+leave enabled. (The parakeet service needs no model; it is a thin gateway that forwards speech to whisper.)
 
-**How this directory reaches the pods.** You never copy the weights into the cluster. Because k0s runs on
-this same machine, a pod can mount a folder straight from the node's disk — this is a Kubernetes *hostPath*
-mount. When you pass `--set inference.inCluster.modelsHostPath=$MODELS` (step 7), the chart mounts your
-`$MODELS` directory **read-only** at `/models` inside each inference pod, so the servers read the exact files
-you just downloaded. (This works because everything is on one node. A multi-node cluster would instead put the
-weights on a shared network volume — a ReadOnlyMany PVC — so any node can mount them.)
+- **Size:** the PVC is 40Gi by default — change with `--set inference.inCluster.models.size=60Gi`.
+- **Multi-node:** if inference pods can land on different nodes, use a storage class that supports shared read
+  access and add `--set inference.inCluster.models.accessModes[0]=ReadOnlyMany`.
+- **Already have the weights** on a PVC? Point the chart at it and skip provisioning:
+  `--set inference.inCluster.models.existingClaim=<your-pvc>`.
 
 ---
 
@@ -256,7 +235,8 @@ HOST_IP=$ENTRY_IP ./gen-certs.sh omi omi-tls $ENTRY_IP
 helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
   --set imageRegistry=$REG \
   --set ingress.loadBalancerIP=$ENTRY_IP \
-  --set inference.inCluster.modelsHostPath=$MODELS \
+  --set inference.inCluster.models.provision.enabled=true \
+  --set inference.inCluster.models.provision.huggingFaceToken=$HF_TOKEN \
   --set inference.openai.baseUrl=$LLM \
   --set inference.embeddings.baseUrl=$LLM \
   --set inference.embeddings.model=bge-m3 \
@@ -293,7 +273,8 @@ run**. Before real production, set them all. There are two ways.
 ```bash
 helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
   --set imageRegistry=$REG --set ingress.loadBalancerIP=$ENTRY_IP \
-  --set inference.inCluster.modelsHostPath=$MODELS \
+  --set inference.inCluster.models.provision.enabled=true \
+  --set inference.inCluster.models.provision.huggingFaceToken=$HF_TOKEN \
   --set inference.openai.baseUrl=$LLM --set inference.embeddings.baseUrl=$LLM --set inference.embeddings.model=bge-m3 \
   --set backend.encryptionSecret="$(openssl rand -hex 32)" \
   --set auth.adminPassword="$(openssl rand -base64 24)" \
@@ -314,7 +295,8 @@ kubectl -n omi create secret generic backend-secret \
 # then install with:
 helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml --set secrets.create=false \
   --set imageRegistry=$REG --set ingress.loadBalancerIP=$ENTRY_IP \
-  --set inference.inCluster.modelsHostPath=$MODELS \
+  --set inference.inCluster.models.provision.enabled=true \
+  --set inference.inCluster.models.provision.huggingFaceToken=$HF_TOKEN \
   --set inference.openai.baseUrl=$LLM --set inference.embeddings.baseUrl=$LLM --set inference.embeddings.model=bge-m3
 ```
 With `secrets.create=false` the chart references the Secret by name and never sees the values.

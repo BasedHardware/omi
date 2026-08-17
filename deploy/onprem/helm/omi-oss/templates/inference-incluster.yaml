@@ -78,13 +78,11 @@ spec:
               readOnly: true
       volumes:
         - name: models
-          {{- if $ic.modelsHostPath }}
-          hostPath:
-            path: {{ $ic.modelsHostPath | quote }}
-            type: Directory
-          {{- else }}
-          emptyDir: {}
-          {{- end }}
+          # Portable across any Kubernetes (incl. multi-node): the weights live on a PVC, mounted read-only.
+          # Not a hostPath — that would only work on the node that happens to hold the files.
+          persistentVolumeClaim:
+            claimName: {{ $ic.models.existingClaim | default (printf "%s-inference-models" $root.Release.Name) }}
+            readOnly: true
 ---
 apiVersion: v1
 kind: Service

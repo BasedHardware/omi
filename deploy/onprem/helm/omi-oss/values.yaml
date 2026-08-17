@@ -153,9 +153,18 @@ inference:
   # OFF here (Kind's GPU is fragile); values-k0s.yaml turns it ON for prod.
   inCluster:
     enabled: false
-    # Model weights mounted read-only at /models. Single-node: the compose models volume on the host;
-    # multi-node: replace with a ReadOnlyMany PVC. Provision the weights first (see the compose inference notes).
-    modelsHostPath: "/var/lib/docker/volumes/omi-oss_inference-models/_data"
+    # Model weights: portable, on a PVC (NOT a hostPath) — mounted read-only into every inference pod, so it
+    # works on ANY Kubernetes including multi-node. The chart creates the PVC unless you point at your own.
+    models:
+      existingClaim: ""              # use a PVC you already created + populated; else the chart creates one
+      storageClassName: ""           # empty = the chart's storageClassName / cluster default
+      size: 40Gi
+      accessModes: ["ReadWriteOnce"] # multi-node (inference pods on different nodes): ["ReadOnlyMany"] + an RWX/ROX class
+      # One-time Job that DOWNLOADS the weights into the PVC (internet + a HF token for the gated pyannote
+      # model). Leave off if you populate the PVC yourself. Uses the inference images on CPU (no GPU needed).
+      provision:
+        enabled: false
+        huggingFaceToken: ""
     nodeSelector: {}   # pin GPU pods to the GPU node(s) on a multi-node cluster
     services:
       # STT engine (faster-whisper, 99 languages) — GPU. Reached by the parakeet gateway, not the backend.

@@ -1,0 +1,27 @@
+{{- /*
+Model weights for in-cluster inference live on a PVC (portable across any Kubernetes, incl. multi-node),
+mounted read-only into every inference pod. The chart creates this claim unless you point at one you already
+made+populated (inference.inCluster.models.existingClaim). Populate it once with the provisioning Job
+(inference.inCluster.models.provision.enabled) or by your own means. For inference pods spread across nodes,
+use a ReadOnlyMany-capable storage class and set models.accessModes accordingly.
+*/}}
+{{- if and .Values.inference.inCluster.enabled (not .Values.inference.inCluster.models.existingClaim) }}
+{{- $m := .Values.inference.inCluster.models }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-inference-models
+  labels:
+    {{- include "omi-oss.labels" . | nindent 4 }}
+    app.kubernetes.io/component: inference-models
+spec:
+  accessModes:
+    {{- toYaml $m.accessModes | nindent 4 }}
+  {{- $sc := $m.storageClassName | default .Values.storageClassName }}
+  {{- if $sc }}
+  storageClassName: {{ $sc | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $m.size }}
+{{- end }}
