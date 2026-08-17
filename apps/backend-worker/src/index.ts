@@ -21,6 +21,27 @@ app.get("/ready", (context) =>
 );
 
 app.use("/v1/*", async (context, next) => {
+  // Authorization is gated on the SAME readiness predicate `/ready` reports,
+  // because a readiness signal is not an enforcement point: Cloudflare routes
+  // request traffic regardless of what `/ready` returns, so a deployment whose
+  // API_TOKEN secret is unset still serves `/v1/*`. That matters here and not
+  // merely in principle: TextEncoder yields an EMPTY expectation for an absent
+  // or empty secret, and an empty bearer credential ("Authorization: Bearer ")
+  // encodes to the same empty value, so the constant-time comparison below
+  // returns true and authenticates an anonymous caller. Wrangler does not fail
+  // a deploy when a secret referenced solely in code is unset, so this is a
+  // reachable configuration, not a hypothetical one. Refuse before comparing.
+  if (!configurationReady(context.env)) {
+    // Operator-visible, client-opaque: the caller still gets the ordinary
+    // refusal, so a misconfigured deployment is not advertised over the wire.
+    console.error(
+      JSON.stringify({
+        message: "configuration_not_ready",
+        path: context.req.path,
+      })
+    );
+    return backendError("unauthorized", "reauthenticate", 401);
+  }
   const authorization = context.req.header("authorization");
   if (authorization === undefined || !authorization.startsWith("Bearer ")) {
     return backendError("unauthorized", "reauthenticate", 401);

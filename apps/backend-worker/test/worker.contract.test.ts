@@ -198,6 +198,117 @@ describe("worker request contract", () => {
     });
   });
 
+  // `/ready` reporting 503 is a signal, not an enforcement point: Cloudflare
+  // routes request traffic regardless of what it returns, so the protected
+  // surface needs its own coverage under the same unprovisioned configuration.
+  //
+  // These cases send `authorization: Bearer ` — a bearer prefix with an EMPTY
+  // credential. It encodes to the same empty byte sequence an absent secret
+  // encodes to, so the constant-time comparison alone reports a match and
+  // authenticates an anonymous caller.
+  //
+  // The header must bypass `Headers`: bun strips optional whitespace, turning
+  // "Bearer " into "Bearer", which fails the prefix check and never reaches the
+  // comparison — a normalizing Headers cannot express this input at all.
+  // workerd delivers the trailing space verbatim; issuing this exact request
+  // over a raw socket against `wrangler dev` returned 200 and a full settings
+  // body before this guard existed. The view below reproduces that production
+  // input faithfully; it does not weaken the assertion.
+  const onTheWireRequest = (
+    path: string,
+    headers: Record<string, string>
+  ): Request => {
+    const request = new Request(`https://worker.test${path}`);
+    Object.defineProperty(request, "headers", {
+      value: new Map(
+        Object.entries(headers).map(([name, value]) => [
+          name.toLowerCase(),
+          value,
+        ])
+      ),
+    });
+    return request;
+  };
+
+  const anonymousHeaders = {
+    authorization: "Bearer ",
+    "x-omi-client-id": "test-client",
+  };
+
+  test.each([
+    ["absent", undefined],
+    ["empty", ""],
+  ])(
+    "an %s API_TOKEN secret refuses an empty bearer credential",
+    async (_label, secret) => {
+      accountCalls.length = 0;
+
+      const response = await handler.fetch(
+        onTheWireRequest("/v1/settings", anonymousHeaders),
+        { ...env, API_TOKEN: secret } as never,
+        executionContext as never
+      );
+
+      expect(response.status).toBe(401);
+      expect((await response.json()) as unknown).toEqual({
+        error: {
+          code: "unauthorized",
+          retryable: false,
+          action: "reauthenticate",
+        },
+      });
+      // The account must never be resolved: refusal precedes storage access.
+      expect(accountCalls).toEqual([]);
+    }
+  );
+
+  test("an unprovisioned API_TOKEN secret refuses every protected route", async () => {
+    accountCalls.length = 0;
+
+    const paths = [
+      "/v1/settings",
+      "/v1/chat-messages",
+      "/v1/conversations",
+      "/v1/memories",
+      "/v1/tasks",
+    ];
+    const statuses = await Promise.all(
+      paths.map(
+        async (path) =>
+          (
+            await handler.fetch(
+              onTheWireRequest(path, anonymousHeaders),
+              { ...env, API_TOKEN: undefined } as never,
+              executionContext as never
+            )
+          ).status
+      )
+    );
+
+    expect(statuses).toEqual(paths.map(() => 401));
+    expect(accountCalls).toEqual([]);
+  });
+
+  test("a provisioned API_TOKEN secret still admits its own credential", async () => {
+    // The guard must fail closed on absent configuration without also breaking
+    // the configured path it protects.
+    const response = await fetchWorker("/v1/conversations", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  test("a provisioned secret still refuses the empty bearer credential", async () => {
+    const response = await handler.fetch(
+      onTheWireRequest("/v1/settings", anonymousHeaders),
+      env as never,
+      executionContext as never
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   test("protected routes reject absent credentials before account access", async () => {
     accountCalls.length = 0;
 
