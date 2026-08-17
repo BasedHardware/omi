@@ -92,6 +92,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                           }
                           return Colors.grey.shade700;
                         }),
+                        checkColor: WidgetStateProperty.all(Colors.black),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
                     ),
@@ -148,7 +149,12 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                 mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  CupertinoCheckbox(value: _checkboxValue, onChanged: _updateCheckboxValue, activeColor: Colors.white),
+                  CupertinoCheckbox(
+                    value: _checkboxValue,
+                    onChanged: _updateCheckboxValue,
+                    activeColor: Colors.white,
+                    checkColor: CupertinoColors.black,
+                  ),
                   const SizedBox(width: 8),
                   Text(widget.checkboxText!, style: TextStyle(fontSize: 14, color: Colors.grey.shade300)),
                 ],
