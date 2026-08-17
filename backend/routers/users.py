@@ -54,7 +54,7 @@ from database.users import (
     set_user_transcription_preferences,
 )
 from config.stt_provider_policy import supports_live_multilingual_mode
-from models.users import AvailableLanguage, AvailableLanguagesResponse
+from models.users import AvailableLanguage, AvailableLanguagesResponse, WebhookConfig
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from database.users import *
 from models.conversation import Conversation
@@ -540,6 +540,26 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
         'realtime_transcript': realtime_transcript,
         'day_summary': day_summary,
     }
+
+
+# ***********************************************
+# ********* WEBHOOK CONFIG (SSOT) **************
+# ***********************************************
+
+
+@router.get('/v1/user/webhook-config', tags=['v1'], response_model=WebhookConfig)
+def get_webhook_config(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the server-authoritative webhook config."""
+    config = get_user_webhook_config(uid)
+    return config
+
+
+@router.put('/v1/user/webhook-config', tags=['v1'], response_model=WebhookConfig)
+def put_webhook_config(body: WebhookConfig, uid: str = Depends(auth.get_current_user_uid)):
+    """Set the server-authoritative webhook config (full replace)."""
+    config = body.model_dump(exclude_none=True)
+    set_user_webhook_config(uid, config)
+    return config
 
 
 # *************************************************

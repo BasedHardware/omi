@@ -238,6 +238,19 @@ def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     user_ref.update({'private_cloud_sync_enabled': value})
 
 
+def get_user_webhook_config(uid: str) -> dict:
+    """Get the server-authoritative webhook config from Firestore."""
+    user_ref = db.collection('users').document(uid)
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('webhook_config', {})
+
+
+def set_user_webhook_config(uid: str, config: dict) -> None:
+    """Set the server-authoritative webhook config in Firestore."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'webhook_config': config}, merge=True)
+
+
 def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
     user_ref = db.collection('users').document(uid)
     user_ref.set(
