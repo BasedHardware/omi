@@ -238,6 +238,140 @@ async def test_a_live_fallback_socket_still_serves_the_session():
 
 
 @pytest.mark.anyio
+async def test_the_chain_continues_to_parakeet_when_modulate_cannot_serve():
+    """Regression (#11752): Deepgram 402 + Modulate rejection must not end the chain.
+
+    ``STT_SERVICE_MODELS`` lists Parakeet behind both of them, so a healthy
+    Parakeet deployment has to take the session instead of it being terminalized.
+    """
+    parakeet_socket = SimpleNamespace(is_connection_dead=False, death_reason=None)
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(streaming, 'record_fallback') as record,
+    ):
+        socket, service = await streaming.connect_stt_socket_with_fallback(
+            primary_service=STTService.deepgram,
+            connect_primary=AsyncMock(return_value=None),
+            connect_modulate=AsyncMock(return_value=_RejectedSocket()),
+            connect_parakeet=AsyncMock(return_value=parakeet_socket),
+        )
+
+    assert socket is parakeet_socket
+    assert service == STTService.parakeet
+    modulate_leg, parakeet_leg = [call.kwargs for call in record.call_args_list]
+    assert (modulate_leg['from_mode'], modulate_leg['to_mode'], modulate_leg['outcome']) == (
+        'deepgram',
+        'modulate',
+        'exhausted',
+    )
+    assert (parakeet_leg['from_mode'], parakeet_leg['to_mode'], parakeet_leg['outcome']) == (
+        'modulate',
+        'parakeet',
+        'recovered',
+    )
+    # The over-quota Modulate rejection is why the session moved on, not Deepgram's 402.
+    assert parakeet_leg['reason'] == 'quota'
+
+
+@pytest.mark.anyio
+async def test_an_exhausted_chain_still_raises_after_parakeet_also_fails():
+    rejected_modulate = _RejectedSocket()
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(streaming, 'record_fallback') as record,
+        pytest.raises(RuntimeError, match='parakeet returned no socket'),
+    ):
+        await streaming.connect_stt_socket_with_fallback(
+            primary_service=STTService.deepgram,
+            connect_primary=AsyncMock(return_value=None),
+            connect_modulate=AsyncMock(return_value=rejected_modulate),
+            connect_parakeet=AsyncMock(return_value=None),
+        )
+
+    assert [call.kwargs['outcome'] for call in record.call_args_list] == ['exhausted', 'exhausted']
+    assert rejected_modulate.finished
+
+
+@pytest.mark.anyio
+async def test_a_parakeet_primary_never_falls_back_to_itself():
+    """The chain must not retry the provider that just failed as its own fallback."""
+    connect_parakeet = AsyncMock()
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        _, service = await streaming.connect_stt_socket_with_fallback(
+            primary_service=STTService.parakeet,
+            connect_primary=AsyncMock(return_value=None),
+            connect_modulate=AsyncMock(return_value=SimpleNamespace(is_connection_dead=False, death_reason=None)),
+            connect_parakeet=connect_parakeet,
+        )
+
+    assert service == STTService.modulate
+    connect_parakeet.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_the_deepgram_session_serves_from_parakeet_when_modulate_is_down():
+    """End of the receiver path: the session survives on Parakeet, labelled as Parakeet."""
+    receiver = _deepgram_receiver()
+    parakeet_socket = SimpleNamespace(is_connection_dead=False, death_reason=None)
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=_RejectedSocket())),
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock(return_value=parakeet_socket)) as parakeet,
+        patch.object(receiver_mod, 'modulate_is_configured_fallback', return_value=True),
+        patch.object(receiver_mod, 'parakeet_is_configured_fallback', return_value=True),
+        patch.object(streaming, 'record_fallback'),
+    ):
+        socket = await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+
+    parakeet.assert_awaited_once()
+    assert socket is parakeet_socket
+    assert receiver.host.stt_service == STTService.parakeet
+    assert receiver.host.stt_model == 'parakeet'
+
+
+@pytest.mark.anyio
+async def test_a_language_parakeet_cannot_serve_is_not_offered_to_it():
+    receiver = _deepgram_receiver()
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(receiver_mod, 'process_audio_dg', new=AsyncMock(return_value=None)),
+        patch.object(receiver_mod, 'process_audio_modulate', new=AsyncMock(return_value=_RejectedSocket())),
+        patch.object(receiver_mod, 'process_audio_parakeet', new=AsyncMock()) as parakeet,
+        patch.object(receiver_mod, 'modulate_is_configured_fallback', return_value=True),
+        patch.object(receiver_mod, 'parakeet_is_configured_fallback', return_value=False),
+        patch.object(streaming, 'record_fallback'),
+        pytest.raises(RuntimeError, match='modulate rejected the stream'),
+    ):
+        await ListenReceiver._create_stt_socket(receiver, MagicMock(), 16000)
+
+    parakeet.assert_not_awaited()
+
+
+def test_parakeet_is_a_configured_fallback_only_when_the_deployment_can_serve_it():
+    with (
+        patch.object(streaming, 'stt_service_models', ['dg-nova-3', ' modulate-velma-2', 'parakeet']),
+        patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream'}),
+    ):
+        assert streaming.parakeet_is_configured_fallback('en') is True
+        # Parakeet has no multilingual live mode, so a `multi` session must not move to it.
+        assert streaming.parakeet_is_configured_fallback('multi') is False
+    with (
+        patch.object(streaming, 'stt_service_models', ['dg-nova-3', 'modulate-velma-2']),
+        patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'ws://parakeet.omi.me/v3/stream'}),
+    ):
+        assert streaming.parakeet_is_configured_fallback('en') is False
+
+
+@pytest.mark.anyio
 async def test_modulate_primary_is_still_rejected():
     with pytest.raises(ValueError, match='modulate'):
         await streaming.connect_stt_socket_with_fallback(
