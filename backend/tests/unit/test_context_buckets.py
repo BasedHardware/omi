@@ -221,9 +221,7 @@ def test_sync_persists_buckets_and_facts_readable_by_consumers(fake_db):
     report = sync(fake_db, [build_bucket()])
 
     assert (report.buckets_written, report.facts_written) == (1, 1)
-    buckets = context_buckets_db.list_context_buckets('u1', account_generation=3, firestore_client=fake_db)
     facts = context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db)
-    assert [bucket.bucket_id for bucket in buckets] == ['bucket-1']
     assert [fact.statement for fact in facts] == ['Ship the parity pack']
     assert facts[0].bucket_id == 'bucket-1'
     assert facts[0].device_id == 'mac-1'
@@ -261,7 +259,6 @@ def test_newer_device_write_replaces_stored_statement(fake_db):
 def test_reads_are_fenced_by_account_generation(fake_db):
     sync(fake_db, [build_bucket()], generation=3)
 
-    assert context_buckets_db.list_context_buckets('u1', account_generation=4, firestore_client=fake_db) == []
     assert context_buckets_db.list_context_facts('u1', account_generation=4, now=NOW, firestore_client=fake_db) == []
 
 
@@ -288,9 +285,8 @@ def test_purge_removes_the_bucket_and_every_fact_it_owns(fake_db):
 
     assert (report.buckets_deleted, report.facts_deleted) == (1, 2)
     facts = context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db)
-    buckets = context_buckets_db.list_context_buckets('u1', account_generation=3, firestore_client=fake_db)
     assert [fact.fact_id for fact in facts] == ['fact-3']
-    assert [bucket.bucket_id for bucket in buckets] == ['bucket-2']
+    assert ('users', 'u1', 'context_buckets', 'bucket-1') not in fake_db.rows
 
 
 def test_canonical_evidence_is_rejected_so_screen_refs_stay_device_local():
@@ -337,9 +333,8 @@ def test_generation_change_republishes_rather_than_skipping_as_stale(fake_db):
     assert (report.buckets_skipped_stale, report.facts_skipped_stale) == (0, 0)
     assert (report.buckets_written, report.facts_written) == (1, 1)
     facts = context_buckets_db.list_context_facts('u1', account_generation=4, now=NOW, firestore_client=fake_db)
-    buckets = context_buckets_db.list_context_buckets('u1', account_generation=4, firestore_client=fake_db)
     assert [fact.fact_id for fact in facts] == ['fact-1']
-    assert [bucket.bucket_id for bucket in buckets] == ['bucket-1']
+    assert fake_db.rows[('users', 'u1', 'context_buckets', 'bucket-1')]['account_generation'] == 4
 
 
 def test_a_fast_device_clock_cannot_lock_out_later_writes(fake_db):

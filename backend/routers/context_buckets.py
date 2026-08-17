@@ -1,12 +1,11 @@
 """Context bucket sync and read APIs shared by every consumer of screen-derived work memory."""
 
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Query
 
 import database.context_buckets as context_buckets_db
 from models.context_bucket import (
-    ContextBucket,
     ContextBucketPurgeReport,
     ContextBucketPurgeRequest,
     ContextBucketSyncReport,
@@ -34,25 +33,9 @@ def sync_context_buckets(
     return context_buckets_db.sync_context_buckets(uid, request, account_generation=account_generation)
 
 
-@router.get('/v1/context-buckets', tags=['context_buckets'], response_model=list[ContextBucket])
-def list_context_buckets(
-    account_generation: AccountGenerationHeader,
-    workstream_id: Optional[str] = None,
-    limit: int = Query(default=100, ge=1, le=500),
-    uid: str = Depends(get_current_user_uid),
-) -> list[ContextBucket]:
-    return context_buckets_db.list_context_buckets(
-        uid,
-        account_generation=account_generation,
-        workstream_id=workstream_id,
-        limit=limit,
-    )
-
-
 @router.get('/v1/context-buckets/facts', tags=['context_buckets'], response_model=list[ContextFact])
 def list_context_facts(
     account_generation: AccountGenerationHeader,
-    workstream_id: Optional[str] = None,
     minimum_confidence: float = Query(default=0, ge=0, le=1),
     limit: int = Query(default=200, ge=1, le=500),
     uid: str = Depends(get_current_user_uid),
@@ -62,7 +45,6 @@ def list_context_facts(
     return context_buckets_db.list_context_facts(
         uid,
         account_generation=account_generation,
-        workstream_id=workstream_id,
         minimum_confidence=minimum_confidence,
         limit=limit,
     )

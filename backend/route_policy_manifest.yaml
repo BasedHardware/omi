@@ -1072,10 +1072,6 @@ routes:
       owner: backend
   - route_type: http
     method: GET
-    path: /v1/context-buckets
-    policy: *context_bucket_policy
-  - route_type: http
-    method: GET
     path: /v1/context-buckets/facts
     policy: *context_bucket_policy
   - route_type: http

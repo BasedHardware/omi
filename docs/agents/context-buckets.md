@@ -100,7 +100,6 @@ Routes in `backend/routers/context_buckets.py`:
 | Route | Purpose |
 |---|---|
 | `POST /v1/context-buckets/sync` | Idempotent batch upsert from a device |
-| `GET /v1/context-buckets` | List buckets for the user |
 | `GET /v1/context-buckets/facts` | Flat validated-fact read for consumers |
 | `POST /v1/context-buckets/purge` | Device-initiated deletion of synced copies |
 
@@ -179,7 +178,7 @@ These stay on the device because they govern capture, not readability.
 | Constant | Value | Source |
 |---|---|---|
 | Dwell before a visit settles | 2 s | `ContextProactivityEngine.swift` |
-| Cold-start gate | 1 prior completed visit within 7 d | `ContextBucketTuning.swift` |
+| Cold-start gate | 1 prior completed visit within 7 d | `ContextBucketStore.swift` |
 | Backend sync cadence | 30 min | `ContextBucketSyncScheduler.swift` |
 | Injection token budget | 7,500 | `ContextBucketRollup.swift` |
 | Departure worthiness threshold | 0.6 | `ContextProactivityEngine.swift` |
@@ -193,7 +192,7 @@ These stay on the device because they govern capture, not readability.
   The gate is a deliberate noise filter — most windows are seen once — but work on a cadence
   slower than the window never accumulates context, because every visit looks like the first.
   Widening it admits slower work at the cost of more buckets; the constant is now named and
-  documented in `ContextBucketTuning`, but the value is unchanged pending that product call.
+  documented at its use site, but the value is unchanged pending that product call.
 - **One frame per visit.** The whole evidence base for a visit is its last screenshot, so a
   long session is summarized by whatever happened to be on screen at the end.
 - **Constants are only partly gathered.** Delivery budget, pooling, and reconciler values

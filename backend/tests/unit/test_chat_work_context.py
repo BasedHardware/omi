@@ -83,21 +83,31 @@ def test_model_authored_statements_cannot_inject_prompt_markup(monkeypatch, stub
     assert section.count('</work_context>') == 1
 
 
-def test_fallback_prompt_renders_the_work_context_section():
-    rendered = chat_prompts._get_agentic_qa_prompt_fallback(
-        {'user_name': 'Max', 'work_context_section': '<work_context>\nobserved\n</work_context>\n\n'}
-    )
+def test_work_context_reaches_the_prompt_on_the_live_template_path(monkeypatch, stub_generation):
+    """The hosted template has no {work_context_section} placeholder.
 
-    assert '<work_context>' in rendered
-    assert 'observed' in rendered
+    render_prompt drops unknown variables silently, so passing the section as a
+    template variable rendered nothing in production while still paying for the
+    Firestore reads. It must be appended to the built prompt instead.
+    """
 
+    stub_facts(monkeypatch, [fact('Shipping the parity pack')])
+    monkeypatch.setattr(chat_prompts, 'get_user_name', lambda uid, **kwargs: 'Max')
+    monkeypatch.setattr(chat_prompts.goals_db, 'get_user_goals', lambda uid: [])
 
-def test_work_context_only_adds_its_own_block_to_the_prompt():
-    """The section must be additive, or it shifts the cacheable prompt prefix."""
+    class StubPrompt:
+        template_text = 'HOSTED TEMPLATE WITHOUT THE PLACEHOLDER'
+        prompt_name = 'stub'
+        prompt_commit = 'stub'
+        source = 'stub'
 
-    section = '<work_context>\nobserved\n</work_context>\n\n'
-    without = chat_prompts._get_agentic_qa_prompt_fallback({'user_name': 'Max', 'work_context_section': ''})
-    with_context = chat_prompts._get_agentic_qa_prompt_fallback({'user_name': 'Max', 'work_context_section': section})
+    import utils.observability.langsmith_prompts as langsmith_prompts
 
-    assert with_context != without
-    assert with_context.replace(section, '', 1) == without
+    monkeypatch.setattr(langsmith_prompts, 'get_agentic_system_prompt_template', lambda: StubPrompt())
+    monkeypatch.setattr(langsmith_prompts, 'render_prompt', lambda template, variables: template)
+
+    prompt = chat_prompts._get_agentic_qa_prompt('u1', tz='UTC')
+
+    assert 'HOSTED TEMPLATE WITHOUT THE PLACEHOLDER' in prompt
+    assert '<work_context>' in prompt
+    assert 'Shipping the parity pack' in prompt

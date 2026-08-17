@@ -142,7 +142,11 @@ enum ContextBucketVisitResolver {
     // A subject binding (including explicit_open) already owns this identity, so
     // do not require a prior completed visit before attaching the subject bucket.
     if binding == nil {
-      let recentCutoff = startedAt.addingTimeInterval(-ContextBucketTuning.coldStartLookback)
+      // A window seen exactly once never becomes a bucket: most windows are incidental,
+      // and bucketing them would bury real work in noise. The cost is that work on a
+      // cadence slower than this window never accumulates context, because every visit
+      // looks like the first. Widening it admits slower work at the cost of more buckets.
+      let recentCutoff = startedAt.addingTimeInterval(-7 * 24 * 60 * 60)
       let previousVisits: Int
       if let handleIdentity, try db.columns(in: "context_visits").map(\.name).contains("primaryHandleValue") {
         previousVisits =
@@ -162,7 +166,7 @@ enum ContextBucketVisitResolver {
               "SELECT COUNT(*) FROM context_visits WHERE referenceHash = ? AND outcome = 'completed' AND startedAt >= ?",
             arguments: [referenceHash, recentCutoff]) ?? 0
       }
-      guard previousVisits >= ContextBucketTuning.coldStartMinimumVisits else { return nil }
+      guard previousVisits >= 1 else { return nil }
     }
 
     let id = UUID().uuidString.lowercased()

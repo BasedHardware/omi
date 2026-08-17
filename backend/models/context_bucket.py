@@ -137,23 +137,6 @@ class ContextFact(BaseModel):
     updated_at: datetime
 
 
-class ContextBucket(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-
-    bucket_id: StableId
-    subject_kind: BucketSubjectKind
-    subject_id: str = Field(min_length=1, max_length=256)
-    workstream_id: Optional[StableId] = None
-    display_label: Optional[str] = Field(default=None, max_length=256)
-    notify_worthiness: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
-    visit_count: int = Field(default=0, ge=0)
-    last_visited_at: Optional[datetime] = None
-    device_id: StableId
-    device_updated_at: datetime
-    created_at: datetime
-    updated_at: datetime
-
-
 class ContextBucketPurgeRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
@@ -169,7 +152,6 @@ class ContextBucketPurgeReport(BaseModel):
 
 __all__ = [
     'BucketSubjectKind',
-    'ContextBucket',
     'ContextBucketPurgeReport',
     'ContextBucketPurgeRequest',
     'ContextBucketSync',

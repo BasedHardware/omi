@@ -626,7 +626,6 @@ Keep this context in mind when answering their question.
         "current_datetime_str": current_datetime_str,
         "current_datetime_iso": current_datetime_iso,
         "goal_section": goal_section,
-        "work_context_section": work_context_section,
         "file_context_section": file_context_section,
         "context_section": context_section,
         "plugin_section": plugin_section,
@@ -645,7 +644,7 @@ Keep this context in mind when answering their question.
             f"📝 Using prompt: {cached_prompt.prompt_name} (commit: {cached_prompt.prompt_commit}, source: {cached_prompt.source})"
         )
 
-        return base_prompt.strip() + platform_section
+        return base_prompt.strip() + work_context_section + platform_section
 
     except Exception as e:
         logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
@@ -801,7 +800,7 @@ Timezone: {tz}
 Current date time: {current_datetime_str}
 Current date time ISO: {current_datetime_iso}
 </user_context>
-{goal_section}{work_context_section}{file_context_section}{context_section}
+{goal_section}{file_context_section}{context_section}
 <tool_datetime_rules>
 **DateTime Formatting Rules for Tool Calls:**
 When using tools with date/time parameters (start_date, end_date), you MUST follow these rules:
@@ -869,7 +868,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 Remember: Use tools strategically to provide the best possible answers. For questions about specific EVENTS or INCIDENTS (e.g., "when did X happen?", "what happened at Y?"), use search_conversations_tool to find relevant conversations. For questions about static FACTS/PREFERENCES (e.g., "what's my favorite X?", "do I like Y?"), use get_memories_tool. Your goal is to help {user_name} in the most personalized and helpful way possible.
 """
 
-    return base_prompt.strip() + platform_section
+    return base_prompt.strip() + work_context_section + platform_section
 
 
 def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: ignore[reportUnusedFunction]  # offline/CI fallback when LangSmith prompt fetch fails
@@ -882,7 +881,6 @@ def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: 
     current_datetime_str = variables.get("current_datetime_str", "")
     current_datetime_iso = variables.get("current_datetime_iso", "")
     goal_section = variables.get("goal_section", "")
-    work_context_section = variables.get("work_context_section", "")
     file_context_section = variables.get("file_context_section", "")
     context_section = variables.get("context_section", "")
     plugin_section = variables.get("plugin_section", "")
@@ -892,7 +890,7 @@ def _get_agentic_qa_prompt_fallback(variables: dict[str, Any]) -> str:  # type: 
     return f"""<assistant_role>
 You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible as you know everything about the user.
 </assistant_role>
-{goal_section}{work_context_section}{file_context_section}{context_section}
+{goal_section}{file_context_section}{context_section}
 
 <current_datetime>
 Current date time in {user_name}'s timezone ({tz}): {current_datetime_str}

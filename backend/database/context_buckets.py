@@ -12,15 +12,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
-from database.firestore_index_registry import (
-    CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY,
-    CONTEXT_BUCKET_FACTS_BY_WORKSTREAM_QUERY,
-    CONTEXT_BUCKETS_BY_GENERATION_QUERY,
-    CONTEXT_BUCKETS_BY_WORKSTREAM_QUERY,
-)
+from database.firestore_index_registry import CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY
 from database.read_boundary import parse_snapshots
 from models.context_bucket import (
-    ContextBucket,
     ContextBucketPurgeReport,
     ContextBucketSync,
     ContextBucketSyncReport,
@@ -43,10 +37,6 @@ FACT_OVERFETCH_CEILING = 1000
 # clock caught up. Clamping rather than rejecting keeps a mildly skewed clock
 # syncing normally while bounding how far ahead any device can place itself.
 MAX_DEVICE_CLOCK_SKEW = timedelta(hours=1)
-
-
-def _field_filter(field_path: str, operator: str, value: Any) -> Any:
-    return FieldFilter(field_path, operator, value)
 
 
 def _get_db(firestore_client: Any = None) -> Any:
@@ -273,30 +263,10 @@ def sync_context_buckets(
     )
 
 
-def list_context_buckets(
-    uid: str,
-    *,
-    account_generation: int,
-    workstream_id: Optional[str] = None,
-    limit: int = 100,
-    firestore_client: Any = None,
-) -> list[ContextBucket]:
-    collection = _user_ref(uid, firestore_client=firestore_client).collection(BUCKETS_COLLECTION)
-    spec = CONTEXT_BUCKETS_BY_GENERATION_QUERY if workstream_id is None else CONTEXT_BUCKETS_BY_WORKSTREAM_QUERY
-    query = spec.build(
-        collection,
-        {'account_generation': account_generation, 'workstream_id': workstream_id},
-        field_filter_factory=_field_filter,
-    )
-    query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit)
-    return parse_snapshots(ContextBucket, query.stream(), payload_from_snapshot=_readable_payload)
-
-
 def list_context_facts(
     uid: str,
     *,
     account_generation: int,
-    workstream_id: Optional[str] = None,
     minimum_confidence: float = 0,
     limit: int = 200,
     now: Optional[datetime] = None,
@@ -315,13 +285,10 @@ def list_context_facts(
     """
 
     moment = now or datetime.now(timezone.utc)
-    spec = (
-        CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY if workstream_id is None else CONTEXT_BUCKET_FACTS_BY_WORKSTREAM_QUERY
-    )
-    query = spec.build(
+    query = CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY.build(
         _facts_collection(uid, firestore_client=firestore_client),
-        {'account_generation': account_generation, 'workstream_tag': workstream_id},
-        field_filter_factory=_field_filter,
+        {'account_generation': account_generation},
+        field_filter_factory=FieldFilter,
     )
     fetch_limit = min(limit * FACT_OVERFETCH_FACTOR, FACT_OVERFETCH_CEILING)
     snapshots = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(fetch_limit).stream()
@@ -366,7 +333,6 @@ def purge_context_buckets(
 __all__ = [
     'BUCKETS_COLLECTION',
     'FACTS_COLLECTION',
-    'list_context_buckets',
     'list_context_facts',
     'purge_context_buckets',
     'sync_context_buckets',

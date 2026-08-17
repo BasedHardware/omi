@@ -19,7 +19,6 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketStore.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSyncClient.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketSyncScheduler.swift
-  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketTuning.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamPooling.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextWorkstreamReconciler.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketsFeature.swift
