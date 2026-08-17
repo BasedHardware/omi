@@ -13,8 +13,6 @@ import { QA_FIXTURE_TIME_ANCHOR_UTC } from "../apps/service/qa/seed";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, "local-model-gateway.mjs");
-const stack = readFileSync(join(here, "dev-stack.sh"), "utf8");
-const app = readFileSync(join(here, "dev-app.sh"), "utf8");
 const source = readFileSync(script, "utf8");
 const MOCK_KEY = "mock-glm-key-for-local-tests";
 const GATEWAY_TOKEN = "local-model-gateway-token";
@@ -60,20 +58,6 @@ const spawnGateway = (env: NodeJS.ProcessEnv) => {
   };
 };
 
-test("default stack still selects the canned local test gateway", () => {
-  expect(stack).toContain('GATEWAY_LAUNCHER="$HERE/local-test-gateway.mjs"');
-  expect(stack).toContain("GATEWAY_PORT=8788");
-  expect(stack).toContain("never a production model, never the production API host");
-  expect(stack).toContain('OMI_LLM_GATEWAY_URL="$GATEWAY_URL"');
-  expect(stack).toContain('OMI_LLM_GATEWAY_SERVICE_TOKEN="$GATEWAY_TOKEN"');
-  expect(stack).toMatch(/OMI_CHAT_MODEL/);
-  expect(stack).toContain("local-model-gateway.mjs");
-  expect(app).toContain("local test gateway");
-  expect(app).toContain("not a real model");
-  expect(app).toContain("reused the listeners already serving 4851 and 8788");
-  expect(app).toContain('GATEWAY_URL="http://127.0.0.1:8788"');
-});
-
 test("model gateway disclosures are honest and do not reuse the test-gateway strings", () => {
   expect(source).toContain("real_model_proxy");
   expect(source).toContain("local real-model proxy");
@@ -84,12 +68,6 @@ test("model gateway disclosures are honest and do not reuse the test-gateway str
   expect(source).toContain("GLM_BASE_URL");
   expect(source).toContain("https://api.z.ai/api/coding/paas/v4");
   expect(source).not.toContain("DEFAULT_BASE = \"https://api.z.ai/api/paas/v4\"");
-  expect(stack).not.toContain("Chat UI still says Local test gateway");
-  expect(app).not.toContain("Chat UI still says Local test gateway");
-  expect(stack).toContain("Chat UI says External model response");
-  expect(app).toContain("Chat UI says External model response");
-  expect(stack).not.toContain("https://api.omi.me");
-  expect(app).not.toMatch(/api\.omi\.me|\?rig=dev/);
 });
 
 test("production entrypoints do not value-import the model gateway shim", () => {

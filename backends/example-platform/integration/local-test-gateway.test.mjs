@@ -8,7 +8,6 @@ import { test } from "node:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, "local-test-gateway.mjs");
-const stack = readFileSync(join(here, "dev-stack.sh"), "utf8");
 const source = readFileSync(script, "utf8");
 
 test("local test gateway is disclosed and never a production or scripted source", () => {
@@ -18,13 +17,6 @@ test("local test gateway is disclosed and never a production or scripted source"
   assert.doesNotMatch(source, /createScriptedChatGenerationSource/);
   assert.match(source, /\/v1\/chat\/completions/);
   assert.match(source, /data: \[DONE\]/);
-  assert.match(stack, /local-test-gateway\.mjs/);
-  assert.match(stack, /OMI_LLM_GATEWAY_URL=/);
-  assert.match(stack, /OMI_LLM_GATEWAY_SERVICE_TOKEN=/);
-  assert.match(stack, /local test gateway/);
-  assert.doesNotMatch(stack, /https:\/\/api\.omi\.me/);
-  assert.doesNotMatch(stack, /createScriptedChatGenerationSource/);
-  assert.match(stack, /never a production model/);
 });
 
 test("loopback gateway answers the authenticated SSE contract", async () => {

@@ -2,14 +2,11 @@
 /**
  * Loopback lane-to-model gateway shim.
  *
- * Opt-in only: integration/dev-stack.sh launches this instead of the canned
- * local test gateway when OMI_CHAT_MODEL=real. It is a real-model proxy
+ * Opt-in only. It is a real-model proxy
  * (GLM / Z.ai by default). Chat's UI label follows the `/ready` self-description
  * (`real_model_proxy` plus the model id) through the service capability receipt.
  * Attachments still fail closed in the service generation source.
  *
- * Enable:
- *   GLM_API_KEY=... OMI_CHAT_MODEL=real integration/dev-stack.sh --up
  * Key env names (first non-empty wins): GLM_API_KEY, ZAI_API_KEY,
  * OMI_BENCH_OPENAI_API_KEY. Optional: OMI_BENCH_OPENAI_BASE_URL,
  * GLM_BASE_URL (used when the bench URL is unset), OMI_BENCH_OPENAI_MODEL,

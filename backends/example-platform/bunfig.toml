@@ -1,5 +1,2 @@
 [test]
-# Root stays bun; frontend/ stays pnpm. Discovery here must not enter that tree.
-# Cross-side and other imported .mjs harness tests run from L2 via `node --test`
-# after `pnpm -r build`; they need built dist and are not the platform bun suite.
-pathIgnorePatterns = ["frontend/**", "integration/**/*.mjs"]
+pathIgnorePatterns = ["integration/**/*.mjs"]
