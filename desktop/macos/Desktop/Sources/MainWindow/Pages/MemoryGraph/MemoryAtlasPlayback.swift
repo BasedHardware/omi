@@ -33,10 +33,11 @@ enum MemoryAtlasPlayback {
   }
 
   /// Dates that may stretch the axis. Epoch placeholders collapse onto the
-  /// first real timestamp so they still appear, just not in 1969.
+  /// first real timestamp so they still appear, just not in 1969. A graph with
+  /// no credible dates keeps the placeholders instead of inventing today.
   static func effectiveDates(from dates: [Date]) -> [Date] {
-    let credible = dates.filter(isCredible)
-    let floor = credible.min() ?? Date()
+    guard let first = dates.first else { return [] }
+    let floor = dates.lazy.filter(isCredible).min() ?? first
     return dates.map { isCredible($0) ? $0 : floor }
   }
 

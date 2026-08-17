@@ -3509,6 +3509,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var asOfLabel: String {
     guard let asOf = asOfDate else { return "Now — the whole map" }
+    guard MemoryAtlasPlayback.isCredible(asOf) else { return "Import replay" }
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
@@ -3519,7 +3520,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func shortDate(_ date: Date?) -> String {
-    guard let date else { return "" }
+    guard let date, MemoryAtlasPlayback.isCredible(date) else { return "" }
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d, yyyy"
     return formatter.string(from: date)
@@ -3723,11 +3724,8 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func point(for normalized: CGPoint, in size: CGSize) -> CGPoint {
-    let span = MemoryAtlasLayoutEngine.projectionSpan(of: size)
-    return CGPoint(
-      x: (normalized.x - 0.5) * span * zoom + size.width / 2 + pan.width,
-      y: (normalized.y - 0.5) * span * zoom + size.height / 2 + pan.height
-    )
+    MemoryAtlasRenderPlanner.renderedPoint(
+      for: normalized, viewportSize: size, zoom: zoom, pan: pan)
   }
 
   private func canvasPaintBounds(for size: CGSize) -> CGRect {

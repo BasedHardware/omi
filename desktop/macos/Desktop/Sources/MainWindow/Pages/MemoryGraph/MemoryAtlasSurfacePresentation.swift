@@ -20,8 +20,10 @@ enum MemoryAtlasSurfacePresentation {
     hasProjection: Bool,
     hasAttemptedLoad: Bool
   ) -> Phase {
-    if hasProjection { return .ready }
+    // An empty server graph still used to mint a synthetic owner projection.
+    // Presence of that object is not readiness — it is the lonely-node flash.
+    if hasProjection && !isEmpty { return .ready }
     if isLoading || !hasAttemptedLoad { return .loading }
-    return isEmpty ? .empty : .ready
+    return .empty
   }
 }

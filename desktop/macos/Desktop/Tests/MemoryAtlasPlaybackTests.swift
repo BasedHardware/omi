@@ -32,6 +32,15 @@ final class MemoryAtlasPlaybackTests: XCTestCase {
     XCTAssertEqual(timeline.date(atFraction: 0), real)
   }
 
+  func testAllUnknownTimestampsDoNotBecomeToday() {
+    let epoch = Date(timeIntervalSince1970: 0)
+    let laterEpoch = epoch.addingTimeInterval(1)
+    let dates = MemoryAtlasPlayback.effectiveDates(from: [epoch, laterEpoch])
+    XCTAssertEqual(dates, [epoch, epoch])
+    XCTAssertFalse(dates.contains { MemoryAtlasPlayback.isCredible($0) })
+    XCTAssertLessThan(dates[0].timeIntervalSince1970, 1_000)
+  }
+
   func testAYearOfSilenceOccupiesLittleReplayTime() throws {
     let base = Date(timeIntervalSince1970: 1_700_000_000)
     let graph = KnowledgeGraphResponse(
@@ -126,12 +135,11 @@ final class MemoryAtlasCameraTests: XCTestCase {
     )
 
     XCTAssertGreaterThan(camera.zoom, 1)
-    let span = MemoryAtlasLayoutEngine.projectionSpan(of: viewport)
     for position in positions {
-      let x = (position.x - 0.5) * span * camera.zoom + viewport.width / 2 + camera.pan.width
-      let y = (position.y - 0.5) * span * camera.zoom + viewport.height / 2 + camera.pan.height
+      let point = MemoryAtlasRenderPlanner.renderedPoint(
+        for: position, viewportSize: viewport, zoom: camera.zoom, pan: camera.pan)
       XCTAssertTrue(
-        (0...viewport.width).contains(x) && (0...viewport.height).contains(y),
+        (0...viewport.width).contains(point.x) && (0...viewport.height).contains(point.y),
         "A highlighted neighbour must remain on screen after focus")
     }
   }
@@ -161,5 +169,12 @@ final class MemoryAtlasSurfacePresentationTests: XCTestCase {
       MemoryAtlasSurfacePresentation.phase(
         isLoading: true, isEmpty: false, hasProjection: true, hasAttemptedLoad: true),
       .ready)
+  }
+
+  func testASyntheticOwnerProjectionIsNotReady() {
+    XCTAssertEqual(
+      MemoryAtlasSurfacePresentation.phase(
+        isLoading: false, isEmpty: true, hasProjection: true, hasAttemptedLoad: true),
+      .empty)
   }
 }

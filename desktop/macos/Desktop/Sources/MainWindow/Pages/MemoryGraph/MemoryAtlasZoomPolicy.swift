@@ -44,10 +44,6 @@ enum MemoryAtlasZoomPolicy {
     compact ? compactMaximumZoom : fullyLabelledZoom(nodeCount: nodeCount)
   }
 
-  static func focusedZoom(currentZoom: CGFloat, nodeCount: Int, compact: Bool) -> CGFloat {
-    min(max(currentZoom, focusTargetZoom), maximumZoom(nodeCount: nodeCount, compact: compact))
-  }
-
   static func panPreservingCenterZoom(
     _ pan: CGSize,
     from currentZoom: CGFloat,
