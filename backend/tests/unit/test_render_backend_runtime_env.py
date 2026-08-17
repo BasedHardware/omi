@@ -109,7 +109,8 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
@@ -182,7 +183,7 @@ def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
     assert '--lane omi:auto:x-memory-extraction-flex' in workflow
 
 
-def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
+def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
@@ -206,10 +207,11 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     out = capsys.readouterr().out
     job_env = _job_env_block(out, 'memory_maintenance_job')
     # Prod GO 2026-08-15: the maintenance job follows the request-path product
-    # flag while the ST→LT cron stays off.
+    # flag. ST→LT cron is job-hosted on both env overlays with Flex.
     assert 'MEMORY_ENABLED=on' in job_env
     assert 'MEMORY_MODE=' not in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in job_env
     assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
     prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
