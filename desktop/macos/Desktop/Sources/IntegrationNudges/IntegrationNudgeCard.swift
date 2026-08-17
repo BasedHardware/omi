@@ -23,11 +23,14 @@ struct IntegrationNudgeCard: View {
           .scaledFont(size: 13, weight: .semibold)
           .foregroundColor(.white)
           .lineLimit(1)
+          .minimumScaleFactor(0.85)
 
+        // Three lines, not two: the longest pitches are a full sentence, and
+        // cutting one mid-clause reads as a bug rather than as brevity.
         Text(entry.pitch)
           .scaledFont(size: 11)
           .foregroundColor(.white.opacity(0.72))
-          .lineLimit(2)
+          .lineLimit(3)
           .multilineTextAlignment(.leading)
           .fixedSize(horizontal: false, vertical: true)
 

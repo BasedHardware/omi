@@ -59,7 +59,7 @@ final class IntegrationNudgeCoordinator {
   static let floatingBarPresenter: Presenter = { ownerID, match, onPresented, onDropped in
     FloatingControlBarManager.shared.showNotification(
       ownerID: ownerID,
-      title: "Connect \(match.entry.displayName) to Omi",
+      title: "Connect \(match.entry.displayName)",
       message: match.entry.pitch,
       assistantId: IntegrationNudgeCoordinator.assistantID,
       sound: .none,
