@@ -149,7 +149,7 @@ did this process actually contact?" rather than "what did this
 
 - Any path the canned drive does not exercise. Default Chat is the
   canned loopback gateway (`docs/architecture.md`,
-  `docs/verification.md`). A green L3 with the canned gateway does
+  `docs/verification.md`, upstream). A green L3 with the canned gateway does
   not prove the real-model proxy, and must not be quoted as if it
   did. Hosted Firebase revocation is not on the local QA binary at
   all. MCP, export, and the prod-local identity path are different
