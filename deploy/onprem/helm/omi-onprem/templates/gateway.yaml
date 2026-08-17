@@ -15,11 +15,17 @@ spec:
     type: Kubernetes
     kubernetes:
       envoyService:
-        # NodePort (not the default LoadBalancer, which stays <pending> on Kind without MetalLB). Pin the
-        # HTTP listener's nodePort so kind's 30080 -> host 8080 mapping is stable. StrategicMerge keys
-        # Service ports by `port` (the number), NOT `name` — merging on `name` adds an invalid entry and
-        # breaks Service creation, so match the listener port (80) here.
-        type: NodePort
+        # NodePort for a plain Kind (host port-mappings) or LoadBalancer for MetalLB/cloud. For NodePort
+        # we pin the listener nodePorts (kind maps 30080->8080, 30443->8443); a StrategicMerge patch keys
+        # Service ports by `port` (the number), NOT `name` — merging on name adds an invalid entry and
+        # breaks Service creation, so match the listener port here. LoadBalancer needs no port pin.
+        type: {{ .Values.ingress.service.type }}
+        {{- if and (eq .Values.ingress.service.type "LoadBalancer") .Values.ingress.loadBalancerIP }}
+        # Pin the LoadBalancer IP (MetalLB) so the OIDC issuer host + TLS SAN can be fixed before install.
+        annotations:
+          metallb.io/loadBalancerIPs: {{ .Values.ingress.loadBalancerIP | quote }}
+        {{- end }}
+        {{- if eq .Values.ingress.service.type "NodePort" }}
         patch:
           type: StrategicMerge
           value:
@@ -31,6 +37,7 @@ spec:
                 - port: 443
                   nodePort: {{ .Values.ingress.httpsNodePort }}
                 {{- end }}
+        {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass

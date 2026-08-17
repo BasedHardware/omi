@@ -72,6 +72,13 @@ auth:
     imagePullPolicy: IfNotPresent
     storage: 1Gi
     resources: {}
+    # Backing DB: "dev-file" (single-node H2, simple) or "postgres" (production-grade, B5). With postgres
+    # a keycloak-postgres StatefulSet is created and Keycloak runs --db=postgres.
+    db: dev-file
+    postgres:
+      image: postgres:16-alpine
+      storage: 2Gi
+      password: ""   # required when db=postgres (dev overlay sets a throwaway value)
 chat:
   enabled: false
   # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
@@ -140,6 +147,13 @@ ingress:
   type: gateway
   gatewayClassName: omi-envoy
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  # Envoy proxy Service exposure: NodePort (plain Kind + host port-mappings) or LoadBalancer (MetalLB on
+  # Kind/bare-metal, or a cloud LB). LoadBalancer ignores the nodePort pins below.
+  service:
+    type: NodePort
+  # When service.type=LoadBalancer, request a specific IP (MetalLB metallb.io/loadBalancerIPs). Empty =
+  # let the LB assign one. Pinning lets the OIDC issuer host + TLS SAN be fixed before install.
+  loadBalancerIP: ""
   # The Envoy proxy Service is exposed as NodePort; kind-cluster.yaml maps containerPort 30080 -> host
   # 8080 (and 30443 -> 8443), so `curl http://localhost:8080` reaches the gateway. On k0s/bare-metal use
   # MetalLB + a LoadBalancer instead (later phase).
