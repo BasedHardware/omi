@@ -95,6 +95,11 @@ export class UncorrelatedOperationGate {
     return this.poisoned.has(key)
   }
 
+  /** True while an attempt is registered and unclaimed on the key. */
+  hasLiveAttempt(key: string): boolean {
+    return this.live.has(key)
+  }
+
   /** Registers an attempt; null when the key is unavailable (in flight or
    *  poisoned) — callers map that to their own identity error message. */
   register(key: string): DeviceOperationHandle | null {
