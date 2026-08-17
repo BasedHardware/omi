@@ -12,7 +12,7 @@ From the repo root:
 bun run apps/service/bin/dev-server.ts
 ```
 
-For a headed macOS demo with a believable persona, from the repo root: `bun run app` (see the root `AGENTS.md` "Test it locally" section). That command composes this server plus the local test gateway; chat generation is not a real model.
+The root `bun run app` command launches this same backend service.
 
 Zero environment variables are required. Supplying `OMI_QA_DB` switches the
 entire registered service—not only Memories—to one file-backed SQLite
