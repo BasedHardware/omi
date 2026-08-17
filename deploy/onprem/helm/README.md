@@ -12,10 +12,12 @@ Prod/k0s hardening (MetalLB, real-SAN TLS, Keycloak on Postgres, a GPU inference
 
 ## Prerequisites
 
-`kind`, `kubectl`, `helm` on PATH. The backend image built locally (`omi-onprem-backend:latest`); public
-images (mongo/valkey/qdrant/rustfs/ntfy/minio-mc) are pulled by the node.
+`kind`, `kubectl`, `helm`, `openssl` on PATH. The backend image built locally (`omi-onprem-backend:latest`);
+public images are pulled by the node. `values-dev.yaml` replicates the **prod topology** on Kind (phase B):
+so it needs three cluster add-ons — **Envoy Gateway** (ingress), **OpenEBS** (storage class), **MetalLB**
+(LoadBalancer). For a bare Kind without them, override to the simple path (see the note after the recipe).
 
-## Dev on Kind (reproducible)
+## Dev on Kind (reproducible, prod-topology)
 
 ```bash
 cd deploy/onprem/helm
@@ -26,24 +28,41 @@ kind create cluster --config kind-cluster.yaml
 # 2. Load the local backend image (no registry; public images the node pulls itself)
 kind load docker-image omi-onprem-backend:latest --name omi-dev
 
-# 3. Ingress prerequisite: Envoy Gateway (cluster-level controller + Gateway API CRDs)
+# 3. Cluster add-ons (like the app, installed once):
+#    3a. Envoy Gateway — Gateway API controller + CRDs
 helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.1 \
   -n envoy-gateway-system --create-namespace --wait
+#    3b. OpenEBS — provides the `openebs-hostpath` storage class
+helm repo add openebs https://openebs.github.io/openebs && helm repo update openebs
+helm install openebs openebs/openebs -n openebs --create-namespace --wait \
+  --set loki.enabled=false --set minio.enabled=false \
+  --set engines.replicated.mayastor.enabled=false \
+  --set engines.local.lvm.enabled=false --set engines.local.zfs.enabled=false
+#    3c. MetalLB — LoadBalancer IPs, then the address pool (from the kind network subnet)
+helm repo add metallb https://metallb.github.io/metallb && helm repo update metallb
+helm install metallb metallb/metallb -n metallb-system --create-namespace --wait
+kubectl apply -f metallb-pool.yaml
 
-# 4. TLS Secret for the Gateway HTTPS listener (only when the auth profile is on). Creates omi-tls.
+# 4. TLS Secret for the Gateway HTTPS listener. SAN must carry the LoadBalancer IP (values-dev pins it):
 kubectl create namespace omi-dev --dry-run=client -o yaml | kubectl apply -f -
-./gen-certs.sh omi-dev omi-tls localhost
+HOST_IP=172.18.255.200 ./gen-certs.sh omi-dev omi-tls localhost
 
-# 5. Install the stack (core + the profiles enabled in values-dev)
+# 5. Install the stack (all profiles enabled in values-dev)
 helm install omi ./omi-onprem -n omi-dev --create-namespace -f omi-onprem/values-dev.yaml --wait
 
-# 6. Reach it. Auth off -> HTTP + `Bearer dev`; auth on -> HTTPS issuer + a real Keycloak token:
-curl http://localhost:8080/v1/health          # {"status":"ok"}
-TOK=$(curl -k -s -X POST https://localhost:8443/realms/omi/protocol/openid-connect/token \
+# 6. Reach it through the LoadBalancer IP (Keycloak issuer + API over HTTPS):
+LBIP=172.18.255.200
+curl -k https://$LBIP/v1/health                # {"status":"ok"}
+TOK=$(curl -k -s -X POST https://$LBIP/realms/omi/protocol/openid-connect/token \
   -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -k https://localhost:8443/v1/users/people -H "Authorization: Bearer $TOK"
+curl -k https://$LBIP/v1/users/people -H "Authorization: Bearer $TOK"
 ```
+
+**Simple path (bare Kind, no OpenEBS/MetalLB):** `helm install ... -f values-dev.yaml
+--set storageClassName= --set ingress.service.type=NodePort --set ingress.loadBalancerIP=
+--set auth.hostname=https://localhost:8443 --set auth.keycloak.db=dev-file` — then reach it on
+`http://localhost:8080` / `https://localhost:8443` (the kind port-mappings). gen-certs with `localhost`.
 
 Teardown: `kind delete cluster --name omi-dev` (and `helm uninstall eg -n envoy-gateway-system`).
 
