@@ -186,6 +186,29 @@ public enum ContextPaths {
 
     static let queryStampFilename = "last-query.json"
 
+    /// The MCP server's running tally of tool calls, drained by the app when it reports. See
+    /// `ToolCallLedger` — and note this is a *different* file from the query stamp on purpose: the
+    /// stamp answers "did Claude call us just now", this answers "how much", and one file cannot be
+    /// both monotonic-latest and cumulative.
+    public static var toolCallLedgerURL: URL {
+        supportDirectory.appendingPathComponent(toolCallLedgerFilename)
+    }
+
+    /// Beside the database the calls were served from, for the reason `queryStampURL(besideDatabaseAt:)`
+    /// gives: two processes have to be talking about the same install.
+    public static func toolCallLedgerURL(besideDatabaseAt databaseURL: URL) -> URL {
+        databaseURL.deletingLastPathComponent().appendingPathComponent(toolCallLedgerFilename)
+    }
+
+    /// The lock guarding a ledger read-modify-write. Never renamed or replaced, so concurrent MCP
+    /// servers always contend over the same inode — see `ToolCallLedger.bump`.
+    public static func toolCallLedgerLockURL(for ledgerURL: URL) -> URL {
+        ledgerURL.deletingLastPathComponent()
+            .appendingPathComponent(ledgerURL.lastPathComponent + ".lock")
+    }
+
+    static let toolCallLedgerFilename = "tool-calls.json"
+
     @discardableResult
     public static func ensureSupportDirectory(at url: URL? = nil) throws -> URL {
         let dir = url ?? supportDirectory

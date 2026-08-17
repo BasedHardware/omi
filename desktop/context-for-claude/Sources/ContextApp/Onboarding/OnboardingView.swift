@@ -1142,6 +1142,11 @@ struct OnboardingView: View {
         // transitions is a relaunch — a resume point recorded afterwards would be recorded by a
         // process that is already gone.
         OnboardingResume().record(next)
+        // Every "continue" goes through here, so the funnel is measured at the one place the
+        // ordering lives. Ordinal only: the step *names* are product copy that changes every
+        // release, and a funnel keyed on copy resets every release.
+        ContextAnalytics.recordOnboardingStep(
+            index: next.rawValue, of: OnboardingStep.allCases.count)
         withAnimation(stepAnimation) { step = next }
         beginStep()
     }
@@ -1367,6 +1372,7 @@ struct OnboardingView: View {
     }
 
     private func finish() {
+        ContextAnalytics.recordOnboardingFinished()
         sealTheRun()
 
         // Screen Recording is the one grant macOS will not take from a dialog — it has to be

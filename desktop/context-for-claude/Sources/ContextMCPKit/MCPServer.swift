@@ -133,6 +133,9 @@ public final class MCPServer {
     private let openError: Error?
     /// Where a served tool call is recorded so the app can prove Claude reached us.
     private let queryStampURL: URL
+    /// Where served calls are *counted*, so the app can report how much this install is used.
+    /// Derived from the same place as `queryStampURL` and for the same reason.
+    private let toolCallLedgerURL: URL
 
     /// `store` is nil when nothing has been captured yet; the tools explain that in prose.
     ///
@@ -140,12 +143,20 @@ public final class MCPServer {
     /// the standard location when there is no database yet. Both resolve to the same file in a real
     /// install; deriving it from the store keeps a server that was pointed at another data directory
     /// from reporting its calls into the default one.
-    public init(store: ContextStore?, openError: Error? = nil, queryStampURL: URL? = nil) {
+    public init(
+        store: ContextStore?,
+        openError: Error? = nil,
+        queryStampURL: URL? = nil,
+        toolCallLedgerURL: URL? = nil
+    ) {
         self.store = store
         self.openError = openError
         self.queryStampURL = queryStampURL
             ?? store.map { ContextPaths.queryStampURL(besideDatabaseAt: $0.databaseURL) }
             ?? ContextPaths.queryStampURL
+        self.toolCallLedgerURL = toolCallLedgerURL
+            ?? store.map { ContextPaths.toolCallLedgerURL(besideDatabaseAt: $0.databaseURL) }
+            ?? ContextPaths.toolCallLedgerURL
     }
 
     // MARK: - Transport
@@ -286,12 +297,19 @@ public final class MCPServer {
     ///
     /// A failure here is noted and dropped. The stamp is a nicety; the tool result is the contract,
     /// and an unwritable data directory must not turn an answered question into an error.
+    ///
+    /// The same call is also counted in `ToolCallLedger`, which the app drains into analytics. The
+    /// two writes are deliberately separate files: the stamp is monotonic-latest and answers "did
+    /// Claude just call us", the ledger is cumulative and answers "how much" — see `ToolCallLedger`.
+    /// The ledger swallows its own failures for the reason stated above, so it cannot be the thing
+    /// that turns an answered question into an error either.
     private func recordServedCall(_ tool: String) {
         do {
             try QueryStamp.record(tool: tool, to: queryStampURL)
         } catch {
             Self.note("could not record the query stamp: \(error)")
         }
+        ToolCallLedger.bump(tool: tool, at: toolCallLedgerURL)
     }
 
     /// The `content` array for a tool result: the prose, then any pictures.
