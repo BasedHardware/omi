@@ -157,7 +157,6 @@ def postprocess_conversation(
                 uid, conversation.id, PostProcessingStatus.failed, fail_reason=fail_reason
             )
             # conversation.postprocessing = MemoryPostProcessing(
-            #     status=PostProcessingStatus.failed, model=PostProcessingModel.none)
             # TODO: consider doing process_conversation, if any segment still matched to user or people
             return 200, conversation
 
@@ -176,7 +175,6 @@ def postprocess_conversation(
 
     conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.completed)
     # result.postprocessing = MemoryPostProcessing(
-    #     status=PostProcessingStatus.completed, model=PostProcessingModel.none)
 
     return 200, result
 
