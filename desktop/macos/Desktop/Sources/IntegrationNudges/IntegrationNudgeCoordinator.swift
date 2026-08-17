@@ -26,8 +26,11 @@ import Foundation
 final class IntegrationNudgeCoordinator {
   static let shared = IntegrationNudgeCoordinator()
 
-  /// The `assistantId` this feature's cards carry. Drives the card view chosen
-  /// in `FloatingControlBarView.barNotification` and its longer auto-dismiss.
+  /// The `assistantId` this feature's cards carry. Selects the card view in
+  /// `FloatingControlBarView.barNotification`. The card uses the bar's standard
+  /// 6s dismissal like every other; giving this one longer meant editing a
+  /// shared timeout whose SwiftLint baseline is down-only, so it is tracked as
+  /// follow-up rather than smuggled in here.
   static let assistantID = "integration_connect"
 
   /// Seconds between browser re-checks while a browser stays frontmost.
@@ -134,15 +137,12 @@ final class IntegrationNudgeCoordinator {
       forName: NSWorkspace.didActivateApplicationNotification,
       object: nil,
       queue: .main
-    ) { notification in
+    ) { [weak self] notification in
       let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
       let bundleIdentifier = app?.bundleIdentifier
       let appName = app?.localizedName
       Task { @MainActor in
-        IntegrationNudgeCoordinator.shared.handleActivation(
-          bundleIdentifier: bundleIdentifier,
-          appName: appName
-        )
+        self?.handleActivation(bundleIdentifier: bundleIdentifier, appName: appName)
       }
     }
 
@@ -152,9 +152,9 @@ final class IntegrationNudgeCoordinator {
       forName: .runtimeOwnerDidChange,
       object: nil,
       queue: .main
-    ) { _ in
+    ) { [weak self] _ in
       MainActor.assumeIsolated {
-        IntegrationNudgeCoordinator.shared.handleOwnerChange()
+        self?.handleOwnerChange()
       }
     }
   }
@@ -191,33 +191,67 @@ final class IntegrationNudgeCoordinator {
     // Omi's own windows are not a trigger; nudging the user about an
     // integration while they are already looking at the Apps tab is noise.
     guard bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+    // Switched off means switched off: no Accessibility window-title read, no
+    // connector inspection, no telemetry. Consulting the toggle later — inside
+    // the policy — would leave a disabled feature doing all of its work and
+    // discarding the answer.
+    guard isEnabledNow else { return }
 
-    let dwell = IntegrationNudgePolicy.requiredDwell
+    let activatedAt = now()
     pendingEvaluation = Task { [weak self] in
-      try? await Task.sleep(nanoseconds: UInt64(dwell * 1_000_000_000))
-      guard !Task.isCancelled else { return }
-      await self?.evaluate(bundleIdentifier: bundleIdentifier, appName: appName, dwell: dwell)
-      guard !Task.isCancelled else { return }
-      self?.startBrowserRecheckIfNeeded(bundleIdentifier: bundleIdentifier, appName: appName)
+      try? await Task.sleep(
+        nanoseconds: UInt64(IntegrationNudgePolicy.requiredDwell * 1_000_000_000))
+      guard !Task.isCancelled, let self else { return }
+      let outcome = await self.evaluate(
+        bundleIdentifier: bundleIdentifier,
+        appName: appName,
+        dwell: self.now().timeIntervalSince(activatedAt)
+      )
+      guard !Task.isCancelled, outcome.shouldKeepWatching else { return }
+      self.startBrowserRecheckIfNeeded(
+        bundleIdentifier: bundleIdentifier,
+        appName: appName,
+        activatedAt: activatedAt
+      )
     }
   }
 
   /// A browser activation only tells us a browser is frontmost; the site the
   /// user actually opens may arrive a moment later, or on a tab switch that
   /// fires no activation at all. Re-check a bounded number of times.
-  private func startBrowserRecheckIfNeeded(bundleIdentifier: String, appName: String?) {
+  ///
+  /// The loop stops as soon as the answer is settled — a card was delivered, or
+  /// a suppression that cannot change while the user stays in this window. It
+  /// used to run all six rounds regardless, which multiplied the suppressed
+  /// event (documented as the funnel's denominator) by six per activation and
+  /// re-read the window title for a decision already made.
+  private func startBrowserRecheckIfNeeded(
+    bundleIdentifier: String,
+    appName: String?,
+    activatedAt: Date
+  ) {
     guard IntegrationNudgeMatcher.isBrowser(bundleIdentifier: bundleIdentifier) else { return }
     browserRecheck = Task { [weak self] in
       for _ in 0..<Self.browserRecheckLimit {
         try? await Task.sleep(nanoseconds: UInt64(Self.browserRecheckInterval * 1_000_000_000))
-        guard !Task.isCancelled, let self, self.frontmostBundleID() == bundleIdentifier else { return }
-        await self.evaluate(
+        guard !Task.isCancelled, let self, self.isEnabledNow,
+          self.frontmostBundleID() == bundleIdentifier
+        else { return }
+        let outcome = await self.evaluate(
           bundleIdentifier: bundleIdentifier,
           appName: appName,
-          dwell: IntegrationNudgePolicy.requiredDwell
+          dwell: self.now().timeIntervalSince(activatedAt)
         )
+        guard outcome.shouldKeepWatching else { return }
       }
     }
+  }
+
+  /// Whether the user currently wants this feature at all. Read before any
+  /// window inspection, not as part of the nudge decision.
+  private var isEnabledNow: Bool {
+    let environment = environment()
+    return environment.isFeatureEnabled && environment.notificationsEnabled
   }
 
   /// Recognize the frontmost window and, if it earns one, offer its integration.
@@ -230,23 +264,44 @@ final class IntegrationNudgeCoordinator {
   /// Notes" delivered while the user is now in Slack is worse than no card, and
   /// task cancellation alone cannot prevent it, because cancelling a task does
   /// not interrupt an `await` already in progress.
-  func evaluate(bundleIdentifier: String, appName: String?, dwell: TimeInterval) async {
+  @discardableResult
+  func evaluate(bundleIdentifier: String, appName: String?, dwell: TimeInterval) async -> Outcome {
     let expectedOwner = ownerID()
-    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return }
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
 
     let windowTitle = await windowTitleProvider(bundleIdentifier, appName)
-    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return }
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
 
     let window = IntegrationNudgeMatcher.Window(
       bundleIdentifier: bundleIdentifier,
       windowTitle: windowTitle
     )
-    guard let match = IntegrationNudgeMatcher.match(window) else { return }
+    // No integration recognized yet — in a browser the user may still be about
+    // to open one, so this is the one outcome worth watching for.
+    guard let match = IntegrationNudgeMatcher.match(window) else { return .noMatchYet }
 
     let isConnected = await connectionInspector(match.entry.route)
-    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return }
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
 
-    offer(match: match, isConnected: isConnected, dwell: dwell)
+    return offer(match: match, isConnected: isConnected, dwell: dwell)
+  }
+
+  /// What one evaluation concluded, and whether re-checking this window could
+  /// still change the answer.
+  enum Outcome: Equatable {
+    /// The window changed, the owner changed, or the work was cancelled.
+    case abandoned
+    /// Nothing recognized — a browser tab may still become one.
+    case noMatchYet
+    /// A card was handed to the bar.
+    case delivered
+    /// Suppressed for a reason that cannot change while the user stays here.
+    case settled(IntegrationNudgePolicy.Suppression)
+
+    /// Only an unrecognized window is worth looking at again. Once an answer
+    /// exists, re-checking re-reads the window title and re-emits the funnel's
+    /// denominator for a decision already made.
+    var shouldKeepWatching: Bool { self == .noMatchYet }
   }
 
   /// Whether the app that triggered this evaluation is still the one in front,
@@ -258,14 +313,13 @@ final class IntegrationNudgeCoordinator {
   }
 
   /// Decide, deliver, and record — the whole nudge lifecycle for one recognized
-  /// window, with no I/O of its own beyond the injected presenter. Returns
-  /// whether a card was actually delivered.
+  /// window, with no I/O of its own beyond the injected presenter.
   @discardableResult
   func offer(
     match: IntegrationNudgeMatcher.Match,
     isConnected: Bool,
     dwell: TimeInterval
-  ) -> Bool {
+  ) -> Outcome {
     let decision = decide(entry: match.entry, isConnected: isConnected, dwell: dwell)
     log(
       "IntegrationNudgeCoordinator: \(match.entry.telemetryID) trigger=\(match.trigger.id) "
@@ -275,18 +329,19 @@ final class IntegrationNudgeCoordinator {
     if let reason = decision.suppression {
       // Only report suppressions the user could plausibly have wanted a nudge
       // for. `alreadyConnected` is the steady state for every integration the
-      // user already set up, and would swamp the funnel.
-      if reason != .alreadyConnected {
+      // user already set up, and `featureDisabled` is a settings choice, not a
+      // funnel signal — either would swamp the denominator.
+      if reason != .alreadyConnected && reason != .featureDisabled {
         AnalyticsManager.shared.integrationNudgeSuppressed(
           entry: match.entry,
           trigger: match.trigger,
           reason: reason
         )
       }
-      return false
+      return .settled(reason)
     }
 
-    guard let ownerID = ownerID() else { return false }
+    guard let ownerID = ownerID() else { return .settled(.notSignedIn) }
 
     // The budget is spent from the bar's presentation callback, not from the
     // return value. A `.queued` card has been admitted to a queue, not shown,
@@ -308,8 +363,14 @@ final class IntegrationNudgeCoordinator {
     }
 
     // `.presented` invokes the callback synchronously; `.queued` invokes it
-    // later, if and only if the card reaches the screen.
-    return recorded || result == .queued
+    // later, if and only if the card reaches the screen. Either way the bar owns
+    // the card now and this window's answer is settled.
+    guard recorded || result == .queued else {
+      // The bar refused it — a changed owner, or no window to draw in. Neither
+      // gets better by re-reading the title in ten seconds.
+      return .abandoned
+    }
+    return .delivered
   }
 
   /// Window titles are content. Do not read one for an app the user excluded
@@ -354,9 +415,10 @@ final class IntegrationNudgeCoordinator {
     guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
     AnalyticsManager.shared.integrationNudgeActioned(
       entry: entry, action: .connect, triggerID: triggerID)
-    // Claim the connect that follows, so it lands in the funnel as a nudge
-    // conversion rather than as an Apps-tab connect.
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: entry.telemetryID)
+    // Claim the connect that follows, so it lands in the connect funnel as a
+    // nudge conversion rather than as an Apps-tab connect. Only imports have a
+    // connect funnel; exports are measured by the Actioned event above.
+    IntegrationConnectOrigin.recordNudgeOpened(for: entry.route)
 
     AppDelegate.summonWindowTarget()?.openMainAppWindow()
     NotificationCenter.default.post(

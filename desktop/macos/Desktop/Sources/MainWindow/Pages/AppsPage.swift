@@ -1163,10 +1163,19 @@ final class ImportConnectorStatusStore: ObservableObject {
   /// re-import re-proves its revocable folder grant. That is right for a status
   /// row and wrong for deciding whether to pitch the integration — a user who
   /// imported Notes in March has already heard the pitch and taken it.
+  /// Reads the persisted keys rather than the in-memory snapshot, because the
+  /// caller is long-lived: a retained store would keep answering from the
+  /// metrics it loaded at init and would go on offering an integration the user
+  /// connected from the Apps tab a minute ago.
   func hasEverSynced(connectorID: String) -> Bool {
-    guard let metrics = metricsByID[connectorID] else { return false }
-    if metrics.lastSyncedAt != nil { return true }
-    return manualConnectorIDs.contains(connectorID) && (metrics.memoryCount ?? 0) > 0
+    guard sessionUserID != nil else { return false }
+    let lastSyncedAtKey = storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
+    if defaults.object(forKey: lastSyncedAtKey) != nil, defaults.double(forKey: lastSyncedAtKey) > 0 {
+      return true
+    }
+    guard manualConnectorIDs.contains(connectorID) else { return false }
+    let memoryCountKey = storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID)
+    return defaults.object(forKey: memoryCountKey) != nil && defaults.integer(forKey: memoryCountKey) > 0
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {

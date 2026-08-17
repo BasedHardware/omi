@@ -57,7 +57,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let presented = Box(0)
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
-    XCTAssertTrue(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
     XCTAssertEqual(presented.value, 1)
 
     let store = IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
@@ -70,7 +70,9 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let presented = Box(0)
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
-    XCTAssertFalse(coordinator.offer(match: try match(), isConnected: true, dwell: 3))
+    XCTAssertEqual(
+      coordinator.offer(match: try match(), isConnected: true, dwell: 3),
+      .settled(.alreadyConnected))
     XCTAssertEqual(presented.value, 0)
     XCTAssertEqual(
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
@@ -92,7 +94,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
 
-    XCTAssertFalse(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
     XCTAssertEqual(
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
         .state(for: try match().entry.telemetryID).shownCount,
@@ -158,7 +160,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       ownerID: nil
     )
 
-    XCTAssertFalse(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
     XCTAssertEqual(presented.value, 0)
   }
 
@@ -169,10 +171,12 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let presented = Box(0)
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
-    XCTAssertTrue(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
 
     let second = try match(.exportDestination("notion"))
-    XCTAssertFalse(coordinator.offer(match: second, isConnected: false, dwell: 3))
+    XCTAssertEqual(
+      coordinator.offer(match: second, isConnected: false, dwell: 3),
+      .settled(.globalCooldown))
     XCTAssertEqual(presented.value, 1)
   }
 
@@ -193,7 +197,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
         presentedCount: presented,
         environment: environment
       )
-      XCTAssertFalse(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+      XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
       XCTAssertEqual(presented.value, 0)
     }
   }
@@ -207,7 +211,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       presentedCount: presented,
       environment: .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: false)
     )
-    XCTAssertFalse(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+    XCTAssertNotEqual(coordinator.offer(match: try match(), isConnected: false, dwell: 3), .delivered)
     XCTAssertEqual(presented.value, 0)
   }
 
@@ -216,12 +220,13 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let presented = Box(0)
     let coordinator = makeCoordinator(defaults: defaults, result: .presented, presentedCount: presented)
 
-    XCTAssertFalse(
+    XCTAssertEqual(
       coordinator.offer(
         match: try match(),
         isConnected: false,
         dwell: IntegrationNudgePolicy.requiredDwell - 0.5
-      )
+      ),
+      .settled(.dwellTooShort)
     )
     XCTAssertEqual(presented.value, 0)
   }
@@ -304,6 +309,83 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
 
     XCTAssertEqual(presented.value, 1)
+  }
+
+  // MARK: - Feature off means no work at all
+
+  /// Switched off must mean no Accessibility window-title read, no connector
+  /// inspection, and no telemetry — not "do all the work and discard it". The
+  /// title read is the privacy-sensitive half, so the assertion is that the
+  /// provider is never called at all.
+  func testFeatureOffDoesNoWindowInspection() async {
+    for environment in [
+      IntegrationNudgeCoordinator.Environment(
+        isFeatureEnabled: false, notificationsEnabled: true, isOnboardingComplete: true),
+      IntegrationNudgeCoordinator.Environment(
+        isFeatureEnabled: true, notificationsEnabled: false, isOnboardingComplete: true),
+    ] {
+      let titleReads = Box(0)
+      let connectionChecks = Box(0)
+      let presented = Box(0)
+      let coordinator = IntegrationNudgeCoordinator(
+        store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
+        now: { self.now },
+        presenter: { _, _, _ in
+          presented.value += 1
+          return .presented
+        },
+        ownerID: { "user-a" },
+        environment: { environment },
+        frontmostBundleID: { "com.google.Chrome" },
+        windowTitleProvider: { _, _ in
+          titleReads.value += 1
+          return "Inbox — Gmail"
+        },
+        connectionInspector: { _ in
+          connectionChecks.value += 1
+          return false
+        }
+      )
+
+      coordinator.handleActivation(bundleIdentifier: "com.google.Chrome", appName: "Google Chrome")
+      // handleActivation short-circuits before scheduling any work, so there is
+      // nothing to await — the counters are already final.
+      XCTAssertEqual(titleReads.value, 0)
+      XCTAssertEqual(connectionChecks.value, 0)
+      XCTAssertEqual(presented.value, 0)
+    }
+  }
+
+  // MARK: - Re-check loop
+
+  /// Once a window has an answer, re-checking re-reads the title and re-emits
+  /// the funnel's denominator for a decision already made.
+  func testASettledOutcomeStopsTheReCheckLoop() throws {
+    XCTAssertFalse(IntegrationNudgeCoordinator.Outcome.delivered.shouldKeepWatching)
+    XCTAssertFalse(IntegrationNudgeCoordinator.Outcome.abandoned.shouldKeepWatching)
+    XCTAssertFalse(
+      IntegrationNudgeCoordinator.Outcome.settled(.connectorCooldown).shouldKeepWatching)
+    XCTAssertTrue(IntegrationNudgeCoordinator.Outcome.noMatchYet.shouldKeepWatching)
+  }
+
+  /// A browser tab the user has not opened yet is the one case worth watching.
+  func testAnUnrecognizedWindowKeepsTheLoopAlive() async {
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, _ in .presented },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) },
+      frontmostBundleID: { "com.google.Chrome" },
+      windowTitleProvider: { _, _ in "Some Unrelated Page" },
+      connectionInspector: { _ in false }
+    )
+
+    let outcome = await coordinator.evaluate(
+      bundleIdentifier: "com.google.Chrome", appName: "Google Chrome", dwell: 3)
+
+    XCTAssertEqual(outcome, .noMatchYet)
+    XCTAssertTrue(outcome.shouldKeepWatching)
   }
 
   private func makeEvaluatingCoordinator(

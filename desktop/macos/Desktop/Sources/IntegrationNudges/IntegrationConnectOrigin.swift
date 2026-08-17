@@ -36,8 +36,20 @@ enum IntegrationConnectOrigin {
 
   private static var claim: Claim?
 
-  static func recordNudgeOpened(telemetryID: String, now: Date = Date()) {
-    claim = Claim(telemetryID: telemetryID, claimedAt: now)
+  /// Opens a window for `route`, if that route's connect is measured by the
+  /// connect funnel at all.
+  ///
+  /// Only import connectors are: they run through `ConnectorImportRunner`,
+  /// which is the single place `IntegrationConnectTelemetry` is emitted. Export
+  /// destinations emit no connect funnel, so recording a window for one would
+  /// store state nothing can ever consume. Export conversion is measured by
+  /// `Integration Nudge Actioned` with `action: connect` instead, which covers
+  /// both halves of the catalog.
+  @discardableResult
+  static func recordNudgeOpened(for route: IntegrationNudgeRoute, now: Date = Date()) -> Bool {
+    guard case .importConnector = route else { return false }
+    claim = Claim(telemetryID: route.telemetryID, claimedAt: now)
+    return true
   }
 
   /// Returns the surface to attribute a connect to, consuming any matching

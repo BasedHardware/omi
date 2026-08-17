@@ -18,7 +18,7 @@ final class IntegrationConnectOriginTests: XCTestCase {
 
   func testANudgeClaimsTheConnectThatFollows() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
     XCTAssertEqual(IntegrationConnectOrigin.consumeSurface(for: .importConnector("email"), now: now), .nudge)
   }
 
@@ -26,7 +26,7 @@ final class IntegrationConnectOriginTests: XCTestCase {
   /// their own, not the nudge converting twice.
   func testTheClaimIsConsumedOnce() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
     _ = IntegrationConnectOrigin.consumeSurface(for: .importConnector("email"), now: now)
     XCTAssertEqual(IntegrationConnectOrigin.consumeSurface(for: .importConnector("email"), now: now), .apps)
   }
@@ -34,7 +34,7 @@ final class IntegrationConnectOriginTests: XCTestCase {
   /// A Gmail nudge must not take credit for the user connecting Notion.
   func testAClaimOnlyCoversItsOwnIntegration() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
     XCTAssertEqual(
       IntegrationConnectOrigin.consumeSurface(for: .importConnector("calendar"), now: now),
       .apps
@@ -48,7 +48,7 @@ final class IntegrationConnectOriginTests: XCTestCase {
   /// Calendar itself is never miscredited.
   func testAnUnrelatedConnectDoesNotCloseTheWindow() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
 
     XCTAssertEqual(
       IntegrationConnectOrigin.consumeSurface(for: .importConnector("calendar"), now: now),
@@ -67,8 +67,8 @@ final class IntegrationConnectOriginTests: XCTestCase {
   /// older integration cannot be credited by a later unrelated connect.
   func testANewerNudgeReplacesTheWindow() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:calendar", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("calendar"), now: now)
 
     XCTAssertEqual(IntegrationConnectOrigin.consumeSurface(for: .importConnector("email"), now: now), .apps)
   }
@@ -76,31 +76,34 @@ final class IntegrationConnectOriginTests: XCTestCase {
   /// Coming back through the Apps tab an hour later is an Apps-tab connect.
   func testTheClaimExpires() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
     let later = now.addingTimeInterval(IntegrationConnectOrigin.claimLifetime)
     XCTAssertEqual(IntegrationConnectOrigin.consumeSurface(for: .importConnector("email"), now: later), .apps)
   }
 
-  /// ChatGPT and Claude exist as both an import and an export. An accepted
-  /// *export* nudge must never take credit for an *import* connect of the
-  /// same-named tool — the exact collision the bare connector id allowed.
-  func testAnExportWindowDoesNotCreditTheSameNamedImport() {
+  /// Export destinations emit no connect funnel, so opening a window for one
+  /// would store state nothing can consume — and, with a bare id, an accepted
+  /// ChatGPT *export* nudge would have credited a ChatGPT *import* connect.
+  func testAnExportNudgeOpensNoWindowAndCannotCreditTheSameNamedImport() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "export:chatgpt", now: now)
 
+    XCTAssertFalse(
+      IntegrationConnectOrigin.recordNudgeOpened(for: .exportDestination("chatgpt"), now: now))
     XCTAssertEqual(
       IntegrationConnectOrigin.consumeSurface(for: .importConnector("chatgpt"), now: now),
       .apps
     )
-    XCTAssertEqual(
-      IntegrationConnectOrigin.consumeSurface(for: .exportDestination("chatgpt"), now: now),
-      .nudge
-    )
+  }
+
+  func testAnImportNudgeOpensAWindow() {
+    IntegrationConnectOrigin.reset()
+    XCTAssertTrue(
+      IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now))
   }
 
   func testTheClaimHoldsRightUpToItsDeadline() {
     IntegrationConnectOrigin.reset()
-    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: "import:email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(for: .importConnector("email"), now: now)
     let justInside = now.addingTimeInterval(IntegrationConnectOrigin.claimLifetime - 1)
     XCTAssertEqual(
       IntegrationConnectOrigin.consumeSurface(for: .importConnector("email"), now: justInside),
