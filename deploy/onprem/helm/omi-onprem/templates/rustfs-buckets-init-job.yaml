@@ -1,15 +1,17 @@
 {{- if .Values.objstore.enabled }}
 # Provision the S3 buckets the backend uses (ADR-0032 §5: buckets are created out-of-band, not by the
 # app). Idempotent (`mc mb --ignore-existing`); a regular resource so `helm install --wait` waits for it
-# alongside rustfs (same rationale as mongo-rs-init). A minio/mc client speaks S3 to RustFS.
+# alongside rustfs. Named per revision + ttl (same rationale as mongo-rs-init) so upgrades create a fresh
+# Job instead of patching this immutable one. A minio/mc client speaks S3 to RustFS.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rustfs-buckets-init
+  name: rustfs-buckets-init-r{{ .Release.Revision }}
   labels:
     {{- include "omi-onprem.labels" . | nindent 4 }}
     app.kubernetes.io/component: rustfs-buckets-init
 spec:
+  ttlSecondsAfterFinished: 600
   backoffLimit: 20
   template:
     metadata:

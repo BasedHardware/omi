@@ -1,19 +1,21 @@
-# Idempotent replica-set initiator (§6.1, the self-contained init-Job). A regular resource (NOT a
-# helm hook) so `helm install --wait` applies it alongside the StatefulSet + backend and waits for all
-# three to converge — a post-install hook would deadlock, since --wait blocks on the backend (whose
+# Idempotent replica-set initiator (§6.1, the self-contained init-Job). A regular resource (NOT a helm
+# hook) so `helm install --wait` applies it alongside the StatefulSet + backend and waits for all three
+# to converge — a post-install hook would deadlock, since --wait blocks on the backend (whose
 # initContainer waits for the RS primary) before hooks run.
 #
-# Known limitation: a Job spec is immutable, so a `helm upgrade` that changes this Job errors. For the
-# dev/CI core milestone (install + validate) that is fine; the prod chart can revisit (revision-suffixed
-# name or a mature Mongo chart) if upgrades need it.
+# Named per release revision (+ ttlSecondsAfterFinished) so each `helm upgrade` creates a FRESH Job
+# instead of patching this one: a Job's pod template is immutable AND the Job controller mutates the
+# live object (adds selector/labels), so re-applying the same name fails on upgrade. The re-run is a
+# cheap no-op (rs.status already ok); the finished Job self-cleans via ttl.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: mongo-rs-init
+  name: mongo-rs-init-r{{ .Release.Revision }}
   labels:
     {{- include "omi-onprem.labels" . | nindent 4 }}
     app.kubernetes.io/component: mongo-rs-init
 spec:
+  ttlSecondsAfterFinished: 600
   backoffLimit: 20
   template:
     metadata:
