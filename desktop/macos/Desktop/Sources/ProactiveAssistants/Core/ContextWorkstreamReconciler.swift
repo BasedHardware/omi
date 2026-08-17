@@ -684,6 +684,37 @@ enum ContextProactiveCandidateLookup {
       arguments: arguments)
   }
 
+  /// The statements (with a short evidence quote) behind a candidate's
+  /// grounding fact ids, for the delivery gate's evidence section. The gate is
+  /// asked whether a claim written earlier is now stale; it can only answer
+  /// that against the evidence the claim was written from, which lives on
+  /// these rows — the current visit's facts are from a different moment.
+  /// No validity filter: the engine has already revalidated the grounding ids
+  /// before the candidate is offered, and even a since-superseded fact remains
+  /// the true provenance of the message.
+  static func groundingFactLines(
+    factIDs: [String], bucketID: String, in db: Database
+  ) throws -> [String] {
+    guard !factIDs.isEmpty else { return [] }
+    var arguments: StatementArguments = [bucketID]
+    arguments += StatementArguments(factIDs)
+    return try Row.fetchAll(
+      db,
+      sql: """
+        SELECT statement, evidenceText FROM bucket_facts
+        WHERE bucketID = ? AND id IN (\(factIDs.map { _ in "?" }.joined(separator: ",")))
+        ORDER BY createdAt ASC, id ASC
+        """,
+      arguments: arguments
+    ).compactMap { row -> String? in
+      guard let statement: String = row["statement"] else { return nil }
+      let evidence = ContextDestinationKey.singleLine(
+        row["evidenceText"] as String? ?? "", limit: 200)
+      guard !evidence.isEmpty else { return statement }
+      return "\(statement) (on-screen wording at the time: \"\(evidence)\")"
+    }
+  }
+
   static func expireStale(now: Date, in db: Database) throws {
     try db.execute(
       sql: """
@@ -717,12 +748,29 @@ enum ContextProactiveCandidateGate {
     return try? JSONDecoder().decode(Decision.self, from: data)
   }
 
+  /// The previous contract asked the gate to verify the candidate was "accurate
+  /// for what is on screen now" while also "adding something not already
+  /// visible" — mutually exclusive demands — and handed it only the current
+  /// visit's facts, never the facts the candidate was written from. Measured
+  /// result: 13 of 14 live rejections read "not supported by the current
+  /// screen", the rejected candidates were exactly the useful class (branch
+  /// divergence, fleet health, a deploy in progress), and conversion was 0%.
+  /// The gate's screen-reading was accurate every time; the contract was wrong.
+  ///
+  /// This version supplies the candidate's own grounding evidence and makes
+  /// absence-from-screen explicitly a non-reason: the gate now only blocks
+  /// staleness, repetition, and redundancy — three questions it can actually
+  /// answer from what it is shown.
   static func prompt(
     message: String,
+    groundingFacts: [String],
     validatedFacts: [String],
     recentDeliveries: [ContextBucketRecentDelivery],
     timeZone: TimeZone = .current
   ) -> String {
+    let grounding =
+      groundingFacts.isEmpty
+      ? "(none)" : groundingFacts.map { "- " + String($0.prefix(400)) }.joined(separator: "\n")
     let facts =
       validatedFacts.isEmpty
       ? "(none)" : validatedFacts.map { String($0.prefix(400)) }.joined(separator: "\n")
@@ -731,15 +779,28 @@ enum ContextProactiveCandidateGate {
       ?? "== RECENTLY DELIVERED FOR THIS BUCKET ==\n(none)"
     return """
       \(ScreenDerivedContent.untrustedPreamble)
-      You are a yes/no delivery gate for a pre-written notification. Do not rewrite the
-      message. Set show to true only if the candidate is accurate for what is on screen
-      now, adds something not already visible, and repeats nothing in the recent list.
-      Answering false is common and correct.
+      You are a yes/no delivery gate for one pre-written notification. Do not rewrite it.
+      The notification was written earlier, from the stored evidence below, not from the
+      current screen. The current screen is not expected to mention it.
+      Answer show=false only for one of these three reasons:
+      1. The current screen clearly shows that the very matter this notification is about
+         is already resolved, completed, or changed, so the notification is now wrong or
+         moot. A different task, pull request, or topic being resolved on screen is not
+         this reason.
+      2. The notification repeats a point in the recently-delivered list, even reworded.
+      3. The notification only tells the user what they are already looking at right now.
+      Otherwise answer show=true.
+      The current screen not mentioning or confirming the notification is normal and is
+      never a reason to answer false.
+      Keep reason to one short sentence.
 
-      == CANDIDATE ==
+      == CANDIDATE NOTIFICATION ==
       \(String(message.prefix(600)))
 
-      == VALIDATED FACTS ON THIS VISIT ==
+      == STORED EVIDENCE THE NOTIFICATION WAS WRITTEN FROM ==
+      \(grounding)
+
+      == VALIDATED FACTS ON THIS VISIT (current screen) ==
       \(facts)
 
       \(recent)
@@ -903,18 +964,21 @@ actor ContextWorkstreamReconciler {
   /// interpolated per pass precisely so it cannot drift.
   static let taggingInstructions = """
     \(ScreenDerivedContent.untrustedPreamble)
-    Assign these observation groups to durable workstream labels.
+    Assign each observation group below to one durable workstream label, or to null.
 
     A workstream is an ongoing project, product, or goal that spans multiple
     applications and persists over days or weeks. Name it after the thing being
-    worked on — a product, repository, company, customer, or person — never after
-    an activity, a tool, or the app the observations were seen in.
+    worked on: a product, a repository, a company, a customer, or a person. Never
+    name it after an activity, a technology, or the app the observations were seen
+    in.
 
-    Prefer an existing label from the vocabulary when one fits. Propose at most
-    six labels in total. Propose a NEW label only when at least two groups in this
-    batch support it. Every label must use a term that actually appears in the
-    observations. Assign each group to one label or to null; null is correct and
-    expected for many groups. Do not invent a workstream to cover leftovers.
+    Decide for each group in this order:
+    1. If an existing label from the vocabulary fits, use it.
+    2. If no label fits, assign null. Null is correct and expected for many groups.
+    3. Propose a NEW label only when at least two groups in this batch support it.
+    Every label must use a term that actually appears in that group's observations.
+    Propose at most six labels in total. Do not invent a workstream to cover
+    leftovers.
     """
 
   /// The per-pass half: vocabulary and observation groups. Sits below the
@@ -948,16 +1012,23 @@ actor ContextWorkstreamReconciler {
 
   /// Distinct instructions from tagging, hence its own key: two prompt shapes
   /// under one key would only ever evict each other.
+  /// The delivery-time line ("hours later, when the user returns") is there
+  /// because a live gate rejection read "it shows 30 touched files—not 33
+  /// uncommitted files": a candidate built on a minute-volatile count went
+  /// stale before anything could show it. The message survives to delivery only
+  /// if it is written for the moment of delivery, not the moment of writing.
   static let candidateInstructions = """
     \(ScreenDerivedContent.untrustedPreamble)
-    For each bucket below, write at most one short notification the user would find
-    worth an interruption, or omit the bucket. Ground it in the supplied fact ids
-    and add a one-line trigger_note describing when it should fire.
-
-    Do not restate what is already visible on the user's screen. Speak only when
-    you add something they cannot currently see: a commitment, a deadline, a
-    conflict, or a connection to other work. Must add one of those; otherwise omit
-    the bucket.
+    For each bucket below, write at most one short notification, or omit the bucket.
+    Omitting most buckets is normal.
+    Ask first: do the facts record a commitment, a deadline, a blocker, a conflict,
+    or a change the user may not have seen? If not, omit the bucket.
+    Never write a notification that merely describes what was on the user's screen.
+    The notification will be delivered hours later, when the user returns to this
+    context. Write only what will still be true and useful then. Do not build the
+    message around counts or figures that change minute to minute.
+    List in fact_ids every supplied fact id the message relies on.
+    Add a one-line trigger_note describing when it should fire.
     """
 
   static func candidateData(groups: [ContextWorkstreamReconcileGroup]) -> String {

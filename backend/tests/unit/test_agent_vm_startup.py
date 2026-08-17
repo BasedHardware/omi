@@ -102,6 +102,10 @@ def test_startup_publishers_render_image_and_secret_name_without_shell_defaults(
         assert "envsubst < backend/agent_vm/startup.sh" not in content
         assert service_account in content
         assert 'gcloud storage cp "$rendered_startup" "gs://$AGENT_GCS_BUCKET/startup.sh"' not in content
+        assert "resolve_agent_vm_sha_release.py" in content
+        assert content.index("resolve_agent_vm_sha_release.py") < content.index('docker build --tag "$agent_image"')
+        assert 'gcloud storage cp --no-clobber "$rendered_startup" "$startup_uri_gs"' in content
+        assert 'cmp -s "$rendered_startup" "$startup_readback"' in content
         assert "AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}" in content
         assert "AGENT_VM_RECONCILER_JOB" in content
         assert "GOOGLE_APPLICATION_CREDENTIALS=/secrets/reconciler/service-account.json" not in content

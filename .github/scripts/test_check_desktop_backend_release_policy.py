@@ -108,6 +108,28 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         )
         self.assertTrue(any("Build and publish Agent VM image" in error for error in errors), errors)
 
+    def test_requires_production_reconciler_deploy_identity_before_traffic(self) -> None:
+        omitted = self.prod.replace(
+            "      - name: Preflight Agent VM reconciler deploy identity",
+            "      - name: Reconciler identity preflight omitted",
+            1,
+        )
+        retargeted = self.prod.replace(
+            "josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com",
+            "other-deployer@based-hardware.iam.gserviceaccount.com",
+            1,
+        )
+        omitted_errors = POLICY.validate_deploy_workflow(omitted, production=True)
+        retargeted_errors = POLICY.validate_deploy_workflow(retargeted, production=True)
+        self.assertTrue(
+            any("Preflight Agent VM reconciler deploy identity" in error for error in omitted_errors),
+            omitted_errors,
+        )
+        self.assertTrue(
+            any("josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com" in error for error in retargeted_errors),
+            retargeted_errors,
+        )
+
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
             "      - name: Prove candidate chat compatibility",

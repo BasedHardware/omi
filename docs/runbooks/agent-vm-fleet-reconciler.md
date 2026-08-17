@@ -1,7 +1,9 @@
 # Agent VM fleet reconciler
 
 The Agent VM fleet is converged by an immutable release manifest and a
-five-minute Cloud Run Job. A desktop-backend deploy publishes the image by
+five-minute Cloud Run Job. A source-SHA `startup.sh` / `manifest.json` pair is
+written once; a later deploy of the same SHA reuses that digest instead of rebuilding a competing image that would fail `--no-clobber` + `cmp`
+(workflow 32012710785). A desktop-backend deploy publishes the image by
 digest and a content-addressed startup artifact, verifies the new backend
 revision, then advances `agent-vm/releases/active.json`. The active pointer is
 the only mutable release object; the previous accepted pointer is retained for
@@ -241,6 +243,13 @@ bash backend/scripts/apply-agent-vm-reconciler-iam.sh
 ```
 
 Use the corresponding CI deploy service account and bucket in each environment.
+Production is pinned to
+`josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com` acting as
+`agent-vm-reconciler@based-hardware.iam.gserviceaccount.com`. The protected
+prod workflow preflights that exact `roles/iam.serviceAccountUser` binding
+(and service-account existence) before routing traffic. Workflow 32012710785
+rolled back a proven SCA-323 candidate because the runtime identity was
+absent and the deployer lacked `iam.serviceAccounts.actAs`.
 Then deploy the desktop backend (which creates or updates the Job), and install
 the Scheduler trigger only after the Agent Proxy lease check succeeds:
 

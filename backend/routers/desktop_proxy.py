@@ -41,6 +41,13 @@ _VERTEX_MODELS = frozenset({'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini
 # Keep the provider decision explicit instead of silently trying one API shape on
 # another provider.
 _VERTEX_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent'})
+# Company-paid Flash text is reserved on Vertex PT. Changing this pin without
+# updating the matching tests and backend/docs/vertex-pt-flash.md is the
+# 2026-08-04 AI Studio double-pay regression.
+VERTEX_PT_MODEL = 'gemini-2.5-flash'
+VERTEX_PT_LOCATION = 'us-central1'
+VERTEX_PT_EXPIRES = '~2027-05-28'
+VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
@@ -254,7 +261,7 @@ def _size_bucket(size: int) -> str:
 
 
 def _path_parts(path: str) -> tuple[str, str, str]:
-    path = path.replace('gemini-3-flash-preview', 'gemini-2.5-flash')
+    path = path.replace('gemini-3-flash-preview', VERTEX_PT_MODEL)
     prefix, separator, action = path.partition(':')
     model = prefix.removeprefix('models/') if separator and prefix.startswith('models/') else ''
     if action not in _ALLOWED_ACTIONS or model not in _ALLOWED_MODELS:
@@ -337,11 +344,25 @@ def _sanitize(body: bytes, action: str) -> bytes:
     return json.dumps(payload, separators=(',', ':')).encode()
 
 
+def _use_vertex_ai() -> bool:
+    return os.getenv('USE_VERTEX_AI', '').strip().lower() in {'1', 'true', 'yes'}
+
+
+def _server_paid_flash_text(model: str, action: str) -> bool:
+    return model == VERTEX_PT_MODEL and action in {'generateContent', 'streamGenerateContent'}
+
+
+def _vertex_required(model: str, action: str) -> bool:
+    if action not in _VERTEX_ACTIONS or model not in _VERTEX_MODELS:
+        return False
+    return _server_paid_flash_text(model, action) or _use_vertex_ai()
+
+
 def _vertex_url(model: str, action: str) -> str | None:
     project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
     if model not in _VERTEX_MODELS or action not in _VERTEX_ACTIONS or not project:
         return None
-    location = os.getenv('GCP_LOCATION', 'us-central1').strip()
+    location = os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION
     return f'https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{action}'
 
 
@@ -385,7 +406,15 @@ async def _upstream(path: str, model: str, action: str, query: dict[str, str]) -
             query,
             'vertex_ai',
             'application_default_credentials',
-            os.getenv('GCP_LOCATION', 'us-central1').strip(),
+            os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION,
+        )
+    if _vertex_required(model, action):
+        # Missing GOOGLE_CLOUD_PROJECT is the 2026-08-04 production bug: Flash
+        # fell through to GEMINI_API_KEY / AI Studio and bypassed Vertex PT.
+        raise RoutingFailure(
+            code='routing_vertex_not_configured',
+            message=f'Gemini Vertex route is required. {VERTEX_PT_CONTRACT}',
+            phase='routing',
         )
     server_key = os.getenv('GEMINI_API_KEY', '').strip()
     if not server_key:
@@ -432,10 +461,13 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
             reason='quota',
             outcome='degraded',
         )
-        return f'models/gemini-2.5-flash:{action}'
+        return f'models/{VERTEX_PT_MODEL}:{action}'
     return path
 
 
+# gemini-embedding-001 single embed uses Vertex :predict when a project is
+# configured (~$278/30d). batchEmbedContents stays on AI Studio because the
+# Vertex batch wire shape is not compatible.
 def _vertex_embedding_request(body: bytes) -> bytes:
     payload = json.loads(body)
     try:

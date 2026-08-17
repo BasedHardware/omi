@@ -683,54 +683,6 @@
           "order": "ASCENDING"
         }
       ]
-    },
-    {
-      "collectionGroup": "chat_first_deferrals",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "account_generation",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "due_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "chat_first_deferrals",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "account_generation",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "state",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "subject.kind",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "subject.id",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
     }
   ],
   "fieldOverrides": []

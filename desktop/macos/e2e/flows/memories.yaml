@@ -32,6 +32,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasGeometry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasPlayback.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasZoomPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSurfacePresentation.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
@@ -172,7 +175,7 @@ steps:
 
   - id: S13
     name: Escape backs out one layer per press
-    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
+    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection, resets the camera to the whole map, and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
     expect:
       text_visible:
         - Memories
