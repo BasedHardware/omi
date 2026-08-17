@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DECISIVE_MARGIN,
   MAX_REACH,
+  MIN_REACH,
   SEA_LEVEL,
   blur,
   coastlineContains,
@@ -43,15 +44,18 @@ describe('influenceReach', () => {
     expect(influenceReach(groups([[0, [{ x: 0.5, y: 0.5 }]]]))).toBe(MAX_REACH)
   })
 
-  it('is not collapsed to zero by two entities at the same coordinate', () => {
+  it('is not collapsed by two entities at the same coordinate', () => {
     // Nearest-neighbour uses value inequality, so a duplicate does not report a
-    // spacing of zero and shrink the reach for the entire map.
-    const duplicated = [
-      { x: 0.3, y: 0.3 },
+    // spacing of zero. Identity comparison would let the duplicate through, the
+    // median gap would fall to zero, and the reach would clamp to its floor -
+    // shrinking every territory on the map because two entities coincided.
+    const spaced = [
       { x: 0.3, y: 0.3 },
       { x: 0.7, y: 0.7 }
     ]
-    expect(influenceReach(groups([[0, duplicated]]))).toBeGreaterThan(0)
+    const withDuplicate = [{ x: 0.3, y: 0.3 }, ...spaced]
+    expect(influenceReach(groups([[0, withDuplicate]]))).toBe(influenceReach(groups([[0, spaced]])))
+    expect(influenceReach(groups([[0, withDuplicate]]))).toBeGreaterThan(MIN_REACH)
   })
 
   it('stays inside its clamp however tightly packed the map is', () => {
@@ -91,7 +95,10 @@ describe('blur', () => {
     const mask = new Array<number>(128 * 128).fill(0)
     mask[0] = 1
     const out = blur(mask)
-    // Wrapping would light the opposite corner, drawing land across the map.
+    // Wrapping would light the far end of the same row and the far end of the
+    // same column, drawing land across the map from one lit corner cell.
+    expect(out[0 * 128 + 127]).toBe(0)
+    expect(out[127 * 128 + 0]).toBe(0)
     expect(out[127 * 128 + 127]).toBe(0)
   })
 })
@@ -222,6 +229,26 @@ describe('coastlines', () => {
       ])
     expect(coastlines(pair(0.006)).get(0)).toBeUndefined()
     expect(coastlines(pair(0.01)).get(0)).toBeDefined()
+  })
+
+  it('never puts a NaN in a coastline', () => {
+    // Every crossing point must come from an edge the contour actually crosses.
+    // An edge whose ends sit on the same side divides by zero, and one NaN
+    // reachable from the neighbouring cell moves a whole coastline off the map.
+    const result = coastlines(
+      groups([
+        [0, cluster(0.3, 0.3, 30, 0.07)],
+        [1, cluster(0.7, 0.7, 30, 0.07)]
+      ])
+    )
+    for (const rings of result.values()) {
+      for (const ring of rings) {
+        for (const point of ring) {
+          expect(Number.isFinite(point.x)).toBe(true)
+          expect(Number.isFinite(point.y)).toBe(true)
+        }
+      }
+    }
   })
 
   it('returns exactly the same rings for the same input', () => {

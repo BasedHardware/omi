@@ -58,6 +58,38 @@ describe('mergeByModularity', () => {
     expect(mergeByModularity([], [])).toEqual([])
   })
 
+  it('leaves a node where it is when two candidates tie exactly', () => {
+    // `a` is pulled equally by `b` and `c`. Moving on a tie makes the winner
+    // whichever candidate is compared last, so the partition depends on
+    // iteration order and oscillates between sweeps; refusing to move on a tie
+    // is what makes it settle.
+    const membership = detectCommunities(
+      ['a', 'b', 'c'],
+      neighbours([
+        ['a', 'b', 1],
+        ['a', 'c', 1]
+      ])
+    )
+    const groupOf = (id: string): number => membership.get(id) as number
+    // b and c are symmetric, so a must not end up merged with exactly one of
+    // them on the strength of a tie.
+    expect(groupOf('b') === groupOf('c') || groupOf('a') !== groupOf('b')).toBe(true)
+    expect(groupOf('b') === groupOf('c') || groupOf('a') !== groupOf('c')).toBe(true)
+  })
+
+  it('ignores a self-edge, so it cannot look like evidence of grouping', () => {
+    // A node linked only to itself has no reason to join anyone.
+    const membership = detectCommunities(
+      ['a', 'b', 'c'],
+      neighbours([
+        ['a', 'a', 99],
+        ['b', 'c', 5]
+      ])
+    )
+    expect(membership.get('a')).not.toBe(membership.get('b'))
+    expect(membership.get('b')).toBe(membership.get('c'))
+  })
+
   it('leaves a node where it is when a candidate only ties', () => {
     // A node pulled by an equal-scoring candidate makes the partition oscillate
     // and never settle, so the map would reorganise itself on every run.

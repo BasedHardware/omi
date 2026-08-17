@@ -176,6 +176,32 @@ describe('buildTerritories', () => {
     expect(built).toEqual([])
   })
 
+  it('drops a region drawn over ground none of its members stand on', () => {
+    // The coastline can form on a ridge BETWEEN a community's members, leaving
+    // them all outside it. A region nothing of its own stands in is worse than
+    // no region.
+    const work = members('work', 8, 0.3, 0.3)
+    const built = buildTerritories({
+      membersByGroup: new Map([[0, work]]),
+      // Land nowhere near the members.
+      ringsByGroup: new Map([[0, [square(0.8, 0.8, 0.15)]]]),
+      allPositions: work.map((m) => m.position)
+    })
+    expect(built).toEqual([])
+  })
+
+  it('drops a community whose coastline came back empty', () => {
+    const work = members('work', 8, 0.3, 0.3)
+    const built = buildTerritories({
+      membersByGroup: new Map([[0, work]]),
+      // An empty array, not a missing key: the difference matters because
+      // coastlines() can return either.
+      ringsByGroup: new Map([[0, []]]),
+      allPositions: work.map((m) => m.position)
+    })
+    expect(built).toEqual([])
+  })
+
   it('drops a community too small to be a region', () => {
     const built = buildTerritories({
       membersByGroup: new Map([[0, members('work', 3, 0.3, 0.3)]]),

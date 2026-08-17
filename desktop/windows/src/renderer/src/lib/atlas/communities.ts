@@ -52,9 +52,12 @@ export function mergeByModularity(
     for (let i = 0; i < n; i += 1) {
       const current = community[i]
       // Weight from i into each candidate community.
+      // Self-edges are excluded where the adjacency is BUILT (both in
+      // detectCommunities and in the collapse below), so there is no second
+      // check here: two guards for one invariant means neither can be shown to
+      // matter on its own.
       const shared = new Map<number, number>()
       for (const [j, weight] of adjacency[i]) {
-        if (j === i) continue
         shared.set(community[j], (shared.get(community[j]) ?? 0) + weight)
       }
 

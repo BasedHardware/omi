@@ -167,9 +167,14 @@ export function traceRings(mask: number[]): Ring[] {
 
       // Each crossing point is created ONLY for an edge the contour actually
       // crosses. Computing all four up front divides by zero on an edge whose
-      // ends are on the same side of the level, and the resulting NaN is then
-      // reachable by the neighbouring cell that shares that edge id - which
-      // silently puts a coastline nowhere near the entities it belongs to.
+      // ends sit on the same side of the level.
+      //
+      // That NaN turns out to be unreachable rather than dangerous: the two
+      // cells sharing an edge read the same two corner values for it, so they
+      // always agree on whether the contour crosses it, and a case never
+      // references an edge its own corners say is uncrossed. Kept lazy anyway,
+      // because a map holding NaN that nothing happens to read is one refactor
+      // away from being a map holding NaN that something does.
       const bottom = (): number => {
         const id = horizontalEdge(r, c)
         if (!points.has(id)) points.set(id, { x: c + cross(bl, br), y: r })
