@@ -5,7 +5,9 @@ Ceph, AWS S3 — differing only by ``S3_ENDPOINT``/credentials (ADR-0004: the ad
 the product is deployment config). Path-style addressing + SigV4, which every self-hosted S3 needs.
 
 Env: ``S3_ENDPOINT`` (e.g. http://rustfs:9000), ``S3_ACCESS_KEY``, ``S3_SECRET_KEY``,
-``S3_REGION`` (default us-east-1), ``S3_PUBLIC_ENDPOINT`` (optional; base for ``public_url``, default = endpoint).
+``S3_REGION`` (default us-east-1), ``S3_PUBLIC_ENDPOINT`` (REQUIRED for ``public_url`` — an externally
+reachable base; no fallback to the internal ``S3_ENDPOINT``), ``S3_PUBLIC_ACL`` (default ``public-read``;
+set empty on AWS bucket-owner-enforced buckets and grant public access via a bucket policy).
 """
 
 from __future__ import annotations
@@ -45,7 +47,29 @@ def _s3():
 
 
 def _public_base() -> str:
-    return ((os.getenv("S3_PUBLIC_ENDPOINT") or os.getenv("S3_ENDPOINT") or "").strip()).rstrip("/")
+    # An externally reachable base for public_url — REQUIRED, no fallback to S3_ENDPOINT. The client endpoint
+    # is usually internal (the documented RustFS setup is http://rustfs:9000), so falling back to it handed
+    # external clients an unreachable URL (cubic PR 10887 s3.py:48). The operator must set S3_PUBLIC_ENDPOINT
+    # to a host reachable by end users (a public RustFS/CDN address).
+    base = (os.getenv("S3_PUBLIC_ENDPOINT") or "").strip().rstrip("/")
+    if not base:
+        raise ValueError(
+            "S3_PUBLIC_ENDPOINT is not set: refusing to expose the internal S3_ENDPOINT as a public URL. "
+            "Configure S3_PUBLIC_ENDPOINT with an externally reachable base for public objects."
+        )
+    return base
+
+
+def _public_acl() -> Optional[str]:
+    # ACL to apply to public objects. Default 'public-read' (RustFS/MinIO honor ACLs). On AWS buckets with
+    # Object Ownership = 'bucket owner enforced' (default since 2023) ACLs are DISABLED and public-read makes
+    # the upload fail — set S3_PUBLIC_ACL='' (empty) there and grant public access via a bucket policy
+    # instead (cubic PR 10887 s3.py:117). An empty value means "send no ACL".
+    value = os.getenv("S3_PUBLIC_ACL")
+    if value is None:
+        return "public-read"
+    value = value.strip()
+    return value or None
 
 
 # Bytes buffered by the streaming writer spill to disk past this size, so a large audio batch is
@@ -101,7 +125,9 @@ class S3ObjectStore:
             if metadata is not None:
                 kwargs["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
             if public:
-                kwargs["ACL"] = "public-read"
+                _acl = _public_acl()
+                if _acl:
+                    kwargs["ACL"] = _acl
             _s3().put_object(**kwargs)
             return
         # A stream: upload_fileobj streams it in multipart chunks (bounded memory) instead of
@@ -114,7 +140,9 @@ class S3ObjectStore:
         if metadata is not None:
             extra["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
         if public:
-            extra["ACL"] = "public-read"
+            _acl = _public_acl()
+            if _acl:
+                extra["ACL"] = _acl
         _s3().upload_fileobj(data, bucket, key, ExtraArgs=extra or None)
 
     def put_from_file(
@@ -133,7 +161,9 @@ class S3ObjectStore:
         if cache_control:
             extra["CacheControl"] = cache_control
         if public:
-            extra["ACL"] = "public-read"
+            _acl = _public_acl()
+            if _acl:
+                extra["ACL"] = _acl
         _s3().upload_file(src_path, bucket, key, ExtraArgs=extra or None)
 
     def open_write(self, bucket: str, key: str, *, content_type: Optional[str] = None) -> IO[bytes]:

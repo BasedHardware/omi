@@ -54,6 +54,10 @@ def store_and_bucket(request):
     from utils.object_store.adapters import s3 as s3_mod
 
     s3_mod._client = None  # reset the module singleton so the endpoint env is picked up
+    # public_url now REQUIRES an explicit external base (no fallback to the internal S3_ENDPOINT, cubic
+    # PR 10887 s3.py:48). For the contract, point it at the same live endpoint so test_public_url_ends_with_path
+    # can assert the path suffix.
+    os.environ.setdefault("S3_PUBLIC_ENDPOINT", os.environ["S3_ENDPOINT"])
     s3_mod._s3().create_bucket(Bucket=bucket)
     return s3_mod.S3ObjectStore(), bucket
 
