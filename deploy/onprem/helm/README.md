@@ -29,12 +29,19 @@ kind load docker-image omi-onprem-backend:latest --name omi-dev
 helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.2.1 \
   -n envoy-gateway-system --create-namespace --wait
 
-# 4. Install the stack (core + the profiles enabled in values-dev)
+# 4. TLS Secret for the Gateway HTTPS listener (only when the auth profile is on). Creates omi-tls.
+kubectl create namespace omi-dev --dry-run=client -o yaml | kubectl apply -f -
+./gen-certs.sh omi-dev omi-tls localhost
+
+# 5. Install the stack (core + the profiles enabled in values-dev)
 helm install omi ./omi-onprem -n omi-dev --create-namespace -f omi-onprem/values-dev.yaml --wait
 
-# 5. Reach the backend through the Gateway (kind maps host 8080 -> nodePort 30080 -> Envoy -> backend)
+# 6. Reach it. Auth off -> HTTP + `Bearer dev`; auth on -> HTTPS issuer + a real Keycloak token:
 curl http://localhost:8080/v1/health          # {"status":"ok"}
-curl http://localhost:8080/v1/users/people -H 'Authorization: Bearer dev'
+TOK=$(curl -k -s -X POST https://localhost:8443/realms/omi/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -k https://localhost:8443/v1/users/people -H "Authorization: Bearer $TOK"
 ```
 
 Teardown: `kind delete cluster --name omi-dev` (and `helm uninstall eg -n envoy-gateway-system`).
@@ -49,7 +56,8 @@ Teardown: `kind delete cluster --name omi-dev` (and `helm uninstall eg -n envoy-
 | `objstore.enabled` | RustFS S3 + bucket-init | `OBJECT_STORE_BACKEND=s3` |
 | `push.enabled` | ntfy UnifiedPush | `PUSH_NOTIFICATION_BACKEND=unifiedpush` |
 | `ingress.enabled` | Gateway API edge (Envoy) | GatewayClass/Gateway/HTTPRoute → backend |
-| `auth` / `inference` | later phases | — |
+| `auth.enabled` | Keycloak OIDC + Gateway HTTPS (TLS from `omi-tls` Secret) | `AUTH_BACKEND=oidc`, `OIDC_ISSUER`/`OIDC_JWKS_URL` |
+| `inference` | later phase (GPU on k0s) | — |
 
 ## Notes
 
