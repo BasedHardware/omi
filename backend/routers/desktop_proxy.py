@@ -4,7 +4,7 @@ import os
 import re
 import sys
 import time
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, TypeVar, cast
@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from database import redis_db
+from llm_gateway.gateway.accounting import vertex_usage_from_response
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -71,6 +72,8 @@ _MAX_CONTENT_PARTS = 512
 _MAX_INLINE_MEDIA_PARTS = 16
 _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
+_ALLOWED_WORKLOADS = frozenset({'interactive', 'extraction', 'maintenance'})
+_ALLOWED_TRAFFIC_TYPES = frozenset({'PROVISIONED_THROUGHPUT', 'ON_DEMAND'})
 
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
@@ -147,6 +150,14 @@ class ProxyTelemetry:
         self.region = 'none'
         self.model = 'unknown'
         self.action = 'unknown'
+        supplied_workload = request.headers.get('x-omi-workload', '').strip().lower()
+        self.workload_class = supplied_workload if supplied_workload in _ALLOWED_WORKLOADS else 'unknown'
+        self.prompt_token_count: int | None = None
+        self.candidates_token_count: int | None = None
+        self.total_token_count: int | None = None
+        self.cached_content_token_count: int | None = None
+        self.thoughts_token_count: int | None = None
+        self.traffic_type = 'unknown'
         self.phase = 'validation'
         self.shape = PayloadShape('unknown', 'unknown', 'unknown')
         self.started = time.monotonic()
@@ -156,6 +167,20 @@ class ProxyTelemetry:
         self.provider = route.provider
         self.credential_source = route.credential_source
         self.region = route.region
+
+    def observe_gemini_response(self, response: Mapping[str, Any]) -> None:
+        """Retain only bounded billing metadata from a Gemini response."""
+        metadata = vertex_usage_from_response(response)
+        if metadata.traffic_type in _ALLOWED_TRAFFIC_TYPES:
+            self.traffic_type = metadata.traffic_type
+        if metadata.usage is None:
+            return
+        usage = metadata.usage
+        self.prompt_token_count = usage.prompt_tokens
+        self.candidates_token_count = usage.output_tokens
+        self.total_token_count = usage.total_tokens
+        self.cached_content_token_count = usage.cached_input_tokens
+        self.thoughts_token_count = usage.reasoning_tokens
 
     def complete(
         self,
@@ -185,6 +210,8 @@ class ProxyTelemetry:
             'model': self.model if self.model in _ALLOWED_MODELS else 'unknown',
             'region': _safe_region(self.region),
             'action': self.action if self.action in _ALLOWED_ACTIONS else 'unknown',
+            'workload_class': self.workload_class,
+            'traffic_type': self.traffic_type,
             'attempt': 1,
             'phase': phase,
             'outcome': outcome,
@@ -197,6 +224,16 @@ class ProxyTelemetry:
             'inline_media_parts_bucket': self.shape.inline_media_bucket,
             'elapsed_ms': round((time.monotonic() - self.started) * 1000),
         }
+        if self.prompt_token_count is not None:
+            event.update(
+                {
+                    'prompt_token_count': self.prompt_token_count,
+                    'candidates_token_count': self.candidates_token_count,
+                    'total_token_count': self.total_token_count,
+                    'cached_content_token_count': self.cached_content_token_count,
+                    'thoughts_token_count': self.thoughts_token_count,
+                }
+            )
         project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
         if self.trace_id and project:
             event['logging.googleapis.com/trace'] = f'projects/{project}/traces/{self.trace_id}'
@@ -683,6 +720,38 @@ def _stream_error_event(*, code: str, phase: str, telemetry: ProxyTelemetry) -> 
     return f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
 
 
+class _StreamingUsageObserver:
+    """Incrementally inspect SSE data fields without retaining response content."""
+
+    def __init__(self, telemetry: ProxyTelemetry) -> None:
+        self.telemetry = telemetry
+        self.buffer = bytearray()
+
+    def feed(self, chunk: bytes) -> None:
+        self.buffer.extend(chunk)
+        self.buffer = bytearray(bytes(self.buffer).replace(b'\r\n', b'\n'))
+        while b'\n\n' in self.buffer:
+            event, _, remainder = self.buffer.partition(b'\n\n')
+            self.buffer = bytearray(remainder)
+            self._observe_event(bytes(event))
+
+    def finish(self) -> None:
+        if self.buffer:
+            self._observe_event(bytes(self.buffer))
+            self.buffer.clear()
+
+    def _observe_event(self, event: bytes) -> None:
+        data_lines = [line[5:].lstrip() for line in event.splitlines() if line.startswith(b'data:')]
+        if not data_lines:
+            return
+        try:
+            payload = json.loads(b'\n'.join(data_lines))
+        except (TypeError, ValueError):
+            return
+        if isinstance(payload, dict):
+            self.telemetry.observe_gemini_response(payload)
+
+
 async def _stream_provider(
     request: Request,
     route: UpstreamRoute,
@@ -694,6 +763,7 @@ async def _stream_provider(
     context: Any | None = None
     acquired = False
     opened = False
+    usage_observer = _StreamingUsageObserver(telemetry)
     try:
         async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
             telemetry.phase = 'pool'
@@ -716,7 +786,9 @@ async def _stream_provider(
             yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
             return
         async for chunk in upstream.aiter_bytes():
+            usage_observer.feed(chunk)
             yield chunk
+        usage_observer.finish()
         telemetry.complete(outcome='success', status_code=upstream.status_code, retryable=False, phase='body')
     except ClientDisconnected:
         telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
@@ -901,6 +973,13 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
         if route.provider == 'vertex_ai' and action == 'embedContent'
         else response.content
     )
+    if action == 'generateContent':
+        try:
+            response_payload = json.loads(response.content)
+        except (TypeError, ValueError):
+            response_payload = None
+        if isinstance(response_payload, dict):
+            telemetry.observe_gemini_response(response_payload)
     telemetry.complete(
         outcome='success',
         status_code=response.status_code,
