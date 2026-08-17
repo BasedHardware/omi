@@ -1,0 +1,532 @@
+import { parseKeysetCursor } from "@omi-core/ratified-contracts/pagination/cursor";
+
+import {
+  APP_CONTRACT_FLOOR_VERSION,
+  APP_CONTRACT_VERSION_HEADER,
+  SYNTHESIZED_READ_CONTRACT_VERSION,
+  isTrustedPageWindowHonest,
+  isTrustedRecallCompletenessHonest,
+  isTrustedSynthesizedPageData,
+  isWellFormedContractVersion,
+  parseCitationRef,
+  parseRecallFrontier,
+  parseSha256Digest,
+  parseSynthesizedPageJson,
+  parseSynthesizedItemId,
+  parseSynthesizedText,
+  resolveDeclaredContractVersion,
+} from "@omi-core/ratified-contracts/projections/synthesized";
+import {
+  TASKS_READ_CONTRACT_VERSION,
+  TASK_ITEM_FIELDS,
+  isTrustedTaskCompletenessHonest,
+  isTrustedTaskPageData,
+  isTrustedTaskWindowHonest,
+  parseTaskFrontier,
+  parseTaskItemId,
+  parseTaskPageJson,
+  readTaskPageAccountEpoch,
+  type TaskRead,
+} from "@omi-core/ratified-contracts/projections/tasks";
+import {
+  CONVERSATION_ITEM_FIELDS,
+  CONVERSATIONS_READ_CONTRACT_VERSION,
+  isTrustedConversationPageData,
+  parseConversationFrontier,
+  parseConversationItemId,
+  parseConversationPageJson,
+  type ConversationRead,
+} from "@omi-core/ratified-contracts/projections/conversations";
+import {
+  FOLDER_ITEM_FIELDS,
+  FOLDERS_READ_CONTRACT_VERSION,
+  isTrustedFolderPageData,
+  parseFolderFrontier,
+  parseFolderItemId,
+  parseFolderPageJson,
+  type FolderRead,
+} from "@omi-core/ratified-contracts/projections/folders";
+import {
+  isTrustedRecallTraceData,
+  parseRecallTraceJson,
+  parseRecallTraceRef,
+} from "@omi-core/ratified-contracts/recall/trace";
+import type { RecallTraceV1 } from "@omi-core/ratified-contracts/recall/trace";
+import {
+  CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS,
+  WRITE_AVAILABILITY,
+  readWriteAvailabilitySignal,
+  isTrustedWriteOpEnvelope,
+  isWritableDomain,
+  mintWriteId,
+  parseWriteId,
+  parseWriteOpEnvelopeJson,
+  readWriteRefusalOutcome,
+  WRITE_ERRORS,
+  WRITE_ID_ENTROPY_BYTES,
+  WRITE_REFUSALS,
+  writeOpsPath,
+} from "@omi-core/ratified-contracts/write/ops";
+import type { WriteId, WriteOpEnvelope, WriteRefusalOutcome } from "@omi-core/ratified-contracts/write/ops";
+
+// domain-pending(DIV-DOMCORE-001)
+// domain-pending(DIV-DOMCORE-008)
+import type { SynthesizedMemoryRead as Read } from "@omi-core/ratified-contracts/projections/synthesized";
+
+const id = parseSynthesizedItemId("retrieval-node-v1:2a40f5");
+const text = parseSynthesizedText("You use Omi for a synthesized memory workflow.");
+const citation = parseCitationRef("citation-v1:bright-coral-harbor");
+const cursor = parseKeysetCursor("v1.signature.payload");
+const declaredFrontier = parseRecallFrontier("frontier-v1:declared");
+const includedFrontier = parseRecallFrontier("frontier-v1:included");
+const behindFrontier = parseRecallFrontier("frontier-v1:behind");
+const inputDigest = parseSha256Digest("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+const outputDigest = parseSha256Digest("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+const traceRef = parseRecallTraceRef("trace-v1:fixture");
+if (!id || !text || !citation || !cursor || !declaredFrontier || !includedFrontier || !behindFrontier || !inputDigest || !outputDigest || !traceRef) {
+  throw new Error("fixture boundary values must parse");
+}
+
+const page: Read.Page = {
+  contractVersion: SYNTHESIZED_READ_CONTRACT_VERSION,
+  items: [{
+    id,
+    text,
+    citations: [citation],
+    provenance: {
+      synthesisVersion: "synthesis-v1",
+      inputDigest,
+      outputDigest,
+    },
+  }],
+  window: { status: "more", complete: false, hasMore: true, nextCursor: cursor },
+  completeness: {
+    version: "recall-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier,
+      newestSearchedAcceptedFrontier: declaredFrontier,
+      missingAcceptedFrontierReason: null,
+      // domain-pending(DIV-DOMCORE-006)
+      newestSearchedStmFrontier: includedFrontier,
+      missingStmFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+
+if (!isTrustedPageWindowHonest(page.window)) throw new Error("valid page window rejected");
+if (!isTrustedRecallCompletenessHonest(page)) throw new Error("valid completeness envelope rejected");
+if (!isTrustedSynthesizedPageData(page)) throw new Error("valid trusted page rejected");
+if (!parseSynthesizedPageJson(JSON.stringify(page))) throw new Error("valid canonical page JSON rejected");
+
+const mixedDegradedRecall: Read.DegradedRecall = {
+  version: "recall-completeness-v1",
+  status: "degraded",
+  reasons: ["projection_stale", "accepted_work_pending", "source_bound"],
+  frontiers: {
+    declaredFrontier,
+    newestSearchedAcceptedFrontier: behindFrontier,
+    missingAcceptedFrontierReason: null,
+    // domain-pending(DIV-DOMCORE-006)
+    newestSearchedStmFrontier: includedFrontier,
+    missingStmFrontierReason: null,
+  },
+};
+const mixedIncompleteRecall: Read.IncompleteRecall = {
+  ...mixedDegradedRecall,
+  status: "incomplete",
+  reasons: ["accepted_work_pending", "time_bound"],
+};
+void mixedDegradedRecall;
+void mixedIncompleteRecall;
+
+const trace: RecallTraceV1 = {
+  version: "recall-trace-v1",
+  traceRef,
+  strategyVersion: "strategy-v1",
+  projectionFreshness: "fresh",
+  outcome: "grounded",
+  latencyMs: 12,
+  tokenCounts: { input: 10, output: 4 },
+  stages: {
+    eligible: [traceRef], selected: [traceRef], hydrated: [traceRef],
+    policyEligible: [traceRef], cited: [traceRef], grounded: [traceRef],
+  },
+};
+if (!isTrustedRecallTraceData(trace)) throw new Error("valid content-safe trace rejected");
+if (!parseRecallTraceJson(JSON.stringify(trace))) throw new Error("valid canonical trace JSON rejected");
+
+const invalidDigest: Read.Provenance = {
+  synthesisVersion: "synthesis-v1",
+  // @ts-expect-error provenance digests must come from the lowercase SHA-256 parser.
+  inputDigest: "arbitrary\nwire-value",
+  outputDigest,
+};
+void invalidDigest;
+
+// @ts-expect-error a complete page cannot advertise a continuation cursor.
+const invalidComplete: Read.Page = { ...page, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
+void invalidComplete;
+
+// @ts-expect-error a page with continuation cannot serialize query-gap absence.
+const invalidContinuationAbsence: Read.Page = { ...page, absence: { kind: "query_gap" } };
+void invalidContinuationAbsence;
+
+// @ts-expect-error a terminal incomplete window cannot carry a cursor.
+const invalidTerminalCursor: Read.Window = { status: "incomplete", complete: false, hasMore: false, nextCursor: cursor };
+void invalidTerminalCursor;
+
+// @ts-expect-error a continuing incomplete window requires its opaque cursor.
+const invalidMissingCursor: Read.Window = { status: "incomplete", complete: false, hasMore: true, nextCursor: null };
+void invalidMissingCursor;
+
+// @ts-expect-error an incomplete terminal window cannot claim complete recall.
+const invalidCompleteRecallIncompleteTerminal: Read.Page = {
+  ...page,
+  window: { status: "incomplete", complete: false, hasMore: false, nextCursor: null },
+};
+void invalidCompleteRecallIncompleteTerminal;
+
+// @ts-expect-error an incomplete continuation window cannot claim complete recall.
+const invalidCompleteRecallIncompleteContinuation: Read.Page = {
+  ...page,
+  window: { status: "incomplete", complete: false, hasMore: true, nextCursor: cursor },
+};
+void invalidCompleteRecallIncompleteContinuation;
+
+const invalidIncompleteReason: Read.IncompleteRecall = {
+  version: "recall-completeness-v1",
+  status: "incomplete",
+  // @ts-expect-error incomplete recall excludes the higher-precedence degraded family.
+  reasons: ["projection_stale"],
+  frontiers: page.completeness.frontiers,
+};
+void invalidIncompleteReason;
+
+// @ts-expect-error unvalidated strings cannot bypass the non-empty item-id boundary.
+const invalidEmptyId: Read.Item = { ...page.items[0]!, id: "" };
+void invalidEmptyId;
+
+// @ts-expect-error unvalidated strings cannot bypass the non-empty text boundary.
+const invalidEmptyText: Read.Item = { ...page.items[0]!, text: "" };
+void invalidEmptyText;
+
+// @ts-expect-error no-selection means the selected stage is empty.
+const invalidNoSelectionTrace: RecallTraceV1 = { ...trace, outcome: "no_selection", stages: { ...trace.stages, selected: [traceRef], hydrated: [], policyEligible: [], cited: [], grounded: [] } };
+void invalidNoSelectionTrace;
+
+// @ts-expect-error degraded traces require a non-fresh projection state.
+const invalidFreshDegradedTrace: RecallTraceV1 = { ...trace, outcome: "degraded", projectionFreshness: "fresh", stages: { ...trace.stages, grounded: [] } };
+void invalidFreshDegradedTrace;
+
+// @ts-expect-error grounded outcomes require at least one grounded reference.
+const invalidEmptyGroundedTrace: RecallTraceV1 = { ...trace, stages: { ...trace.stages, grounded: [] } };
+void invalidEmptyGroundedTrace;
+
+type AssertNever<Value extends never> = Value;
+type ExactKeys<Actual, Expected extends PropertyKey> =
+  Exclude<keyof Actual, Expected> | Exclude<Expected, keyof Actual>;
+type ItemShapeMustStayFrozen = AssertNever<ExactKeys<Read.Item, "id" | "text" | "citations" | "provenance">>;
+type ProvenanceShapeMustStayFrozen = AssertNever<ExactKeys<Read.Provenance, "synthesisVersion" | "inputDigest" | "outputDigest">>;
+type PageShapeMustStayFrozen = AssertNever<ExactKeys<Read.Page, "contractVersion" | "items" | "window" | "completeness" | "absence">>;
+type WindowShapeMustStayFrozen = AssertNever<ExactKeys<Read.Window, "status" | "complete" | "hasMore" | "nextCursor">>;
+void (null as unknown as ItemShapeMustStayFrozen);
+void (null as unknown as ProvenanceShapeMustStayFrozen);
+void (null as unknown as PageShapeMustStayFrozen);
+void (null as unknown as WindowShapeMustStayFrozen);
+type ForbiddenPublicFields = Extract<
+  keyof Read.Item | keyof Read.Page | keyof Read.Provenance | keyof Read.Window,
+  | "content" | "locked" | "visibility" | "category" | "review" | "reviewed"
+  | "transcript" | "tags" | "tier" | "layer" | "cohort" | "store"
+  | "appId" | "app" | "ownerId" | "owner" | "key" | "summary"
+  | "displayOrder" | "order" | "stale" | "failure"
+  | "accountGeneration" | "ownerGeneration" | "projectionGeneration" | "graphGeneration"
+  | "commitId" | "frontierId" | "renderManifest" | "policyLabel" | "policyClass"
+>;
+type ForbiddenFieldsMustStayAbsent = AssertNever<ForbiddenPublicFields>;
+void (null as unknown as ForbiddenFieldsMustStayAbsent);
+
+// @ts-expect-error the package root is deliberately not exported.
+type PackageRootMustStayAbsent = import("@omi-core/ratified-contracts").Memory;
+void (null as unknown as PackageRootMustStayAbsent);
+
+// The declared-version resolver never rejects: absent, empty, and malformed
+// input all fall back to the floor rather than throwing or reflecting the
+// raw value.
+if (resolveDeclaredContractVersion(undefined) !== APP_CONTRACT_FLOOR_VERSION) throw new Error("missing header must resolve to the floor");
+if (resolveDeclaredContractVersion(null) !== APP_CONTRACT_FLOOR_VERSION) throw new Error("null header must resolve to the floor");
+if (resolveDeclaredContractVersion("") !== APP_CONTRACT_FLOOR_VERSION) throw new Error("empty header must resolve to the floor");
+if (resolveDeclaredContractVersion("not-a-version") !== APP_CONTRACT_FLOOR_VERSION) throw new Error("malformed header must resolve to the floor");
+if (resolveDeclaredContractVersion("2.3.1") !== "2.3.1") throw new Error("well-formed header must pass through verbatim");
+if (!isWellFormedContractVersion(APP_CONTRACT_FLOOR_VERSION)) throw new Error("the floor itself must be well-formed");
+if (APP_CONTRACT_VERSION_HEADER !== "x-omi-contract-version") throw new Error("header name must stay stable across the tarball boundary");
+
+export const consumerResult = {
+  contractVersion: page.contractVersion,
+  firstId: page.items[0]?.id,
+  complete: page.window.complete,
+  declaredContractVersionHeader: APP_CONTRACT_VERSION_HEADER,
+  declaredContractFloorVersion: APP_CONTRACT_FLOOR_VERSION,
+} as const;
+
+// ── The write wire, exercised across the tarball boundary ──────────────────
+// A consumer that only typechecks proves the .d.ts parses. These lines prove
+// the shipped RUNTIME behaves, which is the half that has been wrong before.
+const mintedWriteId: WriteId | null = mintWriteId(new Uint8Array(WRITE_ID_ENTROPY_BYTES).fill(0x5a));
+if (mintedWriteId === null) throw new Error("minting from 32 bytes must succeed");
+if (parseWriteId("edit-task-set-done") !== null) throw new Error("a word slug must never parse as a write_id");
+if (isWritableDomain("memories")) throw new Error("memories is read-only by ratified design");
+if (writeOpsPath("tasks") !== "/v1/tasks/ops") throw new Error("route shape drifted");
+
+const staleEpochOutcome: WriteRefusalOutcome | null = readWriteRefusalOutcome(
+  WRITE_REFUSALS.stale_epoch.status,
+  WRITE_REFUSALS.stale_epoch.body,
+);
+if (staleEpochOutcome !== "stale_epoch") throw new Error("stale_epoch must be readable off the wire body");
+if (readWriteRefusalOutcome(WRITE_ERRORS.conflict.status, WRITE_ERRORS.conflict.body) !== null) {
+  throw new Error("conflict must never read as a refusal outcome — it is not one");
+}
+// The fifth wire value, ratified by COORD-fable-rulings-wave2 W1 as an
+// AVAILABILITY signal. A consumer must reach it through its own reader — the
+// refusal reader must not answer it, or the framing the ruling bound is lost.
+if (readWriteAvailabilitySignal(503, WRITE_AVAILABILITY.control_unavailable.body) !== "control_unavailable") {
+  throw new Error("control_unavailable must be readable off its own body");
+}
+if (readWriteRefusalOutcome(503, WRITE_AVAILABILITY.control_unavailable.body) !== null) {
+  throw new Error("control_unavailable is not one of ADR-010 §3's four authorization outcomes");
+}
+if (WRITE_AVAILABILITY.control_unavailable.retryAfterSeconds !== CONTROL_UNAVAILABLE_RETRY_AFTER_SECONDS) {
+  throw new Error("retry-after must be the fixed constant");
+}
+
+const sampleEnvelope: WriteOpEnvelope | null = parseWriteOpEnvelopeJson(
+  JSON.stringify({
+    write_id: mintedWriteId,
+    account_epoch: 7,
+    domain: "tasks",
+    op: { op: "patch", record_id: "task-9f21", patch: { done: true } },
+  }),
+);
+if (sampleEnvelope === null || !isTrustedWriteOpEnvelope(sampleEnvelope)) {
+  throw new Error("a well-formed tasks envelope must parse");
+}
+
+// ── The tasks read wire, exercised across the tarball boundary ─────────────
+//
+// Same discipline as the write wire above: a consumer that only typechecks
+// proves the `.d.ts` parses, and the half that has been wrong before is the
+// shipped RUNTIME. Every assertion here runs against the packed tarball.
+const taskId = parseTaskItemId(`task1_${"c".repeat(64)}`);
+const taskDeclaredFrontier = parseTaskFrontier("frontier-v1:tasks-declared");
+if (!taskId || !taskDeclaredFrontier) throw new Error("tasks boundary values must parse");
+if (parseTaskItemId("task one two") !== null) throw new Error("an id carrying whitespace must not parse");
+if (parseTaskItemId("") !== null) throw new Error("an empty id must not parse");
+
+const taskPage: TaskRead.Page = {
+  contractVersion: TASKS_READ_CONTRACT_VERSION,
+  items: [{
+    id: taskId,
+    description: "Ship the tasks read wire",
+    completed: false,
+    completedAt: null,
+    dueAt: 1786000000,
+    owner: null,
+    source: "assistant",
+    provenance: ["assistant:summarizer-v3"],
+    sortOrder: 1.5,
+    indentLevel: 0,
+    createdAt: 1785900000,
+    updatedAt: 1785950000,
+    revision: "rev-9",
+  }],
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "tasks-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: taskDeclaredFrontier,
+      newestAppliedFrontier: taskDeclaredFrontier,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+
+if (!isTrustedTaskWindowHonest(taskPage.window)) throw new Error("valid tasks window rejected");
+if (!isTrustedTaskCompletenessHonest(taskPage)) throw new Error("valid tasks coverage envelope rejected");
+if (!isTrustedTaskPageData(taskPage)) throw new Error("valid trusted tasks page rejected");
+if (!parseTaskPageJson(JSON.stringify(taskPage))) throw new Error("valid canonical tasks page JSON rejected");
+
+// The checkable half of `complete`: an applied frontier behind the declared one
+// contradicts the claim, and the validator must say so rather than trusting the
+// adjective.
+if (isTrustedTaskPageData({
+  ...taskPage,
+  completeness: {
+    ...taskPage.completeness,
+    frontiers: { ...taskPage.completeness.frontiers, newestAppliedFrontier: parseTaskFrontier("frontier-v1:tasks-behind")! },
+  },
+})) throw new Error("a lagging applied frontier must not read as complete coverage");
+
+// D2's thirteen, asserted over the exported list rather than over a retyped
+// one. The count is the ruling's own number.
+if (TASK_ITEM_FIELDS.length !== 13) throw new Error("the ratified tasks item must carry exactly thirteen fields");
+
+type TaskItemShapeMustStayFrozen = AssertNever<ExactKeys<
+  TaskRead.Item,
+  "id" | "description" | "completed" | "completedAt" | "dueAt" | "owner" | "source"
+  | "provenance" | "sortOrder" | "indentLevel" | "createdAt" | "updatedAt" | "revision"
+>>;
+// `accountEpoch` joins the frozen key list because it is now part of the
+// shape (D3). It is OPTIONAL — see below, where a page WITHOUT it must still
+// typecheck, which is the property that makes this bump additive rather than
+// a lockstep deploy.
+type TaskPageShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Page, "contractVersion" | "items" | "window" | "completeness" | "absence" | "accountEpoch">>;
+type TaskWindowShapeMustStayFrozen = AssertNever<ExactKeys<TaskRead.Window, "status" | "complete" | "hasMore" | "nextCursor">>;
+void (null as unknown as TaskItemShapeMustStayFrozen);
+void (null as unknown as TaskPageShapeMustStayFrozen);
+void (null as unknown as TaskWindowShapeMustStayFrozen);
+
+// D3's account epoch, from a CLEAN CONSUMER's side — the one place that proves
+// the bump is additive rather than merely declared to be.
+//
+// (a) A page WITHOUT the field still typechecks and still parses. That is
+//     precisely what a 0.6.0 server serves, and a 0.7.0 client must keep
+//     reading it.
+const taskPageWithoutEpoch: TaskRead.Page = taskPage;
+if (!parseTaskPageJson(JSON.stringify(taskPageWithoutEpoch))) {
+  throw new Error("a page without an account epoch must still parse — otherwise this bump is breaking");
+}
+if (readTaskPageAccountEpoch(taskPageWithoutEpoch) !== null) {
+  throw new Error("absent must read as null, never as zero");
+}
+
+// (b) A page WITH the field parses, and the reader returns it.
+const taskPageWithEpoch: TaskRead.Page = { ...taskPage, accountEpoch: 7 };
+if (!parseTaskPageJson(JSON.stringify(taskPageWithEpoch))) {
+  throw new Error("a page carrying an account epoch must parse");
+}
+if (readTaskPageAccountEpoch(taskPageWithEpoch) !== 7) {
+  throw new Error("the account epoch must read back exactly");
+}
+
+// (c) A present-but-junk epoch is refused, not ignored. A server that ships a
+//     string would otherwise have a client stamping write envelopes with it.
+if (parseTaskPageJson(JSON.stringify({ ...taskPage, accountEpoch: "7" }))) {
+  throw new Error("a non-integer account epoch must be refused");
+}
+if (parseTaskPageJson(JSON.stringify({ ...taskPage, accountEpoch: -1 }))) {
+  throw new Error("a negative account epoch must be refused");
+}
+
+// @ts-expect-error a complete tasks window cannot advertise a continuation cursor.
+const invalidTaskComplete: TaskRead.Page = { ...taskPage, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
+void invalidTaskComplete;
+
+// @ts-expect-error the memories envelope version cannot label a tasks envelope.
+const invalidTaskEnvelopeVersion: TaskRead.Completeness = { ...taskPage.completeness, version: "recall-completeness-v1" };
+void invalidTaskEnvelopeVersion;
+
+// @ts-expect-error a raw string cannot bypass the opaque-ref boundary on a task id.
+const invalidTaskId: TaskRead.Item = { ...taskPage.items[0]!, id: "task-9f21" };
+void invalidTaskId;
+
+const invalidTaskIncompleteReason: TaskRead.IncompleteCoverage = {
+  version: "tasks-completeness-v1",
+  status: "incomplete",
+  // @ts-expect-error incomplete tasks coverage excludes the higher-precedence degraded family.
+  reasons: ["projection_stale"],
+  frontiers: taskPage.completeness.frontiers,
+};
+void invalidTaskIncompleteReason;
+
+const conversationId = parseConversationItemId("quiet-chat-qa");
+const conversationFrontier = parseConversationFrontier("frontier-v1:conversations-declared");
+const folderHandle = parseFolderItemId("work-folder-qa");
+const folderFrontier = parseFolderFrontier("frontier-v1:folders-declared");
+if (!conversationId || !conversationFrontier || !folderHandle || !folderFrontier) {
+  throw new Error("fixture domain ids must parse");
+}
+
+const conversationPage: ConversationRead.Page = {
+  contractVersion: CONVERSATIONS_READ_CONTRACT_VERSION,
+  items: [{
+    id: conversationId,
+    title: "QA bridge check",
+    overview: "A deterministic conversation for shell acceptance.",
+    createdAt: 1754222400000,
+    updatedAt: 1754568000000,
+    startedAt: 1754567400000,
+    finishedAt: 1754568000000,
+    source: "omi",
+    status: "completed",
+    discarded: false,
+    starred: false,
+    visibility: "private",
+    isLocked: false,
+    folderId: "work-folder-qa",
+    revision: "4",
+  }],
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "conversations-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: conversationFrontier,
+      newestAppliedFrontier: conversationFrontier,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+if (!parseConversationPageJson(JSON.stringify(conversationPage))) {
+  throw new Error("conversations page fixture must parse");
+}
+if (!isTrustedConversationPageData(conversationPage)) {
+  throw new Error("conversations page fixture must be trusted");
+}
+if (CONVERSATION_ITEM_FIELDS.length !== 15) throw new Error("conversations item field count drifted");
+
+const folderPage: FolderRead.Page = {
+  contractVersion: FOLDERS_READ_CONTRACT_VERSION,
+  items: [{
+    id: folderHandle,
+    name: "Work",
+    description: "QA work items",
+    color: "#007AFF",
+    icon: "briefcase",
+    createdAt: 1754222400000,
+    updatedAt: 1754568000000,
+    order: 0,
+    isDefault: false,
+    isSystem: false,
+    revision: null,
+  }],
+  window: { status: "complete", complete: true, hasMore: false, nextCursor: null },
+  completeness: {
+    version: "folders-completeness-v1",
+    status: "complete",
+    reasons: [],
+    frontiers: {
+      declaredFrontier: folderFrontier,
+      newestAppliedFrontier: folderFrontier,
+      missingAppliedFrontierReason: null,
+    },
+  },
+  absence: null,
+};
+if (!parseFolderPageJson(JSON.stringify(folderPage))) {
+  throw new Error("folders page fixture must parse");
+}
+if (!isTrustedFolderPageData(folderPage)) {
+  throw new Error("folders page fixture must be trusted");
+}
+if (FOLDER_ITEM_FIELDS.length !== 11) throw new Error("folders item field count drifted");
+
+// @ts-expect-error a complete conversations window cannot advertise a continuation cursor.
+const invalidConversationComplete: ConversationRead.Page = { ...conversationPage, window: { status: "complete", complete: true, hasMore: false, nextCursor: cursor } };
+void invalidConversationComplete;

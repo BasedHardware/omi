@@ -1,0 +1,146 @@
+From cc94c16fcea716572e715f17d7f526726e899508 Mon Sep 17 00:00:00 2001
+From: David Zhang <david.d.zhang@gmail.com>
+Date: Sat, 8 Aug 2026 01:26:43 -0400
+Subject: [PATCH] draft(mcp): carry authorization receipt to emission fence
+
+---
+ apps/mcp/protocol.ts | 74 ++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 68 insertions(+), 6 deletions(-)
+
+diff --git a/apps/mcp/protocol.ts b/apps/mcp/protocol.ts
+index 902346c..c662bc9 100644
+--- a/apps/mcp/protocol.ts
++++ b/apps/mcp/protocol.ts
+@@ -64,6 +64,29 @@ export type AuthorizationDecision =
+   | { readonly allowed: true; readonly readAuthorization: unknown }
+   | { readonly allowed: false };
+ 
++/**
++ * Content-free authorization coordinates captured by the coherent read.
++ * These are internal fence inputs only and never become part of the page DTO.
++ */
++export interface McpAuthorizationCoordinateReceipt {
++  readonly owner_identity_digest: string;
++  // domain-pending(DIV-DOMAPPS-001): "application" retains the accepted
++  // legacy coordinate until the app-domain vocabulary is ratified.
++  readonly application_identity_digest: string;
++  // domain-pending(DIV-DOMAPPS-006): credential identity remains exact and
++  // must not be collapsed to an unresolved key-family term.
++  readonly credential_identity_digest: string;
++  readonly authorization_state_digest: string;
++  readonly grant_state_digest: string;
++  readonly account_head_digest: string;
++}
++
++/** Exact internal result of one coherent application read. */
++export interface McpReadPageResult {
++  readonly page: unknown;
++  readonly authorization: McpAuthorizationCoordinateReceipt;
++}
++
+ export type RateLimitDecision =
+   | { readonly allowed: true }
+   | { readonly allowed: false; readonly retryAfterSeconds?: number };
+@@ -118,7 +141,7 @@ export interface McpProtocolPorts {
+     readonly authorization: unknown;
+     readonly cursor: string | null;
+     readonly limit: number;
+-  }): Promise<unknown>;
++  }): Promise<McpReadPageResult>;
+   /**
+    * The Track 1 contract parser validates once and returns the bounded,
+    * immutable JSON snapshot to emit. The handler never re-reads `page`.
+@@ -128,7 +151,8 @@ export interface McpProtocolPorts {
+   reauthorizeBeforeEmission(input: {
+     readonly credential: McpCredential;
+     readonly tool: McpToolDefinition;
+-  }): Promise<boolean>;
++    readonly expected_authorization: McpAuthorizationCoordinateReceipt;
++  }): Promise<unknown>;
+ }
+ 
+ export interface McpHttpRequest {
+@@ -169,6 +193,15 @@ const JSON_HEADERS = Object.freeze({
+ const PRIVATE_CACHE = Object.freeze({ ttlMs: 0, cacheScope: "private" });
+ const MAX_VALIDATED_PAGE_BYTES = 1_000_000;
+ const DETACH_FAILED = Symbol("mcp_dependency_data_detach_failed");
++const SHA256_HEX = /^[a-f0-9]{64}$/;
++const AUTHORIZATION_COORDINATE_KEYS = Object.freeze([
++  "owner_identity_digest",
++  "application_identity_digest",
++  "credential_identity_digest",
++  "authorization_state_digest",
++  "grant_state_digest",
++  "account_head_digest",
++] as const satisfies readonly (keyof McpAuthorizationCoordinateReceipt)[]);
+ 
+ export function createMcpProtocolHandler(ports: McpProtocolPorts): {
+   handleHttp(request: McpHttpRequest): Promise<McpHttpResponse>;
+@@ -285,9 +318,9 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
+     return rpcHttp(200, readRate);
+   }
+ 
+-  let page: unknown;
++  let rawReadResult: unknown;
+   try {
+-    page = await ports.readPage({
++    rawReadResult = await ports.readPage({
+       authorization: gate.authorization.readAuthorization,
+       cursor: call.cursor ?? null,
+       limit: call.limit,
+@@ -299,9 +332,14 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
+     return rpcHttp(200, error(rpc.id, -32603, "Internal error"));
+   }
+ 
++  const readResult = snapshotReadPageResult(rawReadResult);
++  if (readResult === null) {
++    return rpcHttp(200, error(rpc.id, -32603, "Invalid synthesized projection"));
++  }
++
+   let validatedJson: string | null;
+   try {
+-    validatedJson = await ports.validatePage(page);
++    validatedJson = await ports.validatePage(readResult.page);
+   } catch {
+     return rpcHttp(200, error(rpc.id, -32603, "Invalid synthesized projection"));
+   }
+@@ -310,7 +348,11 @@ async function callTool(ports: McpProtocolPorts, credential: McpCredential, rpc:
+   }
+ 
+   try {
+-    if (await ports.reauthorizeBeforeEmission({ credential, tool: TOOL }) !== true) {
++    if (await ports.reauthorizeBeforeEmission({
++      credential,
++      tool: TOOL,
++      expected_authorization: readResult.authorization,
++    }) !== true) {
+       return rpcHttp(200, error(rpc.id, -32003, "Access no longer permitted"));
+     }
+   } catch {
+@@ -596,6 +638,26 @@ function snapshotRateLimitDecision(value: unknown): RateLimitDecision | null {
+   return retryAfterSeconds === undefined ? { allowed: false } : { allowed: false, retryAfterSeconds: retryAfterSeconds as number };
+ }
+ 
++function snapshotReadPageResult(value: unknown): McpReadPageResult | null {
++  const snapshot = detachDependencyData(value);
++  if (snapshot === DETACH_FAILED
++    || !isRecord(snapshot)
++    || !hasExactKeys(snapshot, ["page", "authorization"])
++    || !isAuthorizationCoordinateReceipt(snapshot.authorization)) {
++    return null;
++  }
++  return snapshot as unknown as McpReadPageResult;
++}
++
++function isAuthorizationCoordinateReceipt(value: unknown): value is McpAuthorizationCoordinateReceipt {
++  return isRecord(value)
++    && hasExactKeys(value, AUTHORIZATION_COORDINATE_KEYS)
++    && AUTHORIZATION_COORDINATE_KEYS.every((key) => {
++      const digest = value[key];
++      return typeof digest === "string" && SHA256_HEX.test(digest);
++    });
++}
++
+ function isBoundedJsonSnapshot(value: unknown): value is string {
+   if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value, "utf8") > MAX_VALIDATED_PAGE_BYTES) {
+     return false;

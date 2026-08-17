@@ -1,0 +1,358 @@
+import type { MessageKey } from "@omi-core/i18n";
+
+export type ProductionRoute =
+  | "home"
+  | "memories"
+  | "conversations"
+  | "folders"
+  | "tasks"
+  | "rewind"
+  | "apps"
+  | "brain-map"
+  | "chat"
+  | "settings"
+  | "listen";
+
+export type ProductionCommandId =
+  | "open-command-palette"
+  | "navigate-home"
+  | "navigate-memories"
+  | "navigate-conversations"
+  | "navigate-folders"
+  | "navigate-tasks"
+  | "navigate-rewind"
+  | "navigate-apps"
+  | "navigate-brain-map"
+  | "navigate-back"
+  | "navigate-chat"
+  | "navigate-settings"
+  | "navigate-listen"
+  | "focus-home-search"
+  | "new-task"
+  | "navigate-task"
+  | "delete-task"
+  | "indent-task"
+  | "outdent-task"
+  | "save-memory"
+  | "cancel-memory"
+  | "send-chat"
+  | "close-command-palette"
+  | "rewind-frame-prev"
+  | "rewind-frame-next"
+  | "rewind-group-prev"
+  | "rewind-group-next"
+  | "unwind-rewind";
+
+export type TextEntryPolicy = "ignore" | "allow" | "text-only";
+/** Whether a command may run while focus is inside an interactive control. */
+export type InteractiveControlPolicy = "allow" | "ignore";
+export type CommandRepeatPolicy = "allow" | "ignore";
+
+export type CommandChord = {
+  readonly key: string;
+  /** A modifier chord accepts either Meta (macOS/iOS hardware keyboard) or Control. */
+  readonly modifier?: boolean;
+  readonly shift?: boolean;
+  readonly alt?: boolean;
+};
+
+export type ProductionCommandContext = {
+  readonly activeRoute: ProductionRoute;
+  readonly navigate: (route: ProductionRoute) => void;
+  readonly handlers?: Partial<Record<ProductionCommandId, (event?: KeyboardEvent) => void | Promise<void>>>;
+  readonly enabled?: Partial<Record<ProductionCommandId, boolean>>;
+  readonly paletteOpen?: boolean;
+};
+
+export type ProductionCommand = {
+  readonly id: ProductionCommandId;
+  readonly labelKey: MessageKey;
+  readonly descriptionKey?: MessageKey;
+  readonly chord?: CommandChord;
+  readonly chords?: readonly CommandChord[];
+  readonly routeScope: ProductionRoute | "global";
+  readonly textEntryPolicy: TextEntryPolicy;
+  readonly interactiveControlPolicy?: InteractiveControlPolicy;
+  readonly repeatPolicy: CommandRepeatPolicy;
+  readonly isEnabled: (context: ProductionCommandContext) => boolean;
+  readonly invoke: (context: ProductionCommandContext, event?: KeyboardEvent) => void | Promise<void>;
+};
+
+const routeCommand = (
+  id: ProductionCommandId,
+  labelKey: MessageKey,
+  route: ProductionRoute,
+  chord?: CommandChord,
+): ProductionCommand => ({
+  id,
+  labelKey,
+  routeScope: "global",
+  textEntryPolicy: "ignore",
+  repeatPolicy: "allow",
+  ...(chord ? { chord } : {}),
+  isEnabled: () => true,
+  invoke: (context) => context.navigate(route),
+});
+
+const handlerCommand = (
+  definition: Omit<ProductionCommand, "isEnabled" | "invoke">,
+): ProductionCommand => ({
+  ...definition,
+  isEnabled: (context) => context.enabled?.[definition.id] ?? Boolean(context.handlers?.[definition.id]),
+  invoke: (context, event) => {
+    const handler = context.handlers?.[definition.id];
+    if (handler) return handler(event);
+  },
+});
+
+/**
+ * The sole command inventory for production surfaces. IDs are stable across
+ * platforms; labels and chords are projections of this list for web/native hosts.
+ */
+export function createProductionCommandRegistry(): readonly ProductionCommand[] {
+  return [
+    handlerCommand({
+      id: "open-command-palette",
+      labelKey: "tasks.shortcuts",
+      descriptionKey: "shortcuts.openSearch",
+      chord: { key: "p", modifier: true, shift: true },
+      routeScope: "global",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+    }),
+    // Cmd+1 and the palette still open leftover search (`route=home`). The Home
+    // pill itself goes to Chat; this command is the remaining door to search.
+    routeCommand("navigate-home", "nav.home", "home", { key: "1", modifier: true }),
+    routeCommand("navigate-conversations", "nav.conversations", "conversations", { key: "2", modifier: true }),
+    routeCommand("navigate-memories", "nav.memories", "memories", { key: "3", modifier: true }),
+    routeCommand("navigate-folders", "nav.folders", "folders"),
+    routeCommand("navigate-brain-map", "nav.brainMap", "brain-map"),
+    routeCommand("navigate-tasks", "nav.tasks", "tasks", { key: "4", modifier: true }),
+    routeCommand("navigate-rewind", "nav.rewind", "rewind", { key: "5", modifier: true }),
+    routeCommand("navigate-apps", "nav.apps", "apps", { key: "6", modifier: true }),
+    routeCommand("navigate-chat", "chat.title", "chat"),
+    routeCommand("navigate-settings", "nav.settings", "settings", { key: ",", modifier: true }),
+    routeCommand("navigate-listen", "listen.title", "listen"),
+    handlerCommand({
+      id: "focus-home-search",
+      labelKey: "shortcuts.openSearch",
+      chord: { key: "k", modifier: true },
+      routeScope: "home",
+      textEntryPolicy: "allow",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "new-task",
+      labelKey: "tasks.newTask",
+      chord: { key: "n", modifier: true },
+      routeScope: "tasks",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "navigate-task",
+      labelKey: "tasks.shortcutNavigate",
+      chords: [{ key: "ArrowDown" }, { key: "ArrowUp" }],
+      routeScope: "tasks",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "delete-task",
+      labelKey: "tasks.shortcutDelete",
+      chord: { key: "d", modifier: true },
+      routeScope: "tasks",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "indent-task",
+      labelKey: "tasks.shortcutIndent",
+      chord: { key: "]", modifier: true },
+      routeScope: "tasks",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "outdent-task",
+      labelKey: "tasks.shortcutOutdent",
+      chord: { key: "[", modifier: true },
+      routeScope: "tasks",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "save-memory",
+      labelKey: "common.save",
+      chord: { key: "Enter", modifier: true },
+      routeScope: "memories",
+      textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "cancel-memory",
+      labelKey: "common.cancel",
+      chord: { key: "Escape" },
+      routeScope: "memories",
+      textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "send-chat",
+      labelKey: "chat.send",
+      chord: { key: "Enter" },
+      routeScope: "chat",
+      textEntryPolicy: "text-only",
+      repeatPolicy: "ignore",
+    }),
+    handlerCommand({
+      id: "rewind-frame-prev",
+      labelKey: "nav.rewind",
+      chord: { key: "ArrowLeft" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "rewind-frame-next",
+      labelKey: "nav.rewind",
+      chord: { key: "ArrowRight" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "rewind-group-prev",
+      labelKey: "screen.results",
+      chord: { key: "ArrowUp" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "rewind-group-next",
+      labelKey: "screen.results",
+      chord: { key: "ArrowDown" },
+      routeScope: "rewind",
+      textEntryPolicy: "ignore",
+      interactiveControlPolicy: "ignore",
+      repeatPolicy: "allow",
+    }),
+    handlerCommand({
+      id: "unwind-rewind",
+      labelKey: "common.back",
+      chord: { key: "Escape" },
+      routeScope: "rewind",
+      textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
+    }),
+    {
+      id: "navigate-back",
+      labelKey: "common.back",
+      chord: { key: "Escape" },
+      routeScope: "global",
+      textEntryPolicy: "ignore",
+      repeatPolicy: "ignore",
+      isEnabled: (context) => context.activeRoute !== "chat",
+      invoke: (context) => context.navigate("chat"),
+    },
+    handlerCommand({
+      id: "close-command-palette",
+      labelKey: "common.close",
+      chord: { key: "Escape" },
+      routeScope: "global",
+      textEntryPolicy: "allow",
+      repeatPolicy: "ignore",
+    }),
+  ];
+}
+
+function normalizedKey(key: string): string {
+  return key.length === 1 ? key.toLocaleLowerCase() : key;
+}
+
+export function isTextEntryTarget(target: EventTarget | null): boolean {
+  return typeof Element !== "undefined" && target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
+/**
+ * Focus on a nested action must remain with that action. In particular, plain
+ * ArrowUp/ArrowDown on a task card's check/edit/delete controls must not be
+ * reinterpreted as card navigation by the window-level command listener.
+ * Keep this separate from text-entry detection so commands intentionally
+ * allowed in fields (save/cancel/send/search) retain their existing policy.
+ */
+export function isInteractiveControlTarget(target: EventTarget | null): boolean {
+  return typeof Element !== "undefined" && target instanceof Element && Boolean(
+    target.closest("button, a, input, textarea, select, option, [contenteditable='true'], [role='button'], [role='link'], [role='textbox'], [role='combobox']"),
+  );
+}
+
+export function chordMatches(event: KeyboardEvent, chord: CommandChord): boolean {
+  if (normalizedKey(event.key) !== normalizedKey(chord.key)) return false;
+  // Omitted modifiers mean "plain key". `modifier: true` deliberately aliases
+  // Meta and Control for desktop/macOS and hardware-keyboard iOS; it never
+  // permits a chord with an additional modifier to leak into a text field.
+  const platformModifierCount = Number(event.metaKey) + Number(event.ctrlKey);
+  if (chord.modifier === true ? platformModifierCount !== 1 : platformModifierCount !== 0) return false;
+  if (event.shiftKey !== (chord.shift ?? false)) return false;
+  if (event.altKey !== (chord.alt ?? false)) return false;
+  return true;
+}
+
+/**
+ * IME composition can surface Enter/Escape as ordinary keydowns on browsers
+ * that do not consistently set `isComposing`; keyCode 229 is their settled
+ * compatibility signal. Never let a composing keydown invoke a command.
+ */
+export function isComposingKeyboardEvent(event: KeyboardEvent): boolean {
+  return event.isComposing || event.key === "Process" || event.keyCode === 229;
+}
+
+export function commandAppliesToRoute(command: ProductionCommand, route: ProductionRoute): boolean {
+  return command.routeScope === "global" || command.routeScope === route;
+}
+
+/** Dispatches at most one enabled command and reports whether it consumed the event. */
+export function dispatchProductionCommand(
+  event: KeyboardEvent,
+  commands: readonly ProductionCommand[],
+  context: ProductionCommandContext,
+): boolean {
+  if (isComposingKeyboardEvent(event)) return false;
+  for (const command of commands) {
+    const chords = command.chord ? [command.chord] : command.chords ?? [];
+    if (chords.length === 0 || !chords.some((chord) => chordMatches(event, chord))) continue;
+    if (context.paletteOpen && command.id !== "close-command-palette") continue;
+    if (!commandAppliesToRoute(command, context.activeRoute)) continue;
+    const textEntry = isTextEntryTarget(event.target);
+    if (textEntry && command.textEntryPolicy === "ignore") continue;
+    if (!textEntry && command.textEntryPolicy === "text-only") continue;
+    if (command.interactiveControlPolicy === "ignore" && isInteractiveControlTarget(event.target)) continue;
+    if (event.repeat && command.repeatPolicy === "ignore") continue;
+    if (!command.isEnabled(context)) continue;
+    event.preventDefault();
+    void command.invoke(context, event);
+    return true;
+  }
+  return false;
+}
+
+export function commandLabel(command: ProductionCommand, platform: "apple" | "other" = "other"): string {
+  const chord = command.chord ?? command.chords?.[0];
+  if (!chord) return "";
+  const pieces: string[] = [];
+  if (chord.modifier) pieces.push(platform === "apple" ? "⌘" : "Ctrl");
+  if (chord.alt) pieces.push(platform === "apple" ? "⌥" : "Alt");
+  if (chord.shift) pieces.push(platform === "apple" ? "⇧" : "Shift");
+  pieces.push(chord.key.length === 1 ? chord.key.toLocaleUpperCase() : chord.key);
+  return platform === "apple" ? pieces.join("") : pieces.join("+");
+}
+
+export function isApplePlatform(platform = typeof navigator === "undefined" ? "" : navigator.platform): boolean {
+  return /Mac|iPhone|iPad|iPod/i.test(platform);
+}

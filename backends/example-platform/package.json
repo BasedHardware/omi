@@ -1,0 +1,45 @@
+{
+  "name": "omi-placement-platform",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "workspaces": [
+    "core/*",
+    "drivers/*",
+    "harness",
+    "migration"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "test:node": "bun test",
+    "test:postgres": "bun run scripts/postgres-test.ts test",
+    "test:postgres:preserve": "bun run scripts/postgres-test.ts test --preserve",
+    "test:postgres:setup": "bun run scripts/postgres-test.ts setup",
+    "test:postgres:status": "bun run scripts/postgres-test.ts status",
+    "test:postgres:teardown": "bun run scripts/postgres-test.ts teardown",
+    "test:postgres:destroy": "bun run scripts/postgres-test.ts destroy --yes",
+    "prod-local": "bun run scripts/prod-local.ts",
+    "prod-local-identity": "bun run scripts/prod-local-identity.ts",
+    "prod-local-identity-seed": "bun run scripts/prod-local-identity-seed.ts",
+    "lint:imports": "bun run scripts/lint-import-graph.ts",
+    "lint:closure": "bun run scripts/lint-import-closure.ts",
+    "qa:contracts": "bun run scripts/qa-contracts.ts",
+    "qa:production-deps": "node scripts/verify-production-dependency-closure.mjs",
+    "qa:production-qualification": "bun run scripts/validate-production-qualification-manifest.ts",
+    "build:production-deps": "bun run scripts/build-production-dependency-artifact.ts",
+    "app": "bash integration/dev-app.sh",
+    "logs": "bun integration/dev-logs.ts"
+  },
+  "dependencies": {
+    "@omi-core/ratified-contracts": "file:./vendor/contracts/omi-core-ratified-contracts-0.9.0-e44625eb.tgz",
+    "@sinclair/typebox": "^0.34.41",
+    "ajv": "^8.17.1",
+    "firebase-admin": "14.2.0",
+    "hono": "4.12.34"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "fast-check": "^3.23.2",
+    "typescript": "5.9.3"
+  }
+}

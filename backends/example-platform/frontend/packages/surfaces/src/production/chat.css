@@ -1,0 +1,410 @@
+.chat-header {
+  margin: var(--space-xl) 0 var(--space-lg);
+}
+
+.chat-empty-state {
+  display: grid;
+  justify-items: center;
+}
+
+.chat-empty-state .production-empty-state {
+  margin: var(--space-xxl) auto;
+}
+
+.chat-thread {
+  display: grid;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+  position: relative;
+}
+
+/* A row of the message list now, not chrome above it — the list is the scroll
+   container on desktop, so a sibling here stayed frozen over a thread that
+   scrolled underneath. Centred and vertically padded to match Swift's
+   `loadMoreButton` (.frame(maxWidth: .infinity).padding(.vertical, sm)). */
+.chat-history-controls {
+  display: flex;
+  justify-content: center;
+  padding-block: var(--space-xs);
+}
+
+.chat-message-list {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  outline: none;
+}
+
+.chat-message-list:focus-visible {
+  border-radius: var(--radius-section);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus);
+}
+
+.chat-jump-latest {
+  position: absolute;
+  z-index: 2;
+  inset-inline-start: 50%;
+  inset-block-end: var(--space-sm);
+  min-height: var(--min-tap-target);
+  padding-inline: var(--space-lg);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-circular);
+  color: var(--content-primary);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+  transform: translateX(-50%);
+}
+
+html[data-platform="mobile"] .chat-jump-latest {
+  position: fixed;
+  z-index: 3;
+  inset-block-end: calc(var(--chat-mobile-composer-height, 0px) + var(--min-tap-target) + var(--space-xxl) + env(safe-area-inset-bottom, 0px));
+}
+
+.chat-message {
+  padding: var(--space-sm) 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-message.is-user {
+  margin-inline-start: var(--space-xl);
+}
+
+.chat-message.is-assistant {
+  margin-inline-end: var(--space-xl);
+}
+
+.chat-message.is-pending {
+  opacity: 0.85;
+}
+
+.chat-message.is-failed {
+  border-inline-start: var(--focus-ring-width) solid var(--danger);
+  padding-inline-start: var(--space-md);
+}
+
+.chat-message.is-streaming {
+  border-inline-start: var(--focus-ring-width) solid var(--focus);
+  padding-inline-start: var(--space-md);
+}
+
+.chat-message-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  letter-spacing: var(--type-label-tracking);
+  text-transform: uppercase;
+}
+
+.chat-delivery-label {
+  color: var(--content-tertiary);
+}
+
+.chat-message-text {
+  margin: 0;
+  max-width: var(--measure-body);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  color: var(--content-primary);
+}
+
+.chat-message-text.is-placeholder {
+  color: var(--content-secondary);
+}
+
+/* Provenance, at the weight of a footnote rather than a panel.
+ *
+ * Every answer carried a full-width bordered card on a raised fill, so a
+ * transcript read as a stack of boxes with prose between them. The claim is
+ * unchanged — the tier chip still names the adapter that actually answered, and
+ * the whole run is still one click away — but a closed disclosure is now a line
+ * under the answer instead of a container around it. The tap target survives
+ * because it is an accessibility floor, not decoration.
+ */
+.chat-agent-run {
+  margin-top: var(--space-xs);
+}
+
+.chat-agent-run summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-height: var(--min-tap-target);
+  cursor: pointer;
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+}
+
+/* Open, it needs to read as belonging to the answer above it. A rule down the
+   side does that with none of the enclosure a border draws when closed. */
+.chat-agent-run[open] {
+  margin-bottom: var(--space-sm);
+}
+
+.chat-agent-capability,
+.chat-agent-state {
+  max-width: var(--measure-label);
+  overflow: hidden;
+  padding: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--surface-elevated);
+  color: var(--content-secondary);
+  font-family: var(--type-label-family);
+  font-size: var(--type-label-size);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-agent-run ol {
+  display: grid;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: var(--space-xs) 0 0 var(--space-md);
+  border-inline-start: 1px solid var(--border);
+  margin-inline-start: var(--space-xs);
+}
+
+.chat-agent-run li p {
+  margin: 0;
+}
+
+.chat-agent-detail {
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+}
+
+.chat-agent-detail span + span::before {
+  content: " · ";
+}
+
+.chat-agent-approval {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.chat-agent-approval button {
+  margin-top: 0;
+}
+
+.chat-message button {
+  margin-top: var(--space-sm);
+}
+
+.chat-failure-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.chat-failure-recovery button {
+  margin-top: 0;
+}
+
+.chat-failure-recovery p {
+  flex: 1 1 18rem;
+  margin: 0;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-line);
+}
+
+.chat-composer {
+  display: grid;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+  padding: var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-section);
+  background: var(--surface-elevated);
+}
+
+/*
+ * Chat owns its scroll, unlike every other route.
+ *
+ * The shell's `.desktop-page-panel` is normally the scroll container, which put the
+ * composer below the fold at the 934x671 review geometry — the first thing a person tries
+ * to do on a chat surface is type, and it required scrolling to find the input. A sticky
+ * composer fixed the reachability but let messages scroll visibly through it.
+ *
+ * So for this route only, the panel becomes a flex column that does not scroll, and the
+ * message list becomes the scroll container. The composer is then simply the last row and
+ * is always on screen, with no overlap and no translucency trick.
+ */
+html[data-platform="desktop"] main[data-route="chat"] > .desktop-page-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The shell's 74px bottom padding exists to clear a scrolling page's last row. Chat's
+     last row is the composer, which is always on screen, so that space is just dead. */
+  padding-bottom: 23px;
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-thread {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-empty-state {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  place-content: center;
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-message-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+}
+
+html[data-platform="desktop"] main[data-route="chat"] .chat-composer {
+  flex: 0 0 auto;
+  margin-top: var(--space-md);
+}
+
+/* Mobile scrolls the document and already sticks the composer clear of the tab bar and
+   the safe-area inset — see the html[data-platform="mobile"] .chat-composer rule below. */
+
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-attachments li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: var(--min-tap-target);
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--content-secondary);
+}
+
+.chat-attachment-scan,
+.chat-attachment-scanner {
+  font-size: var(--type-label-size);
+}
+
+.chat-message-attachments {
+  display: grid;
+  gap: var(--space-xs);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+}
+
+.chat-message-attachments li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.chat-message-attachment-name {
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.chat-attachment-hint {
+  margin: 0;
+  color: var(--content-secondary);
+  font-size: var(--type-label-size);
+}
+
+/* Attach, input, send — the order Swift's ChatInputView HStack uses. */
+.chat-composer-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-sm);
+  align-items: end;
+}
+
+.chat-draft {
+  min-height: calc(var(--min-tap-target) * 2);
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-md);
+  color: var(--content-primary);
+  background: var(--surface-raised);
+}
+
+.chat-send {
+  min-height: var(--min-tap-target);
+}
+
+.chat-attach:disabled,
+.chat-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Square, so the leading slot is a glyph's worth of chrome rather than a word's
+   worth of button. Swift draws this at 32pt; the tap target is the floor here
+   and does not come down to match it. */
+.chat-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--min-tap-target);
+  min-height: var(--min-tap-target);
+  padding-inline: 0;
+}
+
+html[data-platform="mobile"] .chat-header > div:first-child {
+  display: none;
+}
+
+html[data-platform="mobile"] .chat-message.is-user,
+html[data-platform="mobile"] .chat-message.is-assistant {
+  margin-inline: 0;
+}
+
+html[data-platform="mobile"] .chat-composer {
+  position: sticky;
+  bottom: calc(var(--min-tap-target) + var(--space-xl) + env(safe-area-inset-bottom, 0px));
+  z-index: 1;
+  box-shadow: 0 var(--space-sm) var(--space-xl) var(--surface-scrim);
+}
+
+/* Two columns here, with Send on its own full-width row below. Follows the
+   desktop order: attach takes the narrow column, the input the wide one. */
+html[data-platform="mobile"] .chat-composer-row {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+html[data-platform="mobile"] .chat-send {
+  grid-column: 1 / -1;
+}

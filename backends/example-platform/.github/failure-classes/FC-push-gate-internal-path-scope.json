@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-push-gate-internal-path-scope",
+  "violated_contract": "A CI gate that also runs on the post-merge push lane must scope its 'user-facing change' trigger to exclude internal, non-user-facing paths (generated code, tests, release infrastructure); otherwise a legitimate change to those paths reddens main on the push run with no author able to satisfy the gate.",
+  "canonical_prevention": "Keep the gate's exemption set (e.g. EXEMPT_DESKTOP_PATH_PREFIXES) covering every never-user-facing path class, and add a path to it — with a test — rather than relying on a PR-only label that the post-merge push run cannot honor.",
+  "evidence_prs": [10387, 10481],
+  "scope_hints": [".github/scripts/check-desktop-changelog.py", ".github/scripts/"],
+  "status": "open"
+}

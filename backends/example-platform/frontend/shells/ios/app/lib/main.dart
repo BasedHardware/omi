@@ -1,0 +1,1177 @@
+// Minimal Flutter shell hosting a TS surface in a platform webview.
+// Mirrors ADR-002: the shell owns device/capture state, the surface is UI only,
+// and everything crossing the boundary goes through the generated bridge.
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
+import 'bridge_http_host.dart';
+import 'chat_attachment_staging_host.dart';
+import 'chat_bridge_javascript_sink.dart';
+import 'chat_stream_host.dart';
+import 'consumer_evidence.dart';
+import 'control_probe.dart';
+import 'gen/bridge.g.dart';
+import 'gen/bridge_http_contract.g.dart';
+import 'listen_preflight_policy.dart';
+import 'listen_socket_host.dart';
+import 'loop_server.dart';
+import 'scheme_host.dart';
+
+/// Where the surface is loaded from.
+/// ship   = bundled asset (what an App Store build does)
+/// dev    = local dev server (live reload of the surface, no Dart rebuild)
+/// loop   = in-app loopback HTTP server (ship-origin candidate A probe)
+/// scheme = native WKURLSchemeHandler at omi-ui://local (candidate B / wave-2)
+enum SurfaceMode { ship, dev, loop, scheme }
+
+// Set at build time: flutter run --dart-define=SURFACE_MODE=dev
+const String _modeFlag = String.fromEnvironment('SURFACE_MODE', defaultValue: 'ship');
+// iOS simulator can reach the host Mac on localhost; a real device needs the LAN IP.
+const String _devHost = String.fromEnvironment('SURFACE_HOST', defaultValue: 'localhost:8787');
+// loop mode: 0 = ephemeral port (demonstrates origin-per-port storage loss),
+// any fixed value = stable origin across relaunches.
+const int _loopPort = int.fromEnvironment('LOOP_PORT', defaultValue: 0);
+// scheme mode: which Documents/bundles/<id> to mount. Wave-2 default is the
+// real @omi-core/surfaces ship build; set SCHEME_BUNDLE=v1 to re-run the probe.
+const String _schemeBundle = String.fromEnvironment('SCHEME_BUNDLE', defaultValue: 'surfaces');
+// AUTODRIVE task text for the real surfaces harness (blank = open only).
+const String _addTask = String.fromEnvironment('ADD_TASK', defaultValue: '');
+// Privileged-HTTP custody (wave 9): the SHELL holds the API base URL and bearer
+// token; neither is ever handed to the webview. Unset base URL => no channel
+// registered => the surface truthfully feature-detects "no bridge" and falls
+// back to its DEV transport. Dev-grade custody (keychain is owed).
+const String _apiBaseUrl = String.fromEnvironment('OMI_API_BASE_URL', defaultValue: '');
+const String _apiToken = String.fromEnvironment('OMI_API_TOKEN', defaultValue: '');
+// Per-run QA identity. The shell appends its fixed `ios` identity natively;
+// neither value is placed in the surface URL or JavaScript state.
+const String _runClientId = String.fromEnvironment('OMI_RUN_CLIENT_ID', defaultValue: '');
+// Launcher-owned safe basename for a Documents-local native result. Host paths
+// never cross into the simulator process or JavaScript state.
+const String _consumerEvidenceFilename = String.fromEnvironment('OMI_CONSUMER_EVIDENCE_FILENAME', defaultValue: '');
+// Launcher-owned safe basenames for the shared control-acceptance driver.
+// Host paths never cross into the simulator process or JavaScript state.
+const String _probeFilename = String.fromEnvironment('OMI_PROBE_FILENAME', defaultValue: '');
+const String _probeResultFilename = String.fromEnvironment('OMI_PROBE_RESULT_FILENAME', defaultValue: '');
+// Optional scheme query/profile namespace. Values are appended to the local
+// scheme URL, never interpolated into page JavaScript or logs.
+const String _surfaceQuery = String.fromEnvironment('SURFACE_QUERY', defaultValue: '');
+const String _surfaceProfile = String.fromEnvironment('SURFACE_PROFILE', defaultValue: '');
+// Capture-only builds may receive one per-coordinate query at process launch.
+// This is deliberately compile-time gated: production builds ignore the
+// argument entirely, while capture builds fail closed on an absent, repeated,
+// malformed, or out-of-contract query.
+const bool _captureOnly = bool.fromEnvironment('OMI_CAPTURE_ONLY', defaultValue: false);
+const bool _acceptance = bool.fromEnvironment('OMI_ACCEPTANCE', defaultValue: false);
+const bool _acceptanceExit = bool.fromEnvironment('OMI_ACCEPTANCE_EXIT', defaultValue: false);
+const bool _consumerEvidenceExit = bool.fromEnvironment('OMI_CONSUMER_EVIDENCE_EXIT', defaultValue: false);
+const bool _probeExit = bool.fromEnvironment('OMI_PROBE_EXIT', defaultValue: false);
+
+const Set<String> _captureDomains = {
+  'memories',
+  'memories-platform',
+  'tasks',
+  'conversations',
+  'folders',
+  'listen',
+  'chat',
+  'settings',
+};
+const Set<String> _captureStates = {'loading', 'empty', 'ready', 'error', 'offline', 'busy', 'complete', 'cancelled'};
+const Set<String> _captureAccessibilities = {
+  'none',
+  'keyboard',
+  'voiceover',
+  'high_contrast',
+  'reduced_motion',
+  'reduced_transparency',
+  'rtl',
+  'text_scale_200',
+};
+
+/// Resolve the one launch query accepted by a capture-only build.
+///
+/// The native runner passes `--omi-capture-query=<query>` as one argument.
+/// Every key is parsed manually so duplicate keys, unknown keys, malformed
+/// escapes, fragments, and unbounded values cannot silently select another
+/// fixture. The non-capture path returns the compile-time query and never
+/// inspects launch arguments.
+String surfaceQueryForLaunch({
+  required bool captureOnly,
+  required String compileQuery,
+  required List<String> arguments,
+}) {
+  if (!captureOnly) return compileQuery;
+  const prefix = '--omi-capture-query=';
+  final matches = arguments.where((argument) => argument.startsWith(prefix)).toList();
+  if (matches.length != 1) {
+    throw const FormatException('capture build requires exactly one native capture query argument');
+  }
+  final raw = matches.single.substring(prefix.length);
+  if (raw.isEmpty || raw.length > 1024 || raw.contains('#')) {
+    throw const FormatException('capture query is empty, too long, or contains a fragment');
+  }
+  final values = <String, String>{};
+  for (final part in raw.split('&')) {
+    if (part.isEmpty || !part.contains('=')) {
+      throw const FormatException('capture query contains an empty or valueless pair');
+    }
+    final separator = part.indexOf('=');
+    final encodedKey = part.substring(0, separator);
+    final encodedValue = part.substring(separator + 1);
+    String key;
+    String value;
+    try {
+      key = Uri.decodeQueryComponent(encodedKey);
+      value = Uri.decodeQueryComponent(encodedValue);
+    } on FormatException {
+      throw const FormatException('capture query contains invalid percent encoding');
+    } on ArgumentError {
+      throw const FormatException('capture query contains invalid percent encoding');
+    }
+    if (key.isEmpty || value.isEmpty || values.containsKey(key)) {
+      throw const FormatException('capture query contains an empty or duplicate key');
+    }
+    values[key] = value;
+  }
+  const expectedKeys = {'polish', 'qa', 'state', 'platform', 'theme', 'width', 'accessibility', 'locale'};
+  if (!values.keys.toSet().containsAll(expectedKeys) || values.length != expectedKeys.length) {
+    throw const FormatException('capture query keys do not match the capture contract');
+  }
+  if (values['polish'] != '1' ||
+      !_captureDomains.contains(values['qa']) ||
+      !_captureStates.contains(values['state']) ||
+      values['platform'] != 'mobile' ||
+      !{'light', 'dark'}.contains(values['theme']) ||
+      !{'compact', 'regular', 'wide'}.contains(values['width']) ||
+      !_captureAccessibilities.contains(values['accessibility']) ||
+      !RegExp(r'^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$').hasMatch(values['locale']!)) {
+    throw const FormatException('capture query contains an unsupported value');
+  }
+  const order = ['polish', 'qa', 'state', 'platform', 'theme', 'width', 'accessibility', 'locale'];
+  return order.map((key) => '${Uri.encodeQueryComponent(key)}=${Uri.encodeQueryComponent(values[key]!)}').join('&');
+}
+
+String captureRunIdForLaunch({required bool captureOnly, required List<String> arguments}) {
+  if (!captureOnly) return '';
+  const prefix = '--omi-capture-run-id=';
+  final matches = arguments.where((argument) => argument.startsWith(prefix)).toList();
+  if (matches.length != 1) {
+    throw const FormatException('capture build requires one native run id');
+  }
+  final value = matches.single.substring(prefix.length).trim();
+  if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$').hasMatch(value)) {
+    throw const FormatException('capture build requires one safe native run id');
+  }
+  return value;
+}
+
+late final String _activeSurfaceQuery;
+late final String _captureRunId;
+
+Future<List<String>> captureLaunchArguments({
+  required bool captureOnly,
+  required List<String> executableArguments,
+}) async {
+  if (!captureOnly) return executableArguments;
+  final values = await const MethodChannel('omi/capture-launch').invokeListMethod<String>('arguments');
+  return values ?? const <String>[];
+}
+
+ThemeMode shellThemeModeForSurfaceQuery(String raw) {
+  var query = raw.trim();
+  if (query.startsWith('?')) query = query.substring(1);
+  try {
+    final mode = Uri.splitQueryString(query.split('#').first)['theme'];
+    if (mode == 'light') return ThemeMode.light;
+    if (mode == 'dark') return ThemeMode.dark;
+  } on FormatException {
+    // Malformed optional appearance input follows the system without blocking boot.
+  } on ArgumentError {
+    // Invalid percent encoding is surfaced as ArgumentError by Uri parsing.
+  }
+  return ThemeMode.system;
+}
+
+Brightness shellBrightnessForSurfaceQuery(String raw, Brightness systemBrightness) {
+  return switch (shellThemeModeForSurfaceQuery(raw)) {
+    ThemeMode.light => Brightness.light,
+    ThemeMode.dark => Brightness.dark,
+    ThemeMode.system => systemBrightness,
+  };
+}
+
+Color shellBackgroundForSurfaceQuery(String raw, Brightness systemBrightness) {
+  return shellBrightnessForSurfaceQuery(raw, systemBrightness) == Brightness.dark
+      ? const Color(0xFF0B0B0F)
+      : const Color(0xFFF5F7F9);
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final arguments = await captureLaunchArguments(
+    captureOnly: _captureOnly,
+    executableArguments: Platform.executableArguments,
+  );
+  _activeSurfaceQuery = surfaceQueryForLaunch(
+    captureOnly: _captureOnly,
+    compileQuery: _surfaceQuery,
+    arguments: arguments,
+  );
+  _captureRunId = captureRunIdForLaunch(captureOnly: _captureOnly, arguments: arguments);
+  runApp(const OmiApp());
+}
+
+class OmiApp extends StatelessWidget {
+  const OmiApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeMode = shellThemeModeForSurfaceQuery(_activeSurfaceQuery);
+    return MaterialApp(
+      title: 'Omi',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.light(useMaterial3: true),
+      darkTheme: ThemeData.dark(useMaterial3: true),
+      themeMode: themeMode,
+      home: const SurfaceHost(),
+    );
+  }
+}
+
+class SurfaceHost extends StatefulWidget {
+  const SurfaceHost({super.key});
+
+  @override
+  State<SurfaceHost> createState() => _SurfaceHostState();
+}
+
+class _SurfaceHostState extends State<SurfaceHost> with WidgetsBindingObserver implements OmiShellBridgeHandler {
+  late final WebViewController _controller;
+  late final OmiShellBridge _bridge;
+  BridgeHttpHost? _http;
+  ListenSocketHost? _listen;
+  ChatBridgeJavaScriptSink? _chatSink;
+  ChatStreamHost? _chatStream;
+  ChatAttachmentStagingHost? _chatStaging;
+  ConsumerEvidenceDriver? _consumerEvidence;
+  String? _consumerEvidenceResultPath;
+  ControlProbeDriver? _controlProbe;
+  final List<String> _probeChannelInbox = [];
+  bool _controlProbeStarted = false;
+  Timer? _transcriptTimer;
+  Timer? _acceptanceFallback;
+  int _sessions = 0;
+  // loop mode: two servers so one run demonstrates origin-per-port isolation.
+  LoopServer? _loopA, _loopB;
+  int _loopPhase = 0;
+  // scheme mode: phase machine driving bundle swap / gate / suspend probes.
+  SchemeSpike? _scheme;
+  int _schemePhase = 0;
+  String? _blocked; // non-null = contract gate refused the mount (error surface)
+  bool _acceptanceEmitted = false;
+
+  String get _surfaceQuerySuffix {
+    var raw = _activeSurfaceQuery.trim();
+    if (raw.startsWith('?')) raw = raw.substring(1);
+    final params = <String, String>{};
+    if (raw.isNotEmpty) {
+      try {
+        params.addAll(Uri.splitQueryString(raw.split('#').first));
+      } on FormatException {
+        // A malformed optional query must not make the shell fail to boot.
+      }
+    }
+    if (_surfaceProfile.trim().isNotEmpty) {
+      params['profile'] = _surfaceProfile.trim();
+    }
+    if (params.isEmpty) return '';
+    return '?${Uri(queryParameters: params).query}';
+  }
+
+  String _redactedUrl(String? raw) {
+    final parsed = Uri.tryParse(raw ?? '');
+    return parsed?.replace(query: '', fragment: '', userInfo: '').toString() ?? '(invalid-url)';
+  }
+
+  Future<void> _emitAcceptance(String phase) async {
+    if ((!_acceptance && !_acceptanceExit) || _acceptanceEmitted) return;
+    final served = _http?.servedCount ?? 0;
+    // Ready is a page lifecycle hint, not proof that the async store refresh
+    // reached the host. Wait for host-observed traffic, or let the bounded
+    // fallback below produce a real failure.
+    if (served == 0 && phase != 'ready-timeout' && phase != 'autodrive') {
+      _acceptanceFallback ??= Timer(const Duration(seconds: 5), () {
+        _acceptanceFallback = null;
+        unawaited(_emitAcceptance('ready-timeout'));
+      });
+      return;
+    }
+    _acceptanceFallback?.cancel();
+    _acceptanceFallback = null;
+    _acceptanceEmitted = true;
+    final line =
+        'ACCEPTANCE phase=$phase bridge=${_http == null ? 'disabled' : 'enabled'} '
+        'servedCount=$served profileProvided=${_surfaceProfile.trim().isNotEmpty} '
+        'status=${served > 0 ? 'PASS' : 'FAIL'}';
+    debugPrint(line);
+    await _scheme?.log(line, echo: false);
+    if (_acceptanceExit) exit(served > 0 ? 0 : 1);
+  }
+
+  SurfaceMode get _mode => switch (_modeFlag) {
+    'dev' => SurfaceMode.dev,
+    'loop' => SurfaceMode.loop,
+    'scheme' => SurfaceMode.scheme,
+    _ => SurfaceMode.ship,
+  };
+
+  Uri _ownDocument(Uri uri) => _http?.ownDocument(uri) ?? uri;
+
+  Future<void> _loadOwnedDocument(Uri uri) => _controller.loadRequest(_ownDocument(uri));
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Privileged HTTP: register BEFORE any load so the page sees the channel on
+    // its first script evaluation and picks bridge mode rather than DEV.
+    final apiBase = Uri.tryParse(_apiBaseUrl);
+    if (!_captureOnly && _apiBaseUrl.isNotEmpty && apiBase != null && apiBase.hasScheme && apiBase.host.isNotEmpty) {
+      final authority = ShellTransportAuthority(baseUrl: apiBase, token: _apiToken, runId: _runClientId);
+      _http = authority.makeHttpHost();
+      _listen = authority.makeListenHost(
+        evidenceAudioEnabled: listenEvidenceAudioEnabled(
+          consumerEvidence: _consumerEvidenceFilename.isNotEmpty,
+          controlProbe: _probeFilename.isNotEmpty,
+        ),
+      );
+      final sink = ChatBridgeJavaScriptSink(
+        (source) => _controller.runJavaScript(source),
+        documentInitiallyActive: false,
+      );
+      _chatSink = sink;
+      _chatStream = ChatStreamHost(
+        baseUrl: authority.baseUrl,
+        custody: authority.custody,
+        clientIdentity: authority.clientIdentity,
+        sink: sink,
+      );
+      _chatStaging = ChatAttachmentStagingHost(
+        baseUrl: authority.baseUrl,
+        custody: authority.custody,
+        clientIdentity: authority.clientIdentity,
+        sink: sink,
+      );
+      debugPrint(
+        '[bridge-http] enabled for ${apiBase.scheme}://${apiBase.host} '
+        '(token ${_http!.hasCredential ? "present" : "absent"})',
+      );
+    } else {
+      debugPrint('[bridge-http] disabled (set OMI_API_BASE_URL to enable privileged HTTP)');
+    }
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(
+        shellBackgroundForSurfaceQuery(
+          _activeSurfaceQuery,
+          WidgetsBinding.instance.platformDispatcher.platformBrightness,
+        ),
+      )
+      // Surface console -> flutter logs, so headless runs can read bench output.
+      ..setOnConsoleMessage((msg) {
+        debugPrint('[surface] ${msg.message}');
+        _scheme?.log('[surface] ${msg.message}', echo: false);
+        if (_captureOnly && msg.message.contains('OMI_PRODUCTION_READY')) {
+          _beginCaptureReadiness();
+        }
+        if (msg.message.contains('OMI_PRODUCTION_READY') ||
+            msg.message.contains('data-surface-state=ready') ||
+            msg.message.contains('data-surface-state="ready"')) {
+          unawaited(_emitAcceptance('surface-ready'));
+        }
+        if (msg.message.contains('PROBE all-done')) {
+          if (_mode == SurfaceMode.scheme) {
+            _onSchemePhaseDone();
+          } else {
+            _onLoopPhaseDone();
+          }
+        }
+      })
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (url) {
+            _http?.beginDocument(url);
+            unawaited(_listen?.resetForNavigation());
+            unawaited(_chatStream?.resetForNavigation());
+            unawaited(_chatStaging?.resetForNavigation());
+          },
+          onPageFinished: (url) {
+            _scheme?.log('PAGE-FINISHED ${_redactedUrl(url)}');
+            unawaited(_finishPageLoad(url));
+          },
+          onWebResourceError: (e) {
+            _scheme?.log('WEB-RESOURCE-ERROR ${e.errorCode} ${e.description} ${_redactedUrl(e.url)}');
+          },
+        ),
+      );
+    _bridge = OmiShellBridge(_controller, this);
+    _boot();
+  }
+
+  bool _captureReadinessStarted = false;
+
+  void _beginCaptureReadiness() {
+    if (_captureReadinessStarted) return;
+    _captureReadinessStarted = true;
+    unawaited(
+      _publishCaptureReadiness().catchError((Object error, StackTrace stack) {
+        debugPrint('NATIVE_CAPTURE_READY_FAILED $error');
+      }),
+    );
+  }
+
+  Future<void> _publishCaptureReadiness() async {
+    Map<Object?, Object?>? readiness;
+    for (var attempt = 0; attempt < 80 && readiness == null; attempt += 1) {
+      final result = await _controller.runJavaScriptReturningResult('''
+        (() => {
+          const root = document.querySelector('main[data-production-shell="true"]');
+          if (!root) return JSON.stringify({ok:false});
+          return JSON.stringify({
+            ok: true,
+            domain: String(document.documentElement.dataset.polishDomain || ''),
+            polish_state: String(document.documentElement.dataset.polishState || ''),
+            route: String(root.getAttribute('data-route') || ''),
+            fixture: String(root.getAttribute('data-qa-fixture') || ''),
+            state: String(root.getAttribute('data-surface-state') || '')
+          });
+        })()
+      ''');
+      Object? decoded = result;
+      if (result is String) {
+        try {
+          decoded = jsonDecode(result);
+        } on FormatException {
+          throw StateError('capture readiness result was not JSON');
+        }
+      }
+      if (decoded is Map && decoded['ok'] == true) {
+        readiness = decoded;
+        break;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    if (readiness == null ||
+        readiness['domain'] is! String ||
+        (readiness['domain'] as String).isEmpty ||
+        readiness['polish_state'] is! String ||
+        (readiness['polish_state'] as String).isEmpty ||
+        readiness['route'] is! String ||
+        (readiness['route'] as String).isEmpty ||
+        readiness['fixture'] is! String ||
+        (readiness['fixture'] as String).isEmpty ||
+        readiness['state'] is! String ||
+        (readiness['state'] as String).isEmpty) {
+      throw StateError('capture surface did not expose a typed fixture root');
+    }
+    final confirmed = await const MethodChannel('omi/capture-launch').invokeMethod<bool>('ready', <String, String>{
+      'run_id': _captureRunId,
+      'domain': readiness['domain'] as String,
+      'polish_state': readiness['polish_state'] as String,
+      'route': readiness['route'] as String,
+      'fixture': readiness['fixture'] as String,
+      'state': readiness['state'] as String,
+    });
+    if (confirmed != true) {
+      throw StateError('native capture host did not confirm readiness');
+    }
+    debugPrint('NATIVE_CAPTURE_HOST_CONFIRMED run_id=$_captureRunId');
+  }
+
+  Future<void> _finishPageLoad(String url) async {
+    if (_captureOnly) {
+      // The WK page-finished callback precedes React's typed fixture root.
+      // Begin bounded DOM polling here; the console ready signal is a second
+      // trigger, guarded by _captureReadinessStarted.
+      _beginCaptureReadiness();
+      return;
+    }
+    if (_consumerEvidence != null) {
+      try {
+        await _consumerEvidence!.pageFinished(
+          url,
+          prepareOwnedDocument: () async {
+            await _chatSink?.activateDocument();
+          },
+        );
+        final resultPath = _consumerEvidenceResultPath;
+        if (_consumerEvidenceExit && resultPath != null && await File(resultPath).exists()) {
+          exit(0);
+        }
+      } catch (error) {
+        debugPrint('CONSUMER-EVIDENCE: FAIL $error');
+        try {
+          final snapshot = await _controller.runJavaScriptReturningResult(abortConsumerEvidenceJavaScript);
+          await _scheme?.log('CONSUMER-EVIDENCE abort-at snapshot=$snapshot');
+        } catch (_) {}
+        await _scheme?.log('CONSUMER-EVIDENCE FAIL $error');
+        if (_consumerEvidenceExit) exit(1);
+      }
+      return;
+    }
+    if (_probeFilename.isNotEmpty) {
+      await _chatSink?.activateDocument();
+      if (_controlProbeStarted) {
+        await _controlProbe?.resumeAfterNavigation();
+        return;
+      }
+      unawaited(_startControlProbe());
+      return;
+    }
+    await _chatSink?.activateDocument();
+    if (const bool.fromEnvironment('AUTODRIVE')) {
+      await _autodrive();
+    } else if (_acceptance || _acceptanceExit) {
+      // Surface store refresh is asynchronous; page-finished alone is not
+      // evidence of bridge traffic. The marker above wins, while this bounded
+      // fallback keeps a hung surface fail-capable.
+      _acceptanceFallback ??= Timer(const Duration(seconds: 5), () {
+        _acceptanceFallback = null;
+        unawaited(_emitAcceptance('ready-timeout'));
+      });
+    }
+  }
+
+  // Lifecycle probes for the suspension-resilience question: log every
+  // transition, and on resume verify from inside the page that (a) the DOM is
+  // alive, (b) storage is readable, (c) the scheme handler still serves, and
+  // (d) the bridge still round-trips.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _scheme?.log('LIFECYCLE $state');
+    if (state == AppLifecycleState.resumed && _mode == SurfaceMode.scheme && _schemePhase > 0) {
+      _controller.runJavaScript(
+        "console.log('PROBE resume readyState='+document.readyState+' bootCount='+localStorage.getItem('bootCount'));"
+        "fetch('/probe/echo?after=resume').then(r=>console.log('PROBE resume-fetch '+r.status)).catch(e=>console.log('PROBE resume-fetch FAIL '+e));"
+        "if(window.__probeBridge){var t=Date.now();window.__probeBridge.getDeviceState().then(()=>console.log('PROBE resume-bridge-rtt '+(Date.now()-t)+'ms')).catch(e=>console.log('PROBE resume-bridge FAIL '+e));}",
+      );
+    }
+  }
+
+  Future<void> _boot() async {
+    await _bridge.attach();
+    // Register privileged HTTP before the first load: the surface's feature
+    // detection runs on its first script evaluation, so a channel added after
+    // navigation would leave it in DEV mode for the life of the page.
+    await _http?.register(_controller);
+    await _listen?.register(_controller);
+    await _chatStream?.register(_controller);
+    await _chatStaging?.register(_controller);
+    if (_probeFilename.isNotEmpty) {
+      await _controller.addJavaScriptChannel(
+        controlProbeChannelName,
+        onMessageReceived: (JavaScriptMessage message) {
+          unawaited(_dispatchProbeChannel(message.message));
+        },
+      );
+    }
+    switch (_mode) {
+      case SurfaceMode.dev:
+        await _loadOwnedDocument(Uri.parse('http://$_devHost/'));
+      case SurfaceMode.loop:
+        _loopA = LoopServer('assets/surface-loop');
+        await _loopA!.start(port: _loopPort);
+        _loopPhase = 1;
+        debugPrint('[loop] phase 1: loading from port ${_loopA!.port}');
+        await _loadOwnedDocument(Uri.parse('http://127.0.0.1:${_loopA!.port}/'));
+      case SurfaceMode.scheme:
+        _scheme = SchemeSpike();
+        await _scheme!.init();
+        await _scheme!.log(
+          'BOOT scheme mode, shell contract $kBridgeContractVersion, '
+          'bundle=$_schemeBundle, bundles installed under ${_scheme!.docsDir}/bundles',
+        );
+        // Probe phase machine only for the original v1/v2/v3 suite.
+        _schemePhase = _schemeBundle == 'v1' ? 1 : 0;
+        if (_consumerEvidenceFilename.isNotEmpty && _probeFilename.isNotEmpty) {
+          throw StateError('consumer evidence and control probe are mutually exclusive');
+        }
+        if (_consumerEvidenceFilename.isNotEmpty) {
+          if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,191}\.json$').hasMatch(_consumerEvidenceFilename)) {
+            throw StateError('consumer evidence filename is not a safe basename');
+          }
+          _consumerEvidenceResultPath = '${_scheme!.docsDir}/$_consumerEvidenceFilename';
+          await _startConsumerEvidence();
+        } else {
+          if (_probeFilename.isNotEmpty) {
+            if (!isSafeProbeBasename(_probeFilename) || _probeFilename != controlProbeDriverFilename) {
+              throw StateError('control probe driver filename is not the closed basename');
+            }
+            if (!isSafeProbeBasename(_probeResultFilename) || _probeResultFilename != controlProbeResultFilename) {
+              throw StateError('control probe result filename is not the closed basename');
+            }
+          }
+          await _mountBundle(_schemeBundle);
+        }
+      case SurfaceMode.ship:
+        // Asset mode: file:// origin, allowed to read sibling assets in the bundle.
+        await _controller.loadFlutterAsset('assets/surface/index.html');
+    }
+  }
+
+  Future<void> _startConsumerEvidence() async {
+    final resultPath = _consumerEvidenceResultPath;
+    if (resultPath == null) {
+      throw StateError('consumer evidence result path was not initialized');
+    }
+    final result = File(resultPath);
+    if (await result.exists()) {
+      await result.delete();
+    }
+    if (_mode != SurfaceMode.scheme || _schemeBundle != 'surfaces' || _http == null) {
+      throw StateError('consumer evidence requires the live surfaces scheme host');
+    }
+    final gate = await _scheme!.gateCheck('surfaces', kBridgeContractVersion);
+    if (!gate.ok) {
+      throw StateError('consumer evidence bundle failed the native contract gate');
+    }
+    await _scheme!.setActiveBundle('surfaces');
+    final hashes = ConsumerEvidenceTreeHashes.fromAssetJson(
+      shellStamp: await rootBundle.loadString('assets/surfaces/omi-ios-shell-build-stamp.json'),
+      surfaceStamp: await rootBundle.loadString('assets/surfaces/omi-build-stamp.json'),
+    );
+    final collector = ConsumerEvidenceCollector(resultPath: resultPath, runId: _runClientId, hashes: hashes);
+    await collector.prepare();
+    _consumerEvidence = ConsumerEvidenceDriver(
+      collector: collector,
+      ownNavigation: _ownDocument,
+      navigate: _controller.loadRequest,
+      observe: () async {
+        final result = await _controller.runJavaScriptReturningResult(renderedConsumerObservationJavaScript);
+        return normalizeRenderedObservationResult(result);
+      },
+      startListen: () async {
+        final result = await _controller.runJavaScriptReturningResult(startListenConsumerEvidenceJavaScript);
+        return result == true || result.toString() == 'true';
+      },
+      authorChat: () async {
+        final result = await _controller.runJavaScriptReturningResult(authorChatConsumerEvidenceJavaScript);
+        if (result is int) return result;
+        if (result is double && result.isFinite && result == result.round()) {
+          return result.toInt();
+        }
+        return null;
+      },
+      submitChat: () async {
+        final result = await _controller.runJavaScriptReturningResult(submitChatConsumerEvidenceJavaScript);
+        return result == true || result.toString() == 'true';
+      },
+      observeChatAfterAdmission: (baseline) async {
+        final result = await _controller.runJavaScriptReturningResult(renderedChatObservationJavaScript(baseline));
+        return normalizeRenderedObservationResult(result);
+      },
+    );
+    await _consumerEvidence!.start();
+  }
+
+  Future<void> _dispatchProbeChannel(String message) async {
+    final probe = _controlProbe;
+    if (probe == null) {
+      _probeChannelInbox.add(message);
+      return;
+    }
+    await probe.acceptChannel(message);
+  }
+
+  Future<void> _startControlProbe() async {
+    if (_controlProbeStarted) return;
+    _controlProbeStarted = true;
+    try {
+      if (_mode != SurfaceMode.scheme || _schemeBundle != 'surfaces' || _http == null) {
+        throw StateError('control probe requires the live surfaces scheme host');
+      }
+      final docsDir = _scheme?.docsDir;
+      if (docsDir == null || docsDir.isEmpty) {
+        throw StateError('control probe documents directory is missing');
+      }
+      final driverFile = File('$docsDir/$_probeFilename');
+      if (!await driverFile.exists()) {
+        throw StateError('control probe driver file is missing');
+      }
+      final resultPath = '$docsDir/$_probeResultFilename';
+      await File(resultPath).writeAsString(
+        '${formatProbeJsLine(value: controlProbePendingValue, error: 'probe-started')}\n',
+        flush: true,
+      );
+      final probe = ControlProbeDriver(
+        driverSource: await driverFile.readAsString(),
+        resultPath: resultPath,
+        evaluate: _controller.runJavaScriptReturningResult,
+        hostQuery: _surfaceQuerySuffix,
+        useJavaScriptChannel: true,
+      );
+      _controlProbe = probe;
+      final inbox = List<String>.of(_probeChannelInbox);
+      _probeChannelInbox.clear();
+      for (final message in inbox) {
+        unawaited(probe.acceptChannel(message));
+      }
+      await probe.start();
+      debugPrint(await File(probe.resultPath).readAsString());
+      if (_probeExit) exit(0);
+    } catch (error) {
+      debugPrint('CONTROL-PROBE: FAIL $error');
+      try {
+        final probe = _controlProbe;
+        if (probe != null) {
+          await probe.writeLine(formatProbeJsLine(error: error.toString()));
+        } else {
+          final docsDir = _scheme?.docsDir;
+          if (docsDir != null && docsDir.isNotEmpty && _probeResultFilename.isNotEmpty) {
+            final result = File('$docsDir/$_probeResultFilename');
+            await result.parent.create(recursive: true);
+            await result.writeAsString('${formatProbeJsLine(error: error.toString())}\n', flush: true);
+          }
+        }
+      } catch (_) {
+        // The launcher times out if this write also fails.
+      }
+      if (_probeExit) exit(1);
+    }
+  }
+
+  /// Gate-then-navigate. Returns false when the contract gate refused the
+  /// bundle (navigation is never attempted — the webview keeps whatever it was
+  /// showing and the shell raises the error surface).
+  Future<bool> _mountBundle(String version) async {
+    final s = _scheme!;
+    final gate = await s.gateCheck(version, kBridgeContractVersion);
+    if (!gate.ok) {
+      await s.log(
+        'GATE-BLOCKED bundle=$version bundleId=${gate.bundleId} '
+        'bundleContract=${gate.bundleContract} shellContract=$kBridgeContractVersion '
+        '— navigation NOT attempted',
+      );
+      setState(
+        () => _blocked =
+            'Bundle "$version" refused: it requires bridge contract '
+            '${gate.bundleContract}, this shell speaks $kBridgeContractVersion.',
+      );
+      return false;
+    }
+    await s.setActiveBundle(version);
+    setState(() => _blocked = null);
+    final target = 'omi-ui://local/index.html$_surfaceQuerySuffix';
+    await s.log(
+      'NAVIGATE bundle=$version -> omi-ui://local/index.html '
+      'queryPresent=${_surfaceQuerySuffix.isNotEmpty}',
+    );
+    await _loadOwnedDocument(Uri.parse(target));
+    return true;
+  }
+
+  // Phase machine, advanced by the surface's `PROBE all-done` console line:
+  //  1  v1 probe suite done            -> swap to v2 (update simulation)
+  //  2  v2 done (storage must survive) -> attempt v3 (contract mismatch: must
+  //     be refused before navigation), then roll back to v2
+  //  4  rollback v2 done               -> SPIKE-DONE; open the suspend window
+  //  5  post-suspend-window navigation done
+  Future<void> _onSchemePhaseDone() async {
+    final s = _scheme!;
+    await s.drainSchemeLog();
+    switch (_schemePhase) {
+      case 1:
+        await s.log('PHASE 1 complete (v1). Swapping bundle dir to v2 and reloading.');
+        _schemePhase = 2;
+        await _mountBundle('v2');
+      case 2:
+        await s.log('PHASE 2 complete (v2 after swap). Attempting v3 (bad contract).');
+        _schemePhase = 3;
+        final mounted = await _mountBundle('v3');
+        await s.log(
+          mounted
+              ? 'PHASE 3 UNEXPECTED: v3 mounted despite contract mismatch'
+              : 'PHASE 3 ok: v3 refused by gate; error surface shown. Rolling back to v2 in 2s.',
+        );
+        await Future<void>.delayed(const Duration(seconds: 2));
+        _schemePhase = 4;
+        await _mountBundle('v2');
+      case 4:
+        await s.log(
+          'PHASE 4 complete (v2 rollback remount). SPIKE-DONE. '
+          'Opening suspend window: will renavigate to v1 in 3s — background the app '
+          'right after the SUSPEND-WINDOW line to test suspension mid-navigation.',
+        );
+        _schemePhase = 5;
+        await Future<void>.delayed(const Duration(seconds: 3));
+        await s.log('SUSPEND-WINDOW navigating v1 now');
+        await _mountBundle('v1');
+      case 5:
+        await s.log(
+          'PHASE 5 complete: navigation opened in the suspend window '
+          'finished and the probe suite ran. SUSPEND-NAV-COMPLETE.',
+        );
+      default:
+        await s.log('PROBE all-done in unexpected phase $_schemePhase');
+    }
+  }
+
+  // After the probe suite finishes on server A, reload the identical bundle
+  // from a second server on a different port: same app, same webview, same
+  // bundle — if localStorage/IndexedDB come back empty, storage is keyed on
+  // the port and an ephemeral-port design silently wipes user state.
+  Future<void> _onLoopPhaseDone() async {
+    if (_mode != SurfaceMode.loop || _loopPhase != 1 || _loopPort != 0) {
+      if (_loopPhase == 2) debugPrint('[loop] phase 2 complete — compare bootCount/rows between phases');
+      return;
+    }
+    _loopPhase = 2;
+    _loopB = LoopServer('assets/surface-loop');
+    await _loopB!.start(port: 0);
+    debugPrint('[loop] phase 2: reloading from port ${_loopB!.port} (was ${_loopA!.port})');
+    await _loadOwnedDocument(Uri.parse('http://127.0.0.1:${_loopB!.port}/'));
+  }
+
+  // AUTODRIVE custody probes for the privileged-HTTP bridge (wave 9), mirroring
+  // the macOS wave-7 set. PROTOTYPE-ONLY SCAFFOLDING: this drives the raw channel
+  // with deliberately hostile inputs and must never exist on a production path
+  // (see the playbook's AUTODRIVE note).
+  //
+  // The probe posts raw contract messages so it can attempt things the HttpClient
+  // seam cannot express (forged headers, off-origin paths). It chains the
+  // surface's own reply sink rather than replacing it, so the harness keeps
+  // working while the probe runs.
+  Future<void> _autodriveBridgeProbes() async {
+    await _controller.runJavaScript(
+      r"""
+      window.__w9 = (function () {
+        var pend = new Map();
+        var prev = window.__omiHttpReply;
+        window.__omiHttpReply = function (id, json) {
+          if (pend.has(id)) {
+            var res = pend.get(id); pend.delete(id);
+            try { res(JSON.parse(json)); } catch (e) { res({ parseError: String(e) }); }
+            return;
+          }
+          if (typeof prev === 'function') return prev(id, json);
+        };
+        var n = 0;
+        return {
+          call: function (msg) {
+            return new Promise(function (res) {
+              n += 1;
+              var id = 'w9-' + n;
+              pend.set(id, res);
+              setTimeout(function () {
+                if (pend.has(id)) { pend.delete(id); res({ timeout: true }); }
+              }, 8000);
+              msg.id = id;
+              window[%CHANNEL%].postMessage(JSON.stringify(msg));
+            });
+          },
+        };
+      })();
+      console.log('W9 probe-ready channelPresent=' + !!window[%CHANNEL%] +
+        ' transport=' + ((document.querySelector('[data-transport]') || {}).getAttribute
+          ? document.querySelector('[data-transport]').getAttribute('data-transport') : 'none'));
+    """
+          .replaceAll('%CHANNEL%', "'${BridgeHttpContract.channel}'"),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    await _controller.runJavaScript(r"""
+      (async function () {
+        var r = await window.__w9.call({ method: 'GET', path: '/w9/forged',
+          headers: { authorization: 'Bearer HACKED', cookie: 'a=b', 'x-forged': 'yes' } });
+        console.log('W9 forged-headers -> ' + JSON.stringify(r));
+        r = await window.__w9.call({ method: 'GET', path: 'https://evil.example/steal' });
+        console.log('W9 absolute-url -> ' + JSON.stringify(r));
+        r = await window.__w9.call({ method: 'GET', path: '//evil.example/steal' });
+        console.log('W9 protocol-relative -> ' + JSON.stringify(r));
+        r = await window.__w9.call({ method: 'GET', path: '/w9/429' });
+        console.log('W9 retry-after -> ' + JSON.stringify(r));
+        r = await window.__w9.call({ method: 'POST', path: '/w9/post', body: JSON.stringify({ hello: 'world' }) });
+        console.log('W9 post-body -> ' + JSON.stringify(r));
+      })();
+    """);
+    await Future<void>.delayed(const Duration(milliseconds: 3000));
+
+    // Custody: nothing secret may be reachable from the page.
+    await _controller.runJavaScript(r"""
+      (async function () {
+        var keys = Object.keys(localStorage);
+        var blob = keys.map(function (k) { return k + '=' + localStorage.getItem(k); }).join('|');
+        var hits = [];
+        if (blob.indexOf('dev-token-w9') >= 0) hits.push('localStorage:TOKEN');
+        try {
+          var names = (await indexedDB.databases()).map(function (d) { return d.name; });
+          for (var i = 0; i < names.length; i++) {
+            var db = await new Promise(function (res, rej) {
+              var q = indexedDB.open(names[i]);
+              q.onsuccess = function () { res(q.result); };
+              q.onerror = function () { rej(q.error); };
+            });
+            var stores = Array.prototype.slice.call(db.objectStoreNames);
+            for (var j = 0; j < stores.length; j++) {
+              var rows = await new Promise(function (res, rej) {
+                var t = db.transaction(stores[j], 'readonly');
+                var q2 = t.objectStore(stores[j]).getAll();
+                q2.onsuccess = function () { res(q2.result); };
+                q2.onerror = function () { rej(q2.error); };
+              });
+              var s = JSON.stringify(rows);
+              if (s.indexOf('dev-token-w9') >= 0) hits.push(names[i] + '/' + stores[j] + ':TOKEN');
+              if (s.toLowerCase().indexOf('authorization') >= 0) hits.push(names[i] + '/' + stores[j] + ':AUTHHEADER');
+            }
+            db.close();
+          }
+          console.log('W9 custody dbs=' + names.length + ' lsKeys=' + JSON.stringify(keys) +
+            ' cookie=' + JSON.stringify(document.cookie) + ' HITS=' + (hits.length ? JSON.stringify(hits) : 'NONE'));
+        } catch (e) {
+          console.log('W9 custody scan-error=' + e + ' HITS=' + (hits.length ? JSON.stringify(hits) : 'NONE'));
+        }
+      })();
+    """);
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
+    await _scheme?.log('W9-PROBES-DONE served=${_http?.servedCount}');
+  }
+
+  // Drives the surface from the shell so an unattended run still produces
+  // numbers / screenshots: flutter run --dart-define=AUTODRIVE=true
+  // For the real surfaces harness (SCHEME_BUNDLE=surfaces): click "Open harness",
+  // then walk all four domain tabs. ADD_TASK non-empty seeds one row per
+  // writable domain; leave it blank on relaunch to prove persistence without
+  // writing. Every step reports through console.log, which setOnConsoleMessage
+  // forwards to the Flutter log, so an unattended run is machine-checkable.
+  //
+  // The harness is multi-domain as of wave 6 (tasks | memories | conversations |
+  // folders). Conversations is server-originated and has NO client create, so it
+  // is observed (list renders, no create form) rather than written.
+  Future<void> _autodrive() async {
+    debugPrint('[autodrive] start mode=${_mode.name} bundle=$_schemeBundle addTask=$_addTask');
+    if (_mode == SurfaceMode.scheme && _schemeBundle == 'surfaces') {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      // Prefer the production-shell contract markers; retain the dev harness
+      // class fallback so the existing probe remains runnable.
+      await _controller.runJavaScript(r'''
+        (function () {
+          if (document.querySelector('[data-production-shell] [data-route]') ||
+              document.querySelector('nav.dev-tabs')) {
+            console.log('AUTODRIVE open-harness ALREADY'); return;
+          }
+          var btn = document.querySelector(
+            '[data-production-shell] [data-action="open-harness"], ' +
+            '[data-production-shell] [data-route="harness"]');
+          if (!btn) btn = document.querySelector('.dev-connect > button');
+          if (btn) { btn.click(); console.log('AUTODRIVE open-harness'); }
+          else { console.log('AUTODRIVE open-harness MISSING'); }
+        })();
+      ''');
+      await Future<void>.delayed(const Duration(milliseconds: 1400));
+      // Install shared tab/list helpers once, then drive each domain.
+      await _controller.runJavaScript(r'''
+        (function () {
+          window.__ad = {
+            lists: { tasks: 'ul.task-list', memories: 'ul.memory-list',
+                     conversations: 'ul.conversation-list', folders: 'ul.folder-list' },
+            root: function () {
+              return document.querySelector('[data-production-shell]') || document;
+            },
+            list: function (route) {
+              var root = window.__ad.root();
+              var generic = root.querySelector(
+                '[data-route="' + route + '"][data-surface-state="list"], ' +
+                '[data-route="' + route + '"] [data-surface-state="list"]');
+              return generic || root.querySelector(window.__ad.lists[route]);
+            },
+            rows: function (route) {
+              var list = window.__ad.list(route);
+              var ul = list || window.__ad.root();
+              var marked = ul.querySelectorAll('[data-surface-state="row"]');
+              if (marked.length) return marked.length;
+              if (!list) return -1;
+              return Array.prototype.filter.call(list.querySelectorAll('li'),
+                function (li) { return !li.classList.contains('empty'); }).length;
+            },
+            openTab: function (route) {
+              var root = window.__ad.root();
+              var b = root.querySelector(
+                'button[data-route="' + route + '"], a[data-route="' + route + '"], ' +
+                '[role="tab"][data-route="' + route + '"], ' +
+                '[data-action="navigate"][data-route="' + route + '"]');
+              if (!b) {
+                var order = ['tasks', 'memories', 'conversations', 'folders'];
+                var buttons = root.querySelectorAll('nav.dev-tabs button');
+                var index = order.indexOf(route);
+                b = index >= 0 ? buttons[index] : null;
+              }
+              if (b) { b.click(); return true; }
+              return false;
+            },
+            seed: function (route, text) {
+              if (window.__ad.rows(route) > 0) return 'SKIP already=' + window.__ad.rows(route);
+              var root = window.__ad.root();
+              var form = root.querySelector('form[data-action="create"], [data-action="create"] form, form.add-row');
+              if (!form) {
+                var trigger = root.querySelector('[data-action="create"]');
+                form = trigger && trigger.closest ? trigger.closest('form') : null;
+              }
+              if (!form) return 'NO_CREATE_FORM';
+              var field = form.querySelector('[data-field="text"], input, textarea');
+              if (!field) return 'NO_FIELD';
+              var proto = field.tagName === 'TEXTAREA'
+                ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+              Object.getOwnPropertyDescriptor(proto, 'value').set.call(field, text);
+              field.dispatchEvent(new Event('input', { bubbles: true }));
+              var btn = form.querySelector('[data-action="submit"], button[type="submit"]');
+              if (btn && !btn.disabled) btn.click();
+              else if (form.requestSubmit) form.requestSubmit();
+              else return 'SUBMIT_UNAVAILABLE';
+              return 'submitted';
+            },
+          };
+          console.log('AUTODRIVE helpers-ready routes=' +
+            ['tasks', 'memories', 'conversations', 'folders'].join('|'));
+        })();
+      ''');
+      final seedText = _addTask.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+      for (final route in const ['tasks', 'memories', 'folders', 'conversations']) {
+        await _controller.runJavaScript("console.log('AUTODRIVE route-open $route=' + window.__ad.openTab('$route'));");
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+        if (seedText.isNotEmpty && route != 'conversations') {
+          await _controller.runJavaScript(
+            "console.log('AUTODRIVE seed $route ' + window.__ad.seed('$route', '$seedText'));",
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 1200));
+        }
+        await _controller.runJavaScript(
+          "console.log('AUTODRIVE state $route rows=' + window.__ad.rows('$route')"
+          " + ' pending=' + ((document.querySelector('.badge.pending') || {}).textContent || '0').trim()"
+          " + ' createForm=' + !!document.querySelector('[data-action=\"create\"], form.add-row'));",
+        );
+      }
+      // Must await between route switches: a click renders the next list on a
+      // later frame, so synchronous reads would look like data loss.
+      await _controller.runJavaScript(r'''
+        (async function () {
+          var routes = ['tasks', 'memories', 'conversations', 'folders'];
+          var out = [];
+          for (var i = 0; i < routes.length; i++) {
+            window.__ad.openTab(routes[i]);
+            await new Promise(function (r) { setTimeout(r, 500); });
+            out.push(routes[i] + '=' + window.__ad.rows(routes[i]));
+          }
+          console.log('AUTODRIVE SUMMARY ' + out.join(' '));
+        })();
+      ''');
+      await Future<void>.delayed(const Duration(milliseconds: 3200));
+      if (_http != null) await _autodriveBridgeProbes();
+      await _scheme?.log('AUTODRIVE-DONE addTask=${_addTask.isEmpty ? "(none)" : _addTask}');
+      await _scheme?.drainSchemeLog();
+      await _emitAcceptance('autodrive');
+      return;
+    }
+    await _controller.runJavaScript("document.getElementById('btn-device').click()");
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    await _controller.runJavaScript("document.getElementById('btn-listen').click()");
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    await _controller.runJavaScript("document.getElementById('btn-bench').click()");
+    await _emitAcceptance('autodrive');
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _transcriptTimer?.cancel();
+    _acceptanceFallback?.cancel();
+    _http?.close();
+    unawaited(_listen?.close());
+    unawaited(_chatStream?.close());
+    unawaited(_chatStaging?.close());
+    unawaited(_consumerEvidence?.teardown());
+    unawaited(_controlProbe?.teardown());
+    super.dispose();
+  }
+
+  // ---------------------------------------------------------- bridge handler
+  // Fake shell-side state; in the real app these read the BLE/capture layer.
+  @override
+  Future<DeviceState> getDeviceState() async {
+    return const DeviceState(connected: true, deviceId: 'omi-proto-0001', batteryPct: 57);
+  }
+
+  @override
+  Future<ListenSession> startListening(StartListeningParams params) async {
+    final id = 'sess-${++_sessions}-${params.sampleRateHz}';
+    _transcriptTimer?.cancel();
+    var i = 0;
+    const words = ['hey', 'so', 'the', 'bridge', 'round', 'trip', 'looks', 'fine'];
+    _transcriptTimer = Timer.periodic(const Duration(milliseconds: 700), (t) {
+      if (i >= words.length) {
+        t.cancel();
+        return;
+      }
+      _bridge.transcriptEvent(
+        TranscriptEvent(
+          sessionId: id,
+          text: words.sublist(0, i + 1).join(' '),
+          isFinal: i == words.length - 1,
+          shellSentAtMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+      i++;
+    });
+    return ListenSession(sessionId: id);
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    if (shellThemeModeForSurfaceQuery(_activeSurfaceQuery) != ThemeMode.system) return;
+    unawaited(
+      _controller.setBackgroundColor(
+        shellBackgroundForSurfaceQuery(
+          _activeSurfaceQuery,
+          WidgetsBinding.instance.platformDispatcher.platformBrightness,
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: shellBackgroundForSurfaceQuery(_activeSurfaceQuery, Theme.of(context).brightness),
+      // Shell-level inset ownership: SafeArea keeps the WKWebView out of the
+      // status bar and home indicator. The removed diagnostic strip previously
+      // occupied that layout space; without it the shell must claim MediaQuery
+      // padding here. Do not push iOS-only CSS padding into the shared surface.
+      body: SafeArea(
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            // Contract-gate error surface: shown when a bundle was refused
+            // before navigation (the webview behind it keeps the last good
+            // bundle — rollback is "do nothing").
+            if (_blocked != null)
+              Container(
+                color: const Color(0xE61C0B0B),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'UPDATE BLOCKED\n\n$_blocked',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14, color: Color(0xFFFF453A)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

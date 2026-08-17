@@ -1,0 +1,21 @@
+{
+  "name": "@omi-core/sync",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The ADR-004 layer: durable outbox, projections, reconcile. Pure state machine (engine.ts) + thin impure bindings (outbox.ts). Speaks contracts only \u2014 endpoints live in adapters.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "echo sync:tested-via-testkit",
+    "lint": "echo sync:no-lint-yet"
+  },
+  "dependencies": {
+    "@omi-core/contracts": "workspace:*",
+    "@omi-core/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

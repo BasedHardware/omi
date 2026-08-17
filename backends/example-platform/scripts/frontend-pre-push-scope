@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Exit 0 when the frontend pre-push battery should run, 1 when this push is
+# backend-only and the arriving hook must stay out of the way.
+# ` --print PATH...` writes the in-scope subset to stdout (one path per line).
+set -euo pipefail
+
+print_matches=0
+if [ "${1:-}" = "--print" ]; then
+  print_matches=1
+  shift
+fi
+
+if [ "$#" -eq 0 ]; then
+  exit 1
+fi
+
+in_scope() {
+  case "$1" in
+    frontend|frontend/*)
+      return 0
+      ;;
+    scripts/pre-push|scripts/pre-push-*|scripts/pre-push-singleflight|scripts/pre-push-diff-base)
+      return 0
+      ;;
+    scripts/pr-preflight|scripts/failure-class|scripts/range_base.py|scripts/changed-files)
+      return 0
+      ;;
+    scripts/pre_push_ci_prediction.py|scripts/install-git-hooks.sh|scripts/pre-commit)
+      return 0
+      ;;
+    scripts/test_failure_class.py|scripts/test-pre-push-diff-base.sh|scripts/frontend-pre-push-scope)
+      return 0
+      ;;
+    scripts/fixtures/failure_class|scripts/fixtures/failure_class/*)
+      return 0
+      ;;
+    .github/checks-manifest.yaml|.github/scripts|.github/scripts/*|.github/failure-classes|.github/failure-classes/*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+matched=1
+for file in "$@"; do
+  if in_scope "$file"; then
+    matched=0
+    if [ "$print_matches" -eq 1 ]; then
+      printf '%s\n' "$file"
+    else
+      exit 0
+    fi
+  fi
+done
+
+exit "$matched"

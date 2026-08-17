@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Omi surface (prototype)</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b0b0f; --fg:#f2f2f7; --dim:#8e8e93; --line:#26262b; --accent:#5e5ce6; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font: 15px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; }
+  body { display:flex; flex-direction:column; overscroll-behavior:none; }
+  header { padding: env(safe-area-inset-top) 16px 10px; padding-top: calc(env(safe-area-inset-top) + 10px);
+    border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); }
+  h1 { font-size:17px; margin:0 0 2px; font-weight:600; letter-spacing:-0.01em; }
+  .sub { color:var(--dim); font-size:12px; }
+  main { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:12px 16px 24px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  button { flex:1 1 auto; min-height:44px; padding:0 14px; border:0; border-radius:11px;
+    background:var(--accent); color:#fff; font-size:15px; font-weight:600; }
+  button:active { opacity:.6; }
+  button.sec { background:#1c1c22; color:var(--fg); }
+  input { width:100%; min-height:44px; padding:0 12px; border-radius:11px; border:1px solid var(--line);
+    background:#14141a; color:var(--fg); font-size:16px; }
+  .card { border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; background:#101015; }
+  .k { color:var(--dim); font-size:12px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; }
+  pre { margin:0; white-space:pre-wrap; word-break:break-word; font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .seg { padding:8px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .seg:last-child { border-bottom:0; }
+  .seg.partial { color:var(--dim); font-style:italic; }
+  .filler { padding:10px 0; border-bottom:1px solid var(--line); color:var(--dim); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Omi TS surface</h1>
+  <div class="sub" id="mode">mode: detecting…</div>
+</header>
+<main>
+  <div class="card">
+    <div class="k">Bridge: ui &rarr; shell</div>
+    <div class="row">
+      <button id="btn-device">getDeviceState</button>
+      <button id="btn-listen">startListening</button>
+    </div>
+    <pre id="out">(no call yet)</pre>
+  </div>
+
+  <div class="card">
+    <div class="k">Latency probe (round trip &times; 100)</div>
+    <div class="row"><button class="sec" id="btn-bench">run bench</button></div>
+    <pre id="bench">(not run)</pre>
+  </div>
+
+  <div class="card">
+    <div class="k">Keyboard feel</div>
+    <input id="probe" placeholder="tap to raise the keyboard" />
+  </div>
+
+  <div class="card">
+    <div class="k">Bridge: shell &rarr; ui (transcriptEvent)</div>
+    <div id="transcript"><div class="seg partial">waiting for shell pushes…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="k">Scroll feel (momentum / rubber-band)</div>
+    <div id="filler"></div>
+  </div>
+</main>
+<!-- Classic script, not type="module": ES modules are blocked by CORS on the
+     file:// origin used in asset (ship) mode. See REPORT.md. -->
+<script src="./app.js" defer></script>
+</body>
+</html>

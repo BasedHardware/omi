@@ -1,0 +1,114 @@
+# Local PostgreSQL qualification
+
+This workflow provides a repeatable PostgreSQL 18.4 environment for memory-system
+development. It uses synthetic data only. Docker CLI and Colima are managed by
+`machine-config`; this repository owns the digest-pinned database and runtime controls.
+
+## One-time Mac prerequisite
+
+From `/Users/dazheng/machine-config`:
+
+```sh
+./macctl plan
+./macctl apply
+./macctl doctor
+```
+
+Review the plan before applying it. Apply installs and pins Docker CLI 29.7.2 and
+Colima 0.10.3 but does not start a VM. The dedicated profile stores rebuildable state
+under `/Volumes/Ephemeral` and never changes the global Docker context.
+
+Linux and CI developers supply their existing Docker daemon; the platform script never
+invokes Colima there.
+
+## Daily workflow
+
+From the platform repository root:
+
+```sh
+bun run test:postgres:setup
+bun run test:postgres:status
+bun run test:postgres:preserve
+bun run test:postgres:teardown
+```
+
+`setup` is idempotent. On a Mac without a running managed daemon it starts only the
+`omi-memory` profile. It creates an exactly labelled database volume and container,
+binds PostgreSQL to an OS-assigned `127.0.0.1` port, verifies the pinned amd64 image,
+PostgreSQL 18 data path, labels, mount, and loopback binding, and prints no credential or
+connection URL.
+
+`test:postgres:preserve` reapplies checksummed migrations, exercises the real Postgres.js
+transaction adapter, and runs the same client corpus in pinned Bun 1.3.14 and Node
+24.19.0 amd64 containers. It refuses ambient `DATABASE_URL` and `PG*` selectors.
+
+`teardown` removes only the owned container, stops the managed profile only when this
+workflow started it, and preserves the labelled volume. A later setup reuses that data.
+
+To boot the production Firebase/PostgreSQL memory process against that same
+local database (never the SQLite QA server):
+
+```sh
+bun run prod-local
+```
+
+The script refuses if the managed PostgreSQL runtime is absent or not accepting
+connections. The default path does not mint Firebase identity, MCP credentials,
+or production codec/synthesizer key material. An explicit opt-in,
+`bun run prod-local --local-identity` (or `OMI_PROD_LOCAL_IDENTITY=emulator`),
+composes the official Admin verifier against a locally owned Auth emulator
+after you mint and seed. See
+`docs/memory-productionization/prod-local-identity.md`. The script header lists
+what works locally and what David has not granted. See `scripts/prod-local.ts`.
+
+For the normal hermetic one-shot gate, run:
+
+```sh
+bun run test:postgres
+```
+
+That command always destroys its exactly labelled synthetic container, volume, state,
+and generated credentials after the gate, including when the test or runtime-parity
+step fails. This is the default so repeated qualification runs cannot accumulate an
+unbounded PostgreSQL data volume. Use the explicit `setup` / `test:postgres:preserve` /
+`teardown` sequence only when persistent local state is useful for debugging.
+
+## Destructive reset
+
+After resolving the status output and confirming that the synthetic local database may
+be discarded:
+
+```sh
+bun run test:postgres:destroy
+```
+
+This command carries the required `--yes`, verifies exact resource labels, removes only
+the owned container and volume, and leaves unrelated Docker/Colima state untouched.
+The data is unrecoverable. To remove the rebuildable VM itself as a separate operation:
+
+```sh
+cd /Users/dazheng/machine-config
+./macctl container reset --yes
+```
+
+Never use Docker prune, a mutable PostgreSQL tag, production credentials, or production
+data with this workflow.
+
+## Current qualification boundary
+
+Passing this entrypoint proves the pinned server/client/runtime scaffold, migration
+reapply, callback-scoped serializable transaction behavior, rollback-local cleanup,
+application-role graph/formation/identity/liveness append and reconstruction, shared
+SQLite/PostgreSQL snapshot parity, one-head race behavior, and Bun/Node client parity.
+It also covers append-only product projection writes and isolated read-experiment query
+inputs, exact graph-source reload, result pairing, and finalized grounding persistence.
+The real corpus also kills a size-one pool backend at a query-quiescent pre-commit
+checkpoint after its first write, proves observer-visible rollback, and proves the next
+transaction reconnects with cleared local state. It also cancels an in-flight
+`pg_sleep` through an explicit `AbortSignal`, rolls the transaction back, and proves the
+same physical backend is safely reusable with cleared transaction-local authority. It
+does not by itself activate PostgreSQL for production. Persisted semantic projection
+rebuild is not an authority prerequisite: the first read may render directly from a
+freshly authorized graph. Exact-image load/recovery, backup/restore, canonical
+service/client integration, and the remaining release gates in the PostgreSQL authority
+contract still apply.

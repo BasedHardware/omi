@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-cache-reader-format",
+  "violated_contract": "A cache value written by one service and read by another must stay parseable by every reader that can be serving production, including readers on an older deployed image.",
+  "canonical_prevention": "Keep the serialized form within the intersection every deployed reader accepts, and cover the legacy reader's parse in the writer's own test rather than assuming readers deploy together.",
+  "evidence_prs": [
+    9214
+  ],
+  "scope_hints": [
+    "backend/database/redis_db.py"
+  ],
+  "status": "open"
+}

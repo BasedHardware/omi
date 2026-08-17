@@ -1,0 +1,35 @@
+{
+  "owner_account_id": "synthetic-owner",
+  "source_trust": "synthetic",
+  "event_kind": "synthetic.chat/utterance",
+  "adapter": { "producer_ref": "synthetic-producer", "contract_ref": "synthetic-contract", "namespace_instance_ref": "synthetic-device-a", "asserted_identity_domain": "person", "scope_ref": "synthetic-owner", "issuer_ref": "synthetic-issuer", "authority_policy_version": "synthetic-v1" },
+  "sessions": [
+    { "session_id": "s01", "capture_sequence": 1, "revision_lineage": "r01", "ingest_sequence": 1, "settled_window_id": "w01", "segments": [
+      { "event_id": "e01", "text": "I met Alice at Atlas.", "start_at": "2026-01-01T09:00:00-05:00", "speaker_label": "Owner", "speaker_id": "channel-0", "is_actor_user": true, "person_id": "owner-42", "revision_lineage": "r01a", "ingest_sequence": 1, "settled_window_id": "w01" },
+      { "event_id": "e02", "text": "Alice said hello.", "start_at": "2026-01-01T09:02:00-05:00", "speaker_label": "Owner", "speaker_id": "channel-0", "revision_lineage": "r01b", "ingest_sequence": 2, "settled_window_id": "w01" }
+    ] },
+    { "session_id": "s02", "capture_sequence": 2, "revision_lineage": "r02", "ingest_sequence": 2, "settled_window_id": "w02", "segments": [
+      { "event_id": "e03", "text": "Привет, Alice; мы обсуждали Omi.", "start_at": "2026-01-02T10:00:00+03:00", "speaker_label": "Speaker два", "speaker_id": "channel-0", "revision_lineage": "r02a", "ingest_sequence": 3, "settled_window_id": "w02" },
+      { "event_id": "e04", "text": "Long session begins with a durable evidence quote and continues across a boundary-sized input with mixed English и русский details about Atlas, planning, evidence, and provenance.", "start_at": "2026-01-02T10:45:00+03:00", "speaker_label": null, "speaker_id": "channel-1", "is_actor_user": null, "person_id": null, "revision_lineage": "r02b", "ingest_sequence": 4, "settled_window_id": "w02" }
+    ] },
+    { "session_id": "s03", "capture_sequence": 3, "revision_lineage": "r03", "ingest_sequence": 3, "settled_window_id": "w03", "segments": [
+      { "event_id": "e05", "text": "Person 42 is a separate namespace observation.", "start_at": "2026-01-10T09:00:00Z", "speaker_label": "Agent", "speaker_id": "channel-9", "person_id": "42", "revision_lineage": "r03a", "ingest_sequence": 5, "settled_window_id": "w03" }
+    ] },
+    { "session_id": "s04", "capture_sequence": 4, "revision_lineage": "r04", "ingest_sequence": 4, "settled_window_id": "w04", "adapter": { "producer_ref": "synthetic-producer-b", "contract_ref": "synthetic-contract-b", "namespace_instance_ref": "synthetic-device-b", "asserted_identity_domain": "person", "scope_ref": "synthetic-owner", "issuer_ref": "synthetic-issuer", "authority_policy_version": "synthetic-v1" }, "segments": [
+      { "event_id": "e06", "text": "The same display identifier can arrive from another producer namespace.", "start_at": "2026-01-11T09:00:00Z", "speaker_label": "Agent", "speaker_id": "channel-9", "person_id": "42", "revision_lineage": "r04a", "ingest_sequence": 6, "settled_window_id": "w04" }
+    ] },
+    { "session_id": "s05", "capture_sequence": 5, "revision_lineage": "r05", "ingest_sequence": 5, "settled_window_id": "w05", "segments": [
+      { "event_id": "e07", "text": "A real idle-sized event-time gap starts this session.", "start_at": "2026-02-15T09:00:00Z", "speaker_label": "Owner", "speaker_id": "channel-0", "revision_lineage": "r05a", "ingest_sequence": 7, "settled_window_id": "w05" }
+    ] },
+    { "session_id": "s06", "capture_sequence": 6, "revision_lineage": "r06", "ingest_sequence": 6, "settled_window_id": "w06", "segments": [
+      { "event_id": "e08", "text": "Referent01 predicate01.", "start_at": "2026-02-16T09:00:00Z", "speaker_label": "Many", "speaker_id": "channel-many", "revision_lineage": "r06a", "ingest_sequence": 8, "settled_window_id": "w06" },
+      { "event_id": "e09", "text": "Referent02 predicate02.", "start_at": "2026-02-16T09:01:00Z", "speaker_label": "Many", "speaker_id": "channel-many", "revision_lineage": "r06b", "ingest_sequence": 9, "settled_window_id": "w06" },
+      { "event_id": "e10", "text": "Referent03 predicate03.", "start_at": "2026-02-16T09:02:00Z", "speaker_label": "Many", "speaker_id": "channel-many", "revision_lineage": "r06c", "ingest_sequence": 10, "settled_window_id": "w06" },
+      { "event_id": "e11", "text": "Referent04 predicate04.", "start_at": "2026-02-16T09:03:00Z", "speaker_label": "Many", "speaker_id": "channel-many", "revision_lineage": "r06d", "ingest_sequence": 11, "settled_window_id": "w06" },
+      { "event_id": "e12", "text": "Referent05 predicate05. Referent06 predicate06. Referent07 predicate07. Referent08 predicate08. Referent09 predicate09. Referent10 predicate10. Referent11 predicate11. Referent12 predicate12. Referent13 predicate13. Referent14 predicate14. Referent15 predicate15. Referent16 predicate16. Referent17 predicate17. Referent18 predicate18. Referent19 predicate19. Referent20 predicate20. Referent21 predicate21. Referent22 predicate22. Referent23 predicate23. Referent24 predicate24. Referent25 predicate25. Referent26 predicate26. Referent27 predicate27. Referent28 predicate28. Referent29 predicate29. Referent30 predicate30. Referent31 predicate31.", "start_at": "2026-02-16T09:04:00Z", "speaker_label": "Many", "speaker_id": "channel-many", "revision_lineage": "r06e", "ingest_sequence": 12, "settled_window_id": "w06" }
+    ] },
+    { "session_id": "s07", "capture_sequence": 7, "revision_lineage": "r07", "ingest_sequence": 7, "settled_window_id": "w07", "segments": [
+      { "event_id": "e13", "text": "It is not a top deck.", "start_at": "2026-02-17T09:00:00Z", "speaker_label": "Owner", "speaker_id": "channel-0", "is_actor_user": false, "revision_lineage": "r07a", "ingest_sequence": 13, "settled_window_id": "w07" }
+    ] }
+  ]
+}

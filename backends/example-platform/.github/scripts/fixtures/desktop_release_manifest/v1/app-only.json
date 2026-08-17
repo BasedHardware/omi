@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "release_id": "v0.12.71+12071-macos",
+  "platform": "macos",
+  "version": "0.12.71",
+  "build_number": 12071,
+  "app_source_sha": "1111111111111111111111111111111111111111",
+  "zip_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.71%2B12071-macos/Omi.zip",
+  "zip_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "dmg_url": "https://github.com/BasedHardware/omi/releases/download/v0.12.71%2B12071-macos/omi.dmg",
+  "dmg_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "ed_signature": "sparkle-ed25519-signature",
+  "qualification_evidence_asset": "qualification-evidence-0.12.71+12071-20260712T010203Z.json",
+  "qualification_evidence_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "qualification_tier": "T2",
+  "qualification_passed": true,
+  "backend_mode": "app_only",
+  "compatibility_contract": {
+    "schema_version": 1,
+    "app_release_id": "v0.12.71+12071-macos",
+    "app_version": "0.12.71",
+    "app_build_number": 12071,
+    "backend_mode": "app_only",
+    "environment_contract_version": "desktop-backend-env-v1"
+  },
+  "environment_contract_version": "desktop-backend-env-v1",
+  "created_at": "2026-07-12T01:03:00Z"
+}
