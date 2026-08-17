@@ -39,6 +39,54 @@ describe('detectDeviceType', () => {
     ).toBe('bee')
   })
 
+  it('order matters: Bee is checked before PLAUD, even on a PLAUD advertisement', () => {
+    // Both rules match this advertisement; the mac order gives it to Bee.
+    expect(
+      detectDeviceType(
+        adv({
+          name: 'bee recorder',
+          manufacturerData: new Map([[PLAUD_MANUFACTURER_ID, Uint8Array.from([0x04, 0x56])]])
+        })
+      )
+    ).toBe('bee')
+    expect(detectDeviceType(adv({ name: 'PLAUD Bee' }))).toBe('bee')
+  })
+
+  it('order matters: PLAUD is checked before Fieldy and Friend', () => {
+    expect(detectDeviceType(adv({ name: 'plaud' }))).toBe('plaud')
+    expect(
+      detectDeviceType(
+        adv({
+          name: 'compass',
+          manufacturerData: new Map([[PLAUD_MANUFACTURER_ID, Uint8Array.from([0x01])]])
+        })
+      )
+    ).toBe('plaud')
+    expect(
+      detectDeviceType(
+        adv({
+          name: 'friend_01',
+          manufacturerData: new Map([[PLAUD_MANUFACTURER_ID, Uint8Array.from([0x01])]])
+        })
+      )
+    ).toBe('plaud')
+  })
+
+  it('order matters: Fieldy and Friend are checked before Limitless', () => {
+    expect(
+      detectDeviceType(adv({ name: 'compass', serviceUuids: [LIMITLESS_UUIDS.service] }))
+    ).toBe('fieldy')
+    expect(
+      detectDeviceType(adv({ name: 'friend_pendant', serviceUuids: [LIMITLESS_UUIDS.service] }))
+    ).toBe('friendPendant')
+  })
+
+  it('order matters: Limitless is checked before Omi and Frame', () => {
+    expect(detectDeviceType(adv({ name: 'pendant', serviceUuids: [OMI_UUIDS.mainService] }))).toBe(
+      'limitless'
+    )
+  })
+
   it('fieldy needs an exact name match, not contains', () => {
     expect(detectDeviceType(adv({ name: 'my compass' }))).toBeNull()
   })

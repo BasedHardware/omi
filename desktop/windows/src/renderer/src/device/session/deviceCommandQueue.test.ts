@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DeviceCommandQueue, DeviceCommandQueueError } from './deviceCommandQueue'
 
-const deferred = <T = void,>(): {
+const deferred = <T = void>(): {
   promise: Promise<T>
   resolve: (v: T) => void
   reject: (e: Error) => void

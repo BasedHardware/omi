@@ -46,8 +46,10 @@ interface GattCharacteristicLike {
   readonly uuid: string
   readonly value: DataView | null
   readValue(): Promise<DataView>
-  writeValueWithResponse(value: BufferSource): Promise<void>
-  writeValueWithoutResponse(value: BufferSource): Promise<void>
+  // WebBluetooth accepts any BufferSource; the driver only ever passes byte
+  // arrays, and naming that keeps the call sites free of buffer-variance casts.
+  writeValueWithResponse(value: Uint8Array): Promise<void>
+  writeValueWithoutResponse(value: Uint8Array): Promise<void>
   startNotifications(): Promise<unknown>
   addEventListener(type: 'characteristicvaluechanged', listener: (event: Event) => void): void
   removeEventListener(type: 'characteristicvaluechanged', listener: (event: Event) => void): void
@@ -142,10 +144,7 @@ export class WebBluetoothPhysicalDriver implements BlePhysicalDriver {
     }
     const characteristics = await this.enqueue(() => service.getCharacteristics())
     for (const characteristic of characteristics) {
-      this.characteristics.set(
-        characteristicKey(serviceUuid, characteristic.uuid),
-        characteristic
-      )
+      this.characteristics.set(characteristicKey(serviceUuid, characteristic.uuid), characteristic)
     }
     return characteristics.map((c) => ({ uuid: c.uuid }))
   }
@@ -190,7 +189,9 @@ export class WebBluetoothPhysicalDriver implements BlePhysicalDriver {
   }
 
   private characteristic(serviceUuid: string, characteristicUuid: string): GattCharacteristicLike {
-    const characteristic = this.characteristics.get(characteristicKey(serviceUuid, characteristicUuid))
+    const characteristic = this.characteristics.get(
+      characteristicKey(serviceUuid, characteristicUuid)
+    )
     if (characteristic === undefined) {
       throw new Error(`Characteristic not discovered: ${characteristicUuid}`)
     }

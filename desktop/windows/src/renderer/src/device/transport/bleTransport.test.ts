@@ -286,11 +286,11 @@ describe('BleTransport reads', () => {
       message: 'Read failed: Operation timed out'
     })
 
-    await expect(transport.readCharacteristic(BATTERY_SERVICE, BATTERY_LEVEL)).rejects.toMatchObject(
-      {
-        message: 'Read failed: A previous read has an uncorrelated callback; reconnect the device'
-      }
-    )
+    await expect(
+      transport.readCharacteristic(BATTERY_SERVICE, BATTERY_LEVEL)
+    ).rejects.toMatchObject({
+      message: 'Read failed: A previous read has an uncorrelated callback; reconnect the device'
+    })
 
     // The late physical value must be dropped, not attributed to anything.
     driver.resolveNextRead([88])
@@ -327,8 +327,9 @@ describe('BleTransport reads', () => {
 
   it('guards disposed, not-connected, and unknown characteristics', async () => {
     const { transport } = await setup()
-    await expect(transport.readCharacteristic(OMI_SERVICE, 'ffff0000-0000-0000-0000-000000000000'))
-      .rejects.toMatchObject({ kind: 'characteristicNotFound' })
+    await expect(
+      transport.readCharacteristic(OMI_SERVICE, 'ffff0000-0000-0000-0000-000000000000')
+    ).rejects.toMatchObject({ kind: 'characteristicNotFound' })
 
     const fresh = new BleTransport({
       driver: new FakeDriver(),

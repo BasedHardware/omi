@@ -4,7 +4,11 @@ import {
   type AudioStreamSubscriber
 } from './deviceAudioStreamController'
 
-const deferred = (): { promise: Promise<void>; resolve: () => void; reject: (e: Error) => void } => {
+const deferred = (): {
+  promise: Promise<void>
+  resolve: () => void
+  reject: (e: Error) => void
+} => {
   let resolve!: () => void
   let reject!: (e: Error) => void
   const promise = new Promise<void>((res, rej) => {

@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  BluetoothConnectionLeaseError,
-  BluetoothConnectionLeaseRegistry
-} from './bluetoothConnectionLease'
+import { BluetoothConnectionLeaseRegistry } from './bluetoothConnectionLease'
 
 describe('BluetoothConnectionLeaseRegistry', () => {
   it('one attempt per device, with monotonic tokens', () => {
@@ -23,7 +20,9 @@ describe('BluetoothConnectionLeaseRegistry', () => {
     const lease = registry.begin('dev-a', 1)
     registry.requestCancellation(lease)
     expect(registry.activeLease('dev-a')).toEqual(lease)
-    expect(() => registry.begin('dev-a', 2)).toThrow(BluetoothConnectionLeaseError)
+    expect(() => registry.begin('dev-a', 2)).toThrow(
+      'A previous Bluetooth connection attempt is still draining'
+    )
     registry.end(lease)
     expect(registry.activeLease('dev-a')).toBeNull()
     expect(() => registry.begin('dev-a', 2)).not.toThrow()

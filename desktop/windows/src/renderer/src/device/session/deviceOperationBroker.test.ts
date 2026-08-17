@@ -34,7 +34,11 @@ class ManualClock implements DeviceOperationClock {
   }
 }
 
-const deferred = (): { promise: Promise<void>; resolve: () => void; reject: (e: Error) => void } => {
+const deferred = (): {
+  promise: Promise<void>
+  resolve: () => void
+  reject: (e: Error) => void
+} => {
   let resolve!: () => void
   let reject!: (e: Error) => void
   const promise = new Promise<void>((res, rej) => {
@@ -111,7 +115,9 @@ describe('DeviceOperationBroker', () => {
       .perform<number>({
         key: 'k',
         onTerminal: (t: DeviceOperationTermination) => events.push(`terminal:${t}`),
-        start: () => events.push('started')
+        start: () => {
+          events.push('started')
+        }
       })
       .then((v) => {
         events.push('resumed')

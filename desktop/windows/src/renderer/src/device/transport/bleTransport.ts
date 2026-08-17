@@ -248,9 +248,7 @@ export class BleTransport implements DeviceTransport {
           this.handleNotification(key, data)
         )
         .catch((error) => {
-          console.warn(
-            `[device] startNotifications failed for ${key}: ${toError(error).message}`
-          )
+          console.warn(`[device] startNotifications failed for ${key}: ${toError(error).message}`)
         })
     }
 
@@ -359,10 +357,7 @@ export class BleTransport implements DeviceTransport {
     }
   }
 
-  private registerDiscovered(
-    serviceUuid: string,
-    characteristics: Array<{ uuid: string }>
-  ): void {
+  private registerDiscovered(serviceUuid: string, characteristics: Array<{ uuid: string }>): void {
     const byChar = new Map<string, DiscoveredCharacteristicRef>()
     for (const characteristic of characteristics) {
       byChar.set(characteristic.uuid.toLowerCase(), {

@@ -117,7 +117,11 @@ export function detectDeviceType(input: AdvertisementInput): DeviceType | null {
   if (name.startsWith('friend_') || services.has(FRIEND_PENDANT_UUIDS.service)) {
     return 'friendPendant'
   }
-  if (name.includes('limitless') || name.includes('pendant') || services.has(LIMITLESS_UUIDS.service)) {
+  if (
+    name.includes('limitless') ||
+    name.includes('pendant') ||
+    services.has(LIMITLESS_UUIDS.service)
+  ) {
     return 'limitless'
   }
   if (services.has(OMI_UUIDS.mainService)) return 'omi'
