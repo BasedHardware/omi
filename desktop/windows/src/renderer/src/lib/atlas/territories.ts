@@ -23,6 +23,18 @@ export const CAPTION_MAX_WORDS = 3
 export const TERRITORY_SIZE_SHARE = 0.015
 /** ...and never fewer members than this, however small the map is. */
 export const TERRITORY_MIN_MEMBERS = 6
+/**
+ * Least share of what stands inside a coastline that must belong to it.
+ *
+ * A DIVERGENCE from macOS, which asserts this holds rather than enforcing it:
+ * its bespoke relaxation packs a community tightly enough that the ridge of land
+ * always covers its members. Windows reuses the app's existing d3-force layout,
+ * which can leave a community ringed around its hub, and then the field clears
+ * the sea level on the ridge BETWEEN members while the members themselves sit
+ * just outside it. The region that comes out is drawn over ground none of its
+ * entities stand on, which is worse than no region at all.
+ */
+export const MIN_PURITY = 0.5
 
 export interface AtlasMember {
   id: string
@@ -156,6 +168,9 @@ export function buildTerritories(input: BuildTerritoriesInput): Territory[] {
     if (caption === null) continue
 
     const points = members.map((m) => m.position)
+    const purity = purityOf(rings, points, input.allPositions)
+    // A region nothing of its own stands in is not a place.
+    if (purity < MIN_PURITY) continue
     const center = centerOf(points)
     out.push({
       group,
@@ -164,7 +179,7 @@ export function buildTerritories(input: BuildTerritoriesInput): Territory[] {
       memberIds: members.map((m) => m.id).sort(),
       center,
       radius: radiusOf(center, points),
-      purity: purityOf(rings, points, input.allPositions)
+      purity
     })
   }
 

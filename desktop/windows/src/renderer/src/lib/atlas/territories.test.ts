@@ -180,7 +180,7 @@ describe('buildTerritories', () => {
     const built = buildTerritories({
       membersByGroup: new Map([[0, members('work', 3, 0.3, 0.3)]]),
       ringsByGroup: new Map([[0, [square(0.2, 0.2, 0.2)]]]),
-      allPositions: []
+      allPositions: members('work', 3, 0.3, 0.3).map((m) => m.position)
     })
     expect(built).toEqual([])
   })
@@ -192,7 +192,7 @@ describe('buildTerritories', () => {
     const built = buildTerritories({
       membersByGroup: new Map([[0, unnamed]]),
       ringsByGroup: new Map([[0, [square(0.2, 0.2, 0.2)]]]),
-      allPositions: []
+      allPositions: unnamed.map((m) => m.position)
     })
     expect(built).toEqual([])
   })
@@ -207,7 +207,10 @@ describe('buildTerritories', () => {
         [0, [square(0.1, 0.1, 0.2)]],
         [1, [square(0.7, 0.7, 0.2)]]
       ]),
-      allPositions: []
+      allPositions: [
+        ...members('small', 6, 0.2, 0.2).map((m) => m.position),
+        ...members('big', 12, 0.8, 0.8).map((m) => m.position)
+      ]
     })
     expect(built.map((t) => t.caption)).toEqual(['big hub', 'small hub'])
   })
@@ -220,7 +223,7 @@ describe('territoryAt', () => {
         [0, Array.from({ length: 8 }, (_v, i) => member(`n${i}`, 'Acme', 1, 0.3, 0.3))]
       ]),
       ringsByGroup: new Map([[0, [square(0.2, 0.2, 0.2)]]]),
-      allPositions: []
+      allPositions: Array.from({ length: 8 }, () => ({ x: 0.3, y: 0.3 }))
     })
     expect(territoryAt(territories, { x: 0.3, y: 0.3 })?.caption).toBe('Acme')
     expect(territoryAt(territories, { x: 0.9, y: 0.9 })).toBeNull()

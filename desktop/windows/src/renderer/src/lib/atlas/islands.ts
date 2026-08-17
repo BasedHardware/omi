@@ -165,58 +165,75 @@ export function traceRings(mask: number[]): Ring[] {
         (bl >= 0.5 ? 1 : 0) | (br >= 0.5 ? 2 : 0) | (tr >= 0.5 ? 4 : 0) | (tl >= 0.5 ? 8 : 0)
       if (code === 0 || code === 15) continue
 
-      const bottom = horizontalEdge(r, c)
-      const top = horizontalEdge(r + 1, c)
-      const left = verticalEdge(r, c)
-      const right = verticalEdge(r, c + 1)
-      if (!points.has(bottom)) points.set(bottom, { x: c + cross(bl, br), y: r })
-      if (!points.has(top)) points.set(top, { x: c + cross(tl, tr), y: r + 1 })
-      if (!points.has(left)) points.set(left, { x: c, y: r + cross(bl, tl) })
-      if (!points.has(right)) points.set(right, { x: c + 1, y: r + cross(br, tr) })
+      // Each crossing point is created ONLY for an edge the contour actually
+      // crosses. Computing all four up front divides by zero on an edge whose
+      // ends are on the same side of the level, and the resulting NaN is then
+      // reachable by the neighbouring cell that shares that edge id - which
+      // silently puts a coastline nowhere near the entities it belongs to.
+      const bottom = (): number => {
+        const id = horizontalEdge(r, c)
+        if (!points.has(id)) points.set(id, { x: c + cross(bl, br), y: r })
+        return id
+      }
+      const top = (): number => {
+        const id = horizontalEdge(r + 1, c)
+        if (!points.has(id)) points.set(id, { x: c + cross(tl, tr), y: r + 1 })
+        return id
+      }
+      const left = (): number => {
+        const id = verticalEdge(r, c)
+        if (!points.has(id)) points.set(id, { x: c, y: r + cross(bl, tl) })
+        return id
+      }
+      const right = (): number => {
+        const id = verticalEdge(r, c + 1)
+        if (!points.has(id)) points.set(id, { x: c + 1, y: r + cross(br, tr) })
+        return id
+      }
 
       switch (code) {
         case 1:
         case 14:
-          connect(left, bottom)
+          connect(left(), bottom())
           break
         case 2:
         case 13:
-          connect(bottom, right)
+          connect(bottom(), right())
           break
         case 3:
         case 12:
-          connect(left, right)
+          connect(left(), right())
           break
         case 4:
         case 11:
-          connect(right, top)
+          connect(right(), top())
           break
         case 6:
         case 9:
-          connect(bottom, top)
+          connect(bottom(), top())
           break
         case 7:
         case 8:
-          connect(left, top)
+          connect(left(), top())
           break
         case 5:
           // Ambiguous: the cell's average decides which way the two strands run,
           // so neighbouring saddles agree and the rings stay closed.
           if ((bl + br + tr + tl) / 4 >= 0.5) {
-            connect(left, top)
-            connect(bottom, right)
+            connect(left(), top())
+            connect(bottom(), right())
           } else {
-            connect(left, bottom)
-            connect(right, top)
+            connect(left(), bottom())
+            connect(right(), top())
           }
           break
         case 10:
           if ((bl + br + tr + tl) / 4 >= 0.5) {
-            connect(left, bottom)
-            connect(right, top)
+            connect(left(), bottom())
+            connect(right(), top())
           } else {
-            connect(left, top)
-            connect(bottom, right)
+            connect(left(), top())
+            connect(bottom(), right())
           }
           break
         default:
