@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_ff8aeb5a36f5b8::t_ca5f74f2db7061 4207-4212
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  s_ff8aeb5a36f5b8::t_cdb5ee99a71580 230,236-238,271-280,282-284,287-292,300,306,310-312,314
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeStore.swift
+  s_ff8aeb5a36f5b8::t_17b2e29f8581bc 81,94,97,99-100,103,105-106
+desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift
+  s_ff8aeb5a36f5b8::t_5db6711a085bbf 36-42,45,89-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "45655f5a04b2cb7b6e9ed822f18e45ca2c88ff64",
+  "prompts": {},
+  "sessions": {
+    "s_ff8aeb5a36f5b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cee6b50-5d24-4cd7-ba03-5499c4e7d8a5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
