@@ -13,6 +13,14 @@ backend/google-credentials.json
 **/.venv/
 **/*.pyc
 **/node_modules/
+# Runtime scratch dirs the backend creates at startup (main.py + the compose command `mkdir -p` them);
+# they accumulate large audio artifacts locally (backend/_temp alone reached ~9GB of *_huge.wav test
+# files). They MUST NOT enter the build context — `COPY backend/ .` was pulling them in, and the later
+# `chown -R` duplicated them, bloating the backend image by ~15GB.
+backend/_temp/
+backend/_samples/
+backend/_segments/
+backend/_speech_profiles/
 app/
 omiGlass/
 desktop/
