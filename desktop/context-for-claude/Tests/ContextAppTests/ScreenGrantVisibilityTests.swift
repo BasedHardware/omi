@@ -2,6 +2,23 @@ import XCTest
 
 @testable import ContextApp
 
+/// The minimum `PermissionAsking` these tests need: nothing is granted, no prompt is left, and
+/// every pane opening is recorded. Its own rather than shared with `PermissionInvitationTests`,
+/// whose recorder is file-private — and deliberately so: a fake that grows arms for every test that
+/// borrows it stops being a statement of what *this* test assumes.
+@MainActor
+private final class ScreenAskRecorder: PermissionAsking {
+    private(set) var settingsOpened: [Capability] = []
+
+    func isGranted(_ capability: Capability) -> Bool { false }
+    func request(_ capability: Capability) async -> Bool { false }
+    func promptIsSpent(_ capability: Capability) -> Bool { true }
+    func openSettings(for capability: Capability) { settingsOpened.append(capability) }
+    func refresh(_ capability: Capability) async {}
+    func materialiseSettingsRow(for capability: Capability) async {}
+    var screenNeedsRelaunch: Bool { false }
+}
+
 // MARK: - A grant this process cannot see
 
 /// **The reported bug, as the measurement that produced it.**
@@ -34,7 +51,7 @@ final class ScreenGrantVisibilityTests: XCTestCase {
     /// incapable of updating. Offering the reopen is the only move left that can change anything.
     func testAFalsePreflightAfterSendingTheUserToThePaneStillOffersTheReopen() {
         XCTAssertTrue(
-            Permissions.screenRelaunchOffer(preflight: false, settingsWasOpened: true),
+            Permissions.screenRelaunchOfferWhenPreflightDenies(settingsWasOpened: true),
             "this is the shipped bug: the row sat on \"Asking…\" over a switch that was already on, "
                 + "because a stale preflight was read as a refusal")
     }
@@ -48,17 +65,120 @@ final class ScreenGrantVisibilityTests: XCTestCase {
     /// once per poll.
     func testAProcessThatHasAskedNothingDoesNotTellAnybodyToReopen() {
         XCTAssertFalse(
-            Permissions.screenRelaunchOffer(preflight: false, settingsWasOpened: false),
+            Permissions.screenRelaunchOfferWhenPreflightDenies(settingsWasOpened: false),
             "a reopen offered before the user has been sent anywhere is a loop, not a remedy")
     }
 
-    /// A grant the preflight can actually see never depends on this rule at all — that path keeps
-    /// the persisted flag and the staleness check. Pinned so the guard cannot be narrowed into
-    /// covering only the case it was written for.
-    func testATruePreflightIsAnsweredWithoutConsultingWhereTheUserHasBeen() {
-        for opened in [true, false] {
-            XCTAssertTrue(Permissions.screenRelaunchOffer(preflight: true, settingsWasOpened: opened))
+    // MARK: - The reopen is bounded, recorded, and never offered for a record it cannot repair
+
+    /// **The defect this file exists to stop shipping.**
+    ///
+    /// `screenNeedsRelaunch` is now armed by merely having opened the pane, which is the whole point
+    /// — but it means an unbounded relaunch branch would restart the app forever for a user who
+    /// declined. `OnboardingResume` faithfully returns them to this row, so the loop is two clicks
+    /// wide and has no exit. The menu bar's row (`StatusView.handle`) has always spent exactly one
+    /// reopen; the onboarding row must obey the same bound, or the fix is worse than the bug.
+    @MainActor
+    func testTheReopenIsSpentOnceAndThenBecomesThePane() {
+        let asker = ScreenAskRecorder()
+        var relaunches = 0
+        let board = Self.board(asker, needsRelaunch: true, relaunch: { relaunches += 1 })
+
+        XCTAssertTrue(board.invite(.screen))
+        XCTAssertEqual(relaunches, 1, "the first click is the reopen the caption promises")
+
+        XCTAssertTrue(board.invite(.screen))
+        XCTAssertEqual(
+            relaunches, 1,
+            """
+            the second click must not restart the app again: one reopen is the documented limit \
+            (PermissionDeadEnd.relaunchLimit), and without the bound a user who never granted is \
+            restarted every two clicks for as long as they keep trying
+            """)
+        XCTAssertEqual(
+            asker.settingsOpened, [.screen],
+            "once the reopen is spent the honest remainder is the pane, not silence")
+    }
+
+    /// A record no reopening can repair never gets even the first one. Both flags are true at once
+    /// in that state, and reopening is known in advance not to help — `ScreenRepairControl` and the
+    /// `tccutil` sentence are the real remedy there.
+    @MainActor
+    func testAnUnusableRecordIsNeverOfferedAReopen() {
+        let asker = ScreenAskRecorder()
+        var relaunches = 0
+        let board = Self.board(
+            asker, needsRelaunch: true, unusable: true, relaunch: { relaunches += 1 })
+
+        XCTAssertTrue(board.invite(.screen))
+        XCTAssertEqual(
+            relaunches, 0,
+            "reopening a process whose TCC record is unusable is a dead instruction the app can see "
+                + "is dead before it gives it")
+        XCTAssertEqual(asker.settingsOpened, [.screen])
+    }
+
+    /// The rows must stay live through the one episode that cannot end on its own — otherwise the
+    /// caption asks for a click the card is refusing, which is the same shape of bug one layer up.
+    @MainActor
+    func testTheScreenRowStaysLiveWhileTheEpisodeCannotEnd() {
+        let asker = ScreenAskRecorder()
+        let live = Self.board(asker, needsRelaunch: true, relaunch: {})
+        XCTAssertFalse(live.isBusy, "nothing is in flight yet, so nothing is busy")
+
+        let quiet = Self.board(asker, needsRelaunch: false, relaunch: {})
+        XCTAssertFalse(quiet.isBusy)
+    }
+
+    @MainActor
+    private static func board(
+        _ asker: ScreenAskRecorder,
+        needsRelaunch: Bool,
+        unusable: Bool = false,
+        relaunch: @escaping @MainActor () -> Void
+    ) -> PermissionInvitations {
+        let broker = PermissionBroker()
+        // A volatile suite: the relaunch tally is persisted, and a test that spent the real one
+        // would change what the app offers the user who runs the suite.
+        let defaults = UserDefaults(suiteName: "cfc.screen-grant-visibility.\(UUID().uuidString)")!
+        return PermissionInvitations(
+            granted: { asker.isGranted($0) },
+            openSettings: { asker.openSettings(for: $0) },
+            ledger: PermissionAskLedger(defaults: defaults),
+            screenRecordIsUnusable: { unusable },
+            screenNeedsRelaunch: { needsRelaunch },
+            relaunch: relaunch,
+            gate: {
+                PermissionGate(
+                    asking: asker, required: [$0], broker: broker,
+                    leadIn: .zero, afterGrant: .zero, watchPoll: .zero)
+            })
+    }
+
+    // MARK: - The word on the row
+
+    /// **"Asking…" is the one word this state must never fall through to** — it is the reported bug,
+    /// verbatim, and it is what a row says when something is still going to happen on its own.
+    /// Nothing is: the poll cannot see this grant. The row is a button now, and it has to read like
+    /// one.
+    ///
+    /// The two halves are deliberately different words. A definite stale grant keeps "Action
+    /// required"; the case where the preflight merely denies us — where we do not know whether the
+    /// user flipped anything — must not make that claim, but must still look like the control it is.
+    func testTheScreenRowNeverSaysAskingOnceOnlyAReopenCanAnswerIt() {
+        func word(granted: Bool) -> String {
+            OnboardingView.statusWord(
+                for: .screen, granted: granted, screenNeedsRelaunch: true,
+                reported: true, asking: true, answer: nil, offered: false)
         }
+
+        XCTAssertEqual(
+            word(granted: false), "Reopen",
+            "the reported dead end: a row reading \"Asking…\" while nothing was going to ask")
+        XCTAssertEqual(
+            word(granted: true), "Action required",
+            "a grant TCC vouches for that this process cannot use is a definite state and keeps its "
+                + "definite word")
     }
 
     // MARK: - The sentences people actually read

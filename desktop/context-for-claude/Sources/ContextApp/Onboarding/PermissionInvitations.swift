@@ -106,6 +106,8 @@ final class PermissionInvitations: ObservableObject {
     private let openSettings: @MainActor (Capability) -> Void
     private let ledger: PermissionAskLedger
     private let screenRecordIsUnusable: @MainActor () -> Bool
+    private let screenNeedsRelaunch: @MainActor () -> Bool
+    private let relaunch: @MainActor () -> Void
     private var runs: [Capability: Task<Void, Never>] = [:]
     private var relays: [AnyCancellable] = []
 
@@ -125,6 +127,12 @@ final class PermissionInvitations: ObservableObject {
         screenRecordIsUnusable: @escaping @MainActor () -> Bool = {
             Permissions.screenRecordIsUnusable
         },
+        // Injected for the same reason as the three above, and with more riding on it: the live one
+        // terminates the process. A test that reached the real `Permissions.relaunchApp()` would not
+        // fail, it would kill the test runner — so the seam is what makes the relaunch bound
+        // assertable at all.
+        screenNeedsRelaunch: @escaping @MainActor () -> Bool = { Permissions.screenNeedsRelaunch },
+        relaunch: @escaping @MainActor () -> Void = { Permissions.relaunchApp() },
         gate: @MainActor (Capability) -> PermissionGate = { PermissionGate(required: [$0]) }
     ) {
         self.listed = listed
@@ -133,6 +141,8 @@ final class PermissionInvitations: ObservableObject {
         self.openSettings = openSettings
         self.ledger = ledger
         self.screenRecordIsUnusable = screenRecordIsUnusable
+        self.screenNeedsRelaunch = screenNeedsRelaunch
+        self.relaunch = relaunch
 
         var built: [Capability: PermissionGate] = [:]
         for capability in listed { built[capability] = gate(capability) }
@@ -208,7 +218,7 @@ final class PermissionInvitations: ObservableObject {
     /// thing that can still change the answer, the row has to be the way out.
     var isBusy: Bool {
         guard let inFlight else { return false }
-        if inFlight == .screen, Permissions.screenNeedsRelaunch { return false }
+        if inFlight == .screen, screenNeedsRelaunch() { return false }
         return true
     }
 
@@ -303,9 +313,29 @@ final class PermissionInvitations: ObservableObject {
         // Testing the guard first is how the caption ends up asking for a click the card discards —
         // the same shape of bug one layer up from the one being fixed. `isBusy` opens the row for
         // this; this lets the click through once it arrives.
-        if capability == .screen, Permissions.screenNeedsRelaunch {
+        //
+        // **The bound is not optional, and this branch getting it wrong was worse than the bug it
+        // fixes.** `screenNeedsRelaunch` is now true for any process that has merely opened the
+        // pane, so without a bound a user who declines Screen Recording could restart the app
+        // indefinitely — two clicks a time, forever, since `OnboardingResume` faithfully brings them
+        // back to this row. The same three conditions the menu bar's row already applies
+        // (`StatusView.handle`) apply here, for the same reasons written there: a reopen is spent
+        // once, it is recorded so every other surface's tally agrees, and it is never offered for a
+        // record no reopen can repair.
+        if capability == .screen, screenNeedsRelaunch() {
             lastAsked = capability
-            Permissions.relaunchApp()
+            if !screenRecordIsUnusable(),
+                PermissionDeadEnd.mayRelaunch(after: ledger.relaunches(capability))
+            {
+                ledger.noteRelaunched(capability)
+                relaunch()
+                return true
+            }
+            // Spent, or unusable. The pane is the honest remainder, and `deadEndNote` is what
+            // explains why the reopen is no longer on offer.
+            ledger.noteAsked(capability)
+            openSettings(capability)
+            return true
         }
 
         guard inFlight == nil else { return false }

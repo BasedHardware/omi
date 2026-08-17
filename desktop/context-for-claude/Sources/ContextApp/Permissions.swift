@@ -636,16 +636,20 @@ enum Permissions {
             // true`. The record was never in question; only this process's view of it was.
             //
             // So the old `return false` here was the bug behind *"Permission is already on but it's
-            // still asking for it"*. It made this the one branch that could never fire once the user
-            // had done the thing it was written to notice, and — worse — it cleared the persisted
-            // flag on the way past, erasing an offer an earlier tick had correctly armed.
+            // still asking for it"*: it made this the one branch that could never fire once the user
+            // had done the thing it was written to notice.
             //
             // Once we have sent someone to that pane, `false` stops being evidence of anything. The
-            // honest answer is the reopen, and it is safe to offer precisely because
-            // `screenSettingsWasOpened` dies with the process: a successor starts from a fresh
-            // preflight, so a user who never switched anything on is asked once, not in a loop.
+            // honest answer is the reopen, and it is safe to offer for two reasons that have to hold
+            // together. `screenSettingsWasOpened` dies with the process, so a successor starts from a
+            // fresh preflight rather than an inherited suspicion. And every surface that acts on this
+            // bounds the acting: `PermissionDeadEnd.mayRelaunch` spends one reopen and no more, which
+            // is what stops a user who never granted from being restarted on a loop.
+            //
+            // The persisted flag is still cleared, and still should be: it records a grant this
+            // process *watched* arrive, which is precisely what has not happened here.
             defaults.set(false, forKey: Key.screenPendingRelaunch)
-            return screenRelaunchOffer(preflight: false, settingsWasOpened: screenSettingsWasOpened)
+            return screenRelaunchOfferWhenPreflightDenies(settingsWasOpened: screenSettingsWasOpened)
         }
         if screenGrantIsStale(
             grantedAtLaunch: screenGrantedAtLaunch,
@@ -1467,14 +1471,18 @@ enum Permissions {
     /// answer, while the *rule* is where the wrong answer lived. The wrong answer was a flat `false`,
     /// which made the reopen offer unreachable in precisely the situation it exists for.
     ///
-    /// A `true` preflight never reaches here — that path has the persisted flag and the staleness
-    /// check to work with. This is only the case where macOS has told this process "no" and that "no"
-    /// carries no information, because the answer is fixed per process at window-server connect time.
-    nonisolated static func screenRelaunchOffer(preflight: Bool, settingsWasOpened: Bool) -> Bool {
+    /// Named for the branch it belongs to rather than taking the preflight as a parameter: a `true`
+    /// preflight never reaches here — that path has the persisted flag and the staleness check to
+    /// work with, and can legitimately answer `false`. A version of this that accepted `preflight`
+    /// would have to pin a value for an input it never receives, and the pinned value would
+    /// contradict the real rule the moment anyone called it unconditionally.
+    ///
+    /// So this is only the case where macOS has told this process "no" and that "no" carries no
+    /// information, because the answer is fixed per process at window-server connect time.
+    nonisolated static func screenRelaunchOfferWhenPreflightDenies(settingsWasOpened: Bool) -> Bool {
         // Nothing has been asked of the user yet, so a refusal is just a refusal: the row should read
         // as an offer to grant, not as an instruction to reopen something that would change nothing.
-        guard !preflight else { return true }
-        return settingsWasOpened
+        settingsWasOpened
     }
 
     /// Whether *this process* has already had a CoreAudio tap answered, and therefore whether an
