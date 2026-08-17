@@ -1,0 +1,33 @@
+omi-onprem {{ .Chart.Version }} installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Profiles:
+  core          backend + valkey + mongo replica-set (STORAGE_BACKEND=mongo)
+  chat          {{ if .Values.chat.enabled }}ON  (Qdrant vector store){{ else }}off{{ end }}
+  objstore      {{ if .Values.objstore.enabled }}ON  (RustFS S3){{ else }}off{{ end }}
+  push          {{ if .Values.push.enabled }}ON  (ntfy UnifiedPush){{ else }}off{{ end }}
+  ingress       {{ if .Values.ingress.enabled }}ON  (Gateway API / Envoy Gateway){{ else }}off{{ end }}
+  auth          {{ if .Values.auth.enabled }}ON  (Keycloak OIDC + Gateway TLS){{ else }}off{{ end }}
+  inference     {{ if .Values.inference.enabled }}ON  (external OpenAI-compatible endpoint){{ else }}off{{ end }}
+
+Reach the backend:
+{{- if .Values.ingress.enabled }}
+  # On Kind (kind-cluster.yaml maps host 8080 -> nodePort 30080):
+  curl http://localhost:8080/v1/health
+{{- if .Values.auth.enabled }}
+  # Auth is ON — get a token from Keycloak, then call the API over HTTPS (host 8443):
+  TOK=$(curl -k -s -X POST https://localhost:8443/realms/omi/protocol/openid-connect/token \
+    -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
+    | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+  curl -k https://localhost:8443/v1/users/people -H "Authorization: Bearer $TOK"
+{{- end }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/backend 8080:8080
+  curl http://localhost:8080/v1/health
+{{- end }}
+
+Verify the release:  helm -n {{ .Release.Namespace }} test {{ .Release.Name }}
+{{- if not .Values.secrets.create }}
+
+NOTE: secrets.create=false — this release expects a Secret named "backend-secret" to already exist in
+namespace "{{ .Release.Namespace }}" (provide it via External Secrets / Sealed Secrets / a vault).
+{{- end }}
