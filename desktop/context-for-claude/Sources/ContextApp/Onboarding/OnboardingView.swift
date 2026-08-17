@@ -595,7 +595,18 @@ struct OnboardingView: View {
         // special case; this is the one every capability takes once its pane is open — which now
         // includes the one macOS never prompts for, because a click on its row runs the same episode.
         .onChange(of: invitations.phase, initial: true) { _, phase in syncSpotlight(to: phase) }
-        .onReceive(permissionTick) { _ in refreshPermissions() }
+        .onReceive(permissionTick) { _ in
+            refreshPermissions()
+            // **Polled as well as observed, because the notification does not cover the case that
+            // matters.** `didActivateApplicationNotification` fires on a *change* of frontmost app,
+            // so when System Settings is already frontmost and the pane is reopened underneath the
+            // card — the second capability in the sequence, or the re-click path — macOS posts
+            // nothing and this flag keeps whatever it last held. That is the state the card floats
+            // over the pane in, and it is the reported one. The poll is already running for grant
+            // detection and this is the same kind of fact: something only the user can cause, that
+            // the system will not announce.
+            settingsIsFrontmost = Permissions.systemSettingsIsFrontmost
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissions()
         }

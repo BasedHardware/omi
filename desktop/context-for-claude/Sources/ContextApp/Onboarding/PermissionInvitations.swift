@@ -199,7 +199,18 @@ final class PermissionInvitations: ObservableObject {
     }
 
     /// True while an episode owns the screen — the rows must not be a second entrance to it.
-    var isBusy: Bool { inFlight != nil }
+    ///
+    /// **Except when the episode cannot end.** The screen wait polls for a grant that, once made,
+    /// this process is incapable of observing — window-server capture rights are fixed at connect
+    /// time — so it is the one episode with no self-terminating condition. Leaving the rows disabled
+    /// through it is what made the card a dead end: the caption asks for a click that the card was
+    /// refusing, over a row reading "Asking…" that had nothing left to ask. When a reopen is the only
+    /// thing that can still change the answer, the row has to be the way out.
+    var isBusy: Bool {
+        guard let inFlight else { return false }
+        if inFlight == .screen, Permissions.screenNeedsRelaunch { return false }
+        return true
+    }
 
     /// Every terminal answer, merged — **including the grants macOS was already holding before the
     /// card appeared.**
@@ -276,6 +287,27 @@ final class PermissionInvitations: ObservableObject {
     @discardableResult
     func invite(_ capability: Capability) -> Bool {
         guard let gate = gates[capability], !granted(capability) else { return false }
+
+        // **The reopen, when that is the only thing left that can work.**
+        //
+        // Screen Recording rights are settled when a process connects to the window server, so a
+        // grant made while this card is open belongs to the next process and no amount of asking
+        // will surface it here — `Permissions.screenNeedsRelaunch` is that state. Without this
+        // branch the row's only behaviour was to start another episode, which reopens the pane the
+        // user has already used and leaves them exactly where they were: the reported *"permission
+        // is already on but it's still asking for it"*. The menu bar has offered this reopen for a
+        // while; onboarding is where people actually meet the state.
+        //
+        // **Ahead of the `inFlight` guard, deliberately.** The screen episode never ends by itself,
+        // so it is still in flight at the exact moment this is the only useful thing a click can do.
+        // Testing the guard first is how the caption ends up asking for a click the card discards —
+        // the same shape of bug one layer up from the one being fixed. `isBusy` opens the row for
+        // this; this lets the click through once it arrives.
+        if capability == .screen, Permissions.screenNeedsRelaunch {
+            lastAsked = capability
+            Permissions.relaunchApp()
+        }
+
         guard inFlight == nil else { return false }
 
         offered.insert(capability)
