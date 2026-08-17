@@ -247,6 +247,11 @@ final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
     shouldProceedWithUpdate updateItem: SUAppcastItem,
     updateCheck: SPUUpdateCheck
   ) throws {
+    // Before the egress guard, because "the feed offered us a newer build" is true whether or not
+    // this machine is allowed to fetch it — and an install that keeps finding updates it never
+    // downloads is the exact shape of a stuck fleet, which is invisible if this is only recorded on
+    // the paths that succeed.
+    ContextAnalytics.record(.updateOutcome(.updateFound))
     guard UpdateEgress.permits(.archiveDownload) else { throw UpdateEgress.refusal }
   }
 
