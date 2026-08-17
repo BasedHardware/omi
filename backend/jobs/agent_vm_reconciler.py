@@ -89,6 +89,8 @@ OWNER_FALLBACK_SCAN_LIMIT = 1_000
 FAILED_JOB_STATES = {"retry", "quarantined", "missing", "stale", "recreate_required"}
 DEFAULT_MISSING_CLEANUP_GRACE_SECONDS = 24 * 60 * 60
 MIN_MISSING_CLEANUP_GRACE_SECONDS = 60
+DEFAULT_IDLE_STOP_SECONDS = 60 * 60
+MIN_IDLE_STOP_SECONDS = 30 * 60
 _IMMUTABLE_BOOT_IMAGE = re.compile(r"^projects/[^/]+/global/images/[^/]+$")
 _MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 
@@ -391,6 +393,41 @@ def _missing_cleanup_grace_seconds() -> int:
     if value < MIN_MISSING_CLEANUP_GRACE_SECONDS:
         raise ValueError(f"AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS must be at least {MIN_MISSING_CLEANUP_GRACE_SECONDS}")
     return value
+
+
+def _idle_stop_seconds() -> int:
+    raw = os.getenv("AGENT_VM_IDLE_STOP_SECONDS")
+    if raw is None or not raw.strip():
+        return DEFAULT_IDLE_STOP_SECONDS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("AGENT_VM_IDLE_STOP_SECONDS must be an integer") from exc
+    if value < MIN_IDLE_STOP_SECONDS:
+        raise ValueError(f"AGENT_VM_IDLE_STOP_SECONDS must be at least {MIN_IDLE_STOP_SECONDS}")
+    return value
+
+
+def idle_stop_due(
+    *,
+    status: str,
+    reasons: Sequence[str],
+    start_requested: bool,
+    active_sessions: int,
+    idle_since: float | None,
+    now: float,
+    idle_stop_seconds: int,
+) -> bool:
+    """True only for a healthy RUNNING VM with no live session past the idle TTL.
+
+    Idle must never be folded into drift ``reasons``: that path stops, rewrites
+    metadata, then restarts. This predicate is a terminal-for-this-run outcome.
+    """
+    if reasons or start_requested or active_sessions != 0:
+        return False
+    if status != "RUNNING" or idle_since is None:
+        return False
+    return idle_since <= now - idle_stop_seconds
 
 
 def _canonical_image_ref(value: str) -> str:
@@ -1220,6 +1257,7 @@ async def reconcile_one(
     project: str,
     dry_run: bool = False,
     missing_cleanup_grace_seconds: int | None = None,
+    idle_stop_seconds: int | None = None,
     boot_image_migration: BootImageMigrationPlan | None = None,
 ) -> ReconcileResult:
     vm_name = str(vm["vmName"])
@@ -1265,6 +1303,7 @@ async def reconcile_one(
     missing_cleanup_grace_seconds = (
         _missing_cleanup_grace_seconds() if missing_cleanup_grace_seconds is None else missing_cleanup_grace_seconds
     )
+    idle_stop_seconds = _idle_stop_seconds() if idle_stop_seconds is None else idle_stop_seconds
     failed_candidate: dict[str, str] = {}
     try:
         instance = await api.get_instance(vm_name)
@@ -1510,6 +1549,8 @@ async def reconcile_one(
                     return ReconcileResult(uid, "stale", "owner lease lost while deferring drain")
                 return ReconcileResult(uid, "deferred", f"{active} active session(s)")
         status = str(instance.get("status") or "UNKNOWN")
+        idle_since_raw = reconcile_state.get("idleSince")
+        idle_since = float(idle_since_raw) if isinstance(idle_since_raw, (int, float)) else None
         if not reasons and status in {"TERMINATED", "STOPPED"} and not start_requested:
             if not await _update_reconcile(
                 uid,
@@ -1526,6 +1567,7 @@ async def reconcile_one(
                     "lastError": None,
                     "retryAt": None,
                     "missingSince": DELETE_FIELD,
+                    "idleSince": DELETE_FIELD,
                     **clear_vm_reconcile_lease_fields(),
                 },
                 vm_fields={
@@ -1536,6 +1578,61 @@ async def reconcile_one(
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording stopped VM")
             return ReconcileResult(uid, "ready", "stopped; idle self-stop preserved")
+        if not reasons and status == "RUNNING" and not start_requested:
+            active = await asyncio.to_thread(active_session_count, uid, vm_name)
+            if idle_stop_due(
+                status=status,
+                reasons=reasons,
+                start_requested=start_requested,
+                active_sessions=active,
+                idle_since=idle_since,
+                now=now,
+                idle_stop_seconds=idle_stop_seconds,
+            ):
+                if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
+                    return ReconcileResult(uid, "stale", "owner lease lost before idle stop")
+                await api.stop(vm_name)
+                if not await _update_reconcile(
+                    uid,
+                    vm_name,
+                    auth_token,
+                    owner,
+                    {
+                        "state": "ready",
+                        "observedRelease": release.release_id,
+                        "observedImageDigest": release.image_digest,
+                        "observedStartupSha256": release.startup_sha256,
+                        "lastSuccessAt": time.time(),
+                        "retryCount": 0,
+                        "lastError": None,
+                        "retryAt": None,
+                        "missingSince": DELETE_FIELD,
+                        "idleSince": DELETE_FIELD,
+                        **clear_vm_reconcile_lease_fields(),
+                    },
+                    vm_fields={
+                        "status": "stopped",
+                        **({"stateDisk": state_disk_info} if state_disk_info else {}),
+                    },
+                    consume_start_request_at=observed_start_request_at,
+                ):
+                    return ReconcileResult(uid, "stale", "owner lease lost while recording idle stop")
+                return ReconcileResult(uid, "ready", "stopped; idle TTL elapsed")
+            if active == 0:
+                recorded_idle_since = idle_since if idle_since is not None else now
+                if not await _update_reconcile(
+                    uid,
+                    vm_name,
+                    auth_token,
+                    owner,
+                    {
+                        "state": "ready",
+                        "idleSince": recorded_idle_since,
+                        **clear_vm_reconcile_lease_fields(),
+                    },
+                ):
+                    return ReconcileResult(uid, "stale", "owner lease lost while recording idleSince")
+                return ReconcileResult(uid, "ready", "idle; waiting for TTL")
         if status == "RUNNING" and reasons:
             if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
                 return ReconcileResult(uid, "stale", "owner lease lost before stop")
@@ -1589,6 +1686,7 @@ async def reconcile_one(
                 "lastError": None,
                 "retryAt": None,
                 "missingSince": DELETE_FIELD,
+                "idleSince": DELETE_FIELD,
                 **clear_vm_reconcile_lease_fields(),
             },
             vm_fields={
