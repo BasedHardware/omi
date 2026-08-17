@@ -55,10 +55,12 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
     let payload = IntegrationNudgeTelemetry.actionedPayload(
       integrationName: entry.displayName,
       connectorID: entry.telemetryID,
-      action: .dismissForever
+      action: .dismissForever,
+      triggerID: "notion_app"
     )
 
-    XCTAssertEqual(Set(payload.keys), ["integration_name", "connector_id", "action"])
+    XCTAssertEqual(
+      Set(payload.keys), ["integration_name", "connector_id", "action", "trigger_id"])
     XCTAssertEqual(payload["action"] as? String, "dismiss_forever")
   }
 

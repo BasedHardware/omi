@@ -4054,8 +4054,11 @@ class FloatingControlBarManager {
     case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
-    case .connectIntegration(let telemetryID):
-      IntegrationNudgeCoordinator.shared.acceptPresentedNudge(telemetryID: telemetryID)
+    case .connectIntegration(let telemetryID, let triggerID):
+      IntegrationNudgeCoordinator.shared.acceptPresentedNudge(
+        telemetryID: telemetryID,
+        triggerID: triggerID
+      )
       return
     case nil:
       break

@@ -59,6 +59,52 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
     XCTAssertNil(match(bundle: nil))
   }
 
+  /// A plain substring match makes every short keyword claim a neighbourhood of
+  /// unrelated sites — `x.com` matching `max.com` is the worst case, because a
+  /// wrong nudge is worse than a missing one.
+  func testAKeywordInsideALongerWordIsNotAMatch() {
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Max — max.com"))
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Watch on hbomax.com"))
+  }
+
+  func testTheSameKeywordStillMatchesAsItsOwnToken() {
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "Home / x.com")?.entry.route,
+      .importConnector("x")
+    )
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "(3) twitter.com")?.entry.route,
+      .importConnector("x")
+    )
+  }
+
+  /// "Twitter" as a bare word matched any page that merely discussed Twitter.
+  func testAPageAboutASiteIsNotThatSite() {
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Why I quit Twitter — Substack"))
+  }
+
+  func testTokenMatchingRules() {
+    XCTAssertTrue(IntegrationNudgeMatcher.containsWholeToken("x.com", in: "home / x.com"))
+    XCTAssertFalse(IntegrationNudgeMatcher.containsWholeToken("x.com", in: "max.com"))
+    XCTAssertTrue(IntegrationNudgeMatcher.containsWholeToken("gmail", in: "inbox - gmail"))
+    XCTAssertFalse(IntegrationNudgeMatcher.containsWholeToken("gmail", in: "gmailify settings"))
+    XCTAssertFalse(IntegrationNudgeMatcher.containsWholeToken("", in: "anything"))
+  }
+
+  /// The browser allowlist decides whether a title is read at all, so a variant
+  /// missing from it silently disables browser nudges for those users.
+  func testBrowserVariantsAreRecognized() {
+    for identifier in [
+      "com.microsoft.edgemac.Beta", "com.brave.Browser.nightly",
+      "com.operasoftware.OperaGX", "com.openai.atlas",
+    ] {
+      XCTAssertTrue(
+        IntegrationNudgeMatcher.isBrowser(bundleIdentifier: identifier),
+        "\(identifier) should be treated as a browser"
+      )
+    }
+  }
+
   func testBrowserDetection() {
     XCTAssertTrue(IntegrationNudgeMatcher.isBrowser(bundleIdentifier: "com.apple.Safari"))
     XCTAssertTrue(IntegrationNudgeMatcher.isBrowser(bundleIdentifier: "company.thebrowser.Browser"))

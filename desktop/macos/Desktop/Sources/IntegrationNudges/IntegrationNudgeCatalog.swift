@@ -97,14 +97,20 @@ enum IntegrationNudgeCatalog {
     "com.google.Chrome.beta",
     "com.google.Chrome.canary",
     "com.microsoft.edgemac",
+    "com.microsoft.edgemac.Beta",
+    "com.microsoft.edgemac.Dev",
+    "com.microsoft.edgemac.Canary",
     "com.brave.Browser",
     "com.brave.Browser.beta",
+    "com.brave.Browser.nightly",
     "org.mozilla.firefox",
     "org.mozilla.firefoxdeveloperedition",
     "company.thebrowser.Browser",
     "company.thebrowser.dia",
     "com.vivaldi.Vivaldi",
     "com.operasoftware.Opera",
+    "com.operasoftware.OperaGX",
+    "com.openai.atlas",
     "com.kagi.kagimacOS",
     "app.zen-browser.zen",
     "ai.perplexity.comet",
@@ -215,7 +221,7 @@ enum IntegrationNudgeCatalog {
       triggers: [
         IntegrationNudgeTrigger(
           id: "x_web",
-          match: .browserTitle(keywords: ["/ X", "X.com", "Twitter"])
+          match: .browserTitle(keywords: ["x.com", "twitter.com"])
         )
       ]
     ),

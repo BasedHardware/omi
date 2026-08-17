@@ -86,15 +86,21 @@ enum IntegrationNudgeTelemetry {
     ])
   }
 
+  /// `triggerID` is what makes conversion measurable per trigger. Without it a
+  /// Notion nudge from the desktop app and one from a browser tab are the same
+  /// row, and the experiment cannot tell which recognition path is worth
+  /// keeping.
   static func actionedPayload(
     integrationName: String,
     connectorID: String,
-    action: Action
+    action: Action,
+    triggerID: String
   ) -> [String: Any] {
     allowListOnly([
       "integration_name": integrationName,
       "connector_id": connectorID,
       "action": action.rawValue,
+      "trigger_id": triggerID,
     ])
   }
 

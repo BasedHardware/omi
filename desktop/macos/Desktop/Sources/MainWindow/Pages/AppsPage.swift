@@ -1737,7 +1737,7 @@ struct ImportConnectorSheet: View {
       connectorID: connectorID,
       progressTitle: title,
       progressDetail: detail,
-      surface: IntegrationConnectOrigin.consumeSurface(forConnectorID: connectorID)
+      surface: IntegrationConnectOrigin.consumeSurface(for: .importConnector(connectorID))
     ) { progress in
       switch await operation(progress) {
       case .success(let result, let message):

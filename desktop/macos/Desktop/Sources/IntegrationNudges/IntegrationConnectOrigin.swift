@@ -26,24 +26,28 @@ enum IntegrationConnectOrigin {
   static let claimLifetime: TimeInterval = 5 * 60
 
   private struct Claim {
-    let connectorID: String
+    /// The catalog telemetry id (`import:chatgpt`, `export:chatgpt`), never the
+    /// bare connector id. ChatGPT and Claude exist on both sides of the
+    /// catalog, so a bare id lets an accepted *export* nudge take credit for an
+    /// unrelated *import* connect of the same-named tool.
+    let telemetryID: String
     let claimedAt: Date
   }
 
   private static var claim: Claim?
 
-  static func recordNudgeOpened(connectorID: String, now: Date = Date()) {
-    claim = Claim(connectorID: connectorID, claimedAt: now)
+  static func recordNudgeOpened(telemetryID: String, now: Date = Date()) {
+    claim = Claim(telemetryID: telemetryID, claimedAt: now)
   }
 
-  /// Returns the surface to attribute a connect of `connectorID` to, consuming
-  /// any matching nudge claim.
+  /// Returns the surface to attribute a connect to, consuming any matching
+  /// nudge window. `route` disambiguates the two halves of the catalog.
   static func consumeSurface(
-    forConnectorID connectorID: String,
+    for route: IntegrationNudgeRoute,
     now: Date = Date()
   ) -> IntegrationConnectTelemetry.Surface {
     guard let claim,
-      claim.connectorID == connectorID,
+      claim.telemetryID == route.telemetryID,
       now.timeIntervalSince(claim.claimedAt) < claimLifetime
     else { return .apps }
     self.claim = nil

@@ -12,6 +12,7 @@ import SwiftUI
 struct IntegrationNudgeCard: View {
   let notification: FloatingBarNotification
   let entry: IntegrationNudgeCatalogEntry
+  let triggerID: String
 
   var body: some View {
     HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -60,7 +61,8 @@ struct IntegrationNudgeCard: View {
       .buttonStyle(.plain)
 
       Button {
-        IntegrationNudgeCoordinator.shared.snoozePresentedNudge(telemetryID: entry.telemetryID)
+        IntegrationNudgeCoordinator.shared.snoozePresentedNudge(
+          telemetryID: entry.telemetryID, triggerID: triggerID)
         FloatingControlBarManager.shared.dismissCurrentNotification()
       } label: {
         Text("Not now").scaledFont(size: 12).foregroundColor(.white.opacity(0.55))
@@ -68,7 +70,8 @@ struct IntegrationNudgeCard: View {
       .buttonStyle(.plain)
 
       Button {
-        IntegrationNudgeCoordinator.shared.dismissPresentedNudgeForever(telemetryID: entry.telemetryID)
+        IntegrationNudgeCoordinator.shared.dismissPresentedNudgeForever(
+          telemetryID: entry.telemetryID, triggerID: triggerID)
         FloatingControlBarManager.shared.dismissCurrentNotification()
       } label: {
         Text("Never").scaledFont(size: 12).foregroundColor(.white.opacity(0.35))

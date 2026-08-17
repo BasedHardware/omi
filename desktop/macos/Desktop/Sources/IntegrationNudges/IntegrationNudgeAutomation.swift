@@ -63,7 +63,10 @@ enum IntegrationNudgeAutomation {
       message: entry.pitch,
       assistantId: IntegrationNudgeCoordinator.assistantID,
       sound: .none,
-      action: .connectIntegration(telemetryID: entry.telemetryID)
+      action: .connectIntegration(
+        telemetryID: entry.telemetryID,
+        triggerID: entry.triggers.first?.id ?? "automation"
+      )
     )
     return [
       "presented": (result == .presented || result == .queued) ? "true" : "false",

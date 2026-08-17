@@ -98,6 +98,21 @@ class AnalyticsManager {
     integrationConnectTelemetryCaptureForTests?(event, properties)
   }
 
+  /// Integration-nudge seam: nil in production; tests install a scoped capture
+  /// to observe the real event names and payloads these methods emit.
+  private var integrationNudgeTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setIntegrationNudgeTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationNudgeTelemetryCaptureForTests = capture
+  }
+
+  private func trackIntegrationNudge(_ event: String, properties: [String: Any]) {
+    integrationNudgeTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
+  }
+
   func setDevicePairingTelemetryCaptureForTests(
     _ capture: (@MainActor (String?, [String: Any], [String: Any]) -> Void)?
   ) {
@@ -280,7 +295,7 @@ class AnalyticsManager {
     trigger: IntegrationNudgeTrigger,
     shownCount: Int
   ) {
-    PostHogManager.shared.track(
+    trackIntegrationNudge(
       IntegrationNudgeTelemetry.shownEventName,
       properties: IntegrationNudgeTelemetry.shownPayload(
         integrationName: entry.displayName,
@@ -297,7 +312,7 @@ class AnalyticsManager {
     trigger: IntegrationNudgeTrigger,
     reason: IntegrationNudgePolicy.Suppression
   ) {
-    PostHogManager.shared.track(
+    trackIntegrationNudge(
       IntegrationNudgeTelemetry.suppressedEventName,
       properties: IntegrationNudgeTelemetry.suppressedPayload(
         integrationName: entry.displayName,
@@ -311,14 +326,16 @@ class AnalyticsManager {
 
   func integrationNudgeActioned(
     entry: IntegrationNudgeCatalogEntry,
-    action: IntegrationNudgeTelemetry.Action
+    action: IntegrationNudgeTelemetry.Action,
+    triggerID: String
   ) {
-    PostHogManager.shared.track(
+    trackIntegrationNudge(
       IntegrationNudgeTelemetry.actionedEventName,
       properties: IntegrationNudgeTelemetry.actionedPayload(
         integrationName: entry.displayName,
         connectorID: entry.telemetryID,
-        action: action
+        action: action,
+        triggerID: triggerID
       )
     )
   }

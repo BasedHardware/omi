@@ -26,3 +26,18 @@ enum IntegrationConnectionInspector {
     }
   }
 }
+
+// MARK: - Known limitation
+//
+// Export status is only partly owner-scoped today. The local-MCP half is keyed
+// on the owner's current MCP key, but `memoryExportConnectedAt.<destination>`
+// and the exported-count are machine-global in `MemoryExportService`. So on a
+// Mac where two people sign in, the second person can have an export nudge
+// suppressed by the first person's connection.
+//
+// This is not fixed here on purpose: those keys back the Apps tab's shipped
+// status rows, and re-scoping them is a storage migration with its own
+// review — larger than, and independent of, the nudge feature. The failure
+// direction is the safe one for a nudge (a missed offer, never a wrong or
+// duplicated one), which is the same way every other unknown in this feature
+// resolves.

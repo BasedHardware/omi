@@ -42,8 +42,9 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: defaults, ownerID: ownerID),
       now: { self.now },
-      presenter: { _, _ in
+      presenter: { _, _, onPresented in
         presentedCount.value += 1
+        onPresented()
         return result
       },
       ownerID: { ownerID },
@@ -83,7 +84,13 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
   /// silenced a notice the user never saw.
   func testARejectedPresentationDoesNotSpendTheBudget() throws {
     let defaults = makeDefaults()
-    let coordinator = makeCoordinator(defaults: defaults, result: .rejectedOwnerChange)
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, _ in .rejectedOwnerChange },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
+    )
 
     XCTAssertFalse(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
     XCTAssertEqual(
@@ -93,12 +100,47 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     )
   }
 
-  /// A queued card is still owed to the user, so it counts.
-  func testAQueuedPresentationSpendsTheBudget() throws {
+  /// A queued card has been admitted to a queue, not shown. Spending the budget
+  /// on admission would burn one of the integration's three lifetime offers on a
+  /// card that may never reach the screen — so the budget is spent from the
+  /// bar's presentation callback instead.
+  func testAQueuedCardThatIsNeverPresentedDoesNotSpendTheBudget() throws {
     let defaults = makeDefaults()
-    let coordinator = makeCoordinator(defaults: defaults, result: .queued)
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, _ in .queued },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
+    )
 
-    XCTAssertTrue(coordinator.offer(match: try match(), isConnected: false, dwell: 3))
+    _ = coordinator.offer(match: try match(), isConnected: false, dwell: 3)
+
+    XCTAssertEqual(
+      IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
+        .state(for: try match().entry.telemetryID).shownCount,
+      0
+    )
+  }
+
+  /// The same queued card, once the bar actually presents it, does spend it.
+  func testAQueuedCardSpendsTheBudgetWhenItReachesTheScreen() throws {
+    let defaults = makeDefaults()
+    let present = Box<(@MainActor () -> Void)?>(nil)
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, onPresented in
+        present.value = onPresented
+        return .queued
+      },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
+    )
+
+    _ = coordinator.offer(match: try match(), isConnected: false, dwell: 3)
+    present.value?()
+
     XCTAssertEqual(
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
         .state(for: try match().entry.telemetryID).shownCount,
@@ -230,8 +272,9 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _ in
+      presenter: { _, _, onPresented in
         presented.value += 1
+        onPresented()
         return .presented
       },
       ownerID: { owner.value },
@@ -272,8 +315,9 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _ in
+      presenter: { _, _, onPresented in
         presented.value += 1
+        onPresented()
         return .presented
       },
       ownerID: { "user-a" },

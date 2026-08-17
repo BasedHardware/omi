@@ -124,8 +124,8 @@ extension SettingsContentView {
           }
 
           Text(
-            "When you open an app Omi can connect to — Gmail, Notion, ChatGPT — offer the connection once, "
-              + "with what it would do for you."
+            "When you open an app Omi can connect to — Gmail, Notion, ChatGPT — occasionally offer the "
+              + "connection, with what it would do for you. At most a few times per integration."
           )
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
@@ -134,8 +134,9 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
-              title: "Suggest dismissed integrations again",
-              subtitle: "Clears the integrations you've hidden, so Omi can offer them one more time",
+              title: "Reset all suggestion history",
+              subtitle:
+                "Clears every integration's suggestion history, including ones you hid, so Omi can offer them again",
               settingId: "notifications.integrationsuggestions.reset"
             ) {
               Button("Reset") {

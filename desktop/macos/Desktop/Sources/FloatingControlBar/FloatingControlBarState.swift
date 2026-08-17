@@ -204,8 +204,10 @@ enum FloatingBarNotificationAction: Equatable {
   /// Offer to connect an integration the user has open but has not set up.
   /// Carries the catalog's telemetry id (`import:email`, `export:notion`, …),
   /// which is unique across both halves of the catalog — the bare connector id
-  /// is not, because ChatGPT and Claude exist on both sides.
-  case connectIntegration(telemetryID: String)
+  /// is not, because ChatGPT and Claude exist on both sides. `triggerID` names
+  /// what was recognized, so a conversion can be attributed to the native-app
+  /// or browser-site trigger that produced the card rather than merged.
+  case connectIntegration(telemetryID: String, triggerID: String)
 }
 
 /// A custom in-app notification rendered directly below the floating bar.

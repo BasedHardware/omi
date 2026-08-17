@@ -11,14 +11,18 @@ final class IntegrationNudgeCardPresentationTests: XCTestCase {
   func testEveryNudgeableEntryProducesAResolvableAction() {
     XCTAssertFalse(IntegrationNudgeCatalog.nudgeable.isEmpty)
     for entry in IntegrationNudgeCatalog.nudgeable {
-      let action = FloatingBarNotificationAction.connectIntegration(telemetryID: entry.telemetryID)
-      guard case .connectIntegration(let telemetryID) = action else {
+      let action = FloatingBarNotificationAction.connectIntegration(
+        telemetryID: entry.telemetryID,
+        triggerID: entry.triggers[0].id
+      )
+      guard case .connectIntegration(let telemetryID, let triggerID) = action else {
         return XCTFail("action did not round-trip for \(entry.telemetryID)")
       }
       XCTAssertEqual(
         IntegrationNudgeCatalog.all.first { $0.telemetryID == telemetryID }?.route,
         entry.route
       )
+      XCTAssertEqual(triggerID, entry.triggers[0].id)
     }
   }
 
@@ -26,7 +30,8 @@ final class IntegrationNudgeCardPresentationTests: XCTestCase {
   /// the tap router both switch on this enum, and a case that pattern-matched
   /// the other would send the user to the wrong destination.
   func testConnectActionIsDistinctFromTheRecommendationAction() {
-    let connect = FloatingBarNotificationAction.connectIntegration(telemetryID: "import:email")
+    let connect = FloatingBarNotificationAction.connectIntegration(
+      telemetryID: "import:email", triggerID: "gmail_web")
     let recommendation = FloatingBarNotificationAction.openWhatMattersNow(recommendationID: "import:email")
     XCTAssertNotEqual(connect, recommendation)
   }

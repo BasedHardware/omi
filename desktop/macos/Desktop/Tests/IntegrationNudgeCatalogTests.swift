@@ -82,11 +82,39 @@ final class IntegrationNudgeCatalogTests: XCTestCase {
     }
   }
 
-  func testNudgeableEntriesAreExactlyThoseWithTriggers() {
-    XCTAssertEqual(
-      Set(IntegrationNudgeCatalog.nudgeable.map(\.telemetryID)),
-      Set(IntegrationNudgeCatalog.all.filter { !$0.triggers.isEmpty }.map(\.telemetryID))
-    )
+  /// Every trigger the catalog declares must be reachable by the matcher. A
+  /// browser keyword that no longer survives token-boundary matching, or an
+  /// entry whose triggers were emptied, would silently stop nudging.
+  func testEveryDeclaredTriggerActuallyMatchesSomething() {
+    for entry in IntegrationNudgeCatalog.all {
+      for trigger in entry.triggers {
+        switch trigger.match {
+        case .application(let identifiers):
+          XCTAssertFalse(identifiers.isEmpty, "\(trigger.id) declares no bundle identifiers")
+          for identifier in identifiers {
+            let window = IntegrationNudgeMatcher.Window(bundleIdentifier: identifier)
+            XCTAssertEqual(
+              IntegrationNudgeMatcher.match(window)?.entry.telemetryID,
+              entry.telemetryID,
+              "\(identifier) does not resolve back to \(entry.telemetryID)"
+            )
+          }
+        case .browserTitle(let keywords):
+          XCTAssertFalse(keywords.isEmpty, "\(trigger.id) declares no keywords")
+          for keyword in keywords {
+            let window = IntegrationNudgeMatcher.Window(
+              bundleIdentifier: "com.google.Chrome",
+              windowTitle: "Some Page — \(keyword)"
+            )
+            XCTAssertEqual(
+              IntegrationNudgeMatcher.match(window)?.entry.telemetryID,
+              entry.telemetryID,
+              "keyword '\(keyword)' does not resolve back to \(entry.telemetryID)"
+            )
+          }
+        }
+      }
+    }
   }
 
   /// Trigger ids are a bounded telemetry dimension; a duplicate across

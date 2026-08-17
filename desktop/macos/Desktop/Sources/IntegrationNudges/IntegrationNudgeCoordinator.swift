@@ -37,21 +37,31 @@ final class IntegrationNudgeCoordinator {
   /// user keeps a browser focused, which is most of the day.
   private static let browserRecheckLimit = 6
 
+  /// `onPresented` fires only when the bar actually puts the card on screen.
+  /// The nudge budget is spent from there, never from the return value: a
+  /// `.queued` card is admitted to a queue, not shown, and a queue entry that
+  /// is later dropped would otherwise burn one of the integration's three
+  /// lifetime offers on a card nobody saw.
   typealias Presenter =
     @MainActor (
       _ ownerID: String,
-      _ entry: IntegrationNudgeCatalogEntry
+      _ match: IntegrationNudgeMatcher.Match,
+      _ onPresented: @escaping @MainActor () -> Void
     ) -> OwnerBoundNotificationPresentationResult
 
   /// The default presenter: the real floating-bar card.
-  static let floatingBarPresenter: Presenter = { ownerID, entry in
+  static let floatingBarPresenter: Presenter = { ownerID, match, onPresented in
     FloatingControlBarManager.shared.showNotification(
       ownerID: ownerID,
-      title: "Connect \(entry.displayName) to Omi",
-      message: entry.pitch,
+      title: "Connect \(match.entry.displayName) to Omi",
+      message: match.entry.pitch,
       assistantId: IntegrationNudgeCoordinator.assistantID,
       sound: .none,
-      action: .connectIntegration(telemetryID: entry.telemetryID)
+      action: .connectIntegration(
+        telemetryID: match.entry.telemetryID,
+        triggerID: match.trigger.id
+      ),
+      onPresented: onPresented
     )
   }
 
@@ -277,21 +287,29 @@ final class IntegrationNudgeCoordinator {
     }
 
     guard let ownerID = ownerID() else { return false }
-    let result = presenter(ownerID, match.entry)
-    // Record only on real presentation. Recording before the bar has accepted
-    // the card would spend the integration's lifetime budget on a nudge the
-    // user never saw — the exact defect the screen-capture-reset notice hit
-    // (see `NotificationService.screenCaptureResetShownKey`).
-    guard result == .presented || result == .queued else { return false }
 
-    let shownCountBefore = store.state(for: match.entry.telemetryID).shownCount
-    store.recordDelivery(telemetryID: match.entry.telemetryID, now: now())
-    AnalyticsManager.shared.integrationNudgeShown(
-      entry: match.entry,
-      trigger: match.trigger,
-      shownCount: shownCountBefore + 1
-    )
-    return true
+    // The budget is spent from the bar's presentation callback, not from the
+    // return value. A `.queued` card has been admitted to a queue, not shown,
+    // and a queue entry that is later dropped would otherwise burn one of the
+    // integration's three lifetime offers on a card nobody saw — the same shape
+    // as the screen-capture-reset defect (see
+    // `NotificationService.screenCaptureResetShownKey`).
+    var recorded = false
+    let result = presenter(ownerID, match) { [weak self] in
+      guard let self else { return }
+      recorded = true
+      let shownCountBefore = self.store.state(for: match.entry.telemetryID).shownCount
+      self.store.recordDelivery(telemetryID: match.entry.telemetryID, now: self.now())
+      AnalyticsManager.shared.integrationNudgeShown(
+        entry: match.entry,
+        trigger: match.trigger,
+        shownCount: shownCountBefore + 1
+      )
+    }
+
+    // `.presented` invokes the callback synchronously; `.queued` invokes it
+    // later, if and only if the card reaches the screen.
+    return recorded || result == .queued
   }
 
   /// Window titles are content. Do not read one for an app the user excluded
@@ -332,12 +350,13 @@ final class IntegrationNudgeCoordinator {
 
   /// The user accepted. Open the real connector sheet — the same one the Apps
   /// tab opens — rather than a nudge-only connect path that could drift.
-  func acceptPresentedNudge(telemetryID: String) {
+  func acceptPresentedNudge(telemetryID: String, triggerID: String) {
     guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
-    AnalyticsManager.shared.integrationNudgeActioned(entry: entry, action: .connect)
+    AnalyticsManager.shared.integrationNudgeActioned(
+      entry: entry, action: .connect, triggerID: triggerID)
     // Claim the connect that follows, so it lands in the funnel as a nudge
     // conversion rather than as an Apps-tab connect.
-    IntegrationConnectOrigin.recordNudgeOpened(connectorID: entry.connectorID)
+    IntegrationConnectOrigin.recordNudgeOpened(telemetryID: entry.telemetryID)
 
     AppDelegate.summonWindowTarget()?.openMainAppWindow()
     NotificationCenter.default.post(
@@ -359,17 +378,19 @@ final class IntegrationNudgeCoordinator {
   }
 
   /// "Not now" — snooze this integration.
-  func snoozePresentedNudge(telemetryID: String) {
+  func snoozePresentedNudge(telemetryID: String, triggerID: String) {
     guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
     store.recordSnooze(telemetryID: telemetryID, now: now())
-    AnalyticsManager.shared.integrationNudgeActioned(entry: entry, action: .notNow)
+    AnalyticsManager.shared.integrationNudgeActioned(
+      entry: entry, action: .notNow, triggerID: triggerID)
   }
 
   /// "Don't show again" — opt this integration out permanently.
-  func dismissPresentedNudgeForever(telemetryID: String) {
+  func dismissPresentedNudgeForever(telemetryID: String, triggerID: String) {
     guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
     store.recordOptOut(telemetryID: telemetryID)
-    AnalyticsManager.shared.integrationNudgeActioned(entry: entry, action: .dismissForever)
+    AnalyticsManager.shared.integrationNudgeActioned(
+      entry: entry, action: .dismissForever, triggerID: triggerID)
   }
 
   /// Called when a connector finishes connecting, from any surface, so a later

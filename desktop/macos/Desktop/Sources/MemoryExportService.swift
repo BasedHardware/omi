@@ -872,6 +872,10 @@ actor MemoryExportService {
       if isAuthorized {
         defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
         defaults.set("Authorized through \(destination.title)", forKey: destination.detailKey)
+        // ChatGPT's directory install and Claude's assisted flow never reach
+        // `markConnected` — the grant list is the first authoritative signal
+        // that they connected, so the nudge history is cleared from here too.
+        clearIntegrationNudgeHistory(for: destination)
       } else {
         defaults.removeObject(forKey: destination.connectedAtKey)
         defaults.removeObject(forKey: destination.detailKey)
@@ -1042,9 +1046,19 @@ actor MemoryExportService {
 
   func markConnected(_ destination: MemoryExportDestination) {
     defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
-    // Clear this integration's nudge history so a later disconnect is allowed
-    // to make the pitch again instead of finding a spent lifetime budget.
+    clearIntegrationNudgeHistory(for: destination)
+  }
+
+  /// Clear this integration's nudge history so a later disconnect is allowed to
+  /// make the pitch again instead of finding a spent lifetime budget.
+  ///
+  /// The owner is captured here, before the main-actor hop, and re-checked
+  /// there: an account switch racing this callback would otherwise clear the
+  /// wrong person's history.
+  private func clearIntegrationNudgeHistory(for destination: MemoryExportDestination) {
+    let connectionOwnerID = defaults.string(forKey: DefaultsKey.authUserId.rawValue)
     Task { @MainActor in
+      guard RuntimeOwnerIdentity.currentOwnerId() == connectionOwnerID else { return }
       IntegrationNudgeCoordinator.shared.noteConnected(route: .exportDestination(destination.rawValue))
     }
   }

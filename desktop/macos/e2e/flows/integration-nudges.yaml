@@ -93,9 +93,20 @@ steps:
 
   - id: S7
     name: A second offer for the same integration is suppressed
-    do: "After a card has been delivered for an integration, re-trigger it and verify integration_nudge_evaluate reports would_nudge=false with a budget suppression_reason rather than presenting a second card."
+    # S5 delivered a Notion card, which spends that integration's cooldown. The
+    # assertion is on the decision, not on operator interaction: a regression
+    # that stopped suppressing would otherwise still pass this step.
+    bridge.action:
+      name: integration_nudge_evaluate
+      params:
+        bundle_id: notion.id
     expect:
-      interactive_count: { min: 2 }
+      ok: true
+      detail:
+        matched: "true"
+        telemetry_id: "export:notion"
+        would_nudge: "false"
+        suppression_reason: connector_cooldown
 
   - id: S8
     name: Logs clean
