@@ -80,7 +80,16 @@ export class BleAudioService {
     this.level = 0
     this.degraded = false
 
-    const codec = await connection.getAudioCodec()
+    let codec: BleAudioCodec
+    try {
+      codec = await connection.getAudioCodec()
+    } catch (error) {
+      // The slot is claimed synchronously, so a throw anywhere in setup has to
+      // release it or every later start is refused as already running.
+      console.error(`[device] failed to read the device audio codec: ${String(error)}`)
+      this.stopProcessing()
+      return false
+    }
     // A stop can land during the codec read; that start is stale.
     if (!this.processing || this.generation !== generation) return false
 
@@ -110,7 +119,14 @@ export class BleAudioService {
     // No second decoder-existence check: createAudioDecoder covers the whole
     // codec union and returns null only for 'unknown', which the guard above
     // already rejected.
-    await processor.ready()
+    try {
+      await processor.ready()
+    } catch (error) {
+      console.error(`[device] audio decoder failed to initialize: ${String(error)}`)
+      processor.close()
+      this.stopProcessing()
+      return false
+    }
     if (!this.processing || this.generation !== generation) {
       processor.close()
       return false

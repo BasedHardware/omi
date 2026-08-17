@@ -128,6 +128,10 @@ export interface DeviceConnection {
 
   getAudioCodec(): Promise<BleAudioCodec>
   getAudioStream(subscriber: StreamSubscriber<Uint8Array>): StreamSubscription
+  /** False when the family cannot stream audio to this client at all, so a
+   *  caller can skip opening a transcription session that would never receive
+   *  a sample. */
+  canStreamAudio(): boolean
 
   getButtonState(): Promise<Uint8Array>
   getButtonStream(subscriber: StreamSubscriber<Uint8Array>): StreamSubscription
@@ -186,6 +190,7 @@ export class BaseDeviceConnection implements DeviceConnection {
 
   private didStartLifecycle = false
   private teardownPromise: Promise<void> | null = null
+  private teardownStarted = false
   private readyForCallbacks = false
   private readonly unsubscribeTransportState: () => void
 
@@ -215,14 +220,14 @@ export class BaseDeviceConnection implements DeviceConnection {
   private handleTransportStateChange(state: DeviceTransportState): void {
     // Setup-phase drops surface as connect() errors; only a ready session
     // reports an unexpected disconnect.
-    if (state === 'disconnected' && this.readyForCallbacks && this.teardownPromise === null) {
+    if (state === 'disconnected' && this.readyForCallbacks && !this.teardownStarted) {
       void this.beginTeardown({ notifyUnexpectedDisconnect: true })
     }
   }
 
   /** Template method; exactly once per instance. */
   async connect(): Promise<void> {
-    if (this.didStartLifecycle || this.teardownPromise !== null) {
+    if (this.didStartLifecycle || this.teardownStarted) {
       throw DeviceConnectionError.alreadyConnected()
     }
     this.didStartLifecycle = true
@@ -264,7 +269,7 @@ export class BaseDeviceConnection implements DeviceConnection {
   }
 
   protected ensureLifecycleIsActive(): void {
-    if (this.teardownPromise !== null) {
+    if (this.teardownStarted) {
       throw DeviceConnectionError.operationFailed('Connection was cancelled')
     }
     if (this.transport.state !== 'connected') {
@@ -282,7 +287,10 @@ export class BaseDeviceConnection implements DeviceConnection {
     notifyUnexpectedDisconnect: boolean
     runUnpair?: boolean
   }): Promise<void> {
-    if (this.teardownPromise !== null) return this.teardownPromise
+    if (this.teardownStarted) return this.teardownPromise ?? Promise.resolve()
+    // Claim BEFORE any hook runs: a stream callback fired from inside a hook can
+    // call disconnect(), and the assignment below would not have happened yet.
+    this.teardownStarted = true
     this.sessionAbort.abort()
     this.teardownPromise = (async () => {
       if (args.runUnpair === true) {
@@ -394,6 +402,10 @@ export class BaseDeviceConnection implements DeviceConnection {
         onFinish: (error) => subscriber.onFinish(error)
       }
     )
+  }
+
+  canStreamAudio(): boolean {
+    return true
   }
 
   // --- button ----------------------------------------------------------------

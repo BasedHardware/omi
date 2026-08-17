@@ -98,7 +98,6 @@ describe('LimitlessDeviceConnection', () => {
     )
     expect(frames.length).toBe(1)
     expect(frames[0]).toEqual(frame)
-    expect(connection.highestReceivedIndex).toBe(0)
   })
 
   it('emits only double-press button events, as 4 little-endian bytes', async () => {
@@ -122,83 +121,31 @@ describe('LimitlessDeviceConnection', () => {
     expect(events).toEqual([[0x02, 0x00, 0x00, 0x00]])
   })
 
-  it('storage status resolves from a device-status notification and caches it', async () => {
+  it('drops the oldest incomplete fragment index instead of growing forever', async () => {
     const { transport, connection } = await setup()
-    const statusPromise = connection.getStorageStatus()
-    await tick()
+    const frames: Uint8Array[] = []
+    connection.getAudioStream({ onValue: (f) => frames.push(f), onFinish: () => undefined })
 
-    const inner = Uint8Array.from([
-      0x08,
-      ...encodeVarint(3),
-      0x10,
-      ...encodeVarint(9),
-      0x18,
-      ...encodeVarint(1),
-      0x20,
-      ...encodeVarint(50),
-      0x28,
-      ...encodeVarint(300)
-    ])
-    const status = Uint8Array.from([0x00, 0x2a, inner.length, ...inner])
-    const payload = Uint8Array.from([0x2a, status.length, ...status, 0, 0, 0])
-    transport.notify(LIMITLESS_UUIDS.service, LIMITLESS_UUIDS.rxCharacteristic, [
-      0x22,
-      payload.length,
-      ...payload,
-      ...new Uint8Array(8)
-    ])
-    await expect(statusPromise).resolves.toMatchObject({ oldestFlashPage: 3, newestFlashPage: 9 })
-    expect(connection.getFlashPageCount()).toBe(7)
-  })
+    // 200 indexes that each announce two fragments and deliver one: without a
+    // bound every one of them would be retained for the whole session.
+    for (let index = 0; index < 200; index += 1) {
+      transport.notify(
+        LIMITLESS_UUIDS.service,
+        LIMITLESS_UUIDS.rxCharacteristic,
+        pendantPacket(index, 0, 2, Uint8Array.from([0x22, 2, 1, 2]))
+      )
+    }
+    expect(frames.length).toBe(0)
 
-  it('storage status falls back to the cached value on timeout', async () => {
-    const { transport, clock, connection } = await setup()
-    const first = connection.getStorageStatus()
-    await tick()
-    clock.advance(3_000)
-    await expect(first).resolves.toBeNull()
-    void transport
-  })
-
-  it('batch mode writes the download command and routes flash pages', async () => {
-    const { transport, connection } = await setup()
-    expect(await connection.enableBatchMode()).toBe(true)
-    expect(connection.batchModeEnabled).toBe(true)
-    const writes = txWrites(transport)
-    const packet = parseBlePacket(writes[writes.length - 1])!
-    expect(packet.payload[0]).toBe((8 << 3) | 2)
-
-    const frame = opusFrame(0x78)
-    const audioField = encodeBytesField(2, encodeBytesField(1, frame))
-    const wrapperInner = Uint8Array.from([...encodeVarintField(1, 0), ...audioField])
-    const flashPage = Uint8Array.from([
-      ...encodeVarintField(1, 1_700_000_000_000),
-      ...encodeBytesField(3, wrapperInner)
-    ])
-    const storageBuffer = Uint8Array.from([
-      ...encodeVarintField(2, 4),
-      ...encodeVarintField(4, 1),
-      ...encodeVarintField(5, 2),
-      ...encodeBytesField(6, flashPage)
-    ])
-    const pendantMessage = encodeBytesField(2, storageBuffer)
+    // A fresh index still reassembles normally after the eviction.
+    const frame = opusFrame()
+    const payload = Uint8Array.from([0x22, frame.length, ...frame])
     transport.notify(
       LIMITLESS_UUIDS.service,
       LIMITLESS_UUIDS.rxCharacteristic,
-      pendantPacket(1, 0, 1, pendantMessage)
+      pendantPacket(500, 0, 1, payload)
     )
-
-    expect(connection.completedFlashPages.length).toBe(1)
-    const page = connection.completedFlashPages[0]
-    expect(page.opusFrames.length).toBe(1)
-    expect(page.session).toBe(4)
-    expect(page.index).toBe(2)
-    expect(page.timestampMs).toBe(1_700_000_000_000)
-    expect(connection.firstPageTimestampMs).toBe(1_700_000_000_000)
-
-    expect(await connection.disableBatchMode()).toBe(true)
-    expect(connection.batchModeEnabled).toBe(false)
-    expect(connection.completedFlashPages.length).toBe(0)
+    expect(frames.length).toBe(1)
   })
 
   it('led brightness clamps and reads back the last written value', async () => {

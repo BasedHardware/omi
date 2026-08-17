@@ -278,6 +278,10 @@ export const extractOpusRecursive = (data: Uint8Array): Uint8Array[] => {
       const value = decodeVarint(data, pos)
       if (value === null) break
       pos = value.next
+    } else if (wireType === 1) {
+      pos += 8
+    } else if (wireType === 5) {
+      pos += 4
     } else {
       break
     }
@@ -335,6 +339,12 @@ export const extractOpusFramesFromFlashPage = (data: Uint8Array): Uint8Array[] =
           )
         }
         wpos = fieldStart + Math.max(fieldBounded, 1)
+      } else if (wireType === 1) {
+        // A fixed64/fixed32 field before the audio field must be stepped over,
+        // not treated as the end of the wrapper, or the frames after it are lost.
+        wpos += 8
+      } else if (wireType === 5) {
+        wpos += 4
       } else {
         break
       }

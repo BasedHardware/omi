@@ -207,6 +207,12 @@ export class DeviceOperationBroker {
       } catch (error) {
         op.startFailed = true
         op.startError = error
+        // Settle now rather than waiting for a completion that a failed start
+        // will never produce: without a timeout the caller would hang forever,
+        // and with one it would report a misleading timeout.
+        if (!op.settled && !op.claimed) {
+          this.settle(op, 'failed', { reject: error })
+        }
       }
     })()
 
@@ -273,7 +279,13 @@ export class DeviceOperationBroker {
     if (this.pending.get(op.key) === op) {
       this.pending.delete(op.key)
     }
-    op.onTerminal?.(termination)
+    try {
+      op.onTerminal?.(termination)
+    } catch (error) {
+      // A terminal hook decides nothing about the caller: rethrowing here would
+      // both strand the promise and surface as an unhandled rejection.
+      console.warn('[device] operation terminal hook threw:', error)
+    }
     if ('resolve' in outcome) {
       op.resolve(outcome.resolve)
     } else {

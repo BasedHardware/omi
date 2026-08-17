@@ -38,7 +38,12 @@ import {
 } from './ipc/deviceHandlers'
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
-import { createDeviceWindow, getDeviceWc, getDeviceWindow } from './deviceWindow'
+import {
+  createDeviceWindow,
+  getDeviceWc,
+  getDeviceWindow,
+  setDeviceWindowWiring
+} from './deviceWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
@@ -849,14 +854,11 @@ app.whenReady().then(async () => {
   // Sign-out teardown: clear every user-scoped table so a second account on this
   // machine can't see the prior user's local data (renderer authTeardown.ts).
   ipcMain.handle('db:wipeUserData', async () => wipeUserData())
-  // Creates the hidden WebBluetooth host on demand and installs the chooser
-  // handler on it. Idempotent: an existing window is reused, and a respawned
-  // one is rewired here because the handler lives on the webContents.
-  function ensureDeviceHost(): void {
-    const existing = getDeviceWindow()
-    if (existing && !existing.isDestroyed()) return
+  // Per-window wiring for the device host. Registered once and run for EVERY
+  // device window, including automatic respawns, because the chooser handler
+  // lives on the webContents: an unwired respawn could not be paired.
+  setDeviceWindowWiring((win) => {
     setDeviceHostReady(false, getDeviceWc)
-    const win = createDeviceWindow()
     attachBluetoothChooser(win.webContents, {
       // A reconnect answers the chooser silently with the remembered device; a
       // fresh pairing leaves it null so the user picks from the streamed list.
@@ -865,6 +867,14 @@ app.whenReady().then(async () => {
         emitDeviceEventFromMain({ type: 'device-candidates', candidates }, win.webContents.id)
     })
     win.on('closed', () => setDeviceHostReady(false, getDeviceWc))
+  })
+
+  // Creates the hidden WebBluetooth host on demand. Idempotent: an existing
+  // window is reused, and creation runs the wiring registered above.
+  function ensureDeviceHost(): void {
+    const existing = getDeviceWindow()
+    if (existing && !existing.isDestroyed()) return
+    createDeviceWindow()
   }
 
   registerOmiListenHandlers((ownerId) => {
@@ -891,7 +901,9 @@ app.whenReady().then(async () => {
     () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
     ensureDeviceHost
   )
-  registerDeviceHandlers(getDeviceWc)
+  registerDeviceHandlers(getDeviceWc, () =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.id : undefined
+  )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
   registerSoak()

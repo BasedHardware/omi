@@ -26,6 +26,13 @@ import {
   type SegmentRetainer
 } from '../../capture/liveRescue'
 
+/** Backend events that end the current conversation server-side. */
+const CONVERSATION_BOUNDARY_EVENTS: ReadonlySet<string> = new Set([
+  'memory_creating',
+  'memory_created',
+  'conversation_created'
+])
+
 export type DeviceLaneState =
   | 'idle'
   | 'blocked'
@@ -89,6 +96,9 @@ export class DeviceListenSession {
   /** Opens the lane. Returns false when the conversation slot is taken. */
   async start(): Promise<boolean> {
     if (this.state !== 'idle' && this.state !== 'stopped') return false
+    // Claim the lane BEFORE the first await: two concurrent starts would both
+    // pass the guard above and open duplicate sockets.
+    this.setState('connecting')
     this.stopped = false
     this.abort = new AbortController()
     this.retainer = createSegmentRetainer()
@@ -100,6 +110,7 @@ export class DeviceListenSession {
       this.setState('blocked')
       return false
     }
+    if (this.stopped) return false
     return this.openSession()
   }
 
@@ -123,6 +134,12 @@ export class DeviceListenSession {
       },
       onEvent: (id, event) => {
         if (id !== this.sessionId) return
+        // A conversation boundary means everything retained so far was already
+        // finalized server-side; keeping it would re-rescue those segments into
+        // the NEXT conversation.
+        if (CONVERSATION_BOUNDARY_EVENTS.has(event.type)) {
+          this.retainer = createSegmentRetainer()
+        }
         this.callbacks.onEvent?.(event)
       },
       onClosed: (id, code, reason) => {

@@ -328,6 +328,16 @@ export class PlaudDeviceConnection extends BaseDeviceConnection {
     void (async () => {
       let lastLevel: number | null = null
       for (;;) {
+        // A poisoned command id can never produce another response, so polling
+        // it forever would just report a stale level indefinitely.
+        if (this.commandGate.isPoisoned(commandKey(CMD_GET_BATTERY))) {
+          subscriber.onFinish(
+            DeviceConnectionError.operationFailed(
+              'PLAUD battery reporting is ambiguous; reconnect the device'
+            )
+          )
+          return
+        }
         const state = await this.getBatteryState()
         if (abort.signal.aborted) return
         if (state !== null && state.level !== lastLevel) {

@@ -19,7 +19,8 @@ const MAIN_ONLY_COMMANDS = new Set<DeviceCommand['type']>([
   'device-pair-select',
   'device-connect',
   'device-disconnect',
-  'device-forget'
+  'device-forget',
+  'device-request-state'
 ])
 
 /**

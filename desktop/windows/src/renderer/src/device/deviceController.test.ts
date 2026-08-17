@@ -112,6 +112,10 @@ const harness = (
     driver?: ScriptedDriver
     requestDevice?: BluetoothAccess['requestDevice']
     laneBlocked?: boolean
+    /** Runs while lane.start() is in flight, to simulate a racing change. */
+    duringLaneStart?: (settings: DeviceSettings) => void
+    /** Forces the audio service to refuse the session. */
+    audioStartResult?: boolean
   } = {}
 ): Harness => {
   const driver = options.driver ?? new ScriptedDriver()
@@ -124,7 +128,17 @@ const harness = (
   }
   const lane = { startCalls: 0, stopCalls: 0, fed: 0, blocked: options.laneBlocked ?? false }
 
+  const audioService =
+    options.audioStartResult === false
+      ? ({
+          isProcessing: false,
+          startProcessing: async () => false,
+          stopProcessing: () => null
+        } as never)
+      : undefined
+
   const controller = new DeviceController({
+    audioService,
     bluetooth: {
       requestDevice:
         options.requestDevice ?? (async () => ({ driver, serviceUuids: [OMI_UUIDS.mainService] })),
@@ -141,6 +155,7 @@ const harness = (
       ({
         start: async () => {
           lane.startCalls += 1
+          options.duringLaneStart?.(settings)
           return !lane.blocked
         },
         stop: () => {
@@ -324,6 +339,60 @@ describe('DeviceController listening', () => {
     h.driver.fireDisconnected()
     await tick()
     expect(h.controller.sessionCoordinator.snapshot.phase.kind).not.toBe('waitingToReconnect')
+  })
+
+  it('does not open a lane for a device that cannot stream audio', async () => {
+    // Frame has no audio path on this client, so a lane would create an empty
+    // conversation and immediately tear it down.
+    const h = harness({ paired: { id: 'device-1', name: 'Frame', type: 'frame' }, listen: true })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    expect(h.lane.startCalls).toBe(0)
+    expect(
+      h.events.some((e) => e.type === 'device-listen-state' && e.state === 'unsupported')
+    ).toBe(true)
+  })
+
+  it('stops the lane when listening is turned off while it was opening', async () => {
+    const h = harness({
+      paired: { id: 'device-1', name: 'Omi CV1', type: 'omi' },
+      listen: true,
+      duringLaneStart: (settings) => {
+        settings.deviceListenEnabled = false
+      }
+    })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    expect(h.lane.startCalls).toBe(1)
+    // The socket opened, so it must be closed rather than left recording for a
+    // setting the user just turned off.
+    expect(h.lane.stopCalls).toBe(1)
+    expect(h.events.some((e) => e.type === 'device-codec')).toBe(false)
+  })
+
+  it('stops the lane when audio decoding fails to start', async () => {
+    const h = harness({
+      paired: { id: 'device-1', name: 'Omi CV1', type: 'omi' },
+      listen: true,
+      audioStartResult: false
+    })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    expect(h.lane.startCalls).toBe(1)
+    // Otherwise the conversation stays open with nothing feeding it.
+    expect(h.lane.stopCalls).toBe(1)
+  })
+
+  it('republishes the current state so a late UI is not shown a stale device', async () => {
+    const h = harness({ paired: { id: 'device-1', name: 'Omi CV1', type: 'omi' } })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    h.driver.notify(BATTERY_UUIDS.service, BATTERY_UUIDS.level, [42])
+    const before = h.events.length
+
+    await h.controller.handleCommand({ type: 'device-request-state' })
+    const replayed = h.events.slice(before)
+    expect(replayed.some((e) => e.type === 'device-state' && e.state === 'connected')).toBe(true)
+    expect(replayed.some((e) => e.type === 'device-battery' && e.level === 42)).toBe(true)
   })
 
   it('an unexpected drop ends the session and schedules a reconnect', async () => {

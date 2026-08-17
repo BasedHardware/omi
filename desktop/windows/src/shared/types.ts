@@ -231,6 +231,10 @@ export type ListenStartArgs = {
    *  of stranding a half-recorded one. Regenerated per conversation (after each
    *  finalize/silence boundary); re-used across reconnects within one conversation. */
   clientConversationId?: string
+  /** Conversation mode only: refuse this start when another conversation socket
+   *  is already open for this user, instead of racing it. Set by secondary
+   *  lanes (the wearable) so the primary microphone always keeps the slot. */
+  requireExclusiveConversation?: boolean
 }
 
 export type ListenMessage =
@@ -2800,11 +2804,14 @@ export type DeviceCommand =
   | { type: 'device-pair-select'; deviceId: string | null }
   | { type: 'device-connect'; deviceId: string }
   | { type: 'device-disconnect' }
+  /** Re-publish current device state; a UI opened after the fact needs it. */
+  | { type: 'device-request-state' }
   | { type: 'device-forget' }
   /** Push updated settings into the device window (auto-reconnect, listening). */
   | { type: 'device-settings'; settings: DeviceSettings }
-  /** Sign-in changed: the window rebuilds its lane with the new identity. */
-  | { type: 'auth-changed' }
+  /** Sign-in changed: the window rebuilds its lane with the new identity.
+   *  Carries the uid so an account SWITCH (both sides signed in) is detected. */
+  | { type: 'auth-changed'; uid: string | null }
 
 /** Device window → main (fanned out to UI windows). */
 export type DeviceEvent =

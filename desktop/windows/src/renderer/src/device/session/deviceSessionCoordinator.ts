@@ -138,7 +138,10 @@ export class DeviceSessionCoordinator {
         reconnect.generation === this.generation &&
         this.phase.kind === 'waitingToReconnect' &&
         this.phase.attempt === reconnect.attempt &&
-        this.pairedDevice?.id === reconnect.device.id
+        this.pairedDevice?.id === reconnect.device.id &&
+        // A retry token is for ONE device: without this, a valid token could be
+        // replayed to open a session against a different device.
+        reconnect.device.id === device.id
       if (!matches) throw DeviceSessionError.superseded()
     } else if (!allowsConnectionAttempt(this.phase)) {
       throw DeviceSessionError.connectionAlreadyActive()

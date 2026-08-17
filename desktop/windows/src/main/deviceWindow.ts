@@ -15,6 +15,14 @@ import { killSessionsForOwner } from './ipc/omiListen'
 let deviceWindow: BrowserWindow | null = null
 let spawnTimes: number[] = []
 let firstWindowCreated = false
+// Per-window wiring (the Bluetooth chooser handler) supplied by main. It lives
+// on the webContents, so a respawned window must be wired again or pairing has
+// nothing to answer requestDevice() with.
+let onWindowCreated: ((win: BrowserWindow) => void) | null = null
+
+export function setDeviceWindowWiring(wire: (win: BrowserWindow) => void): void {
+  onWindowCreated = wire
+}
 
 const RESPAWN_WINDOW_MS = 60_000
 const RESPAWN_MAX = 3
@@ -59,7 +67,9 @@ export function createDeviceWindow(): BrowserWindow {
 
   win.on('closed', () => {
     const wasDevice = deviceWindow === win
-    deviceWindow = null
+    // Only drop the reference when the CURRENT host closed: an older window
+    // closing after a replacement was installed must not orphan the new one.
+    if (wasDevice) deviceWindow = null
     if (!wasDevice || isQuitting()) return
     // Its listen session would otherwise linger as an open WebSocket.
     killSessionsForOwner(win.webContents.id)
@@ -75,7 +85,12 @@ export function createDeviceWindow(): BrowserWindow {
     spawnTimes = [...times, now]
     console.warn('[device] window closed unexpectedly — respawning')
     setTimeout(() => {
-      if (!isQuitting()) createDeviceWindow()
+      if (isQuitting()) return
+      // A device command may have recreated the host during the delay; a second
+      // one would leave two renderers owning WebBluetooth.
+      const current = getDeviceWindow()
+      if (current && !current.isDestroyed()) return
+      createDeviceWindow()
     }, RESPAWN_DELAY_MS)
   })
 
@@ -105,5 +120,7 @@ export function createDeviceWindow(): BrowserWindow {
   }
 
   deviceWindow = win
+  // Wire the new webContents (chooser handler) before it can service a command.
+  onWindowCreated?.(win)
   return win
 }

@@ -108,10 +108,26 @@ export function attachBluetoothChooser(
   })
 }
 
-export function registerDeviceHandlers(getDeviceWc: () => WebContents | null): void {
+export function registerDeviceHandlers(
+  getDeviceWc: () => WebContents | null,
+  /** The main window's webContents id. Writes and chooser answers are accepted
+   *  from it alone: every renderer shares one preload, so without this check an
+   *  auxiliary window could unpair a device or answer an open chooser. */
+  getMainWcId: () => number | undefined
+): void {
+  const fromMainWindow = (event: { sender: WebContents }): boolean => {
+    const mainId = getMainWcId()
+    if (mainId !== undefined && event.sender.id === mainId) return true
+    console.warn('[device] rejected settings/chooser call from a non-main window')
+    return false
+  }
+
+  // Reading is harmless and the Settings tab is not always the main window in
+  // tests, so only writes and chooser answers are gated.
   ipcMain.handle('omi-device:get-settings', () => getDeviceSettings())
 
-  ipcMain.handle('omi-device:set-settings', (_e, patch: Partial<DeviceSettings>) => {
+  ipcMain.handle('omi-device:set-settings', (e, patch: Partial<DeviceSettings>) => {
+    if (!fromMainWindow(e)) return getDeviceSettings()
     const current = getAppSettings().device
     const next = setAppSettings({
       device: {
@@ -131,7 +147,8 @@ export function registerDeviceHandlers(getDeviceWc: () => WebContents | null): v
     return next
   })
 
-  ipcMain.handle('omi-device:select', (_e, deviceId: string | null) => {
+  ipcMain.handle('omi-device:select', (e, deviceId: string | null) => {
+    if (!fromMainWindow(e)) return
     selectChooserDevice(deviceId)
   })
 }

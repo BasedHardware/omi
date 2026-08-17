@@ -169,6 +169,13 @@ export class BeeDeviceConnection extends BaseDeviceConnection {
 
   private async stopAudioSession(): Promise<void> {
     this.adts.clear()
+    // A mute command on a dead link just burns the 5 second command timeout
+    // before teardown can continue, delaying the disconnect notification and
+    // the reconnect that follows it.
+    if (!this.transport.isConnected()) {
+      this.commandBroker.cancelAll('disconnected')
+      return
+    }
     try {
       if (this.commandGate.isPoisoned(commandKey(CMD_AUDIO_MUTE_UNMUTE))) {
         // Mute and unmute share one command id: with the identity poisoned, a

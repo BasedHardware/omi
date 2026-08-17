@@ -81,6 +81,13 @@ export class FrameDeviceConnection extends BaseDeviceConnection {
     return finishedStream(subscriber)
   }
 
+  /** Frame audio needs the Lua-based Frame SDK, so there is nothing to stream:
+   *  opening a transcription session for it would create an empty conversation
+   *  and immediately tear it down. */
+  override canStreamAudio(): boolean {
+    return false
+  }
+
   // --- camera: hardware supports it; this fallback client does not -----------
 
   override async hasPhotoStreaming(): Promise<boolean> {

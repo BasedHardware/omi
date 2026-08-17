@@ -13,6 +13,7 @@ import type {
   DeviceCommand,
   DeviceEvent,
   DeviceSettings,
+  WearableConnectionState,
   WearableDeviceInfo
 } from '../../../shared/types'
 import { makeBtDevice, detectDeviceType, type BtDevice } from './protocol/btDevice'
@@ -22,7 +23,10 @@ import type { DeviceConnection } from './connections/deviceConnection'
 import { BleTransport } from './transport/bleTransport'
 import type { BlePhysicalDriver } from './transport/blePhysicalDriver'
 import { BluetoothConnectionLeaseRegistry } from './session/bluetoothConnectionLease'
-import { DeviceSessionCoordinator } from './session/deviceSessionCoordinator'
+import {
+  DeviceSessionCoordinator,
+  type DeviceSessionSnapshot
+} from './session/deviceSessionCoordinator'
 import { BleAudioService } from './audio/bleAudioService'
 import type { DeviceListenSession } from './lane/deviceListenSession'
 
@@ -57,6 +61,7 @@ export class DeviceController {
   private pendingDriver: BlePhysicalDriver | null = null
   private lane: DeviceListenSession | null = null
   private lowBatteryLatched = false
+  private lastBatteryLevel: number | null = null
   private batterySubscription: { cancel: () => void } | null = null
 
   constructor(private readonly deps: DeviceControllerDeps) {
@@ -68,16 +73,7 @@ export class DeviceController {
         onSnapshot: (snapshot) => {
           this.deps.emit({
             type: 'device-state',
-            state:
-              snapshot.phase.kind === 'ready'
-                ? 'connected'
-                : snapshot.phase.kind === 'connecting'
-                  ? 'connecting'
-                  : snapshot.phase.kind === 'waitingToReconnect'
-                    ? 'reconnecting'
-                    : snapshot.failureMessage !== null
-                      ? 'error'
-                      : 'idle',
+            state: phaseToState(snapshot),
             device: snapshot.connectedDevice ? toDeviceInfo(snapshot.connectedDevice) : null
           })
         },
@@ -117,10 +113,28 @@ export class DeviceController {
       case 'device-settings':
         this.applySettings(command.settings)
         return
+      case 'device-request-state':
+        this.publishCurrentState()
+        return
       case 'device-pair-cancel':
       case 'device-pair-select':
       case 'auth-changed':
         return
+    }
+  }
+
+  /** Re-emits everything a freshly opened UI needs: the hidden host may have
+   *  connected long before Settings was opened, so a UI that only subscribes to
+   *  future events would show a disconnected device. */
+  private publishCurrentState(): void {
+    const snapshot = this.coordinator.snapshot
+    this.deps.emit({
+      type: 'device-state',
+      state: phaseToState(snapshot),
+      device: snapshot.connectedDevice ? toDeviceInfo(snapshot.connectedDevice) : null
+    })
+    if (this.lastBatteryLevel !== null) {
+      this.deps.emit({ type: 'device-battery', level: this.lastBatteryLevel })
     }
   }
 
@@ -236,6 +250,7 @@ export class DeviceController {
     this.lowBatteryLatched = false
     this.batterySubscription = connection.getBatteryLevelStream({
       onValue: (level) => {
+        this.lastBatteryLevel = level
         this.deps.emit({ type: 'device-battery', level })
         // Latch so a battery hovering at the threshold cannot spam the funnel;
         // it re-arms once the device charges back above it.
@@ -256,24 +271,51 @@ export class DeviceController {
   }
 
   private async startStreaming(connection: DeviceConnection): Promise<void> {
+    // A family with no audio to stream would open a conversation that never
+    // receives a sample and is torn down immediately.
+    if (!connection.canStreamAudio()) {
+      this.deps.emit({ type: 'device-listen-state', state: 'unsupported' })
+      return
+    }
     const lane = this.deps.createLane?.() ?? null
     this.lane = lane
     if (lane !== null) {
       const opened = await lane.start()
+      this.deps.emit({ type: 'device-listen-state', state: lane.currentState })
       if (!opened) {
-        // The microphone lane holds the only safe conversation socket.
-        this.deps.emit({ type: 'device-listen-state', state: lane.currentState })
+        // The microphone lane holds the only safe conversation socket. Stop
+        // before dropping the reference: a lane that failed after opening a
+        // socket schedules its own retry, which would otherwise run unowned.
+        lane.stop()
         this.lane = null
         return
       }
-      this.deps.emit({ type: 'device-listen-state', state: lane.currentState })
+      // Disconnect or a settings change can land while the lane opens.
+      if (this.coordinator.connection !== connection || !this.deps.settings().deviceListenEnabled) {
+        lane.stop()
+        this.lane = null
+        return
+      }
     }
-    await this.audio.startProcessing(connection, {
-      onPcm: (pcm) => this.lane?.feed(pcm),
-      onCodec: (codec) => this.deps.emit({ type: 'device-codec', codec }),
-      onDegradedChange: (degraded) => this.deps.emit({ type: 'device-audio-degraded', degraded }),
-      onEnded: () => this.stopStreaming()
-    })
+    let started = false
+    try {
+      started = await this.audio.startProcessing(connection, {
+        onPcm: (pcm) => this.lane?.feed(pcm),
+        onCodec: (codec) => this.deps.emit({ type: 'device-codec', codec }),
+        onDegradedChange: (degraded) => this.deps.emit({ type: 'device-audio-degraded', degraded }),
+        onEnded: () => this.stopStreaming()
+      })
+    } catch (error) {
+      this.deps.emit({
+        type: 'device-error',
+        message: error instanceof Error ? error.message : String(error)
+      })
+    }
+    if (!started) {
+      // An open lane with no decoder behind it records nothing.
+      this.lane?.stop()
+      this.lane = null
+    }
   }
 
   private stopStreaming(): void {
@@ -313,6 +355,19 @@ export class DeviceController {
   dispose(): void {
     this.stopStreaming()
     void this.coordinator.disconnect(null)
+  }
+}
+
+const phaseToState = (snapshot: DeviceSessionSnapshot): WearableConnectionState => {
+  switch (snapshot.phase.kind) {
+    case 'ready':
+      return 'connected'
+    case 'connecting':
+      return 'connecting'
+    case 'waitingToReconnect':
+      return 'reconnecting'
+    default:
+      return snapshot.failureMessage !== null ? 'error' : 'idle'
   }
 }
 

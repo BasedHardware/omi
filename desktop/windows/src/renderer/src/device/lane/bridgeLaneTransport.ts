@@ -39,7 +39,11 @@ export function createBridgeLaneTransport(): DeviceLaneTransport {
         deviceIdHash,
         language: getPreferences().language,
         mode: 'conversation',
-        clientConversationId
+        clientConversationId,
+        // Main refuses this start if the microphone lane already holds the
+        // slot, which closes the gap between the advisory check above and the
+        // socket actually opening.
+        requireExclusiveConversation: true
       })
     },
 

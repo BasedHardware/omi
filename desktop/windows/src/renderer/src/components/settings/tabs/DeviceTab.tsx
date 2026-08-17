@@ -46,6 +46,10 @@ export function DeviceTab(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi?.deviceGetSettings?.().then((s) => s && setSettings(s))
+    // The hidden host may have connected long before Settings was opened, so
+    // ask it to republish; subscribing alone would show a connected device as
+    // disconnected until something changed.
+    window.omi?.deviceCommand?.({ type: 'device-request-state' })
     return window.omi?.onDeviceEvent?.((event) => {
       switch (event.type) {
         case 'device-state':

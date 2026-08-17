@@ -26,6 +26,7 @@ interface WebCodecsAudioDecoder {
   state: string
   configure(config: { codec: string; sampleRate: number; numberOfChannels: number }): void
   decode(chunk: unknown): void
+  flush?: () => Promise<void>
   close(): void
 }
 
@@ -130,9 +131,20 @@ export class AacFrameDecoder implements AudioDecoder {
   }
 
   close(): void {
-    if (this.decoder !== null && this.decoder.state !== 'closed') {
-      this.decoder.close()
-    }
+    const decoder = this.decoder
     this.decoder = null
+    if (decoder === null || decoder.state === 'closed') return
+    // Chunks already handed to WebCodecs are still decoding; close() would drop
+    // their output, losing the tail of the recording.
+    const flush = decoder.flush?.bind(decoder)
+    if (flush === undefined) {
+      decoder.close()
+      return
+    }
+    void flush()
+      .catch(() => undefined)
+      .finally(() => {
+        if (decoder.state !== 'closed') decoder.close()
+      })
   }
 }

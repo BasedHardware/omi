@@ -184,8 +184,11 @@ export class BleAudioProcessor {
       return
     }
     if (pcm === null) {
-      // Async decoders deliver through the sink; nothing failed yet.
-      if (!decoder.isAsync) {
+      // Async decoders deliver through the sink, so null is normally "pending".
+      // But an async decoder that reports no real support (WebCodecs missing)
+      // will never deliver anything, and treating its nulls as pending would
+      // make a permanently silent session look healthy.
+      if (!decoder.isAsync || !decoder.hasFullSupport) {
         this.handleDecodeFailure(`decoder returned no samples for ${frame.length} bytes`)
       }
       return

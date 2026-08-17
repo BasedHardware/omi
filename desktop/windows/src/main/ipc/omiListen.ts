@@ -298,6 +298,17 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   }
   const mode: ListenMode = args.mode ?? 'conversation'
 
+  // Exclusive conversation slot. Two /v4/listen sockets for one uid coalesce
+  // through a racy server-side pointer, so a lane that is not the primary
+  // microphone (today: the wearable) asks to be refused rather than to race.
+  // The check and the session insert below both run in this synchronous block,
+  // so two overlapping starts cannot both pass it.
+  if (args.requireExclusiveConversation === true && mode === 'conversation') {
+    if (hasActiveConversationSession(args.sessionId)) {
+      throw new Error('A conversation session is already open for this user')
+    }
+  }
+
   // Push-to-talk is a single-at-a-time gesture. When a new PTT hold opens its
   // connection, close any prior PTT session for the same window — a rapid series of
   // holds otherwise leaves several connections handshaking to the same endpoint at
