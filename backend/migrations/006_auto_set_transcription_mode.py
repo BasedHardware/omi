@@ -96,6 +96,11 @@ def main():
     elapsed = time.time() - start
     logger.info(f"Done in {elapsed:.1f}s")
     logger.info(f"Results: {counts}")
+    # A per-user exception was swallowed into counts['error'] to keep the sweep going; surface it in
+    # the exit code so a caller/CI that only checks $? doesn't read a partial run as fully applied.
+    if counts['error']:
+        logger.error(f"{counts['error']} user(s) errored during the sweep; exiting non-zero.")
+        sys.exit(1)
 
 
 if __name__ == '__main__':

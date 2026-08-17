@@ -242,6 +242,7 @@ def main():
         futures = {executor.submit(migrate_user_usage, uid): uid for uid in users_to_migrate}
 
         completed_count = 0
+        failed_count = 0
         for future in as_completed(futures):
             uid = futures[future]
             completed_count += 1
@@ -249,11 +250,17 @@ def main():
                 future.result()
                 logger.info(f"({completed_count}/{len(users_to_migrate)}) COMPLETED: User {uid}")
             except Exception as exc:
+                failed_count += 1
                 logger.error(
                     f"({completed_count}/{len(users_to_migrate)}) FAILED: User {uid} generated an exception: {exc}"
                 )
 
     logger.info(f"\nMigration script finished. Processed {len(users_to_migrate)} users.")
+    # Fail loudly: a partially-applied backfill must not look like a clean run to a caller/CI that
+    # only checks the exit code — otherwise the missing users are silently never retried.
+    if failed_count:
+        logger.error(f"{failed_count}/{len(users_to_migrate)} users FAILED to migrate; exiting non-zero.")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
