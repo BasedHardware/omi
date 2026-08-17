@@ -48,6 +48,7 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.conversations.search import (
