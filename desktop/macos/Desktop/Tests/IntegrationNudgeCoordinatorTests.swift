@@ -184,6 +184,69 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     XCTAssertEqual(snoozeEvents.count, 0)
   }
 
+  /// The bar retains the callbacks, so a queued card can be drawn long after the
+  /// app that prompted it is gone. The card is the bar's to own by then; the
+  /// integration's lifetime budget is not.
+  func testAQueuedCardDrawnAfterTheUserMovedOnDoesNotSpendTheBudget() throws {
+    let defaults = makeDefaults()
+    let present = Box<(@MainActor () -> Void)?>(nil)
+    let frontmost = Box("com.apple.Notes")
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, onPresented, _ in
+        present.value = onPresented
+        return .queued
+      },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) },
+      frontmostBundleID: { frontmost.value }
+    )
+
+    _ = coordinator.offer(match: try match(), isConnected: false)
+    frontmost.value = "com.tinyspeck.slackmacgap"
+    present.value?()
+
+    XCTAssertEqual(
+      IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
+        .state(for: try match().entry.telemetryID).shownCount,
+      0
+    )
+  }
+
+  /// A drop that arrives after a new activation started belongs to a session
+  /// that is over, and must not report a suppression into the new one.
+  func testALateDropFromAnEndedSessionReportsNothing() throws {
+    let captured = Box<[(String, [String: Any])]>([])
+    AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
+      captured.value.append((event, properties))
+    }
+    addTeardownBlock {
+      await MainActor.run { AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests(nil) }
+    }
+
+    let drop = Box<(@MainActor () -> Void)?>(nil)
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _, _, onDropped in
+        drop.value = onDropped
+        return .queued
+      },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
+    )
+
+    _ = coordinator.offer(match: try match(), isConnected: false)
+    // A new activation ends the session the queued card belonged to.
+    coordinator.handleActivation(bundleIdentifier: "com.apple.Notes", appName: "Notes")
+    drop.value?()
+
+    XCTAssertTrue(
+      captured.value.filter { $0.1["suppression_reason"] as? String == "bar_unavailable" }.isEmpty
+    )
+  }
+
   /// The same queued card, once the bar actually presents it, does spend it.
   func testAQueuedCardSpendsTheBudgetWhenItReachesTheScreen() throws {
     let defaults = makeDefaults()

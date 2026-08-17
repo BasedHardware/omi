@@ -396,28 +396,41 @@ final class IntegrationNudgeCoordinator {
     // integration's three lifetime offers on a card nobody saw — the same shape
     // as the screen-capture-reset defect (see
     // `NotificationService.screenCaptureResetShownKey`).
+    // The bar retains both callbacks, so a queued card can call back long after
+    // this activation ended and a different one began. Each callback compares
+    // the session it was created in before doing anything.
+    let session = sessionToken
+    let triggeringApp = frontmostBundleID()
     var recorded = false
     var dropped = false
+
     let onDropped: @MainActor () -> Void = { [weak self] in
       // Queue eviction or a stale owner: the budget correctly stays unspent, but
       // a nudge that was owed and never drawn still has to be visible.
-      guard let self else { return }
+      guard let self, self.sessionToken == session else { return }
       dropped = true
       _ = self.report(.barUnavailable, for: match)
     }
-    let result = presenter(
-      ownerID, match,
-      { [weak self] in
-        guard let self else { return }
-        recorded = true
-        let shownCountBefore = self.store.state(for: match.entry.telemetryID).shownCount
-        self.store.recordDelivery(telemetryID: match.entry.telemetryID, now: self.now())
-        AnalyticsManager.shared.integrationNudgeShown(
-          entry: match.entry,
-          trigger: match.trigger,
-          shownCount: shownCountBefore + 1
-        )
-      }, onDropped)
+
+    let onPresented: @MainActor () -> Void = { [weak self] in
+      // A queued card is drawn whenever the bar gets to it, which can be long
+      // after the app that prompted it is gone. The card is the bar's to own by
+      // then; the integration's lifetime budget is not, and must not be spent on
+      // an offer about an app the user has already left.
+      guard let self, self.sessionToken == session,
+        self.frontmostBundleID() == triggeringApp
+      else { return }
+      recorded = true
+      let shownCountBefore = self.store.state(for: match.entry.telemetryID).shownCount
+      self.store.recordDelivery(telemetryID: match.entry.telemetryID, now: self.now())
+      AnalyticsManager.shared.integrationNudgeShown(
+        entry: match.entry,
+        trigger: match.trigger,
+        shownCount: shownCountBefore + 1
+      )
+    }
+
+    let result = presenter(ownerID, match, onPresented, onDropped)
 
     // `.presented` invokes the callback synchronously; `.queued` invokes it
     // later, if and only if the card reaches the screen. Either way the bar owns
