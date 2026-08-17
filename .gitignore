@@ -8,3 +8,4 @@ Pods/
 .xcode.env
 .xcode.env.local
 packages/contracts/ratified/dist/
+apps/backend-worker/.wrangler/

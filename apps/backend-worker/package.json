@@ -1,0 +1,27 @@
+{
+  "name": "@omi-v5/backend-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint --config .eslintrc.cjs --max-warnings 0 'src/**/*.ts' 'test/**/*.ts'",
+    "typecheck": "tsc --noEmit && WRANGLER_SEND_METRICS=false wrangler types --check",
+    "test": "bun test test/*.test.ts",
+    "dev": "WRANGLER_SEND_METRICS=false wrangler dev",
+    "deploy:dry-run": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --strict",
+    "deploy:staging": "WRANGLER_SEND_METRICS=false wrangler deploy --strict"
+  },
+  "dependencies": {
+    "@omi-core/ratified-contracts": "workspace:*",
+    "hono": "4.12.26"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@typescript-eslint/eslint-plugin": "6.21.0",
+    "@typescript-eslint/parser": "6.21.0",
+    "eslint": "8.57.1",
+    "wrangler": "4.123.0"
+  }
+}
