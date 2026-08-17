@@ -59,6 +59,31 @@ chat:
     resources: {}
 objstore:
   enabled: false
+  rustfs:
+    image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
+    imagePullPolicy: IfNotPresent
+    storage: 5Gi
+    resources: {}
+  # S3 client image for the bucket-provisioning Job (pinned by digest, like the others).
+  mcImage: minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+  # S3 credentials, shared by the RustFS server and the backend client. Set per environment; dev
+  # overlay uses throwaway values.
+  accessKey: ""
+  secretKey: ""
+  # Public base for object URLs — the s3 adapter requires it (no fallback). Dev = the internal endpoint
+  # (public URLs aren't exercised in-cluster yet; the ingress phase gives it a real host).
+  publicEndpoint: "http://rustfs:9000"
+  # Buckets to provision, keyed by the BUCKET_<KEY> env-var suffix the backend reads.
+  buckets:
+    SPEECH_PROFILES: speech-profiles
+    POSTPROCESSING: postprocessing
+    PRIVATE_CLOUD_SYNC: private-cloud-sync
+    TEMPORAL_SYNC_LOCAL: sync-temporal
+    MEMORIES_RECORDINGS: memories-recordings
+    APP_THUMBNAILS: app-thumbnails
+    CHAT_FILES: chat-files
+    DESKTOP_UPDATES: desktop-updates
+    PLUGINS_LOGOS: plugins-logos
 push:
   enabled: false
 inference:

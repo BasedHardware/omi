@@ -13,3 +13,9 @@ backend:
 # (external, ADR-0035) + the LLM gateway; here we validate the Qdrant vector-store path itself.
 chat:
   enabled: true
+
+# objstore profile: on-prem S3 object store (RustFS) + bucket provisioning. Throwaway dev credentials.
+objstore:
+  enabled: true
+  accessKey: "rustfsadmin"
+  secretKey: "rustfsadmin"

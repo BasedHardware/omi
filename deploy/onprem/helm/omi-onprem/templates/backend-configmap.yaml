@@ -19,3 +19,13 @@ data:
   QDRANT_URL: "http://qdrant:6333"
   QDRANT_VECTOR_DIM: {{ .Values.chat.vectorDim | quote }}
   {{- end }}
+  {{- if .Values.objstore.enabled }}
+  # objstore profile: on-prem S3 object store (RustFS) instead of GCS (ADR-0032). S3_PUBLIC_ENDPOINT is
+  # required for public object URLs (the s3 adapter has no fallback); the credentials live in the Secret.
+  OBJECT_STORE_BACKEND: "s3"
+  S3_ENDPOINT: "http://rustfs:9000"
+  S3_PUBLIC_ENDPOINT: {{ .Values.objstore.publicEndpoint | quote }}
+  {{- range $k, $v := .Values.objstore.buckets }}
+  BUCKET_{{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
