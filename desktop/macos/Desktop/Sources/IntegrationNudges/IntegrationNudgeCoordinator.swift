@@ -209,9 +209,13 @@ final class IntegrationNudgeCoordinator {
       try? await Task.sleep(
         nanoseconds: UInt64(IntegrationNudgePolicy.requiredDwell * 1_000_000_000))
       guard !Task.isCancelled, let self else { return }
-      let outcome = await self.evaluate(bundleIdentifier: bundleIdentifier, appName: appName)
+      let (outcome, title) = await self.evaluate(
+        bundleIdentifier: bundleIdentifier, appName: appName, lastTitle: nil)
       guard !Task.isCancelled, outcome.shouldKeepWatching else { return }
-      self.startBrowserRecheckIfNeeded(bundleIdentifier: bundleIdentifier, appName: appName)
+      // Hand the title forward so the first re-check does not redo the work the
+      // short-circuit exists to skip.
+      self.startBrowserRecheckIfNeeded(
+        bundleIdentifier: bundleIdentifier, appName: appName, lastTitle: title)
     }
   }
 
@@ -224,10 +228,14 @@ final class IntegrationNudgeCoordinator {
   /// used to run all six rounds regardless, which multiplied the suppressed
   /// event (documented as the funnel's denominator) by six per activation and
   /// re-read the window title for a decision already made.
-  private func startBrowserRecheckIfNeeded(bundleIdentifier: String, appName: String?) {
+  private func startBrowserRecheckIfNeeded(
+    bundleIdentifier: String,
+    appName: String?,
+    lastTitle initialTitle: String?
+  ) {
     guard IntegrationNudgeMatcher.isBrowser(bundleIdentifier: bundleIdentifier) else { return }
     browserRecheck = Task { [weak self] in
-      var lastTitle: String?
+      var lastTitle = initialTitle
       for _ in 0..<Self.browserRecheckLimit {
         try? await Task.sleep(nanoseconds: UInt64(Self.browserRecheckInterval * 1_000_000_000))
         guard !Task.isCancelled, let self, self.isEnabledNow,

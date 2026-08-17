@@ -85,6 +85,9 @@ steps:
       ok: true
       detail:
         presented: "true"
+        # The cooldown S7 asserts comes from the budget, not from admission to
+        # the bar's queue, so the flow asserts the budget directly.
+        spent_budget: "true"
         integration: Notion
 
   - id: S6

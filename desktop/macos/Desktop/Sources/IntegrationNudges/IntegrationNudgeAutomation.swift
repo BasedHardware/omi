@@ -67,8 +67,14 @@ enum IntegrationNudgeAutomation {
       match: IntegrationNudgeMatcher.Match(entry: entry, trigger: trigger),
       isConnected: false
     )
+    // `.delivered` means the bar took the card, which for a queued one is not
+    // the same as drawing it — and only drawing spends the budget. Report the
+    // budget, so an e2e step that asserts a cooldown afterwards is asserting
+    // something that actually happened.
+    let spentBudget = IntegrationNudgeStore.shared.state(for: entry.telemetryID).shownCount > 0
     return [
       "presented": outcome == .delivered ? "true" : "false",
+      "spent_budget": spentBudget ? "true" : "false",
       "outcome": "\(outcome)",
       "integration": entry.displayName,
     ]
