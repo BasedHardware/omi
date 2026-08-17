@@ -19,7 +19,7 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
     let entry = try entryOrFail()
     let payload = IntegrationNudgeTelemetry.shownPayload(
       integrationName: entry.displayName,
-      connectorID: entry.telemetryID,
+      route: entry.route,
       triggerID: "notion_app",
       triggerKind: .nativeApp,
       shownCount: 1
@@ -27,9 +27,12 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
 
     XCTAssertEqual(
       Set(payload.keys),
-      ["integration_name", "connector_id", "trigger_id", "trigger_kind", "shown_count"]
+      ["integration_name", "connector_id", "route", "trigger_id", "trigger_kind", "shown_count"]
     )
-    XCTAssertEqual(payload["connector_id"] as? String, "export:notion")
+    // Same shape as the connect funnel's `connector_id`, so the two event
+    // families join; `route` is what disambiguates the two halves.
+    XCTAssertEqual(payload["connector_id"] as? String, "notion")
+    XCTAssertEqual(payload["route"] as? String, "export")
     XCTAssertEqual(payload["trigger_kind"] as? String, "native_app")
   }
 
@@ -37,7 +40,7 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
     let entry = try entryOrFail()
     let payload = IntegrationNudgeTelemetry.suppressedPayload(
       integrationName: entry.displayName,
-      connectorID: entry.telemetryID,
+      route: entry.route,
       triggerID: "notion_web",
       triggerKind: .browserSite,
       reason: .connectorCooldown
@@ -45,7 +48,7 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
 
     XCTAssertEqual(
       Set(payload.keys),
-      ["integration_name", "connector_id", "trigger_id", "trigger_kind", "suppression_reason"]
+      ["integration_name", "connector_id", "route", "trigger_id", "trigger_kind", "suppression_reason"]
     )
     XCTAssertEqual(payload["suppression_reason"] as? String, "connector_cooldown")
   }
@@ -54,13 +57,13 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
     let entry = try entryOrFail()
     let payload = IntegrationNudgeTelemetry.actionedPayload(
       integrationName: entry.displayName,
-      connectorID: entry.telemetryID,
+      route: entry.route,
       action: .dismissForever,
       triggerID: "notion_app"
     )
 
     XCTAssertEqual(
-      Set(payload.keys), ["integration_name", "connector_id", "action", "trigger_id"])
+      Set(payload.keys), ["integration_name", "connector_id", "route", "action", "trigger_id"])
     XCTAssertEqual(payload["action"] as? String, "dismiss_forever")
   }
 

@@ -104,6 +104,11 @@ final class IntegrationNudgeCoordinator {
   /// "Gmail is snoozed" stays true while the user sits on the tab — and the
   /// funnel wants one event per activation, not one per ten seconds.
   private var reportedThisSession: Set<String> = []
+  /// Identifies the current watch session. The bar retains the presentation
+  /// callbacks, so a queued card can call back long after the user moved on and
+  /// a new activation started; both callbacks compare against this before doing
+  /// anything.
+  private var sessionToken = UUID()
   private var activationObserver: NSObjectProtocol?
   private var ownerObserver: NSObjectProtocol?
   private var pendingEvaluation: Task<Void, Never>?
@@ -190,6 +195,7 @@ final class IntegrationNudgeCoordinator {
   }
 
   private func cancelPendingWork() {
+    sessionToken = UUID()
     reportedThisSession.removeAll()
     pendingEvaluation?.cancel()
     pendingEvaluation = nil
@@ -524,7 +530,11 @@ final class IntegrationNudgeCoordinator {
   /// disconnect can start the pitch over instead of finding a spent budget.
   func noteConnected(route: IntegrationNudgeRoute) {
     store.recordConnected(telemetryID: route.telemetryID)
-    IntegrationConnectionInspector.invalidateExportStatuses()
+    // Only an export connect changes what the export scan would find; a routine
+    // Gmail sync should not throw away a cache it cannot have invalidated.
+    if case .exportDestination = route {
+      IntegrationConnectionInspector.invalidateExportStatuses()
+    }
   }
 
   // MARK: - Settings

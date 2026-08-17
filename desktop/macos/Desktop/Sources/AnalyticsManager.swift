@@ -299,7 +299,7 @@ class AnalyticsManager {
       IntegrationNudgeTelemetry.shownEventName,
       properties: IntegrationNudgeTelemetry.shownPayload(
         integrationName: entry.displayName,
-        connectorID: entry.telemetryID,
+        route: entry.route,
         triggerID: trigger.id,
         triggerKind: trigger.kind,
         shownCount: shownCount
@@ -316,7 +316,7 @@ class AnalyticsManager {
       IntegrationNudgeTelemetry.suppressedEventName,
       properties: IntegrationNudgeTelemetry.suppressedPayload(
         integrationName: entry.displayName,
-        connectorID: entry.telemetryID,
+        route: entry.route,
         triggerID: trigger.id,
         triggerKind: trigger.kind,
         reason: reason
@@ -333,7 +333,7 @@ class AnalyticsManager {
       IntegrationNudgeTelemetry.actionedEventName,
       properties: IntegrationNudgeTelemetry.actionedPayload(
         integrationName: entry.displayName,
-        connectorID: entry.telemetryID,
+        route: entry.route,
         action: action,
         triggerID: triggerID
       )

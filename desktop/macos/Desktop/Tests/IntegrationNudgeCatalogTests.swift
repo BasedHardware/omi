@@ -114,8 +114,10 @@ final class IntegrationNudgeCatalogTests: XCTestCase {
         case .browserTitleSuffix(let suffixes):
           XCTAssertFalse(suffixes.isEmpty, "\(trigger.id) declares no suffixes")
           guard let titles = Self.observedBrowserTitles[trigger.id] else {
-            return XCTFail(
-              "browser trigger '\(trigger.id)' has no observed real titles to test against")
+            // `continue`, not `return`: returning here would skip every later
+            // entry's assertions, including the native-app round-trips.
+            XCTFail("browser trigger '\(trigger.id)' has no observed real titles to test against")
+            continue
           }
           for title in titles {
             XCTAssertEqual(

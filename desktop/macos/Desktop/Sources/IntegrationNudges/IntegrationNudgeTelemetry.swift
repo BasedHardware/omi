@@ -9,6 +9,11 @@ import Foundation
 /// `ConnectorImportRunner`, tagged with the ``IntegrationConnectTelemetry/Surface/nudge``
 /// surface so nudge-sourced connects are attributable without a parallel schema.
 ///
+/// `connector_id` is the *bare* connector id (`email`, `notion`) so these events
+/// join to `IntegrationConnectTelemetry` on the same property with the same
+/// shape; `route` (`import` / `export`) is what disambiguates ChatGPT and Claude,
+/// which exist on both sides of the catalog.
+///
 /// Payloads carry bounded dimensions only. The triggering app is reported as its
 /// **catalog trigger id** — a value from a closed set this repo defines — never
 /// the raw `NSRunningApplication.localizedName`, bundle identifier, window
@@ -44,6 +49,7 @@ enum IntegrationNudgeTelemetry {
   static let allowedKeys: Set<String> = [
     "integration_name",
     "connector_id",
+    "route",
     "trigger_id",
     "trigger_kind",
     "suppression_reason",
@@ -53,14 +59,15 @@ enum IntegrationNudgeTelemetry {
 
   static func shownPayload(
     integrationName: String,
-    connectorID: String,
+    route: IntegrationNudgeRoute,
     triggerID: String,
     triggerKind: TriggerKind,
     shownCount: Int
   ) -> [String: Any] {
     allowListOnly([
       "integration_name": integrationName,
-      "connector_id": connectorID,
+      "connector_id": route.identifier,
+      "route": route.telemetryPrefix,
       "trigger_id": triggerID,
       "trigger_kind": triggerKind.rawValue,
       "shown_count": shownCount,
@@ -72,14 +79,15 @@ enum IntegrationNudgeTelemetry {
   /// looks identical to one nobody triggers.
   static func suppressedPayload(
     integrationName: String,
-    connectorID: String,
+    route: IntegrationNudgeRoute,
     triggerID: String,
     triggerKind: TriggerKind,
     reason: IntegrationNudgePolicy.Suppression
   ) -> [String: Any] {
     allowListOnly([
       "integration_name": integrationName,
-      "connector_id": connectorID,
+      "connector_id": route.identifier,
+      "route": route.telemetryPrefix,
       "trigger_id": triggerID,
       "trigger_kind": triggerKind.rawValue,
       "suppression_reason": reason.rawValue,
@@ -92,13 +100,14 @@ enum IntegrationNudgeTelemetry {
   /// keeping.
   static func actionedPayload(
     integrationName: String,
-    connectorID: String,
+    route: IntegrationNudgeRoute,
     action: Action,
     triggerID: String
   ) -> [String: Any] {
     allowListOnly([
       "integration_name": integrationName,
-      "connector_id": connectorID,
+      "connector_id": route.identifier,
+      "route": route.telemetryPrefix,
       "action": action.rawValue,
       "trigger_id": triggerID,
     ])

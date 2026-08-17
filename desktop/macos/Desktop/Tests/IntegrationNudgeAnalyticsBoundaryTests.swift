@@ -40,7 +40,8 @@ final class IntegrationNudgeAnalyticsBoundaryTests: XCTestCase {
 
     let event = try XCTUnwrap(capturedBox.value.first)
     XCTAssertEqual(event.0, IntegrationNudgeTelemetry.shownEventName)
-    XCTAssertEqual(event.1["connector_id"] as? String, "export:notion")
+    XCTAssertEqual(event.1["connector_id"] as? String, "notion")
+    XCTAssertEqual(event.1["route"] as? String, "export")
     XCTAssertEqual(event.1["integration_name"] as? String, "Notion")
     XCTAssertEqual(event.1["shown_count"] as? Int, 2)
   }

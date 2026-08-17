@@ -18,6 +18,14 @@ enum IntegrationNudgeRoute: Equatable, Hashable {
     }
   }
 
+  /// Which half of the catalog this is, as a bounded telemetry value.
+  var telemetryPrefix: String {
+    switch self {
+    case .importConnector: return "import"
+    case .exportDestination: return "export"
+    }
+  }
+
   /// A globally unique, bounded telemetry value. ChatGPT and Claude exist on
   /// both sides of the catalog, so the bare identifier would collide.
   var telemetryID: String {
