@@ -197,7 +197,11 @@ describe('requestCaptureManifest', () => {
   it('returns null on any failure rather than blocking the upload', async () => {
     // The manifest only buys the trusted lane; losing it must not cost the
     // upload, which is the thing that saves the audio.
-    const failing = vi.fn(async () => jsonResponse(500, {})) as unknown as typeof fetch
+    // A failing response whose body still looks manifest-shaped (a proxy error
+    // page, a cached body) must not be trusted just because the field is there.
+    const failing = vi.fn(async () =>
+      jsonResponse(500, { manifest: 'not-a-real-manifest' })
+    ) as unknown as typeof fetch
     expect(
       await client(failing).requestCaptureManifest({ files: [], conversationId: null })
     ).toBeNull()

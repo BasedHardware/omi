@@ -12,14 +12,7 @@
 // Ports the persistence half of Flutter `services/wals/local_wal_sync.dart` and
 // macOS `OmiWAL/WALModel.swift`.
 
-import {
-  isWalDeletable,
-  isWalPending,
-  makeWalEntry,
-  walId,
-  type WalEntry,
-  type WalStatus
-} from '../../shared/wal'
+import { isWalPending, makeWalEntry, walId, type WalEntry, type WalStatus } from '../../shared/wal'
 
 // Minimal DB surface, satisfied structurally by better-sqlite3 (production) and
 // node:sqlite's DatabaseSync (tests). Positional `?` params only.
@@ -265,7 +258,9 @@ export function cleanupCandidates(db: WalDb, cutoffSeconds: number): WalEntry[] 
       `SELECT * FROM audio_wal WHERE status = 'synced' AND timer_start < ? ORDER BY timer_start ASC`
     )
     .all(cutoffSeconds) as WalRow[]
-  return rows.map(rowToEntry).filter((entry) => isWalDeletable(entry))
+  // The status filter lives in the query alone: a second one here would make
+  // neither the authority, and a change to either could pass unnoticed.
+  return rows.map(rowToEntry)
 }
 
 /**

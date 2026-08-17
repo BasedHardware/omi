@@ -772,6 +772,10 @@ export type OmiBridgeApi = {
   walReleaseConfirmed: () => Promise<number>
   /** Subscribe to log changes. Returns an unsubscribe fn. */
   onWalSnapshot: (cb: (snapshot: WalSyncSnapshot) => void) => () => void
+  /** Read the offline-capture preferences. */
+  walGetSettings: () => Promise<OfflineCaptureSettings>
+  /** Patch them; returns the sanitized result. */
+  walSetSettings: (patch: Partial<OfflineCaptureSettings>) => Promise<OfflineCaptureSettings>
   /** True when OMI_ALLOW_VIRTUAL_MIC=1 — lets test harnesses feed a VB-Cable as
    *  the mic. When false, capture steers away from virtual/loopback default
    *  inputs (see lib/audio acquireMicStream). */

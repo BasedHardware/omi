@@ -17,7 +17,8 @@ import {
   walId,
   walSyncDisplayState
 } from '../../shared/wal'
-import type { WalSyncSnapshot } from '../../shared/types'
+import type { OfflineCaptureSettings, WalSyncSnapshot } from '../../shared/types'
+import { getAppSettings, setAppSettings } from '../appSettings'
 import { WalCapture } from './walCapture'
 import { WalSyncEngine } from './syncEngine'
 import { WalHttpClient } from './walHttp'
@@ -267,6 +268,12 @@ export function registerWalHandlers(
   }
 
   ipcMain.handle('omi-wal:snapshot', () => getService()?.snapshot() ?? null)
+  ipcMain.handle('omi-wal:get-settings', () => getAppSettings().offlineCapture)
+  ipcMain.handle('omi-wal:set-settings', (e, patch: Partial<OfflineCaptureSettings>) => {
+    if (!fromMainWindow(e)) return getAppSettings().offlineCapture
+    const current = getAppSettings().offlineCapture
+    return setAppSettings({ offlineCapture: { ...current, ...patch } }).offlineCapture
+  })
   ipcMain.handle('omi-wal:storage-bytes', async () => (await getService()?.storageBytes()) ?? 0)
   ipcMain.handle('omi-wal:retry', async (e, id: string) => {
     if (!fromMainWindow(e)) return

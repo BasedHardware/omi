@@ -20,6 +20,7 @@ import type {
   ListenMessage,
   CaptureCommand,
   CaptureEvent,
+  OfflineCaptureSettings,
   WalSyncSnapshot,
   ExportMemory,
   GoogleSource,
@@ -147,6 +148,9 @@ const omi: OmiBridgeApi = {
   walRetry: (id: string) => ipcRenderer.invoke('omi-wal:retry', id),
   walDiscard: (id: string) => ipcRenderer.invoke('omi-wal:discard', id),
   walReleaseConfirmed: () => ipcRenderer.invoke('omi-wal:release-confirmed'),
+  walGetSettings: () => ipcRenderer.invoke('omi-wal:get-settings'),
+  walSetSettings: (patch: Partial<OfflineCaptureSettings>) =>
+    ipcRenderer.invoke('omi-wal:set-settings', patch),
   onWalSnapshot: (cb: (snapshot: WalSyncSnapshot) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, snapshot: WalSyncSnapshot): void =>
       cb(snapshot)
