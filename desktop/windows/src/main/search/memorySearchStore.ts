@@ -66,8 +66,9 @@ export interface MemorySearchRow {
 
 /**
  * BM25-ranked memories for an FTS5 MATCH expression. `match` is already-built
- * FTS5 syntax (see corpusQuery.ts) — callers must never interpolate raw user
- * text, which would let a stray `"` or `*` throw a syntax error out of SQLite.
+ * FTS5 syntax (desktopSearch.ts builds it) — callers must never interpolate raw
+ * user text, which would let a stray `"` or `*` throw a syntax error out of
+ * SQLite on a keystroke.
  *
  * Ties break on recency, matching searchRewindFrames: two memories that mention
  * the query equally often are most usefully ordered newest-first.
@@ -92,4 +93,16 @@ export function searchMemoriesFts(
       ORDER BY bm25(memories_fts) ASC, memories.created_at DESC
       LIMIT ?`
   ).all(match, limit) as MemorySearchRow[]
+}
+
+/** Total memories matching `match`, before any limit. Separate from
+ *  searchMemoriesFts so a caller can show how much it is not displaying without
+ *  fetching every row to count it. */
+export function countMemoriesFts(db: MemorySearchDb, match: string): number {
+  if (match.length === 0) return 0
+  const row = cachedStmt(
+    db,
+    `SELECT COUNT(*) AS n FROM memories_fts WHERE memories_fts MATCH ?`
+  ).get(match) as { n: number } | undefined
+  return row?.n ?? 0
 }

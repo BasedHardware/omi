@@ -4,8 +4,7 @@
 //
 // MEMORY_SEARCH_SCHEMA is IMPORTED, not re-declared, so this exercises the exact
 // DDL production runs. The base `memories` table below is a copy of db.ts's Track
-// 3 block; `keeps the base-table contract` guards the columns the triggers depend
-// on so a rename in db.ts cannot silently stop the index updating.
+// 3 block; the last test pins what actually happens when the two drift.
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
 import { MEMORY_SEARCH_SCHEMA, searchMemoriesFts, type MemorySearchDb } from './memorySearchStore'

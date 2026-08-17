@@ -7,12 +7,9 @@ import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
-import {
-  MEMORY_SEARCH_SCHEMA,
-  searchMemoriesFts,
-  type MemorySearchDb,
-  type MemorySearchRow
-} from '../search/memorySearchStore'
+import { MEMORY_SEARCH_SCHEMA } from '../search/memorySearchStore'
+import { searchAllCorpora, type SearchDb } from '../search/desktopSearch'
+import type { DesktopSearchResult } from '../../shared/types'
 import {
   clearCorruptionFlags,
   isCorruptionError,
@@ -1494,12 +1491,12 @@ export function listRewindFramesSampled(
   })
 }
 
-/** BM25-ranked memories for an already-built FTS5 MATCH expression. Thin
- *  get()-bound wrapper over search/memorySearchStore.ts, which owns the SQL so
- *  production and the node:sqlite tests run the same statement. */
-export function searchMemories(match: string, limit = 50): MemorySearchRow[] {
-  return timed('searchMemories', () =>
-    searchMemoriesFts(get() as unknown as MemorySearchDb, match, limit)
+/** One search over every local corpus. Thin get()-bound wrapper over
+ *  search/desktopSearch.ts, which owns the SQL so production and the node:sqlite
+ *  tests run the same statements. */
+export function searchDesktopCorpora(query: string, limit?: number): DesktopSearchResult {
+  return timed('searchDesktopCorpora', () =>
+    searchAllCorpora(get() as unknown as SearchDb, query, limit)
   )
 }
 
