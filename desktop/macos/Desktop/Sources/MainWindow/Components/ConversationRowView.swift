@@ -28,6 +28,7 @@ struct ConversationRowView: View {
   @State private var isDeleting = false
   @State private var isUpdatingTitle = false
   @State private var isCopyingLink = false
+  @State private var deleteError: String?
 
   /// The timestamp to display (prefer startedAt, fall back to createdAt)
   private var displayDate: Date {
@@ -148,8 +149,11 @@ struct ConversationRowView: View {
     guard !isDeleting else { return }
     isDeleting = true
 
-    if await appState.deleteConversation(conversation.id) {
+    do {
+      try await appState.deleteConversation(conversation.id)
       log("Deleted conversation \(conversation.id)")
+    } catch {
+      deleteError = UserFacingErrorPresentation.message(for: error, while: .conversationDeletion)
     }
 
     isDeleting = false
@@ -510,6 +514,17 @@ struct ConversationRowView: View {
       }
     } message: {
       Text("Are you sure you want to delete this conversation? This action cannot be undone.")
+    }
+    .alert(
+      "Couldn't Delete Conversation",
+      isPresented: Binding(
+        get: { deleteError != nil },
+        set: { if !$0 { deleteError = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(deleteError ?? "")
     }
   }
 }

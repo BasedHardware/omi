@@ -336,8 +336,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
                           },
                           onDismissed: (direction) async {
                             var conversation = widget.conversation;
+                            final messenger = ScaffoldMessenger.of(context);
+                            final l10n = context.l10n;
                             PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                            provider.deleteConversationLocally(conversation, widget.date);
+                            final deleted = await provider.deleteConversationLocally(conversation, widget.date);
+                            if (!deleted) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text(l10n.unableToDeleteConversation)),
+                              );
+                            }
                           },
                           child: Padding(
                             padding: PlatformService.isMobile

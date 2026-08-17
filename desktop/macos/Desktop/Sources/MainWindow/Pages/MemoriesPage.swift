@@ -143,6 +143,7 @@ class MemoriesViewModel: ObservableObject {
   }
   @Published var hasMoreMemories = true
   @Published var errorMessage: String?
+  @Published var deletionErrorMessage: String?
   @Published var searchText = "" {
     didSet {
       if oldValue != searchText {
@@ -1423,6 +1424,7 @@ class MemoriesViewModel: ObservableObject {
   }
 
   func deleteMemory(_ memory: ServerMemory) async {
+    deletionErrorMessage = nil
     // Cancel any existing pending delete
     deleteTask?.cancel()
     if let existingPending = pendingDeleteMemory {
@@ -1534,6 +1536,7 @@ class MemoriesViewModel: ObservableObject {
       // undo window; decrementing earlier would re-fetch and duplicate it.
       rawBackendOffset = max(0, rawBackendOffset - 1)
     } catch {
+      deletionErrorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
       logError("Failed to delete memory", error: error)
       do {
         try await MemoryStorage.shared.restoreMemory(surfacedId: memory.id)
@@ -1916,6 +1919,17 @@ struct MemoriesPage: View {
     }
     .overlay(alignment: .bottom) {
       undoDeleteToast
+    }
+    .alert(
+      "Couldn't Delete Memory",
+      isPresented: Binding(
+        get: { viewModel.deletionErrorMessage != nil },
+        set: { if !$0 { viewModel.deletionErrorMessage = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(viewModel.deletionErrorMessage ?? "")
     }
     .overlay {
       // Loading overlay for conversation fetch. This page rides on `PageGlassLane`'s panel, so the

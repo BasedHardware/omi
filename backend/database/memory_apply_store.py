@@ -350,6 +350,34 @@ def replace_conversation_source_firestore(
     )
 
 
+def retract_conversation_source_firestore(
+    *,
+    uid: str,
+    conversation_id: str,
+    replacement_id: str,
+    replacement_digest: str,
+    replacement_operation: MemoryOperation,
+    observed_control: MemoryControlState,
+    expected_source_items: List[MemoryItem],
+    expected_reactivation_items: List[MemoryItem],
+    db_client: Any = db,
+) -> ConversationSourceReplacementResult:
+    transaction = db_client.transaction()
+    return _replace_conversation_source_firestore_transaction(
+        transaction,
+        db_client,
+        uid,
+        conversation_id,
+        replacement_id,
+        replacement_digest,
+        replacement_operation,
+        observed_control,
+        expected_source_items,
+        expected_reactivation_items,
+        [],
+    )
+
+
 def tombstone_memory_items_firestore(
     *,
     uid: str,
@@ -1928,5 +1956,6 @@ __all__ = [
     "apply_long_term_patch_firestore",
     "atomic_bump_source_generation",
     "replace_conversation_source_firestore",
+    "retract_conversation_source_firestore",
     "tombstone_memory_items_firestore",
 ]

@@ -647,7 +647,7 @@ def test_memory_service_retract_records_empty_source_replacement():
     assert any(path.startswith(f"users/{LEGACY_UID}/memory_outbox/") for path in db.docs)
 
 
-def test_conversation_delete_cascade_tombstones_canonical_and_emits_durable_deletes(monkeypatch, canonical_db):
+def test_conversation_delete_cascade_tombstones_canonical_while_intake_is_paused(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-cascade"
     content = "Fact sourced from conversation"
@@ -660,7 +660,10 @@ def test_conversation_delete_cascade_tombstones_canonical_and_emits_durable_dele
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    retract_result = retract_conversation_sourced_memories(uid, conversation_id, db_client=canonical_db)
+    monkeypatch.setenv("MEMORY_MODE", "off")
+    service = MemoryService(db_client=canonical_db)
+    service.history.all_live = MagicMock(return_value=[])
+    retract_result = service.retract_conversation_memories(uid, conversation_id)
 
     assert retract_result["retracted_memory_ids"] == [memory_id]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]

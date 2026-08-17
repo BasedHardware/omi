@@ -442,11 +442,27 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         builder: (c) => getDialog(
           context,
           () => Navigator.pop(context),
-          () {
+          () async {
             final convoProvider = context.read<ConversationProvider>();
-            convoProvider.deleteConversation(provider.conversation);
             Navigator.pop(context); // Close dialog
-            Navigator.pop(context, {'deleted': true}); // Close detail page
+            final deleted = await convoProvider.deleteConversation(provider.conversation);
+            if (!context.mounted) return;
+            if (deleted) {
+              Navigator.pop(context, {'deleted': true}); // Close detail page
+              return;
+            }
+            showDialog(
+              context: context,
+              builder: (c) => getDialog(
+                context,
+                () => Navigator.pop(context),
+                () => Navigator.pop(context),
+                context.l10n.unableToDeleteConversation,
+                context.l10n.somethingWentWrongTryAgain,
+                singleButton: true,
+                okButtonText: context.l10n.ok,
+              ),
+            );
           },
           context.l10n.deleteConversationTitle,
           context.l10n.deleteConversationMessage,

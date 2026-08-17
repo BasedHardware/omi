@@ -47,6 +47,7 @@ struct ConversationDetailView: View {
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
   @State private var isDeleting = false
+  @State private var deleteError: String?
 
   // Speaker naming state
   @State private var selectedSegmentForNaming: TranscriptSegment? = nil
@@ -253,6 +254,17 @@ struct ConversationDetailView: View {
         onDismiss: { showAppSelector = false }
       )
       .frame(width: 400, height: 500)
+    }
+    .alert(
+      "Couldn't Delete Conversation",
+      isPresented: Binding(
+        get: { deleteError != nil },
+        set: { if !$0 { deleteError = nil } }
+      )
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(deleteError ?? "")
     }
     .dismissableSheet(item: $selectedSegmentForNaming) { segment in
       NameSpeakerSheet(
@@ -542,11 +554,18 @@ struct ConversationDetailView: View {
     defer { isDeleting = false }
 
     let conversationId = conversation.id
-    if await AppState.current?.deleteConversation(conversationId) == true {
+    guard let appState = AppState.current else {
+      deleteError = UserFacingErrorPresentation.message(from: "", while: .conversationDeletion)
+      return
+    }
+    do {
+      try await appState.deleteConversation(conversationId)
       await MainActor.run {
         onDelete?()
         onBack()
       }
+    } catch {
+      deleteError = UserFacingErrorPresentation.message(for: error, while: .conversationDeletion)
     }
   }
 

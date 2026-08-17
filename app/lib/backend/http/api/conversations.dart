@@ -140,7 +140,7 @@ Future<bool> deleteConversationServer(String conversationId) async {
   );
   if (response == null) return false;
   Logger.debug('deleteConversation: ${response.statusCode}');
-  return response.statusCode == 204;
+  return response.statusCode >= 200 && response.statusCode < 300;
 }
 
 Future<bool> unlinkCalendarEvent(String conversationId) async {

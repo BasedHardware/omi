@@ -20,6 +20,16 @@ final class UserFacingErrorPresentationTests: XCTestCase {
     )
   }
 
+  func testProvidesConversationDeletionRecovery() {
+    XCTAssertEqual(
+      UserFacingErrorPresentation.message(
+        for: APIError.httpError(statusCode: 500, detail: "canonical memory retraction failed"),
+        while: .conversationDeletion
+      ),
+      "Omi's service is unavailable right now. Try again."
+    )
+  }
+
   func testHidesDecodingDiagnostics() {
     let decodingError = DecodingError.keyNotFound(
       CodingKeys.example,

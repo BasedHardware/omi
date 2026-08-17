@@ -11,6 +11,7 @@ enum UserFacingErrorPresentation {
     case dashboard
     case chatSessions
     case conversations
+    case conversationDeletion
     case conversationSearch
     case conversationMerge
     case tasks
@@ -34,6 +35,7 @@ enum UserFacingErrorPresentation {
       case .dashboard: return "refresh the dashboard"
       case .chatSessions: return "load chats"
       case .conversations: return "load conversations"
+      case .conversationDeletion: return "delete this conversation"
       case .conversationSearch: return "search conversations"
       case .conversationMerge: return "merge conversations"
       case .tasks: return "update tasks"
