@@ -1,12 +1,20 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
 from models.memory_evidence import SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.product_memory import (
+    DEFAULT_SHORT_TERM_TTL as DEFAULT_SHORT_TERM_TTL,
+    DEFAULT_SHORT_TERM_TTL_DAYS as DEFAULT_SHORT_TERM_TTL_DAYS,
+    MemoryItemStatus,
+    MemoryTier,
+    ProcessingState,
+    MemoryItem,
+    default_short_term_expiry as default_short_term_expiry,
+    effective_short_term_expiry,
+)
 
-DEFAULT_SHORT_TERM_TTL_DAYS = 30
 SHORT_TERM_LIFECYCLE_POLICY_VERSION = 'short_term_lifecycle.v1'
 
 
@@ -36,10 +44,6 @@ def _coerce_aware_utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError('lifecycle timestamps must be timezone-aware')
     return value.astimezone(timezone.utc)
-
-
-def default_short_term_expiry(captured_at: datetime) -> datetime:
-    return _coerce_aware_utc(captured_at) + timedelta(days=DEFAULT_SHORT_TERM_TTL_DAYS)
 
 
 def _coerce_disposition(disposition: Optional[ShortTermDisposition | str]) -> Optional[ShortTermDisposition]:
@@ -107,7 +111,7 @@ def evaluate_short_term_lifecycle(
     if item.tier != MemoryTier.short_term:
         raise ValueError('short-term lifecycle policy only evaluates short_term memory items')
 
-    expiry_at = _coerce_aware_utc(item.expires_at or default_short_term_expiry(item.captured_at))
+    expiry_at = effective_short_term_expiry(item)
     resolved_disposition = _coerce_disposition(disposition)
 
     if item.source_state in {SourceState.tombstoned, SourceState.purged}:
