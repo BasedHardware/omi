@@ -1,0 +1,20 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "omi-v5-backend-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ENVIRONMENT": "test",
+    "AI_MODEL": "test-model",
+    "STAGING_ACCOUNT_ID": "test-account",
+    "STAGING_DISPLAY_NAME": "Test Account",
+    "STAGING_EMAIL": "test@example.invalid",
+    "STAGING_PLAN_LABEL": "Test",
+    "STAGING_CHAT_LIMIT": 10
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountBackend" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }]
+}

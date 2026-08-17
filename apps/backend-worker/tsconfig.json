@@ -4,7 +4,7 @@
     "lib": ["ES2022", "WebWorker"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "types": ["bun"]
+    "types": ["bun", "@cloudflare/vitest-pool-workers/types"]
   },
   "include": ["src", "test", "worker-configuration.d.ts"]
 }
