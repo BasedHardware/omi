@@ -219,8 +219,10 @@ services:
   parakeet:
     build:
       context: ../../
-      # Base nvcr.io/nvidia/nemo:26.02 — run `docker login nvcr.io` (free NGC account) before building.
-      dockerfile: backend/parakeet/Dockerfile
+      # On-prem SLIM build: NIM gateway (forwards to whisper), no NeMo, no GPU -> ~2.9GB instead of 76GB
+      # (backend/parakeet/Dockerfile.onprem). The NeMo `Dockerfile` stays for the datacenter direct-NeMo
+      # STT path (mode != nim), which on-prem does not use.
+      dockerfile: backend/parakeet/Dockerfile.onprem
     profiles: ["inference"]
     # NIM mode forwards to whisper — wait until whisper's model is resident (its /health readiness), so the
     # first /v3/stream transcriptions don't fail against a not-yet-ready backend (cubic PR 10887 :207).

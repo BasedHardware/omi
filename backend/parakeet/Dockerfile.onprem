@@ -1,0 +1,40 @@
+# Parakeet ASR service — SLIM on-prem build (ADR-0037). On-prem always runs the NIM gateway posture
+# (PARAKEET_INFERENCE_MODE=nim): parakeet loads NO NeMo and uses NO GPU — it is a FastAPI gateway that
+# keeps the full Parakeet protocol the backend speaks (WS /v3/stream + VAD + diarization, /v1//v2 batch)
+# and forwards the actual transcription to whisper (NIM_INFERENCE_URL). So the 76GB nvcr.io/nvidia/nemo
+# base (backend/parakeet/Dockerfile) is dead weight here: nemo_toolkit is fully optional in the code
+# (try/except -> None; the RNNT path is skipped when mode=nim). The only hard import is torch.
+#
+# This installs everything EXCEPT nemo_toolkit on a slim base -> ~2.9GB instead of 76GB. The NeMo
+# Dockerfile stays for the datacenter direct-NeMo STT path (mode != nim).
+#
+# Build (from omi repo root):
+#   docker build -f backend/parakeet/Dockerfile.onprem -t omi-onprem-parakeet:latest .
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends libsndfile1 ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+# CPU torch + torchaudio (the NIM gateway does no GPU work). Install BOTH from the CPU index up front so
+# the later pyannote install can't pull the CUDA torchaudio (which needs CUDA runtime libs absent here).
+RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Everything the service imports EXCEPT nemo_toolkit (which needs the NeMo NGC base). pyannote is kept:
+# gpu_worker/stream_handler import it (optionally) for streaming diarization.
+COPY backend/parakeet/requirements.txt .
+RUN grep -v 'nemo_toolkit' requirements.txt > requirements.onprem.txt && \
+    pip install --no-cache-dir -r requirements.onprem.txt
+
+COPY backend/parakeet/ .
+
+ENV PARAKEET_INFERENCE_MODE=nim
+ENV NUMBA_CACHE_DIR=/tmp/numba_cache
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]
