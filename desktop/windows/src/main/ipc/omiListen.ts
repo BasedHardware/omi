@@ -529,11 +529,27 @@ export function killSessionsForOwner(ownerId: number): void {
 
 /** Authorization seam for captureBridge: an audio command may only control the
  * listen session opened by that same renderer. */
+/**
+ * Whether any live session is running the 'conversation' pipeline. Two /v4/listen
+ * sockets for one uid coalesce through a racy server-side pointer (verified
+ * splitting/bleeding on prod), so a second continuous lane — the wearable's —
+ * must know the slot is taken. Sessions whose socket already closed do not
+ * count: they hold no server-side conversation.
+ */
+export function hasActiveConversationSession(excludeSessionId?: string): boolean {
+  for (const [id, session] of sessions) {
+    if (id === excludeSessionId) continue
+    if (session.mode === 'conversation' && !session.closed) return true
+  }
+  return false
+}
+
 export function isListenSessionOwnedBy(sessionId: string, ownerId: number): boolean {
   return sessionOwners.get(sessionId) === ownerId
 }
 
 export function registerOmiListenHandlers(canStartSession: (ownerId: number) => boolean): void {
+  ipcMain.handle('omi-listen:conversation-active', () => hasActiveConversationSession())
   // Expose the byte counters to the E2E harnesses (VAD-playback / soak) so a
   // Playwright electronApp.evaluate can read them from the main process. Gated on
   // OMI_E2E — inert in production.

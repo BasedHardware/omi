@@ -120,7 +120,8 @@ export default defineConfig({
           index: resolve('src/renderer/index.html'),
           glow: resolve('src/renderer/glow.html'),
           'insight-toast': resolve('src/renderer/insight-toast.html'),
-          capture: resolve('src/renderer/capture.html')
+          capture: resolve('src/renderer/capture.html'),
+          device: resolve('src/renderer/device.html')
         }
       }
     },
