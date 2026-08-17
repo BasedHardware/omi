@@ -312,3 +312,104 @@ kubectl -n omi exec deploy/backend -c backend -- \
 - **Change anything:** re-run the Step 6 command with `helm upgrade` instead of `helm install` — passing the
   **same** `--set` secrets and values each time.
 - **Uninstall:** `helm uninstall omi -n omi` (data volumes remain until you delete the PVCs or the cluster).
+
+---
+
+## Configuration reference (all values)
+
+Every value the chart accepts. **"How"** shows how you'd normally set it for this k0s production install:
+`values-k0s.yaml` = already set for you by the prod overlay; `--set` = you pass it at install (Step 6);
+`default` = leave it unless you have a reason. Override any of them with `--set path=value`.
+
+**Global**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `imageRegistry` | `""` | `--set` | Registry prefix for the 5 images we build (e.g. `192.168.100.122:5000`). Empty = image already on the node. |
+| `storageClassName` | `""` | values-k0s (`openebs-hostpath`) | Storage class for every PVC. Empty = cluster default. |
+| `secrets.create` | `true` | default | Chart builds `backend-secret` from values. `false` = you supply the Secret yourself. |
+| `networkPolicy.enabled` | `false` | default | Default-deny egress (needs a policy-enforcing CNI: Calico/Cilium). |
+
+**Backend (the API)**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `backend.encryptionSecret` | `""` | `--set` (required) | Encrypts stored user data. Must stay the same forever. |
+| `backend.replicas` | `1` | values-k0s | Number of API pods. |
+| `backend.imagePullPolicy` | `Never` | values-k0s (`IfNotPresent`) | Kind loads images; k0s pulls from the registry. |
+| `backend.resources` | `{}` | default | CPU/memory requests & limits (values-k0s sets modest ones). |
+| `backend.env.*` | offline defaults | default | Non-secret backend env (`STORAGE_BACKEND=mongo`, stage flags, Redis host…). |
+
+**Login — `auth` profile (Keycloak)**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `auth.enabled` | `false` | values-k0s (`true`) | Turn on OIDC login. |
+| `auth.hostname` | `""` | derived | OIDC issuer; empty = `https://<ingress.loadBalancerIP>` (the ENTRY_IP). |
+| `auth.adminPassword` | `""` | `--set` | Keycloak admin console password (default `admin`). |
+| `auth.keycloak.db` | `dev-file` | values-k0s (`postgres`) | Keycloak's database backend. |
+| `auth.keycloak.postgres.password` | `""` | `--set` | Keycloak DB password when `db=postgres` (default `keycloak-dev`). |
+
+**Vector store — `chat` profile (Qdrant)**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `chat.enabled` | `false` | values-k0s (`true`) | Turn on the on-prem vector store. |
+| `chat.vectorDim` | `1024` | default | **Must equal your embeddings model's dimension** (`bge-m3`=1024, `nomic-embed-text`=768…). |
+
+**Object store — `objstore` profile (RustFS / S3)**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `objstore.enabled` | `false` | values-k0s (`true`) | Turn on the on-prem S3 store. |
+| `objstore.accessKey` / `objstore.secretKey` | `""` | `--set` | S3 credentials (default `rustfsadmin`). |
+| `objstore.publicEndpoint` | `http://rustfs:9000` | default | Public base URL for object links. |
+
+**Push — `push` profile (ntfy)**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `push.enabled` | `false` | values-k0s (`true`) | Turn on the on-prem UnifiedPush server. |
+| `push.baseUrl` | `http://ntfy` | default | Device-facing URL for the phone's push distributor. |
+
+**Edge — `ingress` profile (Envoy Gateway + MetalLB)**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `ingress.enabled` | `false` | values-k0s (`true`) | Turn on the HTTPS entry point. |
+| `ingress.service.type` | `NodePort` | values-k0s (`LoadBalancer`) | How the edge is exposed (MetalLB on k0s). |
+| `ingress.loadBalancerIP` | `""` | `--set` | The ENTRY_IP MetalLB gives the edge. |
+| `ingress.tlsSecretName` | `omi-tls` | default | TLS Secret (created by `gen-certs.sh`). |
+
+**Inference — LLM + embeddings external, the rest in-cluster on GPU**
+
+| Value | Default | How | What it does |
+|---|---|---|---|
+| `inference.enabled` | `false` | values-k0s (`true`) | Wire the external LLM + embeddings. |
+| `inference.openai.baseUrl` | `""` | `--set` | External OpenAI-compatible LLM URL. |
+| `inference.embeddings.baseUrl` / `.model` | `""` | `--set` | External embeddings endpoint + model (e.g. `bge-m3`). |
+| `inference.inCluster.enabled` | `false` | values-k0s (`true`) | Run STT/diarization/translation as GPU pods in-cluster. |
+| `inference.inCluster.models.existingClaim` | `""` | `--set` (optional) | Use a models PVC you already have; else the chart creates one. |
+| `inference.inCluster.models.size` | `40Gi` | `--set` (optional) | Size of the models PVC. |
+| `inference.inCluster.models.accessModes` | `[ReadWriteOnce]` | `--set` for multi-node | `[ReadOnlyMany]` when inference pods span nodes (needs an RWX/ROX class). |
+| `inference.inCluster.models.provision.enabled` | `false` | `--set` (`true`) | One-time Job that downloads the weights into the PVC. |
+| `inference.inCluster.models.provision.huggingFaceToken` | `""` | `--set` | HF token for the gated pyannote model. |
+| `inference.inCluster.nodeSelector` | `{}` | `--set` for multi-node | Pin GPU pods to the GPU node(s). |
+| `inference.inCluster.services.<name>.enabled` | `true` | `--set` to disable | Turn an engine off (`whisper`/`parakeet`/`diarizer`/`nllb`). |
+| `inference.inCluster.services.<name>.gpu` | `1` | default | GPU units the engine requests (`parakeet` uses none — CPU gateway). |
+
+**Persistent volume sizes** (all take a `--set …storage=` / `…size=` override)
+
+| Component | Value | Default |
+|---|---|---|
+| MongoDB | `mongo.storage` | `2Gi` |
+| Valkey | `valkey.storage` | `1Gi` |
+| Qdrant (chat) | `chat.qdrant.storage` | `2Gi` |
+| RustFS (objstore) | `objstore.rustfs.storage` | `5Gi` |
+| ntfy (push) | `push.ntfy.storage` | `1Gi` |
+| Keycloak (auth) | `auth.keycloak.storage` | `1Gi` |
+| Keycloak DB (auth) | `auth.keycloak.postgres.storage` | `2Gi` |
+| Inference models | `inference.inCluster.models.size` | `40Gi` |
+
+Third-party image pins (mongo, valkey, qdrant, rustfs, ntfy, keycloak, postgres) also live in the values but
+you rarely change them — see `omi-oss/values.yaml` for the exact tags/digests.
