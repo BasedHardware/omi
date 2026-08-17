@@ -36,23 +36,6 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
     XCTAssertEqual(payload["trigger_kind"] as? String, "native_app")
   }
 
-  func testSuppressedPayloadCarriesTheClosedReason() throws {
-    let entry = try entryOrFail()
-    let payload = IntegrationNudgeTelemetry.suppressedPayload(
-      integrationName: entry.displayName,
-      route: entry.route,
-      triggerID: "notion_web",
-      triggerKind: .browserSite,
-      reason: .connectorCooldown
-    )
-
-    XCTAssertEqual(
-      Set(payload.keys),
-      ["integration_name", "connector_id", "route", "trigger_id", "trigger_kind", "suppression_reason"]
-    )
-    XCTAssertEqual(payload["suppression_reason"] as? String, "connector_cooldown")
-  }
-
   func testActionedPayloadIsExactlyItsClosedSchema() throws {
     let entry = try entryOrFail()
     let payload = IntegrationNudgeTelemetry.actionedPayload(
@@ -67,8 +50,8 @@ final class IntegrationNudgeTelemetryTests: XCTestCase {
     XCTAssertEqual(payload["action"] as? String, "dismiss_forever")
   }
 
-  /// Every suppression reason is emitted as a dimension, so each one must have
-  /// a stable, non-empty raw value.
+  /// Suppression reasons are not emitted, but they are the coordinator's control
+  /// flow and its logs, so each still needs a stable, distinct raw value.
   func testEverySuppressionReasonHasABoundedRawValue() {
     var seen = Set<String>()
     for reason in IntegrationNudgePolicy.Suppression.allCases {

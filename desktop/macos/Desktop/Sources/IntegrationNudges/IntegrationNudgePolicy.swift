@@ -195,27 +195,6 @@ enum IntegrationNudgePolicy {
     return nil
   }
 
-  /// Suppressions that persist across activations, so emitting a funnel event
-  /// for them every time is unbounded volume for a decision made once — and it
-  /// inflates the very denominator the event exists to provide. Finder alone is
-  /// activated dozens of times an hour.
-  ///
-  /// A three-day cooldown and a seven-day snooze are exactly that shape: the
-  /// same answer on every activation for their whole window. Their rate is
-  /// already known from the Shown events plus these fixed budgets, so emitting
-  /// them buys nothing the analysis does not already have. What stays is the
-  /// momentary set — the daily and global caps, and a bar that could not draw —
-  /// which is genuinely "we wanted to nudge and could not".
-  static func isAmbient(_ suppression: Suppression) -> Bool {
-    switch suppression {
-    case .alreadyConnected, .featureDisabled, .optedOut, .connectorLifetimeCap,
-      .notSignedIn, .onboardingIncomplete, .snoozed, .connectorCooldown:
-      return true
-    case .globalCooldown, .dailyCap, .barUnavailable:
-      return false
-    }
-  }
-
   /// Whether this suppression is about *one integration* rather than about the
   /// user or the moment.
   ///

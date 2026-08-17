@@ -130,60 +130,6 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     )
   }
 
-  /// The bar invokes `onDropped` and then returns the refusal, so a naive
-  /// implementation reports the suppression twice for one refused card.
-  func testARefusedCardReportsBarUnavailableOnlyOnce() throws {
-    let captured = Box<[(String, [String: Any])]>([])
-    AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
-      captured.value.append((event, properties))
-    }
-    addTeardownBlock {
-      await MainActor.run { AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests(nil) }
-    }
-
-    let coordinator = IntegrationNudgeCoordinator(
-      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
-      now: { self.now },
-      presenter: { _, _, _, onDropped in
-        onDropped()
-        return .windowUnavailable
-      },
-      ownerID: { "user-a" },
-      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
-    )
-
-    XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false), .settled(.barUnavailable))
-
-    let barEvents = captured.value.filter {
-      $0.1["suppression_reason"] as? String == "bar_unavailable"
-    }
-    XCTAssertEqual(barEvents.count, 1)
-  }
-
-  /// A three-day cooldown answers identically on every activation for its whole
-  /// window, so it is ambient and emits nothing at all.
-  func testASnoozedIntegrationEmitsNoSuppressionEvent() throws {
-    let captured = Box<[(String, [String: Any])]>([])
-    AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
-      captured.value.append((event, properties))
-    }
-    addTeardownBlock {
-      await MainActor.run { AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests(nil) }
-    }
-
-    let defaults = makeDefaults()
-    let store = IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
-    store.recordSnooze(telemetryID: try match().entry.telemetryID, now: now)
-    let coordinator = makeCoordinator(defaults: defaults, result: .presented)
-
-    for _ in 0..<4 {
-      XCTAssertEqual(coordinator.offer(match: try match(), isConnected: false), .settled(.snoozed))
-    }
-
-    let snoozeEvents = captured.value.filter { $0.1["suppression_reason"] as? String == "snoozed" }
-    XCTAssertEqual(snoozeEvents.count, 0)
-  }
-
   /// A queued card drawn after the user switched apps was still *seen*, so it
   /// spends its offer. Gating this on the app still being frontmost would let
   /// the same integration be offered again and again, each time free.
@@ -211,39 +157,6 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
         .state(for: try match().entry.telemetryID).shownCount,
       1
-    )
-  }
-
-  /// A drop that arrives after a new activation started belongs to a session
-  /// that is over, and must not report a suppression into the new one.
-  func testALateDropFromAnEndedSessionReportsNothing() throws {
-    let captured = Box<[(String, [String: Any])]>([])
-    AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
-      captured.value.append((event, properties))
-    }
-    addTeardownBlock {
-      await MainActor.run { AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests(nil) }
-    }
-
-    let drop = Box<(@MainActor () -> Void)?>(nil)
-    let coordinator = IntegrationNudgeCoordinator(
-      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
-      now: { self.now },
-      presenter: { _, _, _, onDropped in
-        drop.value = onDropped
-        return .queued
-      },
-      ownerID: { "user-a" },
-      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
-    )
-
-    _ = coordinator.offer(match: try match(), isConnected: false)
-    // A new activation ends the session the queued card belonged to.
-    coordinator.handleActivation(bundleIdentifier: "com.apple.Notes", appName: "Notes")
-    drop.value?()
-
-    XCTAssertTrue(
-      captured.value.filter { $0.1["suppression_reason"] as? String == "bar_unavailable" }.isEmpty
     )
   }
 

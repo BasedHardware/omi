@@ -46,17 +46,6 @@ final class IntegrationNudgeAnalyticsBoundaryTests: XCTestCase {
     XCTAssertEqual(event.1["shown_count"] as? Int, 2)
   }
 
-  func testSuppressedEmitsItsNameAndClosedReason() throws {
-    startCapturing()
-
-    AnalyticsManager.shared.integrationNudgeSuppressed(
-      entry: try entry(), trigger: try trigger(), reason: .dailyCap)
-
-    let event = try XCTUnwrap(capturedBox.value.first)
-    XCTAssertEqual(event.0, IntegrationNudgeTelemetry.suppressedEventName)
-    XCTAssertEqual(event.1["suppression_reason"] as? String, "daily_cap")
-  }
-
   /// Conversion has to be attributable to the trigger that produced the card,
   /// or a native-app nudge and a browser-site nudge for the same integration
   /// are indistinguishable in the funnel.
@@ -79,12 +68,10 @@ final class IntegrationNudgeAnalyticsBoundaryTests: XCTestCase {
 
     AnalyticsManager.shared.integrationNudgeShown(
       entry: try entry(), trigger: try trigger(), shownCount: 1)
-    AnalyticsManager.shared.integrationNudgeSuppressed(
-      entry: try entry(), trigger: try trigger(), reason: .snoozed)
     AnalyticsManager.shared.integrationNudgeActioned(
       entry: try entry(), action: .notNow, triggerID: "notion_app")
 
-    XCTAssertEqual(capturedBox.value.count, 3)
+    XCTAssertEqual(capturedBox.value.count, 2)
     for event in capturedBox.value {
       for key in event.1.keys {
         XCTAssertTrue(

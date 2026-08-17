@@ -99,16 +99,6 @@ final class IntegrationNudgeCoordinator {
   private let frontmostBundleID: @MainActor () -> String?
   private let windowTitleProvider: @MainActor (_ bundleIdentifier: String, _ appName: String?) async -> String?
   private let connectionInspector: @MainActor (IntegrationNudgeRoute) async -> Bool
-  /// Suppression reasons already reported for the window currently being
-  /// watched. A browser re-check can legitimately re-reach the same answer —
-  /// "Gmail is snoozed" stays true while the user sits on the tab — and the
-  /// funnel wants one event per activation, not one per ten seconds.
-  private var reportedThisSession: Set<String> = []
-  /// Identifies the current watch session. The bar retains the presentation
-  /// callbacks, so a queued card can call back long after the user moved on and
-  /// a new activation started; both callbacks compare against this before doing
-  /// anything.
-  private var sessionToken = UUID()
   private var activationObserver: NSObjectProtocol?
   private var ownerObserver: NSObjectProtocol?
   private var pendingEvaluation: Task<Void, Never>?
@@ -195,8 +185,6 @@ final class IntegrationNudgeCoordinator {
   }
 
   private func cancelPendingWork() {
-    sessionToken = UUID()
-    reportedThisSession.removeAll()
     pendingEvaluation?.cancel()
     pendingEvaluation = nil
     browserRecheck?.cancel()
@@ -295,7 +283,7 @@ final class IntegrationNudgeCoordinator {
     // export destination the inspection is a local MCP config scan, and a user
     // who pressed "Never" should not pay for it on every activation.
     if let settled = decideWithoutConnectionState(entry: match.entry) {
-      return report(settled, for: match)
+      return .settled(settled)
     }
 
     let isConnected = await connectionInspector(match.entry.route)
@@ -332,27 +320,6 @@ final class IntegrationNudgeCoordinator {
     }
   }
 
-  /// Emit the suppression, unless it is an ambient state.
-  ///
-  /// An ambient reason — connected, opted out, budget spent, signed out — is the
-  /// same answer on every activation for as long as it holds. Emitting it each
-  /// time is unbounded volume, and it inflates the very denominator the event
-  /// exists to provide.
-  private func report(
-    _ reason: IntegrationNudgePolicy.Suppression,
-    for match: IntegrationNudgeMatcher.Match
-  ) -> Outcome {
-    let key = "\(match.entry.telemetryID)|\(reason.rawValue)"
-    if !IntegrationNudgePolicy.isAmbient(reason), reportedThisSession.insert(key).inserted {
-      AnalyticsManager.shared.integrationNudgeSuppressed(
-        entry: match.entry,
-        trigger: match.trigger,
-        reason: reason
-      )
-    }
-    return .settled(reason)
-  }
-
   /// The gates that do not need the connection state, evaluated against the
   /// same live inputs `decide` uses.
   private func decideWithoutConnectionState(
@@ -384,11 +351,9 @@ final class IntegrationNudgeCoordinator {
         + "connected=\(isConnected) decision=\(decision.suppression?.rawValue ?? "deliver")"
     )
 
-    if let reason = decision.suppression {
-      return report(reason, for: match)
-    }
+    if let reason = decision.suppression { return .settled(reason) }
 
-    guard let ownerID = ownerID() else { return report(.notSignedIn, for: match) }
+    guard let ownerID = ownerID() else { return .settled(.notSignedIn) }
 
     // The budget is spent from the bar's presentation callback, not from the
     // return value. A `.queued` card has been admitted to a queue, not shown,
@@ -396,21 +361,7 @@ final class IntegrationNudgeCoordinator {
     // integration's three lifetime offers on a card nobody saw — the same shape
     // as the screen-capture-reset defect (see
     // `NotificationService.screenCaptureResetShownKey`).
-    // The bar retains both callbacks, so a queued card can call back long after
-    // this activation ended and a different one began. Presentation still counts
-    // whenever it happens — the user saw the card — but a *drop* must not report
-    // a suppression into whatever window session is current by then.
-    let session = sessionToken
     var recorded = false
-    var dropped = false
-
-    let onDropped: @MainActor () -> Void = { [weak self] in
-      // Queue eviction or a stale owner: the budget correctly stays unspent, but
-      // a nudge that was owed and never drawn still has to be visible.
-      guard let self, self.sessionToken == session else { return }
-      dropped = true
-      _ = self.report(.barUnavailable, for: match)
-    }
 
     let onPresented: @MainActor () -> Void = { [weak self] in
       // This fires only when the bar actually drew the card, so the user saw
@@ -429,7 +380,9 @@ final class IntegrationNudgeCoordinator {
       )
     }
 
-    let result = presenter(ownerID, match, onPresented, onDropped)
+    // A dropped card needs no handling: the budget simply stays unspent, so the
+    // next activation offers it again.
+    let result = presenter(ownerID, match, onPresented, {})
 
     // `.presented` invokes the callback synchronously; `.queued` invokes it
     // later, if and only if the card reaches the screen. Either way the bar owns
@@ -439,7 +392,7 @@ final class IntegrationNudgeCoordinator {
       // gets better by re-reading the title in ten seconds. `showNotification`
       // calls `onDropped` *and then* returns the refusal, so only report here
       // when it did not already.
-      return dropped ? .settled(.barUnavailable) : report(.barUnavailable, for: match)
+      return .settled(.barUnavailable)
     }
     return .delivered
   }
@@ -483,8 +436,8 @@ final class IntegrationNudgeCoordinator {
       isFeatureEnabled: environment.isFeatureEnabled && environment.notificationsEnabled,
       isSignedIn: ownerID() != nil,
       isOnboardingComplete: environment.isOnboardingComplete,
-      connector: store.state(for: entry.telemetryID),
-      lastAnyNudgeAt: store.lastAnyNudgeAt(),
+      connector: store.state(for: entry.telemetryID, now: timestamp),
+      lastAnyNudgeAt: store.lastAnyNudgeAt(now: timestamp),
       nudgesInCurrentDay: store.nudgesInCurrentDay(now: timestamp),
       now: timestamp
     )

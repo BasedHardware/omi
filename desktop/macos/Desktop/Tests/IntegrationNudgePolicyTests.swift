@@ -129,20 +129,6 @@ final class IntegrationNudgePolicyTests: XCTestCase {
   /// Emitting a funnel event on every activation for an answer the user settled
   /// once is unbounded volume, and it inflates the denominator the event exists
   /// to provide.
-  func testAmbientSuppressionsAreTheOnesThatPersistAcrossActivations() {
-    for reason in [
-      IntegrationNudgePolicy.Suppression.alreadyConnected, .featureDisabled, .optedOut,
-      .connectorLifetimeCap, .notSignedIn, .onboardingIncomplete, .snoozed, .connectorCooldown,
-    ] {
-      XCTAssertTrue(IntegrationNudgePolicy.isAmbient(reason), "\(reason) persists")
-    }
-    for reason in [
-      IntegrationNudgePolicy.Suppression.globalCooldown, .dailyCap, .barUnavailable,
-    ] {
-      XCTAssertFalse(IntegrationNudgePolicy.isAmbient(reason), "\(reason) is momentary")
-    }
-  }
-
   /// A user whose Gmail is already connected must still be offered ChatGPT when
   /// they switch tabs, so a settlement about one integration cannot end
   /// recognition for the whole browser session.

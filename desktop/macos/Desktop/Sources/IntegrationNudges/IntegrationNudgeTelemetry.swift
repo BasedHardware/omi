@@ -2,8 +2,15 @@ import Foundation
 
 /// Closed, privacy-safe telemetry contract for proactive integration nudges.
 ///
-/// The funnel this measures is: an uncovered integration was detected → a nudge
-/// was delivered → the user acted on it. It deliberately does **not** re-measure
+/// The funnel this measures is: a nudge was delivered → the user acted on it.
+///
+/// There is deliberately no "suppressed" event. Every reason a recognized window
+/// does not produce a card is a deterministic function of the budgets in
+/// ``IntegrationNudgePolicy`` and the Shown events already recorded, and the
+/// states that dominate — already connected, opted out, cooling down — hold for
+/// days while apps like Finder are activated dozens of times an hour. An event
+/// for them is unbounded volume that tells the analysis nothing it cannot
+/// derive. It deliberately does **not** re-measure
 /// the connect itself; once the user taps Connect, the existing
 /// ``IntegrationConnectTelemetry`` funnel takes over from
 /// `ConnectorImportRunner`, tagged with the ``IntegrationConnectTelemetry/Surface/nudge``
@@ -23,7 +30,6 @@ import Foundation
 enum IntegrationNudgeTelemetry {
   /// PostHog event names. Stable identifiers — do not rename.
   static let shownEventName = "Integration Nudge Shown"
-  static let suppressedEventName = "Integration Nudge Suppressed"
   static let actionedEventName = "Integration Nudge Actioned"
 
   /// What the user did with a delivered nudge. Closed set.
@@ -52,7 +58,6 @@ enum IntegrationNudgeTelemetry {
     "route",
     "trigger_id",
     "trigger_kind",
-    "suppression_reason",
     "action",
     "shown_count",
   ]
@@ -74,30 +79,6 @@ enum IntegrationNudgeTelemetry {
     ])
   }
 
-  /// Emitted when a recognized trigger did *not* produce a nudge. This is the
-  /// denominator: without it, a feature that silently suppresses everything
-  /// looks identical to one nobody triggers.
-  static func suppressedPayload(
-    integrationName: String,
-    route: IntegrationNudgeRoute,
-    triggerID: String,
-    triggerKind: TriggerKind,
-    reason: IntegrationNudgePolicy.Suppression
-  ) -> [String: Any] {
-    allowListOnly([
-      "integration_name": integrationName,
-      "connector_id": route.identifier,
-      "route": route.telemetryPrefix,
-      "trigger_id": triggerID,
-      "trigger_kind": triggerKind.rawValue,
-      "suppression_reason": reason.rawValue,
-    ])
-  }
-
-  /// `triggerID` is what makes conversion measurable per trigger. Without it a
-  /// Notion nudge from the desktop app and one from a browser tab are the same
-  /// row, and the experiment cannot tell which recognition path is worth
-  /// keeping.
   static func actionedPayload(
     integrationName: String,
     route: IntegrationNudgeRoute,

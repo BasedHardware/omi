@@ -31,11 +31,24 @@ final class IntegrationNudgeStoreTests: XCTestCase {
     let store = self.store(defaults)
     store.recordDelivery(telemetryID: telemetryID, now: now)
 
-    let state = store.state(for: telemetryID)
+    let state = store.state(for: telemetryID, now: now)
     XCTAssertEqual(state.shownCount, 1)
     XCTAssertEqual(state.lastShownAt?.timeIntervalSince1970, now.timeIntervalSince1970)
-    XCTAssertEqual(store.lastAnyNudgeAt()?.timeIntervalSince1970, now.timeIntervalSince1970)
+    XCTAssertEqual(store.lastAnyNudgeAt(now: now)?.timeIntervalSince1970, now.timeIntervalSince1970)
     XCTAssertEqual(store.nudgesInCurrentDay(now: now), 1)
+  }
+
+  /// `snoozedUntil` is a deadline, so it is in the future by definition. A
+  /// past-only sanitizer applied to it would mean "Not now" silently snoozed
+  /// nothing — the store must read it back even when it is ahead of `now`.
+  func testSnoozeSurvivesReadbackWhileStillInTheFuture() {
+    let defaults = makeDefaults()
+    let store = self.store(defaults)
+    store.recordSnooze(telemetryID: telemetryID, now: Date())
+
+    let snoozedUntil = store.state(for: telemetryID).snoozedUntil
+    XCTAssertNotNil(snoozedUntil)
+    XCTAssertGreaterThan(try XCTUnwrap(snoozedUntil), Date())
   }
 
   func testSnoozeAndOptOutPersist() {
@@ -43,12 +56,12 @@ final class IntegrationNudgeStoreTests: XCTestCase {
     let store = self.store(defaults)
     store.recordSnooze(telemetryID: telemetryID, now: now)
     XCTAssertEqual(
-      store.state(for: telemetryID).snoozedUntil?.timeIntervalSince1970,
+      store.state(for: telemetryID, now: now).snoozedUntil?.timeIntervalSince1970,
       now.addingTimeInterval(IntegrationNudgePolicy.snoozeDuration).timeIntervalSince1970
     )
 
     store.recordOptOut(telemetryID: telemetryID)
-    XCTAssertTrue(store.state(for: telemetryID).optedOut)
+    XCTAssertTrue(store.state(for: telemetryID, now: now).optedOut)
   }
 
   func testConnectingClearsTheHistory() {
@@ -59,7 +72,7 @@ final class IntegrationNudgeStoreTests: XCTestCase {
 
     store.recordConnected(telemetryID: telemetryID)
 
-    let state = store.state(for: telemetryID)
+    let state = store.state(for: telemetryID, now: now)
     XCTAssertEqual(state.shownCount, 0)
     XCTAssertNil(state.lastShownAt)
     XCTAssertNil(state.snoozedUntil)
@@ -71,8 +84,8 @@ final class IntegrationNudgeStoreTests: XCTestCase {
     let defaults = makeDefaults()
     store(defaults, owner: "user-a").recordOptOut(telemetryID: telemetryID)
 
-    XCTAssertTrue(store(defaults, owner: "user-a").state(for: telemetryID).optedOut)
-    XCTAssertFalse(store(defaults, owner: "user-b").state(for: telemetryID).optedOut)
+    XCTAssertTrue(store(defaults, owner: "user-a").state(for: telemetryID, now: now).optedOut)
+    XCTAssertFalse(store(defaults, owner: "user-b").state(for: telemetryID, now: now).optedOut)
   }
 
   func testSignedOutStoreNeitherReadsNorWrites() {
@@ -149,8 +162,8 @@ final class IntegrationNudgeStoreTests: XCTestCase {
       let decision = IntegrationNudgePolicy.decide(
         IntegrationNudgePolicy.Input(
           isConnected: false,
-          connector: store.state(for: telemetryID),
-          lastAnyNudgeAt: store.lastAnyNudgeAt(),
+          connector: store.state(for: telemetryID, now: instant),
+          lastAnyNudgeAt: store.lastAnyNudgeAt(now: instant),
           nudgesInCurrentDay: store.nudgesInCurrentDay(now: instant),
           now: instant
         )
@@ -163,8 +176,8 @@ final class IntegrationNudgeStoreTests: XCTestCase {
     let exhausted = IntegrationNudgePolicy.decide(
       IntegrationNudgePolicy.Input(
         isConnected: false,
-        connector: store.state(for: telemetryID),
-        lastAnyNudgeAt: store.lastAnyNudgeAt(),
+        connector: store.state(for: telemetryID, now: instant),
+        lastAnyNudgeAt: store.lastAnyNudgeAt(now: instant),
         nudgesInCurrentDay: store.nudgesInCurrentDay(now: instant),
         now: instant
       )

@@ -51,19 +51,19 @@ final class IntegrationNudgeStore {
 
   // MARK: - Reads
 
-  func state(for telemetryID: String) -> IntegrationNudgePolicy.ConnectorState {
+  func state(for telemetryID: String, now: Date = Date()) -> IntegrationNudgePolicy.ConnectorState {
     guard ownerID != nil else { return IntegrationNudgePolicy.ConnectorState() }
     return IntegrationNudgePolicy.ConnectorState(
       shownCount: defaults.integer(forKey: key(Field.shownCount, telemetryID)),
-      lastShownAt: date(forKey: key(Field.lastShownAt, telemetryID)),
+      lastShownAt: pastDate(forKey: key(Field.lastShownAt, telemetryID), now: now),
       snoozedUntil: date(forKey: key(Field.snoozedUntil, telemetryID)),
       optedOut: defaults.bool(forKey: key(Field.optedOut, telemetryID))
     )
   }
 
-  func lastAnyNudgeAt() -> Date? {
+  func lastAnyNudgeAt(now: Date = Date()) -> Date? {
     guard let budgetKey = budgetKey(Field.lastAnyNudgeAt) else { return nil }
-    return date(forKey: budgetKey)
+    return pastDate(forKey: budgetKey, now: now)
   }
 
   /// Deliveries inside the trailing day window. Stored as raw timestamps rather
@@ -138,17 +138,27 @@ final class IntegrationNudgeStore {
     return stored.filter { $0 >= cutoff && $0 <= now.timeIntervalSince1970 }
   }
 
-  /// Reads a stored instant, discarding one that lies in the future.
+  private func date(forKey key: ScopedDefaultsKey) -> Date? {
+    let timestamp = defaults.double(forKey: key)
+    guard timestamp > 0 else { return nil }
+    return Date(timeIntervalSince1970: timestamp)
+  }
+
+  /// Reads an instant that can only ever be in the past, discarding one that is
+  /// not.
   ///
   /// A clock that moves backwards would otherwise leave `lastShownAt` and
-  /// `lastAnyNudgeAt` permanently ahead of `now`, and the cooldown gates —
-  /// which compare elapsed time against a positive budget — would silence every
-  /// nudge for as long as the skew lasted. The rolling day window already drops
-  /// future entries for the same reason; these two needed the same treatment.
-  private func date(forKey key: ScopedDefaultsKey, now: Date = Date()) -> Date? {
-    let timestamp = defaults.double(forKey: key)
-    guard timestamp > 0, timestamp <= now.timeIntervalSince1970 else { return nil }
-    return Date(timeIntervalSince1970: timestamp)
+  /// `lastAnyNudgeAt` permanently ahead of `now`, and the cooldown gates — which
+  /// compare elapsed time against a positive budget — would silence every nudge
+  /// until the skew passed. The rolling day window already drops future entries
+  /// for the same reason.
+  ///
+  /// Deliberately *not* applied to `snoozedUntil`, which is a deadline and is in
+  /// the future by definition: sanitizing that one would mean "Not now" never
+  /// snoozed anything.
+  private func pastDate(forKey key: ScopedDefaultsKey, now: Date) -> Date? {
+    guard let value = date(forKey: key), value <= now else { return nil }
+    return value
   }
 
   private func setDate(_ date: Date?, forKey key: ScopedDefaultsKey) {
@@ -159,8 +169,10 @@ final class IntegrationNudgeStore {
     defaults.set(date.timeIntervalSince1970, forKey: key)
   }
 
+  /// Only ever called behind an `ownerID != nil` guard; a signed-out store
+  /// reads and writes nothing.
   private func key(_ field: String, _ telemetryID: String) -> ScopedDefaultsKey {
-    .integrationNudge(field, scope: "\(telemetryID).\(ownerID ?? "anonymous")")
+    .integrationNudge(field, scope: "\(telemetryID).\(ownerID ?? "")")
   }
 
   private func budgetKey(_ field: String) -> ScopedDefaultsKey? {

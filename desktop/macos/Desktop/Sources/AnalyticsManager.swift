@@ -307,23 +307,6 @@ class AnalyticsManager {
     )
   }
 
-  func integrationNudgeSuppressed(
-    entry: IntegrationNudgeCatalogEntry,
-    trigger: IntegrationNudgeTrigger,
-    reason: IntegrationNudgePolicy.Suppression
-  ) {
-    trackIntegrationNudge(
-      IntegrationNudgeTelemetry.suppressedEventName,
-      properties: IntegrationNudgeTelemetry.suppressedPayload(
-        integrationName: entry.displayName,
-        route: entry.route,
-        triggerID: trigger.id,
-        triggerKind: trigger.kind,
-        reason: reason
-      )
-    )
-  }
-
   func integrationNudgeActioned(
     entry: IntegrationNudgeCatalogEntry,
     action: IntegrationNudgeTelemetry.Action,
