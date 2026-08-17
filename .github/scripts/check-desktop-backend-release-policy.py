@@ -50,6 +50,9 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "--format='none'",
         "SERVICE_ACCOUNT_JSON",
         "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "USE_VERTEX_AI=true",
+        "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+        "GCP_LOCATION=us-central1",
         "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
         "AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}",
         "AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}",
@@ -180,7 +183,9 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             workflow=workflow,
         )
     )
-    request_step = "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
+    request_step = (
+        "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
+    )
     errors.extend(_validate_private_agent_vm_readiness(text, workflow=workflow, request_step=request_step))
     # Static workflow tripwire: deploy-cloudrun's parseFlags splits an unquoted
     # --args=-m,... token, making Python treat -m as a gcloud flag instead of a
@@ -226,6 +231,8 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+            "USE_VERTEX_AI=true",
+            "GCP_LOCATION=us-central1",
             "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
             "${{ secrets.GCP_SERVICE_ACCOUNT }}",
@@ -277,6 +284,10 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             for line in desktop_block.splitlines()
         ):
             errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
+        if desktop_block is not None:
+            for env_var in ("USE_VERTEX_AI=true", "GCP_LOCATION=us-central1"):
+                if not any(line.strip() == env_var for line in desktop_block.splitlines()):
+                    errors.append(f"{workflow}: desktop candidate missing Vertex PT runtime env {env_var!r}")
     return errors
 
 

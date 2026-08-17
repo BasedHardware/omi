@@ -297,6 +297,81 @@ async def test_proxy_marks_daily_quota_exhaustion_non_retryable_and_preserves_re
 
 
 @pytest.mark.asyncio
+async def test_server_paid_flash_fails_closed_without_project(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("USE_VERTEX_AI", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "must-not-be-used")
+
+    with pytest.raises(desktop_proxy.RoutingFailure) as error:
+        await desktop_proxy._upstream(
+            "models/gemini-2.5-flash:generateContent",
+            "gemini-2.5-flash",
+            "generateContent",
+            {},
+        )
+
+    assert error.value.code == "routing_vertex_not_configured"
+    assert desktop_proxy.VERTEX_PT_CONTRACT in error.value.message
+    assert desktop_proxy.VERTEX_PT_MODEL == "gemini-2.5-flash"
+    assert desktop_proxy.VERTEX_PT_EXPIRES == "~2027-05-28"
+
+
+@pytest.mark.asyncio
+async def test_server_paid_flash_uses_vertex_never_studio_or_key(monkeypatch):
+    async def token():
+        return "adc-token"
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy._vertex_tokens, "get_access_token", token)
+    monkeypatch.setenv("USE_VERTEX_AI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+    monkeypatch.setenv("GEMINI_API_KEY", "must-not-be-used")
+
+    for action in ("generateContent", "streamGenerateContent"):
+        route = await desktop_proxy._upstream(
+            f"models/{desktop_proxy.VERTEX_PT_MODEL}:{action}",
+            desktop_proxy.VERTEX_PT_MODEL,
+            action,
+            {"alt": "sse"} if action == "streamGenerateContent" else {},
+        )
+        assert route.provider == "vertex_ai"
+        assert "aiplatform.googleapis.com" in route.url
+        assert "us-central1" in route.url
+        assert "generativelanguage.googleapis.com" not in route.url
+        assert "key" not in route.params
+        assert route.params.get("key") is None
+
+
+@pytest.mark.asyncio
+async def test_byok_flash_stays_on_ai_studio(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    monkeypatch.setenv("USE_VERTEX_AI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+
+    route = await desktop_proxy._upstream(
+        "models/gemini-2.5-flash:generateContent",
+        "gemini-2.5-flash",
+        "generateContent",
+        {},
+    )
+
+    assert route.provider == "ai_studio_byok"
+    assert route.params["key"] == "user-key"
+    assert "generativelanguage.googleapis.com" in route.url
+
+
+def test_vertex_pt_model_pin_points_at_the_docs():
+    docs = BACKEND_DIR / "docs" / "vertex-pt-flash.md"
+    text = docs.read_text(encoding="utf-8")
+    assert desktop_proxy.VERTEX_PT_MODEL in text
+    assert desktop_proxy.VERTEX_PT_EXPIRES in text
+    assert desktop_proxy.VERTEX_PT_CONTRACT.split(",")[0] in text
+    assert "generativelanguage.googleapis.com" in text
+
+
+@pytest.mark.asyncio
 async def test_vertex_credentials_fail_closed_without_studio_fallback(monkeypatch):
     async def unavailable():
         raise RuntimeError("credential detail must not escape")
