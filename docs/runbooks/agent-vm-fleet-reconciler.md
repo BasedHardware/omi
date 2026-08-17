@@ -19,18 +19,27 @@ before acceptance, so an unaccepted candidate cannot escape the staged gate.
    metadata, release identity, image digest, or runtime health identity.
 3. A drifted running VM is marked `draining`. Agent Proxy rejects new sessions
    and existing sessions retain a 90-second renewable lease. A VM is stopped
-   only after the lease set is empty; stopped VMs are prepared without booting,
-   then started and verified against `/health` with the owner token over the
-   private VM network. The reconciler job must use direct VPC egress to the
-   Agent VM subnet and set `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc`; it
-   refuses to send the bearer token over a NAT address. A healthy
-   stopped VM with no drift remains stopped so idle self-stop is preserved.
-   A healthy RUNNING VM with no start demand and zero session leases records
-   `agentVm.reconcile.idleSince` on first observation and is stopped after
-   `AGENT_VM_IDLE_STOP_SECONDS` (default 1h, minimum 30m). Idle is never a
-   drift reason: the drift path would stop-then-restart and leak again. The
-   TERMINATED reaper remains the delete backstop. Ownerless VMs (no Firestore
-   owner) are unreachable here — inventory them with
+   only after the lease set is empty. Repair (metadata rewrite, restart, and
+   `/health` verification with the owner token over the private VM network)
+   happens only when a fenced start request demands it; the reconciler job
+   must use direct VPC egress to the Agent VM subnet and set
+   `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc` — it refuses to send the
+   bearer token over a NAT address. **Undemanded capacity is deleted, not
+   preserved** (minimum-spend policy, 2026-08-17): a stopped VM with no start
+   demand, no session lease, and no active boot-image migration is deleted
+   (its `autoDelete` boot and state disks are reclaimed with it), and a
+   drained drifted VM without demand is deleted in the same run instead of
+   being restarted. A healthy RUNNING VM with no start demand and zero
+   session leases records `agentVm.reconcile.idleSince` on first observation
+   and is deleted after `AGENT_VM_IDLE_TEARDOWN_SECONDS` (default and minimum
+   30m). Idle is never a drift reason. Deletion writes
+   `reconcile.state=missing`, so desktop provisioning can claim a replacement
+   immediately and terminal cleanup erases the record after grace. The state
+   disk holds only a client-uploaded SQLite copy (the Chrome profile is a
+   tmpfs), so teardown loses no unique data — the next session re-uploads.
+   The TERMINATED reaper remains the delete backstop for records the
+   reconciler cannot reach. Ownerless VMs (no Firestore owner) are
+   unreachable here — inventory them with
    `python3 backend/scripts/agent_vm_reaper.py --inventory` and clean up
    out-of-band.
 4. A provider-confirmed missing VM is recorded with `missingSince`. The

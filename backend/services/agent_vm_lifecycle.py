@@ -1947,6 +1947,25 @@ class GceAgentVmClient:
             body,
         )
 
+    async def delete_instance(self, vm_name: str, expected_instance_id: str) -> bool:
+        """Delete only the numeric-ID-matched instance (undemanded teardown).
+
+        The caller must hold the owner lease and have observed zero active
+        session leases. The numeric instance ID fences against a same-named
+        replacement created between the caller's observation and this delete.
+        ``autoDelete`` disk attachments are reclaimed by the provider with the
+        instance.
+        """
+        if not expected_instance_id:
+            return False
+        instance = await self.get_instance(vm_name)
+        if instance is None:
+            return True
+        if str(instance.get("id") or "") != expected_instance_id:
+            return False
+        await self._mutate("DELETE", self.instance_url(vm_name))
+        return True
+
     async def delete_replacement(self, vm_name: str, expected_instance_id: str, migration_id: str) -> bool:
         """Delete only the labelled, numeric-ID-matched predecessor/candidate."""
         instance = await self.get_instance(vm_name)
