@@ -8,7 +8,11 @@ only the `values-<env>.yaml` differ.
 Milestone status: all seven profiles are validated live on Kind — **core** (backend + valkey + mongo
 replica-set), **chat** (Qdrant), **objstore** (RustFS), **push** (ntfy), **ingress** (Gateway API / Envoy
 Gateway), **auth** (Keycloak OIDC + Gateway TLS) and **inference** (external OpenAI-compatible endpoint).
-Prod/k0s hardening (MetalLB, real-SAN TLS, Keycloak on Postgres, a GPU inference node) is future work.
+Validated live on a real **k0s** node too (`values-k0s.yaml`), in phases: **A** core (backend image pulled
+from a local registry, OpenEBS storage), **B** ingress + auth (MetalLB LoadBalancer on a real LAN IP, Envoy
+Gateway, Keycloak-on-Postgres OIDC/TLS, real-token 200 / invalid-token 401), **C** in-cluster **GPU**
+inference (`inference.inCluster`, ADR-0053 — nllb on `nvidia.com/gpu`, real EN→IT translation reached by the
+backend at `http://nllb:8080`).
 
 ## Prerequisites
 
@@ -65,6 +69,40 @@ curl -k https://$LBIP/v1/users/people -H "Authorization: Bearer $TOK"
 `http://localhost:8080` / `https://localhost:8443` (the kind port-mappings). gen-certs with `localhost`.
 
 Teardown: `kind delete cluster --name omi-dev` (and `helm uninstall eg -n envoy-gateway-system`).
+
+## Prod on k0s (real bare-metal)
+
+Same chart, `values-k0s.yaml` (the concrete counterpart to the generic `values-prod.yaml`). Differences
+from Kind: the backend image is pulled from a **local registry** (there is no `kind load`), the MetalLB pool
+is a **free LAN IP** the operator owns (`metallb-pool-k0s.yaml`), and phase C runs **in-cluster GPU**
+inference (needs the NVIDIA device plugin on the node).
+
+```bash
+# 0. Registry the node can pull from (containerd hosts.toml -> your registry, skip_verify), then push:
+docker tag omi-oss-backend:latest <registry>/omi-oss-backend:latest && docker push <registry>/omi-oss-backend:latest
+docker tag omi-oss-nllb:latest    <registry>/omi-oss-nllb:latest    && docker push <registry>/omi-oss-nllb:latest   # phase C
+
+# 1. Add-ons: Envoy Gateway + OpenEBS as on Kind; MetalLB with the LAN pool:
+kubectl apply -f metallb-pool-k0s.yaml           # edit the address to a FREE IP on your LAN first
+kubectl create namespace omi --dry-run=client -o yaml | kubectl apply -f -
+HOST_IP=<lan-ip> ./gen-certs.sh omi omi-tls <lan-ip>
+
+# 2. Install (edit values-k0s.yaml: registry host, loadBalancerIP, auth.hostname, modelsHostPath):
+helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
+  --set backend.encryptionSecret="$(openssl rand -hex 32)"   # never store the secret in the values file
+
+# 3. Verify (LAN IP): health, OIDC 200/401, and the in-cluster GPU translation:
+LBIP=<lan-ip>
+curl -k https://$LBIP/v1/health
+TOK=$(curl -k -s -X POST https://$LBIP/realms/omi/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -k -o /dev/null -w '%{http_code}\n' https://$LBIP/v1/users/people -H "Authorization: Bearer $TOK"   # 200
+```
+
+Add a GPU inference engine (whisper/diarizer/parakeet) by pushing its image and adding one entry under
+`inference.inCluster.services` (same shape as `nllb`) — no new template. On a single-GPU node enable only
+what fits at once. Teardown: `helm uninstall omi -n omi`.
 
 ## Profiles (compose parity)
 

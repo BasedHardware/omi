@@ -1,0 +1,101 @@
+{{- /*
+In-cluster inference (phase C, ADR-0053): run the on-prem GPU inference servers INSIDE the cluster
+instead of pointing the backend at an external endpoint (ADR-0035). One generic Deployment+Service per
+entry in `inference.inCluster.services`, so whisper/parakeet/diarizer/nllb all follow the same shape —
+add a service by adding a values entry, not a template. GPU is requested via the standard
+`nvidia.com/gpu` resource (NVIDIA device plugin); on a single-GPU node enable only what fits at once.
+Model weights are mounted read-only from `modelsHostPath` (single-node: reuse the pre-provisioned
+compose models volume) or an emptyDir placeholder. Wire the backend to the resulting Services with the
+matching HOSTED_*_API_URL env in `backend.env`.
+*/}}
+{{- if .Values.inference.inCluster.enabled }}
+{{- $root := . }}
+{{- $ic := .Values.inference.inCluster }}
+{{- range $name, $svc := $ic.services }}
+{{- if $svc.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "omi-oss.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "omi-oss.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      {{- with $ic.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image }}
+          imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          {{- with $svc.env }}
+          env:
+            {{- range $k, $v := . }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          {{- if $svc.healthPath }}
+          # Model load is eager on some servers and can take a while — gate readiness behind a generous
+          # startup probe so the Service never routes before the model is resident.
+          startupProbe:
+            httpGet: { path: {{ $svc.healthPath | quote }}, port: http }
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet: { path: {{ $svc.healthPath | quote }}, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          {{- end }}
+          resources:
+            limits:
+              nvidia.com/gpu: {{ $svc.gpu | default 1 }}
+            {{- with $svc.resources }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+      volumes:
+        - name: models
+          {{- if $ic.modelsHostPath }}
+          hostPath:
+            path: {{ $ic.modelsHostPath | quote }}
+            type: Directory
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "omi-oss.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/component: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+{{- end }}
+{{- end }}
+{{- end }}

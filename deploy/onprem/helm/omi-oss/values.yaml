@@ -137,6 +137,25 @@ inference:
     baseUrl: ""   # OpenAI-compatible embeddings endpoint; dim MUST equal chat.vectorDim
     model: ""     # e.g. bge-m3
     apiKey: ""
+  # In-cluster GPU inference (phase C, ADR-0053): run the on-prem inference servers as GPU pods INSIDE
+  # the cluster (k0s with the NVIDIA device plugin) instead of an external endpoint. One generic
+  # Deployment+Service per entry (templates/inference-incluster.yaml); wire the backend to the Services
+  # with the matching HOSTED_*_API_URL in backend.env. On a single-GPU node enable only what fits at once.
+  inCluster:
+    enabled: false
+    # Model weights mounted read-only at /models. Single-node: a host path (e.g. the compose models
+    # volume `/var/lib/docker/volumes/omi-oss_inference-models/_data`); multi-node: replace with an ROX PVC.
+    modelsHostPath: ""
+    nodeSelector: {}   # pin GPU pods to the GPU node(s) on a multi-node cluster
+    services: {}
+    # services:
+    #   nllb:
+    #     enabled: true
+    #     image: <registry>/omi-oss-nllb:latest
+    #     port: 8080
+    #     gpu: 1
+    #     env: { NLLB_MODEL_DIR: /models/nllb-200-distilled-600M-ct2-int8 }
+    #     # healthPath: /health   # set if the server exposes one (whisper does; nllb does not)
 
 # Edge ingress. Default type "gateway" = Gateway API via Envoy Gateway (ADR-0049 Q3): the modern
 # replacement for the compose TLS reverse-proxies. Envoy Gateway itself is a cluster-level prerequisite
