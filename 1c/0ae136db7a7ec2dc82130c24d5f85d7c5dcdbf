@@ -1,0 +1,31 @@
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectionInspector.swift
+  s_ff8aeb5a36f5b8::t_6bda9055d301c7 60-68
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  s_ff8aeb5a36f5b8::t_d5295532e77e69 181-185,188-189
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgePolicy.swift
+  s_ff8aeb5a36f5b8::t_42a64afa9e2f27 202-208,212,214
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeStore.swift
+  s_ff8aeb5a36f5b8::t_2f7f09a1d592bb 19-28,39-42,44,47-49
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_ff8aeb5a36f5b8::t_352dbc201d58d5 1065
+desktop/macos/Desktop/Tests/IntegrationNudgeCoordinatorTests.swift
+  s_ff8aeb5a36f5b8::t_9cb2320faf93fe 163-165,184
+desktop/macos/Desktop/Tests/IntegrationNudgePolicyTests.swift
+  s_ff8aeb5a36f5b8::t_77b56cec6fcb23 135,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1c0ae136db7a7ec2dc82130c24d5f85d7c5dcdbf",
+  "prompts": {},
+  "sessions": {
+    "s_ff8aeb5a36f5b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cee6b50-5d24-4cd7-ba03-5499c4e7d8a5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
