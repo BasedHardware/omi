@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { RingDrain, type DrainSink, type StorageTransport } from './ringDrain'
-import { RING_RECORD_BYTES, PAYLOAD_BYTES } from './storageProtocol'
+import { RING_RECORD_BYTES } from './storageProtocol'
 import type { DrainedChunk } from './storageChunker'
 
 const FRAMES_PER_SECOND = 50

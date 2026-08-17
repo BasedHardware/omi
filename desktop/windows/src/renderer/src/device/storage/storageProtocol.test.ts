@@ -293,8 +293,20 @@ describe('multi-file storage', () => {
   it('rejects a listing that would read past the frame', () => {
     // A corrupt count must not make the parser read beyond the notification.
     expect(parseFileList(Uint8Array.from([5, 1, 2, 3]))).toBeNull()
-    expect(parseFileList(Uint8Array.from([200]))).toBeNull()
     expect(parseFileList(new Uint8Array(0))).toBeNull()
+  })
+
+  it('rejects a count above the firmware maximum even when the bytes are there', () => {
+    // The firmware caps its table at 128 files. A frame long enough to satisfy
+    // a larger count is not a listing, so the count itself is checked rather
+    // than relying on the buffer running out.
+    const bytes = new Uint8Array(1 + 200 * 8)
+    bytes[0] = 200
+    expect(parseFileList(bytes)).toBeNull()
+
+    const atLimit = new Uint8Array(1 + 128 * 8)
+    atLimit[0] = 128
+    expect(parseFileList(atLimit)?.length).toBe(128)
   })
 
   it('deletes the highest index first because the firmware re-indexes', () => {
