@@ -291,6 +291,11 @@ def clear_user_data(uid: str):
         "short_term_lifecycle_transitions",
         "memory_legacy_fallback",
         "memory_commits",
+        # Screen-derived work memory. Production deletion enumerates collections
+        # live, so it already covers these; this list does not, and a scenario
+        # that leaked bucket rows between tests would look like a passing wipe.
+        "context_buckets",
+        "context_bucket_facts",
     ]:
         docs = list(user_ref.collection(coll_name).stream())
         for d in docs:

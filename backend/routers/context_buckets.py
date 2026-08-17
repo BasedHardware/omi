@@ -1,5 +1,7 @@
 """Context bucket sync and read APIs shared by every consumer of screen-derived work memory."""
 
+import logging
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -13,8 +15,10 @@ from models.context_bucket import (
     ContextBucketSyncRequest,
     ContextFact,
 )
+from utils.other import endpoints as auth
 from utils.other.endpoints import get_current_user_uid
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
@@ -38,7 +42,7 @@ def _resolve_account_generation(uid: str, claimed_generation: int) -> int:
 def sync_context_buckets(
     request: ContextBucketSyncRequest,
     account_generation: AccountGenerationHeader,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(get_current_user_uid, 'context_buckets:sync')),
 ) -> ContextBucketSyncReport:
     """Publish validated facts from a capture device.
 
@@ -46,9 +50,17 @@ def sync_context_buckets(
     already accepted. Screen content itself never arrives here.
     """
 
-    return context_buckets_db.sync_context_buckets(
+    report = context_buckets_db.sync_context_buckets(
         uid, request, account_generation=_resolve_account_generation(uid, account_generation)
     )
+    # Sweep here rather than on a schedule: this is the recurring per-device call,
+    # so expiry collection rides a round trip the device is already paying for.
+    # Bounded per call, so a backlog drains over passes instead of stalling one.
+    try:
+        context_buckets_db.collect_expired_context_facts(uid)
+    except Exception as error:
+        logger.warning(f'expired context fact collection failed for one sync: {error}')
+    return report
 
 
 @router.get('/v1/context-buckets/facts', tags=['context_buckets'], response_model=list[ContextFact])
@@ -71,7 +83,7 @@ def list_context_facts(
 @router.post('/v1/context-buckets/purge', tags=['context_buckets'], response_model=ContextBucketPurgeReport)
 def purge_context_buckets(
     request: ContextBucketPurgeRequest,
-    uid: str = Depends(get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(get_current_user_uid, 'context_buckets:purge')),
 ) -> ContextBucketPurgeReport:
     """Delete synced copies when a device stops retaining a bucket locally.
 
