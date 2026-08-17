@@ -36,6 +36,31 @@ same commit is the regression.
 
 BYOK Gemini stays on the user's key / AI Studio.
 
+## Keeping the reservation for work that must be Flash
+
+The 13,450 tok/s cap is oversubscribed, so the proxy actively keeps low-value
+work off `gemini-2.5-flash`:
+
+- **Over-quota Pro demotes to `gemini-2.5-flash-lite`**
+  (`_QUOTA_DEMOTION_MODEL`), which is `shared`/on-demand on Vertex and never
+  burns the PT. Demoting to `gemini-2.5-flash` instead was the 2026-08-17
+  defect that silently dumped the Insight tool loop (~11% of the reservation)
+  onto the saturated PT lane.
+- **Server-paid requests are capped at 2048 output tokens**
+  (`_SERVER_PAID_MAX_OUTPUT_TOKENS`). No shipped desktop client sends
+  `maxOutputTokens`, so everything used to inherit the 8192 default while
+  output burns down the reservation at 9x. Realistic per-lane budgets are
+  64–1024 visible tokens plus a thinking budget of up to 1024 (thinking counts
+  toward the output limit on 2.5 models). BYOK requests keep the 8192
+  default/clamp.
+
+The desktop clients pin the low-value lanes (memory extraction, LiveNotes,
+goals, task dedup/prioritization, home suggestions, Windows insight) to
+`gemini-2.5-flash-lite` directly — see `ModelQoS.Gemini.lightweight`
+(macOS) and the Windows assistant model pins. Task extraction stays on
+`gemini-2.5-flash`: Flash-Lite measurably fails its prompt contract there
+(omi-knowledge-base, vertex-pt-flash-spend, 2026-08-17 overflow bakeoff).
+
 ## Durable runtime env
 
 `desktop-backend` compose (`backend/deploy/runtime_env/_base.yaml` →

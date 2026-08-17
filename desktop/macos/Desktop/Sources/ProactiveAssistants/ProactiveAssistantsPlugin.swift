@@ -967,11 +967,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
-        // A full-screen `CGImage` redrawn into a 9x8 grayscale context — a real decode and
-        // downscale, and it was on the main actor for every captured frame. `CGImage` is immutable,
-        // and the hash is a pure function of it, so nothing about this needed the main thread.
+        // Off the main actor on purpose: `CGImage` is immutable and the hash is a pure function.
+        // Hashed at preview scale: this enters the same history the ≤80px preview grabs are
+        // compared against, and a full-resolution dHash aliases differently (see previewScaleDHash).
         let fullHash = await Task.detached(priority: .userInitiated) {
-          RewindOCRService.dHash(of: cgImage)
+          RewindOCRService.previewScaleDHash(of: cgImage)
         }.value
         captureTrigger.markCaptured(
           app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)

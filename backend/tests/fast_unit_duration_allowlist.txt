@@ -12,6 +12,9 @@
 # so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_FAIL_SECONDS.
 # Genuinely non-unit tests (real asyncio sleeps, network, stress, codebase greps, full-app wiring,
 # per-test fresh module reload) are marked `slow`/`integration` and are NOT listed here.
+# One full _proxy round trip (metering -> sanitize -> dispatch -> terminal telemetry) with an
+# in-process capturing client; hermetic, but the end-to-end path costs ~0.15-0.19s CPU.
+tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_the_2048_cap
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
