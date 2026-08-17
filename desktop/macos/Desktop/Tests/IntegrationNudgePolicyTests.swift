@@ -129,18 +129,36 @@ final class IntegrationNudgePolicyTests: XCTestCase {
   /// Emitting a funnel event on every activation for an answer the user settled
   /// once is unbounded volume, and it inflates the denominator the event exists
   /// to provide.
-  func testPermanentSuppressionsAreTheOnesThatCannotChangeHere() {
+  func testAmbientSuppressionsAreTheOnesThatPersistAcrossActivations() {
     for reason in [
       IntegrationNudgePolicy.Suppression.alreadyConnected, .featureDisabled, .optedOut,
-      .connectorLifetimeCap,
+      .connectorLifetimeCap, .notSignedIn, .onboardingIncomplete,
     ] {
-      XCTAssertTrue(IntegrationNudgePolicy.isPermanent(reason), "\(reason) should be permanent")
+      XCTAssertTrue(IntegrationNudgePolicy.isAmbient(reason), "\(reason) persists")
     }
     for reason in [
       IntegrationNudgePolicy.Suppression.snoozed, .connectorCooldown, .globalCooldown, .dailyCap,
-      .barUnavailable, .notSignedIn, .onboardingIncomplete,
+      .barUnavailable,
     ] {
-      XCTAssertFalse(IntegrationNudgePolicy.isPermanent(reason), "\(reason) can change")
+      XCTAssertFalse(IntegrationNudgePolicy.isAmbient(reason), "\(reason) is momentary")
+    }
+  }
+
+  /// A user whose Gmail is already connected must still be offered ChatGPT when
+  /// they switch tabs, so a settlement about one integration cannot end
+  /// recognition for the whole browser session.
+  func testPerIntegrationSuppressionsDoNotEndTheSession() {
+    for reason in [
+      IntegrationNudgePolicy.Suppression.alreadyConnected, .optedOut, .connectorLifetimeCap,
+      .snoozed, .connectorCooldown,
+    ] {
+      XCTAssertTrue(IntegrationNudgePolicy.isPerIntegration(reason), "\(reason) is per-integration")
+    }
+    for reason in [
+      IntegrationNudgePolicy.Suppression.featureDisabled, .notSignedIn, .onboardingIncomplete,
+      .globalCooldown, .dailyCap, .barUnavailable,
+    ] {
+      XCTAssertFalse(IntegrationNudgePolicy.isPerIntegration(reason), "\(reason) is global")
     }
   }
 

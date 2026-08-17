@@ -51,11 +51,12 @@ final class IntegrationNudgeCoordinator {
     @MainActor (
       _ ownerID: String,
       _ match: IntegrationNudgeMatcher.Match,
-      _ onPresented: @escaping @MainActor () -> Void
+      _ onPresented: @escaping @MainActor () -> Void,
+      _ onDropped: @escaping @MainActor () -> Void
     ) -> OwnerBoundNotificationPresentationResult
 
   /// The default presenter: the real floating-bar card.
-  static let floatingBarPresenter: Presenter = { ownerID, match, onPresented in
+  static let floatingBarPresenter: Presenter = { ownerID, match, onPresented, onDropped in
     FloatingControlBarManager.shared.showNotification(
       ownerID: ownerID,
       title: "Connect \(match.entry.displayName) to Omi",
@@ -66,7 +67,8 @@ final class IntegrationNudgeCoordinator {
         telemetryID: match.entry.telemetryID,
         triggerID: match.trigger.id
       ),
-      onPresented: onPresented
+      onPresented: onPresented,
+      onDropped: onDropped
     )
   }
 
@@ -232,11 +234,19 @@ final class IntegrationNudgeCoordinator {
     }
   }
 
-  /// Whether the user currently wants this feature at all. Read before any
-  /// window inspection, not as part of the nudge decision.
+  /// Whether a nudge is possible at all right now, independent of which window
+  /// is in front. Read before any inspection, not as part of the nudge decision.
+  ///
+  /// Signed-out and mid-onboarding are included deliberately: without them a
+  /// signed-out user emits a suppressed event on every Finder activation — and
+  /// Finder is activated constantly — for a state that cannot change until they
+  /// sign in.
   private var isEnabledNow: Bool {
     let environment = environment()
-    return environment.isFeatureEnabled && environment.notificationsEnabled
+    return environment.isFeatureEnabled
+      && environment.notificationsEnabled
+      && environment.isOnboardingComplete
+      && ownerID() != nil
   }
 
   /// Recognize the frontmost window and, if it earns one, offer its integration.
@@ -290,23 +300,33 @@ final class IntegrationNudgeCoordinator {
     /// Suppressed for a reason that cannot change while the user stays here.
     case settled(IntegrationNudgePolicy.Suppression)
 
-    /// Only an unrecognized window is worth looking at again. Once an answer
-    /// exists, re-checking re-reads the window title and re-emits the funnel's
-    /// denominator for a decision already made.
-    var shouldKeepWatching: Bool { self == .noMatchYet }
+    /// Whether re-checking this browser could still produce a different answer.
+    ///
+    /// An unrecognized window obviously can — the user may not have opened the
+    /// site yet. So can a settlement that was about *one integration*: someone
+    /// whose Gmail is already connected should still be offered ChatGPT when
+    /// they switch tabs. What ends the session is a global refusal or a card
+    /// already delivered.
+    var shouldKeepWatching: Bool {
+      switch self {
+      case .noMatchYet: return true
+      case .settled(let reason): return IntegrationNudgePolicy.isPerIntegration(reason)
+      case .delivered, .abandoned: return false
+      }
+    }
   }
 
-  /// Emit the suppression, unless it is one the user has permanently settled.
+  /// Emit the suppression, unless it is an ambient state.
   ///
-  /// A permanent reason — connected, opted out, budget spent, feature off — is
-  /// the same answer on every activation for the life of the install. Emitting
-  /// it each time is unbounded volume, and it inflates the very denominator the
-  /// event exists to provide.
+  /// An ambient reason — connected, opted out, budget spent, signed out — is the
+  /// same answer on every activation for as long as it holds. Emitting it each
+  /// time is unbounded volume, and it inflates the very denominator the event
+  /// exists to provide.
   private func report(
     _ reason: IntegrationNudgePolicy.Suppression,
     for match: IntegrationNudgeMatcher.Match
   ) -> Outcome {
-    if !IntegrationNudgePolicy.isPermanent(reason) {
+    if !IntegrationNudgePolicy.isAmbient(reason) {
       AnalyticsManager.shared.integrationNudgeSuppressed(
         entry: match.entry,
         trigger: match.trigger,
@@ -360,17 +380,25 @@ final class IntegrationNudgeCoordinator {
     // as the screen-capture-reset defect (see
     // `NotificationService.screenCaptureResetShownKey`).
     var recorded = false
-    let result = presenter(ownerID, match) { [weak self] in
+    let onDropped: @MainActor () -> Void = { [weak self] in
+      // Queue eviction or a stale owner: the budget correctly stays unspent, but
+      // a nudge that was owed and never drawn still has to be visible.
       guard let self else { return }
-      recorded = true
-      let shownCountBefore = self.store.state(for: match.entry.telemetryID).shownCount
-      self.store.recordDelivery(telemetryID: match.entry.telemetryID, now: self.now())
-      AnalyticsManager.shared.integrationNudgeShown(
-        entry: match.entry,
-        trigger: match.trigger,
-        shownCount: shownCountBefore + 1
-      )
+      _ = self.report(.barUnavailable, for: match)
     }
+    let result = presenter(
+      ownerID, match,
+      { [weak self] in
+        guard let self else { return }
+        recorded = true
+        let shownCountBefore = self.store.state(for: match.entry.telemetryID).shownCount
+        self.store.recordDelivery(telemetryID: match.entry.telemetryID, now: self.now())
+        AnalyticsManager.shared.integrationNudgeShown(
+          entry: match.entry,
+          trigger: match.trigger,
+          shownCount: shownCountBefore + 1
+        )
+      }, onDropped)
 
     // `.presented` invokes the callback synchronously; `.queued` invokes it
     // later, if and only if the card reaches the screen. Either way the bar owns
@@ -482,6 +510,7 @@ final class IntegrationNudgeCoordinator {
   /// disconnect can start the pitch over instead of finding a spent budget.
   func noteConnected(route: IntegrationNudgeRoute) {
     store.recordConnected(telemetryID: route.telemetryID)
+    IntegrationConnectionInspector.invalidateExportStatuses()
   }
 
   // MARK: - Settings
@@ -492,7 +521,4 @@ final class IntegrationNudgeCoordinator {
     UserDefaults.standard.object(forKey: .integrationNudgesEnabled) as? Bool ?? true
   }
 
-  static func setFeatureEnabled(_ enabled: Bool) {
-    UserDefaults.standard.set(enabled, forKey: .integrationNudgesEnabled)
-  }
 }

@@ -18,9 +18,43 @@ enum IntegrationConnectionInspector {
 
     case .exportDestination(let destinationID):
       guard let destination = MemoryExportDestination(rawValue: destinationID) else { return false }
-      let statuses = await MemoryExportService.shared.allStatuses()
-      return statuses[destination]?.hasConnection ?? false
+      return await exportStatuses()[destination]?.hasConnection ?? false
     }
+  }
+
+  /// Export statuses, cached briefly.
+  ///
+  /// `allStatuses()` scans and parses every local MCP config file. The policy
+  /// front-loads its cheap gates so an opted-out user never reaches this, but
+  /// "already connected" — the most common terminal state, and the one every
+  /// set-up user hits — can only be decided *after* the scan. Without a cache,
+  /// opening ChatGPT.app, Claude.app and Obsidian in a minute pays for three
+  /// full scans to reach the same answer each time.
+  ///
+  /// The window is short because the cost of being stale is bounded either way:
+  /// a just-connected integration is cleared through `noteConnected`, and a
+  /// just-disconnected one waits at most this long for its next offer.
+  private static let exportStatusCacheTTL: TimeInterval = 60
+  private static var cachedExportStatuses: [MemoryExportDestination: MemoryExportStatus]?
+  private static var cachedExportStatusesAt: Date?
+
+  private static func exportStatuses() async -> [MemoryExportDestination: MemoryExportStatus] {
+    if let cachedExportStatuses, let cachedExportStatusesAt,
+      Date().timeIntervalSince(cachedExportStatusesAt) < exportStatusCacheTTL
+    {
+      return cachedExportStatuses
+    }
+    let statuses = await MemoryExportService.shared.allStatuses()
+    cachedExportStatuses = statuses
+    cachedExportStatusesAt = Date()
+    return statuses
+  }
+
+  /// Drops the export cache. Called when a connection changes so the next offer
+  /// sees the new state rather than waiting out the window.
+  static func invalidateExportStatuses() {
+    cachedExportStatuses = nil
+    cachedExportStatusesAt = nil
   }
 
   private static var cachedStore: ImportConnectorStatusStore?

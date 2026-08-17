@@ -67,17 +67,37 @@ enum IntegrationNudgeMatcher {
   }
 
   /// Lowercased, trimmed, and stripped of the browser's own trailing chrome so
-  /// a site name that a browser appended its product name after still reads as
-  /// the end of the title.
+  /// a site name the browser appended its product name after still reads as the
+  /// end of the title.
+  ///
+  /// On macOS the Chromium browsers do *not* append their name — a Chrome window
+  /// showing Gmail is titled exactly "Inbox (12) - you@corp.com - Gmail". The
+  /// ones that do are Firefox and its relatives, so those are what this strips.
+  /// Chromium suffixes stay in the list only because they cost nothing and some
+  /// builds and window managers do add them.
   static func normalizedTitle(_ title: String) -> String {
     var value = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-    for chrome in [" - google chrome", " — google chrome", " - brave", " - microsoft edge"] {
-      if value.hasSuffix(chrome) {
+    var didStrip = true
+    while didStrip {
+      didStrip = false
+      for chrome in browserTitleChrome where value.hasSuffix(chrome) {
         value = String(value.dropLast(chrome.count)).trimmingCharacters(in: .whitespaces)
+        didStrip = true
+        break
       }
     }
     return value
   }
+
+  private static let browserTitleChrome = [
+    " — mozilla firefox", " - mozilla firefox",
+    " — firefox developer edition", " - firefox developer edition",
+    " — zen browser", " - zen browser",
+    " - vivaldi", " — vivaldi",
+    " - google chrome", " — google chrome",
+    " - brave", " — brave",
+    " - microsoft edge", " — microsoft edge",
+  ]
 
   static func isBrowser(bundleIdentifier: String?) -> Bool {
     guard let bundleIdentifier else { return false }

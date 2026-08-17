@@ -42,7 +42,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: defaults, ownerID: ownerID),
       now: { self.now },
-      presenter: { _, _, onPresented in
+      presenter: { _, _, onPresented, _ in
         presentedCount.value += 1
         onPresented()
         return result
@@ -89,7 +89,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _, _ in .rejectedOwnerChange },
+      presenter: { _, _, _, _ in .rejectedOwnerChange },
       ownerID: { "user-a" },
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
@@ -111,7 +111,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _, _ in .queued },
+      presenter: { _, _, _, _ in .queued },
       ownerID: { "user-a" },
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) }
     )
@@ -132,7 +132,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: defaults, ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _, onPresented in
+      presenter: { _, _, onPresented, _ in
         present.value = onPresented
         return .queued
       },
@@ -234,7 +234,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
       let coordinator = IntegrationNudgeCoordinator(
         store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
         now: { self.now },
-        presenter: { _, _, _ in
+        presenter: { _, _, _, _ in
           presented.value += 1
           return .presented
         },
@@ -264,12 +264,16 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
 
   /// Once a window has an answer, re-checking re-reads the title and re-emits
   /// the funnel's denominator for a decision already made.
-  func testASettledOutcomeStopsTheReCheckLoop() throws {
+  func testOnlyAGlobalAnswerEndsTheReCheckLoop() throws {
     XCTAssertFalse(IntegrationNudgeCoordinator.Outcome.delivered.shouldKeepWatching)
     XCTAssertFalse(IntegrationNudgeCoordinator.Outcome.abandoned.shouldKeepWatching)
-    XCTAssertFalse(
-      IntegrationNudgeCoordinator.Outcome.settled(.connectorCooldown).shouldKeepWatching)
+    XCTAssertFalse(IntegrationNudgeCoordinator.Outcome.settled(.dailyCap).shouldKeepWatching)
     XCTAssertTrue(IntegrationNudgeCoordinator.Outcome.noMatchYet.shouldKeepWatching)
+    // The case that matters: Gmail already connected must not stop the session,
+    // or switching to a ChatGPT tab in the same browser never gets an offer.
+    XCTAssertTrue(
+      IntegrationNudgeCoordinator.Outcome.settled(.alreadyConnected).shouldKeepWatching)
+    XCTAssertTrue(IntegrationNudgeCoordinator.Outcome.settled(.optedOut).shouldKeepWatching)
   }
 
   /// A browser tab the user has not opened yet is the one case worth watching.
@@ -277,7 +281,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     let coordinator = IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _, _ in .presented },
+      presenter: { _, _, _, _ in .presented },
       ownerID: { "user-a" },
       environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) },
       frontmostBundleID: { "com.google.Chrome" },
@@ -301,7 +305,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     IntegrationNudgeCoordinator(
       store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
       now: { self.now },
-      presenter: { _, _, onPresented in
+      presenter: { _, _, onPresented, _ in
         presented.value += 1
         onPresented()
         return .presented

@@ -195,16 +195,33 @@ enum IntegrationNudgePolicy {
     return nil
   }
 
-  /// Suppressions that cannot change while the user stays on this Mac. Emitting
-  /// a funnel event for these on every activation is unbounded volume for a
-  /// decision that was made once, and it inflates the very denominator the
-  /// event exists to provide.
-  static func isPermanent(_ suppression: Suppression) -> Bool {
+  /// Suppressions that persist across activations, so emitting a funnel event
+  /// for them every time is unbounded volume for a decision made once — and it
+  /// inflates the very denominator the event exists to provide. Finder alone is
+  /// activated dozens of times an hour.
+  static func isAmbient(_ suppression: Suppression) -> Bool {
     switch suppression {
-    case .alreadyConnected, .featureDisabled, .optedOut, .connectorLifetimeCap:
+    case .alreadyConnected, .featureDisabled, .optedOut, .connectorLifetimeCap,
+      .notSignedIn, .onboardingIncomplete:
       return true
-    case .notSignedIn, .onboardingIncomplete, .snoozed, .connectorCooldown,
-      .globalCooldown, .dailyCap, .barUnavailable:
+    case .snoozed, .connectorCooldown, .globalCooldown, .dailyCap, .barUnavailable:
+      return false
+    }
+  }
+
+  /// Whether this suppression is about *one integration* rather than about the
+  /// user or the moment.
+  ///
+  /// It decides whether a browser is still worth watching: a user whose Gmail is
+  /// already connected should still be offered ChatGPT when they switch tabs, so
+  /// "this integration is settled" must not end recognition for the session. A
+  /// global refusal — signed out, budget spent for the day — genuinely does.
+  static func isPerIntegration(_ suppression: Suppression) -> Bool {
+    switch suppression {
+    case .alreadyConnected, .optedOut, .connectorLifetimeCap, .snoozed, .connectorCooldown:
+      return true
+    case .featureDisabled, .notSignedIn, .onboardingIncomplete, .globalCooldown, .dailyCap,
+      .barUnavailable:
       return false
     }
   }
