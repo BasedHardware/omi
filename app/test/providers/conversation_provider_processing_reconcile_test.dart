@@ -679,6 +679,19 @@ void main() {
     expect(provider.conversationServerOffset, 50);
   });
 
+  test('failed delete restores the conversation to the visible list', () async {
+    final conversation = _conversation('page-10', status: ConversationStatus.completed);
+    final provider = ConversationProvider(isSignedIn: () => true);
+    provider.conversationDeleteFetcherOverride = (_) async => false;
+    addTearDown(provider.dispose);
+
+    provider.conversations = [conversation];
+    await provider.deleteConversation(conversation);
+
+    expect(provider.conversations, [conversation]);
+    expect(provider.memoriesToDelete, isEmpty);
+  });
+
   test('delete completion from a prior session cannot mutate the new session', () async {
     final delete = Completer<bool>();
     final provider = ConversationProvider(isSignedIn: () => true);

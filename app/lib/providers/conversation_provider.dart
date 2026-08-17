@@ -1225,11 +1225,11 @@ class ConversationProvider extends ChangeNotifier {
     return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
   }
 
-  void deleteConversationLocally(ServerConversation conversation, DateTime date) {
+  Future<bool> deleteConversationLocally(ServerConversation conversation, DateTime date) async {
     if (lastDeletedConversationId != null &&
         memoriesToDelete.containsKey(lastDeletedConversationId) &&
         DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
-      deleteConversationOnServer(lastDeletedConversationId!);
+      unawaited(deleteConversationOnServer(lastDeletedConversationId!));
     }
 
     memoriesToDelete[conversation.id] = conversation;
@@ -1244,23 +1244,23 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
-    Future.delayed(const Duration(seconds: 3), () {
-      if (memoriesToDelete.containsKey(conversation.id) && lastDeletedConversationId == conversation.id) {
-        deleteConversationOnServer(conversation.id);
-      }
-    });
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (memoriesToDelete.containsKey(conversation.id) && lastDeletedConversationId == conversation.id) {
+      return deleteConversationOnServer(conversation.id);
+    }
+    return true;
   }
 
-  void deleteConversationOnServer(String conversationId) {
+  Future<bool> deleteConversationOnServer(String conversationId) async {
     final generation = _sessionGeneration;
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
-    final deleteFuture =
-        conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
-    unawaited(deleteFuture.then((succeeded) {
+    try {
+      final succeeded =
+          await (conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId));
       // A DELETE can outlive sign-out/account switching. Its result belongs
       // to the session that started it; never let an old account mutate the
       // new provider's tombstones, cursor, revision, or loading state.
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration) return false;
       // Only rebase the server cursor after the backend confirms deletion. A
       // failed DELETE leaves the row in the server sequence and must not make
       // the next page skip an item.
@@ -1283,16 +1283,39 @@ class ConversationProvider extends ChangeNotifier {
           group.removeWhere((conversation) => conversation.id == conversationId);
         }
         groupedConversations.removeWhere((_, group) => group.isEmpty);
+      } else {
+        _restoreFailedDelete(conversationId);
       }
       _clearDeleteTombstone(conversationId);
       notifyListeners();
-    }, onError: (Object _, StackTrace __) {
+      return succeeded;
+    } catch (_) {
       // Match the prior behavior on a failed request: release the local
       // tombstone, but do not rebase the server cursor.
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration) return false;
+      _restoreFailedDelete(conversationId);
       _clearDeleteTombstone(conversationId);
       notifyListeners();
-    }));
+      return false;
+    }
+  }
+
+  void _restoreFailedDelete(String conversationId) {
+    final conversation = memoriesToDelete[conversationId];
+    if (conversation == null) return;
+    if (!conversations.any((item) => item.id == conversationId)) {
+      conversations.add(conversation);
+      conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    }
+    if (hasActiveSearch && !searchedConversations.any((item) => item.id == conversationId)) {
+      searchedConversations.add(conversation);
+      searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    }
+    if (hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
   }
 
   void _clearDeleteTombstone(String conversationId) {
@@ -1319,14 +1342,15 @@ class ConversationProvider extends ChangeNotifier {
 
   /////////////////////////////////////////////////////////////////
 
-  void deleteConversation(ServerConversation conversation) {
+  Future<bool> deleteConversation(ServerConversation conversation) async {
     conversations.removeWhere((element) => element.id == conversation.id);
     searchedConversations.removeWhere((element) => element.id == conversation.id);
     // Keep a tombstone through the in-flight DELETE so a concurrent list
     // response cannot reinsert the just-removed row before confirmation.
     memoriesToDelete[conversation.id] = conversation;
-    deleteConversationOnServer(conversation.id);
+    final succeeded = await deleteConversationOnServer(conversation.id);
     groupConversationsByDate();
+    return succeeded;
   }
 
   @override
