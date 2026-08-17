@@ -67,7 +67,12 @@ struct OnboardingDataSourcesStepView: View {
           await coordinator.startBackgroundInsightsIfNeeded()
         }
       }
-      .sheet(isPresented: $coordinator.showingGmailAccountPicker) {
+      .sheet(
+        isPresented: $coordinator.showingGmailAccountPicker,
+        onDismiss: {
+          coordinator.cancelGmailAccountSelection()
+        }
+      ) {
         GmailAccountPickerView(
           accounts: coordinator.gmailAccounts,
           selectedCookiePath: GmailSelectionStore.selectedCookiePath,

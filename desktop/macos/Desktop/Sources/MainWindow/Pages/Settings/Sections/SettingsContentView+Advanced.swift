@@ -50,6 +50,10 @@ extension SettingsContentView {
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
+      advancedCategoryHeader(title: "Email & Calendar", icon: "envelope")
+      gmailReaderSubsection
+      calendarSyncSubsection
+
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
     }

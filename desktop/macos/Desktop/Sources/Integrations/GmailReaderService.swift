@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Models
 
-struct GmailEmail: Identifiable {
+struct GmailEmail: Identifiable, Sendable {
   let id: String
   let from: String
   let subject: String
@@ -157,6 +157,11 @@ actor GmailReaderService {
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
+    let oauth = GoogleOAuthConnectionManager.shared
+    if oauth.hasGrants() {
+      return try await readRecentEmailsViaOAuth(
+        manager: oauth, maxResults: maxResults, query: query)
+    }
     // Snapshot the selection once for the whole read: readRecentEmails runs
     // several Python fetches (query + label feeds + date windows) and each
     // must use the same profile, or a mid-read picker change would merge two
@@ -181,7 +186,7 @@ actor GmailReaderService {
       var merged: [String: GmailEmail] = [:]
       for email in queryEmails + labelEmails {
         let existing = merged[email.id]
-        if existing == nil || existing!.date < email.date {
+        if (existing?.date ?? .distantPast) < email.date {
           merged[email.id] = email
         }
       }
@@ -200,20 +205,80 @@ actor GmailReaderService {
     return emails.sorted { $0.date > $1.date }
   }
 
-  func verifyConnection(userInitiated: Bool = false) async -> GmailConnectionStatus {
-    if userInitiated {
-      BrowserKeychainCache.shared.beginUserInitiatedOperation()
+  private func readRecentEmailsViaOAuth(
+    manager: GoogleOAuthConnectionManager,
+    maxResults: Int,
+    query: String
+  ) async throws -> [GmailEmail] {
+    let grants = manager.activeConnections()
+    guard !grants.isEmpty else { throw GmailReaderError.sessionExpired }
+    var merged: [String: GmailEmail] = [:]
+    var successfulReads = false
+    var firstFailure: GmailReaderError?
+    for grant in grants {
+      do {
+        let token = try await manager.accessToken(account: grant.account)
+        let emails = try await GoogleOAuthGmailReader.readRecentEmails(
+          token: token, maxResults: maxResults, query: query)
+        successfulReads = true
+        for email in emails {
+          guard let existing = merged[email.id], existing.date >= email.date else {
+            merged[email.id] = email
+            continue
+          }
+        }
+      } catch let error as GoogleOAuthReaderError {
+        if case .reconnectRequired = error {
+          _ = manager.markNeedsReconnect(account: grant.account, expected: grant)
+        }
+        firstFailure = firstFailure ?? Self.gmailError(from: error)
+      } catch let error as GoogleOAuthError {
+        if case .reconnectRequired = error {
+          _ = manager.markNeedsReconnect(account: grant.account, expected: grant)
+        }
+        firstFailure = firstFailure ?? Self.gmailError(from: error)
+      } catch {
+        firstFailure = firstFailure ?? .networkError(error.localizedDescription)
+      }
     }
+    if successfulReads {
+      return Array(
+        merged.values.sorted { $0.date > $1.date }.prefix(maxResults))
+    }
+    throw firstFailure ?? GmailReaderError.authFailed
+  }
+
+  private static func gmailError(from error: Error) -> GmailReaderError {
+    switch error {
+    case GoogleOAuthReaderError.reconnectRequired:
+      return .sessionExpired
+    case GoogleOAuthReaderError.http(let status):
+      return .networkError("Google returned HTTP \(status)")
+    case GoogleOAuthReaderError.network(let detail):
+      return .networkError(detail)
+    case GoogleOAuthError.reconnectRequired, GoogleOAuthError.invalidGrant:
+      return .sessionExpired
+    default:
+      return .networkError(error.localizedDescription)
+    }
+  }
+
+  func verifyConnection(userInitiated: Bool = false) async -> GmailConnectionStatus {
     do {
-      let selectedCookiePath = GmailSelectionStore.selectedCookiePath
-      _ = try fetchGmailViaAtomFeedSingle(
-        maxResults: 1,
-        query: "newer_than:1d",
-        feedPath: "atom/inbox",
-        allowBootstrap: false,
-        userInitiated: userInitiated,
-        selectedCookiePath: selectedCookiePath
-      )
+      let manager = GoogleOAuthConnectionManager.shared
+      if manager.hasGrants() {
+        _ = try await readRecentEmailsViaOAuth(manager: manager, maxResults: 1, query: "newer_than:1d")
+      } else {
+        let selectedCookiePath = GmailSelectionStore.selectedCookiePath
+        _ = try fetchGmailViaAtomFeedSingle(
+          maxResults: 1,
+          query: "newer_than:1d",
+          feedPath: "atom/inbox",
+          allowBootstrap: false,
+          userInitiated: userInitiated,
+          selectedCookiePath: selectedCookiePath
+        )
+      }
       return .connected(verifiedAt: Date())
     } catch let error as GmailReaderError {
       switch error {
@@ -254,7 +319,7 @@ actor GmailReaderService {
     for attempt in 1...maxAttempts {
       do {
         if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
-          || UserDefaults.standard.bool(forKey: "forceSynthesisFail")
+          || UserDefaults.standard.bool(forKey: .forceSynthesisFail)
         {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
@@ -778,7 +843,7 @@ actor GmailReaderService {
       )
       for email in feedEmails {
         let existing = merged[email.id]
-        if existing == nil || existing!.date < email.date {
+        if (existing?.date ?? .distantPast) < email.date {
           merged[email.id] = email
         }
       }
@@ -796,8 +861,7 @@ actor GmailReaderService {
 
   private func fetchGmailViaDateWindows(
     daysBack: Int,
-    maxResults: Int,
-    userInitiated: Bool = false
+    maxResults: Int
   ) throws -> [GmailEmail] {
     guard maxResults > 0 else { return [] }
 
@@ -808,8 +872,7 @@ actor GmailReaderService {
     else {
       return try fetchGmailViaAtomFeedSingle(
         maxResults: maxResults,
-        query: "newer_than:\(daysBack)d",
-        userInitiated: userInitiated
+        query: "newer_than:\(daysBack)d"
       )
     }
 
@@ -829,8 +892,7 @@ actor GmailReaderService {
       let query = Self.atomDateRangeQuery(start: windowStart, end: windowEnd)
       let slice = try fetchGmailViaAtomFeedSingle(
         maxResults: min(20, maxResults),
-        query: query,
-        userInitiated: userInitiated
+        query: query
       )
       for email in slice {
         collected[email.id] = email

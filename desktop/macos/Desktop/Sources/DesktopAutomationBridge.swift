@@ -2575,6 +2575,7 @@ final class DesktopAutomationActionRegistry {
       let requestedDaysBack = intParam(params["daysBack"], default: 1)
       let requestedDaysForward = intParam(params["daysForward"], default: 1)
       let requestedMaxResults = intParam(params["maxResults"], default: 1)
+      let source = GoogleOAuthConnectionManager.shared.hasGrants() ? "oauth" : "cookies"
       let normalized = CalendarFetchParameters.normalized(
         daysBack: requestedDaysBack,
         daysForward: requestedDaysForward,
@@ -2591,6 +2592,7 @@ final class DesktopAutomationActionRegistry {
         return [
           "status": "connected",
           "classification": "readable",
+          "source": source,
           "eventCount": "\(events.count)",
           "daysBack": "\(normalized.daysBack)",
           "daysForward": "\(normalized.daysForward)",
@@ -2617,12 +2619,28 @@ final class DesktopAutomationActionRegistry {
         return [
           "status": "error",
           "classification": classification,
+          "source": source,
           "message": error.errorDescription ?? "\(error)",
           "daysBack": "\(normalized.daysBack)",
           "daysForward": "\(normalized.daysForward)",
           "maxResults": "\(normalized.maxResults)",
         ]
       }
+    }
+
+    register(
+      name: "google_oauth_status",
+      summary: "Report whether an active Google OAuth grant is available",
+      params: []
+    ) { _ in
+      let manager = GoogleOAuthConnectionManager.shared
+      let grants = manager.connections()
+      let activeGrants = manager.activeConnections()
+      return [
+        "source": activeGrants.isEmpty ? "none" : "oauth",
+        "grantCount": "\(grants.count)",
+        "activeGrantCount": "\(activeGrants.count)",
+      ]
     }
 
     register(
@@ -2634,6 +2652,7 @@ final class DesktopAutomationActionRegistry {
       let maxResults = min(max(requestedMaxResults, 1), 500)
       let rawQuery = params["query"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       let query = rawQuery.isEmpty ? "newer_than:1d" : rawQuery
+      let source = GoogleOAuthConnectionManager.shared.hasGrants() ? "oauth" : "cookies"
 
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(
@@ -2644,6 +2663,7 @@ final class DesktopAutomationActionRegistry {
         return [
           "status": "connected",
           "classification": "readable",
+          "source": source,
           "emailCount": "\(emails.count)",
           "maxResults": "\(maxResults)",
           "query": query,
@@ -2667,6 +2687,7 @@ final class DesktopAutomationActionRegistry {
         return [
           "status": "error",
           "classification": classification,
+          "source": source,
           "message": error.errorDescription ?? "\(error)",
           "maxResults": "\(maxResults)",
           "query": query,
@@ -2675,6 +2696,7 @@ final class DesktopAutomationActionRegistry {
         return [
           "status": "error",
           "classification": "unknown",
+          "source": source,
           "message": error.localizedDescription,
           "maxResults": "\(maxResults)",
           "query": query,

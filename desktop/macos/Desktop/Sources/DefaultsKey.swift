@@ -78,8 +78,12 @@ enum DefaultsKey: String {
   /// Shared by the view (@AppStorage) and deep-link expand-before-scroll.
   case tasksSuggestionsSectionExpanded = "tasksSuggestionsSectionExpanded"
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
+  case googleOauthClientId = "googleOauthClientId"
+  case googleOauthClientSecret = "googleOauthClientSecret"
+  case googleOauthPrimaryAccount = "googleOauthPrimaryAccount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  case forceSynthesisFail = "forceSynthesisFail"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 

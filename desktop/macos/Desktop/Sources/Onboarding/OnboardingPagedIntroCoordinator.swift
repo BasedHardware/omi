@@ -128,6 +128,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   @Published var gmailAwaitingSelection = false
   @Published private(set) var gmailAccountSelectionFailed = false
   private var gmailSelectionWaiter: CheckedContinuation<Void, Never>?
+  private var gmailSelectionCancelled = false
+  private var googleAccountSelectionTask: Task<Void, Never>?
   private var gmailTask: Task<Void, Never>?
   private var calendarTask: Task<Void, Never>?
   private var appleNotesTask: Task<Void, Never>?
@@ -209,6 +211,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     if let nameObserver {
       NotificationCenter.default.removeObserver(nameObserver)
     }
+    googleAccountSelectionTask?.cancel()
     gmailTask?.cancel()
     calendarTask?.cancel()
     appleNotesTask?.cancel()
@@ -869,11 +872,14 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   func selectGmailAccount(_ cookiePath: String?, label: String) {
     GmailSelectionStore.persist(cookiePath: cookiePath, label: label)
     showingGmailAccountPicker = false
+    gmailAwaitingSelection = false
     resumeGmailSelection()
   }
 
   private func awaitGmailAccountSelectionIfNeeded() async {
-    guard !GmailSelectionStore.hasMadeChoice else { return }
+    // An OAuth grant already names the account to read; the cookie-profile
+    // picker has nothing left to disambiguate.
+    guard !GoogleOAuthConnectionManager.shared.hasGrants() else { return }
     let accounts: [GmailAccountOption]
     do {
       accounts = try await GmailAccountProbe.availableAccounts()
@@ -886,11 +892,20 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       gmailAccountSelectionFailed = true
       return
     }
-    // Re-check after the probe: the user may have picked an account from the
+    // Re-checked after the probe: the user may have picked an account from the
     // manual picker while the probe was still running, before this waiter
     // exists. Installing a continuation after a choice is already persisted
-    // would suspend the gmail task forever.
-    guard !GmailSelectionStore.hasMadeChoice else { return }
+    // would suspend the gmail task forever. A stored selection whose profile
+    // is gone is not a usable choice, so that case falls through to the picker.
+    if let selectedPath = GmailSelectionStore.selectedCookiePath {
+      if accounts.contains(where: { $0.id == selectedPath }) { return }
+      if accounts.count == 1, let account = accounts.first {
+        GmailSelectionStore.persist(cookiePath: account.id, label: account.email ?? account.browserName)
+        return
+      }
+    } else if GmailSelectionStore.hasMadeChoice {
+      return
+    }
     guard accounts.count > 1 else { return }
     gmailAccounts = accounts
     gmailAwaitingSelection = true
@@ -898,26 +913,27 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     // gmailAwaitingSelection, so without this the gmail background task would
     // suspend forever and onboarding research would never finish.
     showingGmailAccountPicker = true
-    await withTaskCancellationHandler(
-      operation: {
-        await withCheckedContinuation { continuation in
-          if Task.isCancelled {
-            continuation.resume()
-            return
-          }
+    gmailSelectionCancelled = false
+    await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        if Task.isCancelled || gmailSelectionCancelled {
+          continuation.resume()
+        } else {
           gmailSelectionWaiter = continuation
         }
-      },
-      onCancel: {
-        Task { @MainActor in
-          self.resumeGmailSelection()
-        }
-      })
+      }
+    } onCancel: {
+      Task { @MainActor in
+        self.gmailSelectionCancelled = true
+        self.resumeGmailSelection()
+      }
+    }
   }
 
   private func resumeGmailSelection() {
     guard let waiter = gmailSelectionWaiter else { return }
     gmailSelectionWaiter = nil
+    gmailSelectionCancelled = false
     gmailAwaitingSelection = false
     waiter.resume()
   }
@@ -933,6 +949,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       to: "automatic_profile",
       reason: "picker_cancelled",
       outcome: .recovered)
+    gmailSelectionCancelled = true
+    gmailAwaitingSelection = false
     resumeGmailSelection()
   }
 
@@ -976,11 +994,14 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     // profile-level reads, while this onboarding gate prevents two import
     // processes from racing the one user-visible authorization prompt.
     let googleInsightGate = OnboardingGoogleInsightGate()
+    let accountSelectionTask = Task {
+      await self.awaitGmailAccountSelectionIfNeeded()
+    }
+    googleAccountSelectionTask = accountSelectionTask
 
     gmailTask = Task {
+      await accountSelectionTask.value
       await googleInsightGate.waitForCalendar()
-      guard !Task.isCancelled else { return }
-      await self.awaitGmailAccountSelectionIfNeeded()
       guard !Task.isCancelled else { return }
       guard !self.gmailAccountSelectionFailed else {
         await self.markInsightFinished(.gmail)
@@ -1044,6 +1065,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
 
     calendarTask = Task {
+      await accountSelectionTask.value
       defer {
         Task { await googleInsightGate.markCalendarFinished() }
       }

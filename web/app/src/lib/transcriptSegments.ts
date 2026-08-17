@@ -77,5 +77,9 @@ export function applyLiveTranscriptSegment<T extends LiveTranscriptSegmentLike>(
   segment: T,
   maxSegments: number = DEFAULT_MAX_LIVE_SEGMENTS,
 ): T[] {
-  return trimTranscriptSegments(upsertTranscriptSegment(segments, segment), maxSegments, segment.id);
+  return trimTranscriptSegments(
+    upsertTranscriptSegment(segments, segment),
+    maxSegments,
+    segment.id,
+  );
 }

@@ -243,7 +243,7 @@ final class CalendarOutcomeParserTests: XCTestCase {
     let sourceURL =
       testsURL
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/CalendarReaderService.swift")
+      .appendingPathComponent("Sources/Integrations/CalendarReaderService.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     guard let readRange = source.range(of: "func readEvents("),

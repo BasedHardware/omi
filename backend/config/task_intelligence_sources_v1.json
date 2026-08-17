@@ -134,8 +134,8 @@
         "backend/routers/task_integrations.py",
         "backend/utils/task_sync.py",
         "app/lib/providers/task_integration_provider.dart",
-        "desktop/macos/Desktop/Sources/CalendarReaderService.swift",
-        "desktop/macos/Desktop/Sources/GmailReaderService.swift",
+        "desktop/macos/Desktop/Sources/Integrations/CalendarReaderService.swift",
+        "desktop/macos/Desktop/Sources/Integrations/GmailReaderService.swift",
         "desktop/macos/Desktop/Sources/MemoryExportExecutor.swift"
       ],
       "test_adapter": "direct_command_contract",
