@@ -35,3 +35,12 @@ data:
   PUSH_NOTIFICATION_BACKEND: "unifiedpush"
   UNIFIEDPUSH_INTERNAL_BASE_URL: "http://ntfy:80"
   {{- end }}
+  {{- if .Values.auth.enabled }}
+  # auth profile: OIDC (Keycloak) instead of Firebase (ADR-0034). OIDC_ISSUER is the public HTTPS issuer
+  # (token `iss`); OIDC_JWKS_URL is the INTERNAL keycloak endpoint (keys fetched in-cluster, no edge
+  # hairpin) — the two are deliberately decoupled.
+  AUTH_BACKEND: "oidc"
+  OIDC_ISSUER: "{{ .Values.auth.hostname }}/realms/omi"
+  OIDC_JWKS_URL: "http://keycloak:8090/realms/omi/protocol/openid-connect/certs"
+  OIDC_AUDIENCE: {{ .Values.auth.audience | quote }}
+  {{- end }}

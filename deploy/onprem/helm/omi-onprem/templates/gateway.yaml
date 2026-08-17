@@ -27,6 +27,10 @@ spec:
               ports:
                 - port: 80
                   nodePort: {{ .Values.ingress.httpNodePort }}
+                {{- if .Values.auth.enabled }}
+                - port: 443
+                  nodePort: {{ .Values.ingress.httpsNodePort }}
+                {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
@@ -57,4 +61,19 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    {{- if .Values.auth.enabled }}
+    # HTTPS edge for the OIDC issuer (Keycloak needs an https issuer) and the app API. TLS terminated
+    # here from the omi-tls Secret (Q4: a Secret from gen-certs.sh, not cert-manager).
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.ingress.tlsSecretName }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
 {{- end }}

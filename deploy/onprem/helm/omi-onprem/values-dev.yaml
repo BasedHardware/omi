@@ -5,9 +5,9 @@
 backend:
   encryptionSecret: "dev-encryption-secret-not-for-production-32c"
   env:
-    # Dev-auth bypass (Bearer dev -> uid 123), same as compose.dev — lets the core smoke hit the API
-    # without wiring OIDC (the auth profile is off in the core milestone).
-    LOCAL_DEVELOPMENT: "true"
+    # Real OIDC auth (auth profile is on below), so NO dev-auth bypass — the backend validates real
+    # Keycloak tokens. Set "true" only for an auth-off stack to accept "Bearer dev".
+    LOCAL_DEVELOPMENT: "false"
 
 # chat profile: bring up the on-prem vector store (Qdrant). Full RAG also needs an embeddings endpoint
 # (external, ADR-0035) + the LLM gateway; here we validate the Qdrant vector-store path itself.
@@ -26,5 +26,12 @@ push:
 
 # edge: Gateway API via Envoy Gateway (prerequisite installed separately). The proxy is a NodePort on
 # 30080 -> host 8080 (kind-cluster.yaml), so `curl http://localhost:8080/v1/health` reaches the backend.
+# With auth on, the HTTPS listener is on 30443 -> host 8443 (the OIDC issuer).
 ingress:
   enabled: true
+
+# auth profile: Keycloak OIDC issuer. Requires the omi-tls Secret (run gen-certs.sh first) for the
+# Gateway HTTPS listener. Throwaway dev admin password.
+auth:
+  enabled: true
+  adminPassword: "admin"

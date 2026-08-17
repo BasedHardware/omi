@@ -48,6 +48,17 @@ mongo:
 # templates in later steps (auth=Keycloak, chat=Qdrant, objstore=RustFS, push=ntfy, inference=GPU/k0s).
 auth:
   enabled: false
+  # Public HTTPS issuer base (the Gateway's HTTPS host) — the token `iss` is this + /realms/omi.
+  hostname: "https://localhost:8443"
+  audience: omi-backend
+  adminUser: admin
+  # Keycloak bootstrap admin password — set per environment (dev overlay uses a throwaway value).
+  adminPassword: ""
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    imagePullPolicy: IfNotPresent
+    storage: 1Gi
+    resources: {}
 chat:
   enabled: false
   # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
@@ -110,3 +121,6 @@ ingress:
   # 8080 (and 30443 -> 8443), so `curl http://localhost:8080` reaches the gateway. On k0s/bare-metal use
   # MetalLB + a LoadBalancer instead (later phase).
   httpNodePort: 30080
+  # HTTPS edge (used when auth.enabled): nodePort mapped by kind-cluster.yaml to host 8443.
+  httpsNodePort: 30443
+  tlsSecretName: omi-tls
