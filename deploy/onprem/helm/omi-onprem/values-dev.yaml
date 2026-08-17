@@ -1,0 +1,10 @@
+# Dev overlay (Kind). Use with:
+#   helm install omi ./omi-onprem -n omi-dev --create-namespace -f omi-onprem/values-dev.yaml
+# All images are `kind load`-ed, so imagePullPolicy stays Never (no registry, no egress from the node).
+
+backend:
+  encryptionSecret: "dev-encryption-secret-not-for-production-32c"
+  env:
+    # Dev-auth bypass (Bearer dev -> uid 123), same as compose.dev — lets the core smoke hit the API
+    # without wiring OIDC (the auth profile is off in the core milestone).
+    LOCAL_DEVELOPMENT: "true"

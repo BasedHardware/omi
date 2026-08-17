@@ -1,0 +1,58 @@
+# omi-onprem — default values (= compose "base" posture: backend + valkey + mongo replica-set).
+# Overlays: values-dev.yaml (Kind) / values-prod.yaml (k0s). Feature profiles mirror compose profiles
+# and are OFF here; each guards its own templates with `{{- if .Values.<feature>.enabled }}`.
+
+backend:
+  image: omi-onprem-backend:latest
+  # Kind loads images with `kind load docker-image` (no registry, study §4.3) — Never avoids any pull.
+  imagePullPolicy: Never
+  replicas: 1
+  service:
+    port: 8080
+  # ENCRYPTION_SECRET lives in a Secret; the dev overlay sets a throwaway value, prod injects a real one.
+  encryptionSecret: ""
+  # Plain (non-secret) backend env — the Helm mirror of backend.env.base. MONGO_URI/REDIS host are
+  # derived from the in-cluster service names by the configmap template, not set here.
+  env:
+    PROVIDER_MODE: offline
+    OMI_ENV_STAGE: offline
+    STORAGE_BACKEND: mongo
+    FIREBASE_PROJECT_ID: demo-omi-local
+    FIREBASE_AUTH_PROJECT_ID: demo-omi-local
+    GOOGLE_CLOUD_PROJECT: demo-omi-local
+    REDIS_DB_HOST: valkey
+    REDIS_DB_PORT: "6379"
+    CORS_ALLOWED_ORIGINS: ""
+  resources: {}
+
+valkey:
+  image: valkey/valkey:8-alpine
+  # Public image: the node pulls it once from the registry. (Only the locally-built backend image, which
+  # is on no registry, needs `kind load` + Never.) For a fully air-gapped node, pre-seed a local registry.
+  imagePullPolicy: IfNotPresent
+  # Durable, NOT pure cache (username ownership / webhook / subscription state) — AOF + a PVC, same
+  # reason as compose.base.yaml.
+  storage: 1Gi
+  resources: {}
+
+mongo:
+  image: mongo:7
+  # Public image: pulled by the node (see valkey note). backend stays Never (local-only image).
+  imagePullPolicy: IfNotPresent
+  replicaSetName: rs0
+  # Stable identity via StatefulSet + PVC so the single-member replica set survives pod restarts (§6.1).
+  storage: 2Gi
+  resources: {}
+
+# Feature profiles (compose parity) — OFF for the core milestone. Enabling them lands with their
+# templates in later steps (auth=Keycloak, chat=Qdrant, objstore=RustFS, push=ntfy, inference=GPU/k0s).
+auth:
+  enabled: false
+chat:
+  enabled: false
+objstore:
+  enabled: false
+push:
+  enabled: false
+inference:
+  enabled: false

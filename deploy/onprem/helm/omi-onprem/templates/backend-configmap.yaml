@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-env
+  labels:
+    {{- include "omi-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+data:
+  # Plain env mirror of backend.env.base (values.backend.env).
+  {{- range $k, $v := .Values.backend.env }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  # Derived from the in-cluster mongo service — seeds the replica set at the same stable member host.
+  MONGO_URI: "mongodb://{{ include "omi-onprem.mongoHost" . }}:27017/?replicaSet={{ .Values.mongo.replicaSetName }}"

@@ -1,0 +1,17 @@
+# Headless service: gives each StatefulSet pod a stable per-pod DNS (mongo-0.mongo.<ns>.svc...),
+# which the replica-set member host and the backend's MONGO_URI both use.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels:
+    {{- include "omi-onprem.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongo
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/component: mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: 27017

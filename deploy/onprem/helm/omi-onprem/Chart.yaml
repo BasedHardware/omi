@@ -1,0 +1,11 @@
+apiVersion: v2
+name: omi-onprem
+description: >-
+  Omi self-hosted backend on Kubernetes. Milestone "core": backend + valkey + mongo replica-set
+  (STORAGE_BACKEND=mongo), feature profiles (auth/chat/objstore/push/inference) off by default —
+  the Helm mirror of the compose stack (study: docs/analysis/kubernetes-onprem-helm-kind-k0s.md).
+type: application
+# Chart version — bump on template changes. appVersion tracks the omi backend image, not pinned here
+# (the operator sets backend.image); 0.1.0 marks the first core scaffold validated on Kind.
+version: 0.1.0
+appVersion: "0.1.0"
