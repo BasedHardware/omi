@@ -26,6 +26,12 @@ from models.context_bucket import (
 BUCKETS_COLLECTION = 'context_buckets'
 FACTS_COLLECTION = 'context_bucket_facts'
 
+# Expiry and the confidence floor are applied after the query, so it over-fetches
+# to keep post-filter starvation off the caller. The ceiling bounds the read when
+# a caller asks for a large page.
+FACT_OVERFETCH_FACTOR = 4
+FACT_OVERFETCH_CEILING = 1000
+
 # Ordering trusts the publishing device's clock, so a device running fast could
 # stamp a far-future time and lock every other device out of that row until wall
 # clock caught up. Clamping rather than rejecting keeps a mildly skewed clock
@@ -281,8 +287,14 @@ def list_context_facts(
 ) -> list[ContextFact]:
     """Read live facts across every bucket, newest first.
 
-    Expiry is applied here rather than left to collection so a lagging collector
-    cannot serve a fact the device already considers dead.
+    Expiry and the confidence floor are applied here rather than in the query.
+    Expiry cannot be a range filter alongside the ordering without another
+    composite index, and the caller's floor is a runtime value.
+
+    Because those filters run after the query, the query must over-fetch: with
+    the caller's limit applied in Firestore, expired or low-confidence rows at
+    the top of the ordering would consume the budget and silently starve live
+    facts that sort behind them.
     """
 
     moment = now or datetime.now(timezone.utc)
@@ -291,7 +303,8 @@ def list_context_facts(
     )
     if workstream_id is not None:
         query = query.where(filter=FieldFilter('workstream_tag', '==', workstream_id))
-    snapshots = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(limit).stream()
+    fetch_limit = min(limit * FACT_OVERFETCH_FACTOR, FACT_OVERFETCH_CEILING)
+    snapshots = query.order_by('updated_at', direction=firestore.Query.DESCENDING).limit(fetch_limit).stream()
     facts = parse_snapshots(ContextFact, snapshots, payload_from_snapshot=_readable_payload)
     live = [
         fact
@@ -299,7 +312,7 @@ def list_context_facts(
         if fact.confidence >= minimum_confidence
         and (fact.expires_at is None or cast(datetime, _as_aware(fact.expires_at)) > moment)
     ]
-    return live
+    return live[:limit]
 
 
 def purge_context_buckets(

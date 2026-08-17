@@ -336,3 +336,29 @@ def test_a_fast_device_clock_cannot_lock_out_later_writes(fake_db):
 
     facts = context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db)
     assert [fact.statement for fact in facts] == ['Recovered']
+
+
+def test_expired_rows_ahead_of_a_live_fact_do_not_starve_it(fake_db):
+    """Over-fetching bounds post-query starvation; it does not eliminate it.
+
+    Dead rows inside the over-fetch window can no longer consume the caller's
+    budget. More dead rows than that window can still hide a live fact, which is
+    why expiry is also collected rather than only filtered.
+    """
+
+    dead_count = context_buckets_db.FACT_OVERFETCH_FACTOR - 1
+    facts = [build_fact(f'dead-{index}', expires_at=NOW - timedelta(minutes=1)) for index in range(dead_count)]
+    facts.append(build_fact('live-1'))
+    sync(fake_db, [build_bucket(facts=facts)])
+
+    live = context_buckets_db.list_context_facts('u1', account_generation=3, limit=1, now=NOW, firestore_client=fake_db)
+
+    assert [fact.fact_id for fact in live] == ['live-1']
+
+
+def test_fact_read_never_exceeds_the_requested_limit(fake_db):
+    sync(fake_db, [build_bucket(facts=[build_fact(f'fact-{index}') for index in range(5)])])
+
+    live = context_buckets_db.list_context_facts('u1', account_generation=3, limit=2, now=NOW, firestore_client=fake_db)
+
+    assert len(live) == 2
