@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  s_ff8aeb5a36f5b8::t_4a6cd572c19f1d 102-106,185-193,197,343-344,398,403,425-428
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_ff8aeb5a36f5b8::t_6d53bd3b02e605 1055-1062
+desktop/macos/Desktop/Tests/IntegrationNudgeCoordinatorTests.swift
+  s_ff8aeb5a36f5b8::t_b299c42f4c3b6c 92-97,133-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dd09e3f809e6567cbe4104c168648b5e81401ecb",
+  "prompts": {},
+  "sessions": {
+    "s_ff8aeb5a36f5b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cee6b50-5d24-4cd7-ba03-5499c4e7d8a5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
