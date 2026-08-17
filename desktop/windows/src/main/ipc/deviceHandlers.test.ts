@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
 
+/** Handlers registered with ipcMain.handle, so the guards can be invoked. */
+const handlers = new Map<string, (event: { sender: unknown }, ...args: unknown[]) => unknown>()
+
 vi.mock('electron', () => ({
-  ipcMain: { handle: vi.fn(), on: vi.fn() },
+  ipcMain: {
+    handle: vi.fn((channel: string, handler: never) => handlers.set(channel, handler)),
+    on: vi.fn()
+  },
   BrowserWindow: { getAllWindows: () => [] }
 }))
 vi.mock('../appSettings', () => ({
@@ -15,6 +21,7 @@ const {
   attachBluetoothChooser,
   isChooserPending,
   parseRecoveredAudio,
+  registerDeviceHandlers,
   resolveChooserSelection,
   selectChooserDevice
 } = await import('./deviceHandlers')
@@ -167,5 +174,90 @@ describe('parseRecoveredAudio', () => {
     expect(parseRecoveredAudio({ ...valid, codec: '' })).toBeNull()
     expect(parseRecoveredAudio({ ...valid, device: '' })).toBeNull()
     expect(parseRecoveredAudio({ ...valid, codec: 20 })).toBeNull()
+  })
+})
+
+describe('the recovered-audio channel', () => {
+  const audio = {
+    bytes: Uint8Array.from([1, 2, 3]),
+    timerStart: 1_723_800_000,
+    seconds: 180,
+    totalFrames: 9000,
+    codec: 'opus',
+    sampleRate: 16_000,
+    frameSize: 160,
+    device: 'omi'
+  }
+
+  const wire = (): {
+    invoke: (senderId: number, payload: unknown) => Promise<unknown>
+    stored: unknown[]
+  } => {
+    handlers.clear()
+    const stored: unknown[] = []
+    const deviceWc = { id: 7, isDestroyed: () => false } as never
+    registerDeviceHandlers(
+      () => deviceWc,
+      () => 1,
+      async (a) => {
+        stored.push(a)
+        return 'stored'
+      }
+    )
+    const handler = handlers.get('omi-device:store-recovered')!
+    return {
+      invoke: async (senderId, payload) =>
+        handler({ sender: { id: senderId } }, payload) as Promise<unknown>,
+      stored
+    }
+  }
+
+  it('accepts recovered audio from the device window', async () => {
+    const h = wire()
+    expect(await h.invoke(7, audio)).toBe('stored')
+    expect(h.stored.length).toBe(1)
+  })
+
+  it('refuses recovered audio from any other window', async () => {
+    const h = wire()
+    // Every renderer shares one preload. Without this guard the main window, or
+    // any auxiliary one, could inject recordings that upload as the user's
+    // conversations.
+    expect(await h.invoke(1, audio)).toBe('failed')
+    expect(await h.invoke(99, audio)).toBe('failed')
+    expect(h.stored).toEqual([])
+  })
+
+  it('refuses a malformed payload even from the device window', async () => {
+    const h = wire()
+    expect(await h.invoke(7, { ...audio, timerStart: 0 })).toBe('failed')
+    expect(await h.invoke(7, null)).toBe('failed')
+    expect(h.stored).toEqual([])
+  })
+
+  it('reports failure when there is no offline log to store into', async () => {
+    handlers.clear()
+    registerDeviceHandlers(
+      () => ({ id: 7, isDestroyed: () => false }) as never,
+      () => 1
+    )
+    const handler = handlers.get('omi-device:store-recovered')!
+    expect(await handler({ sender: { id: 7 } }, audio)).toBe('failed')
+  })
+
+  it('refuses recovered audio when there is no device window at all', async () => {
+    handlers.clear()
+    const stored: unknown[] = []
+    registerDeviceHandlers(
+      () => null,
+      () => 1,
+      async (a) => {
+        stored.push(a)
+        return 'stored'
+      }
+    )
+    const handler = handlers.get('omi-device:store-recovered')!
+    expect(await handler({ sender: { id: 7 } }, audio)).toBe('failed')
+    expect(stored).toEqual([])
   })
 })
