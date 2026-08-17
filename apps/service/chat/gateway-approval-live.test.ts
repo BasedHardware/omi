@@ -111,7 +111,7 @@ const bootApprovalLoop = () => {
 };
 
 describe("gateway approval live path", () => {
-  test("safe.write pauses the gateway loop until coordinator resolve approves", async () => {
+  test("safe_write pauses the gateway loop until coordinator resolve approves", async () => {
     const ctx = bootApprovalLoop();
     const responses = [
       toolCallStream("provider-write-call"),
@@ -151,7 +151,7 @@ describe("gateway approval live path", () => {
     expect(ctx.store.list("generation-approval-live").some((event) => event.kind === "tool_result")).toBe(true);
   });
 
-  test("deny resolves without executing safe.write and the gateway turn still completes", async () => {
+  test("deny resolves without executing safe_write and the gateway turn still completes", async () => {
     const ctx = bootApprovalLoop();
     const responses = [
       toolCallStream("provider-write-deny"),

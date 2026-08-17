@@ -10,7 +10,7 @@ import {
 import type { GatewayReadOnlyToolLoopOptions } from "./gateway-tool-loop";
 
 /** Canned product seam promoted to approval-required; not a live write path. */
-export const SAFE_WRITE_TOOL_NAME = "safe.write" as const;
+export const SAFE_WRITE_TOOL_NAME = "safe_write" as const;
 
 export const SAFE_WRITE_TOOL_SCHEMA = Object.freeze({
   name: SAFE_WRITE_TOOL_NAME,

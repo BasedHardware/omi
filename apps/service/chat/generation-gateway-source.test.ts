@@ -59,7 +59,7 @@ const safeReadTool = (
   overrides: Partial<AgentToolDefinition> = {},
 ): AgentToolDefinition => ({
   schemaVersion: 1,
-  name: "safe.fixture_status",
+  name: "safe_fixture_status",
   risk: "safe",
   timeoutMs: 100,
   retryable: false,
@@ -72,7 +72,7 @@ const safeReadTool = (
 });
 
 const readOnlyToolSchema = Object.freeze({
-  name: "safe.fixture_status",
+  name: "safe_fixture_status",
   description: "Read the current fixture status.",
   parameters: Object.freeze({
     type: "object" as const,
@@ -89,7 +89,7 @@ const seedAgentLedger = () => {
   return store;
 };
 
-const toolCallStream = (providerCallId: string, name = "safe.fixture_status", argumentsJson = "{\"scope\":\"current\"}") => stream(
+const toolCallStream = (providerCallId: string, name = "safe_fixture_status", argumentsJson = "{\"scope\":\"current\"}") => stream(
   JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: providerCallId,
     function: { name, arguments: argumentsJson } }] } }] }),
   "[DONE]",
@@ -152,7 +152,7 @@ describe("gateway chat generation source", () => {
   test("unknown tools and malformed arguments fail closed through the durable tool ledger without execution", async () => {
     for (const fixture of [
       { name: "safe.unknown", args: "{\"private_id\":\"person-42\"}", code: "tool_unknown" },
-      { name: "safe.fixture_status", args: "{not-json-private-id", code: "tool_invalid_input" },
+      { name: "safe_fixture_status", args: "{not-json-private-id", code: "tool_invalid_input" },
     ]) {
       const store = seedAgentLedger();
       let executions = 0;
@@ -194,7 +194,7 @@ describe("gateway chat generation source", () => {
     const store = seedAgentLedger();
     let executions = 0;
     const responses = [
-      toolCallStream("provider-call", "safe.fixture_status", "{\"secret\":\"raw\"}"),
+      toolCallStream("provider-call", "safe_fixture_status", "{\"secret\":\"raw\"}"),
       stream(JSON.stringify({ choices: [{ delta: { content: "Rejected safely." } }] }), "[DONE]"),
     ];
     const source = createGatewayChatGenerationSource({

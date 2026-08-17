@@ -5,7 +5,7 @@ import {
   createInMemoryAgentRunEventStore,
 } from "./agent-run-events";
 import { createAgentApprovalCoordinator } from "./agent-approval-coordinator";
-import { createSafeWriteTool, createSafeWriteToolRegistry } from "./safe-write-tool";
+import { createSafeWriteTool, createSafeWriteToolRegistry, SAFE_WRITE_TOOL_NAME } from "./safe-write-tool";
 
 describe("agent approval coordinator", () => {
   let executions = 0;
@@ -39,12 +39,12 @@ describe("agent approval coordinator", () => {
     return { coordinator, events, supervisor, now: () => now };
   };
 
-  test("safe.write has zero pre-approval execution and one post-reload execution", async () => {
+  test("safe_write has zero pre-approval execution and one post-reload execution", async () => {
     executions = 0;
     const first = boot();
     const call = {
       callId: "call:write",
-      toolName: "safe.write",
+      toolName: SAFE_WRITE_TOOL_NAME,
       idempotencyKey: "idem:write",
       input: {},
     } as const;
@@ -82,12 +82,12 @@ describe("agent approval coordinator", () => {
     expect(second.events.list("run:approval").some((event) => event.kind === "tool_result")).toBe(true);
   });
 
-  test("post-reload approve keeps the original safe.write input", async () => {
+  test("post-reload approve keeps the original safe_write input", async () => {
     executions = 0;
     const first = boot();
     const call = {
       callId: "call:write-note",
-      toolName: "safe.write",
+      toolName: SAFE_WRITE_TOOL_NAME,
       idempotencyKey: "idem:write-note",
       input: { note: "scoped note" },
     } as const;
@@ -120,7 +120,7 @@ describe("agent approval coordinator", () => {
       const ctx = boot();
       const call = {
         callId: `call:${resolution}`,
-        toolName: "safe.write",
+        toolName: SAFE_WRITE_TOOL_NAME,
         idempotencyKey: `idem:${resolution}`,
         input: {},
       } as const;

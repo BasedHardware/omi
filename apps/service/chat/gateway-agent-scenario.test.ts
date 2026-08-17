@@ -26,7 +26,7 @@ const source = (sourceId: string) => Object.freeze({
 });
 
 const toolSchema = Object.freeze({
-  name: "safe.fixture_status",
+  name: "safe_fixture_status",
   description: "Read the current fixture status.",
   parameters: Object.freeze({
     type: "object" as const,
@@ -80,7 +80,7 @@ const scenario = (): GatewayAgentScenario => ({
   providerScript: [{
     kind: "tool_call",
     providerCallId: "provider-private-call",
-    toolName: "safe.fixture_status",
+    toolName: "safe_fixture_status",
     arguments: { scope: "current" },
   }, {
     kind: "answer",

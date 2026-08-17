@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import { createInMemoryLocalServiceStores, createLocalDevService } from "../app-facing";
 import { DEV_NOOP_SCANNER_ID } from "../chat/attachment-scanner";
+import { SAFE_WRITE_TOOL_NAME } from "../chat/safe-write-tool";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
 
 const pdf = (): Uint8Array => new Uint8Array([
@@ -37,7 +38,7 @@ const admitGeneration = (
 };
 
 describe("chat agent approval route", () => {
-  test("resolveApproval route completes durable safe.write after reload", async () => {
+  test("resolveApproval route completes durable safe_write after reload", async () => {
     const db = new Database(":memory:");
     const stores = createInMemoryLocalServiceStores();
     const local = createLocalDevService({
@@ -57,7 +58,7 @@ describe("chat agent approval route", () => {
       attemptId,
       call: {
         callId: "call:write",
-        toolName: "safe.write",
+        toolName: SAFE_WRITE_TOOL_NAME,
         idempotencyKey: "idem:write",
         input: {},
       },
@@ -117,7 +118,7 @@ describe("chat agent approval route", () => {
       attemptId: `${runId}:attempt:1`,
       call: {
         callId: "call:write-pending",
-        toolName: "safe.write",
+        toolName: SAFE_WRITE_TOOL_NAME,
         idempotencyKey: "idem:write-pending",
         input: { note: "pending note" },
       },
@@ -136,7 +137,7 @@ describe("chat agent approval route", () => {
     db.close();
   });
 
-  test("deny and cancel return 202 without executing safe.write", async () => {
+  test("deny and cancel return 202 without executing safe_write", async () => {
     for (const resolution of ["denied", "cancelled"] as const) {
       const db = new Database(":memory:");
       const stores = createInMemoryLocalServiceStores();
@@ -155,7 +156,7 @@ describe("chat agent approval route", () => {
         attemptId: `${runId}:attempt:1`,
         call: {
           callId: `call:${resolution}`,
-          toolName: "safe.write",
+          toolName: SAFE_WRITE_TOOL_NAME,
           idempotencyKey: `idem:${resolution}`,
           input: {},
         },

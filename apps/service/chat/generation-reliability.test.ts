@@ -84,7 +84,7 @@ const delayedPreamble = (delayMs: number): Response => new Response(
 const statusResponse = (status: number): Response => new Response("no", { status });
 
 const readOnlyToolSchema = Object.freeze({
-  name: "safe.fixture_status",
+  name: "safe_fixture_status",
   description: "Read the current fixture status.",
   parameters: Object.freeze({
     type: "object" as const,
@@ -98,7 +98,7 @@ const readOnlyToolSchema = Object.freeze({
 
 const safeReadTool = (execute: AgentToolDefinition["execute"]): AgentToolDefinition => ({
   schemaVersion: 1,
-  name: "safe.fixture_status",
+  name: "safe_fixture_status",
   risk: "safe",
   timeoutMs: 100,
   retryable: false,
@@ -318,7 +318,7 @@ describe("chat generation reliability", () => {
     const responses = [
       sse(JSON.stringify({
         choices: [{ delta: { tool_calls: [{ index: 0, id: "provider-call",
-          function: { name: "safe.fixture_status", arguments: "{\"scope\":\"current\"}" } }] } }],
+          function: { name: "safe_fixture_status", arguments: "{\"scope\":\"current\"}" } }] } }],
       }), "[DONE]"),
       sse(
         JSON.stringify({ choices: [{ delta: { content: "Canonical answer." } }] }),
