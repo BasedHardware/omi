@@ -5,7 +5,6 @@ import pytest
 from pydantic import ValidationError
 
 import database.context_buckets as context_buckets_db
-from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.context_bucket import (
     BucketSubjectKind,
     ContextBucketSync,
@@ -127,6 +126,13 @@ class FakeTransaction:
         self.pending = []
 
 
+FIRESTORE_MAX_BATCH_OPERATIONS = 500
+
+
+class BatchTooLargeError(AssertionError):
+    """Firestore rejects a commit carrying more than 500 operations."""
+
+
 class FakeBatch:
     def __init__(self, database):
         self.database = database
@@ -139,6 +145,9 @@ class FakeBatch:
         self.operations.append(('delete', ref, None))
 
     def commit(self):
+        if len(self.operations) > FIRESTORE_MAX_BATCH_OPERATIONS:
+            raise BatchTooLargeError(f'{len(self.operations)} operations in one commit')
+        self.database.committed_batch_sizes.append(len(self.operations))
         for kind, ref, payload in self.operations:
             if kind == 'set':
                 ref.set(payload)
@@ -150,6 +159,7 @@ class FakeBatch:
 class FakeDB:
     def __init__(self):
         self.rows = {}
+        self.committed_batch_sizes = []
 
     def collection(self, name):
         return FakeCollection(self, (name,))
@@ -175,22 +185,12 @@ def fake_db(monkeypatch):
     return FakeDB()
 
 
-def screen_evidence(fact_id: str) -> EvidenceRef:
-    return EvidenceRef(
-        kind=EvidenceKind.local_screen,
-        id=fact_id,
-        scope=EvidenceScope.device_local,
-        device_id='mac-1',
-    )
-
-
 def build_fact(fact_id: str, *, device_updated_at=NOW, statement='Ship the parity pack', **overrides):
     return ContextFactSync(
         fact_id=fact_id,
         statement=statement,
         identifiers=['parity-pack'],
         confidence=0.9,
-        evidence_refs=[screen_evidence(fact_id)],
         device_updated_at=device_updated_at,
         **overrides,
     )
@@ -289,19 +289,6 @@ def test_purge_removes_the_bucket_and_every_fact_it_owns(fake_db):
     assert ('users', 'u1', 'context_buckets', 'bucket-1') not in fake_db.rows
 
 
-def test_canonical_evidence_is_rejected_so_screen_refs_stay_device_local():
-    with pytest.raises(ValidationError):
-        ContextFactSync(
-            fact_id='fact-1',
-            statement='Ship the parity pack',
-            confidence=0.9,
-            device_updated_at=NOW,
-            evidence_refs=[
-                EvidenceRef(kind=EvidenceKind.conversation, id='conv-1', scope=EvidenceScope.canonical),
-            ],
-        )
-
-
 def test_sync_contract_rejects_duplicate_ids():
     with pytest.raises(ValidationError):
         ContextBucketSync(
@@ -385,24 +372,6 @@ def test_fact_read_never_exceeds_the_requested_limit(fake_db):
     assert len(live) == 2
 
 
-def test_non_screen_evidence_is_rejected_even_when_device_local():
-    with pytest.raises(ValidationError):
-        ContextFactSync(
-            fact_id='fact-1',
-            statement='Ship the parity pack',
-            confidence=0.9,
-            device_updated_at=NOW,
-            evidence_refs=[
-                EvidenceRef(
-                    kind=EvidenceKind.conversation,
-                    id='conv-1',
-                    scope=EvidenceScope.device_local,
-                    device_id='mac-1',
-                )
-            ],
-        )
-
-
 def test_purge_is_account_wide_and_not_scoped_to_the_calling_device(fake_db):
     """Excluding an app is a privacy action, so it must reach copies from every device.
 
@@ -419,3 +388,86 @@ def test_purge_is_account_wide_and_not_scoped_to_the_calling_device(fake_db):
     assert report.buckets_deleted == 1
     assert report.facts_deleted == 2
     assert context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db) == []
+
+
+def seed_facts(fake_db, count, *, prefix, bucket_id='bucket-1', expires_at=None):
+    """Seed past the per-request fact cap, which is lower than one Firestore batch."""
+
+    sync(fake_db, [build_bucket(bucket_id, facts=[])], generation=3)
+    for index in range(count):
+        fake_db.rows[('users', 'u1', 'context_bucket_facts', f'{prefix}-{index}')] = {
+            'fact_id': f'{prefix}-{index}',
+            'bucket_id': bucket_id,
+            'statement': 'Ship the parity pack',
+            'identifiers': [],
+            'confidence': 0.9,
+            'disposition_state': 'open',
+            'evidence_refs': [],
+            'expires_at': expires_at,
+            'device_id': 'mac-1',
+            'device_updated_at': NOW,
+            'account_generation': 3,
+            'created_at': NOW,
+            'updated_at': NOW,
+        }
+
+
+def test_purge_of_a_bucket_larger_than_one_batch_still_deletes_everything(fake_db):
+    """A rejected commit would leave excluded-app data readable on the server."""
+
+    fact_count = context_buckets_db.MAX_BATCH_OPERATIONS + FIRESTORE_MAX_BATCH_OPERATIONS
+    seed_facts(fake_db, fact_count, prefix='fact')
+    fake_db.committed_batch_sizes.clear()
+
+    report = context_buckets_db.purge_context_buckets('u1', ['bucket-1'], firestore_client=fake_db)
+
+    assert (report.buckets_deleted, report.facts_deleted) == (1, fact_count)
+    assert max(fake_db.committed_batch_sizes) <= context_buckets_db.MAX_BATCH_OPERATIONS
+    assert ('users', 'u1', 'context_buckets', 'bucket-1') not in fake_db.rows
+    assert context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db) == []
+
+
+def test_expired_facts_are_deleted_rather_than_only_filtered(fake_db):
+    sync(
+        fake_db,
+        [
+            build_bucket(
+                facts=[
+                    build_fact('dead-1', expires_at=NOW - timedelta(minutes=1)),
+                    build_fact('live-1', expires_at=NOW + timedelta(hours=1)),
+                    build_fact('forever-1'),
+                ]
+            )
+        ],
+    )
+
+    deleted = context_buckets_db.collect_expired_context_facts('u1', now=NOW, firestore_client=fake_db)
+
+    assert deleted == 1
+    assert ('users', 'u1', 'context_bucket_facts', 'dead-1') not in fake_db.rows
+    facts = context_buckets_db.list_context_facts('u1', account_generation=3, now=NOW, firestore_client=fake_db)
+    assert sorted(fact.fact_id for fact in facts) == ['forever-1', 'live-1']
+
+
+def test_expired_fact_collection_larger_than_one_batch_commits_in_chunks(fake_db):
+    expired_count = context_buckets_db.MAX_BATCH_OPERATIONS + FIRESTORE_MAX_BATCH_OPERATIONS
+    seed_facts(fake_db, expired_count, prefix='dead', expires_at=NOW - timedelta(minutes=1))
+    fake_db.committed_batch_sizes.clear()
+
+    deleted = context_buckets_db.collect_expired_context_facts('u1', now=NOW, firestore_client=fake_db)
+
+    assert deleted == expired_count
+    assert max(fake_db.committed_batch_sizes) <= context_buckets_db.MAX_BATCH_OPERATIONS
+
+
+def test_expired_fact_collection_stops_at_the_requested_limit(fake_db):
+    sync(
+        fake_db,
+        [
+            build_bucket(
+                facts=[build_fact(f'dead-{index}', expires_at=NOW - timedelta(minutes=1)) for index in range(5)]
+            )
+        ],
+    )
+
+    assert context_buckets_db.collect_expired_context_facts('u1', now=NOW, limit=2, firestore_client=fake_db) == 2

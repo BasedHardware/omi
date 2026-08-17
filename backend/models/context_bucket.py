@@ -11,7 +11,6 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.task_intelligence import StableId
 
 
@@ -41,24 +40,11 @@ class ContextFactSync(BaseModel):
     notify_worthiness: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
     disposition_state: FactDispositionState = FactDispositionState.none
     workstream_tag: Optional[str] = Field(default=None, max_length=128)
-    evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=50)
     expires_at: Optional[datetime] = None
     device_updated_at: datetime
 
     @model_validator(mode='after')
-    def require_local_screen_evidence(self):
-        """Bucket facts are extracted from the screen, so their evidence is too.
-
-        Scope alone is not enough: a device_local ref of any other kind would
-        claim a conversation or artifact as this fact's provenance, which the
-        device cannot vouch for and no consumer could resolve.
-        """
-
-        for ref in self.evidence_refs:
-            if ref.scope != EvidenceScope.device_local:
-                raise ValueError('context fact evidence must stay device_local')
-            if ref.kind != EvidenceKind.local_screen:
-                raise ValueError('context fact evidence must be local_screen')
+    def require_usable_identifiers(self):
         for identifier in self.identifiers:
             if not identifier.strip():
                 raise ValueError('identifiers cannot be blank')
@@ -129,7 +115,6 @@ class ContextFact(BaseModel):
     notify_worthiness: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
     disposition_state: FactDispositionState = FactDispositionState.none
     workstream_tag: Optional[str] = Field(default=None, max_length=128)
-    evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=50)
     expires_at: Optional[datetime] = None
     device_id: StableId
     device_updated_at: datetime

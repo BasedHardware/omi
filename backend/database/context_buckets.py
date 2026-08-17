@@ -38,6 +38,16 @@ FACT_OVERFETCH_CEILING = 1000
 # syncing normally while bounding how far ahead any device can place itself.
 MAX_DEVICE_CLOCK_SKEW = timedelta(hours=1)
 
+# Firestore rejects a batch of more than 500 operations outright, and a rejected
+# purge leaves excluded-app data on the server. The margin below the hard cap
+# leaves room for the bucket document and any operation added alongside a delete
+# without pushing a batch over the edge.
+MAX_BATCH_OPERATIONS = 450
+
+# Collection scans the whole per-user collection, so the run is bounded to keep a
+# single sweep off a hot path even for an account with a large backlog.
+EXPIRED_FACT_COLLECT_LIMIT = 2000
+
 
 def _get_db(firestore_client: Any = None) -> Any:
     return firestore_client or get_firestore_client()
@@ -157,7 +167,6 @@ def _fact_storage(
         'notify_worthiness': fact.notify_worthiness,
         'disposition_state': fact.disposition_state.value,
         'workstream_tag': fact.workstream_tag,
-        'evidence_refs': [ref.model_dump(mode='python') for ref in fact.evidence_refs],
         'expires_at': fact.expires_at,
         'device_id': device_id,
         'device_updated_at': _clamped_device_time(fact.device_updated_at, now=now),
@@ -317,22 +326,70 @@ def purge_context_buckets(
     facts_ref = _facts_collection(uid, firestore_client=client)
     for bucket_id in bucket_ids:
         bucket_ref = _bucket_ref(uid, bucket_id, firestore_client=client)
-        batch = client.batch()
         owned_facts = facts_ref.where(filter=FieldFilter('bucket_id', '==', bucket_id)).stream()
-        for fact_snapshot in owned_facts:
-            batch.delete(fact_snapshot.reference)
-            facts_deleted += 1
+        facts_deleted += _delete_in_batches(client, (snapshot.reference for snapshot in owned_facts))
         if bucket_ref.get().exists:
-            batch.delete(bucket_ref)
-            buckets_deleted += 1
-        batch.commit()
+            # Deleted in its own batch so the bucket still goes away when its facts
+            # spanned several commits.
+            buckets_deleted += _delete_in_batches(client, iter([bucket_ref]))
 
     return ContextBucketPurgeReport(buckets_deleted=buckets_deleted, facts_deleted=facts_deleted)
+
+
+def collect_expired_context_facts(
+    uid: str,
+    *,
+    now: Optional[datetime] = None,
+    limit: int = EXPIRED_FACT_COLLECT_LIMIT,
+    firestore_client: Any = None,
+) -> int:
+    """Delete facts whose expiry has passed, returning how many were removed.
+
+    Reads only filter expired rows out, so without collection they are billed on
+    every read and consume the over-fetch window that exists to stop them
+    starving live facts.
+
+    Expiry is evaluated here rather than as a range filter so the sweep needs no
+    additional composite index and no ordering that would fence it to one
+    account generation, which would strand rows left behind by a generation bump.
+    """
+
+    client = _get_db(firestore_client)
+    moment = now or datetime.now(timezone.utc)
+    expired = []
+    for snapshot in _facts_collection(uid, firestore_client=client).stream():
+        expires_at = _as_aware(_snapshot_dict(snapshot).get('expires_at'))
+        if expires_at is not None and expires_at <= moment:
+            expired.append(snapshot.reference)
+            if len(expired) >= limit:
+                break
+    return _delete_in_batches(client, iter(expired))
+
+
+def _delete_in_batches(client: Any, refs: Any) -> int:
+    """Delete every reference, committing before any batch can reach Firestore's cap."""
+
+    deleted = 0
+    batch = client.batch()
+    pending = 0
+    for ref in refs:
+        batch.delete(ref)
+        pending += 1
+        deleted += 1
+        if pending >= MAX_BATCH_OPERATIONS:
+            batch.commit()
+            batch = client.batch()
+            pending = 0
+    if pending:
+        batch.commit()
+    return deleted
 
 
 __all__ = [
     'BUCKETS_COLLECTION',
     'FACTS_COLLECTION',
+    'MAX_BATCH_OPERATIONS',
+    'collect_expired_context_facts',
     'list_context_facts',
     'purge_context_buckets',
     'sync_context_buckets',

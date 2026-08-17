@@ -56,8 +56,6 @@ Synced to the backend:
   `display_label`, `notify_worthiness`, `visit_count`, `last_visited_at`.
 - Validated facts only: `statement`, `identifiers`, `confidence`, `notify_worthiness`,
   `disposition_state`, `expires_at`, `workstream_tag`.
-- `EvidenceRef` pointers with `scope=device_local`, `kind=local_screen`, and a `device_id`.
-  These name the evidence without carrying it.
 
 Never synced:
 
@@ -66,6 +64,8 @@ Never synced:
 - `narrative`, `bucket_entries`, and the frozen ranked segment.
 - `raw_context_key` / `normalized_context_key` — window titles.
 - Visits, proactive deliveries, and subject bindings.
+- Evidence references. The device has no id a consumer could resolve back to a screen
+  frame, so publishing one would assert provenance the payload cannot support.
 
 Facts that are not `validated` never leave the device. `proposed`, `needs_review`,
 `rejected`, and `superseded` are working state for the local validator; publishing them
