@@ -256,7 +256,11 @@ def test_production_workflow_stages_release_renderer_before_checkouting_admitted
     workflow = _read(".github/workflows/desktop_backend_prod.yml")
 
     assert 'cp .workflow-source/backend/scripts/agent_vm_release.py "$controls/backend/scripts/"' in workflow
+    assert (
+        'cp .workflow-source/backend/scripts/resolve_agent_vm_sha_release.py "$controls/backend/scripts/"' in workflow
+    )
     assert 'python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/agent_vm_release.py"' in workflow
+    assert 'python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/resolve_agent_vm_sha_release.py"' in workflow
     # The reconciler deploy must be guarded so a pre-reconciler release_sha
     # does not silently leave a stale or broken Cloud Run Job image.
     assert "AGENT_VM_RECONCILER_AVAILABLE" in workflow
@@ -464,6 +468,9 @@ def test_reconciler_runbook_documents_state_disk_clone_browser_and_production_ga
     assert "seven days of rollback retention" in runbook
     assert "production canary must communicate that expected" in runbook
     assert "It is not permission for a fleet sweep" in runbook
+    assert "josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com" in runbook
+    assert "32012710785" in runbook
+    assert "reuses that digest instead of rebuilding a competing image" in runbook
 
 
 def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(tmp_path):

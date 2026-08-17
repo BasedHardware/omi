@@ -200,17 +200,35 @@ jobs:
             echo "::warning::AGENT_GCS_BUCKET is not set — skipping Agent VM image build"
             exit 0
           fi
-          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
-          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
-          python3 backend/scripts/runtime_image_contracts.py smoke \
-            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
-          docker push "$agent_image"
-          agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
-          [[ "$agent_digest" == sha256:* ]]
-          agent_image_digest="$agent_image@$agent_digest"
           source_sha="${{ steps.candidate-identity.outputs.source_sha }}"
           startup_uri_gs="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
           startup_uri_https="https://storage.googleapis.com/$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
+          manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/manifest.json"
+          python3 backend/scripts/resolve_agent_vm_sha_release.py \
+            --startup-uri "$startup_uri_gs" \
+            --manifest-uri "$manifest_uri" \
+            --expected-source-sha "$source_sha" \
+            --workdir "$RUNNER_TEMP/agent-vm-sha-release" \
+            --output "$RUNNER_TEMP/agent-vm-sha-release.json"
+          reuse="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+          if [[ "$reuse" == "true" ]]; then
+            agent_image_digest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["image_digest"])' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+            reused_boot_image="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("boot_image") or "")' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+            [[ "$agent_image_digest" == *@sha256:* ]]
+            echo "Reusing SHA-keyed Agent VM release artifacts for $source_sha ($agent_image_digest)."
+            if [[ -n "$reused_boot_image" ]]; then
+              AGENT_VM_BOOT_IMAGE="$reused_boot_image"
+            fi
+          else
+            agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
+            docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
+            docker push "$agent_image"
+            agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
+            [[ "$agent_digest" == sha256:* ]]
+            agent_image_digest="$agent_image@$agent_digest"
+          fi
           # Legacy VMs may still reference gs://$AGENT_GCS_BUCKET/startup.sh; do not update it before acceptance.
           rendered_startup="$RUNNER_TEMP/agent-vm-startup.sh"
           AGENT_VM_IMAGE="$agent_image_digest" AGENT_VM_GEMINI_SECRET_NAME="$AGENT_VM_GEMINI_SECRET_NAME" \
@@ -244,6 +262,7 @@ jobs:
             echo "startup_uri=$startup_uri_https"
             echo "startup_sha256=$startup_sha256"
             echo "image_digest=$agent_image_digest"
+            echo "boot_image=$AGENT_VM_BOOT_IMAGE"
             echo "manifest_uri=$manifest_uri"
             echo "active_manifest_uri=$active_manifest_uri"
             echo "previous_manifest_uri=$previous_manifest_uri"
