@@ -66,6 +66,9 @@ spec:
         name: cache
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.push.ntfy.storage }}

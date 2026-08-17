@@ -2,6 +2,19 @@
 # Overlays: values-dev.yaml (Kind) / values-prod.yaml (k0s). Feature profiles mirror compose profiles
 # and are OFF here; each guards its own templates with `{{- if .Values.<feature>.enabled }}`.
 
+# Secrets: dev lets the chart build `backend-secret` from values. Prod sets create=false and supplies a
+# Secret named `backend-secret` out-of-band (External Secrets / Sealed Secrets / vault) — see A2.
+secrets:
+  create: true
+
+# NetworkPolicy air-gap posture (study §6.5): default-deny egress + targeted allows. OFF by default; needs
+# a policy-enforcing CNI (Calico/Cilium on k0s — kindnet on Kind does NOT enforce it).
+networkPolicy:
+  enabled: false
+
+# Optional storage class for every PVC (empty = the cluster default; Kind uses local-path). Set on k0s.
+storageClassName: ""
+
 backend:
   image: omi-onprem-backend:latest
   # Kind loads images with `kind load docker-image` (no registry, study §4.3) — Never avoids any pull.

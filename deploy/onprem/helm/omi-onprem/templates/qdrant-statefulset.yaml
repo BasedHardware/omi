@@ -59,6 +59,9 @@ spec:
         name: storage
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.chat.qdrant.storage }}

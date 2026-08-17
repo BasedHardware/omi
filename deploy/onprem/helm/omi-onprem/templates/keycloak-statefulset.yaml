@@ -79,6 +79,9 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- with .Values.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.auth.keycloak.storage }}
