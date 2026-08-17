@@ -235,12 +235,53 @@ enum ContextBucketPromptAssembler {
 struct ContextDirectorTaskContext: Equatable, Sendable {
   static let maximumDescriptionLength = 600
 
+  /// Stable identity of the task row this context was built from.
+  ///
+  /// Without it the director could only ever *describe* a task in prose: the
+  /// prompt carried the text and dropped the identity, so a resurface about an
+  /// overdue task arrived at the UI with nothing to resolve back to a row, and
+  /// the notification re-stated a task the user could not open. Carrying the id
+  /// lets a decision cite the task it is actually about.
+  let id: String
   let description: String
   let dueAt: Date?
 
-  init(description: String, dueAt: Date?) {
+  /// The handle the model sees and cites. Namespaced so it cannot be confused
+  /// with a bucket-entry or fact ref, and so an invented ref is obvious.
+  var promptRef: String { "task:\(id)" }
+
+  init(id: String, description: String, dueAt: Date?) {
+    self.id = id
     self.description = String(description.prefix(Self.maximumDescriptionLength))
     self.dueAt = dueAt
+  }
+}
+
+/// Cited task refs, filtered to the ones actually supplied on this visit.
+///
+/// Mirrors `BucketFactValidator.resolvableEvidenceRefs`: a weak model invents
+/// plausible-looking handles, and an unresolvable id renders in chat as a
+/// "Task is no longer available" tombstone rather than failing loudly. Only
+/// refs present in the supplied set survive.
+enum ContextDirectorTaskRefs {
+  static let maximumCount = 5
+
+  static func resolvable(_ cited: [String], supplied: [ContextDirectorTaskContext]) -> [String] {
+    let allowed = Set(supplied.map(\.promptRef))
+    var seen = Set<String>()
+    return
+      cited
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { allowed.contains($0) && seen.insert($0).inserted }
+      .prefix(maximumCount)
+      .map { String($0) }
+  }
+
+  /// The bare task id for a validated `task:<id>` ref, for the UI to resolve.
+  static func taskID(from ref: String) -> String? {
+    guard ref.hasPrefix("task:") else { return nil }
+    let id = String(ref.dropFirst("task:".count))
+    return id.isEmpty ? nil : id
   }
 }
 
@@ -483,6 +524,9 @@ enum ContextProactivityPromptBuilder {
       - The title is not a category. Never answer "Insight", "Suggestion", or "Task".
       - A missing identifier is not a reason for silence. Speak with what the context supplies.
       Use only supplied bucket-entry refs.
+      - When the notification is about one of the open tasks above, put that task's bracketed
+        handle in task_refs, copied exactly. Leave task_refs empty when it is about none of
+        them. Never write a handle that is not listed above.
       Timestamps supplied below are already in the user's local time zone. When a message
       mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
 
@@ -503,12 +547,13 @@ enum ContextProactivityPromptBuilder {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
       ContextDirectorTaskSelection.futureHorizon)
     let taskLines: [String] = tasks.prefix(20).map { task -> String in
-      guard let dueAt = task.dueAt else { return "- \(task.description)" }
+      let head = "- [\(task.promptRef)] \(task.description)"
+      guard let dueAt = task.dueAt else { return head }
       if dueAt > actionableCutoff {
         return
-          "- \(task.description)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))\n  Reference only: already exists; do not resurface or create it yet."
+          "\(head)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))\n  Reference only: already exists; do not resurface or create it yet."
       }
-      return "- \(task.description)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))"
+      return "\(head)\n  Due at: \(localTimestamp(dueAt, timeZone: timeZone))"
     }
     let taskContext = taskLines.joined(separator: "\n")
     var prompt = """

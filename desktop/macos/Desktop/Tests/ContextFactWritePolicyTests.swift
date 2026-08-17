@@ -180,3 +180,49 @@ final class ContextFactWritePolicyTests: XCTestCase {
       .dropMachinery)
   }
 }
+
+/// The director cites open tasks by the bracketed handle the prompt supplies.
+/// Every cited ref is filtered against the tasks actually supplied on that
+/// visit: an invented handle would render in chat as a "Task is no longer
+/// available" tombstone rather than failing visibly, which is the failure mode
+/// already observed on the chat surface.
+final class ContextDirectorTaskRefsTests: XCTestCase {
+  private let supplied = [
+    ContextDirectorTaskContext(id: "abc-123", description: "Send the contract", dueAt: nil),
+    ContextDirectorTaskContext(id: "def-456", description: "Review the release", dueAt: nil),
+  ]
+
+  func testPromptRefIsNamespacedSoItCannotBeConfusedWithOtherRefKinds() {
+    XCTAssertEqual(supplied[0].promptRef, "task:abc-123")
+    XCTAssertEqual(ContextDirectorTaskRefs.taskID(from: "task:abc-123"), "abc-123")
+    XCTAssertNil(ContextDirectorTaskRefs.taskID(from: "visit:123"))
+    XCTAssertNil(ContextDirectorTaskRefs.taskID(from: "task:"))
+  }
+
+  func testInventedOrForeignRefsAreDropped() {
+    XCTAssertEqual(
+      ContextDirectorTaskRefs.resolvable(
+        ["task:abc-123", "task:not-a-real-task", "visit:9", "fact:1", ""], supplied: supplied),
+      ["task:abc-123"])
+  }
+
+  func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {
+    XCTAssertEqual(
+      ContextDirectorTaskRefs.resolvable(
+        ["  task:def-456  ", "task:def-456", "task:abc-123"], supplied: supplied),
+      ["task:def-456", "task:abc-123"])
+  }
+
+  func testEmptySuppliedListAcceptsNothing() {
+    XCTAssertTrue(ContextDirectorTaskRefs.resolvable(["task:abc-123"], supplied: []).isEmpty)
+  }
+
+  func testCitationCountIsBounded() {
+    let many = (0..<20).map {
+      ContextDirectorTaskContext(id: "t\($0)", description: "d", dueAt: nil)
+    }
+    XCTAssertEqual(
+      ContextDirectorTaskRefs.resolvable(many.map(\.promptRef), supplied: many).count,
+      ContextDirectorTaskRefs.maximumCount)
+  }
+}
