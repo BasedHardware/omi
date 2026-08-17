@@ -125,6 +125,49 @@ enum ContextAnalytics {
         }
     }
 
+    // MARK: - Onboarding
+
+    /// Records that first run reached a step, stamping the run's start on the first one seen.
+    @MainActor
+    static func recordOnboardingStep(index: Int, of total: Int) {
+        guard isEnabled else { return }
+        if onboardingStartedAt == nil { onboardingStartedAt = Date() }
+        record(.onboardingStep(index: index, of: total))
+    }
+
+    /// Records that first run ended.
+    ///
+    /// The elapsed time is measured from the first *step transition*, not from app launch: onboarding
+    /// opens behind a permission prompt and a sign-in browser hop, and counting the seconds a person
+    /// spent in System Settings as time spent in our flow would make every install look slow for a
+    /// reason we did not cause.
+    @MainActor
+    static func recordOnboardingFinished() {
+        guard isEnabled, let started = onboardingStartedAt else { return }
+        onboardingStartedAt = nil
+        record(.onboardingFinished(secondsElapsed: Int(Date().timeIntervalSince(started))))
+    }
+
+    // MARK: - Fallbacks
+
+    /// Mirrors a local `ContextTelemetry.recordFallback` into the remote series.
+    ///
+    /// **This must never be called for an airgap suppression, and the guard is at the caller.**
+    /// `record` reports its own refusal through `NetworkEgress.recordSuppression`, which calls
+    /// `recordFallback` — so a fallback event that fed back into `record` while airgapped would
+    /// recurse until the stack ran out. `ContextTelemetry.recordFallback` drops `airgap-mode` before
+    /// it reaches here, which both breaks the cycle and honours the older rule it was written under:
+    /// a suppression report must not itself be the disclosure the suppression prevented.
+    static func recordFallback(
+        area: ContextFallbackArea,
+        outcome: ContextFallbackOutcome,
+        reason: AnalyticsEvent.FallbackReason
+    ) {
+        record(.fallback(area: area, outcome: outcome, reason: reason))
+    }
+
+    @MainActor private static var onboardingStartedAt: Date?
+
     // MARK: - The daily rollup
 
     /// Emits `cfc_daily_active` if the last one was on an earlier local day.

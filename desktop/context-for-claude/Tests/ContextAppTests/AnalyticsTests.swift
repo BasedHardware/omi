@@ -167,7 +167,7 @@ final class AnalyticsEventTests: XCTestCase {
     func testDistinctCasesDoNotShareAnEventName() {
         let representatives: [AnalyticsEvent] = [
             .firstLaunch, .appLaunched, .dailyActive(.empty), .permission(.microphone, .granted),
-            .onboardingStep(index: 0, of: 1), .onboardingFinished(secondsElapsed: 0, skipped: false),
+            .onboardingStep(index: 0, of: 1), .onboardingFinished(secondsElapsed: 0),
             .accountStateChanged(signedIn: false), .captureStateChanged(source: .screen, live: true),
             .gestureFired, .surfaceOpened(.settings), .searchRan(resultCountBucket: .zero),
             .updateOutcome(.upToDate),
@@ -258,6 +258,37 @@ final class UsageClockTests: XCTestCase {
     }
 }
 
+/// The bridge from the local fallback log to the remote series, and the cycle it must not close.
+final class AnalyticsFallbackBridgeTests: XCTestCase {
+
+    /// **The infinite recursion this guard prevents.** `ContextAnalytics.record` reports its own
+    /// Airgap Mode refusal through `NetworkEgress.recordSuppression`, which calls
+    /// `ContextTelemetry.recordFallback`. Forwarding an `airgap-mode` fallback back into `record`
+    /// would therefore re-enter the same path and run the stack out. It is also the older invariant:
+    /// a suppression report must never itself be the disclosure the suppression prevented.
+    func testAirgapModeIsNeverForwardedToTheRemoteSeries() {
+        XCTAssertEqual(AnalyticsEvent.FallbackReason(slug: "airgap-mode"), .airgapMode)
+        // The bridge in `ContextTelemetry.recordFallback` drops exactly this case. If the mapping
+        // ever stops producing it, the `!= .airgapMode` filter there silently stops matching.
+    }
+
+    /// The local `reason` is a plain `String` held to a convention. This lookup is the only thing
+    /// standing between a future call site passing `"\(error)"` and an error message — which can
+    /// contain a path, a host or a query — reaching PostHog.
+    func testAnUnrecognisedReasonIsDroppedRatherThanSentAsFreeText() {
+        XCTAssertNil(AnalyticsEvent.FallbackReason(slug: "no such reason"))
+        XCTAssertNil(AnalyticsEvent.FallbackReason(slug: "Error Domain=NSURLErrorDomain Code=-1009"))
+        XCTAssertNil(AnalyticsEvent.FallbackReason(slug: ""))
+    }
+
+    func testTheSlugsTheAppActuallyEmitsAllMap() {
+        for slug in ["offline", "unauthorized", "401", "403", "rate-limited", "429",
+                     "permission-missing", "timeout", "unavailable", "malformed-response"] {
+            XCTAssertNotNil(AnalyticsEvent.FallbackReason(slug: slug), "unmapped slug: \(slug)")
+        }
+    }
+}
+
 /// The day boundary the whole DAU series rests on.
 final class ContextAnalyticsDayTests: XCTestCase {
 
@@ -292,7 +323,7 @@ extension AnalyticsEvent {
                 toolCalls: ["recall": 3], captureMinutes: 12, screenMinutes: 30,
                 activeHours: 4, signedIn: true, airgapped: false)),
             .onboardingStep(index: 2, of: 5),
-            .onboardingFinished(secondsElapsed: 94, skipped: false),
+            .onboardingFinished(secondsElapsed: 94),
             .accountStateChanged(signedIn: true),
             .gestureFired,
             .searchRan(resultCountBucket: .few),

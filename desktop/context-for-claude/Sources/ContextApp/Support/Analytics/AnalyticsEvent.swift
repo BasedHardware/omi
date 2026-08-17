@@ -56,7 +56,9 @@ enum AnalyticsEvent: Sendable {
     /// release, and a funnel keyed on copy is a funnel that resets every release.
     case onboardingStep(index: Int, of: Int)
 
-    case onboardingFinished(secondsElapsed: Int, skipped: Bool)
+    /// How long the whole first run took. Paired with the last `onboardingStep` an install reached,
+    /// this is the drop-off curve; on its own it is how long setup costs somebody.
+    case onboardingFinished(secondsElapsed: Int)
 
     /// Whether this install has an Omi account attached. Not who — see the disclosure rule above.
     case accountStateChanged(signedIn: Bool)
@@ -135,13 +137,14 @@ enum AnalyticsEvent: Sendable {
         }
     }
 
+    /// Only surfaces that are actually recorded appear here. A case nobody emits produces a series
+    /// that is permanently empty, which reads as "nobody opens it" rather than as "nobody measured
+    /// it" — the more dangerous of the two, because it looks like a finding.
     enum Surface: String, Sendable, CaseIterable {
         case menuBar
         case activity
-        case rewind
         case settings
         case search
-        case tutorial
     }
 
     enum UpdateOutcome: String, Sendable, CaseIterable {
@@ -162,6 +165,26 @@ enum AnalyticsEvent: Sendable {
         case timeout
         case unavailable
         case malformedResponse
+
+        /// Maps the kebab-case slug `ContextTelemetry.recordFallback` receives onto this closed set.
+        ///
+        /// Returns nil for anything unrecognised, and the caller drops it. That is deliberate: the
+        /// local `reason` parameter is a plain `String` held to a convention, so the only thing
+        /// standing between a future call site passing `"\(error)"` and an error message reaching
+        /// PostHog is this lookup refusing to invent a case for it.
+        init?(slug: String) {
+            switch slug {
+            case "airgap-mode": self = .airgapMode
+            case "offline": self = .offline
+            case "unauthorized", "401", "403": self = .unauthorized
+            case "rate-limited", "429": self = .rateLimited
+            case "permission-missing": self = .permissionMissing
+            case "timeout": self = .timeout
+            case "unavailable": self = .unavailable
+            case "malformed-response": self = .malformedResponse
+            default: return nil
+            }
+        }
     }
 
     /// Counts, bucketed. A raw count of anything a person did is a fingerprint at the tail; a bucket
@@ -228,8 +251,8 @@ enum AnalyticsEvent: Sendable {
         case let .onboardingStep(index, total):
             return ["step_index": .int(index), "step_total": .int(total)]
 
-        case let .onboardingFinished(seconds, skipped):
-            return ["seconds_elapsed": .int(seconds), "skipped": .bool(skipped)]
+        case let .onboardingFinished(seconds):
+            return ["seconds_elapsed": .int(seconds)]
 
         case let .accountStateChanged(signedIn):
             return ["signed_in": .bool(signedIn)]
