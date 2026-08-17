@@ -83,6 +83,7 @@ from utils.mcp_analytics import (
     result_count_for_tool_result,
     schedule_mcp_tool_call,
 )
+from utils.mcp_memory_platform import build_mcp_memory_platform_payload
 from utils.observability.api_keys import record_api_key_repairs
 from utils.other.endpoints import (
     cutover_enforcement_enabled,
@@ -103,7 +104,6 @@ MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-kno
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
 MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
-MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 
 def _enforce_mcp_cutover_access(uid: str) -> None:
@@ -216,7 +216,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
-            scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
+            scopes=list(user_data.get("scopes") or []),
             app_id=user_data.get("app_id"),
             key_id=user_data.get("key_id"),
             memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
@@ -264,6 +264,7 @@ def invalid_mcp_auth_exception(
 
 TOOL_REQUIRED_SCOPE = {
     "get_user_profile": "memories.read",
+    "memory_platform": "memories.read",
     "get_memories": "memories.read",
     "search_memories": "memories.read",
     "create_memory": "memories.write",
@@ -315,6 +316,13 @@ def _require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
 
 # MCP Tool Definitions
 MCP_TOOLS: List[Dict[str, Any]] = [
+    {
+        "name": "memory_platform",
+        "description": "Describe Omi's backend-authoritative memory contract and its zkr mirror boundary.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {"type": "object", "properties": {}},
+    },
     {
         "name": "get_user_profile",
         "description": (
@@ -835,7 +843,10 @@ def execute_tool(
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
-    if tool_name == "get_user_profile":
+    if tool_name == "memory_platform":
+        return build_mcp_memory_platform_payload()
+
+    elif tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
         if not profile or not profile.get("profile_text"):
             return {"profile": None, "message": "No profile has been generated for this user yet."}

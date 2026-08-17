@@ -23,6 +23,11 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
                     "delete_key_v1_mcp_keys__key_id__delete",
                     "Delete Key",
                 ),
+                ("/v1/mcp/keys/{key_id}/rotate", "POST"): (
+                    "mcp",
+                    "rotate_key_v1_mcp_keys__key_id__rotate_post",
+                    "Rotate Key",
+                ),
             },
         ),
         (
@@ -31,6 +36,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
                 ("/v1/dev/keys", "GET"): ("API Keys", "listApiKeys", "Get Keys"),
                 ("/v1/dev/keys", "POST"): ("API Keys", "createApiKey", "Create Key"),
                 ("/v1/dev/keys/{key_id}", "DELETE"): ("API Keys", "revokeApiKey", "Delete Key"),
+                ("/v1/dev/keys/{key_id}/rotate", "POST"): ("API Keys", "rotateApiKey", "Rotate Key"),
             },
         ),
     ],

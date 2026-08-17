@@ -7,6 +7,7 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import get_firestore_client
+from database.api_key_rotation import ApiKeyRotationKind, rotate_api_key_secret
 from database.api_key_metadata import (
     MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ApiKeyAuthLookupResult,
@@ -21,6 +22,7 @@ from database.api_key_metadata import (
     is_valid_api_key_hash,
     normalize_api_key_app_id,
     project_api_key_metadata,
+    retired_hash_fences_cache,
     valid_api_key_app_id,
 )
 from models.mcp_api_key import McpApiKey
@@ -41,11 +43,35 @@ def _db() -> Any:
     return get_firestore_client()
 
 
+def _memory_grant_scopes(key_scopes: Optional[list[str]]) -> list[str]:
+    """The memory grant a key's own scope set entitles it to.
+
+    The grant gate is a second authority over memory reads/writes; it must never
+    be broader than the credential it was seeded for.
+    """
+    if key_scopes is None:
+        return list(MCP_MEMORY_GRANT_SCOPES)
+    carried = set(key_scopes)
+    return [scope for scope in MCP_MEMORY_GRANT_SCOPES if scope in carried]
+
+
+def _memory_grant_document(key_scopes: Optional[list[str]]) -> Dict[str, Any]:
+    grant_scopes = _memory_grant_scopes(key_scopes)
+    return {
+        "enabled": bool(grant_scopes),
+        "scopes": grant_scopes,
+        "default_read": "memories.read" in grant_scopes,
+        "archive_read": False,
+        "write": "memories.write" in grant_scopes,
+    }
+
+
 def _seed_mcp_memory_grant(
     user_id: str,
     key_id: str,
     app_id: str = MCP_DEFAULT_APP_ID,
     firestore_client: Any = None,
+    key_scopes: Optional[list[str]] = None,
 ) -> None:
     firestore_client = firestore_client or _db()
     grant_ref = (
@@ -56,23 +82,7 @@ def _seed_mcp_memory_grant(
     )
     grant_ref.set(
         {
-            "grants": {
-                "mcp": {
-                    "apps": {
-                        app_id: {
-                            "keys": {
-                                key_id: {
-                                    "enabled": True,
-                                    "scopes": MCP_MEMORY_GRANT_SCOPES,
-                                    "default_read": True,
-                                    "archive_read": False,
-                                    "write": True,
-                                }
-                            }
-                        }
-                    }
-                }
-            },
+            "grants": {"mcp": {"apps": {app_id: {"keys": {key_id: _memory_grant_document(key_scopes)}}}}},
             "updated_at": datetime.now(timezone.utc),
         },
         merge=True,
@@ -84,6 +94,7 @@ def _ensure_mcp_memory_grant(
     key_id: str,
     app_id: str,
     firestore_client: Any,
+    key_scopes: Optional[list[str]] = None,
 ) -> bool:
     grant_ref = (
         firestore_client.collection("users")
@@ -97,19 +108,20 @@ def _ensure_mcp_memory_grant(
     for field in ("grants", "mcp", "apps", app_id, "keys", key_id):
         grant = grant.get(field, {}) if isinstance(grant, dict) else {}
     scopes = grant.get("scopes") if isinstance(grant, dict) else None
+    expected = _memory_grant_document(key_scopes)
     is_current = (
         isinstance(grant, dict)
-        and grant.get("enabled") is True
-        and grant.get("default_read") is True
+        and grant.get("enabled") is expected["enabled"]
+        and grant.get("default_read") is expected["default_read"]
         and grant.get("archive_read") is False
-        and grant.get("write") is True
+        and grant.get("write") is expected["write"]
         and isinstance(scopes, list)
         and all(isinstance(scope, str) for scope in scopes)
-        and set(scopes) == set(MCP_MEMORY_GRANT_SCOPES)
+        and set(scopes) == set(expected["scopes"])
     )
     if is_current:
         return False
-    _seed_mcp_memory_grant(user_id, key_id, app_id, firestore_client=firestore_client)
+    _seed_mcp_memory_grant(user_id, key_id, app_id, firestore_client=firestore_client, key_scopes=key_scopes)
     return True
 
 
@@ -191,7 +203,13 @@ def create_mcp_key(
         "scopes": resolved_scopes,
     }
     firestore_client.collection("mcp_api_keys").document(key_id).set(api_key_doc)
-    _seed_mcp_memory_grant(user_id, key_id, resolved_app_id, firestore_client=firestore_client)
+    _seed_mcp_memory_grant(
+        user_id,
+        key_id,
+        resolved_app_id,
+        firestore_client=firestore_client,
+        key_scopes=resolved_scopes,
+    )
 
     api_key_data = McpApiKey(
         id=key_id,
@@ -203,6 +221,35 @@ def create_mcp_key(
         scopes=resolved_scopes,
     )
     return raw_key, api_key_data
+
+
+def rotate_mcp_key(user_id: str, key_id: str) -> Tuple[str, McpApiKey]:
+    """Issue a new secret for an existing MCP key, preserving its identity.
+
+    Rotation is a hard cutover with no grace window: the previous secret stops
+    authorizing the moment the swap commits. The retired hash is tombstoned before
+    its cache entry is deleted, because deleting alone loses the race — an
+    authentication that already read the pre-swap document can write the retired
+    hash back into the cache afterwards. The tombstone outlives the cache TTL and
+    the authentication path refuses to honor a fenced entry, so a rotated-away
+    secret cannot be re-cached into validity. Name, app identity, scopes, creation
+    time, and the key's memory grant are carried over unchanged; only the
+    credential changes.
+    """
+    kind = ApiKeyRotationKind(
+        label="MCP API key",
+        collection="mcp_api_keys",
+        firestore_client=_db(),
+        model=McpApiKey,
+        key_kind="mcp",
+        retire_hash=lambda hashed: redis_db.mark_api_key_hash_retired_strict(hashed),
+        delete_cached=lambda hashed: redis_db.delete_cached_mcp_api_key_strict(hashed),
+        generate=lambda: generate_api_key(),
+        resolve_app_id=lambda key_data: normalize_api_key_app_id(key_data.get("app_id"), default=MCP_DEFAULT_APP_ID),
+        normalize_scopes=normalize_mcp_scopes,
+        projects_app_id=True,
+    )
+    return rotate_api_key_secret(kind, user_id, key_id)
 
 
 def get_mcp_keys_for_user_with_repair_info(
@@ -292,18 +339,22 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     """
     Verifies an MCP API key and returns uid plus server-owned app/key/scopes.
 
-    MCP keys are full-access agent keys. Older key documents may be missing the
-    app identity, scopes, and memory grant state introduced by the app/key grant
-    layer; repair them lazily on successful authentication so existing agents
-    keep working without regenerating keys.
+    A key authorizes exactly the scopes recorded on its document. Older key
+    documents may be missing the app identity, scopes, and memory grant state
+    introduced by the app/key grant layer; those predate the per-key scope
+    contract, resolve to full access, and are repaired lazily on successful
+    authentication so existing agents keep working without regenerating keys.
     """
     if not api_key.startswith("omi_mcp_"):
         return ApiKeyAuthLookupResult(context=None)
     secret_part = api_key.replace("omi_mcp_", "", 1)
     hashed_key = hash_api_key(secret_part)
 
+    # A rotated-away secret must not be authorized by a cache entry, including one
+    # a racing authentication wrote back after rotation deleted it.
+    cache_fenced = retired_hash_fences_cache(redis_db.api_key_hash_is_retired(hashed_key))
     cache_read = redis_db.read_cached_mcp_api_key_auth_context(hashed_key)
-    cached_data = cache_read.data if cache_read.mode == ApiKeyCacheReadMode.HIT else None
+    cached_data = cache_read.data if (not cache_fenced and cache_read.mode == ApiKeyCacheReadMode.HIT) else None
     if cached_data and _valid_cached_auth_context(cached_data):
         return ApiKeyAuthLookupResult(
             context={
@@ -353,18 +404,19 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
 
     key_ref = key_doc.reference
     key_ref.update({"id": key_id, "last_used_at": datetime.now(timezone.utc), "app_id": app_id, "scopes": scopes})
-    if _ensure_mcp_memory_grant(user_id, key_id, app_id, firestore_client):
+    if _ensure_mcp_memory_grant(user_id, key_id, app_id, firestore_client, key_scopes=scopes):
         repairs.add(ApiKeyAuthRepair.MEMORY_GRANT)
-    cache_written = redis_db.cache_mcp_api_key_auth_context(
-        hashed_key,
-        user_id,
-        scopes,
-        key_id=key_id,
-        app_id=app_id,
-        auth_context_version=MCP_API_KEY_AUTH_CONTEXT_VERSION,
-    )
-    if cache_written is not True:
-        repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
+    if not cache_fenced:
+        cache_written = redis_db.cache_mcp_api_key_auth_context(
+            hashed_key,
+            user_id,
+            scopes,
+            key_id=key_id,
+            app_id=app_id,
+            auth_context_version=MCP_API_KEY_AUTH_CONTEXT_VERSION,
+        )
+        if cache_written is not True:
+            repairs.add(ApiKeyAuthRepair.CACHE_WRITE)
 
     return ApiKeyAuthLookupResult(
         context={"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id},
