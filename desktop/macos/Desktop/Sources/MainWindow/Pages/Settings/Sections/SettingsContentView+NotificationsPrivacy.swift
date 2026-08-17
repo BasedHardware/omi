@@ -107,6 +107,46 @@ extension SettingsContentView {
         }
       }
 
+      // Integration suggestions
+      settingsCard(settingId: "notifications.integrationsuggestions") {
+        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          HStack {
+            settingsCardHeader(icon: "sparkles.rectangle.stack", title: "Integration Suggestions")
+
+            Spacer()
+
+            Toggle("", isOn: $integrationNudgesEnabled)
+              .toggleStyle(OmiToggleStyle())
+              .labelsHidden()
+              .onChange(of: integrationNudgesEnabled) { _, newValue in
+                IntegrationNudgeCoordinator.setFeatureEnabled(newValue)
+              }
+          }
+
+          Text(
+            "When you open an app Omi can connect to — Gmail, Notion, ChatGPT — offer the connection once, "
+              + "with what it would do for you."
+          )
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+
+          if integrationNudgesEnabled {
+            GlassSeparator()
+
+            settingRow(
+              title: "Suggest dismissed integrations again",
+              subtitle: "Clears the integrations you've hidden, so Omi can offer them one more time",
+              settingId: "notifications.integrationsuggestions.reset"
+            ) {
+              Button("Reset") {
+                IntegrationNudgeStore.shared.resetAll()
+              }
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+            }
+          }
+        }
+      }
+
       // Daily Summary
       settingsCard(settingId: "notifications.dailysummary") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {

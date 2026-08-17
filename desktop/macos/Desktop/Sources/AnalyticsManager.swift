@@ -273,6 +273,56 @@ class AnalyticsManager {
       IntegrationConnectTelemetry.failedEventName, properties: payload)
   }
 
+  // MARK: - Integration Nudge Events
+
+  func integrationNudgeShown(
+    entry: IntegrationNudgeCatalogEntry,
+    trigger: IntegrationNudgeTrigger,
+    shownCount: Int
+  ) {
+    PostHogManager.shared.track(
+      IntegrationNudgeTelemetry.shownEventName,
+      properties: IntegrationNudgeTelemetry.shownPayload(
+        integrationName: entry.displayName,
+        connectorID: entry.telemetryID,
+        triggerID: trigger.id,
+        triggerKind: trigger.kind,
+        shownCount: shownCount
+      )
+    )
+  }
+
+  func integrationNudgeSuppressed(
+    entry: IntegrationNudgeCatalogEntry,
+    trigger: IntegrationNudgeTrigger,
+    reason: IntegrationNudgePolicy.Suppression
+  ) {
+    PostHogManager.shared.track(
+      IntegrationNudgeTelemetry.suppressedEventName,
+      properties: IntegrationNudgeTelemetry.suppressedPayload(
+        integrationName: entry.displayName,
+        connectorID: entry.telemetryID,
+        triggerID: trigger.id,
+        triggerKind: trigger.kind,
+        reason: reason
+      )
+    )
+  }
+
+  func integrationNudgeActioned(
+    entry: IntegrationNudgeCatalogEntry,
+    action: IntegrationNudgeTelemetry.Action
+  ) {
+    PostHogManager.shared.track(
+      IntegrationNudgeTelemetry.actionedEventName,
+      properties: IntegrationNudgeTelemetry.actionedPayload(
+        integrationName: entry.displayName,
+        connectorID: entry.telemetryID,
+        action: action
+      )
+    )
+  }
+
   // MARK: - Monitoring Events
 
   func monitoringStarted() {

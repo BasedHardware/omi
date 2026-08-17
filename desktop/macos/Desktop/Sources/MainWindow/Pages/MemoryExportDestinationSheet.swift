@@ -527,6 +527,10 @@ struct MemoryExportDestinationSheet: View {
       // memory pack) never clips inside the fixed-height sheet.
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          if let entry = IntegrationNudgeCatalog.exportEntry(destinationID: destination.rawValue) {
+            IntegrationValueSection(entry: entry)
+          }
+
           content
 
           if let statusMessage = model.statusMessage {

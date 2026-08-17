@@ -32,6 +32,16 @@ struct ConnectDestinationSheet: View {
     }
   }
 
+  /// The member whose catalog copy describes the *tool* the group is named
+  /// after, rather than one of its two connection mechanisms.
+  private var groupAnchor: MemoryExportDestination {
+    switch destination {
+    case .claude, .claudeCode: return .claude
+    case .chatgpt, .codex: return .chatgpt
+    default: return destination
+    }
+  }
+
   private var groupBrand: ConnectorBrand {
     switch destination {
     case .claude, .claudeCode: return .claude
@@ -67,7 +77,16 @@ struct ConnectDestinationSheet: View {
         .padding(OmiSpacing.xxl)
 
         ScrollView {
-          VStack(spacing: OmiSpacing.md) {
+          VStack(alignment: .leading, spacing: OmiSpacing.md) {
+            // The grouped sheet shows two ways to connect one tool, so the case
+            // for connecting it at all belongs above both, not repeated inside
+            // each card. Anchored on the cloud member, whose pitch describes
+            // the tool rather than the CLI.
+            if let entry = IntegrationNudgeCatalog.exportEntry(destinationID: groupAnchor.rawValue) {
+              IntegrationValueSection(entry: entry)
+                .padding(.bottom, OmiSpacing.xs)
+            }
+
             ForEach(members, id: \.self) { d in
               ConnectOptionCard(destination: d, statuses: $statuses)
             }

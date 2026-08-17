@@ -1042,6 +1042,11 @@ actor MemoryExportService {
 
   func markConnected(_ destination: MemoryExportDestination) {
     defaults.set(Date().timeIntervalSince1970, forKey: destination.connectedAtKey)
+    // Clear this integration's nudge history so a later disconnect is allowed
+    // to make the pitch again instead of finding a spent lifetime budget.
+    Task { @MainActor in
+      IntegrationNudgeCoordinator.shared.noteConnected(route: .exportDestination(destination.rawValue))
+    }
   }
 
   private func testHostedMCPMemoryCount(key: String) async throws -> Int {

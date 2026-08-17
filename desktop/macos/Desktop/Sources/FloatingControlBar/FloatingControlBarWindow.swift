@@ -4050,9 +4050,15 @@ class FloatingControlBarManager {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
     dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
-    if case .openWhatMattersNow(let recommendationID) = notification.action {
+    switch notification.action {
+    case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
+    case .connectIntegration(let telemetryID):
+      IntegrationNudgeCoordinator.shared.acceptPresentedNudge(telemetryID: telemetryID)
+      return
+    case nil:
+      break
     }
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
