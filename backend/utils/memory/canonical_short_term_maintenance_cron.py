@@ -192,7 +192,7 @@ def count_active_short_term(uid: str, *, db_client: Any, cap: int = ACTIVE_SHORT
         stream = getattr(query, "stream", None)
         if not callable(stream):
             return None
-        return sum(1 for _ in stream())
+        return sum(1 for _ in cast(Iterable[object], stream()))
     except Exception:
         return None
 
