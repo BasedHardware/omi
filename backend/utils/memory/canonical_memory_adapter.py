@@ -33,6 +33,7 @@ from database.memory_apply_store import (
     ConversationSourceReplacementConflict,
     apply_long_term_patch_firestore,
     replace_conversation_source_firestore,
+    retract_conversation_source_firestore,
     tombstone_memory_items_firestore,
     transactional,
 )
@@ -1309,6 +1310,7 @@ def replace_conversation_sourced_memories(
     items: List[Dict[str, Any]],
     *,
     db_client: Any = None,
+    allow_paused_retraction: bool = False,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set."""
     client = db_client if db_client is not None else default_db_client
@@ -1405,18 +1407,33 @@ def replace_conversation_sourced_memories(
             writes.append(write)
             planning_control = preview.control_state
         try:
-            result = replace_conversation_source_firestore(
-                uid=uid,
-                conversation_id=conversation_id,
-                replacement_id=replacement_id,
-                replacement_digest=replacement_digest,
-                replacement_operation=replacement_operation,
-                observed_control=observed_control,
-                expected_source_items=expected_source_items,
-                expected_reactivation_items=expected_reactivation_items,
-                writes=writes,
-                db_client=client,
-            )
+            if allow_paused_retraction:
+                if items:
+                    raise ValueError("paused source retraction cannot write replacement memories")
+                result = retract_conversation_source_firestore(
+                    uid=uid,
+                    conversation_id=conversation_id,
+                    replacement_id=replacement_id,
+                    replacement_digest=replacement_digest,
+                    replacement_operation=replacement_operation,
+                    observed_control=observed_control,
+                    expected_source_items=expected_source_items,
+                    expected_reactivation_items=expected_reactivation_items,
+                    db_client=client,
+                )
+            else:
+                result = replace_conversation_source_firestore(
+                    uid=uid,
+                    conversation_id=conversation_id,
+                    replacement_id=replacement_id,
+                    replacement_digest=replacement_digest,
+                    replacement_operation=replacement_operation,
+                    observed_control=observed_control,
+                    expected_source_items=expected_source_items,
+                    expected_reactivation_items=expected_reactivation_items,
+                    writes=writes,
+                    db_client=client,
+                )
             break
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
@@ -2163,6 +2180,7 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
         conversation_id,
         [],
         db_client=db_client,
+        allow_paused_retraction=True,
     )
 
 
