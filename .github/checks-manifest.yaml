@@ -46,6 +46,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["windows"]
     reason: "the single-flight pre-push gate must manage child processes and launch Bash checks on native Windows and POSIX hosts"
+  - id: context-for-claude-build-identity
+    command: ["bash", "desktop/context-for-claude/scripts/test-build-identity.sh"]
+    triggers: ["desktop/context-for-claude/scripts/**", "desktop/context-for-claude/Resources/Info.plist", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#11641: a self-signed developer build carrying the production bundle id wrote certificate-pinned TCC records that no re-grant could clear, breaking Screen Recording and Microphone on a user's Mac for days; a build not signed for release must never claim the production identifiers"
   - id: desktop-release-process-guards
     command: ["bash", "scripts/run-release-process-guards.sh"]
     triggers: ["codemagic.yaml", ".github/workflows/desktop_promote_beta.yml", ".github/scripts/check-release-process-guards.py", ".github/scripts/git_bash.py", "scripts/dev-harness/_resolve_python.sh", "scripts/run-release-process-guards.sh", "backend/tests/unit/test_desktop_release_scripts.py", ".github/checks-manifest.yaml"]
@@ -328,6 +333,16 @@ checks:
     triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "web/personas-open-source/src/app/api/social-profile/route.ts"]
     lanes: ["local", "ci"]
     reason: "public-build contract and GitHub variable scope fixtures must remain executable"
+  - id: admin-deploy-scope
+    command: ["python3", ".github/scripts/check_admin_deploy_scope_admission.py"]
+    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "admin Cloud Run deploys must decide scope before taking the shared prod environment slot"
+  - id: admin-deploy-scope-fixtures
+    command: ["python3", ".github/scripts/test_check_admin_deploy_scope.py"]
+    triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", "web/admin/grafana/dashboards/omi-tv.json", "web/admin/grafana/apply_omi_tv_dashboard.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "generated-client-only diffs must skip admin deploy; real admin runtime diffs and workflow_dispatch must still deploy"
   - id: web-llm-gateway-only
     command: ["python3", ".github/scripts/check_web_llm_gateway_only.py"]
     triggers: ["web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.ts", "web/**/*.tsx", "web/**/package.json", ".github/scripts/check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
@@ -710,6 +725,8 @@ exempt:
     reason: "release-policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check-deployment-concurrency.py"
     reason: "deployment concurrency policy full-tree check, not diff-scoped"
+  - path: ".github/scripts/check_admin_deploy_scope.py"
+    reason: "runtime classifier invoked by gcp_admin.yml; contract and fixtures are admin-deploy-scope*"
   - path: ".github/scripts/check_isinstance_return_ratchet.py"
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"

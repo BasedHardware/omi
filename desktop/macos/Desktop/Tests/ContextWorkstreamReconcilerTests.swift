@@ -107,7 +107,13 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       response: response,
       batchIDs: ["b1", "b2", "b3", "b4", "b5"],
       existingTags: ["car"],
-      observations: "Hermes PR blocked. CAR contract review. solo note.")
+      observationsByBucket: [
+        "b1": "Hermes PR blocked.",
+        "b2": "Hermes PR blocked.",
+        "b3": "solo note.",
+        "b4": "CAR contract review.",
+        "b5": "",
+      ])
     XCTAssertEqual(
       Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
       ["b1:hermes", "b2:hermes", "b4:car"])
@@ -123,6 +129,30 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       ContextWorkstreamTagging.labelAppearsInObservations(
         "car-project", observations: "Please concatenate the two reports."),
       "\"car\" inside \"concatenate\" must not count as the word appearing")
+  }
+
+  func testAcceptedAssignmentsRejectALabelAbsentFromTheAssignedBucketsFacts() {
+    let response = ContextWorkstreamTagging.Response(
+      workstreams: [.init(label: "stably", evidence: "two groups")],
+      assignments: [
+        .init(group: "G1", label: "stably"),
+        .init(group: "G2", label: "stably"),
+      ])
+    let accepted = ContextWorkstreamTagging.acceptedAssignments(
+      response: response,
+      batchIDs: ["cursor-agents", "github-pr"],
+      existingTags: [],
+      observationsByBucket: [
+        "cursor-agents": "Screen content is from the Cursor app window labeled Cursor Agents.",
+        "github-pr": "The stably deploy is green and the rate-card PR remains parked.",
+      ])
+    XCTAssertEqual(
+      Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
+      ["github-pr:stably"],
+      "a label earned by one bucket must not attach to another bucket in the same batch")
+    XCTAssertFalse(
+      accepted.contains { $0.bucketID == "cursor-agents" },
+      "attestation must use the assigned bucket's own facts, not the rest of the batch")
   }
 
   func testGenericLabelsAreRejectedWhileRealProjectNamesAreAccepted() {
@@ -175,7 +205,15 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       response: response,
       batchIDs: ["b1", "b2", "b3", "b4", "b5", "b6", "b7"],
       existingTags: ["api"],
-      observations: "Omi release blocked on the Hermes PR. API rate limit on /v1/chat.")
+      observationsByBucket: [
+        "b1": "Omi release blocked on the Hermes PR.",
+        "b2": "Omi release blocked on the Hermes PR.",
+        "b3": "API rate limit on /v1/chat.",
+        "b4": "API rate limit on /v1/chat.",
+        "b5": "Omi release blocked on the Hermes PR.",
+        "b6": "Omi release blocked on the Hermes PR.",
+        "b7": "",
+      ])
     XCTAssertEqual(
       Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
       ["b1:omi", "b2:omi", "b5:hermes", "b6:hermes"])
@@ -200,11 +238,38 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       response: response,
       batchIDs: ["b1", "b2"],
       existingTags: [],
-      observations: "Hermes PR blocked.")
+      observationsByBucket: [
+        "b1": "Hermes PR blocked.",
+        "b2": "Hermes PR blocked.",
+      ])
     XCTAssertEqual(
       Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
       ["b1:hermes", "b2:hermes"],
       "the invalid first assignment for b1 must not claim the bucket and drop the valid one")
+  }
+
+  func testAcceptedAssignmentsLetALaterValidProposalWinAfterAnUnattestableFirstOneForTheSameBucket() {
+    let response = ContextWorkstreamTagging.Response(
+      workstreams: [.init(label: "Hermes", evidence: "two groups")],
+      assignments: [
+        // b1's first proposal sanitizes but is absent from b1's own facts;
+        // it must not claim the bucket and drop b1's later attestable one.
+        .init(group: "G1", label: "Hermes"),
+        .init(group: "G1", label: "Car"),
+        .init(group: "G2", label: "Hermes"),
+      ])
+    let accepted = ContextWorkstreamTagging.acceptedAssignments(
+      response: response,
+      batchIDs: ["b1", "b2"],
+      existingTags: ["car"],
+      observationsByBucket: [
+        "b1": "The CAR contract review is due.",
+        "b2": "Hermes PR blocked.",
+      ])
+    XCTAssertEqual(
+      Set(accepted.map { "\($0.bucketID):\($0.tag)" }),
+      ["b1:car", "b2:hermes"],
+      "an unattestable first proposal must not claim the bucket and drop the later valid one")
   }
 
   func testInsertArmedCandidatesLetsALaterValidCandidateWinAfterAnEarlierInvalidOneForTheSameBucket() throws {
@@ -425,6 +490,44 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
     }
   }
 
+  func testExpiredCandidateNeverReportsAsArmed() throws {
+    let queue = try migratedQueue()
+    let overdue = ContextProactiveCandidate(
+      id: "stale", bucketID: "here", workstreamTag: nil, message: "message",
+      groundingFactIDsJson: "[\"f1\"]", triggerNote: "when relevant",
+      state: "armed", createdAt: now.addingTimeInterval(-13 * 60 * 60),
+      expiresAt: now.addingTimeInterval(-60), consumedAt: nil)
+    XCTAssertEqual(
+      overdue.effectiveState(at: now), "expired",
+      "callers that report state must not still call an overdue row armed")
+    XCTAssertEqual(overdue.state, "armed", "the stored column stays armed until the sweep")
+
+    try queue.write { db in
+      try seedBucket("here", factCount: 1, newestOffset: 0, tagged: false, in: db)
+      try insertCandidate(
+        id: "stale", bucketID: "here", tag: nil, message: "message",
+        createdAt: now.addingTimeInterval(-13 * 60 * 60), in: db)
+      try db.execute(
+        sql: "UPDATE proactive_candidates SET expiresAt = ? WHERE id = 'stale'",
+        arguments: [now.addingTimeInterval(-60)])
+      XCTAssertEqual(
+        try ContextProactiveCandidateLookup.lookupArmed(
+          bucketID: "here", tags: [], now: now, in: db
+        ).map(\.id),
+        [],
+        "lookup must not return an overdue row as armed")
+      try ContextProactiveCandidateLookup.expireStale(now: now, in: db)
+      XCTAssertEqual(
+        try String.fetchOne(db, sql: "SELECT state FROM proactive_candidates WHERE id = 'stale'"),
+        "expired")
+      XCTAssertEqual(
+        try ContextProactiveCandidateLookup.lookupArmed(
+          bucketID: "here", tags: [], now: now, in: db
+        ).map(\.id),
+        [])
+    }
+  }
+
   func testCandidateLookupPrefersABucketMatchOverANewerWorkstreamMatch() throws {
     let queue = try migratedQueue()
     try queue.write { db in
@@ -478,6 +581,52 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
     XCTAssertNil(ContextProactiveCandidateGate.parse("{"))
     XCTAssertNil(ContextProactiveCandidateGate.parse(#"{"show":"yes","reason":"nope"}"#))
     XCTAssertNil(ContextProactiveCandidateGate.parse(#"{"reason":"missing show"}"#))
+    // Empty content is what a completion-token budget exhausted by reasoning
+    // returns. It must parse to nil — *not* to a decision — so the delivery
+    // path can tell "the model did not answer" apart from "the model said no".
+    XCTAssertNil(ContextProactiveCandidateGate.parse(""))
+  }
+
+  /// Strict-equality golden, to the same standard as the extraction and
+  /// director prompts. The gate's previous contract shipped with mutually
+  /// exclusive clauses and rejected 66 of 69 live candidates; a substring
+  /// assertion would not have caught a clause drifting back in.
+  func testGatePromptIsExact() {
+    let prompt = ContextProactiveCandidateGate.prompt(
+      message: "Nik is waiting on the demo recording.",
+      groundingFacts: ["Nik asked for the recording before the launch video."],
+      validatedFacts: ["The release checklist is on screen."],
+      recentDeliveries: [])
+    let expected = """
+      \(ScreenDerivedContent.untrustedPreamble)
+      You are a yes/no delivery gate for one pre-written notification. Do not rewrite it.
+      The notification was written earlier, from the stored evidence below, not from the
+      current screen. The current screen is not expected to mention it.
+      Answer show=false only for one of these three reasons:
+      1. The current screen clearly shows that the very matter this notification is about
+         is already resolved, completed, or changed, so the notification is now wrong or
+         moot. A different task, pull request, or topic being resolved on screen is not
+         this reason.
+      2. The notification repeats a point in the recently-delivered list, even reworded.
+      3. The notification only tells the user what they are already looking at right now.
+      Otherwise answer show=true.
+      The current screen not mentioning or confirming the notification is normal and is
+      never a reason to answer false.
+      Keep reason to one short sentence.
+
+      == CANDIDATE NOTIFICATION ==
+      Nik is waiting on the demo recording.
+
+      == STORED EVIDENCE THE NOTIFICATION WAS WRITTEN FROM ==
+      - Nik asked for the recording before the launch video.
+
+      == VALIDATED FACTS ON THIS VISIT (current screen) ==
+      The release checklist is on screen.
+
+      == RECENTLY DELIVERED FOR THIS BUCKET ==
+      (none)
+      """
+    XCTAssertEqual(prompt, expected)
   }
 
   func testCandidateWriterDropsGroundingThatIsNotPresentAndValidated() throws {

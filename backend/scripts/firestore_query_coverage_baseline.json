@@ -1,5 +1,5 @@
 {
-  "eligible_serving": 47,
+  "eligible_serving": 70,
   "raw_unregistered": [
     "05fdb282df637274",
     "0c75b579eb9f7f04",
@@ -45,7 +45,7 @@
     "fbf6a1e1fdc6920e",
     "fcb4a9e8a36ebd5e"
   ],
-  "registered_serving": 1,
+  "registered_serving": 24,
   "schema_version": 1,
   "unsupported": [
     "4a1b611f6580fc78",

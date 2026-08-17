@@ -14,9 +14,20 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Proto
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from database.firestore_index_registry import EXPIRED_SHORT_TERM_LIFECYCLE_QUERY
+from database.firestore_index_registry import (
+    EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+    POLICY_EXPIRED_SHORT_TERM_QUERY,
+)
 from database.memory_collections import MemoryCollections
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
+from models.memory_evidence import SourceState
+from models.product_memory import (
+    DEFAULT_SHORT_TERM_TTL,
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryTier,
+    ProcessingState,
+    effective_short_term_expiry,
+)
 from utils.memory.short_term_lifecycle import (
     ShortTermDisposition,
     ShortTermLifecycleDecision,
@@ -234,21 +245,46 @@ def fetch_expired_short_term_memory_items_firestore(
         field_filter_factory=FieldFilter,
     )
     snapshots = query.order_by('expires_at').order_by('memory_id').limit(effective_limit).stream()
-    items: List[MemoryItem] = []
+    items_by_id: Dict[str, MemoryItem] = {}
     for snapshot in snapshots:
         item = MemoryItem(**cast(JsonDict, snapshot.to_dict() or {}))
         if item.uid != uid:
             raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
-        if (
-            item.tier == MemoryTier.short_term
-            and item.status == MemoryItemStatus.active
-            and item.processing_state == ProcessingState.processed
-            and item.expires_at is not None
-            and _current_time(item.expires_at) <= current_time
-        ):
-            items.append(item)
-    items = sorted(items, key=lambda item: (_current_time(cast(datetime, item.expires_at)), item.memory_id))
-    return items
+        if _is_expired_short_term_lifecycle_item(item, now=current_time):
+            items_by_id[item.memory_id] = item
+    policy_cutoff = current_time - DEFAULT_SHORT_TERM_TTL
+    policy_query = POLICY_EXPIRED_SHORT_TERM_QUERY.build(
+        db_client.collection(MemoryCollections(uid=uid).memory_items),
+        {
+            'tier': MemoryTier.short_term.value,
+            'status': MemoryItemStatus.active.value,
+            'processing_state': ProcessingState.processed.value,
+            'source_state': SourceState.active.value,
+            'captured_at': policy_cutoff,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    policy_snapshots = policy_query.order_by('captured_at').order_by('memory_id').limit(effective_limit).stream()
+    for snapshot in policy_snapshots:
+        item = MemoryItem(**cast(JsonDict, snapshot.to_dict() or {}))
+        if item.uid != uid:
+            raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
+        if _is_expired_short_term_lifecycle_item(item, now=current_time):
+            items_by_id.setdefault(item.memory_id, item)
+    items = sorted(
+        items_by_id.values(),
+        key=lambda item: (effective_short_term_expiry(item), item.memory_id),
+    )
+    return items[:effective_limit]
+
+
+def _is_expired_short_term_lifecycle_item(item: MemoryItem, *, now: datetime) -> bool:
+    return (
+        item.tier == MemoryTier.short_term
+        and item.status == MemoryItemStatus.active
+        and item.processing_state == ProcessingState.processed
+        and effective_short_term_expiry(item) <= now
+    )
 
 
 def run_short_term_lifecycle_firestore(

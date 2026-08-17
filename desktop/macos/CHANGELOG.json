@@ -2,6 +2,37 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.183",
+      "date": "2026-08-17",
+      "changes": [
+        "Proactive notifications now surface timely connections to your open and overdue tasks instead of staying silent, and no longer discard facts that lack a ticket number or a name."
+      ]
+    },
+    {
+      "version": "0.12.182",
+      "date": "2026-08-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.181",
+      "date": "2026-08-16",
+      "changes": [
+        "Long-running work contexts now reuse their cached prompt history instead of rebuilding it on every visit",
+        "Fixed a task prompt customised on one Mac never reaching your other Macs, and reappearing after you reset it to the default",
+        "A workstream label now stays attached to the work it was earned from, so a label no longer shows up on another workstream's tasks"
+      ]
+    },
+    {
+      "version": "0.12.180",
+      "date": "2026-08-16",
+      "changes": [
+        "Show the model's pre-tool commentary as live progress on the tool rail, then drop it with the chips so only the final answer remains",
+        "Fixed chat source citations so numbered markers and kind-only labels such as [memory] stay tappable and open the matching conversation, memory, task, or Rewind moment"
+      ]
+    },
+    {
       "version": "0.12.179",
       "date": "2026-08-16",
       "changes": [

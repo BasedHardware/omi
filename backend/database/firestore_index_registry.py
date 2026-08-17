@@ -284,6 +284,28 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_policy_expired_short_term_by_capture',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('source_state'),
+        _asc('captured_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
     identifier='memory_items_canonical_graph_read',
     collection_group='memory_items',
@@ -572,6 +594,7 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    POLICY_EXPIRED_SHORT_TERM_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -590,18 +613,25 @@ QUERY_SPECS = (
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
 
+
+def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
+    """One composite index per signature, even when two serving queries share it."""
+    seen = set(_INDEX_ONLY_REQUIREMENT_SIGNATURES)
+    requirements: list[FirestoreIndexRequirement] = []
+    for spec in QUERY_SPECS:
+        if len([field for field in spec.index_fields if field.field_path != '__name__']) <= 1:
+            continue
+        signature = spec.index_requirement.signature
+        if signature in seen:
+            continue
+        seen.add(signature)
+        requirements.append(spec.index_requirement)
+    return tuple(requirements)
+
+
 INDEX_REQUIREMENTS = (
     *INDEX_ONLY_REQUIREMENTS,
-    *(
-        spec.index_requirement
-        for spec in QUERY_SPECS
-        # Firestore manages one-field indexes (including document-ID ordering)
-        # itself and rejects them in the composite-index manifest.
-        if len([field for field in spec.index_fields if field.field_path != '__name__']) > 1
-        # Explicit requirements own legacy manifests while their callers migrate
-        # to query specs. Avoid declaring the same composite index twice.
-        and spec.index_requirement.signature not in _INDEX_ONLY_REQUIREMENT_SIGNATURES
-    ),
+    *_query_spec_index_requirements(),
 )
 
 

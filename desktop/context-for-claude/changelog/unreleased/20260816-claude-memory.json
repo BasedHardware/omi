@@ -1,0 +1,3 @@
+{
+  "change": "Connecting to Claude now adds a line to your global CLAUDE.md so Claude checks what you were doing on this Mac before answering, instead of asking you to explain it again"
+}

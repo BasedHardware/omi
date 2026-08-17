@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 from models.memory_evidence import MemoryEvidence, SourceState
 
+DEFAULT_SHORT_TERM_TTL = timedelta(hours=48)
+DEFAULT_SHORT_TERM_TTL_DAYS = 2
 RESTRICTED_SENSITIVITY_LABELS = frozenset(
     {
         "credential",
@@ -220,6 +222,28 @@ def new_memory_id() -> str:
     return f"mem_{uuid.uuid4().hex}"
 
 
+def _coerce_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamps must be timezone-aware")
+    return value.astimezone(timezone.utc)
+
+
+def default_short_term_expiry(captured_at: datetime) -> datetime:
+    return _coerce_aware_utc(captured_at) + DEFAULT_SHORT_TERM_TTL
+
+
+def effective_short_term_expiry(item: MemoryItem) -> datetime:
+    """Return the sooner of stored expiry and the current 48-hour policy.
+
+    Already-written Short-term rows may still carry a 30-day ``expires_at``.
+    Reads, promotion, and TTL decisions use this so those rows cannot linger
+    past the live policy window.
+    """
+    policy_expiry = default_short_term_expiry(item.captured_at)
+    stored = _coerce_aware_utc(item.expires_at) if item.expires_at is not None else policy_expiry
+    return min(stored, policy_expiry)
+
+
 def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datetime) -> Optional[AccessDecision]:
     if item.status != MemoryItemStatus.active:
         return AccessDecision(False, "not_active")
@@ -227,7 +251,7 @@ def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datet
         return AccessDecision(False, "processing_blocked")
     if item.source_state in {SourceState.tombstoned, SourceState.purged}:
         return AccessDecision(False, "source_not_active")
-    if item.tier == MemoryLayer.short_term and item.expires_at and item.expires_at <= now:
+    if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= now:
         return AccessDecision(False, "short_term_expired")
     if policy.consumer == MemoryConsumer.unknown:
         return AccessDecision(False, "unknown_consumer")
@@ -283,6 +307,8 @@ def derived_default_access_allowed(item: MemoryItem, consumer: str) -> bool:
 
 __all__ = [
     "AccessDecision",
+    "DEFAULT_SHORT_TERM_TTL",
+    "DEFAULT_SHORT_TERM_TTL_DAYS",
     "MemoryAccessPolicy",
     "MemoryConsumer",
     "MemoryItem",
@@ -293,7 +319,9 @@ __all__ = [
     "ProcessingState",
     "MemoryItem",
     "MemoryItemAlias",
+    "default_short_term_expiry",
     "derived_default_access_allowed",
+    "effective_short_term_expiry",
     "is_archive_access_eligible",
     "is_default_access_eligible",
     "new_memory_id",

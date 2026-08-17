@@ -1,0 +1,182 @@
+import XCTest
+
+@testable import Omi_Computer
+
+/// Every statement here is real live dogfood data (lightly truncated), not
+/// synthetic: the policy was fitted on the pre-2026-08-16T17:33 corpus and
+/// these assertions pin its behavior on representatives of each class.
+final class ContextFactWritePolicyTests: XCTestCase {
+  func testMachineryEchoesAreDropped() {
+    for statement in [
+      "The destination is unknown/.",
+      "A user requests a 150-400 token summary of untrusted screen-derived content.",
+      "The user is instructed to fill evidence_refs with supporting wording.",
+      "UNTRUSTED SCREEN-DERIVED CONTENT: The user provided quoted data captured from applications.",
+      "   ",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .dropMachinery, statement)
+    }
+  }
+
+  func testSceneryIsCappedNotDropped() {
+    for statement in [
+      "A Google Sheets document named Combined_Cap_Table is open in a tab within a browser.",
+      "A Slack workspace is open in a browser-like window and shows a Yukon Research channel structure.",
+      "The user is viewing a usage/settings panel labeled Usage with a Weekly SuperGrok Heavy Limit.",
+      "The left sidebar lists multiple color-coded sections such as Wedding Plan, Shop, Retro.",
+      "Finder is being used.",
+      "There is one new item in the Yukon announcements channel on Slack.",
+      "The user is reviewing their Gmail inbox and has multiple promotions emails visible.",
+      "The active window is Finder in Recents view.",
+      "The Discord window shows a video call with multiple participants in a grid of thumbnails.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .capScenery, statement)
+    }
+  }
+
+  func testNamedPersonSpeechActsAreFlooredToArmingEligibility() {
+    // nano scored 8 of 9 of these 0.0 in live data while a sidebar description
+    // scored 0.7 — the floor exists because the score is blind to this class.
+    for statement in [
+      "David posted a thread about odd behavior where Boardy recommends something but has context-loss.",
+      "Mihir Malde thanked flagging the issue and said the team is looking into fixing it.",
+      "Kory Hoang mentions an upcoming first interview for a position and shares a URL.",
+      "Ratnam requested a GitHub username or URL from the other party.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .floorHumanEvent, statement)
+    }
+    XCTAssertEqual(ContextFactWritePolicy.humanEventWorthinessFloor, 0.6, accuracy: 0.000_001)
+  }
+
+  func testScenerySubjectsWithSpeechShapedNounsAreNotHumanEvents() {
+    // "Review notes", "Release notes mention", "pull requests" — capitalized
+    // scenery subjects followed by noun forms of speech verbs must not be
+    // exempted from capping as if a person had spoken.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isHumanEvent(
+        "Review notes reference ticket #11643 and discuss cache reads."))
+    XCTAssertFalse(
+      ContextFactWritePolicy.isHumanEvent(
+        "Release notes mention automated Windows beta build."))
+    XCTAssertFalse(
+      ContextFactWritePolicy.isHumanEvent(
+        "The tab lists 185 Open pull requests and 8,494 Closed pull requests."))
+  }
+
+  func testActionableStatementsPassUntouched() {
+    // The one measured near-miss is here on purpose: "is present to repair"
+    // must not be display language ("is present in" is).
+    for statement in [
+      "PR #11651 in the BasedHardware/omi repository has been merged.",
+      "An email from Slack contains a link to add a workspace (Yukon) and notes the link expires in 24 hours.",
+      "A remediation instruction is present to repair the surface or correct its contract row in a text box.",
+      "Health monitor script terminated with exit code 1.",
+      "The macOS release build v0.12.180 was cut at 11:15 UTC and verification should use git merge-base.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .pass, statement)
+    }
+  }
+
+  /// The collision class an earlier revision of this policy silently zeroed.
+  ///
+  /// Scenery language and work-status language share verbs. "is open",
+  /// "is active", "appears in", "is reviewing" and "shows" are how English
+  /// states that a pull request is unmerged, a flag is live, a regression
+  /// landed, a person is doing something, or a metric breached a threshold.
+  /// Matching the verb alone capped every sentence below to worthiness 0,
+  /// removing it from arming, pooling, departure evaluation and director
+  /// eligibility at once. Scenery is now anchored to an *interface subject*,
+  /// matching the predicate the extraction prompt actually states.
+  func testWorkStatusLanguageIsNotMistakenForScenery() {
+    for statement in [
+      "PR #11651 is open and blocked on review.",
+      "The feature flag is now active in production.",
+      "Legal is reviewing the MSA before Friday.",
+      "The regression appears in the latest build after the deploy.",
+      "The chart shows error rate above the SLO.",
+      "The staging cluster is being used for the load test.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .pass, statement)
+    }
+  }
+
+  /// `dropMachinery` skips the INSERT, so a false positive destroys a fact
+  /// outright rather than demoting it. These four were deleted by unanchored
+  /// substrings (`unknown/`, `^The destination`, `150-400`) before the patterns
+  /// were anchored to the echoes they were measured on.
+  func testRealStatementsSharingMachineryTokensAreNotDropped() {
+    for statement in [
+      "Push to unknown/production failed.",
+      "The destination branch cannot fast-forward.",
+      "The destination folder is missing from the artifact.",
+      "Latency is 150-400ms at p99.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .pass, statement)
+    }
+  }
+
+  /// The extraction prompt's own examples leak verbatim on this model (~1 in 14
+  /// calls). The Good example is a named-person speech-act, which is the class
+  /// `floorHumanEvent` raises to arming eligibility — so an unguarded leak
+  /// would not just be stored, it would arm a notification built from the
+  /// prompt's placeholder text.
+  func testPromptExamplesCannotLeakIntoStoredFacts() {
+    for statement in [
+      "Nik asked for the demo recording before tomorrow's launch video.",
+      "The user is viewing a window with a sidebar and a chat panel.",
+      "Ambient narrative: the user appears to be coordinating a recording workflow.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .dropMachinery, statement)
+    }
+  }
+
+  /// Both engines used here fail silently on an invalid pattern: `try?` leaves
+  /// the regex nil and `range(of:options:)` returns nil, so a typo reads
+  /// exactly like a rule that never matches.
+  func testEveryPatternCompiles() {
+    XCTAssertTrue(ContextFactWritePolicy.allPatternsCompile)
+  }
+
+  /// Paraphrased instruction echoes from live data (77 of 2,531 corpus facts,
+  /// every one verified an echo by reading). The anchored machinery patterns
+  /// miss these because the model rewords; the conjunctive frame+vocabulary
+  /// detector catches them.
+  func testParaphrasedInstructionEchoesAreDropped() {
+    for statement in [
+      "The designated destination value is set to unknown/.",
+      "There is a note indicating a destination should be set to unknown/.",
+      "Destination is set to unknown/ per instruction.",
+      "If domain confidence is low, the response should be unknown/.",
+      "The user requires that each factual record be a plain declarative sentence.",
+      "The task requires filling identifiers with names or handles copied from on-screen text.",
+      "Instructions require plain declarative sentences without labels or numbering.",
+      "The user asks to identify the website page-group this tab belongs to, as destination.",
+      "Format requirement: statements must be plain declarative sentences suitable for colleagues.",
+    ] {
+      XCTAssertEqual(ContextFactWritePolicy.verdict(statement), .dropMachinery, statement)
+    }
+  }
+
+  /// The negatives the echo detector was tested against before adoption: real
+  /// facts that share single ingredients with echoes (the bare `unknown/`
+  /// token, an instruction-shaped frame with no prompt vocabulary) must never
+  /// be dropped. This is the class the earlier unanchored patterns deleted.
+  func testRealFactsSharingEchoIngredientsAreNotDropped() {
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("Push to unknown/production failed."), .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("The destination branch cannot fast-forward."),
+      .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("The response should be sent to the customer before EOD."),
+      .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict(
+        "The user must re-authenticate before the deploy can continue."),
+      .dropMachinery)
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict(
+        "A policy note states that undivisible PRs involve an outside collaborator with repo Admin rights."),
+      .dropMachinery)
+  }
+}
