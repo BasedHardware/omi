@@ -112,5 +112,12 @@ describe("PostgreSQL Firebase canonical memory service app", () => {
     expect(() => createPostgresFirebaseAuthorizedMemoryServiceApp(
       new Proxy(options(), {}) as never,
     )).toThrow();
+    expect(() => createPostgresFirebaseAuthorizedMemoryServiceApp(
+      Object.create(options()) as never,
+    )).toThrow("invalid PostgreSQL Firebase memory service options");
+    expect(() => createPostgresFirebaseAuthorizedMemoryServiceApp({
+      ...options(),
+      mcp_handler: undefined,
+    } as never)).toThrow("invalid PostgreSQL Firebase memory service options");
   });
 });

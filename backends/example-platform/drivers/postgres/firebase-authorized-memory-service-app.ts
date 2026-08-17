@@ -36,11 +36,10 @@ export const createPostgresFirebaseAuthorizedMemoryServiceApp = (
     throw new TypeError("invalid PostgreSQL Firebase memory service options");
   }
   const descriptors = Object.getOwnPropertyDescriptors(options);
-  const ownKeys = Reflect.ownKeys(descriptors);
-  const allowed = new Set(["mcp_handler", "memory_read", "now_epoch_seconds", "counter", "observability"]);
-  if (ownKeys.some((key) => typeof key !== "string" || !allowed.has(key))
-    || !["mcp_handler", "memory_read", "now_epoch_seconds", "counter"].every((key) =>
-      Object.hasOwn(descriptors, key))
+  const required = ["mcp_handler", "memory_read", "now_epoch_seconds", "counter"] as const;
+  if (Reflect.ownKeys(descriptors).some((key) =>
+    typeof key !== "string" || ![...required, "observability"].includes(key))
+    || required.some((key) => !Object.hasOwn(descriptors, key))
     || Object.values(descriptors).some((entry) => !entry.enumerable || !("value" in entry))) {
     throw new TypeError("invalid PostgreSQL Firebase memory service options");
   }

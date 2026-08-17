@@ -1,3 +1,0 @@
-# Existing designated files without lifecycle headers. This list is a frozen
-# debt census: edits to any listed file must add a valid header instead.
-# The old-monorepo backend/ tree was not imported, so the census is empty.
