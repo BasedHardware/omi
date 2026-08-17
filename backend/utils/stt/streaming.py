@@ -33,7 +33,12 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
-from utils.stt.provider_resilience import EXPECTED_REJECTIONS, ProviderCircuitBreaker
+from utils.stt.provider_resilience import (
+    EXPECTED_REJECTIONS,
+    ProviderCircuitBreaker,
+    close_rejected_socket,
+    fallback_socket_is_serving,
+)
 from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
@@ -132,6 +137,10 @@ async def connect_stt_socket_with_fallback(
         fallback_socket = await connect_modulate()
         if fallback_socket is None:
             raise RuntimeError('Modulate returned no socket')
+        if not await fallback_socket_is_serving(fallback_socket):
+            detail = getattr(fallback_socket, 'death_reason', None) or 'stream rejected'
+            close_rejected_socket(fallback_socket)
+            raise RuntimeError(f'Modulate rejected the stream: {detail}')
     except Exception:
         record_fallback(
             component='stt_selection',
