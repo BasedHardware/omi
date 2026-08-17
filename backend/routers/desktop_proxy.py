@@ -48,6 +48,11 @@ VERTEX_PT_MODEL = 'gemini-2.5-flash'
 VERTEX_PT_LOCATION = 'us-central1'
 VERTEX_PT_EXPIRES = '~2027-05-28'
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+# Over-quota Pro demotes to Flash-Lite (`shared`, on-demand), never to the PT
+# model: demoting to `gemini-2.5-flash` silently dumped the Insight tool loop
+# (~11% of the reservation) onto the saturated PT lane. Evidence:
+# omi-knowledge-base vertex-pt-flash-spend 2026-08-17 workload value ranking.
+_QUOTA_DEMOTION_MODEL = 'gemini-2.5-flash-lite'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
@@ -457,11 +462,11 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
         record_fallback(
             component='gemini_model',
             from_mode='pro',
-            to_mode='flash',
+            to_mode='flash_lite',
             reason='quota',
             outcome='degraded',
         )
-        return f'models/{VERTEX_PT_MODEL}:{action}'
+        return f'models/{_QUOTA_DEMOTION_MODEL}:{action}'
     return path
 
 

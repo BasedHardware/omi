@@ -202,17 +202,26 @@ async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypat
         await desktop_proxy._meter_server_request(
             "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
         )
-        == "models/gemini-2.5-flash:generateContent"
+        == "models/gemini-2.5-flash-lite:generateContent"
     )
     assert fallbacks == [
         {
             "component": "gemini_model",
             "from_mode": "pro",
-            "to_mode": "flash",
+            "to_mode": "flash_lite",
             "reason": "quota",
             "outcome": "degraded",
         }
     ]
+
+
+def test_quota_demotion_never_targets_the_pt_model():
+    """Regression: over-quota Pro used to demote onto `gemini-2.5-flash`, silently
+    dumping the Insight tool loop (~11% of the reservation) onto the saturated
+    Vertex PT lane. The demotion target must stay a `shared`/on-demand model."""
+    assert desktop_proxy._QUOTA_DEMOTION_MODEL != desktop_proxy.VERTEX_PT_MODEL
+    assert desktop_proxy._QUOTA_DEMOTION_MODEL in desktop_proxy._ALLOWED_MODELS
+    assert desktop_proxy._QUOTA_DEMOTION_MODEL in desktop_proxy._VERTEX_MODELS
 
 
 @pytest.mark.asyncio
