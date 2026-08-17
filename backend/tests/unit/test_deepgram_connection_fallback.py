@@ -16,7 +16,7 @@ import pytest
 
 from routers.listen import receiver as receiver_mod
 from routers.listen.receiver import ListenReceiver
-from utils.stt import streaming
+from utils.stt import provider_resilience, streaming
 from utils.stt.streaming import STTService
 
 
@@ -180,6 +180,61 @@ async def test_the_deepgram_and_parakeet_circuits_stay_independent():
 
     parakeet_circuit.record_failure.assert_not_called()
     parakeet_circuit.allow_request.assert_not_called()
+
+
+class _RejectedSocket:
+    """Velma's over-quota shape: the upgrade succeeds, then the stream is refused."""
+
+    def __init__(self, reason: str = 'modulate error: Monthly usage limit reached.') -> None:
+        self.death_reason = reason
+        self.finished = False
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return True
+
+    def finish(self) -> None:
+        self.finished = True
+
+
+@pytest.mark.anyio
+async def test_a_fallback_that_is_already_dead_is_not_reported_as_recovered():
+    """Regression (#11752): an over-quota Modulate connect is an exhausted chain, not a heal."""
+    rejected = _RejectedSocket()
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(streaming, 'record_fallback') as record,
+        pytest.raises(RuntimeError, match='Monthly usage limit reached'),
+    ):
+        await streaming.connect_stt_socket_with_fallback(
+            primary_service=STTService.parakeet,
+            connect_primary=AsyncMock(return_value=None),
+            connect_modulate=AsyncMock(return_value=rejected),
+        )
+
+    assert record.call_args.kwargs['outcome'] == 'exhausted'
+    assert rejected.finished, 'the rejected socket must be released, not leaked'
+
+
+@pytest.mark.anyio
+async def test_a_live_fallback_socket_still_serves_the_session():
+    """The liveness check must not fail a healthy fallback that simply has no audio yet."""
+    live_socket = SimpleNamespace(is_connection_dead=False, death_reason=None)
+
+    with (
+        patch.object(provider_resilience, 'STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.05),
+        patch.object(streaming, 'record_fallback') as record,
+    ):
+        socket, service = await streaming.connect_stt_socket_with_fallback(
+            primary_service=STTService.parakeet,
+            connect_primary=AsyncMock(return_value=None),
+            connect_modulate=AsyncMock(return_value=live_socket),
+        )
+
+    assert socket is live_socket
+    assert service == STTService.modulate
+    assert record.call_args.kwargs['outcome'] == 'recovered'
 
 
 @pytest.mark.anyio
