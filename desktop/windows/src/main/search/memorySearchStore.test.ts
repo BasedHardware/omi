@@ -7,7 +7,12 @@
 // 3 block; the last test pins what actually happens when the two drift.
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { MEMORY_SEARCH_SCHEMA, searchMemoriesFts, type MemorySearchDb } from './memorySearchStore'
+import {
+  MEMORY_SEARCH_SCHEMA,
+  countMemoriesFts,
+  searchMemoriesFts,
+  type MemorySearchDb
+} from './memorySearchStore'
 
 /** Verbatim from db.ts's `CREATE TABLE IF NOT EXISTS memories` block. */
 const MEMORIES_SCHEMA = `
@@ -111,11 +116,18 @@ describe('memories full-text index', () => {
     const db = open()
     const id = insert(db, { content: 'Allergic to penicillin' })
     expect(searchMemoriesFts(db, 'penicillin*').length).toBe(1)
+    expect(countMemoriesFts(db, 'penicillin*')).toBe(1)
 
     db.prepare('DELETE FROM memories WHERE id = ?').run(id)
-    // The delete trigger is what makes memories_fts safe to leave out of
-    // USER_DATA_TABLES: an account switch deletes the rows and the index follows.
     expect(searchMemoriesFts(db, 'penicillin*')).toEqual([])
+    // The COUNT is the assertion that actually exercises the delete trigger.
+    // searchMemoriesFts JOINs `memories`, so a deleted row is filtered out by
+    // the join whether or not the index was updated - the hit list alone cannot
+    // tell a working trigger from a broken one. The count reads memories_fts
+    // directly, so a stale index shows up here as a total that overstates what
+    // the user actually has. This is also what makes memories_fts safe to leave
+    // out of USER_DATA_TABLES: the account-switch DELETE empties it too.
+    expect(countMemoriesFts(db, 'penicillin*')).toBe(0)
   })
 
   it('follows an edit rather than keeping the old text findable', () => {
