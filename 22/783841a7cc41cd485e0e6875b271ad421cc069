@@ -1,0 +1,38 @@
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCatalog.swift
+  s_ff8aeb5a36f5b8::t_1ac184a87d596d 35-36,38-43,45-54
+  s_ff8aeb5a36f5b8::t_a508ecca841fd2 66,153,171,232,290,313,332,352
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeAutomation.swift
+  s_ff8aeb5a36f5b8::t_f7e1471823dc38 29,68
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  s_ff8aeb5a36f5b8::t_75e0a14b8afc47 206,208,221,229,253,271,278,322,325,342,344,354,380-382,410,412,417
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeMatcher.swift
+  s_ff8aeb5a36f5b8::t_c913a75f5ff198 56,59-60,69-77,79
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgePolicy.swift
+  s_ff8aeb5a36f5b8::t_d790cf2d8efa77 40-45,121-125,207
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_ff8aeb5a36f5b8::t_f6f984614d0faf 110-128,130-135,137-149
+desktop/macos/Desktop/Tests/IntegrationNudgeCatalogTests.swift
+  s_ff8aeb5a36f5b8::t_b176e824bf6484 85-100,108,113-120,122-124,126,134-152
+desktop/macos/Desktop/Tests/IntegrationNudgeCoordinatorTests.swift
+  s_ff8aeb5a36f5b8::t_17ef65d09a3dfd 60,74,97,119,143,163,174,178,200,214,289
+desktop/macos/Desktop/Tests/IntegrationNudgeMatcherTests.swift
+  s_ff8aeb5a36f5b8::t_5cef8f1301ee2d 29-30,62-64,66,69-70,73-81
+desktop/macos/Desktop/Tests/IntegrationNudgePolicyTests.swift
+  s_ff8aeb5a36f5b8::t_2c4aff96881ce1 141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "22783841a7cc41cd485e0e6875b271ad421cc069",
+  "prompts": {},
+  "sessions": {
+    "s_ff8aeb5a36f5b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cee6b50-5d24-4cd7-ba03-5499c4e7d8a5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
