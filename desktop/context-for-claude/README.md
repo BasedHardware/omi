@@ -72,6 +72,20 @@ Airgap Mode covers the update check like every other remote client (`NetworkEgre
 Cutting a release — including generating the Context-only update key — is
 [`docs/releasing.md`](docs/releasing.md).
 
+## Analytics
+
+The app reports anonymous usage counts — launches, permission states, capture minutes, and how often
+Claude calls its MCP tools — to PostHog, under a salted install hash that is deliberately not the
+identifier the backend uses. No transcript, screen text, window name, URL, query or tool argument
+ever leaves the Mac. The complete list of what is sent is `AnalyticsEvent`, a closed enum, so it can
+be read in one file rather than grepped for.
+
+Airgap Mode **drops** these events rather than deferring them: every other remote client queues its
+work and sends when the switch goes off, which for analytics would delay the disclosure instead of
+preventing it. Locally built copies report nothing at all.
+
+[`docs/analytics.md`](docs/analytics.md).
+
 ## What Claude gets
 
 Twelve tools. The descriptions are written for Claude, so it reaches for them unprompted. In

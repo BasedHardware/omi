@@ -16,7 +16,7 @@ import Foundation
 /// turn the airgap guard itself into the disclosure it exists to prevent — and it would fire on
 /// exactly the machines whose users asked for silence. Anything added here must consult
 /// `NetworkEgress.isSuppressed` before sending, and must not report its own suppression.
-enum ContextFallbackArea: String, Sendable {
+enum ContextFallbackArea: String, Sendable, CaseIterable {
     case capture
     case upload
     case mcp
@@ -26,7 +26,7 @@ enum ContextFallbackArea: String, Sendable {
     case rewind
 }
 
-enum ContextFallbackOutcome: String, Sendable {
+enum ContextFallbackOutcome: String, Sendable, CaseIterable {
     case degraded
     case dropped
     case retried

@@ -253,6 +253,7 @@ final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
   /// A downloaded update is extracted in the background. This state/message is also reflected in
   /// Settings, while the automatic driver's install-on-quit hook below supplies the actual prompt.
   func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+    ContextAnalytics.record(.updateOutcome(.installed))
     owner?.report(UpdatePolicy.RelaunchState.required(version: item.displayVersionString).message)
   }
 
@@ -332,6 +333,7 @@ final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
   }
 
   func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+    ContextAnalytics.record(.updateOutcome(.upToDate))
     Task { @MainActor in owner?.report("Context for Claude is up to date.") }
   }
 
@@ -342,6 +344,9 @@ final class UpdaterEvents: NSObject, SPUUpdaterDelegate {
     // is not worth depending on; `SUNoUpdateError = 1001` in `SUErrors.h` is.
     let nsError = error as NSError
     guard nsError.code != 1001 else { return }
+    // Only after the 1001 filter: counting "no update found" as a failure would report a healthy
+    // fleet as a broken one, and update health is the metric most likely to be read in a panic.
+    ContextAnalytics.record(.updateOutcome(.checkFailed))
     ContextLog.error("update check failed: \(nsError.domain) \(nsError.code)", "update")
     ContextTelemetry.recordFallback(
       area: .settings,
