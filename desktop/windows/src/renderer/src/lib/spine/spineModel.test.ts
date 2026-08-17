@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest'
 import {
   MOMENTS_PER_STRIP,
   attachMoments,
+  compareRows,
   clusterMoments,
   composeSpine,
   countRows,
@@ -125,6 +126,14 @@ describe('composeSpine day bucketing', () => {
     )
     expect(days.map((d) => d.id)).toEqual([DAY_14])
     expect(days[0].rows.map((r) => r.id)).toContain('conv-mem:c1')
+  })
+
+  it('collapses a conversation that arrived on two overlapping pages', () => {
+    // Both upstream stores page by offset against a server-resorted list, so the
+    // same record legitimately arrives twice; rendering it twice would look like
+    // the user had the same conversation two times.
+    const days = composeSpine(input({ conversations: [conversation(), conversation()] }), NOW)
+    expect(rowIds(days)).toEqual(['conv:c1'])
   })
 
   it('titles days Today, Yesterday, then by name', () => {
@@ -336,6 +345,40 @@ describe('composeSpine ordering', () => {
       NOW
     )
     expect(rowIds(days).slice(0, 3)).toEqual(['mem:later', 'conv:c1', 'conv-mem:c1'])
+  })
+})
+
+describe('compareRows', () => {
+  const row = (over: Partial<SpineRow>): SpineRow => ({
+    id: 'r',
+    anchor: 0,
+    kind: 'memories',
+    isAttached: false,
+    content: { type: 'memories', memories: [memory()] },
+    searchText: '',
+    ...over
+  })
+
+  it('orders newest first', () => {
+    expect(compareRows(row({ anchor: 2 }), row({ anchor: 1 }))).toBeLessThan(0)
+    expect(compareRows(row({ anchor: 1 }), row({ anchor: 2 }))).toBeGreaterThan(0)
+  })
+
+  it('puts a conversation first at an identical anchor, whichever side it is on', () => {
+    // Tested directly rather than through composeSpine: rows are emitted
+    // conversation-first and Array.prototype.sort is stable, so the current emit
+    // order already produces this and a composed test could not tell the rule
+    // from the accident.
+    const conv = row({ anchor: 5, kind: 'conversations' })
+    const mem = row({ anchor: 5, kind: 'memories' })
+    expect(compareRows(conv, mem)).toBeLessThan(0)
+    expect(compareRows(mem, conv)).toBeGreaterThan(0)
+  })
+
+  it('leaves two non-conversation rows at the same anchor alone', () => {
+    expect(compareRows(row({ anchor: 5, kind: 'tasks' }), row({ anchor: 5, kind: 'screen' }))).toBe(
+      0
+    )
   })
 })
 

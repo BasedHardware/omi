@@ -71,12 +71,23 @@ describe('bucketByLocalHour', () => {
 
 describe('endOfLocalDay', () => {
   it('ends one calendar day later, not 24 hours later', () => {
-    // Adding 86_400_000 would land an hour early or late across a DST boundary
-    // and drop or double-count the frames in that hour.
     const end = endOfLocalDay(DAY_15)
     const d = new Date(end)
     expect([d.getHours(), d.getMinutes()]).toEqual([0, 0])
     expect(d.getDate()).toBe(16)
+  })
+
+  it('lands on local midnight for every day of a year', () => {
+    // Adding a fixed 86_400_000 lands an hour early or late on the two DST
+    // transition days, dropping or double-counting the frames in that hour. In a
+    // timezone that observes DST this loop fails for the fixed-constant version;
+    // in UTC (which CI uses) no day transitions, so this asserts the property
+    // holds everywhere it can be observed rather than proving the DST case.
+    for (let i = 0; i < 365; i += 1) {
+      const day = startOfLocalDay(new Date(2026, 0, 1 + i, 12).getTime())
+      const end = new Date(endOfLocalDay(day))
+      expect([end.getHours(), end.getMinutes(), end.getSeconds()]).toEqual([0, 0, 0])
+    }
   })
 })
 

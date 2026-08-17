@@ -332,14 +332,7 @@ function composeDay(args: {
     rows.push(momentsRow(`shot:${cluster[0].id}`, cluster, false))
   }
 
-  rows.sort((a, b) => {
-    if (a.anchor !== b.anchor) return b.anchor - a.anchor
-    // At an identical anchor a conversation leads, so its own attachments never
-    // appear above it before the re-seat pass runs.
-    if (a.kind === 'conversations' && b.kind !== 'conversations') return -1
-    if (b.kind === 'conversations' && a.kind !== 'conversations') return 1
-    return 0
-  })
+  rows.sort(compareRows)
 
   const seated = reseatAttachments(rows)
 
@@ -375,6 +368,24 @@ function composeDay(args: {
     taskCount,
     hourCounts: args.screen?.hourCounts ?? new Array<number>(24).fill(0)
   }
+}
+
+/**
+ * Stream order: newest anchor first, and at an identical anchor a conversation
+ * leads so its own attachments never appear above it before the re-seat pass.
+ *
+ * The kind tie-break is defence in depth rather than the thing that produces
+ * today's order: rows are emitted conversation-first and Array.prototype.sort is
+ * stable, so it is already correct without it. It is written out so that
+ * changing the emit order cannot silently reorder a conversation under its own
+ * memory, and it is exported so the rule can be tested rather than inferred from
+ * whatever the emit order happens to be.
+ */
+export function compareRows(a: SpineRow, b: SpineRow): number {
+  if (a.anchor !== b.anchor) return b.anchor - a.anchor
+  if (a.kind === 'conversations' && b.kind !== 'conversations') return -1
+  if (b.kind === 'conversations' && a.kind !== 'conversations') return 1
+  return 0
 }
 
 /**

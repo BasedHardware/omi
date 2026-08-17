@@ -24,10 +24,11 @@ export function parseWireTime(raw: string | null | undefined): number | null {
 export function toSpineConversation(c: Conversation): SpineConversation | null {
   const startedAt = parseWireTime(c.started_at) ?? parseWireTime(c.created_at)
   if (startedAt === null) return null
-  // An in-progress conversation has no finish time yet. Treating it as
-  // zero-length would stop every frame captured during it from attaching, so it
-  // stays open at its start instant until the server closes it.
-  const finishedAt = parseWireTime(c.finished_at) ?? startedAt
+  // An in-progress conversation has no finish time yet, and a bad one can carry
+  // a finish before its start. Either would make the attachment window empty and
+  // silently orphan every frame captured during the conversation, so the window
+  // is clamped to at least the start instant.
+  const finishedAt = Math.max(parseWireTime(c.finished_at) ?? startedAt, startedAt)
   return {
     id: c.id,
     title: c.structured?.title?.trim() ?? '',
@@ -35,7 +36,7 @@ export function toSpineConversation(c: Conversation): SpineConversation | null {
     category: c.structured?.category ?? '',
     emoji: c.structured?.emoji ?? '💬',
     startedAt,
-    finishedAt: Math.max(finishedAt, startedAt),
+    finishedAt,
     starred: c.starred === true
   }
 }
