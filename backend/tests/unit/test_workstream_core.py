@@ -1209,3 +1209,20 @@ def test_noop_refocus_does_not_touch_reservation(fake_db):
     # (a fresh idempotency key so it is not a receipt replay) -> no serialization needed, no bump.
     goals_db.focus_goal('u1', 'g0', idempotency_key='refocus-g0', account_generation=3, firestore_client=fake_db)
     assert fake_db.rows[_RESERVATION_KEY]['version'] == 1
+
+
+def test_noop_refocus_writes_goal_to_conflict_with_concurrent_unfocus(fake_db):
+    # cubic PR 10887 goals.py:635: the already-focused no-op does NOT bump the reservation (above), but it
+    # MUST still WRITE the goal doc (touch updated_at) so it write-conflicts with a concurrent unfocus of the
+    # same goal on Mongo (which detects only write-write conflicts). Without a shared written doc, a racing
+    # unfocus and this focus both commit and focus records a stale 'focused' receipt.
+    seed_control(fake_db)
+    create_goal(fake_db, 'g0')
+    goals_db.focus_goal('u1', 'g0', idempotency_key='focus-g0', account_generation=3, firestore_client=fake_db)
+    key = ('users', 'u1', 'goals', 'g0')
+    before = fake_db.rows[key]['updated_at']
+
+    result = goals_db.focus_goal('u1', 'g0', idempotency_key='refocus-g0', account_generation=3, firestore_client=fake_db)
+    assert fake_db.rows[key]['updated_at'] > before  # the no-op touched the goal doc -> conflict source
+    assert result['updated_at'] == fake_db.rows[key]['updated_at']  # returned result reflects the touch
+    assert result['status'] == 'focused'

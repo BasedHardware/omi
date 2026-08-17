@@ -597,14 +597,22 @@ def focus_goal(
             rank for snapshot in focused for rank in [_goal_dict(snapshot).get('focus_rank')] if isinstance(rank, int)
         }
         if target['status'] == GoalStatus.focused.value and focus_rank in {None, target.get('focus_rank')}:
+            # Already focused at the requested rank — no focus-set change. But still WRITE target_ref (touch
+            # updated_at) so this no-op write-CONFLICTS with a concurrent unfocus of the same goal on Mongo,
+            # which detects only write-write conflicts. Without it, a racing unfocus (which writes target_ref
+            # -> background) and this focus share no written doc, both commit, and focus records a stale
+            # 'focused' receipt that idempotent replay keeps returning while the goal is background (cubic PR
+            # 10887 goals.py:635). On Firestore the target_ref READ already conflicts; this makes Mongo agree.
+            result = normalize_goal_storage({**target, 'updated_at': now}, goal_id=goal_id)
+            write_transaction.update(target_ref, {'updated_at': now})
             _finish_goal_mutation(
                 write_transaction,
                 receipt_ref,
                 request_hash=request_hash,
-                result=target,
+                result=result,
                 now=now,
             )
-            return target
+            return result
         if len(focused) >= focus_cap:
             if replacement_goal_id is None:
                 raise GoalConflictError('focus set is full; replacement_goal_id is required')
