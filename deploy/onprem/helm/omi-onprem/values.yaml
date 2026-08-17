@@ -96,3 +96,17 @@ push:
     resources: {}
 inference:
   enabled: false
+
+# Edge ingress. Default type "gateway" = Gateway API via Envoy Gateway (ADR-0049 Q3): the modern
+# replacement for the compose TLS reverse-proxies. Envoy Gateway itself is a cluster-level prerequisite
+# (installed separately); this chart provides the GatewayClass/Gateway/HTTPRoute. The classic Ingress
+# path (type "ingress") is a later fallback.
+ingress:
+  enabled: false
+  type: gateway
+  gatewayClassName: omi-envoy
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  # The Envoy proxy Service is exposed as NodePort; kind-cluster.yaml maps containerPort 30080 -> host
+  # 8080 (and 30443 -> 8443), so `curl http://localhost:8080` reaches the gateway. On k0s/bare-metal use
+  # MetalLB + a LoadBalancer instead (later phase).
+  httpNodePort: 30080

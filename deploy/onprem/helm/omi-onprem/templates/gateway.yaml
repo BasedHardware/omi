@@ -1,0 +1,60 @@
+{{- if and .Values.ingress.enabled (eq .Values.ingress.type "gateway") }}
+# Gateway API edge via Envoy Gateway (ADR-0049 Q3), the modern replacement for the compose TLS
+# reverse-proxies. Envoy Gateway (the controller + CRDs) is a cluster-level prerequisite installed
+# separately; this chart declares the GatewayClass + Gateway + the EnvoyProxy that shapes the
+# provisioned proxy Service (NodePort on Kind, mapped to the host by kind-cluster.yaml).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: omi-proxy
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "omi-onprem.labels" . | nindent 4 }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        # NodePort (not the default LoadBalancer, which stays <pending> on Kind without MetalLB). Pin the
+        # HTTP listener's nodePort so kind's 30080 -> host 8080 mapping is stable. StrategicMerge keys
+        # Service ports by `port` (the number), NOT `name` — merging on `name` adds an invalid entry and
+        # breaks Service creation, so match the listener port (80) here.
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: 80
+                  nodePort: {{ .Values.ingress.httpNodePort }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.ingress.gatewayClassName }}
+  labels:
+    {{- include "omi-onprem.labels" . | nindent 4 }}
+spec:
+  controllerName: {{ .Values.ingress.controllerName }}
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: omi-proxy
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: omi-gateway
+  labels:
+    {{- include "omi-onprem.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.ingress.gatewayClassName }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+{{- end }}

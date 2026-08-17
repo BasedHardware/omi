@@ -1,0 +1,21 @@
+{{- if and .Values.ingress.enabled (eq .Values.ingress.type "gateway") }}
+# Route the edge to the backend API. Hostname-agnostic for now (the auth/TLS phase adds hostnames +
+# HTTPS listeners for the app API, the Keycloak issuer, and ntfy).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: omi-backend
+  labels:
+    {{- include "omi-onprem.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: omi-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: backend
+          port: {{ .Values.backend.service.port }}
+{{- end }}

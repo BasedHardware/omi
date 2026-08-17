@@ -23,3 +23,8 @@ objstore:
 # push profile: on-prem UnifiedPush server (ntfy). Reached internally by the backend at http://ntfy:80.
 push:
   enabled: true
+
+# edge: Gateway API via Envoy Gateway (prerequisite installed separately). The proxy is a NodePort on
+# 30080 -> host 8080 (kind-cluster.yaml), so `curl http://localhost:8080/v1/health` reaches the backend.
+ingress:
+  enabled: true
