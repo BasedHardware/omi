@@ -94,6 +94,12 @@ def test_load_baseline_rejects_boolean_counts(tmp_path):
         _MODULE.load_baseline(path)
 
 
+def test_migrations_are_no_longer_excluded_from_the_boundary():
+    # Regression (cubic 4948841169 F6): excluding migrations/ let a re-added migration reach
+    # firebase_admin.auth undetected. Parity with the Firestore persistence guard.
+    assert 'migrations/' not in _MODULE.EXCLUDED_PREFIXES
+
+
 # --- edge-case bypasses closed per cubic review PR 10887 ---
 
 
@@ -122,3 +128,49 @@ def test_conditional_rebind_keeps_the_not_rebound_path_visible():
         "import firebase_admin as fb\nif cond:\n    fb = build()\nelse:\n    fb = other()\nfb.auth.verify(t)\n"
     )
     assert _MODULE.count_boundary_violations(rebound_all_branches) == 0
+
+
+# --- edge-case bypasses closed per cubic review 4948841169 ---
+
+
+def test_flags_aliased_dynamic_import_of_firebase_auth():
+    # F3: ``im = importlib.import_module; im('firebase_admin.auth')`` dodged the dynamic-import check
+    # because the alias ``im`` was never tracked (only the literal import_module/__import__ receivers).
+    src = "import importlib\nim = importlib.import_module\nim('firebase_admin.auth')\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+
+
+def test_tuple_unpack_propagates_firebase_alias():
+    # F4: tuple-unpack ``a, fb = 1, firebase_admin`` bound nothing before (target was not a bare Name),
+    # so a later ``fb.auth`` was missed.
+    src = "import firebase_admin\na, fb = 1, firebase_admin\nfb.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+    # And the non-alias element must NOT become an alias.
+    clean = "import firebase_admin\nfb, a = firebase_admin, other\na.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(clean) == 0
+
+
+def test_walrus_assignment_propagates_firebase_alias():
+    # F4: a walrus ``(fb := firebase_admin)`` binds a name from an expression; the later ``fb.auth``
+    # was missed because expressions never rebound before.
+    src = "import firebase_admin\n(fb := firebase_admin)\nfb.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+
+
+def test_match_value_pattern_auth_access_is_flagged():
+    # F5: a ``MatchValue`` value pattern reaching the auth surface (``case fb.auth.X:``) was never
+    # scanned (only the guard/body were). Patterns forbid calls, so this is the narrow completeness gap.
+    src = "import firebase_admin as fb\nmatch x:\n    case fb.auth.INVALID:\n        pass\n"
+    assert _MODULE.count_boundary_violations(src) == 1
+
+
+def test_match_as_capture_of_firebase_subject_propagates_alias():
+    # F5: capturing a firebase-aliased subject (``match fb: case obj:``) must rebind the capture to the
+    # package alias so a ``obj.auth`` in the guard/body is caught.
+    guard = "import firebase_admin as fb\nmatch fb:\n    case obj if obj.auth.verify(t):\n        pass\n"
+    assert _MODULE.count_boundary_violations(guard) == 1
+    body = "import firebase_admin as fb\nmatch fb:\n    case obj:\n        obj.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(body) == 1
+    # A capture of a NON-firebase subject must not become an alias.
+    clean = "import firebase_admin as fb\nmatch other:\n    case obj:\n        obj.auth.verify(t)\n"
+    assert _MODULE.count_boundary_violations(clean) == 0

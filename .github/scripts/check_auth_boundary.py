@@ -32,8 +32,13 @@ DEFAULT_BASELINE = Path('.github/scripts/auth_boundary_baseline.json')
 #  - tests/, testing/ : the test suites (they inject the in-memory FakeAuthProvider / stub firebase).
 #  - scripts/    : one-off operational tooling (ADR-0023).
 #  - agent-proxy/, pusher/ : separately deployed services with their own firebase app (ADR-0023).
-#  - migrations/ : removed in WP1; kept so a re-added dir cannot silently slip in.
-EXCLUDED_PREFIXES = ('utils/auth/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/', 'pusher/', 'migrations/')
+# NOTE: migrations/ is intentionally NOT excluded — a re-added migration that touches Firebase auth
+# directly must fail this boundary too (the upstream migrations reach auth only via the port; verified 0).
+EXCLUDED_PREFIXES = ('utils/auth/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/', 'pusher/')
+
+# ``ast.Match`` / the pattern nodes exist only on Python 3.10+; a file using ``match`` cannot parse on
+# an older interpreter anyway, so the pattern handling is reached only where these attributes exist.
+_AST_MATCH = getattr(ast, 'Match', None)
 
 
 def _is_forbidden_import_module(module: str | None) -> bool:
@@ -42,9 +47,34 @@ def _is_forbidden_import_module(module: str | None) -> bool:
     return module == 'firebase_admin.auth' or module.startswith('firebase_admin.auth.')
 
 
-def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
+def _is_dynimport_callable(value: ast.AST) -> bool:
+    """True if ``value`` is a reference to the dynamic-import *callable itself* (not a call of it):
+    ``importlib.import_module``, a bare ``import_module`` (from ``from importlib import import_module``)
+    or ``__import__``. Used to track ``im = importlib.import_module`` aliases."""
+    if isinstance(value, ast.Attribute):
+        return value.attr == 'import_module' and isinstance(value.value, ast.Name) and value.value.id == 'importlib'
+    if isinstance(value, ast.Name):
+        return value.id in ('import_module', '__import__')
+    return False
+
+
+def _collect_dynimport_aliases(tree: ast.AST) -> frozenset[str]:
+    """Names bound to the dynamic-import callable, e.g. ``im = importlib.import_module``. Without this
+    ``im('firebase_admin.auth')`` would dodge the dynamic-import check (only the literal
+    ``import_module`` / ``__import__`` receivers were recognised)."""
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _is_dynimport_callable(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    aliases.add(target.id)
+    return frozenset(aliases)
+
+
+def _forbidden_dynamic_import(node: ast.Call, is_forbidden, extra_names: frozenset[str] = frozenset()) -> bool:
     """A literal dynamic import of a forbidden module: ``importlib.import_module('X')``,
-    ``import_module('X')`` (bare, from ``from importlib import import_module``) or ``__import__('X')``.
+    ``import_module('X')`` (bare, from ``from importlib import import_module``), ``__import__('X')`` or
+    an aliased callable ``im('X')`` (``im = importlib.import_module``; ``extra_names``).
 
     The attribute form is restricted to ``importlib.import_module`` so an unrelated helper method named
     ``import_module`` is not a false positive. The module name is taken from the first positional
@@ -54,7 +84,7 @@ def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
         if not (func.attr == 'import_module' and isinstance(func.value, ast.Name) and func.value.id == 'importlib'):
             return False
     elif isinstance(func, ast.Name):
-        if func.id not in ('import_module', '__import__'):
+        if func.id not in ('import_module', '__import__') and func.id not in extra_names:
             return False
     else:
         return False
@@ -63,10 +93,11 @@ def _forbidden_dynamic_import(node: ast.Call, is_forbidden) -> bool:
 
 
 class _Count:
-    __slots__ = ('n',)
+    __slots__ = ('n', 'dynimport')
 
     def __init__(self) -> None:
         self.n = 0
+        self.dynimport: frozenset[str] = frozenset()
 
 
 def _scan_expr(node: ast.AST, aliases: set[str], count: _Count) -> None:
@@ -75,10 +106,18 @@ def _scan_expr(node: ast.AST, aliases: set[str], count: _Count) -> None:
     ``firebase_admin.auth``. Expressions never open a statement scope, so a plain walk is safe here —
     only *statements* rebind names, and scope/order tracking happens in ``_scan_stmt``."""
     for sub in ast.walk(node):
-        if isinstance(sub, ast.Attribute):
+        if isinstance(sub, ast.NamedExpr) and isinstance(sub.target, ast.Name):
+            # Walrus ``(fb := firebase_admin)``: the only expression form that *binds* a name. Propagate
+            # or clear the package alias so a later ``fb.auth`` in this scope is seen (statements share
+            # this mutable ``aliases`` set). Non-walrus expressions never rebind, so a plain walk is safe.
+            if isinstance(sub.value, ast.Name) and sub.value.id in aliases:
+                aliases.add(sub.target.id)
+            else:
+                aliases.discard(sub.target.id)
+        elif isinstance(sub, ast.Attribute):
             if sub.attr == 'auth' and isinstance(sub.value, ast.Name) and sub.value.id in aliases:
                 count.n += 1
-        elif isinstance(sub, ast.Call) and _forbidden_dynamic_import(sub, _is_forbidden_import_module):
+        elif isinstance(sub, ast.Call) and _forbidden_dynamic_import(sub, _is_forbidden_import_module, count.dynimport):
             count.n += 1
 
 
@@ -91,6 +130,65 @@ def _scan_scope(statements: list[ast.stmt], inherited: set[str], count: _Count) 
     aliases = set(inherited)
     for stmt in statements:
         _scan_stmt(stmt, aliases, count)
+
+
+def _scan_pattern(
+    pattern: ast.AST | None,
+    aliases: set[str],
+    subject_is_alias: bool,
+    case_aliases: set[str],
+    count: _Count,
+) -> None:
+    """Scan one match ``case`` pattern. Python forbids calls in patterns, so the only auth surface a
+    pattern can reach is a ``MatchValue`` value pattern (``case fb.auth.X:``) — scanned as an
+    expression. A top-level ``MatchAs`` capture (``case obj`` / ``case _ as obj``) of a
+    firebase-aliased *subject* rebinds the captured name to the package alias for this case's
+    guard/body; captures nested inside a sequence/mapping/class pattern bind sub-values, not the
+    subject, so the alias does not propagate into them."""
+    if pattern is None:
+        return
+    if isinstance(pattern, ast.MatchValue):
+        _scan_expr(pattern.value, aliases, count)
+    elif isinstance(pattern, ast.MatchAs):
+        # ``<inner> as name`` — both the inner capture chain and ``name`` bind the same subject value.
+        _scan_pattern(pattern.pattern, aliases, subject_is_alias, case_aliases, count)
+        if pattern.name is not None:
+            if subject_is_alias:
+                case_aliases.add(pattern.name)
+            else:
+                case_aliases.discard(pattern.name)
+    elif isinstance(pattern, ast.MatchOr):  # each alternative matches the same subject
+        for alt in pattern.patterns:
+            _scan_pattern(alt, aliases, subject_is_alias, case_aliases, count)
+    elif isinstance(pattern, ast.MatchSequence):
+        for sub in pattern.patterns:
+            _scan_pattern(sub, aliases, False, case_aliases, count)
+    elif isinstance(pattern, ast.MatchMapping):
+        for sub in pattern.patterns:
+            _scan_pattern(sub, aliases, False, case_aliases, count)
+    elif isinstance(pattern, ast.MatchClass):
+        for sub in [*pattern.patterns, *pattern.kwd_patterns]:
+            _scan_pattern(sub, aliases, False, case_aliases, count)
+    # MatchSingleton / MatchStar: no nested pattern or value to scan.
+
+
+def _bind_target(target: ast.expr, value: ast.expr | None, aliases: set[str], count: _Count) -> None:
+    """Propagate/clear the firebase_admin package alias from an assignment's RHS onto one target.
+    A plain ``fb2 = fb`` binds when the RHS name is a live alias; a ``fb = <non-alias>`` clears it.
+    Tuple/list unpacking (``a, fb = 1, firebase_admin``) matches element-wise against a same-length
+    tuple/list RHS so ``fb`` still becomes an alias; any other target shape (subscript/attribute) or a
+    non-decomposable RHS just clears its Name targets and scans the target expression."""
+    if isinstance(target, ast.Name):
+        if isinstance(value, ast.Name) and value.id in aliases:
+            aliases.add(target.id)
+        else:
+            aliases.discard(target.id)
+    elif isinstance(target, (ast.Tuple, ast.List)):
+        elts = value.elts if isinstance(value, (ast.Tuple, ast.List)) and len(value.elts) == len(target.elts) else None
+        for i, elt in enumerate(target.elts):
+            _bind_target(elt, elts[i] if elts is not None else None, aliases, count)
+    else:
+        _scan_expr(target, aliases, count)
 
 
 def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
@@ -146,15 +244,8 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
 
     if isinstance(stmt, ast.Assign):
         _scan_expr(stmt.value, aliases, count)
-        rhs_is_alias = isinstance(stmt.value, ast.Name) and stmt.value.id in aliases
         for target in stmt.targets:
-            if isinstance(target, ast.Name):
-                if rhs_is_alias:
-                    aliases.add(target.id)  # ``fb2 = fb`` propagates the package alias
-                else:
-                    aliases.discard(target.id)  # ``fb = <non-alias>`` clears it for the rest of scope
-            else:
-                _scan_expr(target, aliases, count)
+            _bind_target(target, stmt.value, aliases, count)
         return
 
     if isinstance(stmt, ast.AnnAssign):
@@ -206,6 +297,22 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
         aliases.update(before | body_aliases | else_aliases)
         return
 
+    if _AST_MATCH is not None and isinstance(stmt, _AST_MATCH):
+        # ``match <subject>: case <pattern> [if <guard>]: <body>``. Each case is branch-like — a
+        # capture binds only in that case's guard/body — so scan every case on its own alias copy.
+        # Beyond the already-covered guard/body: the *pattern* itself can reach the auth surface via a
+        # ``MatchValue`` value pattern (``case fb.auth.X:``), and a top-level ``MatchAs`` capture of a
+        # firebase-aliased subject (``match fb: case obj:``) rebinds the captured name to the alias.
+        _scan_expr(stmt.subject, aliases, count)
+        subject_is_alias = isinstance(stmt.subject, ast.Name) and stmt.subject.id in aliases
+        for case in stmt.cases:
+            case_aliases = set(aliases)
+            _scan_pattern(case.pattern, aliases, subject_is_alias, case_aliases, count)
+            if case.guard is not None:
+                _scan_expr(case.guard, case_aliases, count)
+            _scan_scope(case.body, case_aliases, count)
+        return
+
     # Generic statement (Expr / Return / AugAssign / With / Try / match / …): scan its expression
     # children here and recurse into any sub-statement bodies as the *same* scope, in order, so alias
     # rebinds inside a linear block are seen by later statements.
@@ -225,12 +332,6 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
                     aliases.add(child.optional_vars.id)
                 else:
                     aliases.discard(child.optional_vars.id)
-        elif child.__class__.__name__ == 'match_case':  # ast.match_case (3.10+)
-            # ``case P if fb.auth...:`` — the guard expression was skipped before, letting a raw auth
-            # access in it pass. Scan the guard, then the case body.
-            if getattr(child, 'guard', None) is not None:
-                _scan_expr(child.guard, aliases, count)
-            _scan_scope(child.body, aliases, count)
         elif isinstance(child, ast.expr):
             _scan_expr(child, aliases, count)
 
@@ -238,6 +339,7 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
 def count_boundary_violations(source: str, filename: str = '<unknown>') -> int:
     tree = ast.parse(source, filename=filename)
     count = _Count()
+    count.dynimport = _collect_dynimport_aliases(tree)
     # ``firebase_admin`` is always recognised at module scope so a raw ``firebase_admin.auth`` is
     # caught even in a file that only imports the submodule directly.
     _scan_scope(tree.body, {'firebase_admin'}, count)

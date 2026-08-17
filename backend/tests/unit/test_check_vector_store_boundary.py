@@ -84,6 +84,12 @@ def test_unrelated_import_module_method_is_not_a_false_positive():
     assert _MODULE.count_boundary_violations("self.import_module('pinecone')\nreg.import_module('pinecone')\n") == 0
 
 
+def test_migrations_are_no_longer_excluded_from_the_boundary():
+    # Regression (cubic 4948841169 F6): excluding migrations/ let a re-added migration import a raw
+    # vector client undetected. Parity with the Firestore persistence guard.
+    assert 'migrations/' not in _MODULE.EXCLUDED_PREFIXES
+
+
 def test_load_baseline_rejects_boolean_counts(tmp_path):
     import json
 

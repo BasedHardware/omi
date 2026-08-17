@@ -54,6 +54,48 @@ d = firebase_admin.firestore.client()
     assert _MODULE.count_boundary_violations(forbidden) == 4
 
 
+def test_flags_aliased_and_bare_raw_client_construction():
+    # Regression (cubic 4948841169 F1): the raw-construction check matched only a literal ``firestore``
+    # receiver and had no import-alias map (unlike the auth guard). An ``as``-renamed SDK module
+    # (``fs.Client()``), a submodule renamed off firebase_admin (``fb_fs.client()``) and a bare ctor
+    # imported via ``from google.cloud.firestore import Client`` (``Client()``) all slipped through.
+    source = '''
+import google.cloud.firestore as fs
+from google.cloud.firestore import Client
+from firebase_admin import firestore as fb_fs
+fs.Client()
+fs.AsyncClient()
+Client()
+fb_fs.client()
+'''
+    assert _MODULE.count_boundary_violations(source) == 4
+
+
+def test_aliased_import_does_not_flag_constants_or_facade_ops():
+    # The alias map must not over-reach: ``from google.cloud import firestore`` (unrenamed, for
+    # constants/decorators) and ``.document()/.collection()/.transaction()`` on an injected facade
+    # obtained through such an alias stay allowed (ADR-0044).
+    source = '''
+import google.cloud.firestore as fs
+from google.cloud.firestore import transactional, DELETE_FIELD
+order = fs.Query.DESCENDING
+stamp = fs.SERVER_TIMESTAMP
+rows = db_client.collection(name).stream()
+'''
+    assert _MODULE.count_boundary_violations(source) == 0
+
+
+def test_flags_aliased_dynamic_import_of_sentinels():
+    # Regression (cubic 4948841169 F2): ``im = importlib.import_module; im('database.sentinels')``
+    # dodged the dynamic-import check because the alias ``im`` was never tracked.
+    source = '''
+import importlib
+im = importlib.import_module
+im('database.sentinels')
+'''
+    assert _MODULE.count_boundary_violations(source) == 1
+
+
 def test_flags_firestore_sentinels_import():
     # Regression (CR PR#10887): ``database.sentinels`` re-exports Firestore SDK sentinels
     # (DELETE_FIELD, …) that are stored as literals on the Mongo adapter; domain code must use

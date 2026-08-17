@@ -79,20 +79,74 @@ def _is_forbidden_firestore_member(name: str) -> bool:
 # firestore.Client() / firestore.AsyncClient() / firestore_v1.Client() / firebase_admin.firestore.client()
 _CLIENT_CTOR_ATTRS = frozenset({'Client', 'AsyncClient'})
 
+# Modules whose ``.Client`` / ``.AsyncClient`` / ``.client`` attribute is a raw Firestore SDK client.
+# A name bound to one of these (``import google.cloud.firestore as fs``) is tracked so ``fs.Client()``
+# is caught even though the receiver is not the literal ``firestore``.
+_FIRESTORE_SDK_MODULE_ROOTS = ('google.cloud.firestore', 'google.cloud.firestore_v1', 'firebase_admin.firestore')
 
-def _is_client_construction(node: ast.Call) -> bool:
+
+def _is_firestore_sdk_module(module: str | None) -> bool:
+    if not module:
+        return False
+    return module in _FIRESTORE_SDK_MODULE_ROOTS or any(
+        module.startswith(root + '.') for root in _FIRESTORE_SDK_MODULE_ROOTS
+    )
+
+
+def _collect_client_aliases(tree: ast.AST) -> tuple[set[str], set[str]]:
+    """Build the import-alias maps the raw-construction check needs (the auth guard has the same kind
+    of machinery). Returns ``(module_aliases, ctor_names)``:
+
+      * ``module_aliases`` — names bound to a Firestore SDK *module*, so ``<alias>.Client()`` /
+        ``.AsyncClient()`` / ``.client()`` is a construction. Seeded from ``import
+        google.cloud.firestore as fs`` / ``import google.cloud.firestore_v1 as fv`` / ``from
+        google.cloud import firestore as fs`` / ``from firebase_admin import firestore as fb_fs``.
+      * ``ctor_names`` — names bound to the *ctor itself* via ``from google.cloud.firestore import
+        Client / AsyncClient`` (a bare ``Client()`` call), respecting ``as`` renames.
+
+    ``from google.cloud import firestore`` (no rename) is deliberately NOT tracked as an alias — the
+    unrenamed ``firestore`` receiver is already handled by the literal check, and that import is the
+    sanctioned way to reach constants/decorators (ADR-0044)."""
+    module_aliases: set[str] = set()
+    ctor_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_firestore_sdk_module(alias.name) and alias.asname:
+                    module_aliases.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom):
+            if _is_firestore_sdk_module(node.module):
+                # ``from google.cloud.firestore import Client / AsyncClient`` — a bare ctor call.
+                for alias in node.names:
+                    if alias.name in _CLIENT_CTOR_ATTRS:
+                        ctor_names.add(alias.asname or alias.name)
+            elif node.module in ('google.cloud', 'firebase_admin'):
+                # ``from google.cloud import firestore as fs`` / ``from firebase_admin import
+                # firestore as fb_fs`` — the renamed submodule is a client factory.
+                for alias in node.names:
+                    if alias.name in ('firestore', 'firestore_v1') and alias.asname:
+                        module_aliases.add(alias.asname)
+    return module_aliases, ctor_names
+
+
+def _is_client_construction(node: ast.Call, module_aliases: set[str], ctor_names: set[str]) -> bool:
     """A raw Firestore/Firebase client construction — the one persistence leak still forbidden outside
     ``database/`` (ADR-0044). Domain code must receive an injected ``db_client`` (the neutral facade),
-    never build its own SDK client."""
+    never build its own SDK client. Catches the literal receiver (``firestore.Client()`` /
+    ``firestore_v1.AsyncClient()`` / ``firebase_admin.firestore.client()``), an import-aliased receiver
+    (``fs.Client()`` after ``import google.cloud.firestore as fs``), and a bare ctor imported via
+    ``from google.cloud.firestore import Client`` (``Client()``)."""
     func = node.func
+    if isinstance(func, ast.Name):  # bare ``Client()`` / ``AsyncClient()`` from a ``from ... import``
+        return func.id in ctor_names
     if not isinstance(func, ast.Attribute):
         return False
     receiver = func.value
     base = receiver.id if isinstance(receiver, ast.Name) else (receiver.attr if isinstance(receiver, ast.Attribute) else '')
-    if func.attr in _CLIENT_CTOR_ATTRS:  # firestore.Client(...) / firestore_v1.AsyncClient(...)
-        return base == 'firestore' or base.startswith('firestore_')
-    if func.attr == 'client':  # firebase_admin.firestore.client(...)
-        return base == 'firestore'
+    if func.attr in _CLIENT_CTOR_ATTRS:  # firestore.Client(...) / firestore_v1.AsyncClient(...) / fs.Client(...)
+        return base == 'firestore' or base.startswith('firestore_') or base in module_aliases
+    if func.attr == 'client':  # firebase_admin.firestore.client(...) / fb_fs.client(...)
+        return base == 'firestore' or base in module_aliases
     return False
 
 
@@ -104,9 +158,34 @@ def _is_forbidden_database_member(name: str) -> bool:
     return name == 'sentinels' or name.startswith('sentinels.')
 
 
-def _forbidden_dynamic_import(node: ast.Call) -> bool:
+def _is_dynimport_callable(value: ast.AST) -> bool:
+    """True if ``value`` is a reference to the dynamic-import *callable itself* (not a call of it):
+    ``importlib.import_module``, a bare ``import_module`` (from ``from importlib import import_module``)
+    or ``__import__``. Used to track ``im = importlib.import_module`` aliases."""
+    if isinstance(value, ast.Attribute):
+        return value.attr == 'import_module' and isinstance(value.value, ast.Name) and value.value.id == 'importlib'
+    if isinstance(value, ast.Name):
+        return value.id in ('import_module', '__import__')
+    return False
+
+
+def _collect_dynimport_aliases(tree: ast.AST) -> set[str]:
+    """Names bound to the dynamic-import callable, e.g. ``im = importlib.import_module``. Without this
+    ``im('database.sentinels')`` would dodge the dynamic-import check (the visitor only knew the
+    literal ``import_module`` / ``__import__`` receivers)."""
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _is_dynimport_callable(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    aliases.add(target.id)
+    return aliases
+
+
+def _forbidden_dynamic_import(node: ast.Call, extra_names: set[str] = frozenset()) -> bool:
     """A literal dynamic import of a forbidden module: ``importlib.import_module('X')``,
-    ``import_module('X')`` (bare, from ``from importlib import import_module``) or ``__import__('X')``.
+    ``import_module('X')`` (bare, from ``from importlib import import_module``), ``__import__('X')`` or
+    an aliased callable ``im('X')`` (``im = importlib.import_module``; ``extra_names``).
 
     The attribute form is restricted to ``importlib.import_module`` so an unrelated helper method named
     ``import_module`` is not a false positive. The module name is taken from the first positional
@@ -119,7 +198,7 @@ def _forbidden_dynamic_import(node: ast.Call) -> bool:
         if not (func.attr == 'import_module' and isinstance(func.value, ast.Name) and func.value.id == 'importlib'):
             return False
     elif isinstance(func, ast.Name):
-        if func.id not in ('import_module', '__import__'):
+        if func.id not in ('import_module', '__import__') and func.id not in extra_names:
             return False
     else:
         return False
@@ -128,8 +207,11 @@ def _forbidden_dynamic_import(node: ast.Call) -> bool:
 
 
 class _BoundaryVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, module_aliases: set[str], ctor_names: set[str], dynimport_aliases: set[str]) -> None:
         self.count = 0
+        self.module_aliases = module_aliases
+        self.ctor_names = ctor_names
+        self.dynimport_aliases = dynimport_aliases
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802 - AST visitor name
         for alias in node.names:
@@ -155,16 +237,18 @@ class _BoundaryVisitor(ast.NodeVisitor):
         # ADR-0044: ``.document()/.collection()/.transaction()`` are no longer flagged — they run on
         # the injected ``db_client`` facade (a database/ port). The forbidden leak is constructing a
         # raw SDK client, or dynamically importing the raw client module.
-        if _is_client_construction(node):
+        if _is_client_construction(node, self.module_aliases, self.ctor_names):
             self.count += 1
-        elif _forbidden_dynamic_import(node):
+        elif _forbidden_dynamic_import(node, self.dynimport_aliases):
             self.count += 1
         self.generic_visit(node)
 
 
 def count_boundary_violations(source: str, filename: str = '<unknown>') -> int:
-    visitor = _BoundaryVisitor()
-    visitor.visit(ast.parse(source, filename=filename))
+    tree = ast.parse(source, filename=filename)
+    module_aliases, ctor_names = _collect_client_aliases(tree)
+    visitor = _BoundaryVisitor(module_aliases, ctor_names, _collect_dynimport_aliases(tree))
+    visitor.visit(tree)
     return visitor.count
 
 

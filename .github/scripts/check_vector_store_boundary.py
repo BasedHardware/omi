@@ -31,8 +31,9 @@ DEFAULT_BASELINE = Path('.github/scripts/vector_store_boundary_baseline.json')
 #  - tests/, testing/ : the test suites (they inject the in-memory FakeVectorStore).
 #  - scripts/      : one-off operational tooling (incl. scripts/rag dev helpers) — ADR-0023.
 #  - agent-proxy/  : a separately deployed service — ADR-0023.
-#  - migrations/   : removed in WP1; kept here so a re-added dir does not silently slip in.
-EXCLUDED_PREFIXES = ('utils/vector/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/', 'migrations/')
+# NOTE: migrations/ is intentionally NOT excluded — a re-added migration that imports a raw vector
+# client must fail this boundary too (the upstream migrations reach vectors only via the port; verified 0).
+EXCLUDED_PREFIXES = ('utils/vector/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/')
 
 
 def _is_forbidden_import_module(module: str | None) -> bool:
