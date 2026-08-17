@@ -9875,4 +9875,7 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Isključite da spriječite slanje sirovog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.';
+
+  @override
+  String get findDevice => 'Pronađi';
 }

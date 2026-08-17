@@ -10782,5 +10782,6 @@
     "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
     "accountCutoverOpenStore": "פתחו חנות",
     "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
-    "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi."
+    "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.",
+    "findDevice": "איתור"
 }

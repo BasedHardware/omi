@@ -9841,4 +9841,7 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.';
+
+  @override
+  String get findDevice => 'Leia';
 }

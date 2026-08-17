@@ -3216,5 +3216,6 @@
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
     "accountCutoverOpenStore": "Avaa kauppa",
     "sendRawAudioToOmi": "Lähetä käsittelemätön ääni Omille",
-    "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille."
+    "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.",
+    "findDevice": "Etsi"
 }

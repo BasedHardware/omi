@@ -9872,4 +9872,7 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.';
+
+  @override
+  String get findDevice => 'Cari';
 }

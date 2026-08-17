@@ -3238,5 +3238,6 @@
     "accountCutoverMigrationRollbackMessage": "账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。",
     "accountCutoverOpenStore": "打开应用商店",
     "sendRawAudioToOmi": "向 Omi 发送原始音频",
-    "sendRawAudioToOmiDescription": "关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。"
+    "sendRawAudioToOmiDescription": "关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。",
+    "findDevice": "查找"
 }

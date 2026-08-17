@@ -3194,5 +3194,6 @@
     "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
     "accountCutoverOpenStore": "Abrir tienda",
     "sendRawAudioToOmi": "Envia l'àudio sense processar a Omi",
-    "sendRawAudioToOmiDescription": "Desactiva-ho per impedir que l'àudio sense processar s'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi."
+    "sendRawAudioToOmiDescription": "Desactiva-ho per impedir que l'àudio sense processar s'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi.",
+    "findDevice": "Troba"
 }

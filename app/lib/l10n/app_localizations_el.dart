@@ -9916,4 +9916,7 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi.';
+
+  @override
+  String get findDevice => 'Εύρεση';
 }

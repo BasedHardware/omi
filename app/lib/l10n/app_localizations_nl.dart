@@ -9874,4 +9874,7 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.';
+
+  @override
+  String get findDevice => 'Zoeken';
 }

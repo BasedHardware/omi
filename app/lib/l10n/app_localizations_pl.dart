@@ -9876,4 +9876,7 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Wyłącz, aby surowy dźwięk nie był wysyłany do Omi. Transkrypcje i dane wymagane przez funkcje chmurowe mogą nadal być wysyłane do Omi.';
+
+  @override
+  String get findDevice => 'Znajdź';
 }
