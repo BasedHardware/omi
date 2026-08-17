@@ -730,8 +730,6 @@ MCP_TOOLS: List[Dict[str, Any]] = [
 ]
 
 
-@router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
-@router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def _protected_resource_authorization_servers() -> list:
     """The ``authorization_servers`` to advertise for MCP protected-resource discovery. Shared by GET and
     HEAD so a probe (HEAD) and a client (GET) see the SAME availability — HEAD must not 200 while GET 501s
@@ -752,7 +750,13 @@ def _protected_resource_authorization_servers() -> list:
     return [issuer]
 
 
+@router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
+@router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
 def oauth_protected_resource_metadata():
+    # RFC 9728 protected-resource metadata (NOT a bare authorization-server list): MCP clients parse this
+    # object for `resource`/`authorization_servers`/`scopes_supported` to run OAuth discovery. The GET
+    # decorators MUST sit here, not on the _protected_resource_authorization_servers helper (cubic PR 10887
+    # mcp_sse.py:735 — a prior refactor moved them onto the helper, so GET returned a bare list and broke discovery).
     authorization_servers = _protected_resource_authorization_servers()
     return {
         "resource": MCP_RESOURCE_URL,

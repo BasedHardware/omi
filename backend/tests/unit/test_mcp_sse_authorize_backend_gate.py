@@ -66,6 +66,28 @@ def test_protected_resource_fails_when_oidc_issuer_missing(monkeypatch):
     assert exc.value.status_code == 501
 
 
+def test_protected_resource_get_route_serves_rfc9728_metadata_not_bare_list(monkeypatch):
+    # cubic PR 10887 mcp_sse.py:735: a prior refactor moved the GET decorators onto the
+    # _protected_resource_authorization_servers helper (bare list), so GET /.well-known/oauth-protected-resource
+    # returned ["https://issuer"] instead of the RFC 9728 object -> MCP OAuth discovery broke. The earlier
+    # test called the FUNCTION, not the ROUTE, so it missed it. Assert the route table binds the path to
+    # oauth_protected_resource_metadata AND that it yields the full RFC 9728 dict.
+    from routers.mcp_sse import router
+
+    endpoints = {
+        r.path: r.endpoint
+        for r in router.routes
+        if getattr(r, "path", None) == "/.well-known/oauth-protected-resource" and "GET" in getattr(r, "methods", set())
+    }
+    assert endpoints.get("/.well-known/oauth-protected-resource") is oauth_protected_resource_metadata
+
+    monkeypatch.setenv("AUTH_BACKEND", "firebase")
+    body = oauth_protected_resource_metadata()
+    assert isinstance(body, dict)  # NOT a bare list
+    assert set(body) >= {"resource", "authorization_servers", "scopes_supported", "bearer_methods_supported"}
+    assert isinstance(body["authorization_servers"], list)
+
+
 def test_protected_resource_head_matches_get_availability_under_misconfig(monkeypatch):
     # HEAD probe must see the SAME availability as GET: 501 when OIDC discovery is misconfigured, not a
     # blanket 200 (cubic PR 10887 mcp_sse.py:745).
