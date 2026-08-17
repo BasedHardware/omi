@@ -157,19 +157,7 @@ chat, settings, and screen are not in that table; they are not selected
 this way. `legacy` remains a recognized name so a retired request can be
 refused by name (`generation-unavailable`) rather than looking like a typo.
 
-David's 2026-08-16 rulings that have already landed:
-
-- Tasks park lifted: `tasks` is ratified on platform
-  (`generation-selection.ts:51-52`).
-- In-place memory editing retired: the platform Memories surface adds a
-  fact through the correction composer; it does not patch a synthesized
-  proposition (`home-sources.ts:19-22`, and the rendered-absence test in
-  `frontend/packages/surfaces/test/memories-platform.test.mjs`).
-- Live launchers pin `generation=platform` and refuse `--generation legacy`
-  at exit 2 (`frontend/shells/macos/scripts/dev-run-macos.sh:91-97`;
-  `frontend/shells/ios/scripts/dev-run-ios.sh` does the same). L3 no longer
-  carries a `--generation` split
-  (`integration/single-service-structure.test.mjs:38-40`).
+Tasks are ratified on platform (`generation-selection.ts:51-52`).
 
 Surfaces must not know which generation they are on; `ProductionStores`
 ports hide it (`generation-selection.ts:9-10`). The shell knows, and says
@@ -217,17 +205,6 @@ keeps the user's excerpt.
 ## What is not true
 
 These would otherwise be assumed.
-
-**iOS control clicks exist, and they are not L3.** L3's first step drives both
-shells through `integration/dev-stack.sh --assert` and joins producer and
-consumer evidence. The second L3 step, and all of L4, click real controls
-inside the **macOS** WKWebView (`integration/control-acceptance/run.mjs`,
-`integration/lanes.mjs` L3/L4). iOS click-through is the same runner with
-`--ios`: same `driver.js`, same `verdict.mjs`, same outcome tokens, injected
-through the Flutter host at the frozen `omi-ui://local` origin
-(`frontend/shells/ios/scripts/dev-run-ios.sh`). That origin is not the macOS
-5290/15290 lease. `--ios` is not a lane gate; a green L3 still does not
-entitle an iOS control claim.
 
 **The real chat-provider path is newly present, not the default proof.**
 Default Chat is the canned loopback gateway. The opt-in real-model proxy is
