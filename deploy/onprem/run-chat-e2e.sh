@@ -19,7 +19,10 @@
 #      OMI_LLM_GATEWAY_FEATURE_MODE=gateway, OMI_LLM_GATEWAY_URL=http://llm_gateway:9080,
 #      OMI_LLM_GATEWAY_SERVICE_TOKEN=<same as llm_gateway.env>,
 #      OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true  (OMI_ENV_STAGE=offline is prod-like),
-#      and LOCAL_DEVELOPMENT=true  (this smoke test auths with `Bearer dev` -> uid 123).
+#      and LOCAL_DEVELOPMENT=true + FIREBASE_AUTH_EMULATOR_HOST=firestore-emulator:9099 (this smoke test
+#      auths with `Bearer dev` -> uid 123; the uid-123 fallback fires only with Firebase in emulator mode,
+#      else `dev` raises a credentials error, not InvalidToken — see backend.env.dev.example / ADR-0052).
+#      backend.env.base also needs a real ENCRYPTION_SECRET (openssl rand -hex 32), not the CHANGE_ME placeholder.
 #   3. Your LLM server actually serves the model named in
 #      llm_gateway/generated_route_overrides.yaml (edit it to your model).
 #
