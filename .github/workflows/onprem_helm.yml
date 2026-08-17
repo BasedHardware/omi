@@ -1,0 +1,41 @@
+# CI gate for the on-prem Helm chart (ADR-0049 A5): render + lint both overlays and enforce image
+# parity with compose. Hermetic — no cluster, no network beyond the action installs. A live kind smoke
+# is intentionally NOT here (too heavy for every PR); run it locally via deploy/onprem/helm/README.md.
+name: onprem-helm
+
+on:
+  pull_request:
+    paths:
+      - "deploy/onprem/helm/**"
+      - "deploy/onprem/compose.base.yaml"
+      - "deploy/onprem/compose.selfhost.yaml"
+      - ".github/scripts/check_image_parity.py"
+      - ".github/workflows/onprem_helm.yml"
+
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: helm lint (dev + prod overlays)
+        run: |
+          helm lint deploy/onprem/helm/omi-onprem -f deploy/onprem/helm/omi-onprem/values-dev.yaml
+          helm lint deploy/onprem/helm/omi-onprem -f deploy/onprem/helm/omi-onprem/values-prod.yaml
+
+      - name: helm template (render both overlays; values.schema.json validates inputs)
+        run: |
+          helm template omi deploy/onprem/helm/omi-onprem -n omi-dev \
+            -f deploy/onprem/helm/omi-onprem/values-dev.yaml > /dev/null
+          helm template omi deploy/onprem/helm/omi-onprem -n omi-prod \
+            -f deploy/onprem/helm/omi-onprem/values-prod.yaml > /dev/null
+
+      - name: image parity (compose <-> Helm)
+        run: python3 .github/scripts/check_image_parity.py
+
+      - name: helm package (installable .tgz artifact — ADR-0049 §4.3)
+        run: helm package deploy/onprem/helm/omi-onprem -d /tmp/helm-out
