@@ -216,12 +216,12 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
         ],
     )
 
-    with pytest.raises(
-        ValueError,
-        match="evidence without a unique source binding",
-    ):
-        pc._extract_memories_canonical("uid-quote-grounding", conversation, db_client=MagicMock())
+    result = pc._extract_memories_canonical("uid-quote-grounding", conversation, db_client=MagicMock())
 
+    # No replacement is submitted, so the source keeps the memories it already
+    # has — and finalization still returns, so the caller's action items, audio
+    # files and created webhook are not collateral of an extraction verdict.
+    assert result.count == 0
     mock_service.replace_conversation_memories.assert_not_called()
 
 
