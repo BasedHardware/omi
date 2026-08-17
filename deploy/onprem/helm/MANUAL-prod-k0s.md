@@ -111,27 +111,42 @@ kubectl get node -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}{"\n
 
 ---
 
-## 5. Build the images and provision the model weights
+## 5. Build the images, publish them, and provide the model weights
 
-### 5a. Local registry + build & push the images
+### 5a. Build the Omi images
 
-k0s pulls the images WE build (backend + the four inference servers) from a registry on the node.
+Omi ships **five** images we build ourselves: the API (`backend`) and the four inference servers
+(`whisper`, `parakeet`, `diarizer`, `nllb`). Everything else — MongoDB, Valkey, Qdrant, RustFS, ntfy,
+Keycloak — are public images the cluster pulls on its own; you do **not** build those.
+
+Build all five from the compose files (needs internet for the base images; can take a while):
 
 ```bash
-# Run a local registry on the node (port 5000)
+cd ..                                            # deploy/onprem
+docker compose -f compose.prod.yaml --profile inference build
+cd helm
+docker images | grep omi-oss                     # you should see the 5 omi-oss-* images
+```
+
+### 5b. Publish the images to a local registry (so k0s can pull them)
+
+The images now live in **Docker** on the node — but **k0s uses its own container store (containerd)** and
+cannot see Docker's images. The bridge is a small **image registry** running on the node: you push the images
+into it, and you tell k0s's containerd it may pull from it.
+
+```bash
+# 1. Run a registry on the node (port 5000)
 docker run -d --name omi-registry --restart=unless-stopped -p 0.0.0.0:5000:5000 \
   -v omi-registry-data:/var/lib/registry registry:2
 
-# Build the images from the compose files, then push them to the registry (needs internet for base images)
-cd ..                                            # deploy/onprem
-docker compose -f compose.prod.yaml --profile inference build
+# 2. Tag each of the 5 images for the registry and push them
 for img in backend whisper parakeet diarizer nllb; do
   docker tag  omi-oss-$img:latest $REG/omi-oss-$img:latest
   docker push $REG/omi-oss-$img:latest
 done
-cd helm
+curl -s http://$REG/v2/_catalog                  # -> lists the 5 repositories
 
-# Let k0s's containerd pull from this plain-HTTP registry
+# 3. Tell k0s's containerd it may pull from this (plain-HTTP) registry
 sudo mkdir -p /etc/k0s/containerd.d/certs.d/$REG
 sudo tee /etc/k0s/containerd.d/certs.d/$REG/hosts.toml >/dev/null <<EOF
 server = "http://$REG"
@@ -149,12 +164,14 @@ EOF
 sudo k0s stop && sudo k0s start
 ```
 
-### 5b. Provide the model weights (one time, needs internet)
+At install (step 7) you pass `--set imageRegistry=$REG`; the chart prefixes it onto the five names, so the
+pods pull `$REG/omi-oss-backend`, `$REG/omi-oss-whisper`, and so on.
+
+### 5c. Provide the model weights (one time, needs internet)
 
 The GPU servers load their models **from a plain directory on the node** — they do NOT download anything at
 run time (that keeps them working with no internet). So you download the weights **once**, into a folder you
-choose, and later k0s mounts that folder (read-only) into the pods. It is an ordinary host directory — not a
-Docker volume, not anything k0s-specific.
+choose. It is an ordinary host directory — not a Docker volume, not anything k0s-specific.
 
 Pick the directory and download the three models into it. This must run on a network that can reach Hugging
 Face; after this the cluster needs no internet for inference.
@@ -191,6 +208,13 @@ ls $MODELS $MODELS/nllb-200-distilled-600M-ct2-int8
 ```
 
 (The parakeet service needs no model — it is a thin gateway that forwards speech to whisper.)
+
+**How this directory reaches the pods.** You never copy the weights into the cluster. Because k0s runs on
+this same machine, a pod can mount a folder straight from the node's disk — this is a Kubernetes *hostPath*
+mount. When you pass `--set inference.inCluster.modelsHostPath=$MODELS` (step 7), the chart mounts your
+`$MODELS` directory **read-only** at `/models` inside each inference pod, so the servers read the exact files
+you just downloaded. (This works because everything is on one node. A multi-node cluster would instead put the
+weights on a shared network volume — a ReadOnlyMany PVC — so any node can mount them.)
 
 ---
 
