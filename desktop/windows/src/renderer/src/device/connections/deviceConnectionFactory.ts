@@ -1,7 +1,8 @@
 /**
  * Family dispatch — Windows port of macOS
- * Connections/DeviceConnectionFactory.swift. Apple Watch has no BLE client
- * (the mac source leaves it TODO) and resolves to null.
+ * Connections/DeviceConnectionFactory.swift. Apple Watch resolves to null on
+ * both platforms: it has no BLE client, because a watch pairs through its own
+ * companion app rather than a GATT session.
  */
 
 import type { BtDevice } from '../protocol/btDevice'
