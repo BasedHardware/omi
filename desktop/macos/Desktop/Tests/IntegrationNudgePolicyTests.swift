@@ -132,13 +132,12 @@ final class IntegrationNudgePolicyTests: XCTestCase {
   func testAmbientSuppressionsAreTheOnesThatPersistAcrossActivations() {
     for reason in [
       IntegrationNudgePolicy.Suppression.alreadyConnected, .featureDisabled, .optedOut,
-      .connectorLifetimeCap, .notSignedIn, .onboardingIncomplete,
+      .connectorLifetimeCap, .notSignedIn, .onboardingIncomplete, .snoozed, .connectorCooldown,
     ] {
       XCTAssertTrue(IntegrationNudgePolicy.isAmbient(reason), "\(reason) persists")
     }
     for reason in [
-      IntegrationNudgePolicy.Suppression.snoozed, .connectorCooldown, .globalCooldown, .dailyCap,
-      .barUnavailable,
+      IntegrationNudgePolicy.Suppression.globalCooldown, .dailyCap, .barUnavailable,
     ] {
       XCTAssertFalse(IntegrationNudgePolicy.isAmbient(reason), "\(reason) is momentary")
     }

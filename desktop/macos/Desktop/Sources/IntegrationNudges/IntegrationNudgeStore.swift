@@ -16,7 +16,16 @@ final class IntegrationNudgeStore {
   static let shared = IntegrationNudgeStore()
 
   private let defaults: UserDefaults
-  private var ownerID: String?
+  /// Resolved on every access rather than cached.
+  ///
+  /// A cached snapshot has to be refreshed on `runtimeOwnerDidChange`, and that
+  /// notification is posted *during* the revocation — so any refresh scheduled
+  /// from it races the transition fence and can latch nil, leaving every read
+  /// and write a no-op for the rest of the session. Resolving per access has no
+  /// such window, and costs a dictionary lookup.
+  private let resolveOwnerID: @MainActor () -> String?
+
+  private var ownerID: String? { Self.normalized(resolveOwnerID()) }
 
   private enum Field {
     static let shownCount = "shownCount"
@@ -27,13 +36,17 @@ final class IntegrationNudgeStore {
     static let recentDeliveries = "recentDeliveries"
   }
 
-  init(defaults: UserDefaults = .standard, ownerID: String? = nil) {
+  init(
+    defaults: UserDefaults = .standard,
+    resolveOwnerID: @escaping @MainActor () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
+  ) {
     self.defaults = defaults
-    self.ownerID = Self.normalized(ownerID ?? defaults.string(forKey: .authUserId))
+    self.resolveOwnerID = resolveOwnerID
   }
 
-  func setOwnerID(_ ownerID: String?) {
-    self.ownerID = Self.normalized(ownerID)
+  /// Convenience for tests and for callers that already hold a fixed owner.
+  convenience init(defaults: UserDefaults, ownerID: String?) {
+    self.init(defaults: defaults, resolveOwnerID: { ownerID })
   }
 
   // MARK: - Reads

@@ -160,10 +160,9 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     XCTAssertEqual(barEvents.count, 1)
   }
 
-  /// A browser re-check legitimately re-reaches the same answer while the user
-  /// sits on the tab; the funnel wants one event per activation, not one every
-  /// ten seconds.
-  func testARepeatedSuppressionIsReportedOncePerSession() throws {
+  /// A three-day cooldown answers identically on every activation for its whole
+  /// window, so it is ambient and emits nothing at all.
+  func testASnoozedIntegrationEmitsNoSuppressionEvent() throws {
     let captured = Box<[(String, [String: Any])]>([])
     AnalyticsManager.shared.setIntegrationNudgeTelemetryCaptureForTests { event, properties in
       captured.value.append((event, properties))
@@ -182,7 +181,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     }
 
     let snoozeEvents = captured.value.filter { $0.1["suppression_reason"] as? String == "snoozed" }
-    XCTAssertEqual(snoozeEvents.count, 1)
+    XCTAssertEqual(snoozeEvents.count, 0)
   }
 
   /// The same queued card, once the bar actually presents it, does spend it.

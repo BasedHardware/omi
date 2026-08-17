@@ -140,8 +140,6 @@ final class IntegrationNudgeCoordinator {
   func start() {
     guard activationObserver == nil else { return }
 
-    store.setOwnerID(ownerID())
-
     activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
       forName: NSWorkspace.didActivateApplicationNotification,
       object: nil,
@@ -180,17 +178,15 @@ final class IntegrationNudgeCoordinator {
     cancelPendingWork()
   }
 
+  /// The store resolves the owner per access, so nothing needs re-scoping here
+  /// — which is deliberate: `runtimeOwnerDidChange` is posted *during* the
+  /// revocation, so any snapshot taken from this handler, immediately or after a
+  /// hop, races the transition fence. What does have to happen is dropping the
+  /// caches and pending work that belong to the person who just left.
   private func handleOwnerChange() {
     cancelPendingWork()
-    // `runtimeOwnerDidChange` is posted while the revocation is still in
-    // progress, and the owner resolves to nil for that window. Re-scoping
-    // synchronously would leave the store permanently unscoped — every read and
-    // write a no-op for the rest of the session — so the re-scope waits for the
-    // transition to finish.
-    DispatchQueue.main.async { [weak self] in
-      guard let self else { return }
-      self.store.setOwnerID(self.ownerID())
-    }
+    IntegrationConnectOrigin.reset()
+    IntegrationConnectionInspector.invalidateCaches()
   }
 
   private func cancelPendingWork() {

@@ -57,6 +57,15 @@ enum IntegrationConnectionInspector {
     cachedExportStatusesAt = nil
   }
 
+  /// Drops everything cached for the previous owner. The export statuses are
+  /// keyed on nothing at all, so without this an account switch would answer
+  /// user B's first minute with user A's connections.
+  static func invalidateCaches() {
+    invalidateExportStatuses()
+    cachedStore = nil
+    cachedStoreOwnerID = nil
+  }
+
   private static var cachedStore: ImportConnectorStatusStore?
   private static var cachedStoreOwnerID: String?
 

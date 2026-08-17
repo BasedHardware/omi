@@ -1062,13 +1062,7 @@ actor MemoryExportService {
   /// which costs them one extra offer.
   private func clearIntegrationNudgeHistory(for destination: MemoryExportDestination) {
     Task { @MainActor in
-      // Both sides resolve through `RuntimeOwnerIdentity`, so the comparison is
-      // like-for-like: reading the raw `authUserId` default here would miss the
-      // trimming, the non-production automation override, and the nil returned
-      // during an owner transition, and would then clear the wrong account's
-      // history on exactly the builds this is tested on.
-      let connectionOwnerID = RuntimeOwnerIdentity.currentOwnerId()
-      guard connectionOwnerID != nil else { return }
+      guard RuntimeOwnerIdentity.currentOwnerId() != nil else { return }
       IntegrationNudgeCoordinator.shared.noteConnected(route: .exportDestination(destination.rawValue))
     }
   }
