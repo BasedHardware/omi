@@ -13,6 +13,7 @@ import type {
   DeviceCommand,
   DeviceEvent,
   DeviceSettings,
+  DeviceStorageState,
   WearableConnectionState,
   WearableDeviceInfo
 } from '../../../shared/types'
@@ -29,6 +30,9 @@ import {
 } from './session/deviceSessionCoordinator'
 import { BleAudioService } from './audio/bleAudioService'
 import type { DeviceListenSession } from './lane/deviceListenSession'
+import { StorageDrainService, createWalDrainSink } from './storage/storageDrainService'
+import type { DrainSink } from './storage/ringDrain'
+import { CODEC_SAMPLE_RATE, codecFrameSize, type BleAudioCodec } from './protocol/deviceTypes'
 
 /** Low-battery latch threshold, matching the mac notification rule. */
 export const LOW_BATTERY_PERCENT = 20
@@ -52,6 +56,28 @@ export interface DeviceControllerDeps {
   audioService?: BleAudioService
   /** Built per listening session; null disables the lane (used in tests). */
   createLane?: () => DeviceListenSession | null
+  /** Persists audio recovered off the device. Omitted disables recovery, which
+   *  is what a build with no offline log wants. */
+  storeRecovered?: (audio: {
+    bytes: Uint8Array
+    timerStart: number
+    seconds: number
+    totalFrames: number
+    codec: string
+    sampleRate: number
+    frameSize: number
+    device: string
+  }) => Promise<'stored' | 'duplicate' | 'failed'>
+  /** Injectable so tests drive the drain's waits without real time. */
+  sleep?: (ms: number, signal: AbortSignal) => Promise<'elapsed' | 'aborted'>
+}
+
+const IDLE_STORAGE: DeviceStorageState = {
+  phase: 'unknown',
+  items: 0,
+  estimatedSeconds: 0,
+  recovered: 0,
+  message: null
 }
 
 export class DeviceController {
@@ -63,6 +89,9 @@ export class DeviceController {
   private lowBatteryLatched = false
   private lastBatteryLevel: number | null = null
   private batterySubscription: { cancel: () => void } | null = null
+  private drain: StorageDrainService | null = null
+  private storage: DeviceStorageState = IDLE_STORAGE
+  private recovered = 0
 
   constructor(private readonly deps: DeviceControllerDeps) {
     this.audio = deps.audioService ?? new BleAudioService()
@@ -116,11 +145,101 @@ export class DeviceController {
       case 'device-request-state':
         this.publishCurrentState()
         return
+      case 'device-storage-recover':
+        await this.recoverStoredAudio()
+        return
+      case 'device-storage-cancel':
+        this.drain?.cancel()
+        return
       case 'device-pair-cancel':
       case 'device-pair-select':
       case 'auth-changed':
         return
     }
+  }
+
+  /**
+   * Transfers the audio the device recorded while it was away from this
+   * machine into the offline log, where the sync engine uploads it.
+   *
+   * User-initiated only. A full device can take minutes to drain and shares the
+   * radio with the live session, so starting it on connect would silently
+   * degrade recording for anyone who never asked for it.
+   */
+  private async recoverStoredAudio(): Promise<void> {
+    const drain = this.drain
+    if (drain === null) {
+      this.publishStorage({ phase: 'unsupported', message: null })
+      return
+    }
+    if (drain.isRunning) return
+
+    this.recovered = 0
+    this.publishStorage({
+      phase: 'recovering',
+      recovered: 0,
+      message: 'Looking for recordings on your device'
+    })
+    const result = await drain.drainOnce().catch((error: unknown) => {
+      this.publishStorage({
+        phase: 'failed',
+        message: error instanceof Error ? error.message : String(error)
+      })
+      return null
+    })
+    if (result === null || this.drain !== drain) return
+    const recovered = this.recovered
+
+    switch (result.kind) {
+      case 'drained':
+      case 'idle':
+        this.publishStorage({
+          phase: 'empty',
+          items: 0,
+          estimatedSeconds: 0,
+          recovered,
+          message: recovered > 0 ? plural(recovered, 'Recovered') : 'Nothing new to recover'
+        })
+        return
+      case 'incomplete':
+        // The device keeps whatever was not committed, so this is a pause and
+        // not a loss; saying so stops it reading as audio gone missing.
+        this.publishStorage({
+          phase: 'available',
+          recovered,
+          message:
+            result.reason === 'cancelled'
+              ? `Stopped. ${plural(recovered, 'Recovered')}, the rest is still on your device.`
+              : `Stopped after ${result.reason}. ${plural(recovered, 'Recovered')}, the rest is still on your device.`
+        })
+        return
+      case 'unsupported':
+        this.publishStorage({ phase: 'unsupported', items: 0, message: null })
+        return
+    }
+  }
+
+  /** Asks a freshly connected device what it is holding, without reading it. */
+  private async probeStorage(): Promise<void> {
+    const drain = this.drain
+    if (drain === null) return
+    const probe = await drain.probe().catch(() => null)
+    if (this.drain !== drain) return
+    if (probe === null) {
+      this.publishStorage({ phase: 'empty', items: 0, estimatedSeconds: 0, message: null })
+      return
+    }
+    this.publishStorage({
+      phase: 'available',
+      items: probe.items,
+      estimatedSeconds: probe.estimatedSeconds,
+      message: null
+    })
+  }
+
+  private publishStorage(patch: Partial<DeviceStorageState>): void {
+    this.storage = { ...this.storage, ...patch }
+    this.deps.emit({ type: 'device-storage', storage: this.storage })
   }
 
   /** Re-emits everything a freshly opened UI needs: the hidden host may have
@@ -136,6 +255,7 @@ export class DeviceController {
     if (this.lastBatteryLevel !== null) {
       this.deps.emit({ type: 'device-battery', level: this.lastBatteryLevel })
     }
+    this.deps.emit({ type: 'device-storage', storage: this.storage })
   }
 
   private async pair(): Promise<void> {
@@ -241,8 +361,60 @@ export class DeviceController {
     const connection = this.coordinator.connection
     if (connection === null) return
     this.watchBattery(connection)
+    await this.buildDrain(connection)
     if (!this.deps.settings().deviceListenEnabled) return
     await this.startStreaming(connection)
+  }
+
+  /**
+   * Builds the recovery service for this session and reports what the device is
+   * holding. Reading the codec is what tells the drain how to time the audio it
+   * recovers, so a family that will not answer gets no recovery rather than a
+   * guessed one.
+   */
+  private async buildDrain(connection: DeviceConnection): Promise<void> {
+    this.drain = null
+    this.storage = IDLE_STORAGE
+    if (this.deps.storeRecovered === undefined || !connection.canStreamAudio()) return
+    let codec: BleAudioCodec
+    try {
+      codec = await connection.getAudioCodec()
+    } catch {
+      return
+    }
+    if (this.coordinator.connection !== connection) return
+    this.drain = new StorageDrainService({
+      connection,
+      sink: this.walSink(connection, codec),
+      codec,
+      sleep: this.deps.sleep ?? sleepUnlessAborted,
+      onProgress: (message) => this.publishStorage({ message })
+    })
+    await this.probeStorage()
+  }
+
+  /** Sends one recovered recording to the offline log and counts what it did. */
+  private walSink(connection: DeviceConnection, codec: BleAudioCodec): DrainSink {
+    const store = this.deps.storeRecovered
+    const device = connection.device.type
+    return createWalDrainSink(async (args) => {
+      if (store === undefined) return 'failed'
+      const outcome = await store({
+        bytes: args.bytes,
+        timerStart: args.startEpochSeconds,
+        seconds: args.seconds,
+        totalFrames: args.frameCount,
+        codec,
+        sampleRate: CODEC_SAMPLE_RATE,
+        frameSize: codecFrameSize(codec),
+        device
+      })
+      if (outcome === 'stored') {
+        this.recovered += 1
+        this.publishStorage({ recovered: this.recovered })
+      }
+      return outcome
+    })
   }
 
   private watchBattery(connection: DeviceConnection): void {
@@ -324,6 +496,14 @@ export class DeviceController {
     this.lane = null
     this.batterySubscription?.cancel()
     this.batterySubscription = null
+    // A transfer outlives its connection as a set of pending reads that will
+    // never answer, so it is stopped with the session that owns it.
+    this.drain?.cancel()
+    this.drain = null
+    if (this.storage !== IDLE_STORAGE) {
+      this.storage = IDLE_STORAGE
+      this.deps.emit({ type: 'device-storage', storage: this.storage })
+    }
   }
 
   private applySettings(settings: DeviceSettings): void {
@@ -357,6 +537,27 @@ export class DeviceController {
     void this.coordinator.disconnect(null)
   }
 }
+
+const plural = (count: number, verb: string): string =>
+  `${verb} ${count} recording${count === 1 ? '' : 's'}`
+
+/** Default drain wait: resolves early when the transfer is abandoned. */
+const sleepUnlessAborted = (ms: number, signal: AbortSignal): Promise<'elapsed' | 'aborted'> =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve('aborted')
+      return
+    }
+    const timer = setTimeout(() => resolve('elapsed'), ms)
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer)
+        resolve('aborted')
+      },
+      { once: true }
+    )
+  })
 
 const phaseToState = (snapshot: DeviceSessionSnapshot): WearableConnectionState => {
   switch (snapshot.phase.kind) {

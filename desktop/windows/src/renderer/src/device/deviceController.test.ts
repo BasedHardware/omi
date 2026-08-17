@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { DeviceController, LOW_BATTERY_PERCENT, type BluetoothAccess } from './deviceController'
 import type { DeviceEvent, DeviceSettings, WearableDeviceInfo } from '../../../shared/types'
 import type { BlePhysicalDriver } from './transport/blePhysicalDriver'
-import { OMI_UUIDS, BATTERY_UUIDS, DEVICE_INFO_UUIDS } from './protocol/uuids'
+import { OMI_UUIDS, BATTERY_UUIDS, DEVICE_INFO_UUIDS, STORAGE_UUIDS } from './protocol/uuids'
 import { tick } from './testing/fakes'
+import { RING_RECORD_BYTES } from './storage/storageProtocol'
 
 const OMI_CODEC = OMI_UUIDS.audioCodec
 
@@ -13,6 +14,9 @@ class ScriptedDriver implements BlePhysicalDriver {
   disconnectCalls = 0
   private notifyHandlers = new Map<string, (data: Uint8Array) => void>()
   private disconnectListeners = new Set<() => void>()
+
+  /** Set to make the device speak the ring-storage protocol. */
+  storage: { unreadPackets: number; records: Uint8Array[] } | null = null
 
   constructor(
     public id = 'device-1',
@@ -35,16 +39,21 @@ class ScriptedDriver implements BlePhysicalDriver {
   }
 
   async discoverServices(): Promise<Array<{ uuid: string }>> {
-    return [
+    const services: Array<{ uuid: string }> = [
       { uuid: OMI_UUIDS.mainService },
       { uuid: BATTERY_UUIDS.service },
       { uuid: DEVICE_INFO_UUIDS.service }
     ]
+    if (this.storage !== null) services.push({ uuid: STORAGE_UUIDS.service })
+    return services
   }
 
   async discoverCharacteristics(serviceUuid: string): Promise<Array<{ uuid: string }>> {
     if (serviceUuid === OMI_UUIDS.mainService) {
       return [{ uuid: OMI_UUIDS.audioDataStream }, { uuid: OMI_UUIDS.audioCodec }]
+    }
+    if (serviceUuid === STORAGE_UUIDS.service) {
+      return [{ uuid: STORAGE_UUIDS.dataStream }, { uuid: STORAGE_UUIDS.readControl }]
     }
     if (serviceUuid === BATTERY_UUIDS.service) return [{ uuid: BATTERY_UUIDS.level }]
     return [
@@ -56,15 +65,39 @@ class ScriptedDriver implements BlePhysicalDriver {
   }
 
   async readValue(_serviceUuid: string, characteristicUuid: string): Promise<Uint8Array> {
+    if (characteristicUuid === STORAGE_UUIDS.readControl) {
+      if (this.storage === null) throw new Error('no storage')
+      const bytes = new Uint8Array(16)
+      const view = new DataView(bytes.buffer)
+      view.setUint32(4, this.storage.unreadPackets, true)
+      view.setUint32(12, 1, true) // the device clock is valid
+      return bytes
+    }
     if (characteristicUuid === OMI_CODEC) return Uint8Array.from([1]) // pcm8
     if (characteristicUuid === BATTERY_UUIDS.level) return Uint8Array.from([80])
     if (characteristicUuid === OMI_UUIDS.imageDataStream) throw new Error('no camera')
     return new TextEncoder().encode('omi')
   }
 
-  async writeValue(): Promise<void> {
-    // Writes always succeed in this harness.
+  async writeValue(
+    _serviceUuid?: string,
+    characteristicUuid?: string,
+    data?: Uint8Array
+  ): Promise<void> {
+    if (this.storage === null || characteristicUuid !== STORAGE_UUIDS.dataStream || !data) return
+    this.storageWrites.push(data[0])
+    // 0x11 is "read from this sequence": answer with the records, then done.
+    if (data[0] !== 0x11) return
+    for (const record of this.storage.records) {
+      this.notify(STORAGE_UUIDS.service, STORAGE_UUIDS.dataStream, [0x03, ...record])
+    }
+    const done = new Uint8Array(10)
+    done[0] = 0x04
+    new DataView(done.buffer).setUint32(6, 42, false)
+    this.notify(STORAGE_UUIDS.service, STORAGE_UUIDS.dataStream, Array.from(done))
   }
+
+  storageWrites: number[] = []
 
   async startNotifications(
     serviceUuid: string,
@@ -96,6 +129,8 @@ interface Harness {
   events: DeviceEvent[]
   settings: DeviceSettings
   driver: ScriptedDriver
+  recovered: Array<{ timerStart: number; seconds: number; device: string; byteLength: number }>
+  setStoreResult: (result: 'stored' | 'duplicate' | 'failed') => void
   saved: Array<Partial<DeviceSettings>>
   lane: {
     startCalls: number
@@ -116,6 +151,8 @@ const harness = (
     duringLaneStart?: (settings: DeviceSettings) => void
     /** Forces the audio service to refuse the session. */
     audioStartResult?: boolean
+    /** Omits storeRecovered, which is what a build with no offline log has. */
+    noOfflineLog?: boolean
   } = {}
 ): Harness => {
   const driver = options.driver ?? new ScriptedDriver()
@@ -127,6 +164,8 @@ const harness = (
     deviceListenEnabled: options.listen ?? false
   }
   const lane = { startCalls: 0, stopCalls: 0, fed: 0, blocked: options.laneBlocked ?? false }
+  const recovered: Harness['recovered'] = []
+  let storeResult: 'stored' | 'duplicate' | 'failed' = 'stored'
 
   const audioService =
     options.audioStartResult === false
@@ -165,11 +204,54 @@ const harness = (
           lane.fed += 1
         },
         currentState: lane.blocked ? 'blocked' : 'streaming'
-      }) as never
+      }) as never,
+    // Waits never take real time; the drain's own tests cover its timeouts.
+    sleep: async () => 'elapsed',
+    storeRecovered:
+      options.noOfflineLog === true
+        ? undefined
+        : async (audio) => {
+            recovered.push({
+              timerStart: audio.timerStart,
+              seconds: audio.seconds,
+              device: audio.device,
+              byteLength: audio.bytes.byteLength
+            })
+            return storeResult
+          }
   })
 
-  return { controller, events, settings, driver, saved, lane }
+  return {
+    controller,
+    events,
+    settings,
+    driver,
+    saved,
+    lane,
+    recovered,
+    setStoreResult: (result) => {
+      storeResult = result
+    }
+  }
 }
+
+/** One 444 byte ring record: big-endian timestamp then packed frames. */
+const ringRecord = (epoch: number, frames: number[][]): Uint8Array => {
+  const record = new Uint8Array(RING_RECORD_BYTES)
+  new DataView(record.buffer).setUint32(0, epoch, false)
+  let offset = 4
+  for (const frame of frames) {
+    record[offset] = frame.length
+    record.set(frame, offset + 1)
+    offset += 1 + frame.length
+  }
+  return record
+}
+
+const storageEvents = (events: DeviceEvent[]): Array<{ phase: string; recovered: number }> =>
+  events
+    .filter((e) => e.type === 'device-storage')
+    .map((e) => (e as { storage: { phase: string; recovered: number } }).storage)
 
 const states = (events: DeviceEvent[]): string[] =>
   events.filter((e) => e.type === 'device-state').map((e) => (e as { state: string }).state)
@@ -403,5 +485,117 @@ describe('DeviceController listening', () => {
     await tick()
     expect(h.lane.stopCalls).toBeGreaterThan(0)
     expect(states(h.events)).toContain('reconnecting')
+  })
+})
+
+describe('DeviceController device storage', () => {
+  const PAIRED: WearableDeviceInfo = { id: 'device-1', name: 'Omi CV1', type: 'omi' }
+  const EPOCH = 1_723_800_000
+
+  const withStorage = (records: Uint8Array[], unreadPackets = records.length): ScriptedDriver => {
+    const driver = new ScriptedDriver()
+    driver.storage = { unreadPackets, records }
+    return driver
+  }
+
+  it('reports what a connected device is holding without reading any of it', async () => {
+    const h = harness({
+      paired: PAIRED,
+      driver: withStorage([ringRecord(EPOCH, [[1, 2, 3]])], 1000)
+    })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+
+    const storage = storageEvents(h.events).at(-1)
+    expect(storage?.phase).toBe('available')
+    // A probe reads the status characteristic; issuing a read command would
+    // start a transfer nobody asked for.
+    expect(h.driver.storageWrites).toEqual([])
+    expect(h.recovered).toEqual([])
+  })
+
+  it('recovers the audio only when asked, and reports how much it got', async () => {
+    const h = harness({
+      paired: PAIRED,
+      driver: withStorage([ringRecord(EPOCH, [[1, 2, 3]]), ringRecord(EPOCH + 600, [[4, 5, 6]])])
+    })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    expect(h.recovered).toEqual([])
+
+    await h.controller.handleCommand({ type: 'device-storage-recover' })
+    await tick()
+
+    expect(h.recovered.length).toBe(2)
+    expect(h.recovered.map((r) => r.timerStart)).toEqual([EPOCH, EPOCH + 600])
+    expect(h.recovered.every((r) => r.device === 'omi' && r.byteLength > 0)).toBe(true)
+    const storage = storageEvents(h.events).at(-1)
+    expect(storage).toMatchObject({ phase: 'empty', recovered: 2 })
+    // The pointer only advances once every recording is stored.
+    expect(h.driver.storageWrites).toEqual([0x03, 0x10, 0x11, 0x12])
+  })
+
+  it('leaves the audio on the device when it cannot be stored', async () => {
+    const h = harness({ paired: PAIRED, driver: withStorage([ringRecord(EPOCH, [[1, 2, 3]])]) })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    h.setStoreResult('failed')
+
+    await h.controller.handleCommand({ type: 'device-storage-recover' })
+    await tick()
+
+    // Advancing here would let the ring overwrite audio that was never saved.
+    expect(h.driver.storageWrites).not.toContain(0x12)
+    const storage = storageEvents(h.events).at(-1)
+    expect(storage).toMatchObject({ phase: 'available', recovered: 0 })
+  })
+
+  it('does not count a duplicate as newly recovered', async () => {
+    const h = harness({ paired: PAIRED, driver: withStorage([ringRecord(EPOCH, [[1, 2, 3]])]) })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    h.setStoreResult('duplicate')
+
+    await h.controller.handleCommand({ type: 'device-storage-recover' })
+    await tick()
+
+    // A re-read record is already safe, so the device copy still goes.
+    expect(h.driver.storageWrites).toContain(0x12)
+    expect(storageEvents(h.events).at(-1)).toMatchObject({ phase: 'empty', recovered: 0 })
+  })
+
+  it('reports a device with no stored audio as empty', async () => {
+    const h = harness({ paired: PAIRED, driver: withStorage([], 0) })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    expect(storageEvents(h.events).at(-1)?.phase).toBe('empty')
+  })
+
+  it('offers no recovery when there is no offline log to store it in', async () => {
+    const h = harness({
+      paired: PAIRED,
+      driver: withStorage([ringRecord(EPOCH, [[1, 2, 3]])]),
+      noOfflineLog: true
+    })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    await h.controller.handleCommand({ type: 'device-storage-recover' })
+    await tick()
+
+    expect(h.driver.storageWrites).toEqual([])
+    expect(storageEvents(h.events).at(-1)?.phase).toBe('unsupported')
+  })
+
+  it('forgets what the device held once the session ends', async () => {
+    const h = harness({ paired: PAIRED, driver: withStorage([ringRecord(EPOCH, [[1, 2, 3]])]) })
+    await h.controller.handleCommand({ type: 'device-connect', deviceId: 'device-1' })
+    await tick()
+    expect(storageEvents(h.events).at(-1)?.phase).toBe('available')
+
+    await h.controller.handleCommand({ type: 'device-disconnect' })
+    await tick()
+
+    // Otherwise the tab keeps offering to recover from a device that is gone.
+    expect(storageEvents(h.events).at(-1)?.phase).toBe('unknown')
   })
 })

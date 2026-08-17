@@ -20,7 +20,11 @@ const MAIN_ONLY_COMMANDS = new Set<DeviceCommand['type']>([
   'device-connect',
   'device-disconnect',
   'device-forget',
-  'device-request-state'
+  'device-request-state',
+  // Recovery moves audio off the device and deletes the device's copy, so it
+  // belongs to the same set as unpairing rather than to any auxiliary window.
+  'device-storage-recover',
+  'device-storage-cancel'
 ])
 
 /**

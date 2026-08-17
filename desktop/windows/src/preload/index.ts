@@ -164,6 +164,16 @@ const omi: OmiBridgeApi = {
   deviceSetSettings: (patch: Partial<DeviceSettings>) =>
     ipcRenderer.invoke('omi-device:set-settings', patch),
   deviceSelect: (deviceId: string | null) => ipcRenderer.invoke('omi-device:select', deviceId),
+  deviceStoreRecovered: (audio: {
+    bytes: Uint8Array
+    timerStart: number
+    seconds: number
+    totalFrames: number
+    codec: string
+    sampleRate: number
+    frameSize: number
+    device: string
+  }) => ipcRenderer.invoke('omi-device:store-recovered', audio),
   walSnapshot: () => ipcRenderer.invoke('omi-wal:snapshot'),
   walStorageBytes: () => ipcRenderer.invoke('omi-wal:storage-bytes'),
   walRetry: (id: string) => ipcRenderer.invoke('omi-wal:retry', id),

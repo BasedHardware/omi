@@ -232,6 +232,11 @@ export class StorageDrainService {
  * Builds the sink that turns drained chunks into write-ahead-log entries. The
  * frames are written in the same `[length u32 LE][frame]` layout the device
  * families use, which is what the upload expects.
+ *
+ * A failed write throws, because the drains treat a throw as "not stored" and
+ * that is what keeps the audio on the device. A duplicate does not: an
+ * interrupted transfer re-reads records it already delivered, so the recording
+ * is already safe and the device copy is free to go.
  */
 export function createWalDrainSink(
   persist: (args: {
@@ -239,16 +244,19 @@ export function createWalDrainSink(
     startEpochSeconds: number
     seconds: number
     frameCount: number
-  }) => Promise<void>
+  }) => Promise<'stored' | 'duplicate' | 'failed'>
 ): DrainSink {
   return {
     persist: async (chunk: DrainedChunk) => {
-      await persist({
+      const outcome = await persist({
         bytes: encodeFrames(chunk.frames),
         startEpochSeconds: chunk.startEpochSeconds,
         seconds: chunk.seconds,
         frameCount: chunk.frames.length
       })
+      if (outcome === 'failed') {
+        throw new Error(`could not store the recording starting at ${chunk.startEpochSeconds}`)
+      }
     }
   }
 }

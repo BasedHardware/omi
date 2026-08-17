@@ -9,14 +9,16 @@
 // "Pair" starts a scan, main streams the candidate list here, and the user's
 // pick is sent back to unblock requestDevice().
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bluetooth, BatteryMedium, RefreshCw, AudioLines } from 'lucide-react'
+import { Bluetooth, BatteryMedium, RefreshCw, AudioLines, HardDriveDownload } from 'lucide-react'
 import type {
   DeviceSettings,
+  DeviceStorageState,
   WearableConnectionState,
   WearableDeviceCandidate,
   WearableDeviceInfo
 } from '../../../../../shared/types'
 import { toast } from '../../../lib/toast'
+import { NO_STORAGE, storageSubtitle } from './deviceStorageFormat'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 
@@ -42,6 +44,7 @@ export function DeviceTab(): React.JSX.Element {
   const [candidates, setCandidates] = useState<WearableDeviceCandidate[] | null>(null)
   const [battery, setBattery] = useState<number | null>(null)
   const [degraded, setDegraded] = useState(false)
+  const [storage, setStorage] = useState<DeviceStorageState>(NO_STORAGE)
   const pairing = useRef(false)
 
   useEffect(() => {
@@ -70,12 +73,16 @@ export function DeviceTab(): React.JSX.Element {
         case 'device-forgotten':
           setSettings((prev) => ({ ...prev, pairedDevice: null }))
           setBattery(null)
+          setStorage(NO_STORAGE)
           return
         case 'device-battery':
           setBattery(event.level)
           return
         case 'device-audio-degraded':
           setDegraded(event.degraded)
+          return
+        case 'device-storage':
+          setStorage(event.storage)
           return
         case 'device-error':
           pairing.current = false
@@ -194,6 +201,43 @@ export function DeviceTab(): React.JSX.Element {
               : `${battery}% remaining.`
           }
           keywords="battery charge level device wearable"
+        />
+      )}
+
+      {paired && storage.phase !== 'unsupported' && (
+        <SettingRow
+          icon={HardDriveDownload}
+          dot={storage.phase === 'available' ? 'on' : undefined}
+          title="Recordings on your device"
+          subtitle={storageSubtitle(storage, isConnected)}
+          keywords="storage sdcard offline recordings recover sync device memory ring buffer"
+          control={
+            isConnected && storage.phase === 'recovering' ? (
+              <button
+                type="button"
+                onClick={() => window.omi?.deviceCommand?.({ type: 'device-storage-cancel' })}
+                className="rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/15"
+              >
+                Stop
+              </button>
+            ) : isConnected && storage.phase === 'available' ? (
+              <button
+                type="button"
+                onClick={() => window.omi?.deviceCommand?.({ type: 'device-storage-recover' })}
+                className="rounded-md bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/15"
+              >
+                Recover
+              </button>
+            ) : undefined
+          }
+          note={
+            storage.phase === 'recovering' ? (
+              <span className="text-text-tertiary">
+                Keep your device close by until this finishes. Nothing is removed from it until the
+                audio is safely stored here.
+              </span>
+            ) : undefined
+          }
         />
       )}
 

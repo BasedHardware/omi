@@ -43,7 +43,9 @@ export function DeviceApp(): React.JSX.Element {
           new DeviceListenSession(createBridgeLaneTransport(), {
             onStateChange: (state) =>
               window.omi?.deviceEmit?.({ type: 'device-listen-state', state })
-          })
+          }),
+        storeRecovered: async (audio) =>
+          (await window.omi?.deviceStoreRecovered?.(audio)) ?? 'failed'
       })
       controllerRef.current = controller
 

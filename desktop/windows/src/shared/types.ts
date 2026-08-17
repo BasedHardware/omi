@@ -783,6 +783,19 @@ export type OmiBridgeApi = {
   deviceSetSettings: (patch: Partial<DeviceSettings>) => Promise<DeviceSettings>
   /** Answer an open Bluetooth chooser with the user's pick (null cancels). */
   deviceSelect: (deviceId: string | null) => Promise<void>
+  /** Device window only: hand one recovered recording to the offline log.
+   *  `duplicate` means this recording is already there, which happens whenever
+   *  an interrupted transfer re-reads records it already delivered. */
+  deviceStoreRecovered: (audio: {
+    bytes: Uint8Array
+    timerStart: number
+    seconds: number
+    totalFrames: number
+    codec: string
+    sampleRate: number
+    frameSize: number
+    device: string
+  }) => Promise<'stored' | 'duplicate' | 'failed'>
   // --- Offline audio capture ---
   /** Current state of the offline-audio log. */
   walSnapshot: () => Promise<WalSyncSnapshot | null>
@@ -2829,6 +2842,12 @@ export type DeviceCommand =
   /** Sign-in changed: the window rebuilds its lane with the new identity.
    *  Carries the uid so an account SWITCH (both sides signed in) is detected. */
   | { type: 'auth-changed'; uid: string | null }
+  /** Recover the audio the device recorded while it was away from this machine.
+   *  User-initiated: a transfer can run for minutes and competes with the live
+   *  session, so it never starts on its own. */
+  | { type: 'device-storage-recover' }
+  /** Stop a recovery in progress. */
+  | { type: 'device-storage-cancel' }
 
 /** Device window → main (fanned out to UI windows). */
 export type DeviceEvent =
@@ -2851,6 +2870,23 @@ export type DeviceEvent =
   /** Main-originated: the device window was recreated, so standing commands
    *  must be re-issued. */
   | { type: 'device-window-restarted' }
+  /** What the connected device is holding in its own storage, and how a
+   *  recovery of it is going. */
+  | { type: 'device-storage'; storage: DeviceStorageState }
+
+/** Device-side stored audio, as the Device tab renders it. */
+export type DeviceStorageState = {
+  phase: 'unknown' | 'unsupported' | 'empty' | 'available' | 'recovering' | 'failed'
+  /** Ring packets or stored files the device is holding. */
+  items: number
+  /** Estimated seconds of audio, for a size hint only. */
+  estimatedSeconds: number
+  /** Recordings written to the offline log by the pass in progress or the last
+   *  one that ran. */
+  recovered: number
+  /** Progress line while recovering, or why the last attempt stopped. */
+  message: string | null
+}
 // --- Offline audio capture (write-ahead log) ---------------------------------
 
 /** One stored recording as the sync UI sees it. */

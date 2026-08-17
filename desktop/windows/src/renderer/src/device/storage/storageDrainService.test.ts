@@ -253,6 +253,13 @@ describe('encodeFrames', () => {
 })
 
 describe('createWalDrainSink', () => {
+  const chunk = {
+    frames: [Uint8Array.from([1]), Uint8Array.from([2])],
+    startEpochSeconds: EPOCH,
+    seconds: 12,
+    byteLength: 2
+  }
+
   it('hands the encoded bytes and the capture start to the persister', async () => {
     const calls: Array<{ startEpochSeconds: number; seconds: number; frameCount: number }> = []
     const sink = createWalDrainSink(async (args) => {
@@ -261,13 +268,23 @@ describe('createWalDrainSink', () => {
         seconds: args.seconds,
         frameCount: args.frameCount
       })
+      return 'stored'
     })
-    await sink.persist({
-      frames: [Uint8Array.from([1]), Uint8Array.from([2])],
-      startEpochSeconds: EPOCH,
-      seconds: 12,
-      byteLength: 2
-    })
+    await sink.persist(chunk)
     expect(calls).toEqual([{ startEpochSeconds: EPOCH, seconds: 12, frameCount: 2 }])
+  })
+
+  it('throws when the recording could not be stored', async () => {
+    const sink = createWalDrainSink(async () => 'failed')
+    // The drains read a throw as "not stored", which is what keeps the audio on
+    // the device instead of deleting it.
+    await expect(sink.persist(chunk)).rejects.toThrow()
+  })
+
+  it('accepts a duplicate as stored', async () => {
+    const sink = createWalDrainSink(async () => 'duplicate')
+    // An interrupted transfer re-reads records it already delivered; the
+    // recording is already safe, so the device copy is free to go.
+    await expect(sink.persist(chunk)).resolves.toBeUndefined()
   })
 })

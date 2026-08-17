@@ -11,8 +11,13 @@ vi.mock('../appSettings', () => ({
   setAppSettings: (patch: unknown) => patch
 }))
 
-const { attachBluetoothChooser, isChooserPending, resolveChooserSelection, selectChooserDevice } =
-  await import('./deviceHandlers')
+const {
+  attachBluetoothChooser,
+  isChooserPending,
+  parseRecoveredAudio,
+  resolveChooserSelection,
+  selectChooserDevice
+} = await import('./deviceHandlers')
 
 const CANDIDATES = [
   { deviceId: 'aa', deviceName: 'Omi CV1' },
@@ -109,5 +114,58 @@ describe('attachBluetoothChooser', () => {
   it('a selection with no chooser open is ignored', () => {
     expect(() => selectChooserDevice('aa')).not.toThrow()
     expect(isChooserPending()).toBe(false)
+  })
+})
+
+describe('parseRecoveredAudio', () => {
+  const valid = {
+    bytes: Uint8Array.from([1, 2, 3]),
+    timerStart: 1_723_800_000,
+    seconds: 180,
+    totalFrames: 9000,
+    codec: 'opus',
+    sampleRate: 16_000,
+    frameSize: 160,
+    device: 'omi'
+  }
+
+  it('accepts a complete recording', () => {
+    expect(parseRecoveredAudio(valid)).toEqual(valid)
+  })
+
+  it('accepts bytes that crossed IPC as an ArrayBuffer', () => {
+    const parsed = parseRecoveredAudio({ ...valid, bytes: Uint8Array.from([9, 9]).buffer })
+    expect(parsed?.bytes).toBeInstanceOf(Uint8Array)
+    expect(Array.from(parsed?.bytes ?? [])).toEqual([9, 9])
+  })
+
+  it('rejects an empty or absent payload', () => {
+    expect(parseRecoveredAudio({ ...valid, bytes: new Uint8Array(0) })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, bytes: undefined })).toBeNull()
+    expect(parseRecoveredAudio(null)).toBeNull()
+    expect(parseRecoveredAudio('recording')).toBeNull()
+  })
+
+  it('rejects a capture time that is not a positive whole second', () => {
+    // The upload filename carries this timestamp and the server parses it; a
+    // zero or fractional value becomes an upload that can never be placed.
+    expect(parseRecoveredAudio({ ...valid, timerStart: 0 })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, timerStart: -1 })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, timerStart: 1.5 })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, timerStart: '1723800000' })).toBeNull()
+  })
+
+  it('rejects a recording with no duration, frames, rate or frame size', () => {
+    expect(parseRecoveredAudio({ ...valid, seconds: 0 })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, totalFrames: 0 })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, sampleRate: 0 })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, frameSize: 0 })).toBeNull()
+  })
+
+  it('rejects an empty codec or capture source', () => {
+    // Both go into the upload filename, which the server splits on underscores.
+    expect(parseRecoveredAudio({ ...valid, codec: '' })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, device: '' })).toBeNull()
+    expect(parseRecoveredAudio({ ...valid, codec: 20 })).toBeNull()
   })
 })

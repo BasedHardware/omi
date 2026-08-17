@@ -944,8 +944,10 @@ app.whenReady().then(async () => {
     () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
     ensureDeviceHost
   )
-  registerDeviceHandlers(getDeviceWc, () =>
-    mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.id : undefined
+  registerDeviceHandlers(
+    getDeviceWc,
+    () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.id : undefined),
+    async (audio) => (await walService?.storeRecovered(audio)) ?? 'failed'
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.

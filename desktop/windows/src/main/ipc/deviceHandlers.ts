@@ -108,12 +108,71 @@ export function attachBluetoothChooser(
   })
 }
 
+/** Audio recovered off a wearable's own storage, handed to the offline log. */
+export interface RecoveredAudio {
+  bytes: Uint8Array
+  timerStart: number
+  seconds: number
+  totalFrames: number
+  codec: string
+  sampleRate: number
+  frameSize: number
+  device: string
+}
+
+/** Rejects anything that is not a complete recovered recording. The device
+ *  window sends this over IPC, so the payload is validated rather than trusted:
+ *  a bad timestamp becomes a permanently refused upload, and a bad duration
+ *  misreports how much audio the user got back. */
+export function parseRecoveredAudio(raw: unknown): RecoveredAudio | null {
+  if (raw === null || typeof raw !== 'object') return null
+  const v = raw as Record<string, unknown>
+  const bytes =
+    v.bytes instanceof Uint8Array
+      ? v.bytes
+      : v.bytes instanceof ArrayBuffer
+        ? new Uint8Array(v.bytes)
+        : null
+  if (bytes === null || bytes.byteLength === 0) return null
+  const positiveInt = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+  const timerStart = positiveInt(v.timerStart)
+  const seconds = positiveInt(v.seconds)
+  const totalFrames = positiveInt(v.totalFrames)
+  const sampleRate = positiveInt(v.sampleRate)
+  const frameSize = positiveInt(v.frameSize)
+  if (
+    timerStart === null ||
+    seconds === null ||
+    totalFrames === null ||
+    sampleRate === null ||
+    frameSize === null
+  ) {
+    return null
+  }
+  if (typeof v.codec !== 'string' || v.codec.length === 0) return null
+  if (typeof v.device !== 'string' || v.device.length === 0) return null
+  return {
+    bytes,
+    timerStart,
+    seconds,
+    totalFrames,
+    sampleRate,
+    frameSize,
+    codec: v.codec,
+    device: v.device
+  }
+}
+
 export function registerDeviceHandlers(
   getDeviceWc: () => WebContents | null,
   /** The main window's webContents id. Writes and chooser answers are accepted
    *  from it alone: every renderer shares one preload, so without this check an
    *  auxiliary window could unpair a device or answer an open chooser. */
-  getMainWcId: () => number | undefined
+  getMainWcId: () => number | undefined,
+  /** Persists audio recovered off the device. Optional so tests that only
+   *  exercise settings do not need the offline log. */
+  storeRecovered?: (audio: RecoveredAudio) => Promise<'stored' | 'duplicate' | 'failed'>
 ): void {
   const fromMainWindow = (event: { sender: WebContents }): boolean => {
     const mainId = getMainWcId()
@@ -150,5 +209,20 @@ export function registerDeviceHandlers(
   ipcMain.handle('omi-device:select', (e, deviceId: string | null) => {
     if (!fromMainWindow(e)) return
     selectChooserDevice(deviceId)
+  })
+
+  // Only the device window may write recovered audio. Every renderer shares one
+  // preload, so without this guard any window could inject recordings into the
+  // offline log and have them uploaded as the user's conversations.
+  ipcMain.handle('omi-device:store-recovered', async (e, raw: unknown) => {
+    const wc = getDeviceWc()
+    if (wc === null || wc.isDestroyed() || e.sender.id !== wc.id) {
+      console.warn('[device] rejected recovered audio from a non-device window')
+      return 'failed'
+    }
+    if (storeRecovered === undefined) return 'failed'
+    const audio = parseRecoveredAudio(raw)
+    if (audio === null) return 'failed'
+    return storeRecovered(audio)
   })
 }

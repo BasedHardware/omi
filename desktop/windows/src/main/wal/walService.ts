@@ -14,6 +14,8 @@ import { readFile, writeFile, unlink, stat } from 'fs/promises'
 import {
   WAL_CHUNK_SECONDS,
   WAL_NEW_FRAME_SYNC_DELAY_SECONDS,
+  makeWalEntry,
+  walFileName,
   walId,
   walSyncDisplayState
 } from '../../shared/wal'
@@ -29,6 +31,7 @@ import {
   getWal,
   listWals,
   resetWalRetries,
+  upsertWal,
   walStats,
   type WalDb
 } from './walStore'
@@ -126,6 +129,58 @@ export class WalService {
         this.capture.resolveBuffered(source, disposition, count)
       }
     }
+  }
+
+  /**
+   * Stores audio recovered from a wearable's own storage as a pending
+   * recording, so the sync engine uploads it exactly like audio the live socket
+   * dropped.
+   *
+   * Recordings are identified by capture source plus start second. A drain that
+   * is interrupted and retried re-reads records it already delivered, so an id
+   * that is already present is treated as that same recording arriving twice
+   * and is skipped: overwriting it would put an already-uploaded recording back
+   * in the pending queue and produce a duplicate conversation.
+   */
+  async storeRecovered(args: {
+    bytes: Uint8Array
+    timerStart: number
+    seconds: number
+    totalFrames: number
+    codec: string
+    sampleRate: number
+    frameSize: number
+    device: string
+  }): Promise<'stored' | 'duplicate' | 'failed'> {
+    if (args.bytes.byteLength === 0 || args.totalFrames === 0) return 'failed'
+    const entry = makeWalEntry({
+      timerStart: args.timerStart,
+      codec: args.codec,
+      sampleRate: args.sampleRate,
+      channel: 1,
+      seconds: args.seconds,
+      frameSize: args.frameSize,
+      totalFrames: args.totalFrames,
+      device: args.device,
+      // None of it reached the socket: the machine was not there to hear it.
+      status: 'miss',
+      storage: 'disk'
+    })
+    if (getWal(this.options.db, walId(entry)) !== null) return 'duplicate'
+
+    const fileName = walFileName(entry)
+    let written = 0
+    try {
+      written = await writeFile(join(this.directory, fileName), args.bytes).then(
+        () => args.bytes.byteLength
+      )
+    } catch (error) {
+      console.error(`[wal] failed to store recovered ${fileName}: ${String(error)}`)
+      return 'failed'
+    }
+    upsertWal(this.options.db, { ...entry, filePath: fileName, sizeBytes: written })
+    this.publish()
+    return 'stored'
   }
 
   start(): void {
