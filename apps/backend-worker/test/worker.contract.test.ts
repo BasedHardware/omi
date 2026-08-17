@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import { parseSynthesizedPageJson } from "@omi-core/ratified-contracts/projections/synthesized";
 import { parseTaskPageJson } from "@omi-core/ratified-contracts/projections/tasks";
 
@@ -14,11 +14,61 @@ beforeAll(async () => {
 });
 
 const accountCalls: string[] = [];
+const identity = { displayName: "Test Account", email: "test@example.invalid" };
+const initialEntitlement = {
+  planLabel: "Metered",
+  limitKey: "chat_messages",
+  used: 0,
+  limit: 1,
+  limitReached: false,
+  upgradeAvailable: true,
+};
+let entitlement = { ...initialEntitlement };
+const admissions = new Map<
+  string,
+  {
+    payload: string;
+    message: Record<string, unknown>;
+    generation: { id: string };
+  }
+>();
 const accountStub = {
+  configure: async () => undefined,
   history: async (limit: number) => {
     accountCalls.push(`history:${limit}`);
     return { messages: [], page: { olderCursor: null, hasOlder: false } };
   },
+  settings: async () => ({ identity, entitlement: { ...entitlement } }),
+  admit: async (input: Record<string, unknown>) => {
+    const payload = JSON.stringify(input);
+    const prior = admissions.get(String(input["id"]));
+    if (prior !== undefined) {
+      if (prior.payload !== payload) return "conflict" as const;
+      return { ...prior, created: false };
+    }
+    if (entitlement.limitReached || entitlement.used >= entitlement.limit)
+      return "entitlement" as const;
+    entitlement = {
+      ...entitlement,
+      used: entitlement.used + 1,
+      limitReached: entitlement.used + 1 >= entitlement.limit,
+    };
+    const admission = {
+      payload,
+      message: {
+        id: input["id"],
+        text: input["text"],
+        sender: "human",
+        createdAt: input["at"],
+        generationOutcome: null,
+      },
+      generation: { id: `generation-${String(input["id"])}` },
+    };
+    admissions.set(String(input["id"]), admission);
+    return { ...admission, created: true };
+  },
+  complete: async () => undefined,
+  fail: async () => undefined,
 };
 
 const env = {
@@ -30,6 +80,12 @@ const env = {
       return accountStub;
     },
   },
+  AI_MODEL: "test-model",
+  AI: { run: async () => ({ response: "test response" }) },
+  STAGING_DISPLAY_NAME: identity.displayName,
+  STAGING_EMAIL: identity.email,
+  STAGING_PLAN_LABEL: initialEntitlement.planLabel,
+  STAGING_CHAT_LIMIT: initialEntitlement.limit,
 };
 
 const executionContext = {
@@ -49,6 +105,24 @@ const authenticatedHeaders = {
   authorization: "Bearer test-token",
   "x-omi-client-id": "test-client",
 };
+
+const chatCreate = (id: string) => ({
+  op: "create",
+  opId: `op-${id}`,
+  id,
+  at: 1,
+  text: "hello",
+  sender: "human",
+  journalRevision: 0,
+  appId: null,
+  chatSessionId: null,
+  attachmentIds: [],
+});
+
+beforeEach(() => {
+  entitlement = { ...initialEntitlement };
+  admissions.clear();
+});
 
 describe("worker request contract", () => {
   test("health and readiness do not require account storage", async () => {
@@ -208,6 +282,102 @@ describe("worker request contract", () => {
     expect(response.status).toBe(404);
     expect((await response.json()) as unknown).toEqual({
       error: { code: "not_found", retryable: false, action: "edit_request" },
+    });
+  });
+});
+
+describe("settings entitlement admission contract", () => {
+  test("Settings renders the same entitlement consumed by chat admission", async () => {
+    const before = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    const admitted = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("shared-projection")),
+    });
+    const after = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(before.status).toBe(200);
+    expect((await before.json()) as unknown).toEqual({
+      identity,
+      entitlement: initialEntitlement,
+    });
+    expect(admitted.status).toBe(201);
+    expect((await after.json()) as unknown).toEqual({
+      identity,
+      entitlement: { ...initialEntitlement, used: 1, limitReached: true },
+    });
+  });
+
+  test("an identical replay consumes quota exactly once", async () => {
+    const request = chatCreate("replay-once");
+    const init = {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(request),
+    };
+
+    const first = await fetchWorker("/v1/chat-messages", init);
+    const firstBody = await first.text();
+    const replay = await fetchWorker("/v1/chat-messages", init);
+    const settings = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(200);
+    expect(await replay.text()).toBe(firstBody);
+    expect(await settings.json()).toMatchObject({
+      entitlement: { used: 1, limit: 1, limitReached: true },
+    });
+  });
+
+  test("concurrent distinct admissions share one atomic quota ceiling", async () => {
+    const responses = await Promise.all(
+      ["atomic-first", "atomic-second"].map((id) =>
+        fetchWorker("/v1/chat-messages", {
+          method: "POST",
+          headers: {
+            ...authenticatedHeaders,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(chatCreate(id)),
+        })
+      )
+    );
+    const settings = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      201, 402,
+    ]);
+    expect(await settings.json()).toMatchObject({
+      entitlement: { used: 1, limit: 1, limitReached: true },
+    });
+  });
+
+  test("an exhausted entitlement returns the stable 402 refusal without consumption", async () => {
+    entitlement = { ...initialEntitlement, used: 1, limitReached: true };
+
+    const response = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(chatCreate("exhausted")),
+    });
+    const settings = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+
+    expect(response.status).toBe(402);
+    expect((await response.json()) as unknown).toEqual({
+      error: { code: "entitlement", retryable: false, action: "upgrade" },
+    });
+    expect(await settings.json()).toMatchObject({
+      entitlement: { used: 1, limit: 1, limitReached: true },
     });
   });
 });

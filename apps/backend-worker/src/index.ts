@@ -38,12 +38,20 @@ app.use("/v1/*", async (context, next) => {
   await next();
 });
 
+app.get("/v1/settings", async (context) => {
+  const stub = account(context);
+  await configureAccount(context.env, stub);
+  return json(await stub.settings());
+});
+
 app.get("/v1/chat-messages", async (context) => {
   const limit = parseLimit(context.req.query("limit"));
   if (limit === null || context.req.query("olderCursor") !== undefined) {
     return backendError("bad_request", "edit_request", 400);
   }
-  return json(await account(context).history(limit));
+  const stub = account(context);
+  await configureAccount(context.env, stub);
+  return json(await stub.history(limit));
 });
 
 app.post("/v1/chat-messages", async (context) => {
@@ -56,9 +64,13 @@ app.post("/v1/chat-messages", async (context) => {
   if (!isChatCreate(body))
     return backendError("validation", "edit_request", 422);
   const stub = account(context);
+  await configureAccount(context.env, stub);
   const admission = await stub.admit(body);
   if (admission === "conflict") {
     return backendError("client_message_id_conflict", "edit_request", 409);
+  }
+  if (admission === "entitlement") {
+    return backendError("entitlement", "upgrade", 402);
   }
   if (admission.created) {
     context.executionCtx.waitUntil(
@@ -134,6 +146,18 @@ function constantTimeEqual(
     difference |= (supplied[index] ?? 0) ^ (expected[index] ?? 0);
   }
   return difference === 0;
+}
+
+async function configureAccount(
+  env: WorkerEnv,
+  stub: DurableObjectStub<AccountBackend>
+): Promise<void> {
+  await stub.configure({
+    displayName: env.STAGING_DISPLAY_NAME,
+    email: env.STAGING_EMAIL,
+    planLabel: env.STAGING_PLAN_LABEL,
+    chatLimit: env.STAGING_CHAT_LIMIT,
+  });
 }
 
 function parseLimit(value: string | undefined): number | null {

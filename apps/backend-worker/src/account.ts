@@ -8,6 +8,30 @@ type Admission = {
   created: boolean;
 };
 
+type SettingsIdentity = {
+  displayName: string;
+  email: string;
+};
+
+type SettingsEntitlement = {
+  planLabel: string;
+  limitKey: string;
+  used: number;
+  limit: number | null;
+  limitReached: boolean;
+  upgradeAvailable: boolean;
+};
+
+type SettingsSnapshot = {
+  identity: SettingsIdentity;
+  entitlement: SettingsEntitlement | null;
+};
+
+type AccountConfiguration = SettingsIdentity & {
+  planLabel: string;
+  chatLimit: number | null;
+};
+
 type StoredMessage = ChatMessage & { position: number };
 
 export class AccountBackend extends DurableObject<Env> {
@@ -41,8 +65,67 @@ export class AccountBackend extends DurableObject<Env> {
           payload TEXT NOT NULL,
           PRIMARY KEY (generation_id, event_id)
         );
+        CREATE TABLE IF NOT EXISTS account_identity (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          display_name TEXT NOT NULL,
+          email TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS entitlement (
+          limit_key TEXT PRIMARY KEY,
+          plan_label TEXT NOT NULL,
+          used REAL NOT NULL CHECK (used >= 0),
+          limit_value REAL,
+          upgrade_available INTEGER NOT NULL CHECK (upgrade_available IN (0, 1))
+        );
       `);
     });
+  }
+
+  async configure(configuration: AccountConfiguration): Promise<void> {
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO account_identity (singleton, display_name, email) VALUES (1, ?, ?)",
+      configuration.displayName,
+      configuration.email
+    );
+    this.ctx.storage.sql.exec(
+      "INSERT OR IGNORE INTO entitlement (limit_key, plan_label, used, limit_value, upgrade_available) VALUES ('chat', ?, 0, ?, 1)",
+      configuration.planLabel,
+      configuration.chatLimit
+    );
+  }
+
+  async settings(): Promise<SettingsSnapshot> {
+    const identity = this.ctx.storage.sql
+      .exec<SettingsIdentity>(
+        "SELECT display_name AS displayName, email FROM account_identity WHERE singleton = 1"
+      )
+      .one();
+    const row = this.ctx.storage.sql
+      .exec<{
+        planLabel: string;
+        limitKey: string;
+        used: number;
+        limitValue: number | null;
+        upgradeAvailable: number;
+      }>(
+        "SELECT plan_label AS planLabel, limit_key AS limitKey, used, limit_value AS limitValue, upgrade_available AS upgradeAvailable FROM entitlement WHERE limit_key = 'chat'"
+      )
+      .toArray()[0];
+    return {
+      identity,
+      entitlement:
+        row === undefined
+          ? null
+          : {
+              planLabel: row.planLabel,
+              limitKey: row.limitKey,
+              used: row.used,
+              limit: row.limitValue,
+              limitReached:
+                row.limitValue !== null && row.used >= row.limitValue,
+              upgradeAvailable: row.upgradeAvailable === 1,
+            },
+    };
   }
 
   async history(limit: number): Promise<{
@@ -62,7 +145,9 @@ export class AccountBackend extends DurableObject<Env> {
     };
   }
 
-  async admit(input: ChatCreate): Promise<Admission | "conflict"> {
+  async admit(
+    input: ChatCreate
+  ): Promise<Admission | "conflict" | "entitlement"> {
     const payload = JSON.stringify(input);
     const prior = this.ctx.storage.sql
       .exec<{ payload: string; generationId: string }>(
@@ -78,6 +163,18 @@ export class AccountBackend extends DurableObject<Env> {
         generation: { id: prior.generationId },
         created: false,
       };
+    }
+    const entitlement = this.ctx.storage.sql
+      .exec<{ used: number; limitValue: number | null }>(
+        "SELECT used, limit_value AS limitValue FROM entitlement WHERE limit_key = 'chat'"
+      )
+      .toArray()[0];
+    if (
+      entitlement !== undefined &&
+      entitlement.limitValue !== null &&
+      entitlement.used >= entitlement.limitValue
+    ) {
+      return "entitlement";
     }
     const generationId = crypto.randomUUID();
     const position = this.nextPosition();
@@ -95,6 +192,11 @@ export class AccountBackend extends DurableObject<Env> {
       payload,
       generationId
     );
+    if (entitlement !== undefined) {
+      this.ctx.storage.sql.exec(
+        "UPDATE entitlement SET used = used + 1 WHERE limit_key = 'chat'"
+      );
+    }
     this.appendEvent(generationId, {
       id: "1",
       kind: "accepted",

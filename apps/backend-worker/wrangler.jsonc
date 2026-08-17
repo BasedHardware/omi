@@ -6,7 +6,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "ENVIRONMENT": "staging",
-    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "STAGING_DISPLAY_NAME": "Omi Staging",
+    "STAGING_EMAIL": "staging@omi.invalid",
+    "STAGING_PLAN_LABEL": "Staging",
+    "STAGING_CHAT_LIMIT": 1000
   },
   "ai": {
     "binding": "AI"
