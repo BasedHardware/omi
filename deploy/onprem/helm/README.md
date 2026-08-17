@@ -5,9 +5,10 @@ The Helm mirror of the compose stack (ADR-0049; study
 **in addition to** compose, not a replacement. One chart runs on **Kind** (dev/CI) and **k0s** (prod);
 only the `values-<env>.yaml` differ.
 
-Milestone status: **core** (backend + valkey + mongo replica-set) plus the **chat** (Qdrant), **objstore**
-(RustFS), **push** (ntfy) and **ingress** (Gateway API / Envoy Gateway) profiles are validated live on
-Kind. `auth` (Keycloak/OIDC), TLS, and GPU `inference` (k0s) are later phases.
+Milestone status: all seven profiles are validated live on Kind — **core** (backend + valkey + mongo
+replica-set), **chat** (Qdrant), **objstore** (RustFS), **push** (ntfy), **ingress** (Gateway API / Envoy
+Gateway), **auth** (Keycloak OIDC + Gateway TLS) and **inference** (external OpenAI-compatible endpoint).
+Prod/k0s hardening (MetalLB, real-SAN TLS, Keycloak on Postgres, a GPU inference node) is future work.
 
 ## Prerequisites
 
