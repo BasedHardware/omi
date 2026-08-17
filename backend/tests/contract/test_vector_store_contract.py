@@ -159,6 +159,26 @@ def test_delete_by_filter(store_ns):
     assert {h["id"] for h in store.query(ns, [1, 0, 0, 0, 0, 0, 0, 0], top_k=10)} == {"b"}
 
 
+def test_query_rejects_unsupported_filter(store_ns):
+    """Parity: every adapter rejects an out-of-contract operator up front. Qdrant/Fake already did;
+    the Pinecone adapter used to forward the wider Pinecone dialect ($ne/$nin/…) straight through, so
+    a filter that worked on Pinecone would break on Qdrant (cubic PR 10887 pinecone.py:91)."""
+    from utils.vector.filters import UnsupportedFilterError
+
+    store, ns = store_ns
+    with pytest.raises(UnsupportedFilterError):
+        store.query(ns, [1, 0, 0, 0, 0, 0, 0, 0], top_k=1, filter={"x": {"$ne": 1}})
+
+
+def test_delete_by_filter_rejects_unsupported_filter(store_ns):
+    """Same neutral-contract validation on the destructive delete-by-filter path (parity across adapters)."""
+    from utils.vector.filters import UnsupportedFilterError
+
+    store, ns = store_ns
+    with pytest.raises(UnsupportedFilterError):
+        store.delete_by_filter(ns, {"x": {"$ne": 1}})
+
+
 def test_list_ids_by_prefix(store_ns):
     store, ns = store_ns
     store.upsert(ns, [_rec("u1-c1-0", [1, 0, 0, 0, 0, 0, 0, 0], uid="u1")])

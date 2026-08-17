@@ -12,6 +12,7 @@ import os
 import threading
 from typing import Any, Dict, Iterator, List, Optional
 
+from utils.vector import filters as neutral_filters
 from utils.vector.ports import VectorMatch, VectorRecord
 
 _client_lock = threading.Lock()
@@ -60,6 +61,11 @@ class PineconeVectorStore:
         include_metadata: bool = True,
         include_values: bool = False,
     ) -> List[VectorMatch]:
+        # Reject an out-of-contract filter before it reaches Pinecone — parity with the Qdrant adapter,
+        # which validates in _to_qdrant_filter. Pinecone would accept a wider dialect ($ne/$nin/…), so
+        # without this a caller could write a filter that silently works on Pinecone but breaks on Qdrant.
+        if filter is not None:
+            neutral_filters.validate(filter)
         response = _get_index().query(
             vector=vector,
             top_k=top_k,
@@ -88,6 +94,10 @@ class PineconeVectorStore:
         return len(ids)
 
     def delete_by_filter(self, namespace: str, filter: Dict[str, Any]) -> None:
+        # Same neutral-contract validation as query()/Qdrant: a delete is destructive, so reject an
+        # out-of-contract filter here rather than let Pinecone interpret a wider dialect than Qdrant would.
+        if filter is not None:
+            neutral_filters.validate(filter)
         _get_index().delete(filter=filter, namespace=namespace)
 
     def list_ids(self, namespace: str, *, prefix: str) -> Iterator[List[str]]:
