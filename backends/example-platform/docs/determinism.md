@@ -5,7 +5,10 @@ receipt copies live outside this repo under
 `/tmp/omi-determinism-hunt-platform/` (worktree `data/` is forbidden). Official
 lane receipts are under the workspace `.omi/receipts/` tree-hash history.
 
-Related: [`docs/verification.md`](verification.md).
+Related: the verification ladder, defined upstream at
+[`docs/verification.md`](https://github.com/Git-on-my-level/omi-platform/blob/main/docs/verification.md).
+The ladder drives native shells that are not part of this vendored backend
+subset, so it is defined and run upstream, not here.
 
 ## Environment
 

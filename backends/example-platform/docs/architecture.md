@@ -10,7 +10,8 @@ Related, already written, and not restated here:
 - Chat provenance (three witnesses that must agree):
   [`docs/chat-provenance.md`](chat-provenance.md)
 - How to run a lane, and what a lane is entitled to claim:
-  [`docs/verification.md`](verification.md)
+  [`docs/verification.md`](https://github.com/Git-on-my-level/omi-platform/blob/main/docs/verification.md) (defined upstream; the ladder drives native
+  shells outside this vendored backend subset)
 - Boot, seed, reset, stop: [`docs/running-locally.md`](running-locally.md)
 - UI fixture harness (backend-free): [`docs/ui-harness.md`](ui-harness.md)
 - Local JSONL inspection log: [`docs/telemetry.md`](telemetry.md)
@@ -226,5 +227,5 @@ observation, not a product SLO.
 `adapters-legacy` is gone (`815d133d6d`). A sibling lane is proving the
 real chat provider. Until that is the lane you ran, do not quote a canned
 L3 as a real-model result; the Chat default in
-[`docs/verification.md`](verification.md) is the line that moves. Re-read
+[`docs/verification.md`](https://github.com/Git-on-my-level/omi-platform/blob/main/docs/verification.md) — upstream — is the line that moves. Re-read
 that file; do not take this paragraph as the new state.
