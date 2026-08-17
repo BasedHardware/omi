@@ -21,7 +21,7 @@ export interface CategoryBannerProps extends ProductBannerBase {
 export const PRODUCT_INFO = {
   name: 'Omi',
   price: '$89',
-  // Canonical storefront (legacy omi-dev-kit-2 / friend-dev-kit-2 slugs redirect here).
+  // Canonical storefront (legacy omi-dev-kit-2 / friend-dev-kit-2 slugs redirect into the storefront).
   url: 'https://www.omi.me/?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_app_detail_page',
   shipping: 'Ships Worldwide',
   images: {
