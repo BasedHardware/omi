@@ -502,6 +502,75 @@ async def test_proxy_dispatches_once_and_classifies_read_timeout(monkeypatch):
     assert response.headers["x-omi-retryable"] == "false"
 
 
+def test_output_token_cap_follows_byok(monkeypatch):
+    """Server-paid requests are bounded at 2048 output tokens; BYOK keeps 8192."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert desktop_proxy._output_token_cap() == 2048
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    assert desktop_proxy._output_token_cap() == 8192
+
+
+def test_sanitize_applies_the_requested_output_cap():
+    """No desktop client sets maxOutputTokens, so the cap passed by the caller is
+    both the injected default and the clamp; smaller explicit values pass through."""
+    absent = json.loads(desktop_proxy._sanitize(b'{"generationConfig": {}}', "generateContent", max_output_tokens=2048))
+    assert absent["generationConfig"]["maxOutputTokens"] == 2048
+    oversized = json.loads(
+        desktop_proxy._sanitize(
+            b'{"generationConfig": {"maxOutputTokens": 9000}}', "generateContent", max_output_tokens=2048
+        )
+    )
+    assert oversized["generationConfig"]["maxOutputTokens"] == 2048
+    smaller = json.loads(
+        desktop_proxy._sanitize(
+            b'{"generationConfig": {"maxOutputTokens": 512}}', "generateContent", max_output_tokens=2048
+        )
+    )
+    assert smaller["generationConfig"]["maxOutputTokens"] == 512
+    byok = json.loads(
+        desktop_proxy._sanitize(
+            b'{"generationConfig": {"maxOutputTokens": 9000}}', "generateContent", max_output_tokens=8192
+        )
+    )
+    assert byok["generationConfig"]["maxOutputTokens"] == 8192
+
+
+@pytest.mark.asyncio
+async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch):
+    """End-to-end wiring: a server-paid request leaves the proxy carrying the
+    2048 default (regression for every request inheriting the 8192 default)."""
+    dispatched: list[bytes] = []
+
+    class CapturingClient:
+        async def post(self, url, *, params, content, headers):
+            dispatched.append(content)
+            return httpx.Response(200, request=httpx.Request("POST", url), json={"ok": True})
+
+    async def route(path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: CapturingClient())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+
+    response = await desktop_proxy._proxy(
+        make_request(),
+        "models/gemini-2.5-flash:generateContent",
+        False,
+        "user",
+    )
+
+    assert response.status_code == 200
+    assert len(dispatched) == 1
+    config = json.loads(dispatched[0])["generationConfig"]
+    assert config["maxOutputTokens"] == 2048
+
+
 @pytest.mark.asyncio
 async def test_disconnect_cancels_in_flight_provider_call():
     disconnected = asyncio.Event()

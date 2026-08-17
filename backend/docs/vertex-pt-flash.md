@@ -46,6 +46,13 @@ work off `gemini-2.5-flash`:
   burns the PT. Demoting to `gemini-2.5-flash` instead was the 2026-08-17
   defect that silently dumped the Insight tool loop (~11% of the reservation)
   onto the saturated PT lane.
+- **Server-paid requests are capped at 2048 output tokens**
+  (`_SERVER_PAID_MAX_OUTPUT_TOKENS`). No shipped desktop client sends
+  `maxOutputTokens`, so everything used to inherit the 8192 default while
+  output burns down the reservation at 9x. Realistic per-lane budgets are
+  64–1024 visible tokens plus a thinking budget of up to 1024 (thinking counts
+  toward the output limit on 2.5 models). BYOK requests keep the 8192
+  default/clamp.
 
 The desktop clients pin the low-value lanes (memory extraction, LiveNotes,
 goals, task dedup/prioritization, home suggestions, Windows insight) to

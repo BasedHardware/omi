@@ -54,7 +54,17 @@ VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~20
 # omi-knowledge-base vertex-pt-flash-spend 2026-08-17 workload value ranking.
 _QUOTA_DEMOTION_MODEL = 'gemini-2.5-flash-lite'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
+# Absolute ceiling; also the default for BYOK traffic, which keeps its
+# historical behavior.
 _MAX_OUTPUT_TOKENS = 8192
+# Server-paid requests get a smaller default and clamp. No shipped desktop
+# client can emit maxOutputTokens (macOS GenerationConfig has no such field;
+# Windows sends none), so every request used to take the 8192 default while the
+# largest realistic per-lane budget is ~1024 visible tokens plus a thinking
+# budget of up to 1024 (thinking counts toward the output limit on 2.5 models).
+# Mean measured output is ~241 tokens — this bounds the paid tail, it does not
+# change the mean.
+_SERVER_PAID_MAX_OUTPUT_TOKENS = 2048
 _DEFAULT_THINKING_BUDGET = 1024
 _MAX_CONTENT_ITEMS = 128
 _MAX_CONTENT_PARTS = 512
@@ -286,7 +296,7 @@ def _as_nonnegative_int(value: Any) -> int | None:
     return None
 
 
-def _sanitize(body: bytes, action: str) -> bytes:
+def _sanitize(body: bytes, action: str, *, max_output_tokens: int = _MAX_OUTPUT_TOKENS) -> bytes:
     try:
         payload = json.loads(body)
     except (TypeError, ValueError) as exc:
@@ -327,7 +337,7 @@ def _sanitize(body: bytes, action: str) -> bytes:
         ]
         if not generation_configs:
             payload['generationConfig'] = {
-                'maxOutputTokens': _MAX_OUTPUT_TOKENS,
+                'maxOutputTokens': max_output_tokens,
                 'thinkingConfig': {'thinkingBudget': _DEFAULT_THINKING_BUDGET},
             }
         for config in generation_configs:
@@ -340,13 +350,19 @@ def _sanitize(body: bytes, action: str) -> bytes:
                 value = _as_nonnegative_int(config.get(key))
                 if value is not None:
                     output_key_present = True
-                    if value > _MAX_OUTPUT_TOKENS:
-                        config[key] = _MAX_OUTPUT_TOKENS
+                    if value > max_output_tokens:
+                        config[key] = max_output_tokens
             if not output_key_present:
-                config['maxOutputTokens'] = _MAX_OUTPUT_TOKENS
+                config['maxOutputTokens'] = max_output_tokens
             if 'thinking_config' not in config and 'thinkingConfig' not in config:
                 config['thinkingConfig'] = {'thinkingBudget': _DEFAULT_THINKING_BUDGET}
     return json.dumps(payload, separators=(',', ':')).encode()
+
+
+def _output_token_cap() -> int:
+    """BYOK traffic keeps its historical 8192 ceiling; server-paid requests are
+    bounded at 2048 because output burns the PT reservation down at 9x."""
+    return _MAX_OUTPUT_TOKENS if get_byok_key('gemini') else _SERVER_PAID_MAX_OUTPUT_TOKENS
 
 
 def _use_vertex_ai() -> bool:
@@ -762,7 +778,7 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
         _, model, action = _path_parts(path)
         telemetry.model = model
         telemetry.action = action
-        body = _sanitize(body, action)
+        body = _sanitize(body, action, max_output_tokens=_output_token_cap())
         telemetry.shape = _payload_shape(body)
     except HTTPException as exc:
         outcome = 'rate_limited' if exc.status_code == 429 else 'validation_rejected'
