@@ -1,7 +1,8 @@
 """On-prem multilingual STT server (faster-whisper / CTranslate2).
 
 Exposes the OpenAI-compatible ``POST /v1/audio/transcriptions`` surface the parakeet gateway calls
-in NIM mode (``PARAKEET_INFERENCE_MODE=nim`` + ``NIM_INFERENCE_URL=http://whisper:8000/v1``). The
+in NIM mode (``PARAKEET_INFERENCE_MODE=nim`` + ``NIM_INFERENCE_URL=http://whisper:8000`` — NO trailing
+``/v1``; the gateway appends ``/v1/audio/transcriptions`` itself, so a ``/v1`` here would double it). The
 gateway sends a multipart ``file`` plus an optional ``language`` form field (omitted => auto-detect;
 a concrete BCP-47 code => forced) and reads back ``{"text", "segments":[{"text","start","end"}]}``.
 ADR-0037 makes this the default on-prem STT engine (99 languages, CTranslate2, runs on commodity
@@ -178,17 +179,19 @@ def _transcribe(audio_bytes: bytes, detect: Optional[str]) -> Dict[str, Any]:
 
 @app.post("/v1/audio/transcriptions")
 async def transcribe(file: UploadFile = File(...), language: Optional[str] = Form(default=None)) -> Dict[str, Any]:
-    audio_bytes = await _read_bounded(file)
     # Omit/blank/"auto"/"multi" => let faster-whisper auto-detect (it rejects those as an enum).
     lang = (language or "").strip()
     detect = None if lang.lower() in ("", "auto", "multi") else lang
-    # Admission control: reject immediately when all inference slots are busy. In the single-threaded
-    # event loop there is no await between locked() and the non-blocking acquire() below, so this is
-    # race-free and never queues work beyond MAX_CONCURRENCY.
+    # Admission control BEFORE buffering the body: a saturated server must reject (503) before reading up
+    # to MAX_UPLOAD_BYTES (~100MB) into memory — otherwise a burst of would-be-503 requests each buffers
+    # ~100MB, defeating the fast rejection (cubic PR 10887 whisper/main.py:181). In the single-threaded event
+    # loop there is no await between locked() and the non-blocking acquire(), so this stays race-free and
+    # never admits work beyond MAX_CONCURRENCY; the slot is held through read + transcription.
     if _inference_slots.locked():
         raise HTTPException(status_code=503, detail="transcription capacity saturated; retry later")
     await _inference_slots.acquire()
     try:
+        audio_bytes = await _read_bounded(file)
         # Offload the CPU/GPU-bound transcription so concurrent requests aren't blocked on the loop.
         return await asyncio.to_thread(_transcribe, audio_bytes, detect)
     finally:

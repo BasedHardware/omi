@@ -51,8 +51,8 @@ OUT="$(compose exec -T backend curl -sS -N -X POST http://localhost:8080/v2/mess
 
 # Reject a typed error/timeout terminal frame BEFORE accepting any done: payload, so the smoke test
 # proves a real successful LLM turn — not a canned fallback (cubic review PR 10887).
-printf '%s' "$OUT" | grep -qiE '^error: |Unable to complete the response|The response took too long' \
-  && fail "agentic loop errored/timed out (check: gateway healthy, OPENAI_BASE_URL serves $MODEL, backend logs)"
+printf '%s' "$OUT" | grep -qiE '^error: |Unable to complete the response|The response took too long|Sorry, something went wrong while generating a response' \
+  && fail "chat errored/timed out or returned the canned fallback (check: gateway healthy, OPENAI_BASE_URL serves $MODEL, backend logs)"
 
 ANSWER="$(printf '%s' "$OUT" | grep -m1 '^done: ' | sed 's/^done: //' \
   | python3 -c 'import sys,base64,json; s=sys.stdin.read().strip(); s+="="*(-len(s)%4); print(json.loads(base64.b64decode(s))["text"])' 2>/dev/null || true)"

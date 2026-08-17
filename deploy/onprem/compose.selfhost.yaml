@@ -117,7 +117,10 @@ services:
       - "${NTFY_HTTPS_PORT:-8455}:8443"
     volumes:
       - ./ntfy-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/certs:ro
+      # Only the server cert+key — never the whole ./certs (which holds ca.key). Least-privilege: a
+      # network-facing proxy must not be able to read the CA private key (cubic PR 10887 gen-dev-certs.sh:32).
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
     networks: [omi, edge]
     restart: unless-stopped
 
@@ -395,7 +398,10 @@ services:
       - "${KC_HTTPS_PORT:-8443}:8443"
     volumes:
       - ./keycloak/kc-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/certs:ro
+      # Only the server cert+key — never the whole ./certs (which holds ca.key). Least-privilege: a
+      # network-facing proxy must not be able to read the CA private key (cubic PR 10887 gen-dev-certs.sh:32).
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
     networks: [omi, edge]
     restart: unless-stopped
 

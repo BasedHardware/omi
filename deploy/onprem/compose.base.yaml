@@ -1,6 +1,7 @@
 # Omi self-host — COMPOSE BASE (common services). NOT run directly (ADR-0043). Use an environment
 # entrypoint that `include`s this base:
-#   compose.prod.yaml  — hermetic (`omi internal:true` = the no-egress proof of ADR-0001)
+#   compose.prod.yaml  — on-prem prod, BRIDGED omi network (ADR-0048): data sovereignty by configuration,
+#                        not network isolation (no `internal:true`); ADR-0001's no-egress line was dropped
 #   compose.dev.yaml   — non-hermetic dev (host access + published API)
 # This base intentionally leaves the `omi` network WITHOUT `internal` — the posture is set by the
 # environment file, not here. The `edge` network + the profiles (mongo/objstore/push/chat/inference/
@@ -13,7 +14,13 @@ services:
 
   valkey:
     image: valkey/valkey:8-alpine
-    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    # Durable, NOT pure cache: the backend stores non-cache app state here (username ownership, webhook
+    # config, data-protection level, subscription customer IDs) that is NOT mirrored to the document store,
+    # so it must survive `docker compose down/up`. Enable AOF persistence + a named /data volume; without it
+    # a container recreation silently lost that state (cubic PR 10887 compose.base.yaml:16).
+    command: ["valkey-server", "--appendonly", "yes", "--dir", "/data"]
+    volumes:
+      - valkey-data:/data
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -67,9 +74,16 @@ services:
       - "${API_HTTPS_PORT:-8444}:8443"
     volumes:
       - ./api-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/certs:ro
+      # Mount ONLY the server cert+key, never the whole ./certs dir — that also holds ca.key, and a
+      # network-facing proxy has no need for the CA private key (a compromised proxy could mint
+      # device-trusted certs). Least-privilege (cubic PR 10887 gen-dev-certs.sh:32).
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
     networks: [omi, edge]
     restart: unless-stopped
+
+volumes:
+  valkey-data:  # durable valkey AOF (username ownership / webhook / subscription state — cubic 10887)
 
 networks:
   omi:
