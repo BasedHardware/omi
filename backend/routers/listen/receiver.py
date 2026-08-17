@@ -67,6 +67,7 @@ from utils.transcribe_decisions import (
 )
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,10 @@ STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
 
 # Longest frame the Opus format can carry, in milliseconds.
 OPUS_MAX_FRAME_MS = 120
+
+# Consecutive undecodable frames that mean the session's whole stream is unusable rather
+# than one corrupt packet: 1 s of audio at the 20 ms cadence omi clients encode with.
+DECODE_FAILURE_STREAK_ALERT = 50
 
 
 def opus_decode_capacity(sample_rate: int) -> int:
@@ -117,6 +122,8 @@ class ListenReceiver:
         self.vad_gate: Any = None
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
+        self.decode_failure_streak = 0
+        self.decode_stream_reported = False
 
     def _capture(self, method: str, *args: Any) -> None:
         """Keep optional dev capture out of the production audio failure domain."""
@@ -127,6 +134,39 @@ class ListenReceiver:
             capture(*args)
         except Exception as error:
             logger.warning('Listen parity capture failed method=%s type=%s', method, type(error).__name__)
+
+    def _record_decode_failure(
+        self, codec: str, error: BaseException, payload_len: int, channel: Optional[int] = None
+    ) -> None:
+        """Report an undecodable audio frame with enough detail to act on it.
+
+        Dropping the frame keeps the socket alive, so an undecodable stream is a fail-open
+        branch: the user records a whole session and gets no transcript, no ring buffer, and
+        no mixed audio, while the only trace is one `type=OpusError` line per frame. That name
+        cannot tell a corrupt client stream from a decoder the receiver sized wrong (#10701),
+        so carry the codec's own message and the payload size, and once the streak proves the
+        entire stream is failing, report it as the silent mic it is.
+        """
+        self.decode_failure_streak += 1
+        logger.warning(
+            'Listen audio frame decode failed codec=%s channel=%s type=%s bytes=%s streak=%s detail=%s',
+            codec,
+            channel,
+            type(error).__name__,
+            payload_len,
+            self.decode_failure_streak,
+            sanitize(error)[:120],
+        )
+        if self.decode_stream_reported or self.decode_failure_streak < DECODE_FAILURE_STREAK_ALERT:
+            return
+        self.decode_stream_reported = True
+        record_fallback(
+            component='silent_mic',
+            from_mode=codec,
+            to_mode='none',
+            reason='capability_mismatch',
+            outcome='exhausted',
+        )
 
     def _serving_provider(self) -> str:
         """Resolve the provider actually serving this session, read at use time.
@@ -426,12 +466,9 @@ class ListenReceiver:
                     bytes(audio), opus_decode_capacity(request.sample_rate)
                 )
             except Exception as error:
-                logger.warning(
-                    'Listen audio frame decode failed codec=opus channel=%s type=%s',
-                    channel_index,
-                    type(error).__name__,
-                )
+                self._record_decode_failure('opus', error, len(audio), channel=channel_index)
                 return
+            self.decode_failure_streak = 0
             if not audio:
                 return
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
@@ -590,10 +627,9 @@ class ListenReceiver:
                         elif request.codec == 'pcm8':
                             decoded = audioop.lin2lin(audioop.bias(data, 1, -128), 1, 2)
                     except Exception as error:
-                        logger.warning(
-                            'Listen audio frame decode failed codec=%s type=%s', request.codec, type(error).__name__
-                        )
+                        self._record_decode_failure(request.codec, error, len(data))
                         continue
+                    self.decode_failure_streak = 0
                     if not decoded:
                         continue
                     self._capture('capture_client_audio', decoded)
