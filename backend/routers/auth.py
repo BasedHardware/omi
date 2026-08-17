@@ -1052,10 +1052,14 @@ async def _generate_custom_token(
         # pass None and an already-named account is never overwritten.
         if display_name:
             try:
-                profile = await run_blocking(critical_executor, adapter.get_user_profile, firebase_uid)
+                # Both profile ops are external IdP HTTP round-trips (Firebase Admin get_user/update_user, or
+                # Keycloak Admin under OIDC) — run them on auth_idp_executor, NOT critical_executor (8 workers,
+                # shared with token verification / rate-limit gates), so a slow IdP hop can't starve those,
+                # matching exchange_idp_credential above (cubic PR 10887 auth.py:1055).
+                profile = await run_blocking(auth_idp_executor, adapter.get_user_profile, firebase_uid)
                 if not profile.display_name:
                     await run_blocking(
-                        critical_executor, adapter.update_user_profile, firebase_uid, display_name=display_name
+                        auth_idp_executor, adapter.update_user_profile, firebase_uid, display_name=display_name
                     )
                     logger.info(f"Set display_name for {provider} UID {firebase_uid}")
             except Exception as e:

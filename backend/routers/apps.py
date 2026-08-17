@@ -1750,11 +1750,13 @@ async def migrate_app_owner(
         raise HTTPException(status_code=403, detail='Source identity is not eligible for migration')
 
     try:
+        # check_revoked=True bundles a ~10s synchronous OIDC introspection HTTP call into verify_token, so run
+        # it on auth_idp_executor (external IdP I/O), NOT critical_executor — 8 concurrent revocation checks
+        # would otherwise saturate the gate pool shared with fast bearer verification (cubic PR 10887 apps.py:1754).
         source_principal = await run_blocking(
-            critical_executor, auth.get_auth_provider().verify_token, source_token, check_revoked=True
+            auth_idp_executor, auth.get_auth_provider().verify_token, source_token, check_revoked=True
         )
-        # Keep bearer verification on critical_executor (above); the profile lookup is a separate IdP
-        # HTTP call → auth_idp_executor, so it cannot saturate critical_executor (review 4939247683).
+        # The profile lookup is a separate IdP HTTP call → auth_idp_executor too (review 4939247683).
         source_user = await run_blocking(auth_idp_executor, auth.get_user, old_id)
     except Exception:
         # Invalid/revoked tokens, missing/deleted users, and Admin lookup failures

@@ -80,13 +80,17 @@ def test_token_allowed_on_firebase_backend(monkeypatch):
         assert result["uid"] == "user-1"
 
 
-def test_auth_backend_name_coerces_unknown_value_to_firebase(monkeypatch):
-    """A typo in AUTH_BACKEND must coerce to the firebase default (logged), never raise — a mis-set
-    gate must not take authentication down, and the gate must agree with get_auth_provider."""
+def test_auth_backend_name_rejects_unknown_value_fail_closed(monkeypatch):
+    """A non-empty typo in AUTH_BACKEND must FAIL CLOSED (raise), not silently coerce to firebase — on-prem
+    that would route auth through cloud Google and bypass the zero-Firebase posture. Parity with the storage/
+    object-store factories, which raise on an unknown backend (cubic PR 10887 factory.py:34)."""
+    import pytest
+
     from utils.auth import factory as auth_factory
 
     monkeypatch.setenv("AUTH_BACKEND", "bogus-typo")
-    assert auth_factory.auth_backend_name() == "firebase"
+    with pytest.raises(ValueError):
+        auth_factory.auth_backend_name()
 
 
 def test_auth_backend_name_blank_defaults_to_firebase(monkeypatch):

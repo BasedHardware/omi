@@ -30,8 +30,14 @@ def auth_backend_name() -> str:
     """
     value = (os.getenv("AUTH_BACKEND") or "").strip().lower() or DEFAULT_AUTH_BACKEND
     if value not in VALID_AUTH_BACKENDS:
-        logger.error("Invalid AUTH_BACKEND=%r; falling back to %r", value, DEFAULT_AUTH_BACKEND)
-        return DEFAULT_AUTH_BACKEND
+        # Fail CLOSED, like the storage/object-store factories: a misspelled non-empty value (e.g. `oidcc`)
+        # must NOT silently fall back to firebase and route authentication through cloud Google, which would
+        # bypass the documented zero-Firebase on-prem posture (cubic PR 10887 factory.py:34). Blank/unset
+        # still defaults to firebase (handled above).
+        raise ValueError(
+            f"Unknown AUTH_BACKEND={value!r} (expected one of {sorted(VALID_AUTH_BACKENDS)}); "
+            "refusing to fall back to firebase (on-prem fail-closed)."
+        )
     return value
 
 
