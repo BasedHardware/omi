@@ -16,8 +16,6 @@ Everything below was executed and verified on Ubuntu 24.04 with an NVIDIA RTX 50
 - An NVIDIA GPU with **≥ 16 GB** VRAM (the default STT + diarization + translation share one card via GPU
   time-slicing). More VRAM / more GPUs = more headroom.
 - ~60 GB free disk (container images + model weights).
-- One **free IP address on the node's LAN** (the cluster's entry point). Below we use `192.168.100.190` —
-  replace it everywhere with yours.
 
 **Software on the node (install these first)**
 - **NVIDIA driver** — `nvidia-smi` must print your GPU.
@@ -28,7 +26,10 @@ Everything below was executed and verified on Ubuntu 24.04 with an NVIDIA RTX 50
 
 **External service you provide**
 - An **OpenAI-compatible LLM + embeddings endpoint** reachable from the node — e.g. [Ollama](https://ollama.com)
-  serving a chat model and an embeddings model (`bge-m3`). Note its URL, e.g. `http://192.168.100.122:11434/v1`.
+  serving a chat model and an embeddings model (`bge-m3`). Note its URL.
+
+**A Hugging Face account + token** — one of the diarization models (`pyannote`) is license-gated, so
+provisioning it (step 5) needs a free token whose account has accepted the model terms.
 
 Get the code:
 ```bash
@@ -37,35 +38,54 @@ git clone <your fork of omi> && cd omi/deploy/onprem/helm
 
 ---
 
-## 2. Install k0s (single node)
+## 2. Two addresses you will use (important — they are different machines)
 
+This deployment uses **two IP addresses on your LAN**. Keep them straight:
+
+| In this manual | What it is | How to choose it |
+|---|---|---|
+| **`NODE_IP`** = `192.168.100.122` | **The server's own IP** — where k0s, Docker and the image registry run, and where the node reaches your external LLM. | Your machine's real LAN address. Find it: `ip -4 addr` or `hostname -I`. |
+| **`ENTRY_IP`** = `192.168.100.190` | **The cluster's entry point** — a *second, separate, currently-unused* IP on the **same** LAN. MetalLB "borrows" it and answers for it, so users/apps reach Omi (HTTPS + the login page) here. The OIDC issuer and the TLS certificate are pinned to it. | Any **free** address on your LAN subnet — NOT the node's own IP, and not used by any other device or handed out by your DHCP server. Verify it's free: `ping -c1 <ENTRY_IP>` must get **no** reply. |
+
+Why two: the node already has its own IP for host things (registry, SSH, the LLM). The cluster needs its own
+stable "service" IP that is independent of any single pod — that's what MetalLB provides on `ENTRY_IP`.
+
+Set them once for the shell you'll work in (replace with your real values):
 ```bash
-# Install the k0s binary
-curl -sSLf https://get.k0s.sh | sudo sh
-
-# Install a single-node cluster (controller + worker on the same machine) and start it
-sudo k0s install controller --single
-sudo k0s start
-sudo k0s status                       # wait until "Kube-api ... Running"
-
-# Kubeconfig for kubectl/helm (do this in every new shell, or add to your profile)
-sudo k0s kubeconfig admin > ~/.kube/k0s.conf
-export KUBECONFIG=~/.kube/k0s.conf
-kubectl get nodes                     # your node should be Ready
+export NODE_IP=192.168.100.122
+export ENTRY_IP=192.168.100.190
+export REG=$NODE_IP:5000                       # the registry runs on the node, port 5000
+export LLM=http://$NODE_IP:11434/v1            # your external LLM/embeddings (example: Ollama on the node)
 ```
 
 ---
 
-## 3. Give k0s access to the GPU
+## 3. Install k0s (single node)
+
+```bash
+curl -sSLf https://get.k0s.sh | sudo sh          # install the k0s binary
+sudo k0s install controller --single             # one machine = controller + worker
+sudo k0s start
+sudo k0s status                                  # wait for "Kube-api ... Running"
+
+# kubeconfig for kubectl/helm (repeat the export in every new shell, or add it to your ~/.bashrc)
+sudo k0s kubeconfig admin > ~/.kube/k0s.conf
+export KUBECONFIG=~/.kube/k0s.conf
+kubectl get nodes                                # your node should be Ready
+```
+
+---
+
+## 4. Give k0s access to the GPU
 
 k0s runs its own containerd, so the GPU is wired at the containerd level, then a device plugin advertises
 the GPU to Kubernetes. On one GPU we also turn on **time-slicing** so several inference pods can share it.
 
 ```bash
-# 3a. Generate a CDI spec for your GPU (describes the device to the container runtime)
+# 4a. Describe the GPU to the container runtime
 sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 
-# 3b. Make the NVIDIA runtime the containerd default + enable CDI. Create the drop-in:
+# 4b. Make the NVIDIA runtime the containerd default + enable CDI
 sudo mkdir -p /etc/k0s/containerd.d
 sudo tee /etc/k0s/containerd.d/nvidia.toml >/dev/null <<'EOF'
 version = 3
@@ -81,9 +101,9 @@ version = 3
           BinaryName = "/usr/bin/nvidia-container-runtime"
           SystemdCgroup = true
 EOF
-sudo k0s stop && sudo k0s start       # restart k0s to load the drop-in
+sudo k0s stop && sudo k0s start                  # reload k0s with the drop-in
 
-# 3c. Device plugin WITH time-slicing (advertises 4 shareable GPU units — see the file's comments to tune)
+# 4c. Device plugin WITH time-slicing (advertises 4 shareable GPU units — tune in the file's comments)
 kubectl apply -f nvidia-device-plugin-k0s.yaml
 kubectl -n kube-system rollout status ds/nvidia-device-plugin-daemonset
 kubectl get node -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}{"\n"}'   # -> 4
@@ -91,19 +111,19 @@ kubectl get node -o jsonpath='{.items[0].status.allocatable.nvidia\.com/gpu}{"\n
 
 ---
 
-## 4. Local image registry + build & push the Omi images
+## 5. Build the images and provision the model weights
 
-k0s pulls the images WE build (backend + the inference servers) from a registry on the node.
+### 5a. Local registry + build & push the images
+
+k0s pulls the images WE build (backend + the four inference servers) from a registry on the node.
 
 ```bash
-# 4a. Run a local registry on the node (port 5000). Replace 192.168.100.122 with the node's own IP.
+# Run a local registry on the node (port 5000)
 docker run -d --name omi-registry --restart=unless-stopped -p 0.0.0.0:5000:5000 \
   -v omi-registry-data:/var/lib/registry registry:2
-REG=192.168.100.122:5000
 
-# 4b. Build the images (backend + whisper/parakeet/diarizer/nllb) from the compose files, then push.
-#     (This can take a while and needs internet for the base images.)
-cd ../                                                       # deploy/onprem
+# Build the images from the compose files, then push them to the registry (needs internet for base images)
+cd ..                                            # deploy/onprem
 docker compose -f compose.prod.yaml --profile inference build
 for img in backend whisper parakeet diarizer nllb; do
   docker tag  omi-oss-$img:latest $REG/omi-oss-$img:latest
@@ -111,7 +131,7 @@ for img in backend whisper parakeet diarizer nllb; do
 done
 cd helm
 
-# 4c. Tell k0s's containerd it may pull from this (plain-HTTP) registry.
+# Let k0s's containerd pull from this plain-HTTP registry
 sudo mkdir -p /etc/k0s/containerd.d/certs.d/$REG
 sudo tee /etc/k0s/containerd.d/certs.d/$REG/hosts.toml >/dev/null <<EOF
 server = "http://$REG"
@@ -129,23 +149,48 @@ EOF
 sudo k0s stop && sudo k0s start
 ```
 
----
+### 5b. Provide the model weights (one time, needs internet)
 
-## 5. Provide the inference model weights
+The GPU servers load their models **from a plain directory on the node** — they do NOT download anything at
+run time (that keeps them working with no internet). So you download the weights **once**, into a folder you
+choose, and later k0s mounts that folder (read-only) into the pods. It is an ordinary host directory — not a
+Docker volume, not anything k0s-specific.
 
-The GPU servers load their models from disk (no download at runtime). Provision the weights **once** into a
-directory on the node and point the chart at it. The reproducible way is the compose inference recipe, which
-downloads faster-whisper (`large-v3`), the NLLB translation model and the pyannote diarization model (the
-pyannote repo is gated — you need a free Hugging Face token the first time) into a Docker volume:
+Pick the directory and download the three models into it. This must run on a network that can reach Hugging
+Face; after this the cluster needs no internet for inference.
 
 ```bash
-# Follow deploy/onprem/SELFHOST_NOTES.md, section "Local inference", to populate the models volume, then:
-docker volume inspect omi-oss_inference-models --format '{{.Mountpoint}}'
-#   -> /var/lib/docker/volumes/omi-oss_inference-models/_data   (this is your modelsHostPath)
+export MODELS=/opt/omi/models                    # your models directory (remember it for step 7)
+sudo mkdir -p $MODELS/hf && sudo chown -R $USER $MODELS
+export HF_TOKEN=hf_xxxxxxxx                       # from https://huggingface.co/settings/tokens
+
+# On the pyannote model pages, click "Agree and access" once (the token's account needs the licenses):
+#   huggingface.co/pyannote/speaker-diarization-community-1 · /pyannote/embedding · /pyannote/wespeaker-voxceleb-resnet34-LM
+
+# whisper — downloads faster-whisper large-v3 (public) into $MODELS/hf. Start it, wait until it logs the
+# model is loaded (a "ready"/startup line), then stop it. Nothing is served during provisioning.
+docker run -d --name prov-whisper -e HF_HOME=/models/hf -e WHISPER_MODEL=large-v3 \
+  -e WHISPER_COMPUTE_TYPE=int8_float16 -v $MODELS:/models $REG/omi-oss-whisper:latest
+docker logs -f prov-whisper        # wait for the model to finish loading, then Ctrl-C
+docker rm -f prov-whisper
+
+# diarizer — downloads the (gated) pyannote models into $MODELS/hf using your token. Same pattern.
+docker run -d --name prov-diar -e HF_HOME=/models/hf -e HUGGINGFACE_TOKEN=$HF_TOKEN \
+  -v $MODELS:/models $REG/omi-oss-diarizer:latest
+docker logs -f prov-diar           # wait until it is ready, then Ctrl-C
+docker rm -f prov-diar
+
+# nllb — convert facebook/nllb-200-distilled-600M to the CTranslate2 int8 format the server expects,
+# into $MODELS/nllb-200-distilled-600M-ct2-int8 (this is a one-shot converter, not a server).
+docker run --rm -v $MODELS:/models $REG/omi-oss-nllb:latest \
+  ct2-transformers-converter --model facebook/nllb-200-distilled-600M --quantization int8 \
+  --output_dir /models/nllb-200-distilled-600M-ct2-int8 --copy_files sentencepiece.bpe.model
+
+# You should now have: $MODELS/hf/... (whisper + pyannote) and $MODELS/nllb-200-distilled-600M-ct2-int8/
+ls $MODELS $MODELS/nllb-200-distilled-600M-ct2-int8
 ```
 
-The default `inference.inCluster.modelsHostPath` already points there. If your weights live elsewhere, pass
-`--set inference.inCluster.modelsHostPath=/your/path` in step 7.
+(The parakeet service needs no model — it is a thin gateway that forwards speech to whisper.)
 
 ---
 
@@ -164,10 +209,11 @@ helm install openebs openebs/openebs -n openebs --create-namespace --wait \
   --set engines.replicated.mayastor.enabled=false \
   --set engines.local.lvm.enabled=false --set engines.local.zfs.enabled=false
 
-# 6c. MetalLB — gives the entry point a real LAN IP. Then a pool with YOUR free IP.
+# 6c. MetalLB — lets the cluster own ENTRY_IP on your LAN
 helm repo add metallb https://metallb.github.io/metallb && helm repo update metallb
 helm install metallb metallb/metallb -n metallb-system --create-namespace --wait
-#   Edit metallb-pool-k0s.yaml -> set your free LAN IP (192.168.100.190/32), then:
+# Put YOUR ENTRY_IP into the pool file, then apply it:
+sed -i "s#192.168.100.190/32#$ENTRY_IP/32#" metallb-pool-k0s.yaml
 kubectl apply -f metallb-pool-k0s.yaml
 ```
 
@@ -177,22 +223,20 @@ kubectl apply -f metallb-pool-k0s.yaml
 
 ```bash
 export KUBECONFIG=~/.kube/k0s.conf
-LBIP=192.168.100.190          # your free LAN IP from step 6c
-REG=192.168.100.122:5000      # your registry from step 4
-LLM=http://192.168.100.122:11434/v1   # your external OpenAI-compatible endpoint
 
-# 7a. A TLS cert whose SAN carries the entry-point IP (self-signed; bring your own for real prod)
+# A TLS cert whose SAN carries ENTRY_IP (self-signed; bring your own CA-signed cert for real prod)
 kubectl create namespace omi --dry-run=client -o yaml | kubectl apply -f -
-HOST_IP=$LBIP ./gen-certs.sh omi omi-tls $LBIP
+HOST_IP=$ENTRY_IP ./gen-certs.sh omi omi-tls $ENTRY_IP
 
-# 7b. Install. Everything site-specific is passed here, so nothing secret/IP is committed in the values.
+# Install. Everything site-specific is passed here, so no IP/secret is committed in the chart files.
 helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
   --set imageRegistry=$REG \
-  --set ingress.loadBalancerIP=$LBIP \
-  --set backend.encryptionSecret="$(openssl rand -hex 32)" \
+  --set ingress.loadBalancerIP=$ENTRY_IP \
+  --set inference.inCluster.modelsHostPath=$MODELS \
   --set inference.openai.baseUrl=$LLM \
   --set inference.embeddings.baseUrl=$LLM \
-  --set inference.embeddings.model=bge-m3
+  --set inference.embeddings.model=bge-m3 \
+  --set backend.encryptionSecret="$(openssl rand -hex 32)"
 ```
 
 Watch it come up (first start pulls images and loads GPU models — give it a few minutes):
@@ -208,43 +252,83 @@ You want everything `Running`/`Completed`: `backend`, `mongo-0`, `valkey-0`, `qd
 
 ---
 
-## 8. Verify
+## 8. Passwords & secrets — where they go
+
+The install above sets **one** real secret and leaves the rest as **throwaway defaults suitable for a first
+run**. Before real production, set them all. There are two ways.
+
+**What the secrets are**
+| Secret | Used by | Default in `values-k0s.yaml` |
+|---|---|---|
+| `backend.encryptionSecret` | encrypts stored user data (required, no default) | you pass it via `--set` (the `openssl rand -hex 32` above) |
+| `auth.adminPassword` | the Keycloak admin console | `admin` |
+| `auth.keycloak.postgres.password` | Keycloak's database | `keycloak-dev` |
+| `objstore.accessKey` / `objstore.secretKey` | the S3 object store (RustFS) | `rustfsadmin` / `rustfsadmin` |
+
+**Option A — pass them at install (simplest).** Add `--set` flags for each; nothing is written to disk:
+```bash
+helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml \
+  --set imageRegistry=$REG --set ingress.loadBalancerIP=$ENTRY_IP \
+  --set inference.inCluster.modelsHostPath=$MODELS \
+  --set inference.openai.baseUrl=$LLM --set inference.embeddings.baseUrl=$LLM --set inference.embeddings.model=bge-m3 \
+  --set backend.encryptionSecret="$(openssl rand -hex 32)" \
+  --set auth.adminPassword="$(openssl rand -base64 24)" \
+  --set auth.keycloak.postgres.password="$(openssl rand -base64 24)" \
+  --set objstore.accessKey="omi-s3" --set objstore.secretKey="$(openssl rand -base64 24)"
+```
+Keep these values somewhere safe — you must pass the **same** ones on every future `helm upgrade`, or the
+components (and any data encrypted with the old `encryptionSecret`) won't line up.
+
+**Option B — a Kubernetes Secret you manage (recommended for real prod).** Create the Secret yourself (from a
+vault, Sealed Secrets, External Secrets, …) and tell the chart not to build one:
+```bash
+kubectl -n omi create secret generic backend-secret \
+  --from-literal=ENCRYPTION_SECRET="$(openssl rand -hex 32)" \
+  --from-literal=KC_ADMIN_PASSWORD="…" \
+  --from-literal=KC_DB_PASSWORD="…" \
+  --from-literal=S3_ACCESS_KEY="…" --from-literal=S3_SECRET_KEY="…"
+# then install with:
+helm install omi ./omi-oss -n omi -f omi-oss/values-k0s.yaml --set secrets.create=false \
+  --set imageRegistry=$REG --set ingress.loadBalancerIP=$ENTRY_IP \
+  --set inference.inCluster.modelsHostPath=$MODELS \
+  --set inference.openai.baseUrl=$LLM --set inference.embeddings.baseUrl=$LLM --set inference.embeddings.model=bge-m3
+```
+With `secrets.create=false` the chart references the Secret by name and never sees the values.
+
+---
+
+## 9. Verify
 
 ```bash
-LBIP=192.168.100.190
-
 # API health
-curl -k https://$LBIP/v1/health                                  # {"status":"ok"}
+curl -k https://$ENTRY_IP/v1/health                              # {"status":"ok"}
 
 # Login works (a real token is accepted, a bad one is rejected)
-TOK=$(curl -k -s -X POST https://$LBIP/realms/omi/protocol/openid-connect/token \
+TOK=$(curl -k -s -X POST https://$ENTRY_IP/realms/omi/protocol/openid-connect/token \
   -d grant_type=password -d client_id=omi-test -d username=testuser -d password=testpass \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
-curl -k -o /dev/null -w 'valid  token -> %{http_code}\n' https://$LBIP/v1/users/people -H "Authorization: Bearer $TOK"     # 200
-curl -k -o /dev/null -w 'bad    token -> %{http_code}\n' https://$LBIP/v1/users/people -H "Authorization: Bearer nope"     # 401
+curl -k -o /dev/null -w 'valid token -> %{http_code}\n' https://$ENTRY_IP/v1/users/people -H "Authorization: Bearer $TOK"   # 200
+curl -k -o /dev/null -w 'bad   token -> %{http_code}\n' https://$ENTRY_IP/v1/users/people -H "Authorization: Bearer nope"   # 401
 
-# Inference runs on the GPU inside the cluster:
+# Inference runs on the GPU inside the cluster (translation shown; STT + diarization work the same way):
 kubectl -n omi exec deploy/backend -c backend -- \
   curl -fsS -X POST http://nllb:8080/v1/translate -H 'Content-Type: application/json' \
   -d '{"contents":["The on-prem cluster runs inference on the GPU."],"target_language_code":"it"}'
 #   -> "Il cluster on-premise esegue inferenze sulla GPU."
-kubectl -n omi get pods -l app.kubernetes.io/part-of=omi-oss | grep -E 'whisper|parakeet|diarizer|nllb'
 ```
 
 ---
 
-## Notes & operations
+## 10. Day-two operations
 
 - **What runs where.** In the cluster: the API, the datastore (MongoDB), cache (Valkey), vector store
   (Qdrant), object store (RustFS), push server (ntfy), login (Keycloak + Postgres), and the GPU inference
   servers (whisper + parakeet gateway, diarizer, nllb). Outside: only the chat LLM and the embeddings model.
-- **One GPU, several models.** The device plugin advertises 4 GPU units (step 3c) so whisper, diarizer and
-  nllb share the card. If you add engines or hit out-of-memory, raise VRAM / add a GPU, or lower the number
-  of GPU services.
-- **Turn an inference engine off** (e.g. keep only translation): `--set inference.inCluster.services.diarizer.enabled=false`.
-- **Use external inference instead** (no in-cluster GPU): `--set inference.inCluster.enabled=false` and point
-  `--set inference.openai.baseUrl=...` at your speech/translation endpoints.
-- **Change something:** re-run the same `helm ... upgrade` (replace `install` with `upgrade`) with your flags.
-- **Uninstall:** `helm uninstall omi -n omi`. Data volumes remain until you delete the PVCs / the cluster.
-- **Production secrets.** The admin/database/S3 passwords above are throwaway dev values — set real ones (or
-  supply a `backend-secret` Secret out-of-band and `--set secrets.create=false`) for a real deployment.
+- **One GPU, several models.** The device plugin advertises 4 GPU units (step 4c) so whisper, diarizer and
+  nllb share the card. If you add engines or hit out-of-memory, raise VRAM / add a GPU, or lower the GPU
+  services (`--set inference.inCluster.services.<name>.enabled=false`).
+- **Use external inference instead** (no in-cluster GPU): `--set inference.inCluster.enabled=false`, and point
+  `inference.openai.baseUrl` / the speech endpoints at your own servers.
+- **Change anything:** re-run the command with `helm upgrade` instead of `helm install` — and pass the **same**
+  `--set` secrets/values each time.
+- **Uninstall:** `helm uninstall omi -n omi` (data volumes remain until you delete the PVCs or the cluster).

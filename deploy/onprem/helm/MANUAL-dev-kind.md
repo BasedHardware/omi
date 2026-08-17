@@ -92,7 +92,10 @@ kubectl apply -f metallb-pool.yaml          # already set to Kind's 172.18.255.2
 ## 5. TLS certificate + install Omi
 
 ```bash
-LBIP=172.18.255.200          # pinned by values-dev.yaml (from MetalLB's pool)
+# The cluster's entry point. On Kind this is an IP on Kind's OWN docker network (172.18.0.0/16), reachable
+# from your machine (the docker host) — NOT your LAN. It is pinned in values-dev.yaml + metallb-pool.yaml,
+# so you normally don't change it. (In production, k0s, this would be a real free IP on your LAN instead.)
+LBIP=172.18.255.200
 
 # A TLS cert whose SAN carries the entry-point IP
 kubectl create namespace omi-dev --dry-run=client -o yaml | kubectl apply -f -
