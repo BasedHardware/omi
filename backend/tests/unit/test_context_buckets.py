@@ -38,6 +38,8 @@ class FakeRef:
         return FakeCollection(self.database, (*self.path, name))
 
     def get(self, transaction=None):
+        if transaction is not None and transaction.has_written:
+            raise ReadAfterWriteError(f'read of {self.path} after a write in the same transaction')
         return FakeSnapshot(self.path, self.database.rows.get(self.path))
 
     def set(self, payload):
@@ -92,15 +94,37 @@ class FakeCollection(FakeQuery):
         return FakeRef(self.database, (*self.path, name))
 
 
+class ReadAfterWriteError(AssertionError):
+    """Firestore rejects a read issued after a write inside a transaction."""
+
+
 class FakeTransaction:
+    """Buffers writes and enforces Firestore's read-before-write rule.
+
+    Writing straight through would make every atomicity assertion vacuous and
+    would let a read-after-write ordering bug pass here and fail in production.
+    """
+
     def __init__(self, database):
         self.database = database
+        self.has_written = False
+        self.pending = []
 
     def set(self, ref, payload):
-        ref.set(payload)
+        self.has_written = True
+        self.pending.append(('set', ref, payload))
 
     def delete(self, ref):
-        ref.delete()
+        self.has_written = True
+        self.pending.append(('delete', ref, None))
+
+    def commit(self):
+        for kind, ref, payload in self.pending:
+            if kind == 'set':
+                ref.set(payload)
+            else:
+                ref.delete()
+        self.pending = []
 
 
 class FakeBatch:
@@ -141,7 +165,9 @@ class FakeDB:
 def fake_db(monkeypatch):
     def transactional(function):
         def run(transaction):
-            return function(transaction)
+            result = function(transaction)
+            transaction.commit()
+            return result
 
         return run
 

@@ -206,10 +206,18 @@ def sync_context_buckets(
             Reading outside the transaction and writing after would let two
             concurrent syncs both observe an old row and both write, so the
             loser's older device clock could overwrite the newer state.
+
+            Firestore forbids a read after a write inside a transaction, so
+            every row is read up front and the writes are decided afterwards.
             """
 
-            written = skipped = fact_written = fact_skipped = 0
             stored_bucket = _snapshot_dict(bucket_ref.get(transaction=write_transaction))
+            stored_facts = [
+                (fact, fact_ref, _snapshot_dict(fact_ref.get(transaction=write_transaction)))
+                for fact, fact_ref in fact_refs
+            ]
+
+            written = skipped = fact_written = fact_skipped = 0
             if stored_bucket and _is_stale(
                 stored_bucket,
                 _clamped_device_time(bucket.device_updated_at, now=now),
@@ -229,8 +237,7 @@ def sync_context_buckets(
                 )
                 written += 1
 
-            for fact, fact_ref in fact_refs:
-                stored_fact = _snapshot_dict(fact_ref.get(transaction=write_transaction))
+            for fact, fact_ref, stored_fact in stored_facts:
                 if stored_fact and _is_stale(
                     stored_fact,
                     _clamped_device_time(fact.device_updated_at, now=now),
