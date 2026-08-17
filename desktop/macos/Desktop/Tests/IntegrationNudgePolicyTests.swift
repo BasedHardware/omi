@@ -136,6 +136,49 @@ final class IntegrationNudgePolicyTests: XCTestCase {
     )
   }
 
+  /// Emitting a funnel event on every activation for an answer the user settled
+  /// once is unbounded volume, and it inflates the denominator the event exists
+  /// to provide.
+  func testPermanentSuppressionsAreTheOnesThatCannotChangeHere() {
+    for reason in [
+      IntegrationNudgePolicy.Suppression.alreadyConnected, .featureDisabled, .optedOut,
+      .connectorLifetimeCap,
+    ] {
+      XCTAssertTrue(IntegrationNudgePolicy.isPermanent(reason), "\(reason) should be permanent")
+    }
+    for reason in [
+      IntegrationNudgePolicy.Suppression.snoozed, .connectorCooldown, .globalCooldown, .dailyCap,
+      .dwellTooShort, .notSignedIn, .onboardingIncomplete,
+    ] {
+      XCTAssertFalse(IntegrationNudgePolicy.isPermanent(reason), "\(reason) can change")
+    }
+  }
+
+  /// The connection check is a local config scan for export destinations, so
+  /// every gate that does not need it must settle first — otherwise a user who
+  /// pressed "Never" pays for that scan on every activation, forever.
+  func testGatesThatDoNotNeedConnectionStateSettleWithoutIt() {
+    let optedOut = IntegrationNudgePolicy.Input(isConnected: false, connector: .init(optedOut: true))
+    XCTAssertEqual(
+      IntegrationNudgePolicy.decideWithoutConnectionState(optedOut), .suppress(.optedOut))
+
+    let spent = IntegrationNudgePolicy.Input(
+      isConnected: false,
+      connector: .init(shownCount: IntegrationNudgePolicy.connectorLifetimeCap)
+    )
+    XCTAssertEqual(
+      IntegrationNudgePolicy.decideWithoutConnectionState(spent),
+      .suppress(.connectorLifetimeCap))
+  }
+
+  /// Connectedness is the one thing it cannot answer, so an otherwise-eligible
+  /// window must fall through rather than being wrongly settled.
+  func testAnEligibleWindowIsNotSettledWithoutTheConnectionCheck() {
+    XCTAssertNil(
+      IntegrationNudgePolicy.decideWithoutConnectionState(
+        IntegrationNudgePolicy.Input(isConnected: false)))
+  }
+
   // MARK: - Transitions
 
   func testDeliveryAdvancesCountAndTimestamp() {

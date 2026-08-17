@@ -19,9 +19,11 @@ import Foundation
 /// `NotificationService`. That is deliberate: `NotificationService` applies the
 /// proactive-AI frequency slider, which ships at 0 (Off), so routing through it
 /// would mean this feature is dark for almost every user. The master
-/// Notifications toggle is still honored — it is checked explicitly in
-/// ``decide(entry:isConnected:dwell:)`` — as is the floating bar's own snooze,
-/// which `showNotification` enforces.
+/// Notifications toggle is still honored — it is read in ``handleActivation``
+/// before any window inspection, and again by the policy. The floating bar's
+/// "hide for 2 hours" is deliberately *not* a gate: it is a statement about the
+/// bar, not about notifications, and `NotificationService` documents the same
+/// position — a hidden bar still delivers through the temp-show path.
 @MainActor
 final class IntegrationNudgeCoordinator {
   static let shared = IntegrationNudgeCoordinator()
@@ -280,6 +282,13 @@ final class IntegrationNudgeCoordinator {
     // to open one, so this is the one outcome worth watching for.
     guard let match = IntegrationNudgeMatcher.match(window) else { return .noMatchYet }
 
+    // Settle everything that does not need the connection state first. For an
+    // export destination the inspection is a local MCP config scan, and a user
+    // who pressed "Never" should not pay for it on every activation.
+    if let settled = decideWithoutConnectionState(entry: match.entry, dwell: dwell) {
+      return report(settled, for: match)
+    }
+
     let isConnected = await connectionInspector(match.entry.route)
     guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
 
@@ -302,6 +311,37 @@ final class IntegrationNudgeCoordinator {
     /// exists, re-checking re-reads the window title and re-emits the funnel's
     /// denominator for a decision already made.
     var shouldKeepWatching: Bool { self == .noMatchYet }
+  }
+
+  /// Emit the suppression, unless it is one the user has permanently settled.
+  ///
+  /// A permanent reason — connected, opted out, budget spent, feature off — is
+  /// the same answer on every activation for the life of the install. Emitting
+  /// it each time is unbounded volume, and it inflates the very denominator the
+  /// event exists to provide.
+  private func report(
+    _ reason: IntegrationNudgePolicy.Suppression,
+    for match: IntegrationNudgeMatcher.Match
+  ) -> Outcome {
+    if !IntegrationNudgePolicy.isPermanent(reason) {
+      AnalyticsManager.shared.integrationNudgeSuppressed(
+        entry: match.entry,
+        trigger: match.trigger,
+        reason: reason
+      )
+    }
+    return .settled(reason)
+  }
+
+  /// The gates that do not need the connection state, evaluated against the
+  /// same live inputs `decide` uses.
+  private func decideWithoutConnectionState(
+    entry: IntegrationNudgeCatalogEntry,
+    dwell: TimeInterval
+  ) -> IntegrationNudgePolicy.Suppression? {
+    IntegrationNudgePolicy.decideWithoutConnectionState(
+      policyInput(entry: entry, isConnected: false, dwell: dwell)
+    )?.suppression
   }
 
   /// Whether the app that triggered this evaluation is still the one in front,
@@ -327,18 +367,7 @@ final class IntegrationNudgeCoordinator {
     )
 
     if let reason = decision.suppression {
-      // Only report suppressions the user could plausibly have wanted a nudge
-      // for. `alreadyConnected` is the steady state for every integration the
-      // user already set up, and `featureDisabled` is a settings choice, not a
-      // funnel signal — either would swamp the denominator.
-      if reason != .alreadyConnected && reason != .featureDisabled {
-        AnalyticsManager.shared.integrationNudgeSuppressed(
-          entry: match.entry,
-          trigger: match.trigger,
-          reason: reason
-        )
-      }
-      return .settled(reason)
+      return report(reason, for: match)
     }
 
     guard let ownerID = ownerID() else { return .settled(.notSignedIn) }
@@ -381,7 +410,15 @@ final class IntegrationNudgeCoordinator {
   static func liveWindowTitle(bundleIdentifier: String, appName: String?) async -> String? {
     guard IntegrationNudgeMatcher.isBrowser(bundleIdentifier: bundleIdentifier) else { return nil }
     if let appName, RewindSettings.shared.isAppExcluded(appName) { return nil }
-    return await ScreenCaptureService.getActiveWindowInfoAsync().windowTitle
+
+    let info = await ScreenCaptureService.getActiveWindowInfoAsync()
+    // The lookup can answer from a cache up to a couple of seconds old, and that
+    // snapshot may belong to whatever app was in front before this activation.
+    // Pairing someone else's title with this app is how a TextEdit window named
+    // "Gmail integration notes" becomes a Gmail nudge in the browser you just
+    // switched to, so the title is only used when its own app agrees.
+    guard let appName, info.appName == appName else { return nil }
+    return info.windowTitle
   }
 
   // MARK: - Decision
@@ -391,9 +428,17 @@ final class IntegrationNudgeCoordinator {
     isConnected: Bool,
     dwell: TimeInterval
   ) -> IntegrationNudgePolicy.Decision {
+    IntegrationNudgePolicy.decide(policyInput(entry: entry, isConnected: isConnected, dwell: dwell))
+  }
+
+  private func policyInput(
+    entry: IntegrationNudgeCatalogEntry,
+    isConnected: Bool,
+    dwell: TimeInterval
+  ) -> IntegrationNudgePolicy.Input {
     let timestamp = now()
     let environment = environment()
-    let input = IntegrationNudgePolicy.Input(
+    return IntegrationNudgePolicy.Input(
       isConnected: isConnected,
       isFeatureEnabled: environment.isFeatureEnabled && environment.notificationsEnabled,
       isSignedIn: ownerID() != nil,
@@ -404,7 +449,6 @@ final class IntegrationNudgeCoordinator {
       dwell: dwell,
       now: timestamp
     )
-    return IntegrationNudgePolicy.decide(input)
   }
 
   // MARK: - Card actions

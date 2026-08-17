@@ -18,6 +18,29 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
     XCTAssertEqual(result?.trigger.kind, .nativeApp)
   }
 
+  /// A bare product name fires on any page that merely mentions the tool, so
+  /// browser keywords are domains wherever the real title carries one.
+  func testAPageAboutAToolIsNotThatTool() {
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "ChatGPT vs Claude — a comparison"))
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "anthropics/claude-code: the CLI"))
+    XCTAssertNil(match(bundle: "com.google.Chrome", title: "Notion alternatives in 2026 — Blog"))
+  }
+
+  func testTheRealSiteTitlesStillMatch() {
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "Omi — chatgpt.com")?.entry.route,
+      .exportDestination("chatgpt")
+    )
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "New chat \\ claude.ai")?.entry.route,
+      .exportDestination("claude")
+    )
+    XCTAssertEqual(
+      match(bundle: "com.google.Chrome", title: "Roadmap — notion.so")?.entry.route,
+      .exportDestination("notion")
+    )
+  }
+
   func testBrowserTitleMatchesASite() {
     let result = match(bundle: "com.google.Chrome", title: "Inbox (42) - me@example.com - Gmail")
     XCTAssertEqual(result?.entry.route, .importConnector("email"))
@@ -26,7 +49,7 @@ final class IntegrationNudgeMatcherTests: XCTestCase {
 
   func testBrowserTitleMatchIsCaseInsensitive() {
     XCTAssertEqual(
-      match(bundle: "com.apple.Safari", title: "notion – Roadmap")?.entry.route,
+      match(bundle: "com.apple.Safari", title: "Roadmap – NOTION.SO")?.entry.route,
       .exportDestination("notion")
     )
   }

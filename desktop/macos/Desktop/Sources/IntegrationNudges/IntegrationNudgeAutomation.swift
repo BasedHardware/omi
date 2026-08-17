@@ -42,9 +42,13 @@ enum IntegrationNudgeAutomation {
     ]
   }
 
-  /// Present the connect card for one catalog entry through the real
-  /// floating-bar path, so the card itself can be inspected without waiting for
-  /// the user to open the matching app.
+  /// Offer one catalog entry through the coordinator's real delivery path, so
+  /// the card can be inspected without waiting for the user to open the matching
+  /// app — and so its budget is spent exactly as a real nudge's would be.
+  ///
+  /// Deliberately not a direct `showNotification` call: a QA path that presents
+  /// without recording would diverge from production, and an e2e flow asserting
+  /// the cooldown afterwards would be asserting something that never happened.
   static func present(telemetryID: String) -> [String: String] {
     guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else {
       return [
@@ -53,24 +57,21 @@ enum IntegrationNudgeAutomation {
         "known": IntegrationNudgeCatalog.allTelemetryIDs.joined(separator: ","),
       ]
     }
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else {
+    guard RuntimeOwnerIdentity.currentOwnerId() != nil else {
       return ["presented": "false", "error": "not signed in"]
     }
 
-    let result = FloatingControlBarManager.shared.showNotification(
-      ownerID: ownerID,
-      title: "Connect \(entry.displayName) to Omi",
-      message: entry.pitch,
-      assistantId: IntegrationNudgeCoordinator.assistantID,
-      sound: .none,
-      action: .connectIntegration(
-        telemetryID: entry.telemetryID,
-        triggerID: entry.triggers.first?.id ?? "automation"
-      )
+    let trigger =
+      entry.triggers.first
+      ?? IntegrationNudgeTrigger(id: "automation", match: .application(bundleIdentifiers: []))
+    let outcome = IntegrationNudgeCoordinator.shared.offer(
+      match: IntegrationNudgeMatcher.Match(entry: entry, trigger: trigger),
+      isConnected: false,
+      dwell: IntegrationNudgePolicy.requiredDwell
     )
     return [
-      "presented": (result == .presented || result == .queued) ? "true" : "false",
-      "result": "\(result)",
+      "presented": outcome == .delivered ? "true" : "false",
+      "outcome": "\(outcome)",
       "integration": entry.displayName,
     ]
   }

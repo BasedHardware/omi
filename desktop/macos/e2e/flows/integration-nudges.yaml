@@ -75,6 +75,8 @@ steps:
 
   - id: S5
     name: The connect card presents on the floating bar
+    # Goes through the coordinator's real delivery path, so this spends Notion's
+    # budget exactly as a real nudge would — which is what S7 then asserts on.
     bridge.action:
       name: integration_nudge_present
       params:
@@ -93,9 +95,9 @@ steps:
 
   - id: S7
     name: A second offer for the same integration is suppressed
-    # S5 delivered a Notion card, which spends that integration's cooldown. The
-    # assertion is on the decision, not on operator interaction: a regression
-    # that stopped suppressing would otherwise still pass this step.
+    # S5 delivered a Notion card through the real path, which spends that
+    # integration's cooldown. The assertion is on the decision, not on operator
+    # interaction: a regression that stopped suppressing would otherwise pass.
     bridge.action:
       name: integration_nudge_evaluate
       params:

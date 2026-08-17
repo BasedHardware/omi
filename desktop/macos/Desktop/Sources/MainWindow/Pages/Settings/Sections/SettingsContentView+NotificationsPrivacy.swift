@@ -115,12 +115,11 @@ extension SettingsContentView {
 
             Spacer()
 
+            // `@AppStorage` already persists to the key the coordinator reads;
+            // a second writer on one key only invites drift.
             Toggle("", isOn: $integrationNudgesEnabled)
               .toggleStyle(OmiToggleStyle())
               .labelsHidden()
-              .onChange(of: integrationNudgesEnabled) { _, newValue in
-                IntegrationNudgeCoordinator.setFeatureEnabled(newValue)
-              }
           }
 
           Text(

@@ -149,6 +149,18 @@ enum IntegrationNudgePolicy {
   /// (global cooldown) that happened to also be true.
   static func decide(_ input: Input) -> Decision {
     if input.isConnected { return .suppress(.alreadyConnected) }
+    if let settled = decideWithoutConnectionState(input) { return settled }
+    return .deliver
+  }
+
+  /// Every gate that does not depend on `isConnected`, so a caller can settle
+  /// the cheap cases before paying for a connection check.
+  ///
+  /// This ordering is the difference between a user who pressed "Never" on
+  /// Notion paying nothing and paying a local MCP config scan on every single
+  /// activation of Notion, forever. Returns nil when only the connection state
+  /// is left to decide.
+  static func decideWithoutConnectionState(_ input: Input) -> Decision? {
     if !input.isFeatureEnabled { return .suppress(.featureDisabled) }
     if !input.isSignedIn { return .suppress(.notSignedIn) }
     if !input.isOnboardingComplete { return .suppress(.onboardingIncomplete) }
@@ -178,7 +190,21 @@ enum IntegrationNudgePolicy {
       return .suppress(.globalCooldown)
     }
 
-    return .deliver
+    return nil
+  }
+
+  /// Suppressions that cannot change while the user stays on this Mac. Emitting
+  /// a funnel event for these on every activation is unbounded volume for a
+  /// decision that was made once, and it inflates the very denominator the
+  /// event exists to provide.
+  static func isPermanent(_ suppression: Suppression) -> Bool {
+    switch suppression {
+    case .alreadyConnected, .featureDisabled, .optedOut, .connectorLifetimeCap:
+      return true
+    case .notSignedIn, .onboardingIncomplete, .snoozed, .connectorCooldown,
+      .globalCooldown, .dailyCap, .dwellTooShort:
+      return false
+    }
   }
 
   // MARK: - State transitions

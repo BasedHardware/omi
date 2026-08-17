@@ -33,7 +33,13 @@ enum IntegrationNudgeTriggerMatch: Equatable {
   /// The frontmost application is one of these bundle identifiers.
   case application(bundleIdentifiers: [String])
   /// The frontmost application is a browser and its window title contains one
-  /// of these keywords (case-insensitive).
+  /// of these keywords, case-insensitively and on token boundaries.
+  ///
+  /// Prefer a domain (`notion.so`) over a product name (`Notion`): a bare
+  /// product name fires on any page that merely mentions the tool, so a blog
+  /// post titled "ChatGPT vs Claude" would offer to connect both. Where the
+  /// real title carries no domain — Gmail renders "Inbox (12) - you@corp.com -
+  /// Gmail" — include the separator so the keyword is still specific.
   ///
   /// Title matching rather than URL reading is deliberate: the window title is
   /// already available from the same active-window lookup the proactive
@@ -141,7 +147,7 @@ enum IntegrationNudgeCatalog {
         ),
         IntegrationNudgeTrigger(
           id: "google_calendar_web",
-          match: .browserTitle(keywords: ["Google Calendar"])
+          match: .browserTitle(keywords: ["calendar.google.com", "Google Calendar"])
         ),
       ]
     ),
@@ -160,7 +166,7 @@ enum IntegrationNudgeCatalog {
       triggers: [
         IntegrationNudgeTrigger(
           id: "gmail_web",
-          match: .browserTitle(keywords: ["Gmail"])
+          match: .browserTitle(keywords: ["mail.google.com", "- Gmail"])
         ),
         IntegrationNudgeTrigger(
           id: "gmail_client_app",
@@ -279,7 +285,7 @@ enum IntegrationNudgeCatalog {
         ),
         IntegrationNudgeTrigger(
           id: "chatgpt_web",
-          match: .browserTitle(keywords: ["ChatGPT"])
+          match: .browserTitle(keywords: ["chatgpt.com", "chat.openai.com"])
         ),
       ]
     ),
@@ -302,7 +308,7 @@ enum IntegrationNudgeCatalog {
         ),
         IntegrationNudgeTrigger(
           id: "claude_web",
-          match: .browserTitle(keywords: ["Claude"])
+          match: .browserTitle(keywords: ["claude.ai"])
         ),
       ]
     ),
@@ -321,7 +327,7 @@ enum IntegrationNudgeCatalog {
       triggers: [
         IntegrationNudgeTrigger(
           id: "gemini_web",
-          match: .browserTitle(keywords: ["Gemini"])
+          match: .browserTitle(keywords: ["gemini.google.com"])
         )
       ]
     ),
@@ -344,7 +350,7 @@ enum IntegrationNudgeCatalog {
         ),
         IntegrationNudgeTrigger(
           id: "notion_web",
-          match: .browserTitle(keywords: ["Notion"])
+          match: .browserTitle(keywords: ["notion.so", "notion.site"])
         ),
       ]
     ),
