@@ -12,8 +12,11 @@ secrets:
 networkPolicy:
   enabled: true
 
-# The cluster's durable storage class (e.g. longhorn / ceph-rbd / a local-path with real disks).
-storageClassName: "REPLACE-with-cluster-storageclass"
+# The cluster's durable storage class. The chart is provisioner-agnostic — it only sets storageClassName
+# + the PVC size; the provisioner is a cluster prerequisite the operator installs (like Envoy Gateway).
+# Reference example uses OpenEBS on both Kind and k0s (e.g. "openebs-hostpath" for local PV, or a
+# replicated OpenEBS class); set whatever your cluster provides.
+storageClassName: "openebs-hostpath"
 
 backend:
   imagePullPolicy: IfNotPresent

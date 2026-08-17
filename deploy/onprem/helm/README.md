@@ -73,3 +73,9 @@ the operator's OpenAI/vLLM/Ollama endpoint (outside the cluster). GPU services s
   LoadBalancer instead.
 - **Images**: `kind load docker-image` cannot import Docker's multi-arch/containerd-store images (public
   ones are pulled by the node); a fully air-gapped node needs a pre-seeded local registry.
+- **Storage**: the chart is **provisioner-agnostic** — every PVC declares only `storageClassName` +
+  a size, nothing provisioner-specific. On dev/Kind we inherit the cluster default (`standard` =
+  `rancher.io/local-path`; single-node, `reclaim=Delete`, gone with the cluster). For a real cluster
+  install the storage provisioner as a prerequisite (like Envoy Gateway) and set `storageClassName`.
+  Reference example: **OpenEBS** on both Kind and k0s (e.g. `openebs-hostpath` for local PV, or a
+  replicated OpenEBS class for HA).
