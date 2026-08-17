@@ -73,6 +73,36 @@ def test_target_url_rewrites_host_via_internal_base(monkeypatch):
     assert up._target_url('http://10.0.2.2:8090/topicA?up=1') == 'http://ntfy:80/topicA?up=1'
 
 
+def test_target_url_rejects_non_absolute_endpoint(monkeypatch):
+    # cubic PR 10887 unifiedpush.py:77: a malformed (non-absolute) stored endpoint must be rejected BEFORE
+    # path extraction, so a bare/protocol-relative/non-http value can't steer the rewrite authority (SSRF).
+    monkeypatch.setenv('UNIFIEDPUSH_INTERNAL_BASE_URL', 'http://ntfy:80')
+    for bad in ('/just/a/path', '//evil.com/x', 'evil.com/x', 'ftp://evil.com/x', ''):
+        with pytest.raises(ValueError):
+            up._target_url(bad)
+    assert up._target_url('http://phone-host:8090/topicA?up=1') == 'http://ntfy:80/topicA?up=1'  # absolute still ok
+
+
+def test_send_all_bounded_caps_concurrency(monkeypatch):
+    # cubic PR 10887 unifiedpush.py:225: a large fan-out must not run all sends at once (unbounded crypto/HTTP
+    # backlog). _send_all_bounded caps in-flight coroutines at _MAX_CONCURRENT_SENDS.
+    monkeypatch.setattr(up, '_MAX_CONCURRENT_SENDS', 3)
+    live = {'now': 0, 'max': 0}
+
+    async def _fake_send_one(ep, plaintext):
+        live['now'] += 1
+        live['max'] = max(live['max'], live['now'])
+        await asyncio.sleep(0.005)
+        live['now'] -= 1
+        return 200
+
+    monkeypatch.setattr(up, '_send_one_async', _fake_send_one)
+    eps = [_ep(f'http://ntfy/t{i}?up=1') for i in range(12)]
+    statuses = asyncio.run(up._send_all_bounded(eps, b'payload'))
+    assert statuses == [200] * 12  # all complete, order preserved
+    assert live['max'] <= 3  # never more than the cap concurrent
+
+
 def _endpoints(monkeypatch, values):
     # Accept URL strings (plaintext, keyless) or UnifiedPushEndpoint records.
     records = [v if isinstance(v, UnifiedPushEndpoint) else _ep(v) for v in values]

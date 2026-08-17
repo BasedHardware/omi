@@ -75,6 +75,12 @@ def _target_url(endpoint: str) -> str:
             'endpoint verbatim (SSRF). Configure the internal push-server base URL.'
         )
     parts = urlsplit(endpoint)
+    # The stored endpoint is user-registered: require a well-formed ABSOLUTE http/https URL with a real
+    # authority before trusting its path. A malformed value (no scheme / no netloc, e.g. a bare or
+    # protocol-relative string) could otherwise make urlsplit put an authority into the path we concatenate
+    # onto the trusted base, turning the fail-closed rewrite back into SSRF (cubic PR 10887 unifiedpush.py:77).
+    if parts.scheme not in ('http', 'https') or not parts.netloc:
+        raise ValueError(f'refusing to deliver: UnifiedPush endpoint is not an absolute http(s) URL: {endpoint!r}')
     path = parts.path or '/'
     if parts.query:
         path = f'{path}?{parts.query}'
@@ -194,6 +200,24 @@ async def _send_one_async(endpoint: UnifiedPushEndpoint, plaintext: bytes) -> Op
     return await _post_async(target, body, headers)
 
 
+_MAX_CONCURRENT_SENDS = max(1, int(os.getenv('UNIFIEDPUSH_MAX_CONCURRENT_SENDS', '32')))
+
+
+async def _send_all_bounded(endpoints: List[UnifiedPushEndpoint], plaintext: bytes) -> List[Optional[int]]:
+    """Send to every endpoint with concurrency capped at ``_MAX_CONCURRENT_SENDS``. A large fan-out (the
+    daily-summary broadcast) otherwise gathers N coroutines that each queue a crypto job on
+    push_crypto_executor and an HTTP request, so the executor backlog + in-flight requests grow with the
+    recipient count. The semaphore keeps memory and the crypto/HTTP backlog bounded (cubic PR 10887
+    unifiedpush.py:225). Statuses stay aligned with ``endpoints``."""
+    sem = asyncio.Semaphore(_MAX_CONCURRENT_SENDS)
+
+    async def _one(ep: UnifiedPushEndpoint) -> Optional[int]:
+        async with sem:
+            return await _send_one_async(ep, plaintext)
+
+    return await asyncio.gather(*[_one(ep) for ep in endpoints])
+
+
 def send_to_user(user_id: str, msg: PushMessage, *, endpoints: Optional[List[UnifiedPushEndpoint]] = None) -> int:
     """Send to all of a user's UnifiedPush endpoints (sync). Returns successful-send count."""
     if endpoints is None:
@@ -222,7 +246,7 @@ async def send_to_user_async(
         return 0
 
     plaintext = json.dumps(render_payload(msg)).encode('utf-8')
-    statuses = await asyncio.gather(*[_send_one_async(ep, plaintext) for ep in endpoints])
+    statuses = await _send_all_bounded(endpoints, plaintext)
 
     dead: List[str] = []
     success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep.url, status, dead))
@@ -238,7 +262,7 @@ async def send_bulk(endpoints: List[UnifiedPushEndpoint], msg: PushMessage) -> N
         return
 
     plaintext = json.dumps(render_payload(msg)).encode('utf-8')
-    statuses = await asyncio.gather(*[_send_one_async(ep, plaintext) for ep in endpoints])
+    statuses = await _send_all_bounded(endpoints, plaintext)
 
     dead: List[str] = []
     success = sum(1 for ep, status in zip(endpoints, statuses) if _classify(ep.url, status, dead))
