@@ -4,7 +4,7 @@ import { STORAGE_UUIDS } from '../protocol/uuids'
 import type { DeviceConnection } from '../connections/deviceConnection'
 import type { DrainSink } from './ringDrain'
 import type { DrainedChunk } from './storageChunker'
-import { RING_RECORD_BYTES } from './storageProtocol'
+import { RING_RECORD_BYTES, PAYLOAD_BYTES as RING_PAYLOAD_BYTES } from './storageProtocol'
 
 const EPOCH = 1_723_800_000
 
@@ -167,6 +167,77 @@ describe('StorageDrainService', () => {
       (r) => r.kind === 'idle' && r.reason === 'already-draining'
     )
     expect(refused.length).toBe(1)
+  })
+})
+
+describe('StorageDrainService.probe', () => {
+  it('reports what the ring holds without reading any of it', async () => {
+    const h = harness({ status: ringStatus(1000) })
+    const probe = await h.service.probe()
+    expect(probe).toEqual({
+      protocol: 'ring',
+      items: 1000,
+      bytes: 1000 * RING_PAYLOAD_BYTES,
+      // 440000 bytes at 81 bytes a frame and 100 frames a second.
+      estimatedSeconds: Math.round((1000 * RING_PAYLOAD_BYTES) / (81 * 100))
+    })
+    // Probing must not start a transfer.
+    expect(h.written).toEqual([])
+  })
+
+  it('reports nothing when the ring is empty', async () => {
+    const h = harness({ status: ringStatus(0) })
+    expect(await h.service.probe()).toBeNull()
+    expect(h.written).toEqual([])
+  })
+
+  it('falls through to the file listing and sums the stored files', async () => {
+    const h = harness({
+      status: 'throw',
+      onCommand: (bytes, emit) => {
+        if (bytes[0] !== 0x10) return
+        emit(
+          fileListing([
+            { epoch: EPOCH, size: 400 },
+            { epoch: EPOCH + 600, size: 0 },
+            { epoch: EPOCH + 1200, size: 600 }
+          ])
+        )
+      }
+    })
+    const probe = await h.service.probe()
+    // The empty file is not something the user can recover.
+    expect(probe).toMatchObject({ protocol: 'files', items: 2, bytes: 1000 })
+  })
+
+  it('reports nothing when the device speaks neither protocol', async () => {
+    const h = harness({ status: 'throw' })
+    expect(await h.service.probe()).toBeNull()
+  })
+
+  it('refuses to probe while a drain is running', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const h = harness({
+      status: ringStatus(2),
+      onCommand: (bytes, emit) => {
+        if (bytes[0] !== 0x11) return
+        void gate.then(() => {
+          emit(Uint8Array.from([0x03, ...ringRecord(EPOCH, [[1, 2, 3]])]))
+          const done = new Uint8Array(10)
+          done[0] = 0x04
+          done[9] = 5
+          emit(done)
+        })
+      }
+    })
+    const draining = h.service.drainOnce()
+    // A probe mid-transfer would interleave its commands with the transfer.
+    expect(await h.service.probe()).toBeNull()
+    release()
+    await draining
   })
 })
 

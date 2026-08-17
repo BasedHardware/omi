@@ -35,7 +35,8 @@ interface Script {
 }
 
 const harness = (
-  script: Script
+  script: Script,
+  over: { shouldStop?: () => boolean; chunkSeconds?: number } = {}
 ): {
   drain: FileDrain
   persisted: DrainedChunk[]
@@ -94,7 +95,13 @@ const harness = (
   }
 
   return {
-    drain: new FileDrain({ transport, sink, framesPerSecond: FRAMES_PER_SECOND }),
+    drain: new FileDrain({
+      transport,
+      sink,
+      framesPerSecond: FRAMES_PER_SECOND,
+      shouldStop: over.shouldStop,
+      chunkSeconds: over.chunkSeconds
+    }),
     persisted,
     deletes,
     reads,
@@ -226,6 +233,61 @@ describe('FileDrain', () => {
     })
     await h.drain.drain()
     expect(commands).toEqual([0x10])
+  })
+
+  it('a cancelled pass keeps what it stored and leaves the rest on the device', async () => {
+    let stop = false
+    const h = harness(
+      {
+        onList: (emit) =>
+          emit(
+            listing([
+              { epoch: EPOCH, size: 400 },
+              { epoch: EPOCH + 600, size: 400 },
+              { epoch: EPOCH + 1200, size: 400 }
+            ])
+          ),
+        onRead: (index, emit) => {
+          emit(fileData(EPOCH + index * 600, [[1]]))
+          emit(completeStatus)
+          stop = true
+        }
+      },
+      { shouldStop: () => stop }
+    )
+
+    const result = await h.drain.drain()
+    expect(result).toMatchObject({ kind: 'incomplete', reason: 'cancelled', files: 1 })
+    // The first file is stored, so deleting it is right; the other two were
+    // never read and must survive.
+    expect(h.reads).toEqual([0])
+    expect(h.deletes).toEqual([0])
+    expect(h.persisted.length).toBe(1)
+  })
+
+  it('advances the capture time across the untimed payloads of one file', async () => {
+    const payload = fileData(
+      0,
+      Array.from({ length: 50 }, () => [7])
+    )
+    const h = harness(
+      {
+        onList: (emit) => emit(listing([{ epoch: EPOCH, size: 4000 }])),
+        onRead: (_index, emit) => {
+          // Three payloads of 50 frames, one second per chunk at 50 frames a
+          // second, all carrying the same (absent) timestamp.
+          emit(payload)
+          emit(payload)
+          emit(payload)
+          emit(completeStatus)
+        }
+      },
+      { chunkSeconds: 1 }
+    )
+    await h.drain.drain()
+    // Reusing the file's listing time for all three would give three chunks the
+    // same identity and keep only the first.
+    expect(h.persisted.map((c) => c.startEpochSeconds)).toEqual([EPOCH, EPOCH + 1, EPOCH + 2])
   })
 
   it('a delete that fails leaves the rest for the next pass', async () => {

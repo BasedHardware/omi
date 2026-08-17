@@ -64,6 +64,9 @@ const harness = (
     autoRespond?: (written: Uint8Array, emit: (b: Uint8Array) => void) => void
     /** Every wait elapses immediately, exercising the give-up paths. */
     instantTimeouts?: boolean
+    shouldStop?: () => boolean
+    chunkSeconds?: number
+    frameLengthBytes?: number
   } = {}
 ): Harness => {
   const written: Uint8Array[] = []
@@ -115,7 +118,14 @@ const harness = (
   }
 
   return {
-    drain: new RingDrain({ transport, sink, framesPerSecond: FRAMES_PER_SECOND }),
+    drain: new RingDrain({
+      transport,
+      sink,
+      framesPerSecond: FRAMES_PER_SECOND,
+      shouldStop: over.shouldStop,
+      chunkSeconds: over.chunkSeconds,
+      frameLengthBytes: over.frameLengthBytes
+    }),
     written,
     persisted,
     emit,
@@ -264,15 +274,63 @@ describe('RingDrain', () => {
     expect(h.persisted[0].frames.map((f) => Array.from(f))).toEqual([[7, 7, 7]])
   })
 
-  it('uses the drain time when the device clock is unreliable', async () => {
+  it('places the audio behind the drain time when the device clock is unreliable', async () => {
+    // 1000 unread packets of 440 payload bytes, 81 bytes per stored frame at 50
+    // frames a second, is about 108 seconds of audio ending about now.
     const h = harness({
-      status: statusBytes({ rtc: 0 }),
+      status: statusBytes({ rtc: 0, unread: 1000 }),
       autoRespond: respondWithRecord(1, 946_684_800) // a clearly wrong device time
     })
     await h.drain.drain()
     // A wrong capture time would put the recording outside the recovery window
-    // and get it permanently refused.
-    expect(h.persisted[0].startEpochSeconds).toBe(EPOCH)
+    // and get it permanently refused, and a capture time of exactly now would
+    // date every recovered second to the moment it was recovered.
+    expect(h.persisted[0].startEpochSeconds).toBe(EPOCH - 108)
+  })
+
+  it('advances the capture time from record to record when the clock is unreliable', async () => {
+    // Two records of 50 three-byte frames, one second per chunk at 50 frames a
+    // second, so each record is exactly one chunk.
+    const record = ringRecord(
+      0,
+      Array.from({ length: 50 }, () => [1, 2, 3])
+    )
+    const h = harness({
+      status: statusBytes({ rtc: 0, unread: 2 }),
+      chunkSeconds: 1,
+      autoRespond: (written, emit) => {
+        if (written[0] !== 0x11) return
+        emit(dataNotification(record))
+        emit(dataNotification(record))
+        emit(doneNotification(0, 2))
+      }
+    })
+    await h.drain.drain()
+    // Recordings are identified by their start, so stamping both records with
+    // the same drain time would make the second look like a duplicate of the
+    // first and lose it.
+    expect(h.persisted.map((c) => c.startEpochSeconds)).toEqual([EPOCH, EPOCH + 1])
+  })
+
+  it('a cancelled drain keeps the audio on the device', async () => {
+    let stop = false
+    const h = harness({
+      shouldStop: () => stop,
+      autoRespond: (written, emit) => {
+        if (written[0] !== 0x11) return
+        stop = true
+        emit(dataNotification(ringRecord(EPOCH, [[1, 2, 3]])))
+        emit(doneNotification(0, 9))
+      }
+    })
+    const result = await h.drain.drain()
+    expect(result).toMatchObject({ kind: 'incomplete', reason: 'cancelled' })
+    // Nothing was stored and the read pointer never moved, so the next attempt
+    // reads the same records.
+    expect(h.persisted).toEqual([])
+    expect(h.written.some((w) => w[0] === 0x12)).toBe(false)
+    // The device is told to stop rather than left streaming into nothing.
+    expect(h.written[h.written.length - 1][0]).toBe(0x03)
   })
 
   it('stops an interrupted transfer before starting a new one', async () => {

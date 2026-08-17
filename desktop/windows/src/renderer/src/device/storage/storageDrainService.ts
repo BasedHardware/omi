@@ -10,10 +10,15 @@
  */
 
 import { STORAGE_UUIDS } from '../protocol/uuids'
-import { codecFramesPerSecond, type BleAudioCodec } from '../protocol/deviceTypes'
+import {
+  codecFrameLengthInBytes,
+  codecFramesPerSecond,
+  type BleAudioCodec
+} from '../protocol/deviceTypes'
 import type { DeviceConnection } from '../connections/deviceConnection'
 import { RingDrain, type DrainSink, type StorageTransport } from './ringDrain'
 import { FileDrain } from './fileDrain'
+import { PAYLOAD_BYTES } from './storageProtocol'
 import type { DrainedChunk } from './storageChunker'
 
 export type DrainOutcome =
@@ -21,6 +26,17 @@ export type DrainOutcome =
   | { kind: 'drained'; chunks: number; protocol: 'ring' | 'files' }
   | { kind: 'incomplete'; reason: string; chunks: number; protocol: 'ring' | 'files' }
   | { kind: 'unsupported' }
+
+/** What a connected device is holding, without transferring any of it. */
+export interface StorageProbe {
+  protocol: 'ring' | 'files'
+  /** Ring packets, or stored files. */
+  items: number
+  bytes: number
+  /** Estimated from the codec's nominal frame length, so it is a size hint for
+   *  the UI and never a value anything decides on. */
+  estimatedSeconds: number
+}
 
 export interface StorageDrainOptions {
   connection: DeviceConnection
@@ -69,11 +85,71 @@ export function createStorageTransport(
 
 export class StorageDrainService {
   private running = false
+  private stopRequested = false
 
   constructor(private readonly options: StorageDrainOptions) {}
 
   get isRunning(): boolean {
     return this.running
+  }
+
+  /** Stops the transfer in progress at the next safe point. */
+  cancel(): void {
+    this.stopRequested = true
+  }
+
+  /**
+   * Reports what the device is holding without reading any of it, so the UI can
+   * offer recovery instead of starting a transfer that may run for minutes.
+   *
+   * Null means nothing to recover: either the device holds no stored audio or it
+   * speaks neither protocol.
+   */
+  async probe(): Promise<StorageProbe | null> {
+    // A probe during a transfer would interleave commands with it.
+    if (this.running) return null
+    this.running = true
+    try {
+      const transport = this.transport()
+      const framesPerSecond = codecFramesPerSecond(this.options.codec)
+      const bytesPerSecond = (codecFrameLengthInBytes(this.options.codec) + 1) * framesPerSecond
+
+      const ringStatus = await new RingDrain({
+        transport,
+        sink: this.options.sink,
+        framesPerSecond
+      }).status()
+      if (ringStatus !== null) {
+        if (ringStatus.unreadPackets === 0) return null
+        const bytes = ringStatus.unreadPackets * PAYLOAD_BYTES
+        return {
+          protocol: 'ring',
+          items: ringStatus.unreadPackets,
+          bytes,
+          estimatedSeconds: Math.round(bytes / bytesPerSecond)
+        }
+      }
+
+      const files = await new FileDrain({
+        transport,
+        sink: this.options.sink,
+        framesPerSecond
+      }).listFiles()
+      if (files === null) return null
+      const withAudio = files.filter((file) => file.sizeBytes > 0)
+      if (withAudio.length === 0) return null
+      const bytes = withAudio.reduce((sum, file) => sum + file.sizeBytes, 0)
+      return {
+        protocol: 'files',
+        items: withAudio.length,
+        bytes,
+        estimatedSeconds: Math.round(bytes / bytesPerSecond)
+      }
+    } catch {
+      return null
+    } finally {
+      this.running = false
+    }
   }
 
   /**
@@ -83,19 +159,19 @@ export class StorageDrainService {
   async drainOnce(): Promise<DrainOutcome> {
     if (this.running) return { kind: 'idle', reason: 'already-draining' }
     this.running = true
+    this.stopRequested = false
     try {
       const framesPerSecond = codecFramesPerSecond(this.options.codec)
-      const transport = createStorageTransport(
-        this.options.connection,
-        this.options.sleep,
-        this.options.now
-      )
+      const transport = this.transport()
       const sink = this.options.sink
+      const shouldStop = (): boolean => this.stopRequested
 
       const ring = new RingDrain({
         transport,
         sink,
         framesPerSecond,
+        shouldStop,
+        frameLengthBytes: codecFrameLengthInBytes(this.options.codec),
         onProgress: (p) =>
           this.options.onProgress?.(`Recovering ${p.records} recorded packets from your device`)
       })
@@ -121,6 +197,7 @@ export class StorageDrainService {
         transport,
         sink,
         framesPerSecond,
+        shouldStop,
         onProgress: (p) =>
           this.options.onProgress?.(`Recovering recording ${p.file} of ${p.ofFiles}`)
       })
@@ -142,7 +219,12 @@ export class StorageDrainService {
       }
     } finally {
       this.running = false
+      this.stopRequested = false
     }
+  }
+
+  private transport(): StorageTransport {
+    return createStorageTransport(this.options.connection, this.options.sleep, this.options.now)
   }
 }
 

@@ -37,6 +37,12 @@ export interface FileDrainOptions {
   sink: DrainSink
   framesPerSecond: number
   onProgress?: (progress: { file: number; ofFiles: number; chunks: number }) => void
+  /** Polled between files so the user can stop a long transfer. Stopping keeps
+   *  everything already stored and deletes only those files, so the pass is a
+   *  shorter version of a successful one rather than a discarded one. */
+  shouldStop?: () => boolean
+  /** Seconds of audio per stored chunk; defaults to the stored-audio size. */
+  chunkSeconds?: number
 }
 
 export type FileDrainResult =
@@ -88,6 +94,12 @@ export class FileDrain {
     let chunks = 0
     const stored: number[] = []
     for (const file of withAudio) {
+      if (this.options.shouldStop?.() === true) {
+        // Files already stored are still deleted: they are safely on disk, and
+        // leaving them would make the next pass re-read audio it already has.
+        const deleted = await this.deleteStored(stored)
+        return { kind: 'incomplete', reason: 'cancelled', files: stored.length, chunks, deleted }
+      }
       const read = await this.readFile(file)
       this.options.onProgress?.({
         file: stored.length + 1,
@@ -149,10 +161,19 @@ export class FileDrain {
     file: StoredFile
   ): Promise<{ chunks: DrainedChunk[]; error: string | null }> {
     const { transport } = this.options
-    const chunker = new StorageChunker({ framesPerSecond: this.options.framesPerSecond })
+    const chunker = new StorageChunker({
+      framesPerSecond: this.options.framesPerSecond,
+      chunkSeconds: this.options.chunkSeconds
+    })
     const chunks: DrainedChunk[] = []
     let sawData = false
     let error: string | null = null
+    // Same capture timeline rule as the ring drain: anchor once, then place
+    // later audio by how much has been read. A file big enough to split into
+    // several chunks whose records all carry one timestamp would otherwise
+    // produce chunks that are all identified by the same start.
+    let anchorSeconds: number | null = null
+    let framesConsumed = 0
 
     const abort = new AbortController()
     let settle: () => void = () => undefined
@@ -177,12 +198,19 @@ export class FileDrain {
       sawData = true
       const epochSeconds = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0
       const { frames, timestamps } = unpackPayload(bytes.subarray(4))
+      // A zero timestamp would otherwise date the recording to 1970 and get it
+      // permanently refused as outside the recovery window.
+      if (anchorSeconds === null)
+        anchorSeconds = epochSeconds > 0 ? epochSeconds : file.epochSeconds
       const stamped = stampFrames(
         frames,
-        epochSeconds > 0 ? epochSeconds : file.epochSeconds,
+        epochSeconds > 0
+          ? epochSeconds
+          : anchorSeconds + Math.floor(framesConsumed / this.options.framesPerSecond),
         timestamps,
         this.options.framesPerSecond
       )
+      framesConsumed += frames.length
       for (const chunk of chunker.push(stamped)) chunks.push(chunk)
     })
 

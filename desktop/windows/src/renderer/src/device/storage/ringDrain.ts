@@ -19,6 +19,7 @@ import {
   parseRingNotification,
   parseRingStatus,
   unpackPayload,
+  PAYLOAD_BYTES,
   type RingStatus
 } from './storageProtocol'
 import { StorageChunker, stampFrames, type DrainedChunk } from './storageChunker'
@@ -50,6 +51,15 @@ export interface RingDrainOptions {
   sink: DrainSink
   framesPerSecond: number
   onProgress?: (progress: { records: number; chunks: number; bytes: number }) => void
+  /** Polled between records so the user can stop a long transfer. Stopping
+   *  ends the drain as `incomplete`, which leaves the read pointer where it
+   *  was, so nothing that was already read is lost. */
+  shouldStop?: () => boolean
+  /** Nominal encoded frame length, used only to estimate how far back the
+   *  unread region started when the device clock cannot be trusted. */
+  frameLengthBytes?: number
+  /** Seconds of audio per stored chunk; defaults to the stored-audio size. */
+  chunkSeconds?: number
 }
 
 export type RingDrainResult =
@@ -82,7 +92,10 @@ export class RingDrain {
     // starting: the device would otherwise interleave its records with ours.
     await transport.writeCommand(encodeStorageStop()).catch(() => undefined)
 
-    const chunker = new StorageChunker({ framesPerSecond: this.options.framesPerSecond })
+    const chunker = new StorageChunker({
+      framesPerSecond: this.options.framesPerSecond,
+      chunkSeconds: this.options.chunkSeconds
+    })
     const persisted: DrainedChunk[] = []
     let records = 0
     let bytes = 0
@@ -90,6 +103,14 @@ export class RingDrain {
     let doneSeq: bigint | null = null
     let failure: string | null = null
     let sawData = false
+    // Capture timeline. The anchor is taken from the first record and every
+    // later record is placed relative to it by the audio consumed so far,
+    // matching Flutter's `chunkTimerStart += chunk.length ~/ fps`. Stamping
+    // every record with the drain time instead would give every chunk the same
+    // start, and chunks are identified by start, so all but the first would be
+    // discarded as duplicates.
+    let anchorSeconds: number | null = null
+    let framesConsumed = 0
 
     const abort = new AbortController()
     let settle: () => void = () => undefined
@@ -110,17 +131,31 @@ export class RingDrain {
             records += 1
             bytes += record.payload.byteLength
             const { frames, timestamps } = unpackPayload(record.payload)
+            const trusted = status.rtcValid && record.epochSeconds > 0
+            if (anchorSeconds === null) {
+              // An unreliable device clock makes record times meaningless, so
+              // the unread audio is placed as ending about now.
+              anchorSeconds = trusted
+                ? record.epochSeconds
+                : Math.floor(transport.now() / 1000) -
+                  this.estimatedUnreadSeconds(status.unreadPackets)
+            }
             const stamped = stampFrames(
               frames,
-              // An unreliable device clock makes record times meaningless, so
-              // the drain time is used instead of a wrong capture time.
-              status.rtcValid ? record.epochSeconds : Math.floor(transport.now() / 1000),
+              trusted
+                ? record.epochSeconds
+                : anchorSeconds + Math.floor(framesConsumed / this.options.framesPerSecond),
               timestamps,
               this.options.framesPerSecond
             )
+            framesConsumed += frames.length
             for (const chunk of chunker.push(stamped)) persisted.push(chunk)
           }
           this.options.onProgress?.({ records, chunks: persisted.length, bytes })
+          if (this.options.shouldStop?.() === true) {
+            failure = 'cancelled'
+            settle()
+          }
           return
         }
         case 'done':
@@ -151,6 +186,9 @@ export class RingDrain {
     } finally {
       abort.abort()
       unsubscribe()
+      // Unsubscribing stops us listening but not the device sending. Telling it
+      // to stop keeps the radio free until the next attempt.
+      if (failure !== null) await transport.writeCommand(encodeStorageStop()).catch(() => undefined)
     }
 
     // Everything still buffered belongs to this transfer.
@@ -196,6 +234,14 @@ export class RingDrain {
     }
 
     return { kind: 'drained', records, chunks: persisted.length, advancedTo: doneSeq }
+  }
+
+  /** Rough duration of the unread region, from its size and the codec's nominal
+   *  frame length. Only used to place audio a broken device clock cannot. */
+  private estimatedUnreadSeconds(unreadPackets: number): number {
+    const perFrame = (this.options.frameLengthBytes ?? 80) + 1
+    const frames = Math.floor((unreadPackets * PAYLOAD_BYTES) / perFrame)
+    return Math.floor(frames / Math.max(1, this.options.framesPerSecond))
   }
 
   /**
