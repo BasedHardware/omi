@@ -26,10 +26,12 @@
 // │                        the renderer re-fetches. Subscribe via onTasksChanged│
 // └───────────────────────────────────────────────────────────────────────────┘
 //
-// Reads are LOCAL-FIRST: they return the local rows instantly and kick a background
-// sync, then fire `tasks:changed` when the store updates. The engine reads the
-// SHARED backend session (assistants/core/session.ts, relayed by the renderer); no
-// session is passed per call.
+// Reads are LOCAL-FIRST and stay that way: they return the local rows instantly
+// and never talk to the backend. Freshness is the engine's throttled background
+// sync (≤1 census reconcile per 5 min, plus the interval/focus triggers wired in
+// main); `tasks:changed` fires when a background sync or optimistic write lands.
+// The engine reads the SHARED backend session (assistants/core/session.ts,
+// relayed by the renderer); no session is passed per call.
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   createTask,
