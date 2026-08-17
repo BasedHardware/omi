@@ -10,16 +10,26 @@ enum ContextBucketSyncSelection {
   static let bucketLimit = ContextBucketSyncPayload.bucketLimit
   static let factLimitPerBucket = 40
 
-  static func buckets(in db: Database, limit: Int = bucketLimit) throws -> [ContextBucketSyncBucket] {
+  /// Buckets updated since the last published watermark, oldest first.
+  ///
+  /// A plain "newest N" window would leave bucket N+1 permanently unpublishable
+  /// and would re-transmit the same rows every pass. Walking forward from the
+  /// watermark covers every bucket exactly once and lets a backlog drain.
+  static func buckets(
+    in db: Database,
+    updatedAfter watermark: Date?,
+    limit: Int = bucketLimit
+  ) throws -> [ContextBucketSyncBucket] {
     try Row.fetchAll(
       db,
       sql: """
         SELECT id, subjectKind, subjectID, workstreamID, displayLabel,
                notifyWorthiness, visitCount, lastVisitedAt, updatedAt
         FROM context_buckets
-        ORDER BY updatedAt DESC LIMIT ?
+        WHERE updatedAt > ?
+        ORDER BY updatedAt ASC LIMIT ?
         """,
-      arguments: [limit]
+      arguments: [watermark ?? Date(timeIntervalSince1970: 0), limit]
     ).compactMap { row -> ContextBucketSyncBucket? in
       guard
         let bucketID: String = row["id"], let subjectKind: String = row["subjectKind"],
@@ -91,6 +101,7 @@ actor ContextBucketSyncScheduler {
 
   private var timer: Task<Void, Never>?
   private var isRunning = false
+  private var watermark: Date?
   private let client: ContextBucketSyncClient
 
   init(client: ContextBucketSyncClient = .shared) {
@@ -118,21 +129,32 @@ actor ContextBucketSyncScheduler {
   func runPass(now: Date = Date()) async {
     let enabled = await MainActor.run { ContextBucketsFeature.isBackendSyncEnabled }
     guard enabled else { return }
-    guard RuntimeOwnerIdentity.captureAuthorizationSnapshot() != nil else { return }
+    // The payload is read under this owner, so this is the snapshot the upload
+    // must be fenced against — not whoever owns the process by the time it lands.
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
 
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return }
 
-    let staged = try? await pool.read { db -> ([ContextBucketSyncBucket], [ContextBucketSyncFact]) in
-      let buckets = try ContextBucketSyncSelection.buckets(in: db)
-      var facts: [ContextBucketSyncFact] = []
-      for bucket in buckets {
-        facts.append(
-          contentsOf: try ContextBucketSyncSelection.facts(in: db, bucketID: bucket.bucketID, now: now))
+    let cursor = watermark
+    let staged: ([ContextBucketSyncBucket], [ContextBucketSyncFact])
+    do {
+      staged = try await pool.read { db -> ([ContextBucketSyncBucket], [ContextBucketSyncFact]) in
+        let buckets = try ContextBucketSyncSelection.buckets(in: db, updatedAfter: cursor)
+        var facts: [ContextBucketSyncFact] = []
+        for bucket in buckets {
+          facts.append(
+            contentsOf: try ContextBucketSyncSelection.facts(in: db, bucketID: bucket.bucketID, now: now))
+        }
+        return (buckets, facts)
       }
-      return (buckets, facts)
+    } catch {
+      // Schema drift would otherwise make sync a permanent silent no-op.
+      await RewindDatabase.shared.reportQueryError(error)
+      log("ContextBucketSyncScheduler: staging failed \(error.localizedDescription)")
+      return
     }
-    guard let staged, !staged.0.isEmpty else { return }
+    guard !staged.0.isEmpty else { return }
 
     let deviceID = ClientDeviceService.shared.clientDeviceId
     let accountGeneration = await MainActor.run {
@@ -143,7 +165,10 @@ actor ContextBucketSyncScheduler {
         deviceID: deviceID,
         accountGeneration: accountGeneration,
         buckets: staged.0,
-        facts: staged.1)
+        facts: staged.1,
+        authorizedBy: authorizationSnapshot)
+      // Only advance past rows the server accepted, so a failure re-sends them.
+      watermark = staged.0.map(\.updatedAt).max() ?? watermark
     } catch {
       log("ContextBucketSyncScheduler: sync failed \(error.localizedDescription)")
     }

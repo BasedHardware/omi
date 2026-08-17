@@ -3,20 +3,19 @@ import Foundation
 /// Publishes validated context bucket facts to the backend.
 ///
 /// Capture stays on this device. What crosses the boundary is a projection:
-/// bucket identity and validated facts, with evidence named by device-local
-/// reference rather than carried. Screenshots, quoted screen text, narratives,
-/// and window titles are never part of a payload — see
+/// bucket identity and validated facts. Screenshots, quoted screen text,
+/// narratives, and window titles are never part of a payload — see
 /// `docs/agents/context-buckets.md` for the full boundary.
 enum ContextBucketSyncError: LocalizedError, Equatable {
   case invalidResponse
-  case http(status: Int, retryAfterSeconds: Int?)
+  case http(status: Int)
   case ownerChanged
 
   var errorDescription: String? {
     switch self {
     case .invalidResponse:
       return "context bucket sync received an invalid response"
-    case .http(let status, _):
+    case .http(let status):
       return "context bucket sync failed with status \(status)"
     case .ownerChanged:
       return "context bucket sync aborted because the signed-in owner changed"
@@ -52,14 +51,8 @@ struct ContextBucketSyncBucket: Equatable, Sendable {
 }
 
 enum ContextBucketSyncPayload {
-  /// Backend caps a sync request at 50 buckets and 200 facts per bucket.
+  /// Backend caps a sync request at this many buckets.
   static let bucketLimit = 50
-  static let factLimitPerBucket = 200
-
-  /// Backend rejects any evidence reference that is not device-local, which is
-  /// the contract that keeps screen provenance from being promoted to canonical.
-  static let evidenceScope = "device_local"
-  static let evidenceKind = "local_screen"
 
   static func isoFormatter() -> ISO8601DateFormatter {
     let formatter = ISO8601DateFormatter()
@@ -91,7 +84,7 @@ enum ContextBucketSyncPayload {
         "notify_worthiness": bucket.notifyWorthiness,
         "visit_count": bucket.visitCount,
         "device_updated_at": formatter.string(from: bucket.updatedAt),
-        "facts": (factsByBucket[bucket.bucketID] ?? []).prefix(factLimitPerBucket).map {
+        "facts": (factsByBucket[bucket.bucketID] ?? []).map {
           factPayload($0, formatter: formatter, deviceID: deviceID)
         },
       ]
@@ -119,29 +112,29 @@ enum ContextBucketSyncPayload {
       "notify_worthiness": fact.notifyWorthiness,
       "disposition_state": fact.dispositionState,
       "device_updated_at": formatter.string(from: fact.updatedAt),
-      "evidence_refs": [
-        [
-          "kind": evidenceKind,
-          "id": fact.factID,
-          "scope": evidenceScope,
-          "device_id": deviceID,
-        ]
-      ],
     ]
     if let workstreamTag = fact.workstreamTag { payload["workstream_tag"] = workstreamTag }
     if let expiresAt = fact.expiresAt { payload["expires_at"] = formatter.string(from: expiresAt) }
     return payload
   }
 
+  /// Backend caps one purge request at this many bucket ids.
+  static let purgeBatchSize = 200
+
   static func purgeBody(bucketIDs: [String]) -> [String: Any] {
-    ["bucket_ids": Array(bucketIDs.prefix(200))]
+    ["bucket_ids": bucketIDs]
   }
 
-  static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
-    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
-    guard let seconds = Int(raw.trimmingCharacters(in: .whitespaces)) else { return nil }
-    return max(0, seconds)
+  /// Split a retraction across requests rather than truncating it.
+  ///
+  /// Dropping the overflow would report success while leaving excluded-app
+  /// buckets on the server, which is the one outcome purge exists to prevent.
+  static func purgeBatches(bucketIDs: [String]) -> [[String]] {
+    stride(from: 0, to: bucketIDs.count, by: purgeBatchSize).map {
+      Array(bucketIDs[$0..<min($0 + purgeBatchSize, bucketIDs.count)])
+    }
   }
+
 }
 
 actor ContextBucketSyncClient {
@@ -170,25 +163,45 @@ actor ContextBucketSyncClient {
     deviceID: String,
     accountGeneration: Int,
     buckets: [ContextBucketSyncBucket],
-    facts: [ContextBucketSyncFact]
+    facts: [ContextBucketSyncFact],
+    authorizedBy authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws {
     guard !buckets.isEmpty else { return }
     let body = ContextBucketSyncPayload.body(deviceID: deviceID, buckets: buckets, facts: facts)
-    try await post(path: "v1/context-buckets/sync", body: body, accountGeneration: accountGeneration)
+    try await post(
+      path: "v1/context-buckets/sync",
+      body: body,
+      accountGeneration: accountGeneration,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   func purge(bucketIDs: [String]) async throws {
     guard !bucketIDs.isEmpty else { return }
-    let body = ContextBucketSyncPayload.purgeBody(bucketIDs: bucketIDs)
-    try await post(path: "v1/context-buckets/purge", body: body, accountGeneration: nil)
+    for batch in ContextBucketSyncPayload.purgeBatches(bucketIDs: bucketIDs) {
+      let body = ContextBucketSyncPayload.purgeBody(bucketIDs: batch)
+      try await post(path: "v1/context-buckets/purge", body: body, accountGeneration: nil)
+    }
   }
 
-  private func post(path: String, body: [String: Any], accountGeneration: Int?) async throws {
+  /// The caller passes the snapshot it captured before reading local rows.
+  ///
+  /// Capturing a fresh snapshot here would validate against whoever owns the
+  /// process now, not the owner whose database the payload was read from, so an
+  /// owner change mid-pass could upload one account's rows under another's token.
+  private func post(
+    path: String,
+    body: [String: Any],
+    accountGeneration: Int?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws {
     let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
     guard let url = URL(string: root + path) else { throw ContextBucketSyncError.invalidResponse }
 
-    let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    guard let authorizationSnapshot else { throw ContextBucketSyncError.ownerChanged }
+    let fence = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard let fence else { throw ContextBucketSyncError.ownerChanged }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(fence) else {
+      throw ContextBucketSyncError.ownerChanged
+    }
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -201,14 +214,12 @@ actor ContextBucketSyncClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (_, response) = try await session.data(for: request)
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(fence) else {
       throw ContextBucketSyncError.ownerChanged
     }
     guard let http = response as? HTTPURLResponse else { throw ContextBucketSyncError.invalidResponse }
     guard (200..<300).contains(http.statusCode) else {
-      throw ContextBucketSyncError.http(
-        status: http.statusCode,
-        retryAfterSeconds: ContextBucketSyncPayload.parseRetryAfterSeconds(from: http))
+      throw ContextBucketSyncError.http(status: http.statusCode)
     }
   }
 }

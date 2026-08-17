@@ -118,7 +118,7 @@ final class ContextBucketSyncSelectionTests: XCTestCase {
     XCTAssertEqual(facts.map(\.factID), ["live"])
   }
 
-  func testBucketSelectionIsNewestFirstAndBounded() throws {
+  func testBucketSelectionWalksForwardFromTheWatermark() throws {
     let queue = try migratedQueue()
     try queue.write { db in
       for index in 0..<5 {
@@ -127,9 +127,9 @@ final class ContextBucketSyncSelectionTests: XCTestCase {
       }
     }
 
-    let buckets = try queue.read { db in try ContextBucketSyncSelection.buckets(in: db, limit: 3) }
+    let buckets = try queue.read { db in try ContextBucketSyncSelection.buckets(in: db, updatedAfter: nil, limit: 3) }
 
-    XCTAssertEqual(buckets.map(\.bucketID), ["bucket-4", "bucket-3", "bucket-2"])
+    XCTAssertEqual(buckets.map(\.bucketID), ["bucket-0", "bucket-1", "bucket-2"])
   }
 
   func testIdentifiersDecodeAndMalformedJSONDegradesToEmpty() throws {
@@ -166,7 +166,7 @@ final class ContextBucketSyncSelectionTests: XCTestCase {
     }
     let body = ContextBucketSyncPayload.body(
       deviceID: "macos_abc",
-      buckets: try queue.read { db in try ContextBucketSyncSelection.buckets(in: db) },
+      buckets: try queue.read { db in try ContextBucketSyncSelection.buckets(in: db, updatedAfter: nil) },
       facts: staged)
     let encoded = try XCTUnwrap(String(data: JSONSerialization.data(withJSONObject: body), encoding: .utf8))
 

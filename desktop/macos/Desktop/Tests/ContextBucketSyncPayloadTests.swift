@@ -73,21 +73,18 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
     XCTAssertEqual(facts(in: published[0]).compactMap { $0["fact_id"] as? String }, ["fact-1"])
   }
 
-  func testEvidenceIsAlwaysDeviceLocalAndCarriesNoScreenContent() {
+  func testPayloadCarriesNoScreenContentAndNoUnresolvableProvenance() {
     let body = ContextBucketSyncPayload.body(
       deviceID: "macos_abc", buckets: [bucket()], facts: [fact()])
 
     let payload = facts(in: buckets(in: body)[0])[0]
-    let refs = (payload["evidence_refs"] as? [[String: Any]]) ?? []
-    XCTAssertEqual(refs.count, 1)
-    XCTAssertEqual(refs[0]["scope"] as? String, ContextBucketSyncPayload.evidenceScope)
-    XCTAssertEqual(refs[0]["kind"] as? String, ContextBucketSyncPayload.evidenceKind)
-    XCTAssertEqual(refs[0]["device_id"] as? String, "macos_abc")
-
     // The device boundary: nothing quoted from the screen may appear in a payload.
     for forbidden in ["evidence_text", "narrative", "raw_context_key", "normalized_context_key"] {
       XCTAssertNil(payload[forbidden], "\(forbidden) must never be published")
     }
+    // The device has no id a consumer could resolve back to a screen frame, so it
+    // must not assert provenance it cannot support.
+    XCTAssertNil(payload["evidence_refs"])
   }
 
   func testOptionalFieldsAreOmittedRatherThanSentAsNull() {
@@ -117,6 +114,16 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
     XCTAssertNotNil(facts(in: published)[0]["expires_at"])
   }
 
+  func testRetractionIsSplitAcrossRequestsRatherThanTruncated() {
+    let ids = (0..<(ContextBucketSyncPayload.purgeBatchSize * 2 + 7)).map { "bucket-\($0)" }
+
+    let batches = ContextBucketSyncPayload.purgeBatches(bucketIDs: ids)
+
+    XCTAssertEqual(batches.count, 3)
+    XCTAssertEqual(batches.flatMap { $0 }, ids, "every excluded bucket must still be retracted")
+    XCTAssertTrue(batches.allSatisfy { $0.count <= ContextBucketSyncPayload.purgeBatchSize })
+  }
+
   func testBodyRespectsTheBackendBucketLimit() {
     let overLimit = (0...ContextBucketSyncPayload.bucketLimit).map { bucket("bucket-\($0)") }
 
@@ -134,23 +141,10 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
     XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: body))
   }
 
-  func testPurgeBodyIsBounded() {
-    let body = ContextBucketSyncPayload.purgeBody(bucketIDs: (0..<500).map { "bucket-\($0)" })
+  func testPurgeBodyCarriesExactlyWhatItWasGiven() {
+    let body = ContextBucketSyncPayload.purgeBody(bucketIDs: ["bucket-1", "bucket-2"])
 
-    XCTAssertEqual((body["bucket_ids"] as? [String])?.count, 200)
+    XCTAssertEqual(body["bucket_ids"] as? [String], ["bucket-1", "bucket-2"])
   }
 
-  func testRetryAfterIsParsedAndNeverNegative() throws {
-    let url = try XCTUnwrap(URL(string: "https://example.com"))
-    func response(_ value: String) throws -> HTTPURLResponse {
-      try XCTUnwrap(
-        HTTPURLResponse(
-          url: url, statusCode: 429, httpVersion: nil, headerFields: ["Retry-After": value]))
-    }
-
-    XCTAssertEqual(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response("30")), 30)
-    XCTAssertEqual(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response(" 45 ")), 45)
-    XCTAssertEqual(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response("-5")), 0)
-    XCTAssertNil(ContextBucketSyncPayload.parseRetryAfterSeconds(from: try response("soon")))
-  }
 }
