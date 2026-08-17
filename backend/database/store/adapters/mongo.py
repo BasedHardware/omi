@@ -614,10 +614,12 @@ class MongoDocumentStore:
             else:
                 clause = mongo_filter.setdefault("d." + field, {})
                 clause[_OP[op]] = value
-                if op in ("!=", "not-in"):
-                    # Firestore != / not-in exclude documents where the field is ABSENT; Mongo's
-                    # $ne/$nin would otherwise MATCH a missing field, over-returning rows. Require the
-                    # field to exist so the row set matches Firestore (cubic PR 10887).
+                if op in ("!=", "not-in") or (op == "==" and value is None):
+                    # Firestore != / not-in / IS_NULL (== None) never match a document where the field
+                    # is ABSENT — only one that HAS the field. Mongo's $ne/$nin/$eq-null would otherwise
+                    # MATCH a missing field, over-returning rows. Require the field to exist so the row
+                    # set matches Firestore (cubic PR 10887; extended to == None so a null-equality query
+                    # mirrors Firestore's IS_NULL — present-and-null, not null-or-absent).
                     clause["$exists"] = True
         return mongo_filter
 
@@ -647,8 +649,8 @@ class MongoDocumentStore:
             else:
                 clause = mongo_filter.setdefault("d." + field, {})
                 clause[_OP[op]] = value
-                if op in ("!=", "not-in"):
-                    clause["$exists"] = True  # exclude missing-field docs, matching Firestore != / not-in
+                if op in ("!=", "not-in") or (op == "==" and value is None):
+                    clause["$exists"] = True  # exclude missing-field docs: Firestore != / not-in / IS_NULL
         specs = [(order_by, direction)] if isinstance(order_by, str) else list(order_by or [])
         # A __name__ order on a collection group is the implicit document-name (_id) keyset — strip it so
         # it doesn't count as an "explicit order" that conflicts with start_after (cubic PR 10887 #2).

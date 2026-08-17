@@ -378,7 +378,19 @@ class _Query:
             value = getattr(filter, "value", None)
         op = _OP_MAP.get(op_string)
         if op is None:
-            raise NotImplementedError(f"unsupported query operator: {op_string!r}")
+            # A ``field == None`` / ``field != None`` filter: the Firestore SDK rewrites the equality
+            # into the unary IS_NULL / IS_NOT_NULL operator (``op_string`` becomes a
+            # ``StructuredQuery.UnaryFilter.Operator`` enum, not a string). The store adapters express
+            # null matching as the neutral ``('==' | '!=', None)`` filter, so map it back — this is what
+            # makes a null-equality query run on Mongo exactly as it does natively on Firestore
+            # (e.g. ``get_chat_session(app_id=None)`` queries ``plugin_id == None``).
+            unary = getattr(op_string, "name", None)
+            if unary == "IS_NULL":
+                op, value = "==", None
+            elif unary == "IS_NOT_NULL":
+                op, value = "!=", None
+            else:
+                raise NotImplementedError(f"unsupported query operator: {op_string!r}")
         if field_path == "__name__":
             value = _name_filter_value(value)
         return self._clone(filters=self._filters + [(field_path, op, value)])
@@ -729,7 +741,19 @@ class _GroupQuery:
             value = getattr(filter, "value", None)
         op = _OP_MAP.get(op_string)
         if op is None:
-            raise NotImplementedError(f"unsupported query operator: {op_string!r}")
+            # A ``field == None`` / ``field != None`` filter: the Firestore SDK rewrites the equality
+            # into the unary IS_NULL / IS_NOT_NULL operator (``op_string`` becomes a
+            # ``StructuredQuery.UnaryFilter.Operator`` enum, not a string). The store adapters express
+            # null matching as the neutral ``('==' | '!=', None)`` filter, so map it back — this is what
+            # makes a null-equality query run on Mongo exactly as it does natively on Firestore
+            # (e.g. ``get_chat_session(app_id=None)`` queries ``plugin_id == None``).
+            unary = getattr(op_string, "name", None)
+            if unary == "IS_NULL":
+                op, value = "==", None
+            elif unary == "IS_NOT_NULL":
+                op, value = "!=", None
+            else:
+                raise NotImplementedError(f"unsupported query operator: {op_string!r}")
         if field_path == "__name__":
             value = _group_name_filter_value(value)  # group: full path (not the scoped bare id)
         return self._clone(filters=self._filters + [(field_path, op, value)])

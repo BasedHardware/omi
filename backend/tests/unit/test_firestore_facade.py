@@ -76,6 +76,22 @@ def test_unsupported_operator_fails_loud():
         list(c.collection("users/u1/goals").where("x", "STARTS_WITH", "y").stream())
 
 
+def test_where_field_equals_none_maps_to_is_null():
+    # The Firestore SDK rewrites ``field == None`` / ``field != None`` into the unary IS_NULL /
+    # IS_NOT_NULL operator; the facade must map it back to the neutral ('==' | '!=', None) filter, or
+    # any null-equality query (e.g. get_chat_session(app_id=None) -> plugin_id == None) explodes on Mongo.
+    c = _client()
+    c.document("users/u1/goals/g1").set({"rank": 1, "plugin_id": None})  # present + null
+    c.document("users/u1/goals/g2").set({"rank": 2, "plugin_id": "x"})  # present + value
+    c.document("users/u1/goals/g3").set({"rank": 3})  # plugin_id absent
+
+    is_null = [s.id for s in c.collection("users/u1/goals").where(filter=FieldFilter("plugin_id", "==", None)).stream()]
+    assert is_null == ["g1"]  # present-and-null only, NOT the absent g3
+
+    is_not_null = {s.id for s in c.collection("users/u1/goals").where(filter=FieldFilter("plugin_id", "!=", None)).stream()}
+    assert is_not_null == {"g2"}  # present-and-not-null; null g1 and absent g3 excluded
+
+
 def test_batch_set_and_delete():
     c = _client()
     c.document("users/u1/goals/keep").set({"v": 1})

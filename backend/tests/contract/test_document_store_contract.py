@@ -307,6 +307,24 @@ def test_query_equality_order_and_limit(store, uid):
     assert [d.id for d in limited] == ["p2"]
 
 
+def test_query_field_equals_none_matches_present_null_only(store, uid):
+    # Firestore rewrites ``field == None`` to IS_NULL: it matches a document whose field is present AND
+    # null, and NOT one where the field is absent (and ``!= None`` -> IS_NOT_NULL, present-and-not-null).
+    # The Mongo adapter must mirror that — a bare ``$eq: null`` would also match a missing field. Regression:
+    # get_chat_session(app_id=None) queries ``plugin_id == None`` and 500'd on Mongo before the facade mapped
+    # the unary operator and the adapter added the field-exists guard.
+    base = f"users/{uid}/people"
+    store.set(f"{base}/p1", {"name": "p1", "plugin_id": None})  # present + null
+    store.set(f"{base}/p2", {"name": "p2", "plugin_id": "x"})  # present + value
+    store.set(f"{base}/p3", {"name": "p3"})  # plugin_id absent
+
+    is_null = store.query(base, filters=[("plugin_id", "==", None)])
+    assert {d.id for d in is_null} == {"p1"}  # present-and-null only; absent p3 excluded
+
+    is_not_null = store.query(base, filters=[("plugin_id", "!=", None)])
+    assert {d.id for d in is_not_null} == {"p2"}  # present-and-not-null; null p1 and absent p3 excluded
+
+
 def test_query_fields_projection(store, uid):
     # cubic PR 10887 facade:258: a fields projection returns only the requested payload fields (ids-only for
     # []), so bulk migration reads don't over-fetch every field. Both backends honor it (Mongo find projection
