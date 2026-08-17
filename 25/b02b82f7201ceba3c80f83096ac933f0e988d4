@@ -1,0 +1,19 @@
+web/admin/app/api/omi/stats/retention/posthog/route.ts
+  s_7f7d27f6caa06a::t_975d71da7eb89f 31-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "25b02b82f7201ceba3c80f83096ac933f0e988d4",
+  "prompts": {},
+  "sessions": {
+    "s_7f7d27f6caa06a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d50e47a-f4b3-410c-bc7d-154822e9c288",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
