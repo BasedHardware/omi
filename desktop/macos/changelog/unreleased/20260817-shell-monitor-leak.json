@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a memory leak where each window kept its mouse-tracking helper alive for as long as the app was running."
+}
