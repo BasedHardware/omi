@@ -16,7 +16,7 @@ def test_migration_updates_only_blank_friend_languages(monkeypatch):
         ('missing', {'source': 'friend'}),
         ('blank', {'source': 'friend', 'language': '  '}),
         ('french', {'source': 'friend', 'language': 'fr'}),
-        ('omi', {'source': 'omi'}),
+        ('friend_com_missing', {'source': 'friend_com'}),
     ):
         conversation = MagicMock(id=conversation_id)
         conversation.to_dict.return_value = data
@@ -31,8 +31,12 @@ def test_migration_updates_only_blank_friend_languages(monkeypatch):
 
     result = migrate_conversation_language.process_user('uid', dry_run=False, firestore_client=firestore_client)
 
-    assert result == {'uid': 'uid', 'fixed': 2, 'status': 'ok'}
-    assert updated == [('missing', {'language': 'en'}), ('blank', {'language': 'en'})]
+    assert result == {'uid': 'uid', 'fixed': 3, 'status': 'ok'}
+    assert updated == [
+        ('missing', {'language': 'en'}),
+        ('blank', {'language': 'en'}),
+        ('friend_com_missing', {'language': 'en'}),
+    ]
     conversations_ref.where.assert_called_once()
 
 

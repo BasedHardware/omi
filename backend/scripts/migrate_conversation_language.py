@@ -43,11 +43,6 @@ def process_user(uid: str, dry_run: bool, firestore_client: Any = None) -> Dict[
         for conv in convs:
             data: Dict[str, Any] = conv.to_dict() or {}
 
-            # Check if source is 'friend' or 'friend_com' and language is missing or None
-            source = data.get('source')
-            if source not in ('friend', 'friend_com'):
-                continue
-
             language = data.get('language')
             if language is not None and (not isinstance(language, str) or language.strip()):
                 continue
