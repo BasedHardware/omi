@@ -72,6 +72,7 @@ jobs:
           cp .workflow-source/backend/scripts/agent_vm_release.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/resolve_cloud_run_tagged_url.py "$controls/backend/scripts/"
           cp .workflow-source/backend/scripts/wait_cloud_run_candidate_readiness.py "$controls/backend/scripts/"
+          cp .workflow-source/backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py "$controls/backend/scripts/"
           cp .workflow-source/scripts/voice-provider-probe.sh "$controls/scripts/"
           rm -rf .workflow-source
           echo "DESKTOP_BACKEND_CONTROLS=$controls" >> "$GITHUB_ENV"
@@ -475,6 +476,16 @@ jobs:
               sleep 5
             done
           done
+
+      - name: Preflight Agent VM reconciler deploy identity
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py" \
+            --project="$PROJECT_ID" \
+            --deployer=josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com \
+            --runtime-service-account=agent-vm-reconciler@based-hardware.iam.gserviceaccount.com
 
       - name: Route traffic to accepted production revision
         id: route-traffic

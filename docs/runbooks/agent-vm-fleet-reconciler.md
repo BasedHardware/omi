@@ -241,6 +241,13 @@ bash backend/scripts/apply-agent-vm-reconciler-iam.sh
 ```
 
 Use the corresponding CI deploy service account and bucket in each environment.
+Production is pinned to
+`josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com` acting as
+`agent-vm-reconciler@based-hardware.iam.gserviceaccount.com`. The protected
+prod workflow preflights that exact `roles/iam.serviceAccountUser` binding
+(and service-account existence) before routing traffic. Workflow 32012710785
+rolled back a proven SCA-323 candidate because the runtime identity was
+absent and the deployer lacked `iam.serviceAccounts.actAs`.
 Then deploy the desktop backend (which creates or updates the Job), and install
 the Scheduler trigger only after the Agent Proxy lease check succeeds:
 

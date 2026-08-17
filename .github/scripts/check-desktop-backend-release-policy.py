@@ -176,6 +176,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 *probe_identity_steps,
                 chat_step,
                 "Prove candidate managed realtime provider paths",
+                *(("Preflight Agent VM reconciler deploy identity",) if production else ()),
                 route_step,
                 verify_step,
                 "Restore prior traffic after a failed promotion",
@@ -206,6 +207,10 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "PRODUCTION_DESKTOP_BACKEND_URL: https://desktop-backend-hhibjajaja-uc.a.run.app",
             "EXPECTED_GCP_PROJECT_ID: based-hardware",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+            "preflight_agent_vm_reconciler_deploy_identity.py",
+            "josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com",
+            "agent-vm-reconciler@based-hardware.iam.gserviceaccount.com",
+            'python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py"',
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing production admission guard {fragment!r}")

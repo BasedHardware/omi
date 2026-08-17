@@ -464,6 +464,8 @@ def test_reconciler_runbook_documents_state_disk_clone_browser_and_production_ga
     assert "seven days of rollback retention" in runbook
     assert "production canary must communicate that expected" in runbook
     assert "It is not permission for a fleet sweep" in runbook
+    assert "josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com" in runbook
+    assert "32012710785" in runbook
 
 
 def test_dev_migration_activation_refuses_by_default_and_uses_generation_guard(tmp_path):

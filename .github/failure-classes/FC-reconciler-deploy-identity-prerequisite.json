@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-reconciler-deploy-identity-prerequisite",
+  "violated_contract": "A production desktop-backend promotion must not mutate serving traffic before the Agent VM reconciler Cloud Run Job runtime identity exists and the CI deployer can actAs it. Attaching a missing agent-vm-reconciler service account after traffic is routed rolls back an otherwise proven candidate.",
+  "canonical_prevention": "Preflight the exact production deployer to runtime-SA actAs binding and service-account existence from the immutable workflow controls before routing production traffic, and pin those identities in a checked-in contract test.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py",
+    "backend/tests/unit/test_preflight_agent_vm_reconciler_deploy_identity.py",
+    ".github/scripts/check-desktop-backend-release-policy.py"
+  ],
+  "evidence_prs": [11735],
+  "scope_hints": [
+    ".github/workflows/desktop_backend_prod.yml",
+    "backend/scripts/apply-agent-vm-reconciler-iam.sh",
+    "backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py"
+  ],
+  "status": "open"
+}
