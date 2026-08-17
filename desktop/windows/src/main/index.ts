@@ -26,6 +26,13 @@ import {
   stopTestListenSession
 } from './ipc/omiListen'
 import { registerCaptureBridge } from './ipc/captureBridge'
+import { WalService, registerWalHandlers } from './wal/walService'
+import { getBackendSession, pullFreshSession } from './assistants/core/session'
+import { setListenFeedObserver, getLastDeviceIdHash } from './ipc/omiListen'
+
+// Offline audio capture service; created once the database is open.
+let walService: WalService | null = null
+
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
@@ -456,7 +463,8 @@ import {
   pruneOrphanedRewindEmbeddings,
   getDbRecoveryStatus,
   initDatabase,
-  wipeUserData
+  wipeUserData,
+  walDb
 } from './ipc/db'
 
 // The first time the user closes the window to the tray, tell them Omi is still
@@ -843,6 +851,41 @@ app.whenReady().then(async () => {
     const mainWc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
     return ownerId === mainWc?.id || ownerId === captureWc?.id
   })
+
+  // Offline audio capture. The listen socket reports what it could not take and
+  // this keeps it, so a network drop mid-conversation no longer loses audio.
+  walService = new WalService({
+    db: walDb(),
+    getToken: async () => {
+      // Reuse the main-side session, including its pull-based refresh: a stale
+      // token costs a deferred pass, never a recording.
+      await pullFreshSession().catch(() => undefined)
+      return getBackendSession()?.token ?? null
+    },
+    // The renderer owns the install id; reuse the hash it already sends so
+    // the backend sees one machine, not two.
+    getDeviceIdHash: async () => getLastDeviceIdHash(),
+    baseUrl: 'https://api.omi.me',
+    appVersion: app.getVersion(),
+    settings: () => {
+      const offline = getAppSettings().offlineCapture
+      return {
+        autoSync: offline.autoSync,
+        retainEverything: offline.retainEverything,
+        retention: { maxBytes: offline.maxBytes, retentionDays: offline.retentionDays }
+      }
+    },
+    broadcast: (snapshot) => {
+      const wc = mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null
+      wc?.send('omi-wal:snapshot', snapshot)
+    }
+  })
+  setListenFeedObserver(walService.feedObserver)
+  walService.start()
+  registerWalHandlers(
+    () => walService,
+    () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents.id : undefined)
+  )
   // Capture bridge: routes commands from UI windows to the hidden capture window
   // and events back. Registered before the capture window is created so no early
   // command/event is missed. Reads the capture wc live so a respawn is picked up.

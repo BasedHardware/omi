@@ -190,6 +190,17 @@ export interface ListenFeedObserver {
   resolveBuffered(source: 'mic' | 'system', disposition: 'sent' | 'missed', count?: number): void
 }
 
+// The renderer owns the install id (it lives in its localStorage) and passes
+// its hash on every session start. Main-side uploads must send the SAME hash:
+// a second id minted here would look like a different machine to the backend,
+// which is what binds a capture time to this install.
+let lastDeviceIdHash: string | null = null
+
+/** The device id hash the renderer last used, or null before any session. */
+export function getLastDeviceIdHash(): string | null {
+  return lastDeviceIdHash
+}
+
 let feedObserver: ListenFeedObserver | null = null
 
 export function setListenFeedObserver(observer: ListenFeedObserver | null): void {
@@ -327,6 +338,9 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       ownersWithDestroyHook.delete(owner.id)
       killSessionsForOwner(owner.id)
     })
+  }
+  if (typeof args.deviceIdHash === 'string' && args.deviceIdHash.length > 0) {
+    lastDeviceIdHash = args.deviceIdHash
   }
   const mode: ListenMode = args.mode ?? 'conversation'
 
