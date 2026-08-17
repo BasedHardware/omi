@@ -363,7 +363,13 @@ enum RuntimeOwnerIdentity {
     // it captured. New-owner mutations remain parked by the fence.
     await FileIndexerService.shared.invalidateCache()
     await OCREmbeddingService.shared.reset()
+    await ScreenKnowledgeGraphExtractor.shared.reset()
     await RewindDatabase.shared.retargetEffectiveOwner(to: nextOwner)
+    if nextOwner != nil {
+      Task(priority: .background) {
+        await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded()
+      }
+    }
     await TranscriptionStorage.shared.invalidateCache()
     await MemoryStorage.shared.invalidateCache()
     await ActionItemStorage.shared.invalidateCache()

@@ -120,6 +120,11 @@ actor RewindIndexer {
       await OCREmbeddingService.shared.backfillIfNeeded()
     }
 
+    // Backfill screen→KG extraction for screenshots captured before this shipped
+    Task(priority: .background) {
+      await ScreenKnowledgeGraphExtractor.shared.scheduleBackfillIfNeeded()
+    }
+
     // Reduce ocrDataJson float precision for existing rows (one-time migration)
     Task(priority: .background) {
       await RewindDatabase.shared.reduceOCRDataPrecisionIfNeeded()
@@ -324,11 +329,19 @@ actor RewindIndexer {
       markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
 
       // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
+      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id,
+        let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+      {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
+          await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+            id: id,
+            ocrText: ocrText,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle,
+            expectedOwnerID: captureOwnerID)
         }
       }
 
@@ -424,11 +437,19 @@ actor RewindIndexer {
       markFrameEncodedForDedupe(dedupeSignature, timestamp: captureTime)
 
       // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
+      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id,
+        let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+      {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
+          await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+            id: id,
+            ocrText: ocrText,
+            appName: appName,
+            windowTitle: windowTitle,
+            expectedOwnerID: captureOwnerID)
         }
       }
 
@@ -560,11 +581,19 @@ actor RewindIndexer {
       }
 
       // Embed OCR text for semantic search (non-blocking)
-      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
+      if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id,
+        let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+      {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
             id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
+          await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+            id: id,
+            ocrText: ocrText,
+            appName: frame.appName,
+            windowTitle: frame.windowTitle,
+            expectedOwnerID: captureOwnerID)
         }
       }
 
@@ -710,6 +739,20 @@ actor RewindIndexer {
 
             try await RewindDatabase.shared.updateOCRResult(id: id, ocrResult: ocrResult)
             totalProcessed += 1
+
+            let ocrText = ocrResult.fullText
+            let appName = screenshot.appName
+            let windowTitle = screenshot.windowTitle
+            if let captureOwnerID = RuntimeOwnerIdentity.currentOwnerId() {
+              Task(priority: .utility) {
+                await ScreenKnowledgeGraphExtractor.shared.queueScreenshot(
+                  id: id,
+                  ocrText: ocrText,
+                  appName: appName,
+                  windowTitle: windowTitle,
+                  expectedOwnerID: captureOwnerID)
+              }
+            }
           } catch RewindError.screenshotNotFound {
             // Screenshot/video file is permanently missing — clear skippedForBattery so we don't retry forever
             try? await RewindDatabase.shared.clearSkippedForBattery(id: id)

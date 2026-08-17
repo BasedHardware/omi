@@ -70,6 +70,13 @@ enum DefaultsKey: String {
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
   case desktopIsPaywalled = "desktop_isPaywalled"
   case rewindDisableContentCache = "rewindDisableContentCache"
+  case screenKnowledgeGraphExtractionEnabled = "screenKnowledgeGraphExtractionEnabled"
+  case screenKnowledgeGraphCloudFallbackEnabled = "screenKnowledgeGraphCloudFallbackEnabled"
+  /// Separate from ``screenKnowledgeGraphExtractionEnabled``: turning extraction
+  /// on only ever applies to captures taken from that moment forward. Reaching
+  /// back into screen history the user recorded before they opted in is its own
+  /// decision and requires its own consent.
+  case screenKnowledgeGraphHistoricalBackfillEnabled = "screenKnowledgeGraphHistoricalBackfillEnabled"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
