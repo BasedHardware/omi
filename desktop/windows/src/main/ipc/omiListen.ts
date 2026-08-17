@@ -148,6 +148,9 @@ type Session = {
   ownerId: number // webContents id for routing replies back
   source: 'mic' | 'system'
   mode: ListenMode
+  /** Conversation this session is feeding, when it has one. Stored audio is
+   *  attached to it so a recovered recording joins the right conversation. */
+  clientConversationId: string | null
   closed: boolean
   // Audio captured before the socket reaches OPEN. The renderer starts streaming
   // PCM the moment the mic is live, but the WS handshake can take a beat (esp. PTT
@@ -166,6 +169,31 @@ type Session = {
   lastMessageAt: number
   // Conversation mode only: periodic idleness check (keepalive + watchdog).
   keepaliveTimer: ReturnType<typeof setInterval> | null
+}
+
+/**
+ * Notified of what happened to every fed chunk. The socket has three ways of
+ * not taking audio (no session, a full pre-connect buffer, a closing socket),
+ * and each used to end at a silent return, so an outage lost that audio for
+ * good. The observer is what keeps it; omiListen still owns the socket and
+ * knows nothing else about the write-ahead log.
+ */
+export interface ListenFeedObserver {
+  observe(args: {
+    source: 'mic' | 'system'
+    bytes: Uint8Array
+    byteLength: number
+    disposition: 'sent' | 'buffered' | 'missed'
+    conversationId?: string | null
+  }): void
+  /** Resolves chunks held for a connecting socket once their fate is known. */
+  resolveBuffered(source: 'mic' | 'system', disposition: 'sent' | 'missed', count?: number): void
+}
+
+let feedObserver: ListenFeedObserver | null = null
+
+export function setListenFeedObserver(observer: ListenFeedObserver | null): void {
+  feedObserver = observer
 }
 
 const sessions = new Map<string, Session>()
@@ -220,6 +248,7 @@ export function startTestListenSession(sessionId: string, source: 'mic' | 'syste
     ownerId: -1,
     source,
     mode: 'conversation',
+    clientConversationId: null,
     closed: false,
     pending: [],
     pendingBytes: 0,
@@ -266,6 +295,9 @@ function stopKeepalive(s: Session): void {
 function killSession(id: string, s: Session, why: string): void {
   console.log(`[omi-listen] ${why} ${id} mode=${s.mode} (readyState=${s.ws.readyState})`)
   s.closed = true
+  if (s.pending.length > 0) {
+    feedObserver?.resolveBuffered(s.source, 'missed', s.pending.length)
+  }
   s.pending = []
   s.pendingBytes = 0
   stopKeepalive(s)
@@ -335,6 +367,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     ownerId: owner.id,
     source: args.source,
     mode,
+    clientConversationId: args.clientConversationId ?? null,
     closed: false,
     pending: [],
     pendingBytes: 0,
@@ -361,6 +394,9 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
           /* ignore */
         }
       }
+      // These reached the backend after all, so the write-ahead log must not
+      // keep them as missed audio.
+      feedObserver?.resolveBuffered(session.source, 'sent', session.pending.length)
       session.pending = []
       session.pendingBytes = 0
     }
@@ -467,11 +503,31 @@ function serviceConversationSocket(s: Session): void {
 
 function feedSession(sessionId: string, pcm: ArrayBuffer): void {
   const s = sessions.get(sessionId)
-  if (!s) return
+  if (!s) {
+    // No session owns this audio. It was still captured, so it is offered to
+    // the observer rather than dropped on the floor.
+    feedObserver?.observe({
+      source: 'mic',
+      bytes: new Uint8Array(pcm),
+      byteLength: pcm.byteLength,
+      disposition: 'missed'
+    })
+    return
+  }
   recordFed(s.mode, s.source, pcm.byteLength)
   s.lastFeedAt = Date.now()
+  const observe = (disposition: 'sent' | 'buffered' | 'missed'): void =>
+    feedObserver?.observe({
+      source: s.source,
+      bytes: new Uint8Array(pcm),
+      byteLength: pcm.byteLength,
+      disposition,
+      conversationId: s.clientConversationId ?? null
+    })
+
   if (s.ws.readyState === WebSocket.OPEN) {
     s.ws.send(pcm)
+    observe('sent')
     return
   }
   // Still connecting (or closing): buffer so pre-OPEN speech isn't dropped. Once
@@ -480,11 +536,20 @@ function feedSession(sessionId: string, pcm: ArrayBuffer): void {
     const chunk = Buffer.from(pcm)
     s.pending.push(chunk)
     s.pendingBytes += chunk.byteLength
+    observe('buffered')
+    let evicted = 0
     while (s.pendingBytes > PCM_PENDING_MAX_BYTES && s.pending.length > 1) {
       const dropped = s.pending.shift()!
       s.pendingBytes -= dropped.byteLength
+      evicted += 1
     }
+    // Past the cap the oldest buffered audio never reaches the socket, so it is
+    // the write-ahead log's now rather than lost.
+    if (evicted > 0) feedObserver?.resolveBuffered(s.source, 'missed', evicted)
+    return
   }
+  // Closing or already closed: the socket will never carry this.
+  observe('missed')
 }
 
 /**
