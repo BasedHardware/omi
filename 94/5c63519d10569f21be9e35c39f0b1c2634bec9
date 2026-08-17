@@ -1,0 +1,23 @@
+desktop/context-for-claude/README.md
+  s_7f7d27f6caa06a::t_b15d65292949b8 85-88
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/ContextAnalytics.swift
+  s_7f7d27f6caa06a::t_dfe72da5feec42 13-23
+desktop/context-for-claude/docs/analytics.md
+  s_7f7d27f6caa06a::t_818b152152047b 92-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "945c63519d10569f21be9e35c39f0b1c2634bec9",
+  "prompts": {},
+  "sessions": {
+    "s_7f7d27f6caa06a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d50e47a-f4b3-410c-bc7d-154822e9c288",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
