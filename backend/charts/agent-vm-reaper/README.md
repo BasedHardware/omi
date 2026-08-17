@@ -14,7 +14,7 @@ desktop agent leaves a permanent disk (~$5/mo).
 | Target | Rule (defaults) |
 |--------|-----------------|
 | `TERMINATED` | `lastStopTimestamp` older than **12h** |
-| `RUNNING` | `creationTimestamp` older than **2d** |
+| `RUNNING` | **Never deleted here.** The fleet reconciler is the RUNNING authority: a healthy VM with no session lease past `AGENT_VM_IDLE_STOP_SECONDS` (default 1h) is stopped; this reaper then deletes the TERMINATED leftover. Do not reap RUNNING by creation age — that would delete live sessions (review #10390). |
 
 After a TERMINATED VM is deleted, `GET /v2/agent/status` sees `NOT_FOUND`,
 demotes the client-facing status to `updating`, records `reconcile.state=missing`
@@ -40,11 +40,14 @@ kubectl -n prod-omi-backend logs -l job-name --tail=200   # or logs job/<name>
 AGENT_VM_REAPER_APPLY=1 AGENT_VM_REAPER_LIVE=1 bash backend/scripts/apply-agent-vm-reaper.sh
 ```
 
-Local inventory dry-run (no cluster mutation):
+Local inventory (no deletes; lists by status, including RUNNING that the reconciler must stop first):
 
 ```bash
+python3 backend/scripts/agent_vm_reaper.py --inventory
 python3 backend/scripts/agent_vm_reaper.py --dry-run
 ```
+
+Ownerless RUNNING VMs (no Firestore `users.agentVm.vmName`) are outside the reconciler and need operator cleanup. Join the inventory names against Firestore before any one-shot delete.
 
 ## Related
 

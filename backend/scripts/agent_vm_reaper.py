@@ -90,7 +90,7 @@ def list_agent_vms(project: str) -> list[dict[str, Any]]:
             "list",
             f"--project={project}",
             f"--filter=name~^{NAME_PREFIX}",
-            "--format=json(name,zone,status,creationTimestamp,lastStopTimestamp,disks)",
+            "--format=json(name,zone,status,creationTimestamp,lastStartTimestamp,lastStopTimestamp,disks)",
         ],
         check=True,
         capture_output=True,
@@ -150,7 +150,35 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--instances-json",
         help="Optional path to a gcloud instances JSON list (skips live list; for tests/fixtures).",
     )
+    parser.add_argument(
+        "--inventory",
+        action="store_true",
+        help="List omi-agent VMs by status and exit. No deletes. Ownerless VMs (no Firestore owner) are outside the reconciler and need operator cleanup.",
+    )
     return parser.parse_args(argv)
+
+
+def format_inventory(instances: list[dict[str, Any]]) -> str:
+    """Group-list VMs by status for operator review. Does not decide reapability."""
+    by_status: dict[str, list[str]] = {}
+    for inst in instances:
+        name = str(inst.get("name") or "")
+        if not name.startswith(NAME_PREFIX):
+            continue
+        status = str(inst.get("status") or "UNKNOWN")
+        created = str(inst.get("creationTimestamp") or "")
+        started = str(inst.get("lastStartTimestamp") or "")
+        by_status.setdefault(status, []).append(f"{name} created={created} lastStart={started}")
+    lines = [f"inventory {sum(len(v) for v in by_status.values())} omi-agent VMs"]
+    for status in sorted(by_status):
+        rows = by_status[status]
+        lines.append(f"{status}: {len(rows)}")
+        lines.extend(f"  {row}" for row in rows)
+    lines.append(
+        "Ownerless RUNNING VMs (GCE name not in users.agentVm.vmName) are unreachable "
+        "by the reconciler idle-stop path and need operator cleanup."
+    )
+    return "\n".join(lines)
 
 
 def live_deletes_allowed(*, dry_run: bool, live_flag: bool) -> bool:
@@ -180,6 +208,10 @@ def main(argv: list[str] | None = None) -> int:
             instances = json.load(handle)
     else:
         instances = list_agent_vms(args.project)
+
+    if args.inventory:
+        print(format_inventory(instances if isinstance(instances, list) else []))
+        return 0
 
     targets = select_reapable(
         instances,

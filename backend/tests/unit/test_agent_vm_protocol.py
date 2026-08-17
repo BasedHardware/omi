@@ -100,6 +100,35 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
 
 
+def test_stop_instance_is_observable_when_audience_missing(tmp_path: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    _, module = load_app(tmp_path)
+    monkeypatch.delenv("AGENT_VM_STOP_AUDIENCE", raising=False)
+    module.runtime.backend_url = "https://api.example.test"
+    with caplog.at_level(logging.WARNING, logger="agent-vm"):
+        asyncio.run(module.stop_instance())
+    assert "idle-stop skipped" in caplog.text
+
+
+def test_stop_instance_is_observable_when_broker_fails(tmp_path: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    import httpx
+
+    _, module = load_app(tmp_path)
+    monkeypatch.setenv("AGENT_VM_STOP_AUDIENCE", "https://api.example.test")
+    module.runtime.backend_url = "https://api.example.test"
+
+    async def boom(_path: str) -> str:
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(module, "metadata", boom)
+    with caplog.at_level(logging.WARNING, logger="agent-vm"):
+        asyncio.run(module.stop_instance())
+    assert "idle-stop broker call failed" in caplog.text
+
+
 def test_invalid_database_upload_preserves_open_database(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)

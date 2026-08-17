@@ -25,6 +25,14 @@ before acceptance, so an unaccepted candidate cannot escape the staged gate.
    Agent VM subnet and set `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc`; it
    refuses to send the bearer token over a NAT address. A healthy
    stopped VM with no drift remains stopped so idle self-stop is preserved.
+   A healthy RUNNING VM with no start demand and zero session leases records
+   `agentVm.reconcile.idleSince` on first observation and is stopped after
+   `AGENT_VM_IDLE_STOP_SECONDS` (default 1h, minimum 30m). Idle is never a
+   drift reason: the drift path would stop-then-restart and leak again. The
+   TERMINATED reaper remains the delete backstop. Ownerless VMs (no Firestore
+   owner) are unreachable here — inventory them with
+   `python3 backend/scripts/agent_vm_reaper.py --inventory` and clean up
+   out-of-band.
 4. A provider-confirmed missing VM is recorded with `missingSince`. The
    reconciler selects that terminal record independently of the rollout cohort
    and deletes only its Firestore `agentVm` pointer after the configured grace
