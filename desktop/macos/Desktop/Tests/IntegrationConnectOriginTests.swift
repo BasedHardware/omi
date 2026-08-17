@@ -41,6 +41,38 @@ final class IntegrationConnectOriginTests: XCTestCase {
     )
   }
 
+  /// Detouring through an unrelated connector does not close the window. The
+  /// user who accepted a Gmail nudge and then connected Calendar first was still
+  /// moved by the Gmail nudge when they come back to Gmail a minute later —
+  /// and the window can only ever credit the exact integration it names, so
+  /// Calendar itself is never miscredited.
+  func testAnUnrelatedConnectDoesNotCloseTheWindow() {
+    IntegrationConnectOrigin.reset()
+    IntegrationConnectOrigin.recordNudgeOpened(connectorID: "email", now: now)
+
+    XCTAssertEqual(
+      IntegrationConnectOrigin.consumeSurface(forConnectorID: "calendar", now: now),
+      .apps
+    )
+    XCTAssertEqual(
+      IntegrationConnectOrigin.consumeSurface(
+        forConnectorID: "email",
+        now: now.addingTimeInterval(60)
+      ),
+      .nudge
+    )
+  }
+
+  /// Accepting a newer nudge replaces the window rather than stacking, so the
+  /// older integration cannot be credited by a later unrelated connect.
+  func testANewerNudgeReplacesTheWindow() {
+    IntegrationConnectOrigin.reset()
+    IntegrationConnectOrigin.recordNudgeOpened(connectorID: "email", now: now)
+    IntegrationConnectOrigin.recordNudgeOpened(connectorID: "calendar", now: now)
+
+    XCTAssertEqual(IntegrationConnectOrigin.consumeSurface(forConnectorID: "email", now: now), .apps)
+  }
+
   /// Coming back through the Apps tab an hour later is an Apps-tab connect.
   func testTheClaimExpires() {
     IntegrationConnectOrigin.reset()

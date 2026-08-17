@@ -79,6 +79,9 @@ final class IntegrationNudgeCoordinator {
   private let presenter: Presenter
   private let ownerID: @MainActor () -> String?
   private let environment: @MainActor () -> Environment
+  private let frontmostBundleID: @MainActor () -> String?
+  private let windowTitleProvider: @MainActor (_ bundleIdentifier: String, _ appName: String?) async -> String?
+  private let connectionInspector: @MainActor (IntegrationNudgeRoute) async -> Bool
   private var activationObserver: NSObjectProtocol?
   private var ownerObserver: NSObjectProtocol?
   private var pendingEvaluation: Task<Void, Never>?
@@ -89,13 +92,25 @@ final class IntegrationNudgeCoordinator {
     now: @escaping () -> Date = Date.init,
     presenter: @escaping Presenter = IntegrationNudgeCoordinator.floatingBarPresenter,
     ownerID: @escaping @MainActor () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
-    environment: @escaping @MainActor () -> Environment = { .live }
+    environment: @escaping @MainActor () -> Environment = { .live },
+    frontmostBundleID: @escaping @MainActor () -> String? = {
+      NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    },
+    windowTitleProvider: @escaping @MainActor (String, String?) async -> String? = {
+      await IntegrationNudgeCoordinator.liveWindowTitle(bundleIdentifier: $0, appName: $1)
+    },
+    connectionInspector: @escaping @MainActor (IntegrationNudgeRoute) async -> Bool = {
+      await IntegrationConnectionInspector.isConnected($0)
+    }
   ) {
     self.store = store
     self.now = now
     self.presenter = presenter
     self.ownerID = ownerID
     self.environment = environment
+    self.frontmostBundleID = frontmostBundleID
+    self.windowTitleProvider = windowTitleProvider
+    self.connectionInspector = connectionInspector
   }
 
   // MARK: - Lifecycle
@@ -185,9 +200,8 @@ final class IntegrationNudgeCoordinator {
     browserRecheck = Task { [weak self] in
       for _ in 0..<Self.browserRecheckLimit {
         try? await Task.sleep(nanoseconds: UInt64(Self.browserRecheckInterval * 1_000_000_000))
-        guard !Task.isCancelled else { return }
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleIdentifier else { return }
-        await self?.evaluate(
+        guard !Task.isCancelled, let self, self.frontmostBundleID() == bundleIdentifier else { return }
+        await self.evaluate(
           bundleIdentifier: bundleIdentifier,
           appName: appName,
           dwell: IntegrationNudgePolicy.requiredDwell
@@ -196,18 +210,41 @@ final class IntegrationNudgeCoordinator {
     }
   }
 
-  private func evaluate(bundleIdentifier: String, appName: String?, dwell: TimeInterval) async {
-    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleIdentifier else { return }
+  /// Recognize the frontmost window and, if it earns one, offer its integration.
+  ///
+  /// Both lookups below are genuinely slow — reading the active window title
+  /// goes through the Accessibility API with a timeout, and inspecting an export
+  /// destination scans local MCP config files — so the user can easily switch
+  /// apps while one is in flight. The identity captured before the first await
+  /// is therefore re-verified after each one: a card that says "Connect Apple
+  /// Notes" delivered while the user is now in Slack is worse than no card, and
+  /// task cancellation alone cannot prevent it, because cancelling a task does
+  /// not interrupt an `await` already in progress.
+  func evaluate(bundleIdentifier: String, appName: String?, dwell: TimeInterval) async {
+    let expectedOwner = ownerID()
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return }
 
-    let windowTitle = await windowTitleIfPermitted(bundleIdentifier: bundleIdentifier, appName: appName)
+    let windowTitle = await windowTitleProvider(bundleIdentifier, appName)
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return }
+
     let window = IntegrationNudgeMatcher.Window(
       bundleIdentifier: bundleIdentifier,
       windowTitle: windowTitle
     )
     guard let match = IntegrationNudgeMatcher.match(window) else { return }
 
-    let isConnected = await IntegrationConnectionInspector.isConnected(match.entry.route)
+    let isConnected = await connectionInspector(match.entry.route)
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return }
+
     offer(match: match, isConnected: isConnected, dwell: dwell)
+  }
+
+  /// Whether the app that triggered this evaluation is still the one in front,
+  /// for the same signed-in person, and the work has not been cancelled.
+  private func stillOnSameWindow(_ bundleIdentifier: String, expectedOwner: String?) -> Bool {
+    !Task.isCancelled
+      && frontmostBundleID() == bundleIdentifier
+      && ownerID() == expectedOwner
   }
 
   /// Decide, deliver, and record — the whole nudge lifecycle for one recognized
@@ -260,8 +297,9 @@ final class IntegrationNudgeCoordinator {
   /// Window titles are content. Do not read one for an app the user excluded
   /// from Rewind capture — that list is their statement about which apps Omi
   /// may look at, and it does not stop being true because a different feature
-  /// is asking.
-  private func windowTitleIfPermitted(bundleIdentifier: String, appName: String?) async -> String? {
+  /// is asking. Non-browsers need no title at all, so they never pay the
+  /// Accessibility round-trip.
+  static func liveWindowTitle(bundleIdentifier: String, appName: String?) async -> String? {
     guard IntegrationNudgeMatcher.isBrowser(bundleIdentifier: bundleIdentifier) else { return nil }
     if let appName, RewindSettings.shared.isAppExcluded(appName) { return nil }
     return await ScreenCaptureService.getActiveWindowInfoAsync().windowTitle

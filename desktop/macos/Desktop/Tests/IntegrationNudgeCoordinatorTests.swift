@@ -184,6 +184,112 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     XCTAssertEqual(presented.value, 0)
   }
 
+  // MARK: - Identity across awaits
+
+  /// Reading the active window title and inspecting a connector are both slow
+  /// enough for the user to switch apps mid-flight. A card that says "Connect
+  /// Apple Notes" delivered while the user is now in Slack is worse than no
+  /// card, and cancelling the task does not help — cancellation never
+  /// interrupts an `await` already in progress.
+  ///
+  /// These drive the real `evaluate` and move the frontmost app *during* each
+  /// await, which is the only way to reach the window the bug lives in.
+  func testAnAppSwitchDuringTheWindowTitleLookupCancelsTheOffer() async {
+    let presented = Box(0)
+    let frontmost = Box("com.apple.Notes")
+    let coordinator = makeEvaluatingCoordinator(
+      presented: presented,
+      frontmost: frontmost,
+      onWindowTitleLookup: { frontmost.value = "com.tinyspeck.slackmacgap" }
+    )
+
+    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
+
+    XCTAssertEqual(presented.value, 0)
+  }
+
+  func testAnAppSwitchDuringTheConnectionLookupCancelsTheOffer() async {
+    let presented = Box(0)
+    let frontmost = Box("com.apple.Notes")
+    let coordinator = makeEvaluatingCoordinator(
+      presented: presented,
+      frontmost: frontmost,
+      onConnectionLookup: { frontmost.value = "com.tinyspeck.slackmacgap" }
+    )
+
+    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
+
+    XCTAssertEqual(presented.value, 0)
+  }
+
+  /// A sign-out mid-evaluation must not deliver the previous person's nudge.
+  func testAnOwnerChangeDuringLookupCancelsTheOffer() async {
+    let presented = Box(0)
+    let frontmost = Box("com.apple.Notes")
+    let owner = Box<String?>("user-a")
+    let coordinator = IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _ in
+        presented.value += 1
+        return .presented
+      },
+      ownerID: { owner.value },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) },
+      frontmostBundleID: { frontmost.value },
+      windowTitleProvider: { _, _ in
+        owner.value = "user-b"
+        return nil
+      },
+      connectionInspector: { _ in false }
+    )
+
+    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
+
+    XCTAssertEqual(presented.value, 0)
+  }
+
+  /// The same path with nothing changing underneath still delivers, so the
+  /// guards above cannot pass by suppressing everything.
+  func testAStableWindowStillDelivers() async {
+    let presented = Box(0)
+    let coordinator = makeEvaluatingCoordinator(
+      presented: presented,
+      frontmost: Box("com.apple.Notes")
+    )
+
+    await coordinator.evaluate(bundleIdentifier: "com.apple.Notes", appName: "Notes", dwell: 3)
+
+    XCTAssertEqual(presented.value, 1)
+  }
+
+  private func makeEvaluatingCoordinator(
+    presented: Box<Int>,
+    frontmost: Box<String>,
+    onWindowTitleLookup: @escaping @Sendable () -> Void = {},
+    onConnectionLookup: @escaping @Sendable () -> Void = {}
+  ) -> IntegrationNudgeCoordinator {
+    IntegrationNudgeCoordinator(
+      store: IntegrationNudgeStore(defaults: makeDefaults(), ownerID: "user-a"),
+      now: { self.now },
+      presenter: { _, _ in
+        presented.value += 1
+        return .presented
+      },
+      ownerID: { "user-a" },
+      environment: { .init(isFeatureEnabled: true, notificationsEnabled: true, isOnboardingComplete: true) },
+      frontmostBundleID: { frontmost.value },
+      windowTitleProvider: { _, _ in
+        onWindowTitleLookup()
+        return nil
+      },
+      connectionInspector: { _ in
+        onConnectionLookup()
+        return false
+      }
+    )
+  }
+
   /// A mutable counter usable from the `@Sendable` presenter closure.
   final class Box<T>: @unchecked Sendable {
     var value: T
