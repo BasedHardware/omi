@@ -322,6 +322,10 @@ enum Permissions {
 
     fileprivate static func performOpenSettings(for c: Capability) {
         guard let url = URL(string: c.settingsPane) else { return }
+        // Sending someone to the Screen Recording pane is the last moment this process can still
+        // learn anything about that grant, so it is the moment worth remembering. See
+        // `screenSettingsWasOpened`.
+        if c == .screen { screenSettingsOpened.signal() }
         let open = {
             NSWorkspace.shared.open(url)
             ContextLog.info("Opened the \(c.rawValue) pane in System Settings", "permissions")
@@ -481,15 +485,28 @@ enum Permissions {
     /// rendering the row from the record it still has. The switch is not the state; it is a picture
     /// of a record that no longer applies to us.
     ///
-    /// So the remedy is the only thing that actually rewrites the record against the new signature:
-    /// turn it **off** and back on. Telling a user to switch on a switch they can see is already on
-    /// is what turned this into *"the app is broken"* rather than *"the app needs a click"* — and it
-    /// is the same sentence for microphone, system audio and screen, because all three are one
-    /// `tccd` requirement mismatch wearing three different pane names.
+    /// One remedy that rewrites the record against the new signature — turn it **off** and back on —
+    /// and it is the same sentence for microphone, system audio and screen, because all three are one
+    /// `tccd` requirement mismatch wearing three different pane names. Telling a user to switch on a
+    /// switch they can see is already on is what turned this into *"the app is broken"* rather than
+    /// *"the app needs a click"*.
+    ///
+    /// **But it is no longer the *first* thing said, because it is not the common case.** On 16
+    /// August 2026 this text was measured wrong on this Mac, on the shipped notarized 1.0.11: screen
+    /// capture was dead, the switch was on, and a plain relaunch restored it — `granted true,
+    /// capturing true` — with nothing toggled and no record rewritten. Nothing had been dropped.
+    /// `CGPreflightScreenCaptureAccess()` is answered per process, so a stale `false` is
+    /// indistinguishable *here* from a revocation, and it is much the more frequent of the two: it
+    /// happens on every auto-update, to every install.
+    ///
+    /// So the cheap, non-destructive remedy leads and the record-rewriting one is the fallback. Both
+    /// are still named, and the sentence still refuses to claim the switch is off — that part was
+    /// right and stays. Ordering them the other way round sends the majority of readers to re-toggle
+    /// a switch that was never the problem.
     nonisolated static func staleGrantReason(subject: String, for c: Capability) -> String {
-        "\(subject) has stopped working — an update or a re-sign made macOS drop the grant. The "
-            + "switch may still look on: turn it off and back on in \(c.settingsLocation), then "
-            + "reopen me."
+        "\(subject) has stopped working. Reopening me fixes this most of the time — a grant only "
+            + "reaches me when I start, and the switch may still look on. If it comes back after "
+            + "that, turn it off and back on in \(c.settingsLocation), then reopen me again."
     }
 
     /// **Why the screen half cannot run right now, or nil when nothing is in its way.**
@@ -539,8 +556,14 @@ enum Permissions {
             case .grantLost:
                 return staleGrantReason(subject: "Screen Recording", for: .screen)
             case .needsRelaunch:
-                return "Screen Recording is on, but I have to be reopened before I can actually "
-                    + "see the screen — click the Screen row to restart me."
+                // Deliberately does not assert that the switch is on. This state is now also reached
+                // when the preflight is merely per-process stale (see `screenNeedsRelaunch`), where
+                // whether the user actually flipped it is the one thing this process cannot know —
+                // and a sentence that tells someone their switch is on when it is off is how the
+                // previous rounds of this bug read to the people hitting them.
+                return "Screen Recording only reaches me when I start, so it has to be reopened "
+                    + "before I can see the screen. If you've just switched it on, click the "
+                    + "Screen row to restart me."
             case .recordUnusable:
                 // Names the command because the command is the only thing that works. Every softer
                 // sentence this app has tried here — "reopen me", "turn it off and back on" — is a
@@ -601,9 +624,32 @@ enum Permissions {
     /// made while Context for Claude is running applies to the *next* Context for Claude, never this one.
     static var screenNeedsRelaunch: Bool {
         guard CGPreflightScreenCaptureAccess() else {
-            // Nothing granted, so nothing is waiting on a relaunch.
+            // **A false preflight is not the same claim as "not granted", and treating it as one is
+            // what made this state unreachable in exactly the case it exists for.**
+            //
+            // `CGPreflightScreenCaptureAccess()` is answered per *process*: a grant made after we
+            // connected to the window server reads `false` here for the rest of our life, however
+            // many times we ask. Measured on this Mac on 16 August 2026, on the shipped notarized
+            // 1.0.11, with the switch visibly ON in Privacy & Security ▸ Screen & System Audio
+            // Recording: the running process reported `screen: granted false`, and a relaunch — with
+            // nothing else touched, no toggling, no `tccutil` — reported `granted true, capturing
+            // true`. The record was never in question; only this process's view of it was.
+            //
+            // So the old `return false` here was the bug behind *"Permission is already on but it's
+            // still asking for it"*: it made this the one branch that could never fire once the user
+            // had done the thing it was written to notice.
+            //
+            // Once we have sent someone to that pane, `false` stops being evidence of anything. The
+            // honest answer is the reopen, and it is safe to offer for two reasons that have to hold
+            // together. `screenSettingsWasOpened` dies with the process, so a successor starts from a
+            // fresh preflight rather than an inherited suspicion. And every surface that acts on this
+            // bounds the acting: `PermissionDeadEnd.mayRelaunch` spends one reopen and no more, which
+            // is what stops a user who never granted from being restarted on a loop.
+            //
+            // The persisted flag is still cleared, and still should be: it records a grant this
+            // process *watched* arrive, which is precisely what has not happened here.
             defaults.set(false, forKey: Key.screenPendingRelaunch)
-            return false
+            return screenRelaunchOfferWhenPreflightDenies(settingsWasOpened: screenSettingsWasOpened)
         }
         if screenGrantIsStale(
             grantedAtLaunch: screenGrantedAtLaunch,
@@ -1406,6 +1452,39 @@ enum Permissions {
     /// well — and the next launch is precisely the one the nudge is asking for.
     private static let screenCaptureDeclined = Latch()
 
+    /// Whether *this process* has already sent the user to the Screen Recording pane.
+    ///
+    /// In memory and never persisted, and that is the whole of what makes the relaunch offer it
+    /// unlocks safe to make. See `screenSettingsWasOpened` for what it is for; the reason it must not
+    /// outlive the process is that a successor reads a *fresh* preflight, so an offer armed by this
+    /// process would otherwise be re-armed forever by a user who never switched anything on.
+    private static let screenSettingsOpened = Latch()
+
+    /// Whether this process has sent the user to the Screen Recording pane and can therefore no
+    /// longer tell them anything truthful about that grant on its own.
+    static var screenSettingsWasOpened: Bool { screenSettingsOpened.isSignalled }
+
+    /// **The rule `screenNeedsRelaunch` applies when the preflight says no — as a pure function.**
+    ///
+    /// Split out for the same reason `screenBlock(granted:hasEverCaptured:needsRelaunch:
+    /// recordIsUnusable:)` is split from `screenBlock()`: every input is something only this Mac can
+    /// answer, while the *rule* is where the wrong answer lived. The wrong answer was a flat `false`,
+    /// which made the reopen offer unreachable in precisely the situation it exists for.
+    ///
+    /// Named for the branch it belongs to rather than taking the preflight as a parameter: a `true`
+    /// preflight never reaches here — that path has the persisted flag and the staleness check to
+    /// work with, and can legitimately answer `false`. A version of this that accepted `preflight`
+    /// would have to pin a value for an input it never receives, and the pinned value would
+    /// contradict the real rule the moment anyone called it unconditionally.
+    ///
+    /// So this is only the case where macOS has told this process "no" and that "no" carries no
+    /// information, because the answer is fixed per process at window-server connect time.
+    nonisolated static func screenRelaunchOfferWhenPreflightDenies(settingsWasOpened: Bool) -> Bool {
+        // Nothing has been asked of the user yet, so a refusal is just a refusal: the row should read
+        // as an offer to grant, not as an instruction to reopen something that would change nothing.
+        settingsWasOpened
+    }
+
     /// Whether *this process* has already had a CoreAudio tap answered, and therefore whether an
     /// unattended one can still surprise the user with a consent dialog. In memory and never
     /// persisted, for the reason the persisted version of this claim was the bug — see
@@ -1722,6 +1801,10 @@ final class PermissionGate: ObservableObject {
     /// back, and a permanently hidden card is exactly the dead end the postpone escape exists to
     /// prevent. `explaining` and `confirming` keep the card **on screen**: they are the lead-in and
     /// the confirmation beat, and hiding through them is what made the preamble unreadable.
+    ///
+    /// The rule is right; what was wrong is the freshness of `settingsIsFrontmost`. See the poll in
+    /// `OnboardingView` — the card floating over the Screen Recording pane was this predicate being
+    /// fed a stale `false`, not this predicate being too narrow.
     nonisolated static func cardYields(to phase: Phase, settingsIsFrontmost: Bool) -> Bool {
         switch phase {
         case .prompting: return true
@@ -1768,11 +1851,7 @@ final class PermissionGate: ObservableObject {
         case .prompting:
             return "macOS is asking. I’ll wait."
         case .waitingInSettings(let capability):
-            return """
-                System Settings is open on the right row. Switch it on and I’ll notice — I won’t \
-                move on without an answer. If now is not the time, tell me and I’ll ask again \
-                later. \(waitingDetail(for: capability))
-                """
+            return Self.waitingCaption(for: capability)
         case .confirming(let capability):
             if capability == .screen, asking.screenNeedsRelaunch {
                 return "Granted. I’ll need to be reopened before I can actually see the screen."
@@ -1783,7 +1862,35 @@ final class PermissionGate: ObservableObject {
         }
     }
 
-    private func waitingDetail(for capability: Capability) -> String {
+    /// **What the card says while the pane is open — and the one capability it must say it to
+    /// differently.**
+    ///
+    /// `static` so the sentence can be measured without standing a gate up in a phase; it is a pure
+    /// function of the capability, and the thing worth guarding about it is the wording.
+    ///
+    /// Screen Recording gets its own sentence because the shared one makes a promise macOS does not
+    /// allow us to keep. "Switch it on and I'll notice" is true for microphone and system audio, and
+    /// false for this one: window-server capture rights are fixed when a process connects, so the
+    /// switch the user is looking at reaches the **next** Context for Claude, never this one. Saying
+    /// otherwise is what left the reporter watching a row read "Asking…" over a switch they could
+    /// see was already on — so this sentence names the reopen instead of promising a poll.
+    nonisolated static func waitingCaption(for capability: Capability) -> String {
+        if capability == .screen {
+            return """
+                System Settings is open on the right row. Switch it on, then click this row to \
+                reopen me — macOS only hands screen access to me when I start, so I can’t pick it \
+                up while I’m running. If now is not the time, tell me and I’ll ask again later. \
+                \(waitingDetail(for: capability))
+                """
+        }
+        return """
+            System Settings is open on the right row. Switch it on and I’ll notice — I won’t move \
+            on without an answer. If now is not the time, tell me and I’ll ask again later. \
+            \(waitingDetail(for: capability))
+            """
+    }
+
+    nonisolated private static func waitingDetail(for capability: Capability) -> String {
         switch capability {
         case .microphone: return "It’s under Privacy & Security ▸ Microphone."
         // Named for the list it is really in, not just the pane. That pane carries two, and sending

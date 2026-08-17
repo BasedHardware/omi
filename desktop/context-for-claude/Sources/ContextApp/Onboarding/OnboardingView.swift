@@ -595,7 +595,18 @@ struct OnboardingView: View {
         // special case; this is the one every capability takes once its pane is open — which now
         // includes the one macOS never prompts for, because a click on its row runs the same episode.
         .onChange(of: invitations.phase, initial: true) { _, phase in syncSpotlight(to: phase) }
-        .onReceive(permissionTick) { _ in refreshPermissions() }
+        .onReceive(permissionTick) { _ in
+            refreshPermissions()
+            // **Polled as well as observed, because the notification does not cover the case that
+            // matters.** `didActivateApplicationNotification` fires on a *change* of frontmost app,
+            // so when System Settings is already frontmost and the pane is reopened underneath the
+            // card — the second capability in the sequence, or the re-click path — macOS posts
+            // nothing and this flag keeps whatever it last held. That is the state the card floats
+            // over the pane in, and it is the reported one. The poll is already running for grant
+            // detection and this is the same kind of fact: something only the user can cause, that
+            // the system will not announce.
+            settingsIsFrontmost = Permissions.systemSettingsIsFrontmost
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPermissions()
         }
@@ -1210,7 +1221,24 @@ struct OnboardingView: View {
         answer: PermissionGate.Answer?,
         offered: Bool
     ) -> String {
-        if capability == .screen, screenNeedsRelaunch { return "Action required" }
+        // **The relaunch state now has two halves, and they are not the same sentence.**
+        //
+        // These used to be one case: `screenNeedsRelaunch` implied a true preflight, which implied
+        // `granted`. It no longer does — the offer is now also armed by a *stale* preflight, where
+        // whether the user flipped the switch is exactly what this process cannot know.
+        //
+        // `granted` — TCC vouches for it and this process still cannot use it. That is a definite
+        // claim about a definite state, and "Action required" is right.
+        //
+        // `!granted` — the preflight denies us and we have no idea whether that is true. Saying
+        // "Action required" here would put a demand on the row the moment the pane opened, before
+        // the user had touched anything, and leave it there whether they granted, declined or walked
+        // away. But the row is not idle either: it is the control that performs the reopen, and the
+        // caption has just asked them to click it. "Asking…" was the reported dead end and is the one
+        // word this must not fall through to.
+        if capability == .screen, screenNeedsRelaunch {
+            return granted ? "Action required" : "Reopen"
+        }
         if granted { return "Granted" }
         if capability == .accessibility, reported, answer != .deferred { return "Open Settings" }
         if asking { return "Asking…" }
