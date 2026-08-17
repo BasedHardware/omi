@@ -281,11 +281,9 @@ Legitimate loopback traffic this fence must not fail:
 | Auth emulator | CLOUD process, only with `--local-identity` | `FIREBASE_AUTH_EMULATOR_HOST` | opt-in |
 
 v1 of candidate A, installed only at the four entrypoints, with
-loopback as a first-class allow, leaves `bun test` and L1 alone. L2
-boots real loopback HTTP (`integration/lanes.mjs`); those processes
-are the entrypoints, so the wrap is live there. That is the first
-real contact, and it is the right one: if loopback is spelled
-narrowly, L2 will say so before L3 ever opens a WKWebView.
+loopback as a first-class allow, leaves `bun test` alone. Boot acceptance
+starts real loopback HTTP through those entrypoints, so the wrap is live
+at the first real network contact.
 
 `OMI_LLM_GATEWAY_URL` on the LOCAL process should be required to
 resolve to a loopback host, not merely to "whatever is in the env".
