@@ -1,0 +1,67 @@
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCoordinator.swift
+  s_ff8aeb5a36f5b8::t_396595959d2e74 40-44,48-49,53,56-57,60-64
+  s_ff8aeb5a36f5b8::t_776b75cbdd38d7 291-312
+  s_ff8aeb5a36f5b8::t_15b7bb10177091 290,353,355-356,359,381,384-385,389,392-393
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeMatcher.swift
+  s_ff8aeb5a36f5b8::t_0abf0a7eaaf70c 60,69-105
+  s_ff8aeb5a36f5b8::t_41023b624ac205 106
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectionInspector.swift
+  s_ff8aeb5a36f5b8::t_37349f52ec0ce6 29-43
+desktop/macos/e2e/flows/integration-nudges.yaml
+  s_ff8aeb5a36f5b8::t_dddfeb49054a4a 96-102,104-109
+desktop/macos/Desktop/Tests/IntegrationNudgeAnalyticsBoundaryTests.swift
+  s_ff8aeb5a36f5b8::t_fcadafac2a2f69 1-100
+  s_ff8aeb5a36f5b8::t_1a89a0afc05e3f 101
+desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  s_ff8aeb5a36f5b8::t_9a827977f4a5f1 101-115,298,315,329-330,332,337-338
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  s_ff8aeb5a36f5b8::t_dbd3b48c9520fe 207-210
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_ff8aeb5a36f5b8::t_a4ddde1a6e57d7 577,580
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_ff8aeb5a36f5b8::t_87c28898edacf7 4057-4061
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationConnectOrigin.swift
+  s_ff8aeb5a36f5b8::t_264da3a51ec7b0 29-33,39-40,43-44,46,50
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeAutomation.swift
+  s_ff8aeb5a36f5b8::t_fd97e0712448dc 66-69
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCard.swift
+  s_ff8aeb5a36f5b8::t_0618779986f4c3 15,64-65,73-74
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeCatalog.swift
+  s_ff8aeb5a36f5b8::t_4b9a3ab99c920d 100-102,105,112-113,224
+desktop/macos/Desktop/Sources/IntegrationNudges/IntegrationNudgeTelemetry.swift
+  s_ff8aeb5a36f5b8::t_5c8fda5b81cd84 89-92,96-97,103
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_ff8aeb5a36f5b8::t_a687a7e5d70fc0 1740
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+  s_ff8aeb5a36f5b8::t_fac87b3ec89ff4 127-128,137-139
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_ff8aeb5a36f5b8::t_8d6f8b387e6812 875-878,1049-1059,1061
+desktop/macos/Desktop/Tests/IntegrationConnectOriginTests.swift
+  s_ff8aeb5a36f5b8::t_6e0debd19e74f1 16,21-22,29-31,37,39,51,54,59,70-71,73,79,81-98,103,106
+desktop/macos/Desktop/Tests/IntegrationNudgeCardPresentationTests.swift
+  s_ff8aeb5a36f5b8::t_3c61421a0dcf44 14-18,25,33-34
+desktop/macos/Desktop/Tests/IntegrationNudgeCatalogTests.swift
+  s_ff8aeb5a36f5b8::t_ab1a276cdab7bb 85-117
+desktop/macos/Desktop/Tests/IntegrationNudgeCoordinatorTests.swift
+  s_ff8aeb5a36f5b8::t_c7efd0ceed4369 45,47,87-93,103-107,109-142,275,277,318,320
+desktop/macos/Desktop/Tests/IntegrationNudgeMatcherTests.swift
+  s_ff8aeb5a36f5b8::t_ec5405033aad49 62-107
+desktop/macos/Desktop/Tests/IntegrationNudgeTelemetryTests.swift
+  s_ff8aeb5a36f5b8::t_dd8530bbc15c25 58-59,62-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "832f64b35e3442040932b3093271080f8626818d",
+  "prompts": {},
+  "sessions": {
+    "s_ff8aeb5a36f5b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cee6b50-5d24-4cd7-ba03-5499c4e7d8a5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
