@@ -37,8 +37,4 @@ One command from this repo root:
 bun run app
 ```
 
-That reuses `integration/dev-stack.sh --up` when 4851/8788 are already serving, otherwise boots them with `OMI_SEED_PERSONA=demo` and `OMI_STT_ENGINE=mlx-whisper`, then launches the headed macOS shell (`frontend/shells/macos/scripts/dev-run-macos.sh`, route conversations / Activity, origin `http://127.0.0.1:5290`).
-
-Expect **Demo User** (empty email) and a fictional recent week: Harborline Cafe / Cedar Loop / Fable and Wick people and places, conversations with transcripts in a few folders, tasks (some linked to those conversations), and a short chat history. Chat generation goes through the **local test gateway** on 8788, not a real model.
-
-Persona off (default): omit `OMI_SEED_PERSONA` and every seeded byte stays the historical QA fixture. Persona on: `OMI_SEED_PERSONA=demo`. Stop the stack with `integration/dev-stack.sh --stop`. Headless-safe check: `integration/dev-app.sh --accept`.
+That launches the loopback-only backend service on port 4851 with deterministic QA seed data. See `apps/service/README.md` for configuration and boot acceptance.
