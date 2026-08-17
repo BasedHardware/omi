@@ -49,7 +49,7 @@ enum IntegrationNudgeAutomation {
   /// without recording would diverge from production, and an e2e flow asserting
   /// the cooldown afterwards would be asserting something that never happened.
   static func present(telemetryID: String) -> [String: String] {
-    guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else {
+    guard let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID) else {
       return [
         "presented": "false",
         "error": "unknown telemetry_id",

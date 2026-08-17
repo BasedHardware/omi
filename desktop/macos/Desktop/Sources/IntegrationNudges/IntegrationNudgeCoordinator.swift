@@ -397,10 +397,10 @@ final class IntegrationNudgeCoordinator {
     // as the screen-capture-reset defect (see
     // `NotificationService.screenCaptureResetShownKey`).
     // The bar retains both callbacks, so a queued card can call back long after
-    // this activation ended and a different one began. Each callback compares
-    // the session it was created in before doing anything.
+    // this activation ended and a different one began. Presentation still counts
+    // whenever it happens — the user saw the card — but a *drop* must not report
+    // a suppression into whatever window session is current by then.
     let session = sessionToken
-    let triggeringApp = frontmostBundleID()
     var recorded = false
     var dropped = false
 
@@ -413,13 +413,12 @@ final class IntegrationNudgeCoordinator {
     }
 
     let onPresented: @MainActor () -> Void = { [weak self] in
-      // A queued card is drawn whenever the bar gets to it, which can be long
-      // after the app that prompted it is gone. The card is the bar's to own by
-      // then; the integration's lifetime budget is not, and must not be spent on
-      // an offer about an app the user has already left.
-      guard let self, self.sessionToken == session,
-        self.frontmostBundleID() == triggeringApp
-      else { return }
+      // This fires only when the bar actually drew the card, so the user saw
+      // the offer and it counts — whatever they are looking at by then. Gating
+      // it on the app still being frontmost would let the same integration be
+      // offered again and again, each time free, which is the opposite of the
+      // budget's purpose.
+      guard let self else { return }
       recorded = true
       let shownCountBefore = self.store.state(for: match.entry.telemetryID).shownCount
       self.store.recordDelivery(telemetryID: match.entry.telemetryID, now: self.now())
@@ -496,7 +495,7 @@ final class IntegrationNudgeCoordinator {
   /// The user accepted. Open the real connector sheet — the same one the Apps
   /// tab opens — rather than a nudge-only connect path that could drift.
   func acceptPresentedNudge(telemetryID: String, triggerID: String) {
-    guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
+    guard let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID) else { return }
     AnalyticsManager.shared.integrationNudgeActioned(
       entry: entry, action: .connect, triggerID: triggerID)
     // Claim the connect that follows, so it lands in the connect funnel as a
@@ -525,7 +524,7 @@ final class IntegrationNudgeCoordinator {
 
   /// "Not now" — snooze this integration.
   func snoozePresentedNudge(telemetryID: String, triggerID: String) {
-    guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
+    guard let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID) else { return }
     store.recordSnooze(telemetryID: telemetryID, now: now())
     AnalyticsManager.shared.integrationNudgeActioned(
       entry: entry, action: .notNow, triggerID: triggerID)
@@ -533,7 +532,7 @@ final class IntegrationNudgeCoordinator {
 
   /// "Don't show again" — opt this integration out permanently.
   func dismissPresentedNudgeForever(telemetryID: String, triggerID: String) {
-    guard let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID }) else { return }
+    guard let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID) else { return }
     store.recordOptOut(telemetryID: telemetryID)
     AnalyticsManager.shared.integrationNudgeActioned(
       entry: entry, action: .dismissForever, triggerID: triggerID)

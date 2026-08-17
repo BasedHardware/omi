@@ -184,10 +184,10 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     XCTAssertEqual(snoozeEvents.count, 0)
   }
 
-  /// The bar retains the callbacks, so a queued card can be drawn long after the
-  /// app that prompted it is gone. The card is the bar's to own by then; the
-  /// integration's lifetime budget is not.
-  func testAQueuedCardDrawnAfterTheUserMovedOnDoesNotSpendTheBudget() throws {
+  /// A queued card drawn after the user switched apps was still *seen*, so it
+  /// spends its offer. Gating this on the app still being frontmost would let
+  /// the same integration be offered again and again, each time free.
+  func testAQueuedCardDrawnAfterTheUserMovedOnStillSpendsTheBudget() throws {
     let defaults = makeDefaults()
     let present = Box<(@MainActor () -> Void)?>(nil)
     let frontmost = Box("com.apple.Notes")
@@ -210,7 +210,7 @@ final class IntegrationNudgeCoordinatorTests: XCTestCase {
     XCTAssertEqual(
       IntegrationNudgeStore(defaults: defaults, ownerID: "user-a")
         .state(for: try match().entry.telemetryID).shownCount,
-      0
+      1
     )
   }
 

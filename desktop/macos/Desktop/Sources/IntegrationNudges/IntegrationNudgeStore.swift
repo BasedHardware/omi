@@ -138,9 +138,16 @@ final class IntegrationNudgeStore {
     return stored.filter { $0 >= cutoff && $0 <= now.timeIntervalSince1970 }
   }
 
-  private func date(forKey key: ScopedDefaultsKey) -> Date? {
+  /// Reads a stored instant, discarding one that lies in the future.
+  ///
+  /// A clock that moves backwards would otherwise leave `lastShownAt` and
+  /// `lastAnyNudgeAt` permanently ahead of `now`, and the cooldown gates —
+  /// which compare elapsed time against a positive budget — would silence every
+  /// nudge for as long as the skew lasted. The rolling day window already drops
+  /// future entries for the same reason; these two needed the same treatment.
+  private func date(forKey key: ScopedDefaultsKey, now: Date = Date()) -> Date? {
     let timestamp = defaults.double(forKey: key)
-    guard timestamp > 0 else { return nil }
+    guard timestamp > 0, timestamp <= now.timeIntervalSince1970 else { return nil }
     return Date(timeIntervalSince1970: timestamp)
   }
 

@@ -575,7 +575,7 @@ struct FloatingControlBarView: View {
       suggestionCard(notification)
     } else if notification.assistantId == IntegrationNudgeCoordinator.assistantID,
       case .connectIntegration(let telemetryID, let triggerID)? = notification.action,
-      let entry = IntegrationNudgeCatalog.all.first(where: { $0.telemetryID == telemetryID })
+      let entry = IntegrationNudgeCatalog.entry(telemetryID: telemetryID)
     {
       IntegrationNudgeCard(notification: notification, entry: entry, triggerID: triggerID)
     } else {

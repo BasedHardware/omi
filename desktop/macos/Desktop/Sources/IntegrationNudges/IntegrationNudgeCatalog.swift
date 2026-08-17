@@ -463,6 +463,11 @@ enum IntegrationNudgeCatalog {
     all.first { $0.route == route }
   }
 
+  /// Resolve an entry from the value carried on a notification action.
+  static func entry(telemetryID: String) -> IntegrationNudgeCatalogEntry? {
+    all.first { $0.telemetryID == telemetryID }
+  }
+
   /// Onboarding copy for an Apps-tab import connector. Returns nil for ids the
   /// catalog has no entry for, so a new connector shows its existing one-line
   /// description rather than nothing.

@@ -109,6 +109,20 @@ final class IntegrationNudgeStoreTests: XCTestCase {
     XCTAssertEqual(store.nudgesInCurrentDay(now: now), 0)
   }
 
+  /// A clock that moves backwards would leave the cooldown timestamps ahead of
+  /// `now`, and the gates that compare elapsed time against a positive budget
+  /// would then silence every nudge until the skew passed.
+  func testFutureDatedTimestampsAreDiscardedRatherThanSilencingNudges() {
+    let defaults = makeDefaults()
+    let store = self.store(defaults)
+    // Genuinely ahead of the wall clock the store reads, which is what a
+    // backwards clock change leaves behind.
+    store.recordDelivery(telemetryID: telemetryID, now: Date().addingTimeInterval(60 * 60))
+
+    XCTAssertNil(store.state(for: telemetryID).lastShownAt)
+    XCTAssertNil(store.lastAnyNudgeAt())
+  }
+
   func testResetClearsEverythingForTheOwner() {
     let defaults = makeDefaults()
     let store = self.store(defaults)
