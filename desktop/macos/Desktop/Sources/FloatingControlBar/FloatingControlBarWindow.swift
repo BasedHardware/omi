@@ -4204,6 +4204,12 @@ class FloatingControlBarManager {
     let ownerID = notification.ownerID
     guard !ownerID.isEmpty,
       RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      // A proactive card is journaled because it is something Omi observed and
+      // the user may want to follow up on in chat. An integration offer is
+      // neither — it is product copy about a connector, and writing "Omi can
+      // read your inbox…" into the user's conversation history as though it
+      // were an observation is noise they cannot act on there.
+      notification.assistantId != IntegrationNudgeCoordinator.assistantID,
       let provider = historyChatProvider
     else { return }
     let surface = provider.mainChatSurfaceReference()

@@ -227,12 +227,15 @@ final class IntegrationNudgeCoordinator {
   private func startBrowserRecheckIfNeeded(bundleIdentifier: String, appName: String?) {
     guard IntegrationNudgeMatcher.isBrowser(bundleIdentifier: bundleIdentifier) else { return }
     browserRecheck = Task { [weak self] in
+      var lastTitle: String?
       for _ in 0..<Self.browserRecheckLimit {
         try? await Task.sleep(nanoseconds: UInt64(Self.browserRecheckInterval * 1_000_000_000))
         guard !Task.isCancelled, let self, self.isEnabledNow,
           self.frontmostBundleID() == bundleIdentifier
         else { return }
-        let outcome = await self.evaluate(bundleIdentifier: bundleIdentifier, appName: appName)
+        let (outcome, title) = await self.evaluate(
+          bundleIdentifier: bundleIdentifier, appName: appName, lastTitle: lastTitle)
+        lastTitle = title
         guard outcome.shouldKeepWatching else { return }
       }
     }
@@ -265,11 +268,28 @@ final class IntegrationNudgeCoordinator {
   /// not interrupt an `await` already in progress.
   @discardableResult
   func evaluate(bundleIdentifier: String, appName: String?) async -> Outcome {
+    await evaluate(bundleIdentifier: bundleIdentifier, appName: appName, lastTitle: nil).0
+  }
+
+  /// Returns the outcome and the title it was decided from, so a re-check can
+  /// skip the work entirely when nothing on screen changed.
+  private func evaluate(
+    bundleIdentifier: String,
+    appName: String?,
+    lastTitle: String?
+  ) async -> (Outcome, String?) {
     let expectedOwner = ownerID()
-    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else {
+      return (.abandoned, lastTitle)
+    }
 
     let windowTitle = await windowTitleProvider(bundleIdentifier, appName)
-    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else {
+      return (.abandoned, lastTitle)
+    }
+    // Same tab as last round: the answer cannot have changed, so skip the match,
+    // the connection check and the decision entirely.
+    if let lastTitle, lastTitle == windowTitle { return (.noMatchYet, windowTitle) }
 
     let window = IntegrationNudgeMatcher.Window(
       bundleIdentifier: bundleIdentifier,
@@ -277,19 +297,21 @@ final class IntegrationNudgeCoordinator {
     )
     // No integration recognized yet — in a browser the user may still be about
     // to open one, so this is the one outcome worth watching for.
-    guard let match = IntegrationNudgeMatcher.match(window) else { return .noMatchYet }
+    guard let match = IntegrationNudgeMatcher.match(window) else { return (.noMatchYet, windowTitle) }
 
     // Settle everything that does not need the connection state first. For an
     // export destination the inspection is a local MCP config scan, and a user
     // who pressed "Never" should not pay for it on every activation.
     if let settled = decideWithoutConnectionState(entry: match.entry) {
-      return .settled(settled)
+      return (.settled(settled), windowTitle)
     }
 
     let isConnected = await connectionInspector(match.entry.route)
-    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else { return .abandoned }
+    guard stillOnSameWindow(bundleIdentifier, expectedOwner: expectedOwner) else {
+      return (.abandoned, windowTitle)
+    }
 
-    return offer(match: match, isConnected: isConnected)
+    return (offer(match: match, isConnected: isConnected), windowTitle)
   }
 
   /// What one evaluation concluded, and whether re-checking this window could

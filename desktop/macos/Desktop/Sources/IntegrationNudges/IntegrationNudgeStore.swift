@@ -78,7 +78,7 @@ final class IntegrationNudgeStore {
 
   func recordDelivery(telemetryID: String, now: Date) {
     guard ownerID != nil else { return }
-    write(IntegrationNudgePolicy.stateAfterDelivery(state(for: telemetryID), now: now), for: telemetryID)
+    write(IntegrationNudgePolicy.stateAfterDelivery(state(for: telemetryID, now: now), now: now), for: telemetryID)
 
     guard let lastKey = budgetKey(Field.lastAnyNudgeAt),
       let recentKey = budgetKey(Field.recentDeliveries)
@@ -91,17 +91,19 @@ final class IntegrationNudgeStore {
 
   func recordSnooze(telemetryID: String, now: Date) {
     guard ownerID != nil else { return }
-    write(IntegrationNudgePolicy.stateAfterSnooze(state(for: telemetryID), now: now), for: telemetryID)
+    write(IntegrationNudgePolicy.stateAfterSnooze(state(for: telemetryID, now: now), now: now), for: telemetryID)
   }
 
-  func recordOptOut(telemetryID: String) {
+  func recordOptOut(telemetryID: String, now: Date = Date()) {
     guard ownerID != nil else { return }
-    write(IntegrationNudgePolicy.stateAfterOptOut(state(for: telemetryID)), for: telemetryID)
+    write(
+      IntegrationNudgePolicy.stateAfterOptOut(state(for: telemetryID, now: now)), for: telemetryID)
   }
 
-  func recordConnected(telemetryID: String) {
+  func recordConnected(telemetryID: String, now: Date = Date()) {
     guard ownerID != nil else { return }
-    write(IntegrationNudgePolicy.stateAfterConnect(state(for: telemetryID)), for: telemetryID)
+    write(
+      IntegrationNudgePolicy.stateAfterConnect(state(for: telemetryID, now: now)), for: telemetryID)
   }
 
   /// Clears every nudge record for the current owner. Backs the Settings
