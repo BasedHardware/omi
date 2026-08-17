@@ -78,6 +78,20 @@ final class IntegrationNudgeStoreTests: XCTestCase {
     XCTAssertNil(state.snoozedUntil)
   }
 
+  /// Connecting clears the *budget*, not the user's refusal. The grant refresh
+  /// re-runs this on every reconnect check while the sheet is open, so a clear
+  /// that also dropped `optedOut` would hand back nudges the user had turned
+  /// off for good — and would do it repeatedly.
+  func testConnectingKeepsAnOptOut() {
+    let defaults = makeDefaults()
+    let store = self.store(defaults)
+    store.recordOptOut(telemetryID: telemetryID)
+
+    store.recordConnected(telemetryID: telemetryID)
+
+    XCTAssertTrue(store.state(for: telemetryID, now: now).optedOut)
+  }
+
   /// "You already declined this" is a fact about a person. A second account on
   /// the same Mac must not inherit it.
   func testHistoryIsScopedToTheOwner() {
