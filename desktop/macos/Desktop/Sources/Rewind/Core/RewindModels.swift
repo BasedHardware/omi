@@ -525,8 +525,8 @@ class RewindSettings: ObservableObject {
     RewindPendingContextBucketPurgeJournal.enqueue(appName: appName, ownerID: ownerID)
     Task { @MainActor in
       do {
-        let purgedBucketIDs = try await ContextBucketStore.shared.purgeExcludedApp(appName)
-        RewindPendingBucketRetractionJournal.enqueue(bucketIDs: purgedBucketIDs, ownerID: ownerID)
+        await Self.journalRetraction(appName: appName, ownerID: ownerID)
+        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
         RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
         await Self.retractPublishedBuckets(ownerID: ownerID)
       } catch {
@@ -552,8 +552,8 @@ class RewindSettings: ObservableObject {
     for appName in pending {
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
       do {
-        let purgedBucketIDs = try await ContextBucketStore.shared.purgeExcludedApp(appName)
-        RewindPendingBucketRetractionJournal.enqueue(bucketIDs: purgedBucketIDs, ownerID: ownerID)
+        await Self.journalRetraction(appName: appName, ownerID: ownerID)
+        _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
         RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
         await Self.retractPublishedBuckets(ownerID: ownerID)
       } catch {
@@ -562,22 +562,30 @@ class RewindSettings: ObservableObject {
     }
   }
 
+  /// Record which buckets will need retracting, before the local delete runs.
+  ///
+  /// The delete is irreversible and destroys the app-to-bucket mapping, so ids
+  /// captured after it are unrecoverable if the process dies in between. Only
+  /// journal when sync can actually drain the record: publishing is
+  /// dogfood-only, and an entry nothing will ever retract is a leak.
+  private static func journalRetraction(appName: String, ownerID: String) async {
+    guard await MainActor.run(body: { ContextBucketsFeature.isBackendSyncEnabled }) else { return }
+    let bucketIDs = await ContextBucketStore.shared.bucketIDsForExcludedApp(appName)
+    RewindPendingBucketRetractionJournal.enqueue(bucketIDs: bucketIDs, ownerID: ownerID)
+  }
+
   /// Delete the backend's copies of buckets this device purged locally.
   ///
   /// Excluding an app is a privacy action, so it has to reach every copy. The
-  /// local delete is authoritative and irreversible, and once it has run the
-  /// bucket ids can no longer be recovered from the database — so they are
-  /// journalled first and cleared only once the server confirms the delete.
-  /// Without that record a failure here would strand the published copies
-  /// forever: the retry re-runs the local purge, which now finds nothing and
-  /// reports no buckets to retract.
+  /// journal is cleared only once the server confirms the delete, so a failure
+  /// leaves work the next launch picks up rather than stranding the copies.
   static func retractPublishedBuckets(ownerID: String) async {
     guard await MainActor.run(body: { ContextBucketsFeature.isBackendSyncEnabled }) else { return }
     let pending = RewindPendingBucketRetractionJournal.pending(ownerID: ownerID)
     guard !pending.isEmpty else { return }
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    guard let fence = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else { return }
     do {
-      try await ContextBucketSyncClient.shared.purge(bucketIDs: Array(pending))
+      try await ContextBucketSyncClient.shared.purge(bucketIDs: Array(pending), authorizedBy: fence)
       RewindPendingBucketRetractionJournal.complete(bucketIDs: pending, ownerID: ownerID)
     } catch {
       logError("RewindSettings: backend bucket retraction failed", error: error)

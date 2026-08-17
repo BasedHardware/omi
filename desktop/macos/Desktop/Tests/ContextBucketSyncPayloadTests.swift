@@ -7,15 +7,12 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
 
   private func bucket(
     _ bucketID: String = "bucket-1",
-    workstreamID: String? = nil,
-    displayLabel: String? = "Design doc"
+    workstreamID: String? = nil
   ) -> ContextBucketSyncBucket {
     ContextBucketSyncBucket(
       bucketID: bucketID,
       subjectKind: "document",
-      subjectID: "design-doc",
       workstreamID: workstreamID,
-      displayLabel: displayLabel,
       notifyWorthiness: 0.7,
       visitCount: 3,
       lastVisitedAt: now,
@@ -32,7 +29,6 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
       factID: factID,
       bucketID: bucketID,
       statement: "Ship the parity pack",
-      identifiers: ["parity-pack"],
       confidence: 0.9,
       notifyWorthiness: 0.8,
       dispositionState: "none",
@@ -82,20 +78,26 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
     for forbidden in ["evidence_text", "narrative", "raw_context_key", "normalized_context_key"] {
       XCTAssertNil(payload[forbidden], "\(forbidden) must never be published")
     }
-    // The device has no id a consumer could resolve back to a screen frame, so it
-    // must not assert provenance it cannot support.
+    // identifiers are handles copied verbatim from the screen by prompt design,
+    // and evidence refs named the fact itself, so neither may be published.
+    XCTAssertNil(payload["identifiers"])
     XCTAssertNil(payload["evidence_refs"])
+
+    // display_label is the normalized window title, or a raw URL or file path
+    // for a durable handle; subject_id carries the same value.
+    let bucketPayload = buckets(in: body)[0]
+    XCTAssertNil(bucketPayload["display_label"])
+    XCTAssertNil(bucketPayload["subject_id"])
   }
 
   func testOptionalFieldsAreOmittedRatherThanSentAsNull() {
     let body = ContextBucketSyncPayload.body(
       deviceID: "macos_abc",
-      buckets: [bucket(workstreamID: nil, displayLabel: nil)],
+      buckets: [bucket(workstreamID: nil)],
       facts: [fact(workstreamTag: nil, expiresAt: nil)])
 
     let published = buckets(in: body)[0]
     XCTAssertNil(published["workstream_id"])
-    XCTAssertNil(published["display_label"])
     let payload = facts(in: published)[0]
     XCTAssertNil(payload["workstream_tag"])
     XCTAssertNil(payload["expires_at"])
@@ -104,12 +106,11 @@ final class ContextBucketSyncPayloadTests: XCTestCase {
   func testOptionalFieldsAreSentWhenPresent() {
     let body = ContextBucketSyncPayload.body(
       deviceID: "macos_abc",
-      buckets: [bucket(workstreamID: "ws-1", displayLabel: "Design doc")],
+      buckets: [bucket(workstreamID: "ws-1")],
       facts: [fact(workstreamTag: "ws-1", expiresAt: now)])
 
     let published = buckets(in: body)[0]
     XCTAssertEqual(published["workstream_id"] as? String, "ws-1")
-    XCTAssertEqual(published["display_label"] as? String, "Design doc")
     XCTAssertEqual(facts(in: published)[0]["workstream_tag"] as? String, "ws-1")
     XCTAssertNotNil(facts(in: published)[0]["expires_at"])
   }

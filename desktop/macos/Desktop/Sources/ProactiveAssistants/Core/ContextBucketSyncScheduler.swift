@@ -6,41 +6,57 @@ import GRDB
 /// Only `validated` facts are selected. The other validity states are working
 /// state for the local validator, and publishing them would export exactly the
 /// low-confidence content the validator exists to withhold.
+///
+/// The selected columns are deliberately narrow: `displayLabel`, `subjectID`,
+/// and `identifiersJson` all hold text copied from the screen — window titles,
+/// URLs, file paths, and literal on-screen handles — so they are never read
+/// here and cannot reach a payload.
+/// Keyset position of the last bucket this device published.
+struct ContextBucketSyncCursor: Equatable, Sendable, Codable {
+  let updatedAt: Date
+  let bucketID: String
+}
+
 enum ContextBucketSyncSelection {
   static let bucketLimit = ContextBucketSyncPayload.bucketLimit
   static let factLimitPerBucket = 40
 
-  /// Buckets updated since the last published watermark, oldest first.
+  /// Buckets after the cursor, oldest first.
   ///
   /// A plain "newest N" window would leave bucket N+1 permanently unpublishable
-  /// and would re-transmit the same rows every pass. Walking forward from the
-  /// watermark covers every bucket exactly once and lets a backlog drain.
+  /// and would re-transmit the same rows every pass. The cursor is a keyset on
+  /// (updatedAt, id) rather than a bare timestamp: buckets written in the same
+  /// batch share an updatedAt, and a timestamp-only cursor would step past all
+  /// but the first `limit` of them and never come back.
   static func buckets(
     in db: Database,
-    updatedAfter watermark: Date?,
+    after cursor: ContextBucketSyncCursor?,
     limit: Int = bucketLimit
   ) throws -> [ContextBucketSyncBucket] {
     try Row.fetchAll(
       db,
       sql: """
-        SELECT id, subjectKind, subjectID, workstreamID, displayLabel,
+        SELECT id, subjectKind, workstreamID,
                notifyWorthiness, visitCount, lastVisitedAt, updatedAt
         FROM context_buckets
-        WHERE updatedAt > ?
-        ORDER BY updatedAt ASC LIMIT ?
+        WHERE (updatedAt > ?) OR (updatedAt = ? AND id > ?)
+        ORDER BY updatedAt ASC, id ASC LIMIT ?
         """,
-      arguments: [watermark ?? Date(timeIntervalSince1970: 0), limit]
+      arguments: [
+        cursor?.updatedAt ?? Date(timeIntervalSince1970: 0),
+        cursor?.updatedAt ?? Date(timeIntervalSince1970: 0),
+        cursor?.bucketID ?? "",
+        limit,
+      ]
     ).compactMap { row -> ContextBucketSyncBucket? in
       guard
         let bucketID: String = row["id"], let subjectKind: String = row["subjectKind"],
-        let subjectID: String = row["subjectID"], let updatedAt: Date = row["updatedAt"]
+        let updatedAt: Date = row["updatedAt"]
       else { return nil }
       return ContextBucketSyncBucket(
         bucketID: bucketID,
         subjectKind: subjectKind,
-        subjectID: subjectID,
         workstreamID: row["workstreamID"],
-        displayLabel: row["displayLabel"],
         notifyWorthiness: row["notifyWorthiness"] ?? 0,
         visitCount: row["visitCount"] ?? 0,
         lastVisitedAt: row["lastVisitedAt"],
@@ -57,7 +73,7 @@ enum ContextBucketSyncSelection {
     try Row.fetchAll(
       db,
       sql: """
-        SELECT id, bucketID, statement, identifiersJson, confidence, notifyWorthiness,
+        SELECT id, bucketID, statement, confidence, notifyWorthiness,
                dispositionState, workstreamTag, expiresAt, updatedAt
         FROM bucket_facts
         WHERE bucketID = ? AND validityState = 'validated'
@@ -74,7 +90,6 @@ enum ContextBucketSyncSelection {
         factID: factID,
         bucketID: rowBucketID,
         statement: statement,
-        identifiers: decodeIdentifiers(row["identifiersJson"]),
         confidence: row["confidence"] ?? 0,
         notifyWorthiness: row["notifyWorthiness"] ?? 0,
         dispositionState: row["dispositionState"] ?? "none",
@@ -84,10 +99,6 @@ enum ContextBucketSyncSelection {
     }
   }
 
-  static func decodeIdentifiers(_ json: String?) -> [String] {
-    guard let json, let data = json.data(using: .utf8) else { return [] }
-    return (try? JSONDecoder().decode([String].self, from: data)) ?? []
-  }
 }
 
 /// Publishes this device's validated facts on a slow cadence.
@@ -101,7 +112,27 @@ actor ContextBucketSyncScheduler {
 
   private var timer: Task<Void, Never>?
   private var isRunning = false
-  private var watermark: Date?
+  /// Persisted so a restart resumes instead of replaying from the beginning.
+  ///
+  /// An in-memory cursor restarts at epoch every launch, so a device restarted
+  /// regularly would keep re-publishing its oldest buckets and never reach its
+  /// newest ones.
+  private var cursor: ContextBucketSyncCursor? {
+    get {
+      guard let data = UserDefaults.standard.data(forKey: Self.cursorDefaultsKey) else { return nil }
+      return try? JSONDecoder().decode(ContextBucketSyncCursor.self, from: data)
+    }
+    set {
+      let defaults = UserDefaults.standard
+      guard let newValue, let data = try? JSONEncoder().encode(newValue) else {
+        defaults.removeObject(forKey: Self.cursorDefaultsKey)
+        return
+      }
+      defaults.set(data, forKey: Self.cursorDefaultsKey)
+    }
+  }
+
+  private static let cursorDefaultsKey = "contextBucketSyncCursor"
   private let client: ContextBucketSyncClient
 
   init(client: ContextBucketSyncClient = .shared) {
@@ -136,11 +167,11 @@ actor ContextBucketSyncScheduler {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { return }
 
-    let cursor = watermark
+    let position = cursor
     let staged: ([ContextBucketSyncBucket], [ContextBucketSyncFact])
     do {
       staged = try await pool.read { db -> ([ContextBucketSyncBucket], [ContextBucketSyncFact]) in
-        let buckets = try ContextBucketSyncSelection.buckets(in: db, updatedAfter: cursor)
+        let buckets = try ContextBucketSyncSelection.buckets(in: db, after: position)
         var facts: [ContextBucketSyncFact] = []
         for bucket in buckets {
           facts.append(
@@ -168,7 +199,9 @@ actor ContextBucketSyncScheduler {
         facts: staged.1,
         authorizedBy: authorizationSnapshot)
       // Only advance past rows the server accepted, so a failure re-sends them.
-      watermark = staged.0.map(\.updatedAt).max() ?? watermark
+      if let last = staged.0.last {
+        cursor = ContextBucketSyncCursor(updatedAt: last.updatedAt, bucketID: last.bucketID)
+      }
     } catch {
       log("ContextBucketSyncScheduler: sync failed \(error.localizedDescription)")
     }

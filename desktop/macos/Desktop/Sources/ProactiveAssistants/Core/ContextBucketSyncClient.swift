@@ -3,8 +3,9 @@ import Foundation
 /// Publishes validated context bucket facts to the backend.
 ///
 /// Capture stays on this device. What crosses the boundary is a projection:
-/// bucket identity and validated facts. Screenshots, quoted screen text,
-/// narratives, and window titles are never part of a payload — see
+/// bucket identity and model-authored fact statements. No field carries text
+/// copied from the screen: window titles, URLs, file paths, quoted evidence, and
+/// extracted identifiers all stay on the device. See
 /// `docs/agents/context-buckets.md` for the full boundary.
 enum ContextBucketSyncError: LocalizedError, Equatable {
   case invalidResponse
@@ -28,7 +29,6 @@ struct ContextBucketSyncFact: Equatable, Sendable {
   let factID: String
   let bucketID: String
   let statement: String
-  let identifiers: [String]
   let confidence: Double
   let notifyWorthiness: Double
   let dispositionState: String
@@ -41,9 +41,7 @@ struct ContextBucketSyncFact: Equatable, Sendable {
 struct ContextBucketSyncBucket: Equatable, Sendable {
   let bucketID: String
   let subjectKind: String
-  let subjectID: String
   let workstreamID: String?
-  let displayLabel: String?
   let notifyWorthiness: Double
   let visitCount: Int
   let lastVisitedAt: Date?
@@ -80,7 +78,6 @@ enum ContextBucketSyncPayload {
       var payload: [String: Any] = [
         "bucket_id": bucket.bucketID,
         "subject_kind": bucket.subjectKind,
-        "subject_id": bucket.subjectID,
         "notify_worthiness": bucket.notifyWorthiness,
         "visit_count": bucket.visitCount,
         "device_updated_at": formatter.string(from: bucket.updatedAt),
@@ -89,7 +86,6 @@ enum ContextBucketSyncPayload {
         },
       ]
       if let workstreamID = bucket.workstreamID { payload["workstream_id"] = workstreamID }
-      if let displayLabel = bucket.displayLabel { payload["display_label"] = displayLabel }
       if let lastVisitedAt = bucket.lastVisitedAt {
         payload["last_visited_at"] = formatter.string(from: lastVisitedAt)
       }
@@ -107,7 +103,6 @@ enum ContextBucketSyncPayload {
     var payload: [String: Any] = [
       "fact_id": fact.factID,
       "statement": fact.statement,
-      "identifiers": fact.identifiers,
       "confidence": fact.confidence,
       "notify_worthiness": fact.notifyWorthiness,
       "disposition_state": fact.dispositionState,
@@ -175,11 +170,18 @@ actor ContextBucketSyncClient {
       authorizationSnapshot: authorizationSnapshot)
   }
 
-  func purge(bucketIDs: [String]) async throws {
+  func purge(
+    bucketIDs: [String],
+    authorizedBy authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws {
     guard !bucketIDs.isEmpty else { return }
     for batch in ContextBucketSyncPayload.purgeBatches(bucketIDs: bucketIDs) {
       let body = ContextBucketSyncPayload.purgeBody(bucketIDs: batch)
-      try await post(path: "v1/context-buckets/purge", body: body, accountGeneration: nil)
+      try await post(
+        path: "v1/context-buckets/purge",
+        body: body,
+        accountGeneration: nil,
+        authorizationSnapshot: authorizationSnapshot)
     }
   }
 
@@ -187,19 +189,19 @@ actor ContextBucketSyncClient {
   ///
   /// Capturing a fresh snapshot here would validate against whoever owns the
   /// process now, not the owner whose database the payload was read from, so an
-  /// owner change mid-pass could upload one account's rows under another's token.
+  /// owner change mid-pass could upload one account's rows under another's
+  /// token. The parameter is deliberately required: a default would let a new
+  /// call site silently opt back into that.
   private func post(
     path: String,
     body: [String: Any],
     accountGeneration: Int?,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws {
     let root = baseURL().hasSuffix("/") ? baseURL() : baseURL() + "/"
     guard let url = URL(string: root + path) else { throw ContextBucketSyncError.invalidResponse }
 
-    let fence = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    guard let fence else { throw ContextBucketSyncError.ownerChanged }
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(fence) else {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw ContextBucketSyncError.ownerChanged
     }
 
@@ -214,7 +216,7 @@ actor ContextBucketSyncClient {
     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
     let (_, response) = try await session.data(for: request)
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(fence) else {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw ContextBucketSyncError.ownerChanged
     }
     guard let http = response as? HTTPURLResponse else { throw ContextBucketSyncError.invalidResponse }

@@ -52,10 +52,13 @@ So the split is: **capture stays local, facts sync.**
 
 Synced to the backend:
 
-- Bucket identity and label: `bucket_id`, `subject_kind`, `subject_id`, `workstream_id`,
-  `display_label`, `notify_worthiness`, `visit_count`, `last_visited_at`.
-- Validated facts only: `statement`, `identifiers`, `confidence`, `notify_worthiness`,
+- Bucket identity and counters: `bucket_id`, `subject_kind`, `workstream_id`,
+  `notify_worthiness`, `visit_count`, `last_visited_at`.
+- Validated facts only: `statement`, `confidence`, `notify_worthiness`,
   `disposition_state`, `expires_at`, `workstream_tag`.
+
+`statement` is the only free text that crosses, and it is model-authored prose about the
+work rather than anything copied from the screen.
 
 Never synced:
 
@@ -63,6 +66,11 @@ Never synced:
 - `evidence_text` — the quoted on-screen text a fact was extracted from.
 - `narrative`, `bucket_entries`, and the frozen ranked segment.
 - `raw_context_key` / `normalized_context_key` — window titles.
+- `display_label` and `subject_id` — these hold the normalized window title, or for a
+  durable handle the raw URL or file path. Nothing reads them on the backend, so they are
+  not published; a bucket is identified by its id.
+- `identifiers` — the extraction prompt asks for handles *copied from the quoted on-screen
+  text*, so they are literal screen strings by construction.
 - Visits, proactive deliveries, and subject bindings.
 - Evidence references. The device has no id a consumer could resolve back to a screen
   frame, so publishing one would assert provenance the payload cannot support.
@@ -81,13 +89,12 @@ Firestore, under `users/{uid}`:
 
 ```
 context_buckets/{bucket_id}
-    subject_kind, subject_id, workstream_id, display_label,
-    notify_worthiness, visit_count, last_visited_at,
+    subject_kind, workstream_id, notify_worthiness, visit_count, last_visited_at,
     device_id, device_updated_at, account_generation, created_at, updated_at
 
 context_bucket_facts/{fact_id}
-    bucket_id, statement, identifiers[], confidence, notify_worthiness,
-    disposition_state, workstream_tag, expires_at, evidence_refs[],
+    bucket_id, statement, confidence, notify_worthiness,
+    disposition_state, workstream_tag, expires_at,
     device_id, device_updated_at, account_generation, created_at, updated_at
 ```
 
@@ -129,9 +136,12 @@ the same content readable by chat and every other device would defeat the point.
 are locally-minted UUIDs, so in practice two devices do not share one, but the account-wide
 semantics are the intended contract either way.
 
-`account_generation` comes from the `X-Account-Generation` header, is stored on every
-document, and filters every read. Data from a superseded generation becomes invisible
-rather than requiring a migration.
+`account_generation` is validated against the account's own cutover record before it is
+used, and a mismatch is a 409. The header states which generation the caller believes it
+is on; it is not itself the fence, because a client that could choose its generation could
+read a superseded incarnation's context back or pin writes into a generation nothing
+reads. It is stored on every document and filters every read, so data from a superseded
+generation becomes invisible rather than requiring a migration.
 
 Expired facts are filtered on read as well as deleted by GC, so a lagging GC never serves
 stale context.
@@ -143,9 +153,9 @@ validated facts above a 0.6 confidence floor, capped at 20, into a `<work_contex
 the agentic system prompt.
 
 Three constraints apply to any consumer added later. Chat must never fail because this
-optional context is unavailable, so every read error degrades to an empty section. Fact text
-is model-authored and screen-derived, so it is sanitized before entering a prompt exactly as
-page-context titles are. And the block is additive, so it does not shift the cacheable static
+optional context is unavailable, so every read error degrades to an empty section. Fact text is model-authored but originates from whatever was on screen, including pages an
+attacker controls, so it is collapsed to a single line and escaped before entering the
+prompt — escaping alone would still let a multi-line statement impersonate an instruction. And the block is additive, so it does not shift the cacheable static
 prompt prefix.
 
 The prompt tells the model this is background awareness and not to recite it back — a user
@@ -161,8 +171,10 @@ statics so it is testable without a URLProtocol stub.
 facts, and the payload has no field for `evidenceText`, `narrative`, or context keys — quoted
 screen text cannot be published by adding a caller, only by changing the payload shape.
 
-`ContextBucketSyncScheduler` runs a plain 30-minute pass with no local cursor, which is safe
-because the backend skips writes older than what it already holds.
+`ContextBucketSyncScheduler` runs every 30 minutes from a persisted keyset cursor on
+`(updatedAt, id)`. A bare "newest N" window would leave bucket N+1 permanently
+unpublishable, and a timestamp-only cursor would step past all but the first N buckets
+written in the same batch. The cursor advances only past rows the server accepted.
 
 Excluding an app retracts published copies as well as deleting local rows. Exclusion is a
 privacy action, so it must reach every copy; the local delete stays authoritative, and a

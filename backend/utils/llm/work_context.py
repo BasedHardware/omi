@@ -15,9 +15,18 @@ WORK_CONTEXT_MINIMUM_CONFIDENCE = 0.6
 
 
 def sanitize_prompt_text(value: str) -> str:
-    """Neutralize markup in model-authored text before it enters the prompt."""
+    """Neutralize markup and line structure before the text enters the prompt.
 
-    return value.replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    Escaping angle brackets stops a fact from closing its own block, but the
+    text originates from whatever was on screen — including a page an attacker
+    controls. Left with newlines it can still open a new line in the system
+    prompt and impersonate an instruction, so the whole value is collapsed onto
+    one line and control characters are dropped.
+    """
+
+    collapsed = ' '.join(value.split())
+    escaped = collapsed.replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return ''.join(character for character in escaped if character.isprintable())
 
 
 def get_work_context_section(uid: str, user_name: Optional[str]) -> str:

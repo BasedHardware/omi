@@ -44,9 +44,10 @@ MAX_DEVICE_CLOCK_SKEW = timedelta(hours=1)
 # without pushing a batch over the edge.
 MAX_BATCH_OPERATIONS = 450
 
-# Collection scans the whole per-user collection, so the run is bounded to keep a
-# single sweep off a hot path even for an account with a large backlog.
-EXPIRED_FACT_COLLECT_LIMIT = 2000
+# The sweep scans the user's own fact collection, so both the read and the delete
+# are bounded. An unbounded stream would bill the whole collection on every call,
+# which is the cost the sweep exists to remove.
+EXPIRED_FACT_COLLECT_LIMIT = 500
 
 
 def _get_db(firestore_client: Any = None) -> Any:
@@ -135,9 +136,7 @@ def _bucket_storage(
     return {
         'bucket_id': bucket.bucket_id,
         'subject_kind': bucket.subject_kind.value,
-        'subject_id': bucket.subject_id,
         'workstream_id': bucket.workstream_id,
-        'display_label': bucket.display_label,
         'notify_worthiness': bucket.notify_worthiness,
         'visit_count': bucket.visit_count,
         'last_visited_at': bucket.last_visited_at,
@@ -162,7 +161,6 @@ def _fact_storage(
         'fact_id': fact.fact_id,
         'bucket_id': bucket_id,
         'statement': fact.statement,
-        'identifiers': list(fact.identifiers),
         'confidence': fact.confidence,
         'notify_worthiness': fact.notify_worthiness,
         'disposition_state': fact.disposition_state.value,

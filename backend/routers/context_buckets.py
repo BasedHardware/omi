@@ -2,8 +2,9 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
+import database.account_cutover as account_cutover_db
 import database.context_buckets as context_buckets_db
 from models.context_bucket import (
     ContextBucketPurgeReport,
@@ -18,6 +19,21 @@ router = APIRouter()
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
 
+def _resolve_account_generation(uid: str, claimed_generation: int) -> int:
+    """Reject a generation the caller asserted but the account does not hold.
+
+    Generation is the fence that keeps a superseded incarnation's context out of
+    the current one. Taking it from a client header on trust lets a caller read
+    the previous incarnation back, or pin writes into a generation nothing reads
+    and nothing sweeps.
+    """
+
+    actual = account_cutover_db.get_account_cutover_record(uid).account_generation
+    if actual != claimed_generation:
+        raise HTTPException(status_code=409, detail='Account generation mismatch')
+    return actual
+
+
 @router.post('/v1/context-buckets/sync', tags=['context_buckets'], response_model=ContextBucketSyncReport)
 def sync_context_buckets(
     request: ContextBucketSyncRequest,
@@ -30,7 +46,9 @@ def sync_context_buckets(
     already accepted. Screen content itself never arrives here.
     """
 
-    return context_buckets_db.sync_context_buckets(uid, request, account_generation=account_generation)
+    return context_buckets_db.sync_context_buckets(
+        uid, request, account_generation=_resolve_account_generation(uid, account_generation)
+    )
 
 
 @router.get('/v1/context-buckets/facts', tags=['context_buckets'], response_model=list[ContextFact])
@@ -44,7 +62,7 @@ def list_context_facts(
 
     return context_buckets_db.list_context_facts(
         uid,
-        account_generation=account_generation,
+        account_generation=_resolve_account_generation(uid, account_generation),
         minimum_confidence=minimum_confidence,
         limit=limit,
     )

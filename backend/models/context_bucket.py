@@ -1,8 +1,9 @@
 """Backend-owned context bucket contracts synced from capture devices.
 
-Only validated facts cross the device boundary. Screenshots, quoted screen text,
-narratives, and window titles stay on the capturing device and are named here
-only through device-local evidence references.
+Only validated, model-authored fact statements cross the device boundary. No
+field here carries text copied from the screen: screenshots, quoted evidence,
+narratives, window titles, URLs, file paths, and extracted identifiers all stay
+on the capturing device.
 """
 
 from datetime import datetime
@@ -35,20 +36,12 @@ class ContextFactSync(BaseModel):
 
     fact_id: StableId
     statement: str = Field(min_length=1, max_length=500)
-    identifiers: list[str] = Field(default_factory=list, max_length=8)
     confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
     notify_worthiness: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
     disposition_state: FactDispositionState = FactDispositionState.none
     workstream_tag: Optional[str] = Field(default=None, max_length=128)
     expires_at: Optional[datetime] = None
     device_updated_at: datetime
-
-    @model_validator(mode='after')
-    def require_usable_identifiers(self):
-        for identifier in self.identifiers:
-            if not identifier.strip():
-                raise ValueError('identifiers cannot be blank')
-        return self
 
 
 class ContextBucketSync(BaseModel):
@@ -58,9 +51,7 @@ class ContextBucketSync(BaseModel):
 
     bucket_id: StableId
     subject_kind: BucketSubjectKind
-    subject_id: str = Field(min_length=1, max_length=256)
     workstream_id: Optional[StableId] = None
-    display_label: Optional[str] = Field(default=None, max_length=256)
     notify_worthiness: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
     visit_count: int = Field(default=0, ge=0)
     last_visited_at: Optional[datetime] = None
@@ -110,7 +101,6 @@ class ContextFact(BaseModel):
     fact_id: StableId
     bucket_id: StableId
     statement: str = Field(min_length=1, max_length=500)
-    identifiers: list[str] = Field(default_factory=list, max_length=8)
     confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
     notify_worthiness: float = Field(default=0, ge=0, le=1, allow_inf_nan=False)
     disposition_state: FactDispositionState = FactDispositionState.none

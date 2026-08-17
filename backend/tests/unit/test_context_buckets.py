@@ -189,7 +189,6 @@ def build_fact(fact_id: str, *, device_updated_at=NOW, statement='Ship the parit
     return ContextFactSync(
         fact_id=fact_id,
         statement=statement,
-        identifiers=['parity-pack'],
         confidence=0.9,
         device_updated_at=device_updated_at,
         **overrides,
@@ -200,8 +199,6 @@ def build_bucket(bucket_id='bucket-1', *, facts=None, device_updated_at=NOW, **o
     return ContextBucketSync(
         bucket_id=bucket_id,
         subject_kind=BucketSubjectKind.document,
-        subject_id='design-doc',
-        display_label='Design doc',
         device_updated_at=device_updated_at,
         facts=facts if facts is not None else [build_fact('fact-1')],
         **overrides,
@@ -454,10 +451,21 @@ def test_expired_fact_collection_larger_than_one_batch_commits_in_chunks(fake_db
     seed_facts(fake_db, expired_count, prefix='dead', expires_at=NOW - timedelta(minutes=1))
     fake_db.committed_batch_sizes.clear()
 
-    deleted = context_buckets_db.collect_expired_context_facts('u1', now=NOW, firestore_client=fake_db)
+    deleted = context_buckets_db.collect_expired_context_facts(
+        'u1', now=NOW, limit=expired_count, firestore_client=fake_db
+    )
 
     assert deleted == expired_count
     assert max(fake_db.committed_batch_sizes) <= context_buckets_db.MAX_BATCH_OPERATIONS
+
+
+def test_expired_fact_collection_is_bounded_so_one_sweep_cannot_stall_a_request(fake_db):
+    over_limit = context_buckets_db.EXPIRED_FACT_COLLECT_LIMIT + 50
+    seed_facts(fake_db, over_limit, prefix='dead', expires_at=NOW - timedelta(minutes=1))
+
+    deleted = context_buckets_db.collect_expired_context_facts('u1', now=NOW, firestore_client=fake_db)
+
+    assert deleted == context_buckets_db.EXPIRED_FACT_COLLECT_LIMIT
 
 
 def test_expired_fact_collection_stops_at_the_requested_limit(fake_db):
@@ -471,3 +479,20 @@ def test_expired_fact_collection_stops_at_the_requested_limit(fake_db):
     )
 
     assert context_buckets_db.collect_expired_context_facts('u1', now=NOW, limit=2, firestore_client=fake_db) == 2
+
+
+def test_no_synced_field_can_carry_text_copied_from_the_screen(fake_db):
+    """Window titles, URLs, file paths, and extracted identifiers stay on device.
+
+    These are the fields that used to carry them. If a future change reintroduces
+    one, the boundary claim in docs/agents/context-buckets.md becomes false again.
+    """
+
+    sync(fake_db, [build_bucket()])
+
+    stored_bucket = fake_db.rows[('users', 'u1', 'context_buckets', 'bucket-1')]
+    stored_fact = fake_db.rows[('users', 'u1', 'context_bucket_facts', 'fact-1')]
+    for forbidden in ('display_label', 'subject_id'):
+        assert forbidden not in stored_bucket, f'{forbidden} carries screen text'
+    for forbidden in ('identifiers', 'evidence_refs', 'evidence_text', 'narrative'):
+        assert forbidden not in stored_fact, f'{forbidden} carries screen text'

@@ -695,6 +695,16 @@ extension ContextBucketStore {
       versionID: result.versionID, maximumValidatedWorthiness: result.maximumWorthiness)
   }
 
+  /// Bucket ids an excluded app owns, readable before anything is deleted.
+  ///
+  /// The delete destroys this mapping, so a caller that must act on the ids
+  /// afterwards has to capture them first.
+  func bucketIDsForExcludedApp(_ appName: String) async -> Set<String> {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return (try? await pool.read { db in try ContextBucketPurger.affectedBucketIDs(appName: appName, in: db) }) ?? []
+  }
+
   func purgeExcludedApp(_ appName: String, now: Date = Date()) async throws -> Set<String> {
     let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
     guard let pool else { throw ContextBucketStoreError.databaseUnavailable }
@@ -915,7 +925,8 @@ enum ContextBucketPurger {
     return result
   }
 
-  private static func affectedBucketIDs(appName: String, in db: Database) throws -> Set<String> {
+  /// Also read before a purge so a caller can journal what will need retracting.
+  fileprivate static func affectedBucketIDs(appName: String, in db: Database) throws -> Set<String> {
     var affected = Set(
       try String.fetchAll(
         db, sql: "SELECT DISTINCT bucketID FROM bucket_entries WHERE appName = ?", arguments: [appName]))
