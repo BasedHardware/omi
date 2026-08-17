@@ -1,0 +1,19 @@
+desktop/context-for-claude/Sources/ContextApp/Update/ContextUpdater.swift
+  s_7f7d27f6caa06a::t_d0d96f49a8dff5 250-254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "99c22236d02717be225bae6f8e528a82a096a394",
+  "prompts": {},
+  "sessions": {
+    "s_7f7d27f6caa06a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d50e47a-f4b3-410c-bc7d-154822e9c288",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
