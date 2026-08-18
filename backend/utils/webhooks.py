@@ -115,7 +115,14 @@ async def _post_dev_webhook(
                 finally:
                     await semaphore_context.__aexit__(None, None, None)
 
-            response = await send_request()
+            try:
+                response = await send_request()
+            except _WebhookAdmissionTimeout:
+                if last_response is not None:
+                    return last_response
+                if last_exception is not None:
+                    raise last_exception
+                raise
             last_response = response
             last_exception = None
             if 200 <= response.status_code < 300:
@@ -382,6 +389,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
     if not cb.allow_request():
         logger.info(f'send_audio_bytes_developer_webhook: circuit breaker open for {webhook_url[:80]}')
         return
+    probe_claimed = cb.state == 'half_open'
 
     lock_token = None
 
@@ -401,7 +409,6 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             lock_token = await acquisition
             raise
         if not lock_token:
-            cb.release_probe()
             raise _WebhookLockUnavailable()
 
     try:
@@ -417,9 +424,11 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         )
         if response.status_code >= 200 and response.status_code < 300:
             cb.record_success()
+            probe_claimed = False
             await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.audio_bytes)
         else:
             cb.record_failure()
+            probe_claimed = False
             should_disable = await run_blocking(
                 db_executor,
                 record_dev_webhook_failure,
@@ -435,13 +444,15 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         return
     except Exception as e:
         cb.record_failure()
+        probe_claimed = False
         should_disable = await run_blocking(
             db_executor, record_dev_webhook_failure, uid, WebhookType.audio_bytes, 0, type(e).__name__
         )
         await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
         logger.error(f"Error sending audio bytes to developer webhook: {e}")
     finally:
-        cb.release_probe()
+        if probe_claimed:
+            cb.release_probe()
         if lock_token:
             release_task = asyncio.create_task(
                 run_blocking(db_executor, redis_db.release_audio_bytes_webhook_lock, uid, lock_token)

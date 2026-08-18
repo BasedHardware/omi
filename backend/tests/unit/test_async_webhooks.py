@@ -339,6 +339,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client.post = AsyncMock(side_effect=asyncio.CancelledError)
         mock_cb = MagicMock()
         mock_cb.allow_request.return_value = True
+        mock_cb.state = 'half_open'
 
         with patch.object(webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb), patch.object(
             webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
@@ -348,6 +349,52 @@ class TestSendAudioBytesDeveloperWebhook:
 
         mock_cb.release_probe.assert_called_once()
         webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
+
+    @pytest.mark.asyncio
+    async def test_lock_contention_releases_a_half_open_probe_once(self):
+        mock_client = AsyncMock()
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+        mock_cb.state = 'half_open'
+
+        with patch.object(webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value=None
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_cb.release_probe.assert_called_once()
+        mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_admission_timeout_preserves_prior_endpoint_failure(self):
+        mock_response = MagicMock(status_code=500)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        semaphore_calls = 0
+
+        @asynccontextmanager
+        async def semaphore():
+            nonlocal semaphore_calls
+            semaphore_calls += 1
+            if semaphore_calls > 1:
+                await asyncio.Event().wait()
+            yield
+
+        mock_cb = MagicMock(allow_request=MagicMock(return_value=True))
+        with patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=(0,)), patch.object(
+            webhooks_module, "_WEBHOOK_REQUEST_TIMEOUT_SECONDS", 0.01
+        ), patch.object(webhooks_module, "get_webhook_semaphore", side_effect=lambda: semaphore()), patch.object(
+            webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_client.post.assert_called_once()
+        mock_cb.record_failure.assert_called_once()
+        webhooks_module.record_dev_webhook_failure.assert_called_once_with(
+            "uid-1", webhooks_module.WebhookType.audio_bytes, 500, "HTTP 500"
+        )
 
     @pytest.mark.asyncio
     async def test_lock_acquisition_is_not_cancelled_by_request_timeout(self):
