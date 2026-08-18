@@ -1,0 +1,3 @@
+{
+  "change": "Improved internal Gemini usage reporting so AI capacity and costs can be tracked by workload without collecting request content"
+}

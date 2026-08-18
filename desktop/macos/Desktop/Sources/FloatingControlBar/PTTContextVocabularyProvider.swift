@@ -409,7 +409,7 @@ actor PTTTranscriptCleanupService {
 
     do {
       let response = try await withTimeout(seconds: 2) {
-        let client = try GeminiClient(model: ModelQoS.Gemini.proactive)
+        let client = try GeminiClient(model: ModelQoS.Gemini.proactive, workload: .interactive)
         return try await client.sendTextRequest(
           prompt: prompt,
           systemPrompt: "You clean up short voice ASR transcripts. Return only the corrected transcript.",
