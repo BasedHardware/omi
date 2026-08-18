@@ -6,14 +6,16 @@
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint --config .eslintrc.cjs --max-warnings 0 'src/**/*.ts' 'test/**/*.ts' 'scripts/**/*.ts'",
+    "lint": "eslint --config .eslintrc.cjs --max-warnings 0 'src/**/*.ts' 'test/**/*.ts' 'scripts/**/*.ts' 'migrations/**/*.ts'",
     "typecheck": "tsc --noEmit && WRANGLER_SEND_METRICS=false wrangler types --check",
-    "test": "bun x tsc -b ../../packages/adapters-platform --force && bun test test/worker.contract.test.ts test/ready.verify.test.ts test/openrouter.gateway.test.ts test/observability.policy.test.ts test/release.gate.test.ts test/retrieval.test.ts && bun x vitest run test/account.integration.test.ts test/d1-tasks.integration.test.ts test/d1-chat.integration.test.ts",
+    "test": "bun x tsc -b ../../packages/adapters-platform --force && bun test test/worker.contract.test.ts test/ready.verify.test.ts test/openrouter.gateway.test.ts test/observability.policy.test.ts test/release.gate.test.ts test/retrieval.test.ts test/migrations.verify.test.ts && bun x vitest run test/account.integration.test.ts test/d1-tasks.integration.test.ts test/d1-chat.integration.test.ts",
     "dev": "WRANGLER_SEND_METRICS=false wrangler dev",
     "deploy:dry-run": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --strict",
     "deploy:staging": "WRANGLER_SEND_METRICS=false wrangler deploy --strict",
+    "migrate:staging": "WRANGLER_SEND_METRICS=false wrangler d1 migrations apply omi-v5-backend-staging-tasks --config wrangler.jsonc",
     "verify:ready": "bun run scripts/verify-ready.ts",
-    "verify:release": "bun run scripts/verify-release.ts"
+    "verify:release": "bun run scripts/verify-release.ts",
+    "verify:migrations": "bun run scripts/verify-migrations.ts"
   },
   "dependencies": {
     "@omi-core/contracts": "workspace:*",

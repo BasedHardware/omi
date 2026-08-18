@@ -6,5 +6,11 @@
     "moduleResolution": "Bundler",
     "types": ["bun", "@cloudflare/vitest-pool-workers/types"]
   },
-  "include": ["src", "test", "worker-configuration.d.ts", "scripts"]
+  "include": [
+    "src",
+    "test",
+    "worker-configuration.d.ts",
+    "scripts",
+    "migrations"
+  ]
 }

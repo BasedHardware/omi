@@ -21,6 +21,10 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }],
   "d1_databases": [
-    { "binding": "DB", "database_name": "omi-v5-backend-test-tasks" }
+    {
+      "binding": "DB",
+      "database_name": "omi-v5-backend-test-tasks",
+      "migrations_dir": "migrations"
+    }
   ]
 }
