@@ -324,7 +324,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get searchApps => 'Alkalmazások keresése...';
 
   @override
-  String get myApps => 'Alkalmazásaim';
+  String get myApps => 'Általam létrehozva';
 
   @override
   String get installedApps => 'Telepített alkalmazások';

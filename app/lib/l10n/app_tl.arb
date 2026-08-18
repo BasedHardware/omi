@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Aking Mga App",
+    "myApps": "Likha ko",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },

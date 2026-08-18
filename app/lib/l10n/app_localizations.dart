@@ -798,7 +798,7 @@ abstract class AppLocalizations {
   /// Filter button for user's own apps
   ///
   /// In en, this message translates to:
-  /// **'My Apps'**
+  /// **'Created by me'**
   String get myApps;
 
   /// Filter button for installed apps

@@ -323,7 +323,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get searchApps => 'Apps zoeken...';
 
   @override
-  String get myApps => 'Mijn apps';
+  String get myApps => 'Door mij gemaakt';
 
   @override
   String get installedApps => 'Geïnstalleerde apps';

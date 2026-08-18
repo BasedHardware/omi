@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мои апликации",
+    "myApps": "Создадено од мене",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },

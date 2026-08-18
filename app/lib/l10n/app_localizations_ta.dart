@@ -323,7 +323,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get searchApps => 'பயன்பாடுகளைத் தேடுங்கள்...';
 
   @override
-  String get myApps => 'என் பயன்பாடுகள்';
+  String get myApps => 'நான் உருவாக்கியவை';
 
   @override
   String get installedApps => 'நிறுவப்பட்ட பயன்பாடுகள்';
