@@ -139,7 +139,7 @@ sequenceDiagram
     Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, lifecycle_version, lifecycle_phase, lifecycle_sequence}
     Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
-    Backend-->>Client: {type: "service_status", status: "ready"}
+    Backend-->>Client: {type: "service_status", status: "ready", provider, reason?}
 
     Note over Backend: Start background tasks:<br/>conversation_lifecycle_manager (5s poll)<br/>speaker_identification_task<br/>stream_transcript_process
 
@@ -478,7 +478,7 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Event | Fields | When |
 |-------|--------|------|
-| `service_status` | `{type, status: "ready"}` | After WS connect, services initialized |
+| `service_status` | `{type, status: "ready", provider?, reason?}` | After WS connect, services initialized. `provider` names the STT provider actually serving (absent for custom-STT sessions); `reason` is `fallback_from_<selected>` only when the fallback chain moved the session off the selected provider |
 | `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
 | `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
 | `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |
