@@ -49,6 +49,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
+from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -792,7 +793,18 @@ def delete_conversation(
         # the fence is closed; anything real still raises rather than orphaning
         # live memories against a deleted conversation.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
-            memory_service.retract_conversation_memories(uid, conversation_id)
+            try:
+                memory_service.retract_conversation_memories(uid, conversation_id)
+            except ConversationReplacementConflictError as error:
+                logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
+                # Concurrent same-account memory writes kept winning the
+                # account-global control CAS. Nothing has been deleted yet, so
+                # fail closed with a retryable answer instead of an opaque 500;
+                # the retraction is idempotent, a retried delete is safe (#11726).
+                raise HTTPException(
+                    status_code=503,
+                    detail='Conversation memory retraction is busy, please retry',
+                ) from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
