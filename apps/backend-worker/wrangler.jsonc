@@ -22,6 +22,9 @@
     "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountBackend" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "omi-v5-backend-staging-tasks" }
+  ],
   "observability": {
     "enabled": true,
     "logs": { "head_sampling_rate": 1 },

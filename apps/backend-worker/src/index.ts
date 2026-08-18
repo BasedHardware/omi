@@ -7,9 +7,11 @@ import {
   gatewayModeEnabled,
   type GatewaySecretEnv,
 } from "./openrouter";
+import { parseTaskLimit, readTasks } from "./tasks";
 import { backendError, isChatCreate, json } from "./wire";
 
-type WorkerEnv = Env & GatewaySecretEnv & { API_TOKEN: string };
+type WorkerEnv = Omit<Env, "DB"> &
+  GatewaySecretEnv & { API_TOKEN: string; DB?: D1Database };
 type Variables = { accountId: string; requestId: string };
 
 type ObservableContext = {
@@ -174,7 +176,21 @@ app.delete("/v1/chat-generations/:id", async (context) => {
 
 app.get("/v1/conversations", () => json([]));
 app.get("/v1/memories", () => json(emptyPage("recall-completeness-v1")));
-app.get("/v1/tasks", () => json(emptyPage("tasks-completeness-v1")));
+app.get("/v1/tasks", async (context) => {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const db = context.env.DB;
+  if (db === undefined) return json(emptyPage("tasks-completeness-v1"));
+  const limit = parseTaskLimit(query.get("limit"));
+  const cursor = query.get("cursor") ?? undefined;
+  return json(await readTasks(db, context.get("accountId"), limit, cursor));
+});
 
 app.notFound(() => backendError("not_found", "edit_request", 404));
 app.onError((error, context) => {
