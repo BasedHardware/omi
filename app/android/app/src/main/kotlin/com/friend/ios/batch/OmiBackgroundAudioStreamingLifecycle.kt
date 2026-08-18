@@ -9,10 +9,9 @@ import java.util.ArrayDeque
  * while holding its monitor before touching this guard.
  */
 internal class OmiBackgroundAudioStreamingLifecycle(private val maxPendingFrames: Int) {
-    class Session internal constructor(val generation: Long)
+    class Session internal constructor()
 
     private val pendingFrames = ArrayDeque<ByteArray>()
-    private var nextSessionId = 0L
     private var invalidationGeneration = 0L
     private var activeSession: Session? = null
 
@@ -20,7 +19,7 @@ internal class OmiBackgroundAudioStreamingLifecycle(private val maxPendingFrames
         get() = pendingFrames.size
 
     fun beginSession(): Session {
-        val session = Session(++nextSessionId)
+        val session = Session()
         activeSession = session
         return session
     }
@@ -51,7 +50,10 @@ internal class OmiBackgroundAudioStreamingLifecycle(private val maxPendingFrames
      * the session, so it cannot leak audio captured before the transition.
      */
     fun drainOnOpen(session: Session, policyAllowsStreaming: Boolean): List<ByteArray> {
-        if (!policyAllowsStreaming || !isCurrent(session)) {
+        if (!isCurrent(session)) {
+            return emptyList()
+        }
+        if (!policyAllowsStreaming) {
             invalidateSession()
             return emptyList()
         }
@@ -59,10 +61,6 @@ internal class OmiBackgroundAudioStreamingLifecycle(private val maxPendingFrames
         val queued = pendingFrames.toList()
         pendingFrames.clear()
         return queued
-    }
-
-    fun clear() {
-        pendingFrames.clear()
     }
 
     fun invalidateSession() {

@@ -219,7 +219,7 @@ class CustomSttConfig {
   /// Used only when a persisted Custom STT blob cannot be decoded. A corrupt
   /// preference must not silently restore Omi audio egress.
   static const privacySafeFallbackConfig = CustomSttConfig(
-    provider: SttProvider.customLive,
+    provider: SttProvider.omi,
     privacyPolicy: SttPrivacyPolicy.localOnly,
   );
 

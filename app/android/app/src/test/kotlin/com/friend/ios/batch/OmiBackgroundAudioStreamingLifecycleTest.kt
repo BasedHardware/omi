@@ -81,6 +81,17 @@ class OmiBackgroundAudioStreamingLifecycleTest {
     }
 
     @Test
+    fun staleOpenCannotInvalidateNewerSession() {
+        val lifecycle = OmiBackgroundAudioStreamingLifecycle(maxPendingFrames = 3)
+        val staleSession = lifecycle.beginSession()
+        lifecycle.invalidateSession()
+        val currentSession = lifecycle.beginSession()
+
+        assertTrue(lifecycle.drainOnOpen(staleSession, policyAllowsStreaming = false).isEmpty())
+        assertTrue(lifecycle.queueFrameIfCurrent(currentSession, byteArrayOf(2)))
+    }
+
+    @Test
     fun failedSessionQueueIsClearedBeforeAReenableSessionStarts() {
         val lifecycle = OmiBackgroundAudioStreamingLifecycle(maxPendingFrames = 3)
         val failedSession = lifecycle.beginSession()

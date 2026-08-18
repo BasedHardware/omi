@@ -712,6 +712,7 @@ class OmiBleForegroundService : Service() {
                 characteristicUuid: String,
                 value: ByteArray
             ) {
+                if (isDestroying) return
                 // Batch mode and background streaming are mutually exclusive (gated by
                 // their respective prefs); calling all sinks is safe — each self-gates.
                 batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)

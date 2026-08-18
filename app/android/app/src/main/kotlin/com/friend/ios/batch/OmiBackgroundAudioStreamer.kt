@@ -185,12 +185,9 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             connecting = true
             connected = false
             activeUrl = url
-            val configChanged = activeConfig != currentConfig
             activeConfig = currentConfig
             sentFrames = 0
-            if (configChanged) {
-                pendingFrames.invalidateSession()
-            }
+            pendingFrames.invalidateSession()
             val session = pendingFrames.beginSession()
 
             Log.i(TAG, "Opening background transcription websocket (codec=${currentConfig.codec}, source=${currentConfig.source})")

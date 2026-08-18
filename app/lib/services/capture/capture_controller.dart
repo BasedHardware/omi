@@ -606,7 +606,7 @@ class CaptureController extends ChangeNotifier
     await previousSocket?.stop(reason: 'transcription settings changed');
 
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
-    if (customSttConfig.isEnabled && customSttConfig.isLocalOnlyPolicy) {
+    if (customSttConfig.isLocalOnlyPolicy) {
       // This awaited operation shares SocketServicePool's creation mutex, so
       // an already-connected speech-profile socket cannot survive the policy
       // transition or race with a new one.
@@ -981,7 +981,11 @@ class CaptureController extends ChangeNotifier
     final activeSocket = _socket;
     final persistedConfig = SharedPreferencesUtil().customSttConfig;
     final persistedSttConfigId = persistedConfig.isEnabled ? persistedConfig.sttConfigId : 'omi:default';
-    if (activeSocket?.state != SocketServiceState.connected || activeSocket?.sttConfigId != persistedSttConfigId) {
+    final allowsDefaultOmiFallback = activeSocket?.sttConfigId == 'omi:default' &&
+        persistedConfig.isEnabled &&
+        persistedConfig.forwardsRawAudioToOmi;
+    if (activeSocket?.state != SocketServiceState.connected ||
+        (activeSocket?.sttConfigId != persistedSttConfigId && !allowsDefaultOmiFallback)) {
       return false;
     }
     activeSocket?.send(payload);
@@ -1254,7 +1258,7 @@ class CaptureController extends ChangeNotifier
 
   bool get _nativeOmiRawAudioAllowed {
     final config = SharedPreferencesUtil().customSttConfig;
-    return !config.isEnabled || config.forwardsRawAudioToOmi;
+    return !config.isLocalOnlyPolicy && (!config.isEnabled || config.forwardsRawAudioToOmi);
   }
 
   bool get _shouldEnableNativeBackgroundStreaming =>

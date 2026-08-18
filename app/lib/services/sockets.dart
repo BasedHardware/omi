@@ -187,7 +187,7 @@ class SocketServicePool extends ISocketService {
     // Speech-profile onboarding is a separate Omi transcription egress path.
     // Keep localOnly independent of that backend as well.
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
-    if (customSttConfig.isEnabled && customSttConfig.isLocalOnlyPolicy) {
+    if (customSttConfig.isLocalOnlyPolicy) {
       Logger.debug("socket speech profile > blocked: localOnly policy active");
       DebugLogManager.logWarning('speech_profile_socket_blocked_local_only', {'reason': 'local_only_policy'});
       return null;
@@ -199,7 +199,7 @@ class SocketServicePool extends ISocketService {
       // while still holding the same mutex used for socket creation so a
       // localOnly transition cannot race into a new speech-profile socket.
       final currentConfig = SharedPreferencesUtil().customSttConfig;
-      if (currentConfig.isEnabled && currentConfig.isLocalOnlyPolicy) {
+      if (currentConfig.isLocalOnlyPolicy) {
         Logger.debug("socket speech profile > blocked after mutex: localOnly policy active");
         DebugLogManager.logWarning('speech_profile_socket_blocked_local_only', {'reason': 'local_only_policy'});
         return null;

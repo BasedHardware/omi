@@ -191,7 +191,7 @@ void main() {
 
     final config = SharedPreferencesUtil().customSttConfig;
 
-    expect(config.provider, SttProvider.customLive);
+    expect(config.provider, SttProvider.omi);
     expect(config.privacyPolicy, SttPrivacyPolicy.localOnly);
     expect(config.forwardsRawAudioToOmi, isFalse);
   });
@@ -202,7 +202,7 @@ void main() {
 
       final config = SharedPreferencesUtil().customSttConfig;
 
-      expect(config.provider, SttProvider.customLive);
+      expect(config.provider, SttProvider.omi);
       expect(config.privacyPolicy, SttPrivacyPolicy.localOnly);
       expect(config.forwardsRawAudioToOmi, isFalse);
     }
