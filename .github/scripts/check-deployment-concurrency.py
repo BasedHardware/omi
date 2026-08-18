@@ -63,8 +63,6 @@ LOCK_CONTRACTS = {
     "gcp_firestore_indexes.yml": LockContract(
         "firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
     ),
-    "gcp_backend_agent_proxy.yml": LockContract("deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"),
-    "gcp_backend_agent_proxy_auto_deploy.yml": LockContract("deploy-gke-agent-proxy-development"),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
@@ -665,7 +663,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
-        ("gcp_backend_agent_proxy.yml", "gcp_backend_agent_proxy_auto_deploy.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
     for manual, automatic in family_pairs:
@@ -678,7 +675,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
     environment_scoped = (
         "gcp_backend.yml",
         "gcp_firestore_indexes.yml",
-        "gcp_backend_agent_proxy.yml",
         "gcp_backend_listen_helm.yml",
         "gcp_diarizer.yml",
         "gcp_llm_gateway.yml",

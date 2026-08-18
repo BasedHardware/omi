@@ -72,7 +72,6 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
-        'agent_vm_reconciler',
         'other',
     }
 )
