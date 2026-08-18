@@ -662,6 +662,49 @@ async def test_transcript_loop_emits_diarization_completion_after_terminal_flush
     assert telemetry.events[0]['event'] == 'Diarization Completed'
     assert telemetry.events[0]['properties']['speaker_count'] == 1
     assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+
+
+@pytest.mark.anyio
+async def test_transcript_loop_attributes_diarization_completion_to_each_conversation(monkeypatch):
+    from utils.product_telemetry import set_product_telemetry_client_for_tests
+
+    websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
+    processor, _delivered, _flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.host.recording_session_id = 'recording-1'
+    telemetry = _ProductTelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+    processor.segment_buffer[0]['speaker_id'] = 2
+    waits = 0
+    updates = 0
+
+    async def wait(_seconds):
+        nonlocal waits
+        waits += 1
+        if waits == 2:
+            processor.host.state.active = False
+        return False
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        nonlocal updates
+        updates += 1
+        if updates == 1:
+            processor.host.state.current_conversation_id = 'conversation-2'
+            processor.segment_buffer.append(
+                {'id': 'segment-2', 'text': 'World', 'start': 1.0, 'end': 1.5, 'speaker_id': 3}
+            )
+        return SimpleNamespace(id=f'conversation-{updates}'), segments, []
+
+    processor.host.wait = wait
+    processor._update_live_conversation = update
+
+    await processor.process_loop()
+
+    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
+        'conversation-1',
+        'conversation-2',
+    ]
+    assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
 
 
 async def _async_result(value):

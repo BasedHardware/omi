@@ -183,7 +183,7 @@ The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript
 Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry
 the durable recording/conversation IDs, selected provider/model/language,
-bounded source/platform, terminal phase, and first-transcript latency. The user
+bounded source/platform, terminal phase, and session duration. The user
 ID is used only as PostHog's `distinct_id`; transcript content and raw provider
 errors are never included.
 
