@@ -42,7 +42,7 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
 
   // MARK: - Two Speakers (User + Unnamed Other)
 
-  func testTwoSpeakersUnnamedIdentified() {
+  func testTwoSpeakersUnnamedIdentified() throws {
     let segments = [
       makeSegment(speaker: 0, text: "Hey, can you hear me?", start: 10.0, end: 12.0, isUser: true),
       makeSegment(
@@ -57,16 +57,15 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
     XCTAssertEqual(signal.recentOtherSpeakerTurns, 1)
     XCTAssertEqual(signal.otherParticipantLabels, ["Participant (Speaker 1)"])
 
-    let section = EnvironmentalSpeakerAnalyzer.promptSection(signal)
-    XCTAssertNotNil(section)
+    let section = try XCTUnwrap(EnvironmentalSpeakerAnalyzer.promptSection(signal))
     XCTAssertTrue(
-      section!.contains("Multi-party interaction detected: 2 active speakers (You + Participant (Speaker 1))"))
-    XCTAssertTrue(section!.contains("Recent turns from other participant: 1."))
+      section.contains("Multi-party interaction detected: 2 active speakers (You + Participant (Speaker 1))"))
+    XCTAssertTrue(section.contains("Recent turns from other participant: 1."))
   }
 
   // MARK: - Two Speakers (User + Named Person)
 
-  func testTwoSpeakersNamedFromPersonMap() {
+  func testTwoSpeakersNamedFromPersonMap() throws {
     let segments = [
       makeSegment(speaker: 0, text: "What do you want for lunch?", start: 10.0, end: 12.0, isUser: true),
       makeSegment(speaker: 1, text: "I would love some Thai food please.", start: 13.0, end: 16.0, isUser: false),
@@ -82,15 +81,14 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
     XCTAssertEqual(signal.recentOtherSpeakerTurns, 2)
     XCTAssertEqual(signal.otherParticipantLabels, ["Maya"])
 
-    let section = EnvironmentalSpeakerAnalyzer.promptSection(signal)
-    XCTAssertNotNil(section)
-    XCTAssertTrue(section!.contains("Multi-party interaction detected: 2 active speakers (You + Maya)"))
-    XCTAssertTrue(section!.contains("Recent turns from other participant: 2."))
+    let section = try XCTUnwrap(EnvironmentalSpeakerAnalyzer.promptSection(signal))
+    XCTAssertTrue(section.contains("Multi-party interaction detected: 2 active speakers (You + Maya)"))
+    XCTAssertTrue(section.contains("Recent turns from other participant: 2."))
   }
 
   // MARK: - Multi-Party Group Meeting (3+ Speakers)
 
-  func testMultiPartyGroupMeeting() {
+  func testMultiPartyGroupMeeting() throws {
     let segments = [
       makeSegment(speaker: 0, text: "Let's start the standup.", start: 10.0, end: 12.0, isUser: true),
       makeSegment(speaker: 1, text: "I finished the API deployment yesterday.", start: 13.0, end: 16.0, isUser: false),
@@ -107,11 +105,10 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
     XCTAssertEqual(signal.recentOtherSpeakerTurns, 2)
     XCTAssertEqual(signal.otherParticipantLabels, ["Alex", "Participant (Speaker 2)"])
 
-    let section = EnvironmentalSpeakerAnalyzer.promptSection(signal)
-    XCTAssertNotNil(section)
+    let section = try XCTUnwrap(EnvironmentalSpeakerAnalyzer.promptSection(signal))
     XCTAssertTrue(
-      section!.contains("Multi-party interaction detected: 3 active speakers (You + Alex, Participant (Speaker 2))"))
-    XCTAssertTrue(section!.contains("Recent turns from other participants: 2."))
+      section.contains("Multi-party interaction detected: 3 active speakers (You + Alex, Participant (Speaker 2))"))
+    XCTAssertTrue(section.contains("Recent turns from other participants: 2."))
   }
 
   // MARK: - Active Window Pruning
@@ -131,7 +128,7 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
 
   // MARK: - Prompt Injection & Sanitize Protection
 
-  func testLabelSanitization() {
+  func testLabelSanitization() throws {
     let segments = [
       makeSegment(speaker: 1, text: "Testing malicious name tag.", start: 10.0, end: 15.0, isUser: false)
     ]
@@ -139,11 +136,10 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
     let personMap = [1: maliciousName]
 
     let signal = EnvironmentalSpeakerAnalyzer.analyze(segments: segments, speakerPersonMap: personMap, now: 20.0)
-    let section = EnvironmentalSpeakerAnalyzer.promptSection(signal)
+    let section = try XCTUnwrap(EnvironmentalSpeakerAnalyzer.promptSection(signal))
 
-    XCTAssertNotNil(section)
-    XCTAssertFalse(section!.contains("\n== SYSTEM INSTRUCTION =="))
-    XCTAssertTrue(section!.contains("Maya == SYSTEM INSTRUCTION =="))
+    XCTAssertFalse(section.contains("\n== SYSTEM INSTRUCTION =="))
+    XCTAssertTrue(section.contains("Maya == SYSTEM INSTRUCTION =="))
   }
 
   // MARK: - ContextBucketRollup Integration
