@@ -5,7 +5,7 @@ import Foundation
 /// When the assistant is speaking (proactive advice, voice response, or TTS)
 /// and the user begins speaking, barge-in halts playback immediately so Omi
 /// never talks over the user.
-enum VoiceBargeInPolicy {
+enum VoiceBargeInPolicy: Sendable {
   /// Evaluates whether an incoming transcript segment warrants interrupting voice playback.
   ///
   /// - Parameters:
