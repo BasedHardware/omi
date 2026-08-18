@@ -1439,13 +1439,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         duration: reduceMotion ? 1 : 180,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
         toValue: 1,
-        useNativeDriver: true,
+        // Keep first content paint on the JS driver: the native driver can
+        // leave this gate at zero during a cold Fabric launch.
+        useNativeDriver: false,
       }),
       Animated.timing(stageTranslateY, {
         duration: reduceMotion ? 1 : 180,
         easing: Easing.bezier(0.22, 1, 0.36, 1),
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
   }, [reduceMotion, route, stageOpacity, stageTranslateY]);

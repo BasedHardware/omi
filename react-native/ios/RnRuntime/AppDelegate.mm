@@ -19,6 +19,10 @@
   ]];
   NSString *requestedRoute = NSProcessInfo.processInfo.environment[@"OMI_INITIAL_ROUTE"];
   NSString *initialRoute = [allowedRoutes containsObject:requestedRoute] ? requestedRoute : @"Home";
+  NSString *metroPort = NSProcessInfo.processInfo.environment[@"OMI_METRO_PORT"];
+  if (metroPort.integerValue > 0 && metroPort.integerValue <= 65535) {
+    [RCTBundleURLProvider sharedSettings].jsLocation = [NSString stringWithFormat:@"localhost:%@", metroPort];
+  }
   self.initialProps = @{ @"initialRoute" : initialRoute };
 
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
