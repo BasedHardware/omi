@@ -186,6 +186,7 @@ if not token:
 status, _ = post_json(
     f"{desktop_backend_url}/v2/chat/completions",
     {
+        "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": "ping"}],
         "max_tokens": 1,
     },

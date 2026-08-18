@@ -15,5 +15,5 @@ This package provides the context and tool surfaces used by Omi’s agentic chat
 
 - Tools are the model-facing boundary; service modules are the reusable implementation boundary.
 - Retrieval results must remain bounded and must preserve authorization and memory evidence markers.
-- Managed chat uses the gateway’s OpenAI-compatible route; direct specialist providers remain explicit and isolated.
+- Managed chat uses the gateway’s OpenAI-compatible route when both gateway feature and chat-agent route flags enable it; the direct managed-chat path remains available for the kill switch and specialist-provider fallback.
 - New tools should be exported from `tools/__init__.py`, covered by focused tests, and routed through existing safety and result-boundary helpers where applicable.
