@@ -737,7 +737,7 @@ class TestPurgeAndRebuild:
             lambda uid, db_client=None: control,
         )
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.replace_conversation_source_firestore",
+            "utils.memory.canonical_memory_adapter.retract_conversation_source_firestore",
             lambda **_: types.SimpleNamespace(
                 control_state=committed_control,
                 retracted_memory_ids=[item.memory_id],
@@ -751,7 +751,9 @@ class TestPurgeAndRebuild:
             lambda uid, memory_ids, db_client=None: 0,
         )
 
-        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())
+        db_client = MagicMock()
+        db_client.document.return_value.get.return_value.exists = False
+        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=db_client)
         assert _provider_id(item) not in docs_store
 
     def test_rebuild_reconstructs_index_count_verified(self, mock_typesense, monkeypatch):
