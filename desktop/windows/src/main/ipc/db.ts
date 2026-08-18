@@ -3,7 +3,7 @@ import { app, BrowserWindow } from 'electron'
 import { basename, dirname, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
-import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
+import { buildRewindFtsMatch, buildRewindFtsSearchSql } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { LOCAL_CONVERSATION_SCHEMA } from './localConversationSchema'
@@ -1491,15 +1491,11 @@ export function searchRewindFrames(
     const match = buildRewindFtsMatch(query)
     if (!match) return []
     const scoped = scope != null
-    return cachedStmt(
-      get(),
-      `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
-           JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
-          WHERE rewind_frames_fts MATCH ?
-          ${scoped ? 'AND rewind_frames.ts BETWEEN ? AND ?' : ''}
-          ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
-          LIMIT ?`
-    ).all(match, ...(scoped ? [scope.from, scope.to] : []), limit) as RewindFrame[]
+    return cachedStmt(get(), buildRewindFtsSearchSql(REWIND_COLUMNS_QUALIFIED, scoped)).all(
+      match,
+      ...(scoped ? [scope.from, scope.to] : []),
+      limit
+    ) as RewindFrame[]
   })
 }
 
