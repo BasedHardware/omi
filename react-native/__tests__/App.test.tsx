@@ -278,7 +278,7 @@ jest.mock('../src/omiNative', () => ({
   },
 }));
 
-import App, {resolveInitialRoute} from '../App';
+import App, {omiDotColor, resolveInitialRoute} from '../App';
 
 function chatMessage(
   id: string,
@@ -378,6 +378,17 @@ test('uses only allowlisted host-selected initial routes', () => {
   expect(resolveInitialRoute('Chat')).toBe('Chat');
   expect(resolveInitialRoute('Goals')).toBe('Home');
   expect(resolveInitialRoute()).toBe('Home');
+});
+
+test('derives a stable, varied Omi dot palette from a stable identity', () => {
+  const omi = Array.from({length: 8}, (_, index) => omiDotColor('omi', index));
+  expect(omi).toEqual(
+    Array.from({length: 8}, (_, index) => omiDotColor('omi', index)),
+  );
+  expect(new Set(omi).size).toBeGreaterThan(1);
+  expect(omi).not.toEqual(
+    Array.from({length: 8}, (_, index) => omiDotColor('another-agent', index)),
+  );
 });
 
 test('opens host-selected Chat without changing the default route', async () => {
@@ -1762,11 +1773,12 @@ test('renders saved Chat history as a wide transcript without the resting hub', 
   );
   expect(avatarDots).toHaveLength(8);
   expect(
-    avatarDots.every(
-      dot =>
-        Array.isArray(dot.props.style[2]?.transform) &&
-        dot.props.style[2].transform.length === 2,
-    ),
+    avatarDots.every(dot => {
+      const motion = dot.props.style.find((style: {transform?: unknown}) =>
+        Array.isArray(style?.transform),
+      );
+      return Array.isArray(motion?.transform) && motion.transform.length === 2;
+    }),
   ).toBe(true);
   expect(
     renderer.root.findAll(
