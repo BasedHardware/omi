@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Memory Atlas failing to load for accounts whose knowledge graph still lives in the legacy store"
+}
