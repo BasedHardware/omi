@@ -27,7 +27,7 @@ send completes. Finalization opcode `104` carries the durable job id and dispatc
 generation, and Pusher claims that Firestore-owned job before processing.
 
 Developer audio-byte webhooks serialize delivery per user through a Redis lock
-after acquiring the shared webhook semaphore, so semaphore queue time cannot
+before entering the shared webhook semaphore, so semaphore queue time cannot
 expire the delivery lock. The configured `url,seconds` value limits each payload
 to `sample_rate * 2 * seconds` bytes; invalid URLs are skipped without delivery.
 

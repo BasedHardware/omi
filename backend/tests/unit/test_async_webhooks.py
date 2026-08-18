@@ -371,6 +371,52 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_client.post.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_cancellation_during_lock_acquisition_releases_late_token(self):
+        acquisition_started = asyncio.Event()
+        mock_client = AsyncMock()
+
+        def acquire_lock(*_args, **_kwargs):
+            acquisition_started.set()
+            time.sleep(0.05)
+            return "late-lock-token"
+
+        with patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00")))
+            await acquisition_started.wait()
+            delivery.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await delivery
+
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
+
+    @pytest.mark.asyncio
+    async def test_semaphore_admission_timeout_does_not_record_endpoint_failure(self):
+        mock_client = AsyncMock()
+        mock_cb = MagicMock(allow_request=MagicMock(return_value=True))
+
+        @asynccontextmanager
+        async def blocked_semaphore():
+            await asyncio.Event().wait()
+            yield
+
+        with patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=()), patch.object(
+            webhooks_module, "_WEBHOOK_REQUEST_TIMEOUT_SECONDS", 0.01
+        ), patch.object(webhooks_module, "get_webhook_semaphore", return_value=blocked_semaphore()), patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=mock_cb,
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_client.post.assert_not_called()
+        mock_cb.record_failure.assert_not_called()
+        webhooks_module.record_dev_webhook_failure.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):
         mock_response = MagicMock(status_code=200)
         mock_client = AsyncMock()
