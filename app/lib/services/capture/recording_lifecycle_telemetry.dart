@@ -56,7 +56,11 @@ class RecordingLifecycleTelemetry {
 
   void complete({String reason = 'user_stopped'}) {
     if (_recordingId == null) return;
-    if (_startedEmitted && _startedAt != null) {
+    if (!_startedEmitted) {
+      failStart(failureClass: 'pipeline_closed');
+      return;
+    }
+    if (_startedAt != null) {
       _emit(completedEvent, {
         'recording_id': _recordingId,
         'recording_source': _source,
@@ -107,7 +111,12 @@ class RecordingLifecycleTelemetry {
       };
 
   static String _normalizeFailureClass(String failureClass) => switch (failureClass) {
-        'permission_denied' || 'capture_unavailable' || 'pipeline_unavailable' || 'unknown' => failureClass,
+        'permission_denied' ||
+        'capture_unavailable' ||
+        'pipeline_unavailable' ||
+        'pipeline_closed' ||
+        'unknown' =>
+          failureClass,
         _ => 'unknown',
       };
 }

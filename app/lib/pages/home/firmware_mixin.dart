@@ -92,7 +92,6 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'nordic_dfu');
       return startLegacyDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
     }
-    _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'mcumgr');
     return startMCUDfu(btDevice, fileInAssets: fileInAssets, zipFilePath: zipFilePath);
   }
 
@@ -112,6 +111,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
       Logger.debug('MCU firmware updates are unavailable in the Ray-Ban DAT build');
       return;
     }
+    _firmwareTelemetry = FirmwareUpdateTelemetry.start(device: btDevice, protocol: 'mcumgr');
     setState(() {
       isInstalling = true;
     });
@@ -154,7 +154,13 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
           isInstalled = true;
         });
       } else {
+        _firmwareTelemetry?.failed(failureClass: 'native_dfu_error');
         Logger.debug('update state: $state');
+        if (mounted) {
+          setState(() {
+            isInstalling = false;
+          });
+        }
       }
     });
 

@@ -274,6 +274,7 @@ class CaptureController extends ChangeNotifier
   }
 
   BtDevice? _recordingDevice;
+  BtDevice? _sessionRecordingDevice;
 
   String? _getConversationSourceFromDevice() {
     return conversationSourceForDeviceType(_recordingDevice?.type);
@@ -548,7 +549,7 @@ class CaptureController extends ChangeNotifier
     final phoneMicSessionActive = _phoneMicBatchActive || _activeSource is PhoneMicSource;
     if (phoneMicSessionActive) {
       try {
-        await stopStreamRecording();
+        await stopStreamRecording(reason: 'mode_changed');
         await streamRecording();
       } catch (e, st) {
         Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
@@ -1453,6 +1454,7 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
+    _sessionRecordingDevice = null;
     // The backend snapshots its cached location when finalizing a conversation.
     // Complete this bounded update before any live or batch capture path can
     // create/finalize that conversation.
@@ -1539,7 +1541,7 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  stopStreamRecording() async {
+  stopStreamRecording({String reason = 'user_stopped'}) async {
     // Batch (Transcribe Later) phone-mic session: no WAL flush or socket to
     // close. Native stop() finalizes the current .bin before it resolves; the
     // recordings list refreshes from onBatchRecordingFinalized.
@@ -1550,7 +1552,7 @@ class CaptureController extends ChangeNotifier
       await _cleanupCurrentState();
       _phoneMicBatchActive = false;
       updateRecordingState(RecordingState.stop);
-      _recordingTelemetry.complete();
+      _recordingTelemetry.complete(reason: reason);
       return;
     }
 
@@ -1571,7 +1573,7 @@ class CaptureController extends ChangeNotifier
     ServiceManager.instance().phoneMic.stop();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
-    _recordingTelemetry.complete();
+    _recordingTelemetry.complete(reason: reason);
   }
 
   /// Start a phone-mic Transcribe Later (batch) session. Native opus-encodes and
@@ -1661,6 +1663,7 @@ class CaptureController extends ChangeNotifier
       await restoreBatchModeAfterOnboarding();
     }
     if (device != null) _updateRecordingDevice(device);
+    _sessionRecordingDevice = _recordingDevice;
 
     _recordingTelemetry.prepare(source: SharedPreferencesUtil().batchModeEnabled ? 'pendant_batch' : 'pendant_live');
 
@@ -2103,7 +2106,7 @@ class CaptureController extends ChangeNotifier
     }
 
     externalActions.upsertConversation(conversation);
-    PlatformManager.instance.analytics.conversationCreated(conversation, recordingDevice: _recordingDevice);
+    PlatformManager.instance.analytics.conversationCreated(conversation, recordingDevice: _sessionRecordingDevice);
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {

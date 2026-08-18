@@ -84,6 +84,20 @@ void main() {
     });
   });
 
+  test('closing a prepared capture emits a bounded start failure', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-closed-before-start',
+    );
+
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.complete();
+
+    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.single.properties['failure_class'], 'pipeline_closed');
+  });
+
   test('the recording UUID is attached to the authoritative listen request', () {
     final service = TranscriptSegmentSocketService.create(
       16000,

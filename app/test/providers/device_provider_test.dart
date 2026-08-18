@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,9 +66,11 @@ void main() {
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
     expect(connectedProperties['hardware_family'], 'fieldy');
-    expect(connectedProperties['transport_device_id'], device.id);
+    expect(
+        connectedProperties['transport_device_id'], sha256.convert(utf8.encode(device.id)).toString().substring(0, 16));
     expect(connectedProperties['transport_id_stability'], 'platform_dependent');
-    expect(connectedProperties['hardware_id'], 'OMI-SERIAL-001');
+    expect(
+        connectedProperties['hardware_id'], sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16));
     expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
     expect(connectedProperties['hardware_id_stable'], isTrue);
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);

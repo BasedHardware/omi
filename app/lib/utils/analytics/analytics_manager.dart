@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -667,12 +669,19 @@ class AnalyticsManager {
 
   static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
     final serial = device.serialNumber?.trim();
+    String hash(String value) => sha256.convert(utf8.encode(value)).toString().substring(0, 16);
+    final transportIdKind = switch (device.type) {
+      DeviceType.appleWatch => 'watch_identifier',
+      DeviceType.limitless => 'limitless_identifier',
+      DeviceType.raybanMeta => 'rayban_identifier',
+      _ => 'ble_identifier',
+    };
     return {
-      'transport_device_id': device.id,
-      'transport_id_kind': 'ble_identifier',
+      'transport_device_id': hash(device.id),
+      'transport_id_kind': transportIdKind,
       'transport_id_stability': 'platform_dependent',
       if (serial != null && serial.isNotEmpty && serial != 'Unknown') ...{
-        'hardware_id': serial,
+        'hardware_id': hash(serial),
         'hardware_id_kind': 'manufacturer_serial',
         'hardware_id_stable': true,
       } else ...{
