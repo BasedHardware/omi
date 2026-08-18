@@ -443,6 +443,46 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
 # Hard safety caps for list reads. Unbounded streams + in-process sort caused prod GET
 # /v1/action-items to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts.
 _ACTION_ITEMS_LIST_HARD_MAX = 2000
+# Slack so a handful of soft-deleted rows in a Firestore prefix still fill the page.
+_ACTION_ITEMS_LIST_DELETED_SLACK = 32
+# Lean projection for GET /v1/action-items. Omit `provenance` (evidence arrays dominate
+# payload on large accounts; ActionItemResponse defaults it to []). Do not add
+# `order_by due_at` here: missing `due_at` is excluded from that index and would
+# drop undated tasks. Existing `action_items_completed_due` stays for due-range reads.
+_ACTION_ITEMS_LIST_SELECT_FIELDS = (
+    'description',
+    'status',
+    'completed',
+    'deleted',
+    'goal_id',
+    'workstream_id',
+    'owner',
+    'due_at',
+    'due_confidence',
+    'source',
+    'priority',
+    'sort_order',
+    'indent_level',
+    'recurrence_rule',
+    'recurrence_parent_id',
+    'created_at',
+    'updated_at',
+    'completed_at',
+    'superseded_by',
+    'conversation_id',
+    'is_locked',
+    'exported',
+    'export_date',
+    'export_platform',
+    'apple_reminder_id',
+)
+
+
+def _list_scan_budget(row_budget: int) -> int:
+    """Docs to pull for one page: the page itself plus deleted slack, never 2× the page."""
+    if row_budget <= 0:
+        return 0
+    return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
 
 
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
@@ -456,11 +496,17 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
 
 
 def _stream_action_items_bounded(query: Any, *, max_docs: int) -> tuple[List[Dict[str, Any]], int]:
-    """Stream at most max_docs Firestore documents; skip soft-deleted rows."""
+    """Stream at most max_docs Firestore documents; skip soft-deleted rows.
+
+    Applies a field projection and a Firestore ``limit`` so the backend process
+    never downloads full documents past the page budget (Python ``break`` alone
+    still lets the client library buffer the rest of the stream).
+    """
     action_items: List[Dict[str, Any]] = []
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
+    query = query.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
     for doc in query.stream():
         document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
@@ -520,7 +566,11 @@ def get_action_items(
     Legacy documents with missing/null ``completed`` are harvested via a separate bounded
     unfiltered scan and treated as active after ``_prepare_action_item_for_read``.
     All paths are hard-capped so GET /v1/action-items cannot unbounded-scan under
-    HTTP_GET_TIMEOUT. Pagination is applied after the product sort.
+    HTTP_GET_TIMEOUT. Pagination is applied after the product sort. When
+    ``completed`` is set, the scan budget is the page plus deleted slack
+    (not 2× the page). Offset is a live-item slice after that sort so it stays
+    aligned with Windows ``offset += items.length`` — Firestore ``offset``
+    counts deleted documents and would skip/duplicate across pages.
     """
     offset = max(0, int(offset or 0))
     if limit is None or limit <= 0:
@@ -551,8 +601,7 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        scan = min(_ACTION_ITEMS_LIST_HARD_MAX, max(row_budget * 2, row_budget + 32))
-        items, docs = _stream_action_items_bounded(q, max_docs=scan)
+        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget))
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]
