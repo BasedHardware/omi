@@ -194,6 +194,16 @@ function OmiMark() {
   );
 }
 
+export function omiDotColor(identity: string, index: number): string {
+  let hash = 2166136261;
+  for (let cursor = 0; cursor < identity.length; cursor += 1) {
+    hash ^= identity.charCodeAt(cursor);
+    hash = Math.imul(hash, 16777619);
+  }
+  const hue = (hash + index * 43) >>> 0;
+  return `hsl(${hue % 360}, 84%, 66%)`;
+}
+
 const omiDotPoses = [
   {ring: {left: 17.5, top: 3.5}, smile: {left: 10, top: 12}},
   {ring: {left: 27.5, top: 7.5}, smile: {left: 26, top: 12}},
@@ -207,9 +217,11 @@ const omiDotPoses = [
 
 function OmiAvatar({
   animate = false,
+  identity = 'omi',
   reduceMotion = false,
 }: {
   animate?: boolean;
+  identity?: string;
   reduceMotion?: boolean;
 }) {
   const smileProgress = useRef(new Animated.Value(0)).current;
@@ -258,6 +270,7 @@ function OmiAvatar({
             key={index}
             style={[
               styles.chatAvatarDot,
+              {backgroundColor: omiDotColor(identity, index)},
               ring,
               {transform: [{translateX}, {translateY}]},
             ]}
