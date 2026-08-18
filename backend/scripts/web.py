@@ -10,6 +10,11 @@ import json
 USER_BATCH_SIZE = 20
 
 
+def clear_export_artifacts() -> None:
+    Path("user_messages_with_bot_name.json").unlink(missing_ok=True)
+    Path("plugin_data_by_persona_name.json").unlink(missing_ok=True)
+
+
 def get_user_messages_with_bot_name() -> List[str]:
     user_messages_with_bot_name: Dict[str, List[Dict[str, Any]]] = {}
     uids = get_users_uid()
@@ -25,7 +30,6 @@ def get_user_messages_with_bot_name() -> List[str]:
             data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
             if 'botName' in data:
                 filtered_messages.append(data)
-        print(uid, "has personas messages", len(filtered_messages))
         if filtered_messages:
             user_messages_with_bot_name[uid] = filtered_messages
 
@@ -94,6 +98,7 @@ def map_plugin_data_by_persona_name(*, firestore_client: Any = None) -> None:
 
 
 if __name__ == "__main__":
+    clear_export_artifacts()
     get_user_messages_with_bot_name()
     map_plugin_data_by_persona_name()
     # TODO: questions
