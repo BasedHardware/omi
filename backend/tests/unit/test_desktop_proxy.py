@@ -961,6 +961,7 @@ def test_an_unavailable_target_cannot_be_considered_a_live_reservation():
 def test_model_unavailability_is_distinguished_from_capacity_conditions():
     not_enabled = "Publisher model `projects/p/locations/l/publishers/google/models/m` was not found"
     assert desktop_proxy.ptr.is_model_unavailable(404, not_enabled)
+    assert not desktop_proxy.ptr.is_model_unavailable(404, "The requested resource was not found")
     assert not desktop_proxy.ptr.is_model_unavailable(429, "Exceeded the Provisioned Throughput.")
     assert not desktop_proxy._overflow_triggered(404, not_enabled)
 

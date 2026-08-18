@@ -310,7 +310,7 @@ def is_model_unavailable(status: int, message: str) -> bool:
     if status != 404:
         return False
     text = (message or '').casefold()
-    return 'publisher model' in text or 'was not found' in text
+    return 'publisher model' in text
 
 
 def is_provisioned_capacity_absent(status: int, message: str) -> bool:
