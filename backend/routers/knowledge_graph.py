@@ -6,13 +6,18 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Callable, Optional, cast
 
 from database import knowledge_graph as kg_db
+from database._client import db as firestore_db
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
+from utils.memory.memory_service import MemoryService
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.other import endpoints as auth
 from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
+Payload = Dict[str, Any]
+MemoryPayloads = List[Payload]
+RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
 RateLimitFactory = Callable[[Any, str], Any]
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
@@ -24,9 +29,38 @@ def _knowledge_graph_llm_module() -> Any:
     return sys.modules.get("utils.llm.knowledge_graph") or importlib.import_module("utils.llm.knowledge_graph")
 
 
-def _is_assertion_backed_graph_account(uid: str) -> bool:
-    """All authenticated accounts use assertion-backed graph semantics."""
+def _run_rebuild_knowledge_graph(uid: str, memories: MemoryPayloads, user_name: str) -> Payload:
+    rebuild_knowledge_graph = cast(
+        RebuildKnowledgeGraph, getattr(_knowledge_graph_llm_module(), "rebuild_knowledge_graph")
+    )
+    return rebuild_knowledge_graph(uid, memories, user_name)
+
+
+def _has_canonical_graph_state(uid: str) -> bool:
+    """Whether canonical graph state is actually established for this account.
+
+    Canonical graph reads are fenced on ``users/{uid}/memory_state/head``, which
+    only the canonical apply transaction writes. The convergence shipped no
+    backfill, so an account that has never committed through canonical apply has
+    no derived state at all.
+    """
+    try:
+        canonical_graph_service.get_canonical_knowledge_graph(uid, limit=1, cursor=None)
+    except canonical_graph_service.CanonicalGraphReadUnavailable:
+        return False
     return True
+
+
+def _is_assertion_backed_graph_account(uid: str) -> bool:
+    """Whether this account's graph is derived state owned by canonical apply.
+
+    This must stay a real per-account probe. Answering ``True`` unconditionally
+    protects derived state that does not exist and denies every account the
+    legacy rebuild/delete their graph still needs.
+    """
+    if _has_canonical_graph_state(uid):
+        return True
+    return kg_db.has_stored_memory_graph_assertions(uid, db_client=firestore_db)
 
 
 def _require_legacy_graph_mutation(uid: str) -> None:
@@ -186,12 +220,27 @@ def get_canonical_knowledge_graph(
     )
 
 
+def _rebuild_graph_task(uid: str, user_name: str) -> None:
+    if _is_assertion_backed_graph_account(uid):
+        return
+    memories: MemoryPayloads = [
+        {"id": memory.id, "content": memory.content}
+        for memory in MemoryService(db_client=firestore_db).read(uid, limit=500)
+        if not getattr(memory, "is_locked", False)
+    ]
+    _run_rebuild_knowledge_graph(uid, memories, user_name)
+
+
 @router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
 def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
     _require_legacy_graph_mutation(uid)
+    user_name = get_user_name(uid) or ""
+    kg_db.delete_knowledge_graph(uid)
+    background_tasks.add_task(_rebuild_graph_task, uid, user_name)
+    return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 
 
 @router.post(
@@ -236,4 +285,6 @@ async def extract_knowledge_graph(
 
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)
 def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
-    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CANONICAL_GRAPH_MUTATION_CONFLICT)
+    _require_legacy_graph_mutation(uid)
+    kg_db.delete_knowledge_graph(uid)
+    return DeleteKnowledgeGraphResponse(status="deleted")
