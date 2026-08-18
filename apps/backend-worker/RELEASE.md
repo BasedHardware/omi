@@ -1,13 +1,14 @@
 # Worker staging release runbook
 
-This runbook applies the D1 authoritative Tasks+Chat migration and verifies it through an operator-managed safe evidence endpoint before the Worker is deployed or declared ready.
+This runbook applies the D1-authoritative Tasks, Chat, and Attachments migrations and verifies them through an operator-managed safe evidence endpoint before the Worker is deployed or declared ready.
 
 ## Required operator inputs
 
 - `STAGING_D1_MIGRATION_EVIDENCE_URL`: an HTTPS URL that returns the current migration evidence envelope.
 - `STAGING_D1_MIGRATION_EVIDENCE_ID`: an opaque operator-issued identifier that must appear in the evidence envelope.
 - `CLOUDFLARE_API_TOKEN`: the API token that owns the Worker and D1 database.
-- `CLOUDFLARE_ACCOUNT_ID`: the account that owns the Worker and D1 database.
+- `CLOUDFLARE_ACCOUNT_ID`: the account that owns the Worker, D1 database, R2 bucket, and Queue.
+- Worker secrets set out-of-band: `API_TOKEN`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`. The attachment route fails closed without all three; never place their values in repository files.
 - `STAGING_WORKER_URL`: the public URL used by `verify:release` after the deploy.
 - `STAGING_OBSERVABILITY_SINK_MODE`: `cloudflare_only` or `better_stack`.
 - `STAGING_BETTER_STACK_EVIDENCE_ID`: an opaque operator evidence identifier required only for `better_stack`.
@@ -27,7 +28,7 @@ This runbook applies the D1 authoritative Tasks+Chat migration and verifies it t
 
    ```json
    {
-     "schema_version": "0002_chat.sql",
+     "schema_version": "0003_attachments.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -36,6 +37,10 @@ This runbook applies the D1 authoritative Tasks+Chat migration and verifies it t
        {
          "name": "0002_chat.sql",
          "sha256": "f1b3da76a9d949198e066af5320d2b684e32ecc4112896e8cd2ffdad75a824d1"
+       },
+       {
+         "name": "0003_attachments.sql",
+         "sha256": "ee4efd8d61929ba0155753de9b6c5784f657b6264b90964c1c6dd34d9fc98fa3"
        }
      ],
      "evidence_id": "ops-20260818-1"
