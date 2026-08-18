@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import uuid
 from datetime import datetime, timezone
@@ -46,10 +47,14 @@ def _get_dev_webhook_retry_delays() -> tuple[float, ...]:
     if raw_delays is None:
         return _DEV_WEBHOOK_RETRY_DELAYS
     try:
-        return tuple(float(delay.strip()) for delay in raw_delays.split(',') if delay.strip())
+        delays = tuple(float(delay.strip()) for delay in raw_delays.split(',') if delay.strip())
     except ValueError:
         logger.warning(f'Invalid DEV_WEBHOOK_RETRY_DELAYS={raw_delays!r}; using default schedule')
         return _DEV_WEBHOOK_RETRY_DELAYS
+    if not all(math.isfinite(delay) for delay in delays):
+        logger.warning(f'Invalid DEV_WEBHOOK_RETRY_DELAYS={raw_delays!r}; using default schedule')
+        return _DEV_WEBHOOK_RETRY_DELAYS
+    return delays
 
 
 def _append_query_params(url: str, params: dict) -> str:
@@ -406,7 +411,12 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         try:
             lock_token = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
-            lock_token = await acquisition
+            while True:
+                try:
+                    lock_token = await asyncio.shield(acquisition)
+                    break
+                except asyncio.CancelledError:
+                    continue
             raise
         if not lock_token:
             raise _WebhookLockUnavailable()

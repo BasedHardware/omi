@@ -439,6 +439,34 @@ class TestSendAudioBytesDeveloperWebhook:
         webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
 
     @pytest.mark.asyncio
+    async def test_repeated_cancellation_during_lock_acquisition_releases_late_token(self):
+        acquisition_started = asyncio.Event()
+        mock_client = AsyncMock()
+
+        def acquire_lock(*_args, **_kwargs):
+            acquisition_started.set()
+            time.sleep(0.05)
+            return "late-lock-token"
+
+        with patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00')))
+            await acquisition_started.wait()
+            delivery.cancel()
+            await asyncio.sleep(0)
+            delivery.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await delivery
+
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
+
+    def test_non_finite_retry_delays_use_default_schedule(self, monkeypatch):
+        monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "1,nan,inf")
+
+        assert webhooks_module._get_dev_webhook_retry_delays() == webhooks_module._DEV_WEBHOOK_RETRY_DELAYS
+
+    @pytest.mark.asyncio
     async def test_semaphore_admission_timeout_does_not_record_endpoint_failure(self):
         mock_client = AsyncMock()
         mock_cb = MagicMock(allow_request=MagicMock(return_value=True))
