@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-broadened-default-surface-absorbs-explicit-delivery",
+  "violated_contract": "Widening a default presentation path to cover a state it previously skipped must not consume deliveries whose caller explicitly requested a different, persistent surface. Delivery policies that suppress duplicates treat 'the default surface accepted it' as proof the user was reached, so once the broadened path accepts a functional notice the explicit surface is dropped as a duplicate. A notice sent once per episode has no second chance: the disabled Ask Omi bar's temp-show card auto-dismisses in seconds, and the screen-recording repair prompt's one-shot flag is set at that delivery and cleared only on capture recovery, which cannot happen while capture is broken.",
+  "canonical_prevention": "Pass the caller's explicit surface intent into the policy that selects the presentation, so a broadened default applies only to callers that did not name a surface. FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview takes deliverSystemBanner and yields the card when the bar is disabled and a banner was explicitly requested; the regression tests assert both the widened default and the explicit-intent path.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/FloatingBarNotificationPreviewPolicyTests.swift"
+  ],
+  "evidence_prs": [
+    11636
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Services/**"
+  ],
+  "status": "open"
+}

@@ -6,11 +6,53 @@ latency optimization for each listener process, not a fleet-wide coordinator.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
 import threading
 import time
-from typing import Callable
+from typing import Any, Callable, Final
+
+logger = logging.getLogger(__name__)
 
 EXPECTED_REJECTIONS = frozenset({'capacity_full', 'allocation_rejected'})
+
+# A provider accepts the WebSocket upgrade before it applies account state, so the
+# window has to outlast that rejection round trip (prod measured ~150ms).
+STT_FALLBACK_LIVENESS_GRACE_SECONDS: Final[float] = float(os.getenv('STT_FALLBACK_LIVENESS_GRACE_SECONDS', '0.3'))
+_FALLBACK_LIVENESS_POLL_SECONDS: Final[float] = 0.02
+
+
+async def fallback_socket_is_serving(socket: Any) -> bool:
+    """Return whether a freshly connected fallback socket is actually serving.
+
+    Velma accepts the upgrade and only then rejects the stream — an over-quota
+    account answers ``{"type":"error","error":"Monthly usage limit reached."}``
+    about 150ms later, which the socket surfaces as ``is_connection_dead``.
+    Treating that connect as a heal reports ``outcome='recovered'`` for a session
+    that dies moments afterwards, so the outage never reaches ops (#11752).
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + STT_FALLBACK_LIVENESS_GRACE_SECONDS
+    while True:
+        if getattr(socket, 'is_connection_dead', False):
+            return False
+        if loop.time() >= deadline:
+            return True
+        await asyncio.sleep(_FALLBACK_LIVENESS_POLL_SECONDS)
+
+
+def close_rejected_socket(socket: Any) -> None:
+    """Release a fallback socket that never served.
+
+    Deliberately the sync close and not the awaited tail drain: a rejected stream
+    transcribed nothing, and the drain path is allowed to wait on a provider that
+    has already gone away — which would stall session setup instead of failing it.
+    """
+    try:
+        socket.finish()
+    except Exception:
+        logger.warning('Failed to close a rejected STT fallback socket')
 
 
 class ProviderCircuitBreaker:

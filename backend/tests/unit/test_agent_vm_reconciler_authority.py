@@ -40,10 +40,20 @@ def test_proxy_and_tools_have_no_direct_compute_control_plane_path():
         assert "request_vm_start" in source
 
 
-def test_desktop_status_requests_reconciliation_without_direct_power_mutation():
+def test_desktop_status_is_read_only_without_power_mutation_or_start_demand():
+    """Status polling must never wake or mutate VMs (static tripwire).
+
+    Contract change 2026-08-17 (minimum-spend): wake-on-open is retired.
+    Measured basis: prod agent-proxy logs for the trailing 24h showed 135
+    status-driven restart/queue attempts (99 "not reachable", 90 "RUNNING but
+    unhealthy, resetting", 36 "no VM") against zero successful sessions, while
+    the read path kept an undemanded fleet billing. Only a real session
+    (agent-proxy connect) or an explicit ensure call may queue start demand.
+    """
     status = _function(BACKEND_DIR / "routers/desktop_agent_vm.py", "get_agent_status")
     calls = _called_names(status)
     blocking_targets = _run_blocking_targets(status)
 
-    assert "request_vm_start" in blocking_targets
+    assert "request_vm_start" not in blocking_targets
+    assert "request_vm_start" not in calls
     assert not {"_start_vm", "_stop_vm", "_set_service_account", "_delete_vm"} & calls

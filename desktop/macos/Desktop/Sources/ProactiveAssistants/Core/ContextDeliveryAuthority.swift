@@ -57,6 +57,10 @@ struct ContextBucketRecentDelivery: Equatable, Sendable, Decodable, FetchableRec
 }
 
 enum ContextDeliveryLifecycle {
+  /// Inserted when a delivery attempt begins, and kept when the lane fails
+  /// before a model decision. Not a choice to stay silent.
+  static let unresolvedDecisionType = "pending"
+
   /// Nonterminal ledger states that may still advance. Terminal
   /// `failed`/`suppressed`/`delivered` rows are immutable.
   static let advanceableStates: Set<String> = ["attempted", "model_completed", "policy_approved"]
@@ -138,6 +142,19 @@ enum ContextDeliveryBudget {
     let base = [0, 10, 20, 40, 60, 100][max(0, min(5, frequencyLevel))]
     return base * max(1, planMultiplier)
   }
+
+  /// Ceiling on candidate-sourced deliveries per 24-hour window, inside the
+  /// overall daily budget.
+  ///
+  /// The rewritten candidate gate swung from a 4% to a 71% pass rate (n=7 —
+  /// far too small to size the true rate, which is exactly why a ceiling is
+  /// warranted while dogfood measures it): a gate that now returns parseable
+  /// JSON will act on its own `show=true` default. Cooldown and the daily
+  /// budget bound the total interruption rate, but not the *mix* — without a
+  /// ceiling, armed candidates could crowd the entire budget. The check runs
+  /// before the gate's model call, so a capped candidate costs no tokens and
+  /// stays armed for a quieter window rather than being retired.
+  static let candidateDailyShowCeiling = 8
 
   static func cooldownSeconds(frequencyLevel: Int) -> TimeInterval {
     switch frequencyLevel {
@@ -267,13 +284,15 @@ extension ContextBucketStore {
       let id = UUID().uuidString.lowercased()
       try db.execute(
         sql: """
-          INSERT INTO proactive_deliveries
-            (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
-             provenanceJson, attemptedAt, expiresAt, createdAt)
-          VALUES (?, ?, ?, ?, 'pending', 'attempted', '{}', ?, ?, ?)
+            INSERT INTO proactive_deliveries
+              (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
+               provenanceJson, attemptedAt, expiresAt, createdAt)
+            VALUES (?, ?, ?, ?, ?, 'attempted', '{}', ?, ?, ?)
           """,
         arguments: [
-          id, fence.visitID, snapshot.bucketID, snapshot.versionID, now, now.addingTimeInterval(30 * 24 * 60 * 60), now,
+          id, fence.visitID, snapshot.bucketID, snapshot.versionID,
+          ContextDeliveryLifecycle.unresolvedDecisionType, now,
+          now.addingTimeInterval(30 * 24 * 60 * 60), now,
         ])
       return ContextDeliveryAttempt(id: id, reason: .allowed)
     }

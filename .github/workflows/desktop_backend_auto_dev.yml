@@ -200,17 +200,35 @@ jobs:
             echo "::warning::AGENT_GCS_BUCKET is not set — skipping Agent VM image build"
             exit 0
           fi
-          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
-          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
-          python3 backend/scripts/runtime_image_contracts.py smoke \
-            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
-          docker push "$agent_image"
-          agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
-          [[ "$agent_digest" == sha256:* ]]
-          agent_image_digest="$agent_image@$agent_digest"
           source_sha="${{ steps.candidate-identity.outputs.source_sha }}"
           startup_uri_gs="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
           startup_uri_https="https://storage.googleapis.com/$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
+          manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/manifest.json"
+          python3 backend/scripts/resolve_agent_vm_sha_release.py \
+            --startup-uri "$startup_uri_gs" \
+            --manifest-uri "$manifest_uri" \
+            --expected-source-sha "$source_sha" \
+            --workdir "$RUNNER_TEMP/agent-vm-sha-release" \
+            --output "$RUNNER_TEMP/agent-vm-sha-release.json"
+          reuse="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+          if [[ "$reuse" == "true" ]]; then
+            agent_image_digest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["image_digest"])' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+            reused_boot_image="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("boot_image") or "")' "$RUNNER_TEMP/agent-vm-sha-release.json")"
+            [[ "$agent_image_digest" == *@sha256:* ]]
+            echo "Reusing SHA-keyed Agent VM release artifacts for $source_sha ($agent_image_digest)."
+            if [[ -n "$reused_boot_image" ]]; then
+              AGENT_VM_BOOT_IMAGE="$reused_boot_image"
+            fi
+          else
+            agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
+            docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
+            docker push "$agent_image"
+            agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
+            [[ "$agent_digest" == sha256:* ]]
+            agent_image_digest="$agent_image@$agent_digest"
+          fi
           # Legacy VMs may still reference gs://$AGENT_GCS_BUCKET/startup.sh; do not update it before acceptance.
           rendered_startup="$RUNNER_TEMP/agent-vm-startup.sh"
           AGENT_VM_IMAGE="$agent_image_digest" AGENT_VM_GEMINI_SECRET_NAME="$AGENT_VM_GEMINI_SECRET_NAME" \
@@ -244,6 +262,7 @@ jobs:
             echo "startup_uri=$startup_uri_https"
             echo "startup_sha256=$startup_sha256"
             echo "image_digest=$agent_image_digest"
+            echo "boot_image=$AGENT_VM_BOOT_IMAGE"
             echo "manifest_uri=$manifest_uri"
             echo "active_manifest_uri=$active_manifest_uri"
             echo "previous_manifest_uri=$previous_manifest_uri"
@@ -270,6 +289,8 @@ jobs:
             FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            USE_VERTEX_AI=true
+            GCP_LOCATION=us-central1
             FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
@@ -285,6 +306,7 @@ jobs:
             AGENT_VM_IMAGE_DIGEST=${{ steps.agent-vm-release.outputs.image_digest }}
             AGENT_VM_STARTUP_SHA256=${{ steps.agent-vm-release.outputs.startup_sha256 }}
             AGENT_VM_STOP_AUDIENCE=${{ steps.desktop-base-api-url.outputs.base_api_url }}
+            AGENT_VM_PROVISIONING_ENABLED=true
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
@@ -424,12 +446,30 @@ jobs:
           REVISION: ${{ steps.candidate-identity.outputs.revision }}
         run: |
           set -euo pipefail
+          # Refuse only promotions that would move the service backwards in history.
+          # Requiring origin/main to be unchanged fails whenever any commit lands
+          # during the build, which discards an accepted candidate without saving a
+          # single Cloud Build. Run ordering is already guaranteed by the
+          # desktop-backend-auto-dev concurrency group (cancel-in-progress: false).
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse 'origin/main^{commit}')"
-          if [[ "$current_main" != "${{ steps.candidate-identity.outputs.source_sha }}" ]]; then
-            echo "ERROR: candidate is stale because origin/main advanced to $current_main; traffic remains unchanged." >&2
-            exit 1
+          git fetch --no-tags --deepen=200 origin main 2>/dev/null || true
+          serving_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json 2>/dev/null \
+            | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py 2>/dev/null || true)"
+          serving_release_sha=""
+          if [[ -n "$serving_revision" ]]; then
+            serving_release_sha="$(gcloud run revisions describe "$serving_revision" \
+              --project="$PROJECT_ID" \
+              --region="$REGION" \
+              --format=json 2>/dev/null \
+              | jq -r '[.spec.containers[]?.env[]? | select(.name == "OMI_DESKTOP_BACKEND_RELEASE_SHA") | .value] | first // ""' \
+              || true)"
           fi
+          python3 .github/scripts/check_desktop_backend_traffic_regression.py \
+            --candidate-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --serving-release-sha="$serving_release_sha"
           python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project="$PROJECT_ID" \
             --region="$REGION" \

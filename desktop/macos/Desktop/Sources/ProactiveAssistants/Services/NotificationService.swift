@@ -344,7 +344,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// (`ShortcutSettings.floatingBarNotificationPreviewsEnabled == false`) while the
   /// Floating Bar is still enabled, so that opt-out is never fully silenced (#6765).
   /// Previews muted *and* the bar disabled still temp-shows the card rather than
-  /// going silent or falling back to a contentless banner.
+  /// going silent or falling back to a contentless banner. That temp-show is a
+  /// proactive-notification surface only: a caller passing `deliverSystemBanner: true`
+  /// while the bar is disabled keeps its banner instead, because a card on a bar the
+  /// user turned off auto-dismisses in seconds and cannot carry a functional notice
+  /// (the screen-recording repair prompt is delivered once per broken-capture episode).
   /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
   /// bounded delivery outcomes and never carries notification text or window context.
   func sendNotification(
@@ -464,7 +468,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
     let floatingBarPreviewEnabled = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+      deliverSystemBanner: deliverSystemBanner
     )
 
     var floatingBarMayDeliver = false
@@ -593,7 +598,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
     if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
       previewsEnabled: previewsEnabled,
-      floatingBarEnabled: floatingBarEnabled)
+      floatingBarEnabled: floatingBarEnabled,
+      deliverSystemBanner: false)
     {
       return FloatingControlBarManager.shared.contextNotificationPreflight(
         ownerID: ownerID,
@@ -644,7 +650,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
     let showInBar = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled)
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+      deliverSystemBanner: false)
     let deliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled, deliverSystemBanner: false)
 

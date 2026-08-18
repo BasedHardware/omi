@@ -10780,5 +10780,8 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "sendRawAudioToOmi": "Испраќај необработено аудио до Omi",
+    "sendRawAudioToOmiDescription": "Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.",
+    "findDevice": "Пронајди"
 }

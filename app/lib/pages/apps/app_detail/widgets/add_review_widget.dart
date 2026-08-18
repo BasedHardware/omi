@@ -129,7 +129,7 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                   return dynamicPadding.clamp(8.0, 24.0); // Clamp between reasonable values
                 }(),
               ),
-              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.deepPurple),
+              itemBuilder: (context, _) => const Icon(Icons.star, color: Colors.white),
               maxRating: 5.0,
               onRatingUpdate: (rating) {
                 if (isLoading) return;

@@ -4,6 +4,10 @@ kind: BackendConfig
 metadata:
   name: {{ .Values.service.backendConfig }}
 spec:
+  # Flex requests have a route-level 15-minute deadline. Keep the ingress
+  # connection alive slightly longer; ordinary lanes retain shorter gateway
+  # deadlines from their route artifacts.
+  timeoutSec: 960
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5

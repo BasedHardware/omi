@@ -83,6 +83,73 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertFalse(settled.contains(where: isToolCalls))
   }
 
+  func testContentBlocksPathRendersToolGroupsBeforeTruncatedAnswer() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    // omi-test-quality: source-inspection -- static contract: SwiftUI ViewBuilder order of live tool chips vs truncated answer cannot be observed without mounting ChatBubble.
+    let source = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
+      encoding: .utf8
+    )
+
+    guard
+      let functionRange = source.range(
+        of: "private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {"
+      )
+    else {
+      return XCTFail("messageContentView must exist")
+    }
+    let functionBody = source[functionRange.upperBound...]
+    guard
+      let contentBlocksRange = functionBody.range(
+        of: "else if message.sender == .ai && !message.contentBlocks.isEmpty {"
+      )
+    else {
+      return XCTFail("content-blocks branch must exist")
+    }
+    let afterContentBlocks = functionBody[contentBlocksRange.upperBound...]
+    guard
+      let nextBranchRange = afterContentBlocks.range(of: "} else if isDuplicate && !isExpanded {")
+    else {
+      return XCTFail("content-blocks branch must be followed by the duplicate-message path")
+    }
+    let contentBlocksBranch = afterContentBlocks[..<nextBranchRange.lowerBound]
+
+    guard let groupsIndex = contentBlocksBranch.range(of: "ForEach(groupedBlocks)")?.lowerBound else {
+      return XCTFail("content-blocks path must iterate groupedBlocks")
+    }
+    guard let groupViewIndex = contentBlocksBranch.range(of: "groupView(group)")?.lowerBound else {
+      return XCTFail("content-blocks path must render non-text groups via groupView")
+    }
+    guard let answerIndex = contentBlocksBranch.range(of: "messageTextBubble(displayText)")?.lowerBound else {
+      return XCTFail("content-blocks path must still render truncated displayText")
+    }
+
+    XCTAssertLessThan(
+      groupsIndex,
+      answerIndex,
+      "tool/rich groups must render above the truncated answer on the content-blocks path"
+    )
+    XCTAssertLessThan(
+      groupViewIndex,
+      answerIndex,
+      "non-text groupView must appear before messageTextBubble(displayText)"
+    )
+    XCTAssertTrue(
+      contentBlocksBranch.contains("if case .text = group"),
+      "duplicate .text groups must stay skipped when the answer bubble already renders"
+    )
+    XCTAssertTrue(
+      contentBlocksBranch.contains("message.visibleAnswerText"),
+      "content-blocks path must render post-tool answer text, not concatenated commentary"
+    )
+    XCTAssertTrue(
+      contentBlocksBranch.contains("truncationControl"),
+      "long answers on the content-blocks path must keep Show more/less"
+    )
+  }
+
   func testCopyableTextIncludesOnlyFinalAssistantOutput() {
     let message = ChatMessage(
       text: "Fallback answer",
@@ -105,6 +172,121 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
 
     XCTAssertEqual(message.copyableText, "Visible final answer")
+  }
+
+  func testPreToolCommentaryIsNotTheVisibleOrCopyableAnswer() {
+    let preamble = ChatContentBlock.text(id: "preamble", text: "Let me look that up.")
+    let tool = ChatContentBlock.toolCall(
+      id: "tool_1",
+      name: "get_daily_recap",
+      status: .completed,
+      output: "recap"
+    )
+    let answer = ChatContentBlock.text(
+      id: "answer",
+      text: "You filmed the launch video and tested the memory graph."
+    )
+    let concatenated = "Let me look that up.You filmed the launch video and tested the memory graph."
+    let streaming = ChatMessage(
+      text: concatenated,
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [preamble, tool, answer]
+    )
+    let settled = ChatMessage(
+      text: concatenated,
+      sender: .ai,
+      isStreaming: false,
+      contentBlocks: [preamble, tool, answer]
+    )
+
+    XCTAssertEqual(streaming.visibleAnswerText, "You filmed the launch video and tested the memory graph.")
+    XCTAssertEqual(settled.copyableText, "You filmed the launch video and tested the memory graph.")
+    XCTAssertEqual(
+      ChatAssistantAnswerText.visible(
+        contentBlocks: [preamble, tool],
+        fallback: concatenated,
+        isStreaming: true
+      ),
+      "",
+      "hide commentary while tools run and no post-tool answer exists yet"
+    )
+
+    let streamingGroups = ContentBlockGroup.visibleChatGroups(
+      [preamble, tool, answer], isStreaming: true)
+    XCTAssertFalse(
+      streamingGroups.contains { group in
+        if case .text(_, let text) = group { return text.contains("look that up") }
+        return false
+      })
+    XCTAssertTrue(
+      streamingGroups.contains { group in
+        if case .commentary(_, let text) = group { return text.contains("look that up") }
+        return false
+      },
+      "pre-tool commentary must render as live progress while the turn is streaming"
+    )
+    XCTAssertTrue(
+      streamingGroups.contains { group in
+        if case .toolCalls = group { return true }
+        return false
+      })
+    XCTAssertTrue(
+      streamingGroups.contains { group in
+        if case .text(_, let text) = group {
+          return text.contains("filmed the launch video")
+        }
+        return false
+      })
+
+    let settledGroups = ContentBlockGroup.visibleChatGroups(
+      [preamble, tool, answer], isStreaming: false)
+    XCTAssertFalse(
+      settledGroups.contains { group in
+        if case .commentary = group { return true }
+        return false
+      })
+    XCTAssertFalse(
+      settledGroups.contains { group in
+        if case .toolCalls = group { return true }
+        return false
+      })
+    XCTAssertEqual(settled.copyableText, "You filmed the launch video and tested the memory graph.")
+  }
+
+  func testSettledPreToolTextRemainsWhenItIsTheOnlyAnswer() {
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text_1", text: "I started a background agent for that."),
+      .toolCall(id: "tool_1", name: "spawn_agent", status: .completed, output: "started"),
+    ]
+    XCTAssertEqual(
+      ChatAssistantAnswerText.visible(
+        contentBlocks: blocks, fallback: "I started a background agent for that.", isStreaming: false),
+      "I started a background agent for that.")
+    let settled = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(settled.count, 1)
+    guard case .text(_, let text) = settled[0] else {
+      return XCTFail("settled pre-tool text must remain when it is the only answer")
+    }
+    XCTAssertEqual(text, "I started a background agent for that.")
+  }
+
+  func testWhitespaceOnlyPostToolTextDoesNotDropSettledCommentary() {
+    let blocks: [ChatContentBlock] = [
+      .text(id: "text_1", text: "I started a background agent for that."),
+      .toolCall(id: "tool_1", name: "spawn_agent", status: .completed, output: "started"),
+      .text(id: "text_2", text: " \n "),
+    ]
+    XCTAssertEqual(
+      ChatAssistantAnswerText.visible(
+        contentBlocks: blocks, fallback: "I started a background agent for that.", isStreaming: false),
+      "I started a background agent for that.")
+    let settled = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(settled.count, 1)
+    guard case .text(_, let text) = settled[0] else {
+      return XCTFail("whitespace after a tool must not hide the settled pre-tool answer")
+    }
+    XCTAssertEqual(text, "I started a background agent for that.")
   }
 
   func testFloatingResponseCopiesTheSharedFinalOutputProjection() throws {

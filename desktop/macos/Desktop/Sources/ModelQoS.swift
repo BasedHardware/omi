@@ -87,14 +87,28 @@ struct ModelQoS {
 
     /// Insight generation.
     ///
-    /// Pro on both tiers, deliberately. Insight ran on `gemini-pro-latest` for everyone until
-    /// this dropped to Flash at the premium tier, and the click-through fell with it: 2.34%
-    /// in the week of 2026-04-12 (39.8k sent, 336 distinct clickers) against 0.7–0.96%
-    /// through July. Unlike the other proactive assistants this one is cheap to run well —
-    /// a 10-minute timer caps it at ~6 analyses/hour no matter how much the user switches
-    /// windows — and its whole job is finding the one non-obvious thing, which is exactly
-    /// where the weaker model stops earning its interruption.
+    /// Pro on both tiers, deliberately. A 10-minute timer caps it at ~6 analyses/hour no
+    /// matter how much the user switches windows, so it is cheap to run well — and its whole
+    /// job is finding the one non-obvious thing, which is exactly where the weaker model
+    /// stops earning its interruption. Measured (PostHog, 30d to 2026-08-17, macOS): insight
+    /// CTR 1.162% against a 0.68% fleet average — the best-performing high-volume lane.
+    /// (An earlier revision cited "2.34% in the week of 2026-04-12, 39.8k sent, 336
+    /// clickers"; that tuple reproduces from no PostHog slice and was removed.)
+    /// After 30 Pro calls/user/day the backend proxy demotes this lane to Flash-Lite —
+    /// never to Flash, which would burn the Vertex PT reservation.
     static var insight: String { "gemini-2.5-pro" }
+
+    /// Low-value / schema-bounded lanes evicted from the Vertex PT Flash reservation
+    /// (2026-08-17 workload value ranking + overflow bakeoff, omi-knowledge-base
+    /// vertex-pt-flash-spend): memory extraction, LiveNotes, goals, task dedup,
+    /// task prioritization, home suggestions. Flash-Lite is `shared`/on-demand on
+    /// Vertex — it never competes with task extraction for the 13,450 tok/s PT cap —
+    /// and measured ~0.27x Flash's cost. On the memory lane it is also *more*
+    /// prompt-compliant than Flash (fires 5/12 vs Flash's 8/8 against a prompt that
+    /// says most screens should return nothing). Task extraction must NOT use this
+    /// pin: Flash-Lite measurably extracts from chat sidebars and drops second
+    /// commitments on that lane.
+    static var lightweight: String { "gemini-2.5-flash-lite" }
 
     /// Live notch suggestions.
     ///

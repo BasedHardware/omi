@@ -53,6 +53,25 @@ def test_memory_maintenance_import_smoke_supplies_its_required_nonproduction_con
     }
 
 
+def test_registered_import_smokes_declare_their_import_time_environment(contracts_module):
+    assert contracts_module.import_smoke_environment_errors(contracts_module.load_contracts()) == []
+
+
+def test_import_smoke_reaching_encryption_without_its_secret_is_rejected(contracts_module):
+    notifications_job = _contract(contracts_module, 'notifications-job')
+    assert 'utils.encryption' in contracts_module.first_party_import_closure(
+        notifications_job, notifications_job.smoke_entrypoints
+    )
+
+    undeclared = replace(notifications_job, smoke_environment=())
+
+    errors = contracts_module.import_smoke_environment_errors([undeclared])
+
+    assert len(errors) == 1
+    assert 'utils.encryption' in errors[0]
+    assert 'ENCRYPTION_SECRET' in errors[0]
+
+
 def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
     pusher = _contract(contracts_module, 'pusher')
     dockerfile = _dockerfile_without(

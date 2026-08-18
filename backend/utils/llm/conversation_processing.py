@@ -1,7 +1,6 @@
 import hashlib
 import logging
 import os
-import time
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
@@ -46,33 +45,29 @@ CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ST
 CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
 CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
 CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
+GPT56_EXPLICIT_CACHE_ENABLED_ENV = 'OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED'
 GPT56_EXPLICIT_CACHE_OPTIONS = EXPLICIT_CACHE_OPTIONS
-CONVERSATION_CACHE_BUCKET_COUNT = 4
-CONVERSATION_CACHE_BUCKET_SECONDS = 15
+TRANSCRIPT_STRUCTURE_CACHE_KEY = 'omi-transcript-structure-v1'
+ACTION_ITEMS_CACHE_KEY = 'omi-extract-actions-v1'
 GPT56_CACHE_MINIMUM_TOKENS = EXPLICIT_CACHE_MINIMUM_TOKENS
 
 
-def _cache_bucket_key(prefix: str, *, now: float | None = None) -> str:
-    """Return a fixed, opaque cache-routing bucket without user-derived input."""
-    slot = int(time.time() if now is None else now) // CONVERSATION_CACHE_BUCKET_SECONDS
-    return f'{prefix}-v1-b{slot % CONVERSATION_CACHE_BUCKET_COUNT}'
+def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool, formatted: bool) -> Any:
+    """Build the static-prefix system message.
 
-
-def _gpt56_cacheable_system_message(content: str, *, cache_enabled: bool) -> Any:
-    """Mark a static system prefix only when the request uses the GPT-5.6 gateway."""
-    if not cache_enabled:
+    Pre-formatted instructions (gateway mode) are always a concrete message:
+    ChatPromptTemplate would otherwise parse the literal JSON braces in the
+    parser schema as template variables and fail before the LLM call. The
+    breakpoint is added only when the explicit-cache path will actually pay
+    for a cache write; explicit mode without a breakpoint is the unique-prompt
+    opt-out from billable cache writes.
+    """
+    if not formatted and not cache_enabled:
         return ('system', content)
-    # A concrete message prevents ChatPromptTemplate from treating literal JSON
-    # braces in parser instructions as template variables.
-    return SystemMessage(
-        content=[
-            {
-                'type': 'text',
-                'text': content,
-                'prompt_cache_breakpoint': {'mode': 'explicit'},
-            }
-        ]
-    )
+    block: Dict[str, Any] = {'type': 'text', 'text': content}
+    if cache_enabled:
+        block['prompt_cache_breakpoint'] = {'mode': 'explicit'}
+    return SystemMessage(content=[block])
 
 
 def _has_gpt56_cacheable_static_prefix(content: str) -> bool:
@@ -160,6 +155,10 @@ def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
+
+
+def _gpt56_explicit_cache_enabled() -> bool:
+    return should_route_features_through_gateway() and _env_flag_enabled(GPT56_EXPLICIT_CACHE_ENABLED_ENV, default=True)
 
 
 def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
@@ -960,6 +959,7 @@ def extract_action_items(
     Content:
     {conversation_context}{existing_items_context}'''
     gateway_mode_enabled = should_route_features_through_gateway()
+    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
     if gateway_mode_enabled:
         instructions_text = instructions_text.format(
             format_instructions=action_items_parser.get_format_instructions(),
@@ -971,20 +971,22 @@ def extract_action_items(
             strict_filter_intro=strict_filter_intro,
             timing_importance_rules=timing_importance_rules,
         )
-    gateway_cache_enabled = gateway_mode_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
+    gateway_cache_enabled = explicit_cache_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
     prompt = cast(Any, ChatPromptTemplate).from_messages(
         [
-            _gpt56_cacheable_system_message(instructions_text, cache_enabled=gateway_cache_enabled),
+            _gpt56_cacheable_system_message(
+                instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
+            ),
             ('system', context_message),
         ]
     )
     if gateway_cache_enabled:
-        cache_key = _cache_bucket_key('omi-extract-actions')
+        cache_key = ACTION_ITEMS_CACHE_KEY
     elif gateway_mode_enabled:
         cache_key = None
     else:
         cache_key = 'omi-extract-actions'
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     action_items_llm = get_llm('conv_action_items', cache_key=cache_key, prompt_cache_options=cache_options)
     chain = prompt | action_items_llm | action_items_parser
 
@@ -1143,10 +1145,13 @@ def get_transcript_structure(
     gateway_mode_enabled = should_route_features_through_gateway()
     if gateway_mode_enabled:
         instructions_text = instructions_text.format(format_instructions=parser.get_format_instructions())
-    gateway_cache_enabled = gateway_mode_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
+    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
+    gateway_cache_enabled = explicit_cache_enabled and _has_gpt56_cacheable_static_prefix(instructions_text)
     prompt = cast(Any, ChatPromptTemplate).from_messages(
         [
-            _gpt56_cacheable_system_message(instructions_text, cache_enabled=gateway_cache_enabled),
+            _gpt56_cacheable_system_message(
+                instructions_text, cache_enabled=gateway_cache_enabled, formatted=gateway_mode_enabled
+            ),
             ('system', context_message),
         ]
     )
@@ -1162,12 +1167,12 @@ def get_transcript_structure(
 
     with track_usage(uid, Features.CONVERSATION_STRUCTURE):
         if gateway_cache_enabled:
-            cache_key = _cache_bucket_key('omi-transcript-structure')
+            cache_key = TRANSCRIPT_STRUCTURE_CACHE_KEY
         elif gateway_mode_enabled:
             cache_key = None
         else:
             cache_key = 'omi-transcript-structure'
-        cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+        cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
         structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
         chain = prompt | structure_llm | parser
         response = _coerce_structured(chain.invoke(legacy_prompt_values))
@@ -1248,11 +1253,15 @@ def get_reprocess_transcript_structure(
     ).strip()
 
     prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
-    gateway_cache_enabled = should_route_features_through_gateway()
+    gateway_mode_enabled = should_route_features_through_gateway()
+    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
     # Reprocessing has no eligible static prefix, so explicit mode avoids both
-    # cache reads and billable cache writes on the GPT-5.6 route.
-    cache_key = None if gateway_cache_enabled else 'omi-transcript-structure'
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    # cache reads and billable cache writes on the GPT-5.6 route. The
+    # None/legacy split keys on gateway mode (like get_transcript_structure):
+    # with the gateway on, a legacy routing key would opt these unique-prompt
+    # requests back into implicit, billable cache writes.
+    cache_key = None if gateway_mode_enabled else 'omi-transcript-structure'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
     chain = prompt | structure_llm | parser
 
@@ -1304,11 +1313,14 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     {full_context}
     '''
 
-    gateway_cache_enabled = should_route_features_through_gateway()
+    gateway_mode_enabled = should_route_features_through_gateway()
+    explicit_cache_enabled = _gpt56_explicit_cache_enabled()
     # App-specific instructions vary at the start of the prompt. Explicit mode
     # without a breakpoint keeps this route out of GPT-5.6's billable cache.
-    cache_key = None if gateway_cache_enabled else 'omi-app-result'
-    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if gateway_cache_enabled else None
+    # The None/legacy split keys on gateway mode (like get_transcript_structure)
+    # so gateway-on requests never fall back to a legacy implicit routing key.
+    cache_key = None if gateway_mode_enabled else 'omi-app-result'
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
     app_result_llm = get_llm('conv_app_result', cache_key=cache_key, prompt_cache_options=cache_options)
     response = app_result_llm.invoke(prompt)
     content = _content_str(response).replace('```json', '').replace('```', '')

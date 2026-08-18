@@ -9880,4 +9880,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Áruház megnyitása';
+
+  @override
+  String get sendRawAudioToOmi => 'Nyers hang küldése az Ominak';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.';
+
+  @override
+  String get findDevice => 'Keresés';
 }

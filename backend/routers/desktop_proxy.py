@@ -4,7 +4,7 @@ import os
 import re
 import sys
 import time
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, TypeVar, cast
@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from database import redis_db
+from llm_gateway.gateway.accounting import vertex_usage_from_response
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -41,14 +42,38 @@ _VERTEX_MODELS = frozenset({'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini
 # Keep the provider decision explicit instead of silently trying one API shape on
 # another provider.
 _VERTEX_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent'})
+# Company-paid Flash text is reserved on Vertex PT. Changing this pin without
+# updating the matching tests and backend/docs/vertex-pt-flash.md is the
+# 2026-08-04 AI Studio double-pay regression.
+VERTEX_PT_MODEL = 'gemini-2.5-flash'
+VERTEX_PT_LOCATION = 'us-central1'
+VERTEX_PT_EXPIRES = '~2027-05-28'
+VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+# Over-quota Pro demotes to Flash-Lite (`shared`, on-demand), never to the PT
+# model: demoting to `gemini-2.5-flash` silently dumped the Insight tool loop
+# (~11% of the reservation) onto the saturated PT lane. Evidence:
+# omi-knowledge-base vertex-pt-flash-spend 2026-08-17 workload value ranking.
+_QUOTA_DEMOTION_MODEL = 'gemini-2.5-flash-lite'
 _MAX_BODY_BYTES = 5 * 1024 * 1024
+# Absolute ceiling; also the default for BYOK traffic, which keeps its
+# historical behavior.
 _MAX_OUTPUT_TOKENS = 8192
+# Server-paid requests get a smaller default and clamp. No shipped desktop
+# client can emit maxOutputTokens (macOS GenerationConfig has no such field;
+# Windows sends none), so every request used to take the 8192 default while the
+# largest realistic per-lane budget is ~1024 visible tokens plus a thinking
+# budget of up to 1024 (thinking counts toward the output limit on 2.5 models).
+# Mean measured output is ~241 tokens — this bounds the paid tail, it does not
+# change the mean.
+_SERVER_PAID_MAX_OUTPUT_TOKENS = 2048
 _DEFAULT_THINKING_BUDGET = 1024
 _MAX_CONTENT_ITEMS = 128
 _MAX_CONTENT_PARTS = 512
 _MAX_INLINE_MEDIA_PARTS = 16
 _BURST_LIMIT = 30
 _DAILY_HARD_LIMIT = 1500
+_ALLOWED_WORKLOADS = frozenset({'interactive', 'extraction', 'maintenance'})
+_ALLOWED_TRAFFIC_TYPES = frozenset({'PROVISIONED_THROUGHPUT', 'ON_DEMAND'})
 
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
@@ -125,6 +150,14 @@ class ProxyTelemetry:
         self.region = 'none'
         self.model = 'unknown'
         self.action = 'unknown'
+        supplied_workload = request.headers.get('x-omi-workload', '').strip().lower()
+        self.workload_class = supplied_workload if supplied_workload in _ALLOWED_WORKLOADS else 'unknown'
+        self.prompt_token_count: int | None = None
+        self.candidates_token_count: int | None = None
+        self.total_token_count: int | None = None
+        self.cached_content_token_count: int | None = None
+        self.thoughts_token_count: int | None = None
+        self.traffic_type = 'unknown'
         self.phase = 'validation'
         self.shape = PayloadShape('unknown', 'unknown', 'unknown')
         self.started = time.monotonic()
@@ -134,6 +167,20 @@ class ProxyTelemetry:
         self.provider = route.provider
         self.credential_source = route.credential_source
         self.region = route.region
+
+    def observe_gemini_response(self, response: Mapping[str, Any]) -> None:
+        """Retain only bounded billing metadata from a Gemini response."""
+        metadata = vertex_usage_from_response(response)
+        if metadata.traffic_type in _ALLOWED_TRAFFIC_TYPES:
+            self.traffic_type = metadata.traffic_type
+        if metadata.usage is None:
+            return
+        usage = metadata.usage
+        self.prompt_token_count = usage.prompt_tokens
+        self.candidates_token_count = usage.output_tokens
+        self.total_token_count = usage.total_tokens
+        self.cached_content_token_count = usage.cached_input_tokens
+        self.thoughts_token_count = usage.reasoning_tokens
 
     def complete(
         self,
@@ -163,6 +210,8 @@ class ProxyTelemetry:
             'model': self.model if self.model in _ALLOWED_MODELS else 'unknown',
             'region': _safe_region(self.region),
             'action': self.action if self.action in _ALLOWED_ACTIONS else 'unknown',
+            'workload_class': self.workload_class,
+            'traffic_type': self.traffic_type,
             'attempt': 1,
             'phase': phase,
             'outcome': outcome,
@@ -175,6 +224,16 @@ class ProxyTelemetry:
             'inline_media_parts_bucket': self.shape.inline_media_bucket,
             'elapsed_ms': round((time.monotonic() - self.started) * 1000),
         }
+        if self.prompt_token_count is not None:
+            event.update(
+                {
+                    'prompt_token_count': self.prompt_token_count,
+                    'candidates_token_count': self.candidates_token_count,
+                    'total_token_count': self.total_token_count,
+                    'cached_content_token_count': self.cached_content_token_count,
+                    'thoughts_token_count': self.thoughts_token_count,
+                }
+            )
         project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
         if self.trace_id and project:
             event['logging.googleapis.com/trace'] = f'projects/{project}/traces/{self.trace_id}'
@@ -254,7 +313,7 @@ def _size_bucket(size: int) -> str:
 
 
 def _path_parts(path: str) -> tuple[str, str, str]:
-    path = path.replace('gemini-3-flash-preview', 'gemini-2.5-flash')
+    path = path.replace('gemini-3-flash-preview', VERTEX_PT_MODEL)
     prefix, separator, action = path.partition(':')
     model = prefix.removeprefix('models/') if separator and prefix.startswith('models/') else ''
     if action not in _ALLOWED_ACTIONS or model not in _ALLOWED_MODELS:
@@ -274,7 +333,7 @@ def _as_nonnegative_int(value: Any) -> int | None:
     return None
 
 
-def _sanitize(body: bytes, action: str) -> bytes:
+def _sanitize(body: bytes, action: str, *, max_output_tokens: int = _MAX_OUTPUT_TOKENS) -> bytes:
     try:
         payload = json.loads(body)
     except (TypeError, ValueError) as exc:
@@ -315,7 +374,7 @@ def _sanitize(body: bytes, action: str) -> bytes:
         ]
         if not generation_configs:
             payload['generationConfig'] = {
-                'maxOutputTokens': _MAX_OUTPUT_TOKENS,
+                'maxOutputTokens': max_output_tokens,
                 'thinkingConfig': {'thinkingBudget': _DEFAULT_THINKING_BUDGET},
             }
         for config in generation_configs:
@@ -328,20 +387,40 @@ def _sanitize(body: bytes, action: str) -> bytes:
                 value = _as_nonnegative_int(config.get(key))
                 if value is not None:
                     output_key_present = True
-                    if value > _MAX_OUTPUT_TOKENS:
-                        config[key] = _MAX_OUTPUT_TOKENS
+                    if value > max_output_tokens:
+                        config[key] = max_output_tokens
             if not output_key_present:
-                config['maxOutputTokens'] = _MAX_OUTPUT_TOKENS
+                config['maxOutputTokens'] = max_output_tokens
             if 'thinking_config' not in config and 'thinkingConfig' not in config:
                 config['thinkingConfig'] = {'thinkingBudget': _DEFAULT_THINKING_BUDGET}
     return json.dumps(payload, separators=(',', ':')).encode()
+
+
+def _output_token_cap() -> int:
+    """BYOK traffic keeps its historical 8192 ceiling; server-paid requests are
+    bounded at 2048 because output burns the PT reservation down at 9x."""
+    return _MAX_OUTPUT_TOKENS if get_byok_key('gemini') else _SERVER_PAID_MAX_OUTPUT_TOKENS
+
+
+def _use_vertex_ai() -> bool:
+    return os.getenv('USE_VERTEX_AI', '').strip().lower() in {'1', 'true', 'yes'}
+
+
+def _server_paid_flash_text(model: str, action: str) -> bool:
+    return model == VERTEX_PT_MODEL and action in {'generateContent', 'streamGenerateContent'}
+
+
+def _vertex_required(model: str, action: str) -> bool:
+    if action not in _VERTEX_ACTIONS or model not in _VERTEX_MODELS:
+        return False
+    return _server_paid_flash_text(model, action) or _use_vertex_ai()
 
 
 def _vertex_url(model: str, action: str) -> str | None:
     project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
     if model not in _VERTEX_MODELS or action not in _VERTEX_ACTIONS or not project:
         return None
-    location = os.getenv('GCP_LOCATION', 'us-central1').strip()
+    location = os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION
     return f'https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{action}'
 
 
@@ -385,7 +464,15 @@ async def _upstream(path: str, model: str, action: str, query: dict[str, str]) -
             query,
             'vertex_ai',
             'application_default_credentials',
-            os.getenv('GCP_LOCATION', 'us-central1').strip(),
+            os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION,
+        )
+    if _vertex_required(model, action):
+        # Missing GOOGLE_CLOUD_PROJECT is the 2026-08-04 production bug: Flash
+        # fell through to GEMINI_API_KEY / AI Studio and bypassed Vertex PT.
+        raise RoutingFailure(
+            code='routing_vertex_not_configured',
+            message=f'Gemini Vertex route is required. {VERTEX_PT_CONTRACT}',
+            phase='routing',
         )
     server_key = os.getenv('GEMINI_API_KEY', '').strip()
     if not server_key:
@@ -428,14 +515,17 @@ async def _meter_server_request(uid: str, path: str, model: str, action: str) ->
         record_fallback(
             component='gemini_model',
             from_mode='pro',
-            to_mode='flash',
+            to_mode='flash_lite',
             reason='quota',
             outcome='degraded',
         )
-        return f'models/gemini-2.5-flash:{action}'
+        return f'models/{_QUOTA_DEMOTION_MODEL}:{action}'
     return path
 
 
+# gemini-embedding-001 single embed uses Vertex :predict when a project is
+# configured (~$278/30d). batchEmbedContents stays on AI Studio because the
+# Vertex batch wire shape is not compatible.
 def _vertex_embedding_request(body: bytes) -> bytes:
     payload = json.loads(body)
     try:
@@ -630,6 +720,38 @@ def _stream_error_event(*, code: str, phase: str, telemetry: ProxyTelemetry) -> 
     return f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
 
 
+class _StreamingUsageObserver:
+    """Incrementally inspect SSE data fields without retaining response content."""
+
+    def __init__(self, telemetry: ProxyTelemetry) -> None:
+        self.telemetry = telemetry
+        self.buffer = bytearray()
+
+    def feed(self, chunk: bytes) -> None:
+        self.buffer.extend(chunk)
+        self.buffer = bytearray(bytes(self.buffer).replace(b'\r\n', b'\n'))
+        while b'\n\n' in self.buffer:
+            event, _, remainder = self.buffer.partition(b'\n\n')
+            self.buffer = bytearray(remainder)
+            self._observe_event(bytes(event))
+
+    def finish(self) -> None:
+        if self.buffer:
+            self._observe_event(bytes(self.buffer))
+            self.buffer.clear()
+
+    def _observe_event(self, event: bytes) -> None:
+        data_lines = [line[5:].lstrip() for line in event.splitlines() if line.startswith(b'data:')]
+        if not data_lines:
+            return
+        try:
+            payload = json.loads(b'\n'.join(data_lines))
+        except (TypeError, ValueError):
+            return
+        if isinstance(payload, dict):
+            self.telemetry.observe_gemini_response(payload)
+
+
 async def _stream_provider(
     request: Request,
     route: UpstreamRoute,
@@ -641,6 +763,7 @@ async def _stream_provider(
     context: Any | None = None
     acquired = False
     opened = False
+    usage_observer = _StreamingUsageObserver(telemetry)
     try:
         async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
             telemetry.phase = 'pool'
@@ -663,7 +786,9 @@ async def _stream_provider(
             yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
             return
         async for chunk in upstream.aiter_bytes():
+            usage_observer.feed(chunk)
             yield chunk
+        usage_observer.finish()
         telemetry.complete(outcome='success', status_code=upstream.status_code, retryable=False, phase='body')
     except ClientDisconnected:
         telemetry.complete(outcome='client_cancelled', status_code=499, retryable=False, phase='client_disconnect')
@@ -725,7 +850,7 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
         _, model, action = _path_parts(path)
         telemetry.model = model
         telemetry.action = action
-        body = _sanitize(body, action)
+        body = _sanitize(body, action, max_output_tokens=_output_token_cap())
         telemetry.shape = _payload_shape(body)
     except HTTPException as exc:
         outcome = 'rate_limited' if exc.status_code == 429 else 'validation_rejected'
@@ -848,6 +973,13 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
         if route.provider == 'vertex_ai' and action == 'embedContent'
         else response.content
     )
+    if action == 'generateContent':
+        try:
+            response_payload = json.loads(response.content)
+        except (TypeError, ValueError):
+            response_payload = None
+        if isinstance(response_payload, dict):
+            telemetry.observe_gemini_response(response_payload)
     telemetry.complete(
         outcome='success',
         status_code=response.status_code,

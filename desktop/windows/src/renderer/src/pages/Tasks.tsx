@@ -7,6 +7,7 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
+import { bucketOf, formatDue, startOfDay, startOfDayOffset, type Bucket } from '../lib/taskBuckets'
 import type { ActionItemRecord } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
 
@@ -47,14 +48,6 @@ async function fetchConvMeta(): Promise<Record<string, ConvMeta>> {
   return map
 }
 
-const DAY = 86_400_000
-
-function startOfDay(ms: number): number {
-  const d = new Date(ms)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
-}
-
 // Native <input type="date"> works in local YYYY-MM-DD; convert both ways while
 // pinning the time to local noon so the day never slips across time zones. The
 // store speaks epoch-ms, so these bridge ms ↔ the date input's string.
@@ -72,43 +65,6 @@ function dateInputToMs(v: string): number | null {
   if (!v) return null
   const d = new Date(`${v}T12:00:00`)
   return Number.isNaN(d.getTime()) ? null : d.getTime()
-}
-
-function formatDue(ms: number): string {
-  const d = new Date(ms)
-  if (Number.isNaN(d.getTime())) return ''
-  const today = startOfDay(Date.now())
-  const due = startOfDay(d.getTime())
-  if (due === today) return 'Today'
-  if (due === today + DAY) return 'Tomorrow'
-  if (due === today - DAY) return 'Yesterday'
-  const sameYear = d.getFullYear() === new Date().getFullYear()
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    ...(sameYear ? {} : { year: 'numeric' })
-  })
-}
-
-type Bucket = 'today' | 'tomorrow' | 'later' | 'nodate'
-
-// Four due-date buckets, matching Mac's TaskCategory (Today · Tomorrow · Later ·
-// No Deadline). Overdue tasks fold into Today — there is no separate Overdue
-// section — mirroring Mac's `categoryFor` (`dueAt < startOfTomorrow → .today`,
-// TasksPage.swift) and the Flutter app's grouping.
-function bucketOf(t: ActionItemRecord): Bucket {
-  if (t.dueAt == null) return 'nodate'
-  const due = startOfDay(t.dueAt)
-  const today = startOfDay(Date.now())
-  if (due <= today) return 'today' // overdue + today
-  // Tomorrow's local start-of-day via Date.setDate (which handles DST shifts and
-  // month/year boundaries). A fixed `today + DAY` offset is 23h/25h wrong on the
-  // two DST-transition days each year, which would mis-bucket a "due tomorrow"
-  // task into Later.
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  if (due === startOfDay(tomorrow.getTime())) return 'tomorrow'
-  return 'later'
 }
 
 // A task whose due date is before today. Independent of bucketing (overdue rows
@@ -317,6 +273,27 @@ export function Tasks(): React.JSX.Element {
 
   // For open/all: group open items by due bucket. For done/all: a flat
   // completed list (newest first), shown after the open buckets.
+  // The bucket grouping reads the clock, so a page left open across local
+  // midnight would keep yesterday's Today/Tomorrow split until something else
+  // re-rendered. Tick the day anchor at each local midnight; bucketOf(t, dayStamp)
+  // is equivalent to bucketOf(t, Date.now()) because the rule only consumes
+  // startOfDay(now).
+  const [dayStamp, setDayStamp] = useState(() => startOfDay(Date.now()))
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const arm = (): void => {
+      timer = setTimeout(
+        () => {
+          setDayStamp(startOfDay(Date.now()))
+          arm()
+        },
+        Math.max(1000, startOfDayOffset(Date.now(), 1) - Date.now())
+      )
+    }
+    arm()
+    return () => clearTimeout(timer)
+  }, [])
+
   const openGroups = useMemo(() => {
     if (filter === 'done') return []
     const groups: Record<Bucket, ActionItemRecord[]> = {
@@ -327,7 +304,7 @@ export function Tasks(): React.JSX.Element {
     }
     for (const t of items) {
       if (t.completed) continue
-      groups[bucketOf(t)].push(t)
+      groups[bucketOf(t, dayStamp)].push(t)
     }
     for (const b of BUCKET_ORDER) {
       groups[b].sort((a, c) => {
@@ -341,7 +318,7 @@ export function Tasks(): React.JSX.Element {
       bucket: b,
       items: groups[b]
     }))
-  }, [items, filter])
+  }, [items, filter, dayStamp])
 
   const doneItems = useMemo(() => {
     if (filter === 'open') return []

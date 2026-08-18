@@ -12,6 +12,7 @@ from database import conversation_finalization_effect_store as effect_store
 from database import conversation_finalization_jobs as jobs
 from database import conversation_finalization_terminal_store as terminal_store
 from database import firestore_transaction_retry
+from utils.listen_pusher_session import FINALIZATION_IN_FLIGHT_ERROR
 
 
 class _PhotoCollection:
@@ -451,6 +452,29 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
         'created_at': None,
     }
     assert duplicate.updates == []
+
+
+def test_live_lease_rejection_matches_the_listen_in_flight_wire_error():
+    """Pin the string the live session keys its in-flight branch on.
+
+    pusher reports a rejected claim as `job_<status>`; listen must recognise the
+    live-lease rejection as healthy in-flight work rather than a failed attempt.
+    """
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 1,
+            'lease_expires_at': now + timedelta(seconds=300),
+        },
+    )
+
+    claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 2, False, 1500, now)
+
+    assert f"job_{claim['status']}" == FINALIZATION_IN_FLIGHT_ERROR
+    assert claim['status'] not in jobs.TERMINAL_JOB_STATUSES
 
 
 def test_expired_worker_lease_can_be_safely_reclaimed():

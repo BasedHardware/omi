@@ -1,5 +1,20 @@
 import Foundation
 
+/// Whether capture may continue while the meeting gate has not yet answered.
+///
+/// Only Meetings is a *closed* gate that a detected call opens, so "we do not know yet" has to be
+/// treated as "not in a call". Selecting Only Meetings from a live Always session builds a fresh
+/// detector, so its first reconcile pass runs with `hasObservedState == false`; leaving capture
+/// alone until the first probe lands would keep the microphone the previous mode opened running
+/// after the user asked for it to be closed.
+enum MeetingGateReadinessPolicy {
+  static func shouldPauseCapture(
+    mode: AssistantSettings.AudioRecordingMode, meetingStateReady: Bool
+  ) -> Bool {
+    mode == .onlyMeetings && !meetingStateReady
+  }
+}
+
 enum MeetingConversationBoundaryPolicy {
   typealias Role = TranscriptionConversationRole
 

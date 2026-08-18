@@ -585,7 +585,7 @@ def test_read_canonical_scan_page_snapshot_id_mismatch_and_lineage(monkeypatch):
         canonical_memory_id=None,
         doc_id=None,
     ):
-        stamp = now - timedelta(days=day)
+        stamp = now - timedelta(hours=day)
         evidence = MemoryEvidence(
             evidence_id=f"evidence-{memory_id}",
             source_id=f"source-{memory_id}",
@@ -893,7 +893,7 @@ def _canonical_scan_memory_item(
         tier = MemoryLayer.short_term
     if status is None:
         status = MemoryItemStatus.active
-    stamp = now - timedelta(days=day)
+    stamp = now - timedelta(hours=day)
     evidence = MemoryEvidence(
         evidence_id=f"evidence-{memory_id}",
         source_id=f"source-{memory_id}",
@@ -1101,7 +1101,7 @@ def test_read_canonical_scan_page_uses_keyset_order_and_filters(monkeypatch):
     now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
 
     def _item(memory_id: str, *, day: int, processing_state=ProcessingState.processed, tier=MemoryLayer.short_term):
-        stamp = now - timedelta(days=day)
+        stamp = now - timedelta(hours=day)
         evidence = MemoryEvidence(
             evidence_id=f"evidence-{memory_id}",
             source_id=f"source-{memory_id}",
@@ -1276,3 +1276,32 @@ def test_canonical_scan_failure_logs_underlying_exception_and_503s(service_mod, 
     assert "canonical list scan page failed" in caplog.text
     assert "RuntimeError" in caplog.text
     assert "FAILED_PRECONDITION" in caplog.text
+
+
+def test_building_index_failure_is_the_historical_unavailable_detail(service_mod):
+    """Pin the detail the historical keyset scan raises while an index builds.
+
+    ``routers.memories`` matches this exact string to fall the first page back
+    to the legacy offset read (the 2026-08-18 5.5h GET /v3/memories outage), so
+    a rename here would silently reopen it. Drives the real adapter with the
+    Firestore error prod raised.
+    """
+    from fastapi import HTTPException
+    from google.api_core import exceptions as gcloud_exceptions
+
+    building_index = gcloud_exceptions.FailedPrecondition(
+        "400 The query requires an index. That index is currently building and cannot be used yet."
+    )
+    adapter = service_mod.HistoricalMemoryAdapter(db_client=_Db())
+    adapter_db = service_mod.memories_db
+    original = adapter_db.scan_memories_updated_at_page
+    adapter_db.scan_memories_updated_at_page = MagicMock(side_effect=building_index)
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            adapter.read_updated_scan_page("uid-test", limit=100)
+    finally:
+        adapter_db.scan_memories_updated_at_page = original
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Historical memory unavailable"
+    assert isinstance(exc_info.value.__cause__, gcloud_exceptions.FailedPrecondition)

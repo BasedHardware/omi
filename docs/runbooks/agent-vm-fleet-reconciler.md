@@ -1,7 +1,9 @@
 # Agent VM fleet reconciler
 
 The Agent VM fleet is converged by an immutable release manifest and a
-five-minute Cloud Run Job. A desktop-backend deploy publishes the image by
+five-minute Cloud Run Job. A source-SHA `startup.sh` / `manifest.json` pair is
+written once; a later deploy of the same SHA reuses that digest instead of rebuilding a competing image that would fail `--no-clobber` + `cmp`
+(workflow 32012710785). A desktop-backend deploy publishes the image by
 digest and a content-addressed startup artifact, verifies the new backend
 revision, then advances `agent-vm/releases/active.json`. The active pointer is
 the only mutable release object; the previous accepted pointer is retained for
@@ -17,12 +19,29 @@ before acceptance, so an unaccepted candidate cannot escape the staged gate.
    metadata, release identity, image digest, or runtime health identity.
 3. A drifted running VM is marked `draining`. Agent Proxy rejects new sessions
    and existing sessions retain a 90-second renewable lease. A VM is stopped
-   only after the lease set is empty; stopped VMs are prepared without booting,
-   then started and verified against `/health` with the owner token over the
-   private VM network. The reconciler job must use direct VPC egress to the
-   Agent VM subnet and set `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc`; it
-   refuses to send the bearer token over a NAT address. A healthy
-   stopped VM with no drift remains stopped so idle self-stop is preserved.
+   only after the lease set is empty. Repair (metadata rewrite, restart, and
+   `/health` verification with the owner token over the private VM network)
+   happens only when a fenced start request demands it; the reconciler job
+   must use direct VPC egress to the Agent VM subnet and set
+   `AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc` — it refuses to send the
+   bearer token over a NAT address. **Undemanded capacity is deleted, not
+   preserved** (minimum-spend policy, 2026-08-17): a stopped VM with no start
+   demand, no session lease, and no active boot-image migration is deleted
+   (its `autoDelete` boot and state disks are reclaimed with it), and a
+   drained drifted VM without demand is deleted in the same run instead of
+   being restarted. A healthy RUNNING VM with no start demand and zero
+   session leases records `agentVm.reconcile.idleSince` on first observation
+   and is deleted after `AGENT_VM_IDLE_TEARDOWN_SECONDS` (default and minimum
+   30m). Idle is never a drift reason. Deletion writes
+   `reconcile.state=missing`, so desktop provisioning can claim a replacement
+   immediately and terminal cleanup erases the record after grace. The state
+   disk holds only a client-uploaded SQLite copy (the Chrome profile is a
+   tmpfs), so teardown loses no unique data — the next session re-uploads.
+   The TERMINATED reaper remains the delete backstop for records the
+   reconciler cannot reach. Ownerless VMs (no Firestore owner) are
+   unreachable here — inventory them with
+   `python3 backend/scripts/agent_vm_reaper.py --inventory` and clean up
+   out-of-band.
 4. A provider-confirmed missing VM is recorded with `missingSince`. The
    reconciler selects that terminal record independently of the rollout cohort
    and deletes only its Firestore `agentVm` pointer after the configured grace
@@ -241,6 +260,13 @@ bash backend/scripts/apply-agent-vm-reconciler-iam.sh
 ```
 
 Use the corresponding CI deploy service account and bucket in each environment.
+Production is pinned to
+`josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com` acting as
+`agent-vm-reconciler@based-hardware.iam.gserviceaccount.com`. The protected
+prod workflow preflights that exact `roles/iam.serviceAccountUser` binding
+(and service-account existence) before routing traffic. Workflow 32012710785
+rolled back a proven SCA-323 candidate because the runtime identity was
+absent and the deployer lacked `iam.serviceAccounts.actAs`.
 Then deploy the desktop backend (which creates or updates the Job), and install
 the Scheduler trigger only after the Agent Proxy lease check succeeds:
 

@@ -109,8 +109,10 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
     memory_job = jobs['memory-maintenance-job']
     memory_env = _MODULE['_render_env_vars'](memory_job['env'])
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in memory_env
     assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in memory_env
+    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
     assert 'MEMORY_ENABLED_USERS' not in memory_env
     assert 'MEMORY_ENABLED=on' in memory_env
     assert 'MEMORY_MODE=' not in memory_env
@@ -161,15 +163,27 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     }
     assert forbidden_notifications_vars.isdisjoint(notifications_env)
     assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
+    assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
+    assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
     assert set(notifications_job['secrets']) == {
         'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
 
 
-def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypatch):
+def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
+    workflow = (_SCRIPT.parents[2] / '.github/workflows/gcp_notifications_job.yml').read_text(encoding='utf-8')
+
+    assert 'Verify LLM Gateway serving data plane' in workflow
+    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in workflow
+    assert '${{ steps.runtime-env.outputs.cloud_run_flags }}' in workflow
+    assert '--lane omi:auto:x-memory-extraction-flex' in workflow
+
+
+def test_render_prod_emits_memory_maintenance_job_cron_on(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
     monkeypatch.setenv('GOOGLE_CLIENT_ID', 'fake-google-client-id')
@@ -192,10 +206,16 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert rc == 0
     out = capsys.readouterr().out
     job_env = _job_env_block(out, 'memory_maintenance_job')
-    assert 'MEMORY_ENABLED=off' in job_env
+    # Prod GO 2026-08-15: the maintenance job follows the request-path product
+    # flag. ST→LT cron is job-hosted on both env overlays with Flex.
+    assert 'MEMORY_ENABLED=on' in job_env
     assert 'MEMORY_MODE=' not in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=false' in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in job_env
+    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX=true' in job_env
+    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
     assert 'MEMORY_ENABLED_USERS' not in job_env
+    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
+    assert '--task-timeout=3600s' in _MODULE['_render_flags'](prod_memory_job['flags'])
 
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
     assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')
@@ -345,3 +365,23 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
         job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
         job_flags = _MODULE['_render_flags'](job['flags'])
         assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
+
+
+VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+
+
+@pytest.mark.parametrize(
+    ('env', 'project'),
+    [
+        ('dev', 'based-hardware-dev'),
+        ('prod', 'based-hardware'),
+    ],
+)
+def test_desktop_backend_compose_pins_vertex_pt(env, project):
+    desktop = _MANIFEST['environments'][env]['desktop_backend']
+    rendered = _MODULE['_render_env_vars'](desktop['env'])
+    assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
+    assert f'GOOGLE_CLOUD_PROJECT={project}' in rendered, VERTEX_PT_CONTRACT
+    assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
+    docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
+    assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')

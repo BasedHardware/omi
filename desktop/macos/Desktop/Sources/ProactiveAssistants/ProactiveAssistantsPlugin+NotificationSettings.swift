@@ -49,6 +49,7 @@ struct ProactiveTestNotificationPayload: Sendable {
   private static let supportedKeys = [
     "hours", "count", "title", "message", "assistantId", "sourceApp",
     "windowTitle", "contextSummary", "currentActivity", "reasoning", "detail",
+    "deliverSystemBanner",
   ]
 
   private let values: [String: String]
