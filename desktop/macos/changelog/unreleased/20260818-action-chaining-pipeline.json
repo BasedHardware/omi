@@ -1,0 +1,3 @@
+{
+  "change": "Added multi-step action chaining pipeline to plan context-grounded actions with reversible receipts"
+}
