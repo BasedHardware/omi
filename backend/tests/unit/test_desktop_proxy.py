@@ -24,6 +24,7 @@ def make_request(
     body: bytes = b'{"contents":[{"parts":[{"text":"hello"}]}]}',
     *,
     query_string: bytes = b"",
+    workload: str | None = None,
 ) -> Request:
     sent = False
     pending = asyncio.Event()
@@ -35,13 +36,16 @@ def make_request(
             return {"type": "http.request", "body": body, "more_body": False}
         await pending.wait()
 
+    headers = [(b"x-omi-request-id", b"request-12345678")]
+    if workload is not None:
+        headers.append((b"x-omi-workload", workload.encode()))
     return Request(
         {
             "type": "http",
             "method": "POST",
             "path": "/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
             "query_string": query_string,
-            "headers": [(b"x-omi-request-id", b"request-12345678")],
+            "headers": headers,
         },
         receive,
     )
@@ -544,7 +548,20 @@ async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch
     class CapturingClient:
         async def post(self, url, *, params, content, headers):
             dispatched.append(content)
-            return httpx.Response(200, request=httpx.Request("POST", url), json={"ok": True})
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={
+                    "usageMetadata": {
+                        "promptTokenCount": 120,
+                        "cachedContentTokenCount": 80,
+                        "candidatesTokenCount": 14,
+                        "thoughtsTokenCount": 6,
+                        "totalTokenCount": 140,
+                    },
+                    "trafficType": "PROVISIONED_THROUGHPUT",
+                },
+            )
 
     async def route(path, _model, _action, _query):
         return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
@@ -552,6 +569,8 @@ async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch
     async def meter(_uid, path, _model, _action):
         return path
 
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
     monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
     monkeypatch.setattr(desktop_proxy, "_upstream", route)
@@ -559,7 +578,7 @@ async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
 
     response = await desktop_proxy._proxy(
-        make_request(),
+        make_request(workload="extraction"),
         "models/gemini-2.5-flash:generateContent",
         False,
         "user",
@@ -569,6 +588,30 @@ async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch
     assert len(dispatched) == 1
     config = json.loads(dispatched[0])["generationConfig"]
     assert config["maxOutputTokens"] == 2048
+    event = json.loads(output.getvalue())
+    assert event["workload_class"] == "extraction"
+    assert event["traffic_type"] == "PROVISIONED_THROUGHPUT"
+    assert event["prompt_token_count"] == 120
+    assert event["cached_content_token_count"] == 80
+    assert event["candidates_token_count"] == 14
+    assert event["thoughts_token_count"] == 6
+    assert event["total_token_count"] == 140
+
+
+def test_missing_usage_and_unknown_workload_are_safely_bucketed(monkeypatch):
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+    missing_usage = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    missing_usage.observe_gemini_response({"candidates": []})
+    missing_usage.complete(outcome="success", status_code=200, retryable=False, phase="body")
+    event = json.loads(output.getvalue())
+    assert event["workload_class"] == "unknown"
+    assert event["traffic_type"] == "unknown"
+    assert "prompt_token_count" not in event
+    assert (
+        desktop_proxy.ProxyTelemetry(make_request(workload="private-feature-name"), streaming=False).workload_class
+        == "unknown"
+    )
 
 
 @pytest.mark.asyncio
@@ -743,13 +786,19 @@ async def test_proxy_bounds_concurrency_pool_wait_and_labels_phase(monkeypatch):
 async def test_streaming_defers_resource_acquisition_until_body_iteration(monkeypatch):
     streams_opened = 0
     streams_closed = 0
-    chunk = b'data: {"ok":true}\n\n'
+    chunks = [
+        b'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],',
+        b'"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":4,',
+        b'"candidatesTokenCount":2,"thoughtsTokenCount":1,"totalTokenCount":13},',
+        b'"trafficType":"ON_DEMAND"}\r\n\r\n',
+    ]
 
     class UpstreamResponse:
         status_code = 200
 
         async def aiter_bytes(self):
-            yield chunk
+            for chunk in chunks:
+                yield chunk
 
     class StreamContext:
         async def __aenter__(self):
@@ -779,12 +828,24 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
     monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
 
-    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:streamGenerateContent", True, "user")
+    response = await desktop_proxy._proxy(
+        make_request(workload="interactive"), "models/gemini-2.5-flash:streamGenerateContent", True, "user"
+    )
 
     assert response.status_code == 200
     assert streams_opened == 0
-    chunks = [chunk async for chunk in response.body_iterator]
-    assert chunks == [chunk]
+    received = [chunk async for chunk in response.body_iterator]
+    assert received == chunks
     assert streams_opened == 1
     assert streams_closed == 1
+    event = json.loads(output.getvalue())
+    assert event["workload_class"] == "interactive"
+    assert event["traffic_type"] == "ON_DEMAND"
+    assert event["prompt_token_count"] == 10
+    assert event["cached_content_token_count"] == 4
+    assert event["candidates_token_count"] == 2
+    assert event["thoughts_token_count"] == 1
+    assert event["total_token_count"] == 13

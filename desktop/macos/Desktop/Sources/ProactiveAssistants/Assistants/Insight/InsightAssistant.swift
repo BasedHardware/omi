@@ -76,7 +76,10 @@ actor InsightAssistant: ProactiveAssistant {
 
   init(apiKey: String? = nil) throws {
     self.geminiClient = try GeminiClient(
-      apiKey: apiKey, model: ModelQoS.Gemini.insight, fallbackModel: ModelQoS.Gemini.lightweight)
+      apiKey: apiKey,
+      model: ModelQoS.Gemini.insight,
+      fallbackModel: ModelQoS.Gemini.lightweight,
+      workload: .extraction)
 
     let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
     self.frameSignal = stream

@@ -446,12 +446,30 @@ jobs:
           REVISION: ${{ steps.candidate-identity.outputs.revision }}
         run: |
           set -euo pipefail
+          # Refuse only promotions that would move the service backwards in history.
+          # Requiring origin/main to be unchanged fails whenever any commit lands
+          # during the build, which discards an accepted candidate without saving a
+          # single Cloud Build. Run ordering is already guaranteed by the
+          # desktop-backend-auto-dev concurrency group (cancel-in-progress: false).
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse 'origin/main^{commit}')"
-          if [[ "$current_main" != "${{ steps.candidate-identity.outputs.source_sha }}" ]]; then
-            echo "ERROR: candidate is stale because origin/main advanced to $current_main; traffic remains unchanged." >&2
-            exit 1
+          git fetch --no-tags --deepen=200 origin main 2>/dev/null || true
+          serving_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json 2>/dev/null \
+            | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py 2>/dev/null || true)"
+          serving_release_sha=""
+          if [[ -n "$serving_revision" ]]; then
+            serving_release_sha="$(gcloud run revisions describe "$serving_revision" \
+              --project="$PROJECT_ID" \
+              --region="$REGION" \
+              --format=json 2>/dev/null \
+              | jq -r '[.spec.containers[]?.env[]? | select(.name == "OMI_DESKTOP_BACKEND_RELEASE_SHA") | .value] | first // ""' \
+              || true)"
           fi
+          python3 .github/scripts/check_desktop_backend_traffic_regression.py \
+            --candidate-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --serving-release-sha="$serving_release_sha"
           python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project="$PROJECT_ID" \
             --region="$REGION" \

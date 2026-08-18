@@ -1,0 +1,8 @@
+{
+  "version": "0.12.187",
+  "date": "2026-08-17",
+  "changes": [
+    "Tuned which AI model each background assistant uses and slowed the memory-extraction timer to reduce noise; fixed a screen-change detector bug that caused unnecessary captures",
+    "Stopped creating a new cloud agent computer on every app launch"
+  ]
+}

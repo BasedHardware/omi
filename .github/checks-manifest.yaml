@@ -695,6 +695,11 @@ checks:
     triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", ".github/scripts/test_check_desktop_backend_release_policy.py", "backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mutation fixtures reject traffic-before-proof, missing reconciler actAs preflight, mutable/stale/wrong-platform images, automatic production deploys, baked runtime credentials, and chat-contract drift"
+  - id: desktop-backend-traffic-lineage-fixtures
+    command: ["python3", ".github/scripts/test_check_desktop_backend_traffic_regression.py"]
+    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/scripts/check_desktop_backend_traffic_regression.py", ".github/scripts/test_check_desktop_backend_traffic_regression.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a traffic promotion gate must refuse only backwards promotions; refusing on branch recency discards candidates whose build and acceptance are already paid for"
   - id: desktop-backend-candidate-probe-fixtures
     command: ["python3", ".github/scripts/test_desktop_backend_candidate_probe.py"]
     triggers: [".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/test_desktop_backend_candidate_probe.py", "backend/**/*.py", "backend/pylock.runtime.toml", ".github/checks-manifest.yaml"]
@@ -727,6 +732,8 @@ exempt:
     reason: "deployment concurrency policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check_admin_deploy_scope.py"
     reason: "runtime classifier invoked by gcp_admin.yml; contract and fixtures are admin-deploy-scope*"
+  - path: ".github/scripts/check_desktop_backend_traffic_regression.py"
+    reason: "runtime promotion gate invoked by desktop_backend_auto_dev.yml; contract and fixtures are desktop-backend-traffic-lineage-fixtures"
   - path: ".github/scripts/check_isinstance_return_ratchet.py"
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"
