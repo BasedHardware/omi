@@ -851,7 +851,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     voiceID: String,
     instructions: String
   ) async throws -> Data {
-    let byokKey = APIKeyService.isByokActive ? APIKeyService.byokKey(.openai) : nil
+    let byokKey = APIKeyService.selectedBYOKLLMProvider == .openai ? APIKeyService.byokKey(.openai) : nil
     let fingerprint = byokKey.map(APIKeyService.byokFingerprint)
     if let fingerprint {
       let canUseKey = await MainActor.run {

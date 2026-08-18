@@ -25,7 +25,9 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from cachetools import TTLCache
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from starlette.websockets import WebSocket
+from utils.executors import critical_executor, run_blocking
 
 logger = logging.getLogger('byok')
 
@@ -187,6 +189,20 @@ class BYOKMiddleware(BaseHTTPMiddleware):
         uid_token = _byok_uid_ctx.set(None)
         validated_token = _byok_validated_ctx.set(False)
         try:
+            if keys:
+                authorization = request.headers.get('authorization', '')
+                parts = authorization.split(' ', 1)
+                if len(parts) == 2 and parts[0].lower() == 'bearer' and parts[1]:
+                    try:
+                        from utils.other.endpoints import verify_token
+
+                        uid = await run_blocking(critical_executor, verify_token, parts[1])
+                        validated_keys, error = await run_blocking(critical_executor, _validated_byok_keys, uid, keys)
+                        if error:
+                            return JSONResponse(status_code=403, content={'detail': error})
+                        set_validated_byok_keys(validated_keys, uid)
+                    except Exception:
+                        pass
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)
