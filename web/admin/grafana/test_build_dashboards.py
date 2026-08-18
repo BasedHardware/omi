@@ -121,6 +121,28 @@ class PlatformBoardTests(unittest.TestCase):
                     self.assertEqual(params["fields"], [field], f"{uid}: {var['name']}")
 
 
+class ApplyScopeTests(unittest.TestCase):
+    def test_apply_publishes_exactly_the_three_boards(self) -> None:
+        import apply_omi_tv_dashboard as apply_mod
+
+        found = {
+            json.loads(path.read_text(encoding="utf-8"))["uid"]
+            for path in (HERE / "dashboards").glob("*.json")
+        }
+        self.assertEqual(found, set(BOARDS))
+        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS))
+
+    def test_apply_rejects_foreign_uids(self) -> None:
+        import tempfile
+
+        import apply_omi_tv_dashboard as apply_mod
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump({"uid": "rogue-board", "panels": []}, handle)
+        with self.assertRaises(SystemExit):
+            apply_mod.load_dashboard(Path(handle.name))
+
+
 class BuilderIdempotencyTests(unittest.TestCase):
     def test_rebuild_is_idempotent(self) -> None:
         """Running the builder against its own output changes nothing —

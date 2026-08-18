@@ -287,9 +287,9 @@ def main() -> None:
     macos = build_macos(base)
     mobile = build_mobile(base)
 
-    BASE_PATH.write_text(json.dumps(base, indent=1) + "\n", encoding="utf-8")
+    BASE_PATH.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
     for dash, name in [(macos, "omi-tv-macos.json"), (mobile, "omi-tv-mobile.json")]:
-        (DASH_DIR / name).write_text(json.dumps(dash, indent=1) + "\n", encoding="utf-8")
+        (DASH_DIR / name).write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
         print(f"wrote {name}: {len(dash['panels'])} panels, "
               f"{len(dash['templating']['list'])} vars")
     print(f"updated omi-tv.json: {len(base['panels'])} panels (NYC tz + _tzdates + links)")
