@@ -197,9 +197,12 @@ async def connect_stt_socket_with_fallback(
             reason = 'provider_5xx'
             circuit.record_failure()
 
-    # Ordered by STT_SERVICE_MODELS preference. A provider is never offered its
-    # own failure as a fallback, so the chain is derived from the primary rather
-    # than fixed: a Modulate primary walks Deepgram then Parakeet (#11752).
+    # A provider is never offered its own failure as a fallback, so the chain
+    # excludes the primary: a Modulate primary walks Deepgram then Parakeet
+    # (#11752). The relative order of the fallback legs is fixed here and is not
+    # parsed out of STT_SERVICE_MODELS; it matches the declared deployment
+    # config, and callers already gate each leg on whether the deployment can
+    # serve it. Reading the true order off the policy list is a separate change.
     ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [
         (STTService.modulate, connect_modulate),
         (STTService.deepgram, connect_deepgram),
