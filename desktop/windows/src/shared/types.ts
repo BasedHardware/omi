@@ -1329,6 +1329,7 @@ export type OmiBridgeApi = {
   byokClear: (provider: ByokProvider) => Promise<void>
   /** Remove all stored provider keys. */
   byokClearAll: () => Promise<void>
+  byokClearCodex: () => Promise<void>
   /** True only when all four providers have a key (backend all-or-nothing). */
   byokIsActive: () => Promise<boolean>
   /** Live-validate the stored keys and reconcile backend BYOK activation. The

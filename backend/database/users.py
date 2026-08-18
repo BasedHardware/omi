@@ -279,15 +279,13 @@ def _set_byok_active_transaction(transaction, user_ref, fingerprints: dict):
     snapshot = user_ref.get(transaction=transaction)
     data = snapshot.to_dict() or {}
     byok = data.get('byok') or {}
-    existing_fingerprints = byok.get('fingerprints') or {}
-    merged_fingerprints = dict(existing_fingerprints) if isinstance(existing_fingerprints, dict) else {}
-    merged_fingerprints.update(fingerprints)
+    enrolled_fingerprints = dict(fingerprints) if isinstance(fingerprints, dict) else {}
     transaction.set(
         user_ref,
         {
             'byok': {
                 'active': True,
-                'fingerprints': merged_fingerprints,
+                'fingerprints': enrolled_fingerprints,
                 'last_seen_at': datetime.now(timezone.utc),
             }
         },

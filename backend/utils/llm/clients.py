@@ -535,8 +535,15 @@ def get_llm(
             get_active_profile_name(),
         )
 
+    preferred_openrouter_key = get_byok_key('openrouter')
+    preferred_openrouter = bool(preferred_openrouter_key)
     byok_profile = get_byok_profile()
-    if byok_profile:
+    if preferred_openrouter_key:
+        model = _byok_fallback_model('openrouter')
+        provider = 'openrouter'
+        byok_provider = 'openrouter'
+        byok_key = preferred_openrouter_key
+    elif byok_profile:
         profile_model, profile_provider = byok_profile.get(feature, (model, provider))
         profile_key = get_byok_key(_effective_byok_provider(profile_model, profile_provider))
         if profile_key:
@@ -567,7 +574,7 @@ def get_llm(
                 )
                 break
 
-    if byok_key and byok_profile:
+    if byok_key and byok_profile and not preferred_openrouter:
         byok_model, byok_prov = byok_profile.get(feature, (model, provider))
         byok_prov_eff = _effective_byok_provider(byok_model, byok_prov)
         byok_key_for_profile = get_byok_key(byok_prov_eff)

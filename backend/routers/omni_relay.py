@@ -16,6 +16,7 @@ from utils.byok import (
 )
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
 import database.users as users_db
 from models.users import PlanType
@@ -100,14 +101,14 @@ async def omni_relay(websocket: WebSocket):
         return
     set_validated_byok_keys(validated_byok, uid)
 
+    provider = websocket.query_params.get("provider", "gemini")
+
     # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
     # desktop users past their trial are paywalled.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop", required_byok_provider=provider):
         logger.info(f"omni relay paywalled uid={uid}")
         await websocket.close(code=1008, reason="trial_expired")
         return
-
-    provider = websocket.query_params.get("provider", "gemini")
 
     # Monthly free-tier chat quota: realtime turns count as questions, so they
     # must also be blocked past the cap. Exempt only when THIS session will
@@ -115,9 +116,17 @@ async def omni_relay(websocket: WebSocket):
     # BYOK-enrolled — mirrors enforce_chat_quota's rule; a deepgram-only (or
     # forged) BYOK header must not skip the gate while _upstream falls back to
     # Omi's platform key.
-    byok_serves_session = bool(validated_byok.get(provider)) and await run_blocking(
-        db_executor, users_db.is_byok_active, uid
-    )
+    byok_enrolled = await run_blocking(db_executor, users_db.is_byok_active, uid)
+    byok_serves_session = bool(validated_byok.get(provider)) and byok_enrolled
+    if byok_enrolled and not byok_serves_session:
+        record_fallback(
+            component='realtime_hub',
+            from_mode=f'byok_{provider}',
+            to_mode='managed',
+            reason='capability_mismatch',
+            outcome='degraded',
+            log=logger,
+        )
     if not byok_serves_session:
         snapshot = await run_blocking(db_executor, get_chat_quota_snapshot, uid, "desktop")
         if snapshot['plan'] == PlanType.basic and not snapshot['allowed']:

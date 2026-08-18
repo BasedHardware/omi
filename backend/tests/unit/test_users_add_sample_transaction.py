@@ -180,7 +180,7 @@ def test_add_sample_transaction_already_aligned_transcripts(users_db):
     assert transaction.updated_data["speech_samples_version"] == 3
 
 
-def test_byok_activation_preserves_existing_provider_fingerprints(users_db):
+def test_byok_activation_replaces_existing_provider_fingerprints(users_db):
     user_ref = _FakePersonRef(
         {'byok': {'fingerprints': {'openai': 'openai-fingerprint', 'gemini': 'gemini-fingerprint'}}}
     )
@@ -190,11 +190,7 @@ def test_byok_activation_preserves_existing_provider_fingerprints(users_db):
 
     assert transaction.updated_ref is user_ref
     assert transaction.merge is True
-    assert transaction.updated_data['byok']['fingerprints'] == {
-        'openai': 'openai-fingerprint',
-        'gemini': 'gemini-fingerprint',
-        'openrouter': 'openrouter-fingerprint',
-    }
+    assert transaction.updated_data['byok']['fingerprints'] == {'openrouter': 'openrouter-fingerprint'}
     assert transaction.updated_data['byok']['active'] is True
 
 
