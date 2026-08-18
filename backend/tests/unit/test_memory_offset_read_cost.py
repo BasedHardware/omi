@@ -6,6 +6,12 @@ start, so a linear step plus an uncached status lookup made one page of a fully
 suppressed account cost 330 sequential Firestore round trips over 82,500
 documents — past the 30s edge timeout, which is how GET /v3/memories 504'd in
 prod on 2026-08-18 for both the offset>0 pages and the first page's fallback.
+
+The cost a page pays is what Firestore reads, not what it returns: the
+newest-first sort is index-less, so each historical query streams two candidate
+windows of ``limit + offset`` documents. Walking the prefix in offset pages
+re-reads everything it skips, which kept the page over the edge timeout after
+the round cost was fixed.
 """
 
 from unittest.mock import MagicMock
@@ -17,6 +23,10 @@ from tests.unit.test_memory_service_parity import _load_memory_service, _sample_
 # Scaled-down mirror of the prod window so the guard stays a fast unit test.
 TEST_COMPATIBILITY_WINDOW = 500
 TEST_PAGE_SIZE = 50
+# One geometric walk of the window reads it once per round (2,500 scanned here,
+# 25,000 at the prod window). Chunking the walk into MAX_PAGE_SIZE offset pages
+# read 10,500 (105,000 in prod).
+SCANNED_DOCUMENT_BUDGET = 3000
 
 
 class _Snapshot:
@@ -89,13 +99,20 @@ def _suppressed_account(service_mod, monkeypatch, uid, *, rows):
         payloads.append(payload)
 
     db = _CountingDb(docs)
-    stats = {"calls": 0, "docs": 0}
+    stats = {"calls": 0, "docs": 0, "scanned": 0}
 
     def fake_get_memories(_uid, limit, offset, sort=None, **_kwargs):
         del _uid, sort
         page = payloads[offset : offset + limit]
         stats["calls"] += 1
         stats["docs"] += len(page)
+        # Charge what Firestore actually reads. The newest-first sort has no
+        # index, so ``get_memories`` streams two candidate windows of
+        # ``limit + offset`` documents and orders them in Python: rows that an
+        # offset skips are still read and billed. Counting only returned rows
+        # hides an offset walk's quadratic cost, which is how the 105,000-read
+        # prod page passed this guard at 12,500.
+        stats["scanned"] += 2 * min(limit + offset, TEST_COMPATIBILITY_WINDOW)
         return [dict(row) for row in page]
 
     monkeypatch.setattr(service_mod.memories_db, "get_memories", fake_get_memories)
@@ -119,6 +136,9 @@ def test_fully_suppressed_offset_read_stays_within_a_bounded_scan_cost(service_m
     # geometric growth needs 5 rounds and never re-reads the whole window.
     assert stats["calls"] <= 30
     assert stats["docs"] <= 1500
+    # Each round must fetch its prefix in one query, not an offset walk that
+    # re-reads every row it skips.
+    assert stats["scanned"] <= SCANNED_DOCUMENT_BUDGET
     # Canonical status is a stable read within one request, so a repeated
     # prefix must not be re-queried: previously 30 batch gets / 3,000 documents.
     assert db.get_all_calls <= 8

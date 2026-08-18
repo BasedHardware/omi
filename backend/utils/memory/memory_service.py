@@ -546,6 +546,15 @@ class HistoricalMemoryAdapter:
             raise HTTPException(status_code=413, detail="Historical memory pagination window exceeded")
         # Over-fetch when adapt/device filters skip rows so a page of N valid
         # memories is not silently shortened by malformed documents.
+        # Ask for the whole prefix in one query: the newest-first sort has no
+        # index, so ``get_memories`` streams two candidate windows of
+        # ``limit + offset`` documents and orders them in Python. An offset walk
+        # therefore re-reads every row it skips — chunking cost 105,000 reads
+        # over 25 queries for one page of a suppressed 5,000-row account, which
+        # is what took GET /v3/memories past the 30s edge timeout on 2026-08-18.
+        # ``needed`` is bounded by MAX_COMPATIBILITY_WINDOW above and each chunk's
+        # candidate window had grown that large anyway, so this reads no more at
+        # once than the last chunked query already did.
         records: List[HistoricalMemoryRecord] = []
         db_offset = 0
         while len(records) < needed:
@@ -555,7 +564,6 @@ class HistoricalMemoryAdapter:
             fetch_size = min(
                 max(needed - len(records), bounded_limit),
                 remaining_window,
-                self.MAX_PAGE_SIZE,
             )
             try:
                 raw_rows = memories_db.get_memories(
