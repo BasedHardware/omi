@@ -36,7 +36,6 @@ The routing authority matrix is:
 | Surface | Production-family authority |
 | --- | --- |
 | Flutter API | `https://api.omi.me/` |
-| Flutter agent WebSocket | `wss://agent.omi.me/v1/agent/ws` |
 | macOS Stable Python / desktop API | `https://api.omi.me/` / `https://desktop-backend-hhibjajaja-uc.a.run.app/` |
 | macOS Beta Python / desktop API | `https://api.omiapi.com/` / `https://desktop-backend-dt5lrfkkoa-uc.a.run.app/` |
 | macOS Beta OAuth API | `https://api.omi.me/` |
@@ -74,7 +73,7 @@ reuse a production-family identity.
 ## Guard tests
 
 - `app/test/unit/env_test.dart` — production startup rejects non-canonical API
-  and agent routing; `local_prod` is rejected in release builds.
+  routing; `local_prod` is rejected in release builds.
 - `desktop/macos/Desktop/Tests/APIClientRoutingTests.swift` — Stable remains
   production-routed; Beta resolves only its fixed development serving endpoints
   and production auth despite contaminated values.

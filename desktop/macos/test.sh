@@ -46,7 +46,6 @@ fi
   tests/unit/test_desktop_realtime.py \
   tests/unit/test_desktop_screen_crisp.py \
   tests/unit/test_desktop_tts_updates.py \
-  tests/unit/test_agent_vm_protocol.py
 echo ""
 
 echo "=== Swift App Tests (parallel per-suite process isolation) ==="
