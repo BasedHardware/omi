@@ -5,6 +5,11 @@ const MAX_URL_LENGTH = 2048;
 const MAX_MODEL_LENGTH = 128;
 const ENABLED_TRUE = "true";
 
+// The deployment is intentionally pinned rather than accepting arbitrary
+// OpenRouter model identifiers from configuration. A model change is a code
+// review + evaluation event, not an operational typo with unknown behavior/cost.
+export const LUNA_MODEL = "openai/gpt-5.6-luna";
+
 export type GatewayConfig = {
   url: string;
   model: string;
@@ -35,6 +40,7 @@ export const gatewayConfig = (env: GatewayEnv): GatewayConfig | null => {
   if (!isValidGatewayUrl(url)) return null;
   if (secret.length === 0) return null;
   if (!isBoundedString(model, MAX_MODEL_LENGTH)) return null;
+  if (model !== LUNA_MODEL) return null;
   return { url, model, secret };
 };
 
@@ -130,6 +136,7 @@ function logGateway(
 }
 
 export const openrouter = {
+  LUNA_MODEL,
   gatewayModeEnabled,
   gatewayConfig,
   gatewayReady,
