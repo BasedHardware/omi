@@ -9,7 +9,7 @@ This note records locally reproducible evidence for the current Omi v5 Workers s
 - **Durable Objects** coordinate per-account state/admission and generation/event sequencing; they are not the authoritative migrated tasks read store.
 - **AI traffic**: the gateway slice adds fail-closed configuration, HTTPS-only URL validation, bounded request/response handling, bearer forwarding to the configured Cloudflare AI Gateway/OpenRouter endpoint, and correlation-safe error logs. It does not add a direct provider path or Google backend.
 - **Async/runtime operations** remain bounded to the Workers platform surface (R2, Queues, Workflows, and Cron when a slice requires them). No platform or core-foundation worktree is part of this evidence.
-- **Observability**: request events are JSON, correlation-safe, and omit URL/query, account identifiers, authorization, request content, prompts, and completions. Wrangler Observability is enabled in the worker configuration; the same privacy-safe line format is suitable for Better Stack ingestion.
+- **Observability**: request events are JSON, correlation-safe, and omit URL/query, account identifiers, authorization, request content, prompts, and completions. Wrangler Observability is enabled in the worker configuration. `cloudflare_only` is the default sink mode; `better_stack` is configuration-gated and requires out-of-band Cloudflare log-delivery provisioning plus an opaque operator evidence identifier. The repository does not contain a delivery URL or source token, and does not represent the identifier as proof of ingestion.
 
 ## Verified slices
 
@@ -60,4 +60,4 @@ The slice includes guarded staging delivery checks, a no-secret readiness verifi
 
 ## Remaining gate
 
-This evidence is local and commit-scoped. It is not a deployment approval and does not authorize `deploy:staging`, pushing, or accessing secrets. Before any staged rollout, rerun the scoped gates from the exact candidate commit, verify the configured secret bindings out of band, and follow the rollback document.
+This evidence is local and commit-scoped. It is not a deployment approval and does not authorize `deploy:staging`, pushing, or accessing secrets. Before any staged rollout, rerun the scoped gates from the exact candidate commit, verify the configured secret bindings out of band, require the release verifier to match the expected environment and sink mode, and follow the rollback document. The correlation policy is: `request_id` identifies one Worker fetch event; `correlation_id` equals that request identifier for request telemetry and identifies the generation passed to the AI Gateway for asynchronous generation telemetry. Operators join the two only through the generation transition evidence and must never use request content, account data, URLs, authorization, prompts, completions, or sink credentials as correlation fields.

@@ -61,6 +61,13 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Verify /ready
-        if: vars.STAGING_WORKER_URL != ''
-        run: bun run --cwd apps/backend-worker verify:ready "${{ vars.STAGING_WORKER_URL }}/ready"
+      - name: Verify release gate
+        run: |
+          test -n "${{ vars.STAGING_WORKER_URL }}"
+          test -n "${{ vars.STAGING_OBSERVABILITY_SINK_MODE }}"
+          if [ "${{ vars.STAGING_OBSERVABILITY_SINK_MODE }}" = "better_stack" ]; then
+            test -n "${{ vars.STAGING_BETTER_STACK_EVIDENCE_ID }}"
+            bun run --cwd apps/backend-worker verify:release "${{ vars.STAGING_WORKER_URL }}/ready" --environment staging --observability-sink-mode "${{ vars.STAGING_OBSERVABILITY_SINK_MODE }}" --better-stack-evidence "${{ vars.STAGING_BETTER_STACK_EVIDENCE_ID }}"
+          else
+            bun run --cwd apps/backend-worker verify:release "${{ vars.STAGING_WORKER_URL }}/ready" --environment staging --observability-sink-mode "${{ vars.STAGING_OBSERVABILITY_SINK_MODE }}"
+          fi
