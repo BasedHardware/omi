@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const exclusionList = require('metro-config/src/defaults/exclusionList');
 
+const workspaceRoot = path.resolve(__dirname, '..');
 const rnwPath = fs.realpathSync(
   path.resolve(require.resolve('react-native-windows/package.json'), '..'),
 );
@@ -16,7 +17,12 @@ const rnwPath = fs.realpathSync(
  */
 
 const config = {
+  watchFolders: [workspaceRoot],
   resolver: {
+    nodeModulesPaths: [
+      path.resolve(__dirname, 'node_modules'),
+      path.resolve(workspaceRoot, 'node_modules'),
+    ],
     blockList: exclusionList([
       new RegExp(
         `${path.resolve(__dirname, 'windows').replace(/[/\\]/g, '/')}.*`,
