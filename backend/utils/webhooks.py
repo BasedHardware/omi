@@ -86,21 +86,30 @@ async def _post_dev_webhook(
         failure_reason = None
         try:
 
-            async def send_request():
-                if acquire_semaphore:
-                    async with get_webhook_semaphore():
-                        if attempt_index == 0 and before_first_request is not None:
-                            await before_first_request()
-                        return await client.post(webhook_url, **request_kwargs)
-                if attempt_index == 0 and before_first_request is not None:
-                    await before_first_request()
-                return await client.post(webhook_url, **request_kwargs)
-
-            if attempt_timeout is None:
-                response = await send_request()
-            else:
+            async def post_with_timeout():
+                if attempt_timeout is None:
+                    return await client.post(webhook_url, **request_kwargs)
                 async with asyncio.timeout(attempt_timeout):
-                    response = await send_request()
+                    return await client.post(webhook_url, **request_kwargs)
+
+            async def send_request():
+                if attempt_index == 0 and before_first_request is not None:
+                    if acquire_semaphore:
+                        async with get_webhook_semaphore():
+                            await before_first_request()
+                            return await post_with_timeout()
+                    await before_first_request()
+                    return await post_with_timeout()
+                if acquire_semaphore:
+                    if attempt_timeout is None:
+                        async with get_webhook_semaphore():
+                            return await client.post(webhook_url, **request_kwargs)
+                    async with asyncio.timeout(attempt_timeout):
+                        async with get_webhook_semaphore():
+                            return await client.post(webhook_url, **request_kwargs)
+                return await post_with_timeout()
+
+            response = await send_request()
             last_response = response
             last_exception = None
             if 200 <= response.status_code < 300:
@@ -151,7 +160,7 @@ def _parse_audio_bytes_webhook_config(webhook_url: str) -> tuple[str, int]:
             seconds = int(parts[1])
         except ValueError:
             pass
-    return parts[0], seconds
+    return parts[0].strip(), seconds
 
 
 async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool):

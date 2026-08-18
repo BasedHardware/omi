@@ -9,6 +9,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import os
 import re
+import time
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -172,6 +173,19 @@ class TestSendAudioBytesDeveloperWebhook:
         assert ",10" not in call_url
 
     @pytest.mark.asyncio
+    async def test_url_whitespace_is_normalized(self):
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(
+            webhooks_module, "get_user_webhook_db", return_value=" https://example.com/audio,10 "
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
+
+        assert mock_client.post.call_args.args[0].startswith("https://example.com/audio?")
+
+    @pytest.mark.asyncio
     async def test_disabled_webhook_skips(self):
         """Verify disabled webhook returns early."""
         mock_client = AsyncMock()
@@ -318,6 +332,27 @@ class TestSendAudioBytesDeveloperWebhook:
 
         await semaphore_started.wait()
         assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_lock_acquisition_is_not_cancelled_by_request_timeout(self):
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        def acquire_lock(*_args, **_kwargs):
+            time.sleep(0.05)
+            return "lock-token"
+
+        with patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=()), patch.object(
+            webhooks_module, "_WEBHOOK_REQUEST_TIMEOUT_SECONDS", 0.01
+        ), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
+
+        mock_client.post.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):
