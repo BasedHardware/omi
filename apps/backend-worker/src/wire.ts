@@ -3,7 +3,10 @@ import type {
   ChatGenerationFrame,
   ChatMessage,
   ChatMessageOp,
+  StagedChatAttachment,
 } from "@omi-core/contracts";
+
+export type StagedAttachment = StagedChatAttachment;
 
 export type { ChatMessage } from "@omi-core/contracts";
 
@@ -12,9 +15,13 @@ export type ChatCreate = Omit<DomainChatCreate, "id"> & { id: string };
 export type GenerationEvent = ChatGenerationFrame & { id: string };
 
 export const CHAT_CAPABILITIES: ChatCapabilitiesWire = {
-  maxAttachmentsPerMessage: 0,
-  maxAttachmentBytes: 0,
-  allowedAttachmentMimeTypes: [] as string[],
+  maxAttachmentsPerMessage: 4,
+  maxAttachmentBytes: 52_428_800,
+  allowedAttachmentMimeTypes: [
+    "image/png",
+    "image/jpeg",
+    "application/pdf",
+  ] as readonly string[],
 };
 
 export const json = (

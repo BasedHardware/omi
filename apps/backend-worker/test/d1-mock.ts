@@ -10,6 +10,11 @@ const chatSchema = [
   "CREATE INDEX IF NOT EXISTS chat_generation_events_account ON chat_generation_events (account_id)",
   "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, description TEXT NOT NULL, completed INTEGER NOT NULL, completed_at INTEGER, due_at INTEGER, owner TEXT, source TEXT NOT NULL, provenance TEXT NOT NULL, sort_order REAL NOT NULL, indent_level INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, revision TEXT)",
   "CREATE INDEX IF NOT EXISTS tasks_account_id_id ON tasks (account_id, id)",
+  "CREATE TABLE IF NOT EXISTS chat_attachments (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, op_id TEXT NOT NULL, display_name TEXT NOT NULL, media_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, state TEXT NOT NULL CHECK (state IN ('staged', 'uploaded', 'ingesting', 'ingested', 'invalid', 'bound', 'expired')), r2_key TEXT NOT NULL, expires_at INTEGER NOT NULL, bound_message_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS chat_attachments_account ON chat_attachments (account_id)",
+  "CREATE INDEX IF NOT EXISTS chat_attachments_account_state ON chat_attachments (account_id, state)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS chat_attachments_account_op ON chat_attachments (account_id, op_id)",
+  "CREATE UNIQUE INDEX IF NOT EXISTS chat_attachments_r2_key ON chat_attachments (r2_key)",
 ];
 
 export function createD1Mock(): D1Database {
@@ -40,9 +45,15 @@ export function createD1Mock(): D1Database {
     };
     const run = async (): Promise<D1Result<unknown>> => {
       const stmt = db.prepare(sql);
-      if (bindings.length > 0) stmt.run(...(bindings as never[]));
-      else stmt.run();
-      return { results: [], success: true, meta: {} as never };
+      const runResult =
+        bindings.length > 0
+          ? (stmt.run(...(bindings as never[])) as { changes?: number })
+          : (stmt.run() as { changes?: number });
+      return {
+        results: [],
+        success: true,
+        meta: { changes: runResult?.changes ?? 0 } as never,
+      };
     };
     const raw = async (): Promise<unknown[]> => {
       const stmt = db.prepare(sql);

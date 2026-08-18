@@ -58,6 +58,24 @@ Worktree: `workers-observability`, commits `66853a0ed` and `b2f54fb2f`.
 
 The slice includes guarded staging delivery checks, a no-secret readiness verifier, privacy-safe telemetry tests, and `ROLLBACK.md`. No deploy, push, credential access, or secret value was used for this evidence.
 
+### Attachment staging vertical slice
+
+Worktree: `agents-attachments-async`, uncommitted.
+
+- `bun test apps/backend-worker/test/attachments.contract.test.ts`: **26 passed**.
+- `bun x vitest run test/attachments.integration.test.ts`: **5 passed**.
+- `bun run --cwd apps/backend-worker typecheck`: **passed**.
+- `bun run --cwd apps/backend-worker lint`: **passed**.
+- Prettier check: **passed**.
+- `wrangler deploy --dry-run --strict`: **passed**, including R2 and Queue producer bindings.
+- `git diff --check`: **passed**.
+
+The slice adds `POST /v1/chat-attachments`, which accepts only bounded, validated attachment metadata (`opId`, `displayName`, `mimeType`, `sizeBytes`) as JSON — never file bytes through the Worker body. D1 is authoritative for attachment metadata (`0003_attachments.sql`, `chat_attachments` table with account-scoped `op_id` idempotency and `r2_key` uniqueness). R2 holds bytes only; the Worker produces an explicit staging/upload contract (`StagedAttachment` + `UploadContract`) with a presigned R2 PUT URL (`createPresignedR2Url`) that uses AWS SigV4 signing via the Web Crypto API and is wired through the route only when the full signing configuration is present. A Queue producer (`ATTACHMENT_INGEST`) sends an async coordination message after staging; the Queue is not authoritative. The route fails closed with `503 service_unavailable` when the `ATTACHMENTS` R2 binding, the `ATTACHMENT_INGEST` Queue binding, or the R2 direct-upload signing configuration (`R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) is absent or invalid, and the 503 is returned BEFORE any D1 row is created or any Queue message is sent.
+
+#### Provisioned-resource proof boundary
+
+The presigned R2 upload URL requires a non-secret R2 account host id (`R2_ACCOUNT_ID`, the Cloudflare R2 S3 endpoint account id, distinct from the authenticated Omi `STAGING_ACCOUNT_ID`), a non-secret bucket name (`R2_BUCKET_NAME`, mirroring the `ATTACHMENTS` R2 binding), and R2 S3 API credentials (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`) provisioned as Worker secrets via Wrangler. The non-secret vars are declared in `wrangler.jsonc` (`R2_ACCOUNT_ID` ships empty so a deploy fails closed until an operator fills it in); the credentials are not present in the repository and are not faked. The route validates the full signing configuration strictly via `parseSignedUploadConfig` and returns `503 service_unavailable` BEFORE creating any D1 row or sending any Queue message when any required field is absent or malformed; R2 and Queue binding presence alone is NOT sufficient. The `createPresignedR2Url` seam is exercised both directly with test credentials and through the Worker route in local tests (contract and integration) with test-only credential values injected at the call boundary. The `upload.url` field is a usable signed PUT URL when the full configuration is present and is never produced otherwise. No R2 bucket ID, Queue ID, or resource ARN is fabricated. The `wrangler deploy --dry-run --strict` validates the binding configuration structure; it does not prove the named R2 bucket or Queue exists. A staging deployment requires an operator to fill in `R2_ACCOUNT_ID` and provision the R2 bucket (`omi-v5-backend-staging-attachments`), the Queue (`omi-v5-attachment-ingest`), and the R2 S3 credentials out of band before the upload contract becomes functional.
+
 ## Remaining gate
 
 This evidence is local and commit-scoped. It is not a deployment approval and does not authorize `deploy:staging`, pushing, or accessing secrets. Before any staged rollout, rerun the scoped gates from the exact candidate commit, verify the configured secret bindings out of band, require the release verifier to match the expected environment and sink mode, and follow the rollback document. The correlation policy is: `request_id` identifies one Worker fetch event; `correlation_id` equals that request identifier for request telemetry and identifies the generation passed to the AI Gateway for asynchronous generation telemetry. Operators join the two only through the generation transition evidence and must never use request content, account data, URLs, authorization, prompts, completions, or sink credentials as correlation fields.
