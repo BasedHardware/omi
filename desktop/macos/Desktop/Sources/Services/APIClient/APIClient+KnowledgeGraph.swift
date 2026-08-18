@@ -325,13 +325,20 @@ struct RebuildGraphResponse: Codable {
 
 // MARK: - Knowledge Graph API
 
+/// The backend's answer when this account has no canonical graph state at all.
+/// Production fences canonical intake, so `/v1/knowledge-graph/canonical` gives
+/// this to accounts whose graph only exists in the legacy store — a statement
+/// about the account, not a transient outage. Any other 503 stays an outage.
+private let canonicalGraphUnavailableDetail = "canonical_graph_unavailable"
+
 extension APIClient {
 
   /// Gets the complete canonical graph, exhausting the bounded page endpoint.
   ///
   /// The endpoint was added after the legacy graph route, so a 404/405 on the
-  /// canonical route is the only condition that selects the legacy request.
-  /// Every other error is returned to the caller.
+  /// canonical route selects the legacy request, as does a 503 that names this
+  /// account as having no canonical state. Every other error is returned to the
+  /// caller.
   func getKnowledgeGraphImpl(
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
@@ -348,12 +355,17 @@ extension APIClient {
       return try await getCanonicalKnowledgeGraph(
         expectedOwnerId: expectedOwnerId,
         authorizationSnapshot: pinnedAuthorization)
-    } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 404 || statusCode == 405 {
+    } catch APIError.httpError(statusCode: let statusCode, detail: let detail)
+      where statusCode == 404 || statusCode == 405
+      || (statusCode == 503 && detail == canonicalGraphUnavailableDetail)
+    {
       DesktopDiagnosticsManager.shared.recordFallback(
         area: "memory_atlas",
         from: "canonical_paged_graph",
         to: "legacy_graph",
-        reason: "canonical_endpoint_unavailable_" + String(statusCode),
+        reason: statusCode == 503
+          ? "canonical_state_unavailable_503"
+          : "canonical_endpoint_unavailable_" + String(statusCode),
         outcome: .recovered
       )
       let legacy: KnowledgeGraphResponse = try await get(
