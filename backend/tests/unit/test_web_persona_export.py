@@ -134,6 +134,17 @@ def test_map_plugin_data_by_persona_name_removes_stale_output_when_input_missing
     assert not (tmp_path / 'plugin_data_by_persona_name.json').exists()
 
 
+def test_clear_export_artifacts_removes_previous_exports(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / 'user_messages_with_bot_name.json').write_text('{}', encoding='utf-8')
+    (tmp_path / 'plugin_data_by_persona_name.json').write_text('{}', encoding='utf-8')
+
+    _load_web_module().clear_export_artifacts()
+
+    assert not (tmp_path / 'user_messages_with_bot_name.json').exists()
+    assert not (tmp_path / 'plugin_data_by_persona_name.json').exists()
+
+
 def test_map_plugin_data_by_persona_name_preserves_bot_name_only_messages(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / 'user_messages_with_bot_name.json').write_text(
