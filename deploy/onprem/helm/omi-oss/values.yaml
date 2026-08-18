@@ -8,6 +8,15 @@
 # images (mongo/valkey/qdrant/…) are unaffected — the node always pulls those from their upstream registry.
 imageRegistry: ""
 
+# Pull secrets for a PRIVATE/authenticated registry (Harbor, GitLab, ECR, …). Empty = anonymous pull
+# (the default local registry needs none). To use an authenticated registry, pre-create a
+# `kubernetes.io/dockerconfigjson` Secret in the release namespace and name it here — it is attached to
+# EVERY pod the chart runs, so it covers our omi-oss-* images and any third-party images you mirror:
+#   kubectl -n <ns> create secret docker-registry regcred \
+#     --docker-server=<host:port> --docker-username=<user> --docker-password=<pw>
+#   helm install ... --set imagePullSecrets[0].name=regcred
+imagePullSecrets: []
+
 # Secrets: dev lets the chart build `backend-secret` from values. Prod sets create=false and supplies a
 # Secret named `backend-secret` out-of-band (External Secrets / Sealed Secrets / vault) — see A2.
 secrets:

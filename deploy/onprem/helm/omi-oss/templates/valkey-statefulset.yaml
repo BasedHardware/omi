@@ -17,6 +17,10 @@ spec:
         {{- include "omi-oss.labels" . | nindent 8 }}
         app.kubernetes.io/component: valkey
     spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: valkey
           image: {{ .Values.valkey.image }}

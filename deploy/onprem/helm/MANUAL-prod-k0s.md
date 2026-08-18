@@ -222,6 +222,29 @@ sudo k0s stop && sudo k0s start
 At install (Step 6) you pass `--set imageRegistry=$REG`; the chart prefixes it onto the five names, so the
 pods pull `$REG/omi-oss-backend`, `$REG/omi-oss-whisper`, and so on.
 
+### Already run your own registry?
+
+Steps **b–d** stand up a throwaway registry on the node. If you already operate one — Harbor, GitLab, a
+shared Docker registry — **skip step b** and instead:
+
+- Set `REG` to your registry's `host:port` and **push the five images there** (step **c**). If it requires
+  a login, run `docker login $REG` first.
+- Point k0s's containerd at it (step **d**). If your registry serves **HTTPS with a certificate the node
+  already trusts**, drop the `server = …` / `skip_verify = true` lines — containerd validates it normally;
+  keep them only for a plain-HTTP or self-signed registry.
+
+**Authenticated registry.** A registry that needs a login also needs the *cluster* to authenticate when it
+pulls. Create a pull Secret in the release namespace (created in Step 6) and tell the chart to use it — it
+attaches the Secret to **every** pod, so it covers both our `omi-oss-*` images and any third-party images
+you mirror through your registry:
+```bash
+kubectl -n omi create secret docker-registry regcred \
+  --docker-server=$REG --docker-username=<user> --docker-password=<password>
+```
+Then add `--set imagePullSecrets[0].name=regcred` to the `helm install` in Step 6. Leave it out entirely
+for an anonymous registry (the default). No cluster-level "credential manager" is needed — this one Secret
+per registry is the whole mechanism.
+
 ## Step 5 — Provide the model weights
 
 The GPU servers read their models from a **persistent volume** (a Kubernetes PVC) that the chart mounts
@@ -252,13 +275,37 @@ parakeet service needs no model; it is a thin gateway that forwards speech to wh
 
 ## Step 6 — TLS certificate + install Omi
 
-Create the namespace and a TLS cert whose SAN carries `ENTRY_IP` (self-signed here; bring your own CA-signed
-cert for real prod):
+Create the release namespace, then the TLS certificate for the HTTPS entry point. The helper
+`gen-certs.sh` generates a **self-signed** certificate whose SAN covers `ENTRY_IP` (plus `localhost` and
+`127.0.0.1`) and loads it into a Kubernetes Secret named **`omi-tls`** — the Secret the gateway serves
+HTTPS from. Its arguments are `./gen-certs.sh <namespace> <secret-name> <hostname>`, and the `HOST_IP=`
+prefix adds the device-reachable IP to the certificate's SAN so both in-cluster and phone traffic
+validate. It only needs `openssl` + `kubectl`, and re-running it simply replaces the Secret.
 ```bash
 export KUBECONFIG=~/.kube/k0s.conf
 kubectl create namespace omi --dry-run=client -o yaml | kubectl apply -f -
 HOST_IP=$ENTRY_IP ./gen-certs.sh omi omi-tls $ENTRY_IP
 ```
+Because the certificate is self-signed, clients (curl, the phone app) see a trust warning until they trust
+it. For real production you'll bring your own certificate instead — two cases:
+
+**You already have a certificate + key.** Skip `gen-certs.sh` and create the `omi-tls` Secret straight from
+your files. `tls.crt` must hold the **full chain** — your server (leaf) certificate first, then any
+intermediate certificates — and `tls.key` its private key:
+```bash
+kubectl -n omi create secret tls omi-tls --cert=fullchain.pem --key=privkey.pem
+```
+That is the whole step: the gateway serves exactly what's in the Secret (re-run with `--dry-run=client -o
+yaml | kubectl apply -f -` to rotate it in place).
+
+**Your certificate is signed by a private / internal CA.** Just put the chain in `tls.crt` — leaf first,
+then the intermediate(s) up to (but not including) the root. **No dedicated CA setting is needed on the
+cluster**, because TLS is terminated at the edge and *nothing inside the cluster validates this
+certificate*: the backend talks to Keycloak, ntfy and RustFS over plain HTTP on internal service names, and
+validates OIDC tokens by fetching JWKS internally — never back through the HTTPS gateway. The custom CA is
+purely a **client-trust** matter: install your root CA on the phone/device (and pass `--cacert ca.crt` to
+curl) so they accept the chain. (An external LLM/embeddings endpoint behind its own private CA is a
+separate concern — that's the backend trusting *that* endpoint, not this gateway certificate.)
 
 Generate the passwords once and **save them** — you must pass the same ones on every future `helm upgrade`
 (data encrypted with the old `ENCRYPTION_SECRET` can't be read with a different one):
@@ -364,6 +411,7 @@ Every value the chart accepts. **"How"** shows how you'd normally set it for thi
 | Value | Default | How | What it does |
 |---|---|---|---|
 | `imageRegistry` | `""` | `--set` | Registry prefix for the 5 images we build (e.g. `192.168.100.122:5000`). Empty = image already on the node. |
+| `imagePullSecrets` | `[]` | `--set` | Pull secrets for a **private/authenticated** registry (Harbor, GitLab, …). Names of pre-created `docker-registry` Secrets; attached to every pod. Empty = anonymous pull (the default local registry). |
 | `storageClassName` | `""` | values-k0s (`openebs-hostpath`) | Storage class for every PVC. Empty = cluster default. |
 | `secrets.create` | `true` | default | Chart builds `backend-secret` from values. `false` = you supply the Secret yourself. |
 | `networkPolicy.enabled` | `false` | default | Default-deny egress (needs a policy-enforcing CNI: Calico/Cilium). |

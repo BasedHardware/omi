@@ -23,6 +23,10 @@ spec:
         {{- include "omi-oss.labels" . | nindent 8 }}
         app.kubernetes.io/component: mongo-rs-init
     spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       restartPolicy: OnFailure
       containers:
         - name: init

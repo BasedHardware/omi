@@ -91,6 +91,12 @@ kubectl apply -f metallb-pool.yaml          # already set to Kind's 172.18.255.2
 
 ## 5. TLS certificate + install Omi
 
+The gateway serves HTTPS from a Kubernetes Secret named `omi-tls`. The helper `gen-certs.sh` generates a
+**self-signed** certificate — SAN = `localhost` + `127.0.0.1`, plus the `HOST_IP=` you pass — and loads it
+into that Secret. Its arguments are `./gen-certs.sh <namespace> <secret-name> <hostname>`; it needs only
+`openssl` + `kubectl`, and re-running it just replaces the Secret. Being self-signed, curl and the app show
+a trust warning — expected in dev.
+
 ```bash
 # The cluster's entry point. On Kind this is an IP on Kind's OWN docker network (172.18.0.0/16), reachable
 # from your machine (the docker host) — NOT your LAN. It is pinned in values-dev.yaml + metallb-pool.yaml,

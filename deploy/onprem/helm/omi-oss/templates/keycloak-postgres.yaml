@@ -35,6 +35,10 @@ spec:
         {{- include "omi-oss.labels" . | nindent 8 }}
         app.kubernetes.io/component: keycloak-postgres
     spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: postgres
           image: {{ .Values.auth.keycloak.postgres.image }}

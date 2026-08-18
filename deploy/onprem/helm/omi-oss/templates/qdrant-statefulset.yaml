@@ -22,6 +22,10 @@ spec:
         {{- include "omi-oss.labels" . | nindent 8 }}
         app.kubernetes.io/component: qdrant
     spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: qdrant
           image: {{ .Values.chat.qdrant.image }}
