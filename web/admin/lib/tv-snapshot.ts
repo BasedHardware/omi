@@ -6,9 +6,11 @@
 import { posthogResultsFresh } from "@/lib/posthog";
 import { computeRevenue } from "@/app/api/omi/stats/revenue/route";
 import { getPayload, setPayload } from "@/lib/payload-cache";
+import { getUserGrowthSeries } from "@/lib/services/user-growth";
 
 export const MILLION_USERS = 1_000_000;
 export const MILLION_RATE_DAYS = 7;
+const SNAPSHOT_TTL_MS = 2 * 60 * 1000;
 export const WINDOW_HOURS = [12, 24, 72] as const;
 export type WindowHours = (typeof WINDOW_HOURS)[number];
 
@@ -226,6 +228,7 @@ async function ph(
     creds.projectId,
     creds.apiKey,
     query,
+    { softTtlMs: SNAPSHOT_TTL_MS },
   );
   if (stale) staleCounter.count++;
   return results;
@@ -350,16 +353,22 @@ function pivotPlatformSeries(
   return Array.from(byT.values()).sort((a, b) => a.t - b.t);
 }
 
-export async function buildTvSnapshot(opts: {
+async function buildTvSnapshotUncached(opts: {
   includeRevenue: boolean;
 }): Promise<TvSnapshot> {
   const cacheKey = `tv-snapshot:v6:rev=${opts.includeRevenue ? 1 : 0}`;
   const cached = await getPayload<TvSnapshot>(cacheKey);
-  if (cached?.data && Date.now() - cached.freshAt < 2 * 60 * 1000) {
+  if (cached?.data && Date.now() - cached.freshAt < SNAPSHOT_TTL_MS) {
     return cached.data;
   }
 
   const warnings: string[] = [];
+  const userGrowthP = getUserGrowthSeries().catch((error) => {
+    warnings.push(
+      `firebase_auth_growth: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  });
   let revenue: TvSnapshot["revenue"] = null;
   let stripeOk = false;
 
@@ -540,24 +549,13 @@ GROUP BY bucket, platform
 ORDER BY bucket ASC
 LIMIT ${lim * 5}`.trim();
 
-    const qPersonsTotal = `SELECT count() AS total_users FROM persons LIMIT 1`;
-    const qPersonsTotalCompleted = `SELECT count() AS total_users FROM persons WHERE created_at < toStartOfDay(now()) LIMIT 1`;
-    const qPersonsDaily = `
-SELECT toDate(created_at) AS day, count() AS new_users
-FROM persons
-WHERE created_at >= now() - INTERVAL 30 DAY AND created_at < toStartOfDay(now())
-GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
-
     const results = await Promise.allSettled([
       ph(creds, qActivityPlat, posthogStale),
       ph(creds, qActivity10m, posthogStale),
       ph(creds, qFeaturesPlat, posthogStale),
       ph(creds, qFeatures10m, posthogStale),
-      ph(creds, qPersonsTotal, posthogStale),
-      ph(creds, qPersonsDaily, posthogStale),
       ph(creds, qActivityTotals, posthogStale),
       ph(creds, qFeaturesTotals, posthogStale),
-      ph(creds, qPersonsTotalCompleted, posthogStale),
     ]);
 
     const labels = [
@@ -565,11 +563,8 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "activity_10m",
       "features_plat",
       "features_10m",
-      "persons_total",
-      "persons_daily",
       "activity_totals",
       "features_totals",
-      "persons_total_completed",
     ];
     results.forEach((r, i) => {
       if (r.status === "rejected") warnings.push(`${labels[i]}: ${r.reason}`);
@@ -588,7 +583,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "wau",
     ]);
     const actTotals =
-      asRows(get(6), ["dau_12h", "dau_24h", "dau_72h", "wau"])[0] || {};
+      asRows(get(4), ["dau_12h", "dau_24h", "dau_72h", "wau"])[0] || {};
     const byHours: TvSnapshot["activity"]["byHours"] = {
       "12": { total: num(actTotals.dau_12h), platforms: {} },
       "24": { total: num(actTotals.dau_24h), platforms: {} },
@@ -625,7 +620,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       "memory_events_72h",
     ]);
     const featTotals =
-      asRows(get(7), [
+      asRows(get(5), [
         "conversation_users_12h",
         "conversation_users_24h",
         "conversation_users_72h",
@@ -641,7 +636,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
     const memH = buildFeatHours(featPlat, "memory_events");
     // If the global totals query failed, platform-summed values could
     // double-count multi-platform users, so null the headline totals.
-    const featTotalsOk = results[7].status === "fulfilled";
+    const featTotalsOk = results[5].status === "fulfilled";
     for (const [board, prefix] of [
       [convH, "conversation_users"],
       [chatH, "chat_users"],
@@ -675,19 +670,6 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       queryOk: feat10mOk,
     });
 
-    const totRow = asRows(get(4), ["total_users"])[0] || {};
-    const totalUsers = num(totRow.total_users);
-    const dailyNew = asRows(get(5), ["day", "new_users"]).map((r) => ({
-      day: String(r.day ?? ""),
-      newUsers: num(r.new_users) ?? 0,
-    }));
-    const completedTotalRow = asRows(get(8), ["total_users"])[0] || {};
-    const seriesTotal = num(completedTotalRow.total_users);
-    million = daysUntilMillion(totalUsers, dailyNew, {
-      dailyNewOk: results[5].status === "fulfilled",
-      seriesTotal,
-    });
-
     activity = {
       byHours,
       wau,
@@ -707,9 +689,7 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
       results[2].status === "fulfilled" ||
       results[3].status === "fulfilled" ||
       results[4].status === "fulfilled" ||
-      results[5].status === "fulfilled" ||
-      results[6].status === "fulfilled" ||
-      results[7].status === "fulfilled";
+      results[5].status === "fulfilled";
     if (posthogStale.count > 0) {
       warnings.push(
         `posthog: ${posthogStale.count} quer${posthogStale.count === 1 ? "y" : "ies"} served from stale cache`,
@@ -722,6 +702,18 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
   // while stripeOk is still false and revenue is still null, dropping
   // ARR/MRR from otherwise successful responses.
   await stripeP;
+
+  const userGrowth = await userGrowthP;
+  if (userGrowth) {
+    const today = new Date().toISOString().slice(0, 10);
+    const completed = userGrowth.data.filter((point) => point.date < today);
+    const lastCompleted = completed[completed.length - 1];
+    million = daysUntilMillion(
+      userGrowth.totalUsers,
+      completed.map((point) => ({ day: point.date, newUsers: point.users })),
+      { dailyNewOk: true, seriesTotal: lastCompleted?.cumulative ?? 0 },
+    );
+  }
 
   if (!posthogOk && !(opts.includeRevenue && stripeOk)) {
     // Nothing useful to show — fail rather than caching an empty board.
@@ -744,4 +736,23 @@ GROUP BY day ORDER BY day ASC LIMIT 40`.trim();
 
   await setPayload(cacheKey, snap).catch(() => undefined);
   return snap;
+}
+
+const inFlightSnapshots = new Map<string, Promise<TvSnapshot>>();
+
+export async function buildTvSnapshot(opts: {
+  includeRevenue: boolean;
+}): Promise<TvSnapshot> {
+  const cacheKey = `tv-snapshot:v6:rev=${opts.includeRevenue ? 1 : 0}`;
+  const active = inFlightSnapshots.get(cacheKey);
+  if (active) return active;
+
+  const build = buildTvSnapshotUncached(opts);
+  inFlightSnapshots.set(cacheKey, build);
+  try {
+    return await build;
+  } finally {
+    if (inFlightSnapshots.get(cacheKey) === build)
+      inFlightSnapshots.delete(cacheKey);
+  }
 }
