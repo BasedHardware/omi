@@ -1602,7 +1602,7 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native-macos/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native-macos/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native-macos/ReactCommon/react/nativemodule/microtasks`)
-  - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
+  - react-native-safe-area-context (from `../../node_modules/react-native-safe-area-context`)
   - React-NativeModulesApple (from `../node_modules/react-native-macos/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native-macos/ReactCommon/oscompat`)
   - React-perflogger (from `../node_modules/react-native-macos/ReactCommon/reactperflogger`)
@@ -1633,7 +1633,7 @@ DEPENDENCIES:
   - ReactAppDependencyProvider (from `build/generated/ios`)
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native-macos/ReactCommon`)
-  - RNSVG (from `../node_modules/react-native-svg`)
+  - RNSVG (from `../../node_modules/react-native-svg`)
   - SocketRocket (from `../node_modules/react-native-macos/third-party-podspecs/SocketRocket.podspec`)
   - Yoga (from `../node_modules/react-native-macos/ReactCommon/yoga`)
 
@@ -1713,7 +1713,7 @@ EXTERNAL SOURCES:
   React-microtasksnativemodule:
     :path: "../node_modules/react-native-macos/ReactCommon/react/nativemodule/microtasks"
   react-native-safe-area-context:
-    :path: "../node_modules/react-native-safe-area-context"
+    :path: "../../node_modules/react-native-safe-area-context"
   React-NativeModulesApple:
     :path: "../node_modules/react-native-macos/ReactCommon/react/nativemodule/core/platform/ios"
   React-oscompat:
@@ -1775,7 +1775,7 @@ EXTERNAL SOURCES:
   ReactCommon:
     :path: "../node_modules/react-native-macos/ReactCommon"
   RNSVG:
-    :path: "../node_modules/react-native-svg"
+    :path: "../../node_modules/react-native-svg"
   SocketRocket:
     :podspec: "../node_modules/react-native-macos/third-party-podspecs/SocketRocket.podspec"
   Yoga:
@@ -1848,12 +1848,12 @@ SPEC CHECKSUMS:
   React-timing: 01fb653bcd2c119213c2a57a70586b906cd328a7
   React-utils: c276acc90b7da1158fc99381943e1b708aec9f35
   ReactAppDependencyProvider: 1d1d794177511cbb0249dd4e5083389eb2bb1d7b
-  ReactCodegen: a51629df67a6a0f528f27d42348493e17edd723f
+  ReactCodegen: 4be87d184b16e9e37063e35b1ebebc15acf30af3
   ReactCommon: 6ca2d140e3aac63917c5c45c2a548f94a348130a
   RNSVG: c61e38e1c0c90ed982418ed696ec272b706995bb
   SocketRocket: 03f7111df1a343b162bf5b06ead333be808e1e0a
   Yoga: 45ce05cb11db042ba2e5e51a2dfaf0ff63d269f9
 
-PODFILE CHECKSUM: 72565ad1826e7aee90aedcbccaa85a27227a00c0
+PODFILE CHECKSUM: cd0da5cf90a473edab0a467059c7bcf12c4f9097
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.17.0

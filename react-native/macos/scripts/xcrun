@@ -1,0 +1,5 @@
+#!/bin/sh
+# React Native's vendored glog configure script stores xcrun's output in CC
+# and later executes it without shell quoting. Xcode.app is an intentionally
+# selected no-space alias for the installed Xcode Beta.app bundle.
+/usr/bin/xcrun "$@" | /usr/bin/sed 's|/Applications/Xcode Beta\.app|/Applications/Xcode.app|g'

@@ -2,6 +2,14 @@ require_relative '../node_modules/react-native-macos/scripts/react_native_pods'
 
 prepare_react_native_project!
 
+# React Native's glog 0.3.5 configure script executes xcrun's compiler path
+# without shell quoting. Prefer the stable no-space Xcode.app alias when the
+# installed Xcode bundle's canonical path includes spaces.
+xcode_clang = Pod::Executable.execute_command('/usr/bin/xcrun', ['--find', 'clang']).strip
+if xcode_clang.include?(' ')
+  ENV['PATH'] = "#{File.expand_path('scripts', __dir__)}:#{ENV['PATH']}"
+end
+
 target 'RnRuntime-macOS' do
   platform :macos, '14.0'
   use_native_modules!
@@ -22,6 +30,9 @@ target 'RnRuntime-macOS' do
     installer.pods_project.targets.each do |target|
       target.build_configurations.each do |configuration|
         configuration.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '14.0'
+        # The generated CocoaPods project otherwise points at the iOS package.
+        # macOS codegen script phases must inspect the macOS React Native tree.
+        configuration.build_settings['REACT_NATIVE_PATH'] = '${PODS_ROOT}/../../../node_modules/react-native-macos'
       end
 
       if target.name == 'fmt'
