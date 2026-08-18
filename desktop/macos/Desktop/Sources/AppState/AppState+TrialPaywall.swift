@@ -26,7 +26,7 @@ extension AppState {
   /// the persisted `desktop_isPaywalled` flag, which can lag behind BYOK
   /// activation. Use this anywhere that only has UserDefaults access.
   nonisolated static var isPaywalledEffective: Bool {
-    !APIKeyService.hasTranscriptionBYOK && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    !APIKeyService.hasTranscriptionBYOK && UserDefaults.standard.bool(forKey: .desktopIsPaywalled)
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
