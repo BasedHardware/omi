@@ -37,7 +37,7 @@ def _content_str(response: Any) -> str:
 
 
 def normalize_filter(value: str) -> str:
-    value = re.sub(r'[^\w\s]', '', value.lower()).strip()
+    value = re.sub(r'[^\w\s-]', '', value.lower()).strip()
     value = re.sub(r'\s+', ' ', value)
     # Remove common filler words
     filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'of'}

@@ -75,6 +75,8 @@ def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_i
         ('John Patrick Doe', 'john doe'),
         ('東京の会議', '東京の会議'),
         ('José Álvarez', 'josé álvarez'),
+        ('Jean-Luc Picard', 'jean-luc picard'),
+        ('COVID-19', 'covid-19'),
     ],
 )
 def test_normalize_filter(value, expected):
