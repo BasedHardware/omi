@@ -1030,7 +1030,6 @@ class CaptureController extends ChangeNotifier
 
         final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
         if (_sendAudioIfPolicyCurrent(socketPayload)) {
-
           // Track bytes sent to websocket
           _metrics.addSocketBytes(socketPayload.length);
 
@@ -1208,10 +1207,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveString('batchAudioDir', docsDir.path);
 
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil().saveBool(
-      'nativeBleStreamingEnabled',
-      _shouldEnableNativeBackgroundStreaming,
-    );
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', _shouldEnableNativeBackgroundStreaming);
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
       'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}',
@@ -1269,10 +1265,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _reconcileNativeBackgroundStreamingPolicy() async {
     final shouldEnable = _shouldEnableNativeBackgroundStreaming;
-    await SharedPreferencesUtil().saveBool(
-      'nativeBleStreamingEnabled',
-      shouldEnable,
-    );
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', shouldEnable);
 
     if (shouldEnable || !Platform.isAndroid) return;
 
