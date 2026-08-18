@@ -51,7 +51,7 @@ class _CompareTranscriptsPageState extends State<CompareTranscriptsPage> {
                 Tab(text: 'Deepgram'),
                 Tab(text: 'Soniox'),
                 Tab(text: 'SpeechMatics'),
-                Tab(text: 'Whisper-x'),
+                Tab(text: 'Prerecorded'),
               ],
               indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),
             ),
