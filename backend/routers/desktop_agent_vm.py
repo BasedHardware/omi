@@ -34,17 +34,17 @@ _AGENT_VM_RETIRED = "The cloud Agent VM has been retired and can no longer be pr
 
 
 @router.post("/v2/agent/provision")
-async def provision_agent_vm() -> JSONResponse:
+def provision_agent_vm() -> JSONResponse:
     return JSONResponse(status_code=410, content={"detail": _AGENT_VM_RETIRED})
 
 
 @router.post("/v2/agent/vm/stop-self")
-async def stop_self() -> JSONResponse:
+def stop_self() -> JSONResponse:
     return JSONResponse(status_code=410, content={"detail": _AGENT_VM_RETIRED})
 
 
 @router.get("/v2/agent/status")
-async def get_agent_status() -> JSONResponse:
+def get_agent_status() -> JSONResponse:
     # `content=None` serializes to a literal `null` body, which released
     # desktop clients decode as an absent optional and skip silently.
     return JSONResponse(status_code=200, content=None)
