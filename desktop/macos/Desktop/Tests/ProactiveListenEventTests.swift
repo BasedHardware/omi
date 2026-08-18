@@ -25,7 +25,7 @@ final class ProactiveListenEventTests: XCTestCase {
     ]
 
     let event = TranscriptionService.ListenEvent(
-      type: backendJSON["type"] as! String,
+      type: (backendJSON["type"] as? String) ?? "",
       raw: backendJSON
     )
 
@@ -47,7 +47,7 @@ final class ProactiveListenEventTests: XCTestCase {
     ]
 
     let event = TranscriptionService.ListenEvent(
-      type: backendJSON["type"] as! String,
+      type: (backendJSON["type"] as? String) ?? "",
       raw: backendJSON
     )
 
