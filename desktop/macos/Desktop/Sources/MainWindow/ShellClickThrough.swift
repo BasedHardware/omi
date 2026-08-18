@@ -54,8 +54,8 @@ final class ShellMouseInterceptionSync {
 
   init(window: NSWindow) {
     self.window = window
-    let scheduleReconciliation: @Sendable () -> Void = {
-      DispatchQueue.main.async { [weak self] in self?.sync() }
+    let scheduleReconciliation: @Sendable () -> Void = { [weak self] in
+      DispatchQueue.main.async { self?.sync() }
     }
     if let global = NSEvent.addGlobalMonitorForEvents(
       matching: [.mouseMoved, .leftMouseDragged],
@@ -101,7 +101,12 @@ final class ShellMouseInterceptionSync {
           localPoint: local,
           windowSize: window.frame.size,
           isResizable: window.styleMask.contains(.resizable),
-          contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
+          contentContains: {
+            // No registered surface means nothing can vouch for this window's content, so it stays
+            // fully interactive rather than becoming a pass-through hole.
+            guard InkGlassHitRegions.shared.hasSurfaces(in: window) else { return true }
+            return InkGlassHitRegions.shared.containsPoint($0, in: window)
+          })
       })
     if window.ignoresMouseEvents != shouldIgnore {
       window.ignoresMouseEvents = shouldIgnore

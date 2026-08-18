@@ -68,7 +68,8 @@
         frozenRankedSegment: Data(input.frozen.utf8),
         tail: input.tail,
         validatedFacts: input.validatedFacts,
-        notifyWorthiness: input.notifyWorthiness)
+        notifyWorthiness: input.notifyWorthiness,
+        visitCount: input.visitCount)
       guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
         return [
           "decision": "silence",
@@ -89,8 +90,9 @@
         captureTime: input.capturedAt)
       let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
       let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
-        tasks: input.tasks, frame: frame, recentDeliveries: input.recentDeliveries)
-      let cacheKey = "bucket:\(snapshot.bucketID):v\(snapshot.version)"
+        tasks: input.tasks, frame: frame, recentDeliveries: input.recentDeliveries,
+        visitCount: input.visitCount)
+      let cacheKey = ContextPromptCacheKey.director
       let started = DispatchTime.now().uptimeNanoseconds
       let result = try await completion(
         ModelQoS.Proactivity.reasoningOperation,
@@ -137,6 +139,9 @@
       let window: String
       let capturedAt: Date
       let notifyWorthiness: Double
+      /// Optional. Absent means "unknown", which prints no visit line, so
+      /// existing probe callers keep their exact prompt.
+      let visitCount: Int
       /// Optional. Lets a probe exercise the recent-delivery prompt section, which is
       /// otherwise only reachable from the live ledger.
       let recentDeliveries: [ContextBucketRecentDelivery]
@@ -166,6 +171,15 @@
           throw ContextBucketDirectorProbeError.invalidParams("notify_worthiness")
         }
         notifyWorthiness = parsedWorthiness
+        if let rawVisitCount = params["visit_count"], !rawVisitCount.isEmpty {
+          guard let parsedVisitCount = Int(rawVisitCount), (0...1_000_000).contains(parsedVisitCount)
+          else {
+            throw ContextBucketDirectorProbeError.invalidParams("visit_count")
+          }
+          visitCount = parsedVisitCount
+        } else {
+          visitCount = 0
+        }
         recentDeliveries = try Self.optionalRecentDeliveryList(
           params, key: "recent_deliveries",
           maxCount: ContextBucketRecentDelivery.promptCap)

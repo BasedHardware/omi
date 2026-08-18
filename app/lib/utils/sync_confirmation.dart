@@ -24,7 +24,7 @@ Future<bool> confirmSyncForCustomStt(BuildContext context) async {
     message: l.syncCustomSttWarningMessage,
     confirmLabel: l.sync,
     cancelLabel: l.cancel,
-    confirmColor: Colors.deepPurpleAccent,
+    confirmColor: Colors.white,
   );
   return confirmed ?? false;
 }

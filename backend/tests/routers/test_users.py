@@ -468,3 +468,27 @@ def test_update_person_name_existing_returns_ok():
 
     assert result == {'status': 'ok'}
     update_person.assert_called_once_with('uid1', 'p1', 'Alice')
+
+
+def test_byok_subscription_endpoint_returns_unlimited_plan():
+    # `PlanLimits` was used in this module without being imported, so every BYOK
+    # user's GET /v1/users/me/subscription raised NameError -> 500 in prod.
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
+        users_router, 'has_byok_keys', MagicMock(return_value=True)
+    ):
+        response = users_router.get_user_subscription_endpoint(uid='uid1')
+
+    assert response.subscription.plan == users_router.PlanType.unlimited
+    assert response.subscription.features == ['byok']
+    assert response.subscription.limits.transcription_seconds is None
+
+
+def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
+    # Same missing import on the reviewer branch (routers/users.py:1193).
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.dict(
+        users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}
+    ):
+        response = users_router.get_user_subscription_endpoint(uid='reviewer-uid')
+
+    assert response.subscription.plan == users_router.PlanType.unlimited
+    assert response.subscription.limits.words_transcribed is None

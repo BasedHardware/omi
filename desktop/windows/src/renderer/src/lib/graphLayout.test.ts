@@ -53,4 +53,48 @@ describe('computeLayout', () => {
     )
     expect(out.nodes[0].degree).toBe(1)
   })
+
+  it('ignores an edge that points to a node that is not present', () => {
+    const out = computeLayout(
+      {
+        nodes: [{ id: 'a', label: 'A', nodeType: 'person', aliases: [], memoryIds: [] }],
+        edges: [{ id: 'e', sourceId: 'a', targetId: 'ghost', label: '', memoryIds: [] }]
+      },
+      { iterations: 5 }
+    )
+    expect(out.nodes).toHaveLength(1)
+    expect(Number.isFinite(out.nodes[0].x)).toBe(true)
+  })
+
+  it('ignores an edge whose endpoint id matches an inherited object property', () => {
+    const out = computeLayout(
+      {
+        nodes: [{ id: 'a', label: 'A', nodeType: 'person', aliases: [], memoryIds: [] }],
+        edges: [{ id: 'e', sourceId: 'a', targetId: '__proto__', label: '', memoryIds: [] }]
+      },
+      { iterations: 5 }
+    )
+    expect(out.nodes).toHaveLength(1)
+    expect(Number.isFinite(out.nodes[0].x)).toBe(true)
+  })
+
+  it('keeps the edges of a node actually named __proto__', () => {
+    // The degree map is null-prototype: on a plain object literal the
+    // `degree['__proto__'] = 0` write hits the inherited setter, the node reads
+    // as absent, and this edge would be silently dropped.
+    const out = computeLayout(
+      {
+        nodes: [
+          { id: 'a', label: 'A', nodeType: 'person', aliases: [], memoryIds: [] },
+          { id: '__proto__', label: 'P', nodeType: 'person', aliases: [], memoryIds: [] }
+        ],
+        edges: [{ id: 'e', sourceId: 'a', targetId: '__proto__', label: '', memoryIds: [] }]
+      },
+      { iterations: 5 }
+    )
+    expect(out.nodes).toHaveLength(2)
+    const proto = out.nodes.find((n) => n.id === '__proto__')
+    expect(proto?.degree).toBe(1)
+    expect(out.nodes.every((n) => Number.isFinite(n.x))).toBe(true)
+  })
 })

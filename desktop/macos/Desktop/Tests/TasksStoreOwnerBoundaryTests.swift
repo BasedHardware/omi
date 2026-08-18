@@ -390,6 +390,7 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       "updateCompletionStatus(",
       "updateActionItemFields(",
       "deleteActionItemByBackendId(",
+      "markActionItemDeletionAcknowledged(",
       "deleteActionItemsByBackendIds(",
       "compactScoresAfterRemoval(",
       "hardDeleteAbsentTasks(",

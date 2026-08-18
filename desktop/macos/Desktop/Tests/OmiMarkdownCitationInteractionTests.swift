@@ -89,4 +89,31 @@ final class OmiMarkdownCitationInteractionTests: XCTestCase {
 
     XCTAssertEqual(table.rows.first?[1], "Build notes [1]")
   }
+
+  func testCitationMaskKeepsAdjacentMarkersOnRecapBullets() throws {
+    let references = [20, 21, 3].map {
+      ChatCitationReference(
+        ordinal: $0, kind: .conversation, sourceID: "conversation-\($0)", title: "Source \($0)")
+    }
+    let mask = try XCTUnwrap(
+      ChatCitationMask.mask(
+        "- Worked on the launch/demo video [20][21][3]",
+        references: Dictionary(uniqueKeysWithValues: references.map { ($0.ordinal, $0) })))
+
+    XCTAssertEqual(mask.markers.map(\.reference.ordinal), [20, 21, 3])
+  }
+
+  func testCitationMaskPromotesKindPrefixedMemoryMarkers() throws {
+    let references = [5023, 5001].map {
+      ChatCitationReference(
+        ordinal: $0, kind: .memory, sourceID: "memory-\($0)", title: "Source \($0)")
+    }
+    let mask = try XCTUnwrap(
+      ChatCitationMask.mask(
+        "- Formalizing the content testing loop [memory 5023][memory:5001]. Bare [memory] stays prose.",
+        references: Dictionary(uniqueKeysWithValues: references.map { ($0.ordinal, $0) })))
+
+    XCTAssertEqual(mask.markers.map(\.reference.ordinal), [5023, 5001])
+    XCTAssertTrue(mask.markdown.contains("Bare [memory] stays prose."))
+  }
 }

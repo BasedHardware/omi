@@ -18332,6 +18332,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open store'**
   String get accountCutoverOpenStore;
+
+  /// Toggle label controlling whether Custom STT raw audio is also sent to Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Send raw audio to Omi'**
+  String get sendRawAudioToOmi;
+
+  /// Explains that disabling raw audio forwarding preserves transcript-based cloud features
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.'**
+  String get sendRawAudioToOmiDescription;
+
+  /// Action that makes a nearby connected Omi pendant vibrate so the user can locate it
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

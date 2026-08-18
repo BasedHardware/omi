@@ -72,7 +72,16 @@ class SystemAudioMuteBridge {
       clearTimeout(pending.timer)
       pending.resolve(json)
     })
-    child.stdout.on('data', (chunk: Buffer) => decoder.push(chunk))
+    child.stdout.on('data', (chunk: Buffer) => {
+      try {
+        decoder.push(chunk)
+      } catch (e) {
+        // Desynced or oversized frame (the shared decoder now fails fast on
+        // both) — drop this helper and restart clean, like the OCR supervisor.
+        console.error('[win-audio-helper] protocol error:', (e as Error).message)
+        if (this.child === child) this.recycle()
+      }
+    })
     child.stderr.on('data', (c: Buffer) => console.log('[win-audio-helper]', c.toString().trim()))
     // Both handlers ignore a child we've already torn down (recycle() nulls
     // `this.child` first), so a recycle + its trailing 'exit' can't double-count.

@@ -503,9 +503,6 @@ esac
                 "rayban-dat-xcode-graph",
                 "rayban-dat-build-wrapper",
             },
-            ".github/workflows/desktop_qualify_beta.yml": {
-                "desktop-release-one-path-contract",
-            },
         }
         for path, expected in expected_by_path.items():
             windows = {check.id for check in resolve_checks(manifest, [path], "ci", platform="windows")}
@@ -520,7 +517,6 @@ esac
             "scripts/dev-harness/_resolve_python.sh": {
                 "dev-harness-unit-tests",
                 "desktop-release-process-guards",
-                "pre-tag-readiness-contract",
             },
             "scripts/pre-push-singleflight": {"pr-preflight-contract-tests"},
             ".github/scripts/preflight_runner.py": {"pr-preflight-contract-tests"},
@@ -532,7 +528,6 @@ esac
                 "check-manifest-contract",
                 "desktop-release-process-guards",
                 "desktop-swiftlint-config",
-                "pre-tag-readiness-behavior",
             },
         }
         for path, expected in expected_by_path.items():

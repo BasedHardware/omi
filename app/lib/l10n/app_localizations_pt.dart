@@ -9848,4 +9848,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Abrir loja';
+
+  @override
+  String get sendRawAudioToOmi => 'Enviar áudio em bruto para o Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Desative para impedir o envio de áudio em bruto para o Omi. As transcrições e os dados necessários às funcionalidades na nuvem ainda podem ser enviados para o Omi.';
+
+  @override
+  String get findDevice => 'Encontrar';
 }

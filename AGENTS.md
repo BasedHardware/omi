@@ -17,7 +17,9 @@ These rules apply to every AI agent working in this repository. This file is **h
 | Desktop macOS (`desktop/macos/`) | `desktop/macos/AGENTS.md` — build/run, named bundles, self-testing, release pipeline, changelog |
 | Firmware (`omi/firmware/`) | `omi/firmware/AGENTS.md` — release workflow |
 | Product behavior | `PRODUCT.md` + `docs/product/invariants/` — locked invariants and guard tests |
+| A rule shared across app/macOS/Windows (buckets, day grouping, wire decode) | `contracts/parity/README.md` — shared fixtures, per-platform conformance suites, divergence register |
 | Fallback/fail-open branches | `docs/agents/fallback-telemetry.md` — when to call `record_fallback` |
+| Mobile/desktop plan catalog | `docs/agents/plan-catalog.md` — who sees Plus/Neo/Operator/Architect |
 | App flows / E2E | `app/e2e/SKILL.md`, `desktop/macos/e2e/SKILL.md` |
 | Cursor Cloud VM (Linux x86) | `.cursor/cloud-agent-environment.md` — hermetic E2E harness, known failures |
 

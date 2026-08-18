@@ -881,15 +881,21 @@ end
 return {1, current, ttl}
 """)
 
-_RATE_LIMIT_RELEASE_LUA = r.register_script("""
+_RATE_LIMIT_RELEASE_LUA_SOURCE = """
 local key = KEYS[1]
-local current = tonumber(redis.call('GET', key) or '0')
+local current = tonumber(redis.call('GET', key) or '0') or 0
 if current <= 1 then
     redis.call('DEL', key)
     return 0
 end
-return redis.call('DECR', key)
-""")
+local remaining = tonumber(redis.call('DECR', key) or '0') or 0
+if remaining <= 0 then
+    redis.call('DEL', key)
+    return 0
+end
+return remaining
+"""
+_RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -913,13 +919,18 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 
 
 def reserve_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
-    """Atomically reserve one reversible slot without counting denied attempts."""
+    """Atomically reserve one reversible slot without counting denied attempts.
+
+    Returns ``(allowed, remaining, reset_seconds)``. ``reset_seconds`` is the
+    key TTL on both admit and deny so callers can advertise window reset without
+    a second Redis round-trip. Denied attempts still do not increment the counter.
+    """
     redis_key = f'rl:{policy}:{key}'
     admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests])
     allowed = bool(admitted)
     remaining = max(0, max_requests - current)
-    retry_after = max(0, ttl) if not allowed else 0
-    return allowed, remaining, retry_after
+    reset_seconds = max(0, int(ttl))
+    return allowed, remaining, reset_seconds
 
 
 def release_rate_limit(key: str, policy: str) -> None:
@@ -1055,6 +1066,16 @@ def can_update_persona(uid: str) -> bool:
 def set_speech_profile_duration(uid: str, duration: float) -> None:
     """Cache speech profile duration (write-ahead on upload)"""
     r.set(f'users:{uid}:speech_profile_duration', str(duration))
+
+
+@try_catch_decorator
+def get_speech_profile_duration(uid: str) -> Optional[float]:
+    """Read the cached speech profile duration in seconds (0.0 if unset; None if
+    the read itself fails, per try_catch_decorator's fail-open contract)."""
+    val = r.get(f'users:{uid}:speech_profile_duration')
+    if not val:
+        return 0.0
+    return float(val.decode() if isinstance(val, bytes) else val)
 
 
 # ******************************************************

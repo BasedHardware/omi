@@ -294,6 +294,59 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       "revoked while running → a relaunch can't help; the grant flow handles it")
   }
 
+  func testScreenCaptureKitInvokedOnlyWhenGrantWasLiveAtLaunch() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(grantedAtLaunch: true),
+      "SCK is usable when this process launched with Screen Recording already granted")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(grantedAtLaunch: false),
+      "an in-session first grant is not live on this window-server connection")
+  }
+
+  func testFirstGrantPathsDoNotCallScreenCaptureKitUntilRelaunch() throws {
+    // omi-test-quality: source-inspection -- static contract: SCK abort after an
+    // in-session first grant is not reproducible in XCTest without a WindowServer
+    // connection that predates TCC; every SCK entry must consult the policy gate.
+    let src = try sourceFile("Sources/ScreenCaptureService.swift")
+    XCTAssertTrue(src.contains("requestScreenCaptureKitPermissionIfUsableInThisProcess()"))
+    XCTAssertTrue(
+      src.contains("ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit("),
+      "ScreenCaptureService must consult the launch-time SCK gate")
+
+    guard let rfn = src.range(of: "static func requestAllScreenCapturePermissions() {"),
+      let rend = src.range(of: "\n  }", range: rfn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("requestAllScreenCapturePermissions must exist") }
+    let rbody = String(src[rfn.upperBound..<rend])
+    XCTAssertTrue(
+      rbody.contains("requestScreenCaptureKitPermissionIfUsableInThisProcess()"),
+      "requestAll must not call SCK until the grant is live in this process")
+    XCTAssertFalse(
+      rbody.contains("await requestScreenCaptureKitPermission()"),
+      "requestAll must not call raw SCK after the first TCC dialog")
+
+    guard
+      let pfn = src.range(of: "static func primeCaptureConsent() async {"),
+      let pend = src.range(of: "\n  }", range: pfn.upperBound..<src.endIndex)?.lowerBound
+    else { return XCTFail("primeCaptureConsent must exist") }
+    let pbody = String(src[pfn.upperBound..<pend])
+    XCTAssertTrue(
+      pbody.contains("shouldInvokeScreenCaptureKit"),
+      "primeCaptureConsent must skip SCK when the grant arrived after launch")
+
+    let onboarding = try sourceFile("Sources/Onboarding/SecondBrain/SBOnboardingModel+Steps.swift")
+    guard let ofn = onboarding.range(of: "func primeScreenCaptureConsentIfNeeded() {"),
+      let oend = onboarding.range(of: "\n  }", range: ofn.upperBound..<onboarding.endIndex)?
+        .lowerBound
+    else { return XCTFail("primeScreenCaptureConsentIfNeeded must exist") }
+    let obody = String(onboarding[ofn.upperBound..<oend])
+    XCTAssertTrue(
+      obody.contains("shouldInvokeScreenCaptureKit"),
+      "onboarding must not prime SCK until a relaunch makes the grant live")
+    XCTAssertTrue(
+      obody.contains("screenRecordingGrantedAtLaunch"),
+      "onboarding must use AppState's launch-time snapshot, not a post-grant preflight")
+  }
+
   func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
     let src = try sourceFile("Sources/ScreenCaptureService.swift")
     XCTAssertTrue(src.contains("static func screenCaptureRelaunchCommand(appPath: String) -> String"))

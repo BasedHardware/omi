@@ -3249,5 +3249,8 @@
     "accountCutoverMigrationInProgressTitle": "Taşıma devam ediyor",
     "accountCutoverMigrationInProgressMessage": "Hesabınız taşınıyor. Taşıma bitene kadar ürün özellikleri duraklatılır.",
     "accountCutoverMigrationRollbackMessage": "Taşıma geri alınmasından sonra hesabınız bakımda. Daha yeni bazı veriler izole kalabilir.",
-    "accountCutoverOpenStore": "Mağazayı aç"
+    "accountCutoverOpenStore": "Mağazayı aç",
+    "sendRawAudioToOmi": "Ham sesi Omi'ye gönder",
+    "sendRawAudioToOmiDescription": "Ham sesin Omi'ye gönderilmesini önlemek için kapatın. Transkriptler ve bulut özelliklerinin gerektirdiği veriler yine de Omi'ye gönderilebilir.",
+    "findDevice": "Bul"
 }
