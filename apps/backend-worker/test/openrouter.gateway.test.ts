@@ -244,13 +244,13 @@ describe("openrouter gateway redaction", () => {
 });
 
 describe("openrouter gateway fail-closed validation", () => {
-  test("gatewayConfig rejects empty URL, empty secret, empty model, and non-https URL", async () => {
+  test("gatewayConfig accepts the declared Luna model and rejects missing, unsafe, or drifted configuration", async () => {
     const { openrouter } = await import("../src/openrouter");
     const valid = {
       OPENROUTER_GATEWAY_ENABLED: "true",
       OPENROUTER_GATEWAY_URL: "https://gateway.example.invalid/openrouter",
       OPENROUTER_API_KEY: "secret",
-      OPENROUTER_MODEL: "test-model",
+      OPENROUTER_MODEL: openrouter.LUNA_MODEL,
     };
     expect(openrouter.gatewayConfig(valid)).not.toBeNull();
     expect(
@@ -261,6 +261,12 @@ describe("openrouter gateway fail-closed validation", () => {
     ).toBeNull();
     expect(
       openrouter.gatewayConfig({ ...valid, OPENROUTER_MODEL: "" })
+    ).toBeNull();
+    expect(
+      openrouter.gatewayConfig({
+        ...valid,
+        OPENROUTER_MODEL: "openai/gpt-5.6-luna-experimental",
+      })
     ).toBeNull();
     expect(
       openrouter.gatewayConfig({
