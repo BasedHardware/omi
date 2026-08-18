@@ -194,24 +194,76 @@ function OmiMark() {
   );
 }
 
-function OmiAvatar() {
+const omiDotPoses = [
+  {ring: {left: 17.5, top: 3.5}, smile: {left: 10, top: 12}},
+  {ring: {left: 27.5, top: 7.5}, smile: {left: 26, top: 12}},
+  {ring: {left: 31.5, top: 17.5}, smile: {left: 28, top: 23}},
+  {ring: {left: 27.5, top: 27.5}, smile: {left: 25, top: 27}},
+  {ring: {left: 17.5, top: 31.5}, smile: {left: 21, top: 30}},
+  {ring: {left: 7.5, top: 27.5}, smile: {left: 15, top: 30}},
+  {ring: {left: 3.5, top: 17.5}, smile: {left: 11, top: 27}},
+  {ring: {left: 7.5, top: 7.5}, smile: {left: 8, top: 23}},
+] as const;
+
+function OmiAvatar({
+  animate = false,
+  reduceMotion = false,
+}: {
+  animate?: boolean;
+  reduceMotion?: boolean;
+}) {
+  const smileProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    smileProgress.setValue(0);
+    if (!animate || reduceMotion) {
+      return;
+    }
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(smileProgress, {
+          duration: 520,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(smileProgress, {
+          duration: 900,
+          easing: Easing.out(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [animate, reduceMotion, smileProgress]);
+
   return (
     <View
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       style={styles.chatAvatar}>
-      {[
-        styles.chatAvatarDotTop,
-        styles.chatAvatarDotTopRight,
-        styles.chatAvatarDotRight,
-        styles.chatAvatarDotBottomRight,
-        styles.chatAvatarDotBottom,
-        styles.chatAvatarDotBottomLeft,
-        styles.chatAvatarDotLeft,
-        styles.chatAvatarDotTopLeft,
-      ].map((position, index) => (
-        <View key={index} style={[styles.chatAvatarDot, position]} />
-      ))}
+      {omiDotPoses.map(({ring, smile}, index) => {
+        const translateX = smileProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, smile.left - ring.left],
+        });
+        const translateY = smileProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, smile.top - ring.top],
+        });
+        return (
+          <Animated.View
+            key={index}
+            style={[
+              styles.chatAvatarDot,
+              ring,
+              {transform: [{translateX}, {translateY}]},
+            ]}
+          />
+        );
+      })}
     </View>
   );
 }
@@ -1110,7 +1162,7 @@ function ChatThinking({reduceMotion}: {reduceMotion: boolean}) {
   }, [dots, reduceMotion]);
   return (
     <View style={[styles.chatMessageRow, styles.chatMessageRowAi]}>
-      <OmiAvatar />
+      <OmiAvatar animate reduceMotion={reduceMotion} />
       <View
         accessibilityLabel="Thinking"
         style={[styles.chatBubble, styles.chatBubbleAi]}>
@@ -2510,14 +2562,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 5,
   },
-  chatAvatarDotTop: {left: 17.5, top: 3.5},
-  chatAvatarDotTopRight: {left: 27.5, top: 7.5},
-  chatAvatarDotRight: {left: 31.5, top: 17.5},
-  chatAvatarDotBottomRight: {left: 27.5, top: 27.5},
-  chatAvatarDotBottom: {left: 17.5, top: 31.5},
-  chatAvatarDotBottomLeft: {left: 7.5, top: 27.5},
-  chatAvatarDotLeft: {left: 3.5, top: 17.5},
-  chatAvatarDotTopLeft: {left: 7.5, top: 7.5},
   chatTimestamp: {color: '#666666', fontSize: 12, marginTop: 4},
   chatTimestampHuman: {textAlign: 'right'},
   cancelledMessage: {borderColor: '#666666', opacity: 0.72},
