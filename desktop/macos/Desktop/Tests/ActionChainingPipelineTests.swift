@@ -29,7 +29,7 @@ final class ActionChainingPipelineTests: XCTestCase {
     )
     let memory = [
       "You": "Pad Thai with Tofu",
-      "Maya": "Green Curry with Jasmine Rice"
+      "Maya": "Green Curry with Jasmine Rice",
     ]
 
     let proposal = ActionChainingPipeline.plan(
@@ -42,10 +42,12 @@ final class ActionChainingPipelineTests: XCTestCase {
     XCTAssertNotNil(proposal)
     XCTAssertEqual(proposal?.title, "Food Order for You and Maya")
     XCTAssertEqual(proposal?.participants, ["You", "Maya"])
-    XCTAssertEqual(proposal?.items, [
-      "You: Pad Thai with Tofu",
-      "Maya: Green Curry with Jasmine Rice"
-    ])
+    XCTAssertEqual(
+      proposal?.items,
+      [
+        "You: Pad Thai with Tofu",
+        "Maya: Green Curry with Jasmine Rice",
+      ])
     XCTAssertEqual(proposal?.estimatedCost, "$32.00")
   }
 

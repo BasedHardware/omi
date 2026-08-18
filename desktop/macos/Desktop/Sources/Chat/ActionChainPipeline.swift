@@ -149,7 +149,8 @@ enum ActionChainingPipeline {
     proposal: ActionProposal,
     now: Date = Date()
   ) -> ActionReceipt {
-    let deadline = proposal.isReversible
+    let deadline =
+      proposal.isReversible
       ? now.addingTimeInterval(proposal.cancellationWindowSeconds)
       : nil
 
