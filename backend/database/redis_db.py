@@ -522,7 +522,7 @@ def publish_proactive_message(
 _async_redis_client: Optional[Any] = None
 
 
-def get_async_redis_client() -> Any:
+async def get_async_redis_client() -> Any:
     global _async_redis_client
     if _async_redis_client is None:
         import redis.asyncio as _asyncio_redis

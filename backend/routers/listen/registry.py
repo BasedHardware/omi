@@ -16,13 +16,14 @@ import logging
 import threading
 from typing import Any, Dict, List, Set
 
-from database.redis_db import PROACTIVE_MESSAGE_CHANNEL, get_async_redis_client
 from models.message_event import ProactiveMessageEvent
 
 logger = logging.getLogger(__name__)
 
 _sessions: Dict[str, Set[Any]] = {}
 _lock = threading.Lock()
+
+PROACTIVE_MESSAGE_CHANNEL = "proactive_message:listen"
 
 
 def register(session: Any) -> None:
@@ -47,7 +48,16 @@ def _sessions_for(uid: str) -> List[Any]:
 
 async def proactive_message_dispatcher(client: Any = None) -> None:
     if client is None:
-        client = get_async_redis_client()
+        import os
+        import redis.asyncio as aioredis
+
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        client = aioredis.Redis(
+            host=redis_host,
+            port=6379,
+            db=0,
+            decode_responses=True,
+        )
     pubsub = client.pubsub()
     try:
         await pubsub.subscribe(PROACTIVE_MESSAGE_CHANNEL)
