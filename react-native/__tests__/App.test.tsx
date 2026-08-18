@@ -482,25 +482,43 @@ test('renders the collapsed reference rail and search-first desktop Home', async
   ).toHaveLength(1);
 });
 
-test('renders the compact native-device fallback, Currents, and bottom-search Home', async () => {
+test('renders a pendant-first Home with a bottom-anchored search dock', async () => {
+  mockViewportWidth = 390;
   const renderer = await renderApp();
   const output = JSON.stringify(renderer.toJSON());
 
-  expect(output).toContain('Checking Bluetooth…');
-  expect(output).toContain('Scan');
-  expect(output).toContain('Currents');
+  expect(output).toContain('Home pendant');
+  expect(output).not.toContain('Devices');
+  expect(output).not.toContain('Currents');
   expect(output).not.toContain('QA bridge check');
   expect(output).toContain('Search Omi');
   expect(output).toContain('Home search dock');
   expect(output).not.toContain('HOME');
   expect(output).not.toContain('LATEST');
+
+  const pendant = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home pendant',
+  );
+  expect(
+    pendant.find(node => String(node.type) === 'Image').props.style,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({height: 248, width: 248}),
+    ]),
+  );
+  const dock = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home search dock',
+  );
+  expect(dock.props.style).toEqual(
+    expect.arrayContaining([expect.objectContaining({marginTop: 'auto'})]),
+  );
 });
 test('keeps Home calm until a search begins, then fades in matching results', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();
   const beforeSearch = JSON.stringify(renderer.toJSON());
 
-  expect(beforeSearch).toContain('Currents');
+  expect(beforeSearch).toContain('Home pendant');
   expect(beforeSearch).toContain('Omi');
   expect(beforeSearch).not.toContain('QA bridge check');
   const search = renderer.root.find(
@@ -1290,7 +1308,9 @@ test('uses a full, navigation-free pane on mobile', async () => {
       .props.value,
   ).toBe('');
   expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Omi'),
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home pendant',
+    ),
   ).toBeDefined();
 });
 
