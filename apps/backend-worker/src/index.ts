@@ -5,10 +5,41 @@ import { AccountBackend } from "./account";
 import { backendError, isChatCreate, json } from "./wire";
 
 type WorkerEnv = Env & { API_TOKEN: string };
-type Variables = { accountId: string };
+type Variables = { accountId: string; requestId: string };
+
+type ObservableContext = {
+  req: { method: string; routePath: string };
+  res: { status: number };
+  set(key: "requestId", value: string): void;
+  get(key: "requestId"): string | undefined;
+  header(name: string, value: string): void;
+};
 
 const app = new Hono<{ Bindings: WorkerEnv; Variables: Variables }>({
   strict: true,
+});
+
+// Emit one small, schema-stable JSON event for every request. Cloudflare
+// Workers Observability can retain it natively and Better Stack can ingest the
+// same line without a Worker-specific SDK. The event intentionally carries no
+// URL, query, authorization header, account identifier, request body, prompt,
+// or completion content.
+app.use("*", async (context, next) => {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  context.set("requestId", requestId);
+  await next();
+  context.header("x-omi-request-id", requestId);
+  console.log(
+    JSON.stringify({
+      event: "request_completed",
+      request_id: requestId,
+      method: context.req.method,
+      route: safeRoute(context),
+      status: context.res.status,
+      duration_ms: Math.max(0, Date.now() - startedAt),
+    })
+  );
 });
 
 app.get("/health", (context) =>
@@ -36,8 +67,9 @@ app.use("/v1/*", async (context, next) => {
     // refusal, so a misconfigured deployment is not advertised over the wire.
     console.error(
       JSON.stringify({
-        message: "configuration_not_ready",
-        path: context.req.path,
+        event: "configuration_not_ready",
+        request_id: context.get("requestId") ?? "unavailable",
+        route: safeRoute(context),
       })
     );
     return backendError("unauthorized", "reauthenticate", 401);
@@ -143,9 +175,10 @@ app.notFound(() => backendError("not_found", "edit_request", 404));
 app.onError((error, context) => {
   console.error(
     JSON.stringify({
-      message: "request_failed",
+      event: "request_failed",
+      request_id: context.get("requestId") ?? "unavailable",
       name: error.name,
-      path: context.req.path,
+      route: safeRoute(context),
     })
   );
   return backendError("internal_server_error", "retry", 500, true);
@@ -157,6 +190,11 @@ const handler = {
 
 export { AccountBackend };
 export default handler;
+
+function safeRoute(context: Pick<ObservableContext, "req">): string {
+  const route = context.req.routePath;
+  return route.startsWith("/") && route.length <= 200 ? route : "unmatched";
+}
 
 function account(context: { env: WorkerEnv; get(key: "accountId"): string }) {
   return context.env.ACCOUNTS.getByName(context.get("accountId"));

@@ -181,6 +181,36 @@ describe("worker request contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
+  test("request telemetry is correlation-safe and excludes query content", async () => {
+    const messages: unknown[][] = [];
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => messages.push(args);
+    try {
+      const response = await fetchWorker("/health?private=must-not-appear");
+      const requestId = response.headers.get("x-omi-request-id");
+
+      expect(response.status).toBe(200);
+      expect(requestId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      );
+      expect(messages).toHaveLength(1);
+      const [eventPayload] = messages[0]!;
+      expect(messages[0]).toHaveLength(1);
+      const event = JSON.parse(String(eventPayload)) as Record<string, unknown>;
+      expect(event).toMatchObject({
+        event: "request_completed",
+        request_id: requestId,
+        method: "GET",
+        route: "/health",
+        status: 200,
+      });
+      expect(event).not.toHaveProperty("path");
+      expect(JSON.stringify(event)).not.toContain("must-not-appear");
+    } finally {
+      console.log = originalLog;
+    }
+  });
+
   test("readiness fails closed when required configuration is absent", async () => {
     const response = await handler.fetch(
       new Request("https://worker.test/ready"),
@@ -196,6 +226,33 @@ describe("worker request contract", () => {
         action: "retry",
       },
     });
+  });
+
+  test("configuration failures log a route template rather than user input", async () => {
+    const messages: unknown[][] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => messages.push(args);
+    try {
+      const response = await handler.fetch(
+        new Request("https://worker.test/v1/settings?private=must-not-appear", {
+          headers: authenticatedHeaders,
+        }),
+        { ...env, API_TOKEN: "" } as never,
+        executionContext as never
+      );
+
+      expect(response.status).toBe(401);
+      const [eventPayload] = messages[0]!;
+      const event = JSON.parse(String(eventPayload)) as Record<string, unknown>;
+      expect(event).toMatchObject({
+        event: "configuration_not_ready",
+        route: "/v1/*",
+      });
+      expect(event).not.toHaveProperty("path");
+      expect(JSON.stringify(event)).not.toContain("must-not-appear");
+    } finally {
+      console.error = originalError;
+    }
   });
 
   // `/ready` reporting 503 is a signal, not an enforcement point: Cloudflare
