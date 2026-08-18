@@ -51,6 +51,10 @@ jest.mock('react-native', () => {
   );
   class MockAnimatedValue {
     value: number;
+    interpolate = jest.fn((config: Record<string, unknown>) => ({
+      config,
+      type: 'interpolation',
+    }));
     setValue = jest.fn((value: number) => {
       this.value = value;
     });
@@ -1749,15 +1753,21 @@ test('renders saved Chat history as a wide transcript without the resting hub', 
         node.props.style?.width === 40,
     ),
   ).not.toHaveLength(0);
+  const avatarDots = renderer.root.findAll(
+    node =>
+      String(node.type) === 'AnimatedView' &&
+      Array.isArray(node.props.style) &&
+      node.props.style[0]?.height === 5 &&
+      node.props.style[0]?.width === 5,
+  );
+  expect(avatarDots).toHaveLength(8);
   expect(
-    renderer.root.findAll(
-      node =>
-        String(node.type) === 'View' &&
-        Array.isArray(node.props.style) &&
-        node.props.style[0]?.height === 5 &&
-        node.props.style[0]?.width === 5,
+    avatarDots.every(
+      dot =>
+        Array.isArray(dot.props.style[2]?.transform) &&
+        dot.props.style[2].transform.length === 2,
     ),
-  ).toHaveLength(8);
+  ).toBe(true);
   expect(
     renderer.root.findAll(
       node =>
