@@ -17,10 +17,20 @@ traffic is routed.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Callable
+
+
+# Git exports GIT_DIR & friends while running hooks; the ancestry probes below
+# must always target the repository containing the current directory instead.
+_GIT_ENV = {
+    key: value
+    for key, value in os.environ.items()
+    if key not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE"}
+}
 
 
 @dataclass(frozen=True)
@@ -93,12 +103,14 @@ def _git_is_ancestor(repo_ancestor: str, repo_descendant: str) -> bool | None:
         resolved = subprocess.run(
             ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
             capture_output=True,
+            env=_GIT_ENV,
         )
         if resolved.returncode != 0:
             return None
     completed = subprocess.run(
         ["git", "merge-base", "--is-ancestor", repo_ancestor, repo_descendant],
         capture_output=True,
+        env=_GIT_ENV,
     )
     if completed.returncode == 0:
         return True
