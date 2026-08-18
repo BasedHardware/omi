@@ -137,7 +137,7 @@ class TestEffectiveDesktopAccessTier:
 
         assert is_trial_paywalled('neo-uid', 'desktop') is False
         assert get_remaining_transcription_seconds('neo-uid', source='desktop') is None
-        assert cleared_cache_keys == ['trial_paywall:expired:neo-uid']
+        assert cleared_cache_keys == ['trial_paywall:expired:neo-uid:gemini', 'trial_paywall:expired:neo-uid']
 
 
 class TestNeoGrandfatherUntil:
