@@ -71,6 +71,7 @@ from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import (
+    MemoryExtractionError,
     extract_canonical_l1_memory_candidates,
     extract_memories_from_text,
 )
@@ -887,9 +888,8 @@ def _extract_memories_canonical(
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
-            capture_candidates = [
-                (memory, [], "unknown", [], False)
-                for memory in extract_memories_from_text(
+            try:
+                extracted_memories = extract_memories_from_text(
                     uid,
                     text_content,
                     text_source,
@@ -897,18 +897,58 @@ def _extract_memories_canonical(
                     content_date=content_date,
                     strict=True,
                 )
-            ]
+            except MemoryExtractionError as exc:
+                # Same verdict as the transcript path (#11777): a provider
+                # failure skips the replacement so existing memories survive and
+                # conversation finalization completes instead of raising.
+                logger.warning(
+                    "canonical memory extraction skipped replacement: external text provider failure "
+                    "conversation=%s extractor=%s",
+                    conversation.id,
+                    exc.extractor,
+                )
+                record_fallback(
+                    component='other',
+                    from_mode='canonical_memory_extraction',
+                    to_mode='replacement_skipped',
+                    reason='provider_5xx',
+                    outcome='degraded',
+                )
+                return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
+            capture_candidates = [(memory, [], "unknown", [], False) for memory in extracted_memories]
     else:
         raw_user_name = get_user_name(uid)
         user_name = raw_user_name.strip() if isinstance(raw_user_name, str) and raw_user_name.strip() else "the user"
-        extracted_candidates = extract_canonical_l1_memory_candidates(
-            uid,
-            conversation.id,
-            conversation.transcript_segments,
-            user_name=user_name,
-            language=language,
-            strict=True,
-        )
+        from utils.llm.working_observations import WorkingObservationExtractionError
+
+        try:
+            extracted_candidates = extract_canonical_l1_memory_candidates(
+                uid,
+                conversation.id,
+                conversation.transcript_segments,
+                user_name=user_name,
+                language=language,
+                strict=True,
+            )
+        except WorkingObservationExtractionError as exc:
+            # A provider failure is not "no memories": submitting the empty
+            # replacement would retract the source's existing memories. Skipping
+            # the replacement is the verdict; returning (instead of raising)
+            # lets the caller's action items, goal progress, audio files and
+            # created webhook finish too (#11777).
+            logger.warning(
+                "canonical memory extraction skipped replacement: provider failure " "conversation=%s stage=%s",
+                conversation.id,
+                exc.stage,
+            )
+            record_fallback(
+                component='other',
+                from_mode='canonical_memory_extraction',
+                to_mode='replacement_skipped',
+                reason='provider_5xx',
+                outcome='degraded',
+            )
+            return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
         ungrounded_candidates = 0
         seen_candidates = 0
         for candidate in extracted_candidates:

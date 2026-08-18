@@ -135,6 +135,98 @@ def test_universal_reextract_failure_preserves_existing_memories(monkeypatch):
     mock_service.replace_conversation_memories.assert_not_called()
 
 
+def test_universal_reextract_typed_failure_skips_replacement_and_finalizes(monkeypatch):
+    """A strict working-observation failure is not 'valid empty': skip the replacement (do not retract existing memories) and still finalize instead of raising."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from utils.llm.working_observations import WorkingObservationExtractionError
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    fail_fallback = MagicMock()
+    monkeypatch.setattr(pc, "record_fallback", fail_fallback)
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(side_effect=WorkingObservationExtractionError("invoke")),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-canonical-typed-failure",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[],
+    )
+
+    result = pc._extract_memories_inner("uid-canonical-typed-failure", conversation)
+
+    assert result.count == 0
+    assert result.path == pc.PATH_CANONICAL
+    mock_service.replace_conversation_memories.assert_not_called()
+    fail_fallback.assert_any_call(
+        component="other",
+        from_mode="canonical_memory_extraction",
+        to_mode="replacement_skipped",
+        reason="provider_5xx",
+        outcome="degraded",
+    )
+
+
+def test_universal_reextract_external_provider_failure_skips_replacement(monkeypatch):
+    """An external-integration extractor provider failure must skip the replacement the same way as the transcript path."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+
+    class ExtractorProviderFailure(RuntimeError):
+        def __init__(self, extractor: str):
+            self.extractor = extractor
+            super().__init__(f"{extractor} failed before producing a valid extraction result")
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc, "MemoryExtractionError", ExtractorProviderFailure)
+    fail_fallback = MagicMock()
+    monkeypatch.setattr(pc, "record_fallback", fail_fallback)
+    monkeypatch.setattr(
+        pc,
+        "extract_memories_from_text",
+        MagicMock(side_effect=ExtractorProviderFailure("external_text_memory_extractor")),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-canonical-external-failure",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.external_integration,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        external_data={"text": "Product docs to memorize.", "text_source": "readme"},
+        transcript_segments=[],
+    )
+
+    result = pc._extract_memories_inner("uid-canonical-external-failure", conversation)
+
+    assert result.count == 0
+    assert result.path == pc.PATH_CANONICAL
+    mock_service.replace_conversation_memories.assert_not_called()
+    fail_fallback.assert_any_call(
+        component="other",
+        from_mode="canonical_memory_extraction",
+        to_mode="replacement_skipped",
+        reason="provider_5xx",
+        outcome="degraded",
+    )
+
+
 def test_universal_reextract_valid_empty_replaces_existing_source_state(monkeypatch):
     """A valid empty extraction is an authoritative source replacement."""
     pc = _load_process_conversation()
