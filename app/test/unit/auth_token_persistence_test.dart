@@ -137,7 +137,8 @@ void main() {
     }
     final delete = SharedPreferencesUtil().persistAuthToken('');
 
-    await Future.wait([write, delete]);
+    expect(await write.timeout(const Duration(milliseconds: 1050)), isFalse);
+    await delete;
     await Future<void>.delayed(const Duration(milliseconds: 1200));
 
     expect(storage.value, isNull);

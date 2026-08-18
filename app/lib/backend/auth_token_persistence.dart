@@ -37,12 +37,20 @@ final class AuthTokenPersistence {
   final SharedPreferences _preferences;
   final AuthTokenStorage _storage;
 
+  Future<void> _mutationTail = Future<void>.value();
+
   static const _authTokenKey = 'authToken';
   static const _nativeAuthTokenKey = 'nativeAuthToken';
   static const _authTokenDeletePendingKey = 'authTokenDeletePending';
 
   static AuthTokenStorage createDefaultStorage() {
     return const _FlutterSecureAuthTokenStorage(FlutterSecureStorage());
+  }
+
+  Future<T> _withMutationFence<T>(Future<T> Function() operation) {
+    final completion = _mutationTail.then((_) => operation());
+    _mutationTail = completion.then<void>((_) {}, onError: (_, __) {});
+    return completion.timeout(const Duration(seconds: 1));
   }
 
   Future<T> _withRetry<T>(Future<T> Function() operation, String label,
@@ -74,11 +82,13 @@ final class AuthTokenPersistence {
 
   Future<bool> writeSecureAuthToken(String value) async {
     try {
-      return await _withRetry(() async {
-        await _storage.write(value);
-        if (await _storage.read() == value) return true;
-        throw StateError('secure authToken verification failed');
-      }, 'writeAuthToken to secure storage');
+      return await _withMutationFence(
+        () => _withRetry(() async {
+          await _storage.write(value);
+          if (await _storage.read() == value) return true;
+          throw StateError('secure authToken verification failed');
+        }, 'writeAuthToken to secure storage'),
+      );
     } catch (e) {
       Logger.error('Failed to write authToken to secure storage: ${e.runtimeType}');
       return false;
@@ -87,11 +97,13 @@ final class AuthTokenPersistence {
 
   Future<bool> deleteSecureAuthToken() async {
     try {
-      return await _withRetry(() async {
-        await _storage.delete();
-        if (await _storage.read() == null) return true;
-        throw StateError('secure authToken deletion verification failed');
-      }, 'deleteAuthToken from secure storage');
+      return await _withMutationFence(
+        () => _withRetry(() async {
+          await _storage.delete();
+          if (await _storage.read() == null) return true;
+          throw StateError('secure authToken deletion verification failed');
+        }, 'deleteAuthToken from secure storage'),
+      );
     } catch (e) {
       Logger.error('Failed to delete authToken from secure storage: ${e.runtimeType}');
       return false;
