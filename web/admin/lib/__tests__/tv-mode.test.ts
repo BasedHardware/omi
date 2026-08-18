@@ -8,7 +8,11 @@ import {
   safeEqualHex,
   tvLinkStatus,
 } from "../tv-links";
-import { daysUntilMillion, MILLION_USERS } from "../tv-snapshot";
+import {
+  daysUntilMillion,
+  MILLION_USERS,
+  projectRevenue,
+} from "../tv-snapshot";
 
 describe("tv-links crypto", () => {
   it("hashes tokens with sha256 hex", () => {
@@ -39,18 +43,24 @@ describe("tv link status", () => {
   const now = 1_700_000_000_000;
 
   it("marks active / expired / revoked correctly", () => {
-    expect(tvLinkStatus({ revokedAt: null, expiresAt: null }, now)).toBe("active");
+    expect(tvLinkStatus({ revokedAt: null, expiresAt: null }, now)).toBe(
+      "active",
+    );
     expect(tvLinkStatus({ revokedAt: null, expiresAt: now + 1000 }, now)).toBe(
       "active",
     );
     expect(tvLinkStatus({ revokedAt: null, expiresAt: now - 1 }, now)).toBe(
       "expired",
     );
-    expect(tvLinkStatus({ revokedAt: now, expiresAt: null }, now)).toBe("revoked");
+    expect(tvLinkStatus({ revokedAt: now, expiresAt: null }, now)).toBe(
+      "revoked",
+    );
     expect(isTvLinkActive({ revokedAt: null, expiresAt: now + 1 }, now)).toBe(
       true,
     );
-    expect(isTvLinkActive({ revokedAt: now, expiresAt: null }, now)).toBe(false);
+    expect(isTvLinkActive({ revokedAt: now, expiresAt: null }, now)).toBe(
+      false,
+    );
   });
 });
 
@@ -95,5 +105,43 @@ describe("daysUntilMillion", () => {
       asOf: "2026-01-02T12:00:00Z",
     });
     expect(m.days).toBeNull();
+  });
+});
+
+describe("projectRevenue", () => {
+  const base = {
+    mrr: 5000,
+    arr: 60_000,
+    trialingSubscriptions: 12,
+    byProduct: [
+      { productName: "Omi Premium", mrr: 3000, subscriptionCount: 30 },
+      { productName: "Omi Pro", mrr: 2000, subscriptionCount: 20 },
+    ],
+  };
+
+  it("carries trialing subscriptions through, outside MRR subscription count", () => {
+    const r = projectRevenue(base);
+    expect(r.mrr).toBe(5000);
+    expect(r.arr).toBe(60_000);
+    expect(r.subscriptionCount).toBe(50); // 30 + 20 — trials excluded
+    expect(r.trialingSubscriptions).toBe(12);
+    expect(r.unavailable).toBe(false);
+  });
+
+  it("nulls every figure, including trials, when Stripe is unavailable", () => {
+    const r = projectRevenue({ ...base, unavailable: true });
+    expect(r.mrr).toBeNull();
+    expect(r.arr).toBeNull();
+    expect(r.subscriptionCount).toBeNull();
+    expect(r.trialingSubscriptions).toBeNull();
+    expect(r.unavailable).toBe(true);
+  });
+
+  it("projects per-product ARR from monthly MRR", () => {
+    const r = projectRevenue(base);
+    expect(r.byProduct).toEqual([
+      { name: "Omi Premium", arr: 36_000, subscriptions: 30 },
+      { name: "Omi Pro", arr: 24_000, subscriptions: 20 },
+    ]);
   });
 });

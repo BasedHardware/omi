@@ -30,6 +30,11 @@ const PLATFORM_EXPR = `multiIf(
   'other'
 )`;
 
+// Chat events are emitted only by the Flutter app (iOS/Android) and the macOS
+// desktop (floating bar). The web app reports to Mixpanel, not PostHog, and
+// desktop/windows emits none of these events — so the chat tile's totals
+// structurally cover Mac/iOS/Android only. The board labels that scope
+// explicitly instead of implying a product-wide (or Windows) zero.
 const CHAT_EVENTS = `event IN ('Chat Message Sent','floating_bar_query_sent','Floating Bar Query Sent')`;
 // Count both the authoritative backend conversation-memory event
 // (Conversation Memories Extracted — emitted after durable persistence in
@@ -37,6 +42,9 @@ const CHAT_EVENTS = `event IN ('Chat Message Sent','floating_bar_query_sent','Fl
 // proactive screen-context assistant event (Memory Extracted). Counting only
 // the latter omits all regular mobile/device conversation memories.
 const MEMORY_EVENTS = `event IN ('Memory Extracted','Conversation Memories Extracted')`;
+// Conversation (recording start) events are emitted only by the Flutter app
+// (iOS/Android) and the macOS desktop; desktop/windows does not emit
+// 'Desktop Recording Started'. Scoped like the chat tile above.
 const CONV_EVENT = `event IN ('Phone Mic Recording Started','Desktop Recording Started')`;
 
 export type SeriesPoint = {
@@ -65,6 +73,10 @@ export type TvSnapshot = {
     mrr: number | null;
     arr: number | null;
     subscriptionCount: number | null;
+    // Trials are pipeline, not revenue (AGENTS.md): reported alongside MRR,
+    // never inside it. Kept out of subscriptionCount so the board can render
+    // it separately from MRR subscriptions.
+    trialingSubscriptions: number | null;
     byProduct: Array<{ name: string; arr: number; subscriptions: number }>;
     unavailable?: boolean;
   } | null;
@@ -353,10 +365,42 @@ function pivotPlatformSeries(
   return Array.from(byT.values()).sort((a, b) => a.t - b.t);
 }
 
+// Project a computeRevenue() result into the snapshot's revenue shape.
+// Pure so tests can cover trial propagation and unavailable handling without
+// mocking Stripe. `trialingSubscriptions` is carried through (not folded into
+// MRR/subscriptionCount) so the board can render it as pipeline, separately.
+export function projectRevenue(rev: {
+  mrr: number;
+  arr: number;
+  trialingSubscriptions: number;
+  byProduct: Array<{
+    productName: string;
+    mrr: number;
+    subscriptionCount: number;
+  }>;
+  unavailable?: boolean;
+}): NonNullable<TvSnapshot["revenue"]> {
+  const byProduct = (rev.byProduct || []).map((p) => ({
+    name: p.productName,
+    arr: (p.mrr || 0) * 12,
+    subscriptions: p.subscriptionCount || 0,
+  }));
+  return {
+    mrr: rev.unavailable ? null : rev.mrr,
+    arr: rev.unavailable ? null : rev.arr,
+    subscriptionCount: rev.unavailable
+      ? null
+      : byProduct.reduce((a, p) => a + p.subscriptions, 0),
+    trialingSubscriptions: rev.unavailable ? null : rev.trialingSubscriptions,
+    byProduct,
+    unavailable: !!rev.unavailable,
+  };
+}
+
 async function buildTvSnapshotUncached(opts: {
   includeRevenue: boolean;
 }): Promise<TvSnapshot> {
-  const cacheKey = `tv-snapshot:v6:rev=${opts.includeRevenue ? 1 : 0}`;
+  const cacheKey = `tv-snapshot:v7:rev=${opts.includeRevenue ? 1 : 0}`;
   const cached = await getPayload<TvSnapshot>(cacheKey);
   if (cached?.data && Date.now() - cached.freshAt < SNAPSHOT_TTL_MS) {
     return cached.data;
@@ -377,26 +421,7 @@ async function buildTvSnapshotUncached(opts: {
     ? computeRevenue()
         .then((rev) => {
           stripeOk = !rev.unavailable;
-          const byProduct = (rev.byProduct || []).map(
-            (p: {
-              productName: string;
-              mrr: number;
-              subscriptionCount: number;
-            }) => ({
-              name: p.productName,
-              arr: (p.mrr || 0) * 12,
-              subscriptions: p.subscriptionCount || 0,
-            }),
-          );
-          revenue = {
-            mrr: rev.unavailable ? null : rev.mrr,
-            arr: rev.unavailable ? null : rev.arr,
-            subscriptionCount: rev.unavailable
-              ? null
-              : byProduct.reduce((a, p) => a + p.subscriptions, 0),
-            byProduct,
-            unavailable: !!rev.unavailable,
-          };
+          revenue = projectRevenue(rev);
           if (rev.partial) warnings.push("stripe: partial");
           if (rev.unavailable) warnings.push("stripe: unavailable");
         })
@@ -408,6 +433,7 @@ async function buildTvSnapshotUncached(opts: {
             mrr: null,
             arr: null,
             subscriptionCount: null,
+            trialingSubscriptions: null,
             byProduct: [],
             unavailable: true,
           };
@@ -743,7 +769,7 @@ const inFlightSnapshots = new Map<string, Promise<TvSnapshot>>();
 export async function buildTvSnapshot(opts: {
   includeRevenue: boolean;
 }): Promise<TvSnapshot> {
-  const cacheKey = `tv-snapshot:v6:rev=${opts.includeRevenue ? 1 : 0}`;
+  const cacheKey = `tv-snapshot:v7:rev=${opts.includeRevenue ? 1 : 0}`;
   const active = inFlightSnapshots.get(cacheKey);
   if (active) return active;
 

@@ -2,14 +2,14 @@
 
 ## Surfaces
 
-| Path | Auth | Purpose |
-| --- | --- | --- |
-| `/dashboard` (TV wall links panel) | Firebase admin | Create / list / revoke share links |
-| `/dashboard/tv-links` | Firebase admin | Dedicated TV link management page |
-| `/tv/view/<token>` | Capability token in path | Kiosk wall view; no Google login |
-| `GET /api/tv/snapshot` | Admin bearer **or** TV token | Aggregate metrics only |
-| `GET/POST /api/omi/tv-links` | Firebase admin | Manage share links |
-| `DELETE /api/omi/tv-links/[id]` | Firebase admin | Revoke a share link |
+| Path                               | Auth                         | Purpose                            |
+| ---------------------------------- | ---------------------------- | ---------------------------------- |
+| `/dashboard` (TV wall links panel) | Firebase admin               | Create / list / revoke share links |
+| `/dashboard/tv-links`              | Firebase admin               | Dedicated TV link management page  |
+| `/tv/view/<token>`                 | Capability token in path     | Kiosk wall view; no Google login   |
+| `GET /api/tv/snapshot`             | Admin bearer **or** TV token | Aggregate metrics only             |
+| `GET/POST /api/omi/tv-links`       | Firebase admin               | Manage share links                 |
+| `DELETE /api/omi/tv-links/[id]`    | Firebase admin               | Revoke a share link                |
 
 Kiosk is link-only; link management lives on `/dashboard` and `/dashboard/tv-links`.
 
@@ -29,10 +29,11 @@ Kiosk is link-only; link management lives on `/dashboard` and `/dashboard/tv-lin
 
 ## Snapshot contents
 
-- Stripe ARR/MRR via `computeRevenue` (optional per link; unavailable Stripe is marked partial)
+- Stripe ARR/MRR via `computeRevenue` (optional per link; unavailable Stripe is marked partial); trialing subscriptions are carried through and rendered separately from MRR subscriptions (trials are pipeline, not revenue)
 - PostHog activity (DAU/WAU by platform via `$os_name`/`$os`, conversation/chat/memory boards) via `posthogResults`
 - Days-to-1M from PostHog `persons` + 7-calendar-day avg new persons/day (zero-filled missing days)
 - Chat metrics use `floating_bar_query_sent` (sent queries only, not panel opens)
+- Conversation/chat event predicates are only emitted by the Flutter app (iOS/Android) and the macOS desktop: desktop/windows does not emit `Chat Message Sent`, the floating-bar events, or `Desktop Recording Started`, and the web app reports to Mixpanel — so those tiles are explicitly labeled Mac/iOS/Android, and a Windows zero there is a coverage gap in the Windows app, not zero usage
 - No Prometheus; no M1 retention; no PII
 - If every enabled source fails, the snapshot endpoint errors (502) instead of caching an empty board
 

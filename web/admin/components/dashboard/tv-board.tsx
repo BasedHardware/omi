@@ -791,6 +791,10 @@ export function TvBoard({
                   <div className="tv-caption">
                     {fmt(r.subscriptionCount)} subscriptions · MRR{" "}
                     {fmtMoney(r.mrr)}
+                    {r.trialingSubscriptions != null &&
+                    r.trialingSubscriptions > 0
+                      ? ` · ${fmt(r.trialingSubscriptions)} trialing`
+                      : ""}
                   </div>
                 </div>
                 <div className="tv-pie">
@@ -890,7 +894,9 @@ export function TvBoard({
             <div className="tv-stat-row">
               <div className="tv-stat">
                 <div className="tv-value">{fmt(conv?.byHours?.[hk])}</div>
-                <div className="tv-caption">users starting rec · {wlabel}</div>
+                <div className="tv-caption">
+                  users starting rec · {wlabel} · Mac/iOS/Android
+                </div>
               </div>
             </div>
             <PlatStats
@@ -914,7 +920,9 @@ export function TvBoard({
             <div className="tv-stat-row">
               <div className="tv-stat">
                 <div className="tv-value">{fmt(chat?.byHours?.[hk])}</div>
-                <div className="tv-caption">users sending msgs · {wlabel}</div>
+                <div className="tv-caption">
+                  users sending msgs · {wlabel} · Mac/iOS/Android
+                </div>
               </div>
             </div>
             <PlatStats
