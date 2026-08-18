@@ -7,6 +7,7 @@ import re
 from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
+from models.conversation_enums import ConversationSource
 from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
@@ -40,6 +41,11 @@ def _bounded_route(route: str) -> str:
 def _bounded_platform(platform: str | None) -> str:
     normalized = (platform or '').strip().lower()
     return normalized if normalized in _PLATFORMS else 'unknown'
+
+
+def _bounded_source(source: str | None) -> str:
+    normalized = (source or '').strip()
+    return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
 
 
 def _deployment_version() -> str:
@@ -117,7 +123,7 @@ class LiveSTTAttempt:
         self.uid = uid
         self.recording_id = recording_id
         self.conversation_id = conversation_id
-        self.source = source or 'unknown'
+        self.source = _bounded_source(source)
         self.model = model or 'unknown'
         self.language = language or 'unknown'
         self._emitter = emitter

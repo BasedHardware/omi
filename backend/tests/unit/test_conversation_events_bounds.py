@@ -334,6 +334,7 @@ def test_segment_assign_repeating_the_same_identity_is_an_acceptance(router):
     ), patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)):
         handler("c1", 0, "is_user", value="true", uid="u1")
 
+    assert len(emitted) == 1
     assert emitted[0]["properties"]["confirmation"] == "accepted"
 
 

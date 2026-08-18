@@ -396,11 +396,11 @@ class ListenReceiver:
             self._capture('capture_outbound_stt', outbound_audio)
             self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
 
-    async def _handle_multi_channel_audio(self, data: bytes) -> None:
+    async def _handle_multi_channel_audio(self, data: bytes) -> int:
         request = self.host.request
         channel_index = self.channel_id_to_index.get(data[0])
         if channel_index is None:
-            return
+            return 0
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
@@ -413,9 +413,9 @@ class ListenReceiver:
                     channel_index,
                     type(error).__name__,
                 )
-                return
+                return 0
             if not audio:
-                return
+                return 0
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
         self._capture('capture_client_audio', pcm)
         # Custom-STT clients own transcript production.  Their channel sockets are intentionally
@@ -457,6 +457,8 @@ class ListenReceiver:
                     self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
                 for buffer in self.channel_mix_buffers:
                     del buffer[: decision.min_len]
+
+        return len(audio)
 
     async def _handle_text(self, message: str) -> None:
         try:
@@ -558,7 +560,7 @@ class ListenReceiver:
                         self.host.state.last_usage_record_timestamp = now
                         self.host.start_live_transcription()
                     if self.host.is_multi_channel:
-                        await self._handle_multi_channel_audio(data)
+                        decoded_audio_bytes += await self._handle_multi_channel_audio(data)
                         continue
                     try:
                         decoded: bytes = data

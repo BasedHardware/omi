@@ -438,7 +438,6 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
             'properties': {
                 'task_count': 2,
                 'conversation_id': 'conversation-1',
-                'memory_id': 'conversation-1',
                 'task_source': 'transcript',
                 'persistence_path': 'canonical_candidate',
             },

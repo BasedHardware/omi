@@ -14,6 +14,12 @@ def anyio_backend():
     return 'asyncio'
 
 
+@pytest.fixture(autouse=True)
+def _reset_product_telemetry_client():
+    yield
+    set_product_telemetry_client_for_tests(None)
+
+
 class _FramesWebSocket:
     def __init__(self, frames):
         self.frames = iter(frames)

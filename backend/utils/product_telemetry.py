@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Any, Mapping, Optional
 
+from utils.observability.fallback import record_fallback
+
 logger = logging.getLogger(__name__)
 
 _posthog_client: Optional[Any] = None
@@ -16,8 +18,17 @@ _posthog_disabled = False
 def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -> None:
     """Emit a bounded product event without changing the owning operation."""
 
+    if not uid:
+        return
     client = _get_posthog_client()
-    if client is None or not uid:
+    if client is None:
+        record_fallback(
+            component='other',
+            from_mode='posthog',
+            to_mode='none',
+            reason='config_incomplete',
+            outcome='degraded',
+        )
         return
     safe_properties = {key: value for key, value in properties.items() if value is not None}
     safe_properties['environment'] = os.getenv('OMI_ENV_STAGE') or os.getenv('ENVIRONMENT') or 'unknown'
@@ -25,6 +36,13 @@ def emit_product_event(*, uid: str, event: str, properties: Mapping[str, Any]) -
         client.capture(distinct_id=uid, event=event, properties=safe_properties)
     except Exception as error:
         logger.warning('product telemetry emit failed event=%s error_type=%s', event, type(error).__name__)
+        record_fallback(
+            component='other',
+            from_mode='posthog',
+            to_mode='none',
+            reason='other',
+            outcome='degraded',
+        )
 
 
 def _get_posthog_client() -> Optional[Any]:

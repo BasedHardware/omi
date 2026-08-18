@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Any, Dict, List, Optional
@@ -95,8 +96,12 @@ def _speaker_assignment(segment: TranscriptSegment) -> str:
     if segment.is_user:
         return 'self'
     if segment.person_id:
-        return 'person'
+        return f"person:{hashlib.sha256(str(segment.person_id).encode('utf-8')).hexdigest()[:16]}"
     return 'unassigned'
+
+
+def _speaker_assignment_kind(assignment: str) -> str:
+    return 'person' if assignment.startswith('person:') else assignment
 
 
 def _emit_speaker_identity_confirmed(
@@ -109,16 +114,20 @@ def _emit_speaker_identity_confirmed(
 ) -> None:
     if not after:
         return
+    assignment_kinds = [_speaker_assignment_kind(value) for value in after]
+    properties = {
+        'conversation_id': conversation_id,
+        'confirmation': 'accepted' if before == after else 'corrected',
+        'assignment': assignment_kinds[0] if len(set(assignment_kinds)) == 1 else 'mixed',
+        'scope': scope,
+        'affected_segment_count': len(after),
+    }
+    if len(set(after)) == 1 and assignment_kinds[0] == 'person':
+        properties['assignment_id'] = after[0]
     emit_product_event(
         uid=uid,
         event='Speaker Identity Confirmed',
-        properties={
-            'conversation_id': conversation_id,
-            'confirmation': 'accepted' if before == after else 'corrected',
-            'assignment': after[0] if len(set(after)) == 1 else 'mixed',
-            'scope': scope,
-            'affected_segment_count': len(after),
-        },
+        properties=properties,
     )
 
 

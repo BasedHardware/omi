@@ -1150,7 +1150,6 @@ def _save_action_items(uid: str, conversation: Conversation):
             properties={
                 'task_count': len(conversation.structured.action_items),
                 'conversation_id': conversation.id,
-                'memory_id': conversation.id,
                 'task_source': 'transcript',
                 'persistence_path': 'canonical_candidate',
             },
@@ -1218,7 +1217,6 @@ def _save_action_items(uid: str, conversation: Conversation):
             properties={
                 'task_count': len(action_item_ids),
                 'conversation_id': conversation.id,
-                'memory_id': conversation.id,
                 'task_source': 'transcript',
                 'persistence_path': 'legacy_projection',
             },
