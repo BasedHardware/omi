@@ -41,6 +41,7 @@ class TestShouldDeferDesktopProcessing:
             mod = _stub(name)
             if name == 'database._client':
                 mod.db = MagicMock()
+                mod.get_customer_firestore_client = MagicMock(return_value=MagicMock())
             elif name == 'database.redis_db':
                 mod.get_generic_cache = MagicMock(return_value=None)
                 mod.set_generic_cache = MagicMock()
@@ -103,12 +104,19 @@ class TestShouldDeferDesktopProcessing:
         self._users.get_user_valid_subscription.return_value = self._sub_with_plan(PlanType.architect)
         assert self._sub.should_defer_desktop_processing('uid') is False
 
-    def test_byok_basic_is_not_deferred(self):
+    def test_byok_basic_with_openai_is_not_deferred(self, monkeypatch):
         from models.users import PlanType
 
         self._users.is_byok_active.return_value = True
         self._users.get_user_valid_subscription.return_value = None
+        monkeypatch.setattr(self._sub, 'get_byok_key', lambda provider: 'sk-openai' if provider == 'openai' else None)
         assert self._sub.should_defer_desktop_processing('uid') is False
+
+    def test_byok_basic_without_openai_is_deferred(self, monkeypatch):
+        self._users.is_byok_active.return_value = True
+        self._users.get_user_valid_subscription.return_value = None
+        monkeypatch.setattr(self._sub, 'get_byok_key', lambda provider: 'sk-gemini' if provider == 'gemini' else None)
+        assert self._sub.should_defer_desktop_processing('uid') is True
 
     def test_lookup_error_fails_safe_to_not_deferred(self):
         self._users.is_byok_active.side_effect = RuntimeError("firestore down")

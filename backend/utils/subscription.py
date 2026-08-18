@@ -168,7 +168,7 @@ def should_defer_desktop_processing(uid: str) -> bool:
     summaries.
     """
     try:
-        if users_db.is_byok_active(uid):
+        if users_db.is_byok_active(uid) and get_byok_key('openai'):
             return False
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic

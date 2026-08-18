@@ -290,4 +290,24 @@ final class APIKeyService: ObservableObject {
     }
     return snapshot
   }
+
+  func reconcileBYOKActivation() async {
+    guard let selectedProvider = Self.selectedBYOKLLMProvider, Self.byokKey(selectedProvider) != nil else { return }
+
+    let snapshot = Self.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
+      result[entry.key] = entry.value.key
+    }
+    let statuses = await BYOKValidator.validateAll(snapshot)
+    guard statuses[selectedProvider] == .ok else {
+      try? await APIClient.shared.deactivateBYOK()
+      return
+    }
+
+    let fingerprints = Self.activeBYOKSnapshot.reduce(into: [String: String]()) { result, entry in
+      if statuses[entry.key] == .ok {
+        result[entry.key.rawValue] = entry.value.fingerprint
+      }
+    }
+    try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+  }
 }
