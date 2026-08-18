@@ -44,6 +44,9 @@ environments:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
+          OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
             category: rollout
@@ -130,9 +133,9 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: TWILIO_ACCOUNT_SID
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
-            value: 'off'
+            value: 'on'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -140,9 +143,6 @@ environments:
             config_map:
               name: dev-omi-backend-config
               key: MCP_RESOURCE_URL
-          MEMORY_V3_GET_ENABLED:
-            category: memory_rollout
-            value: 'false'
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -334,6 +334,14 @@ environments:
           X_OAUTH_REDIRECT_URI:
             source: environment
     region: us-central1
+    desktop_backend:
+      env:
+        USE_VERTEX_AI:
+          value: 'true'
+        GOOGLE_CLOUD_PROJECT:
+          value: based-hardware-dev
+        GCP_LOCATION:
+          value: us-central1
     cloud_run:
       network:
         flags:
@@ -427,15 +435,12 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
@@ -490,6 +495,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            GOOGLE_MAPS_API_KEY:
+              secret: GOOGLE_MAPS_API_KEY
               version: latest
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -566,9 +574,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -576,9 +584,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
@@ -705,9 +710,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -715,9 +720,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             OMI_PARITY_PACK_CAPTURE:
@@ -810,9 +812,9 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -825,9 +827,6 @@ environments:
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             GCP_LOCATION:
               value: us-central1
             GOOGLE_CLOUD_PROJECT:
@@ -869,7 +868,12 @@ environments:
           - HOSTED_PUSHER_API_URL
       jobs:
         notifications-job:
+          flags:
+            --task-timeout: 3600s
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -883,6 +887,13 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
@@ -937,7 +948,10 @@ environments:
               category: rollout
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
-              value: 'false'
+              value: 'true'
+            MEMORY_CANONICAL_MAINTENANCE_FLEX:
+              category: memory_rollout
+              value: 'true'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
@@ -950,18 +964,18 @@ environments:
             PINECONE_INDEX_NAME:
               category: memory_rollout
               value: memories-backend-dev
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
               category: memory_rollout
-              value: 'false'
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
@@ -1017,6 +1031,9 @@ environments:
             category: rollout
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
+            category: rollout
+          OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED:
+            value: 'true'
             category: rollout
           OMI_LLM_CHAT_AGENT_ROUTE:
             value: gateway
@@ -1104,9 +1121,9 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: TWILIO_ACCOUNT_SID
-          MEMORY_MODE:
+          MEMORY_ENABLED:
             category: memory_rollout
-            value: 'off'
+            value: 'on'
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
@@ -1114,9 +1131,6 @@ environments:
             config_map:
               name: prod-omi-backend-config
               key: MCP_RESOURCE_URL
-          MEMORY_V3_GET_ENABLED:
-            category: memory_rollout
-            value: 'false'
           ACCOUNT_DELETION_DISPATCH_MODE:
             value: cloud_tasks
             category: reliability
@@ -1232,6 +1246,14 @@ environments:
           SYNC_TASKS_INVOKER_SA:
             source: environment
     region: us-central1
+    desktop_backend:
+      env:
+        USE_VERTEX_AI:
+          value: 'true'
+        GOOGLE_CLOUD_PROJECT:
+          value: based-hardware
+        GCP_LOCATION:
+          value: us-central1
     cloud_run:
       network:
         flags:
@@ -1330,15 +1352,12 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1417,6 +1436,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            GOOGLE_MAPS_API_KEY:
+              secret: GOOGLE_MAPS_API_KEY
+              version: latest
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -1486,9 +1508,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1496,9 +1518,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1626,9 +1645,9 @@ environments:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
               category: rollout
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
               provisional: true
               value: '555'
@@ -1636,9 +1655,6 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             LISTEN_FINALIZATION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1732,9 +1748,9 @@ environments:
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
               value: 'off'
               category: rollout
@@ -1747,9 +1763,6 @@ environments:
             POSTHOG_HOST:
               value: https://app.posthog.com
               category: telemetry
-            MEMORY_V3_GET_ENABLED:
-              category: memory_rollout
-              value: 'false'
             GCP_LOCATION:
               value: us-central1
             ACCOUNT_DELETION_DISPATCH_MODE:
@@ -1780,7 +1793,12 @@ environments:
               category: rollout
       jobs:
         notifications-job:
+          flags:
+            --task-timeout: 3600s
           secrets:
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
             OPENAI_API_KEY:
               secret: OPENAI_API_KEY
               version: latest
@@ -1794,6 +1812,13 @@ environments:
               secret: PINECONE_API_KEY
               version: latest
           env:
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
+              category: memory_rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
@@ -1825,6 +1850,7 @@ environments:
               version: latest
           flags:
             --remove-env-vars: MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+            --task-timeout: 3600s
           env:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
@@ -1841,7 +1867,10 @@ environments:
               category: rollout
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
-              value: 'false'
+              value: 'true'
+            MEMORY_CANONICAL_MAINTENANCE_FLEX:
+              category: memory_rollout
+              value: 'true'
             MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
               category: memory_rollout
               value: 'false'
@@ -1854,18 +1883,18 @@ environments:
             PINECONE_INDEX_NAME:
               category: memory_rollout
               value: memories-backend
-            MEMORY_MODE:
+            MEMORY_ENABLED:
               category: memory_rollout
-              value: 'off'
+              value: 'on'
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
             MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
               value: 'true'
               category: memory_rollout
-            MEMORY_V3_GET_ENABLED:
+            OMI_BACKGROUND_FLEX_CAPABLE:
+              value: 'true'
               category: memory_rollout
-              value: 'false'
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
               category: rollout

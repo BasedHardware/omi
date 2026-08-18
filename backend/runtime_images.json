@@ -37,18 +37,6 @@
             }
         },
         {
-            "name": "agent-vm",
-            "dockerfile": "backend/agent_vm/Dockerfile",
-            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml"],
-            "build_context": ".",
-            "source_root": "backend/agent_vm",
-            "workdir": "/app",
-            "entrypoints": ["main"],
-            "image_import_smoke": true,
-            "dependency_probe_smoke": true,
-            "pull_request_smoke": true
-        },
-        {
             "name": "pusher",
             "dockerfile": "backend/pusher/Dockerfile",
             "deployment_workflows": [
@@ -70,37 +58,6 @@
             "pull_request_smoke": true,
             "dependency_probe_exclusions": {
                 "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback."
-            }
-        },
-        {
-            "name": "agent-proxy",
-            "dockerfile": "backend/agent-proxy/Dockerfile",
-            "deployment_workflows": [
-                ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml",
-                ".github/workflows/gcp_backend_agent_proxy.yml"
-            ],
-            "build_context": ".",
-            "source_root": "backend",
-            "entrypoint_source_root": "backend/agent-proxy",
-            "workdir": "/app",
-            "entrypoints": ["main"],
-            "image_import_smoke": true,
-            "dependency_probe_smoke": true,
-            "pull_request_smoke": true
-        },
-        {
-            "name": "agent-vm-reconciler-job",
-            "dockerfile": "backend/Dockerfile.desktop_backend",
-            "deployment_workflows": [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml"],
-            "build_context": ".",
-            "source_root": "backend",
-            "workdir": "/app",
-            "entrypoints": ["jobs.agent_vm_reconciler"],
-            "image_import_smoke": false,
-            "dependency_probe_smoke": true,
-            "pull_request_smoke": true,
-            "dependency_probe_exclusions": {
-                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
             }
         },
         {
@@ -152,6 +109,10 @@
             "workdir": "/app",
             "entrypoints": ["job"],
             "image_import_smoke": true,
+            "smoke_environment": {
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
+                "OPENAI_API_KEY": "fake-notifications-image-smoke-only"
+            },
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
             "dependency_probe_exclusions": {

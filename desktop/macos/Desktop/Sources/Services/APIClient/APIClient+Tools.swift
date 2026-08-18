@@ -90,6 +90,11 @@ extension APIClient {
     let limit: Int
   }
 
+  struct SearchChunksRequest: Encodable {
+    let query: String
+    let limit: Int
+  }
+
   struct CreateActionItemRequest: Encodable {
     let description: String
     let dueAt: String?
@@ -175,6 +180,26 @@ extension APIClient {
       includeTranscript: includeTranscript)
     return try await post(
       "v1/tools/conversations/search",
+      body: body,
+      customBaseURL: nil,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  /// Semantic search over raw transcript chunks — the verbatim layer behind
+  /// `toolSearchConversations`, whose summary matching drops exact dates, names,
+  /// and numbers. Typed sources reuse kind "conversation" with the PARENT
+  /// conversation id, so chunk citations share the summary results' ref
+  /// namespace. Older backends return the same envelope with no sources.
+  func toolSearchConversationChunks(
+    query: String,
+    limit: Int = 5,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ToolResponse {
+    let body = SearchChunksRequest(query: query, limit: limit)
+    return try await post(
+      "v1/tools/conversations/search-chunks",
       body: body,
       customBaseURL: nil,
       expectedOwnerId: expectedOwnerId,

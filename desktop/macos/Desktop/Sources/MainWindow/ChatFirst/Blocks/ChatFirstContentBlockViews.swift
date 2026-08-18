@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -455,6 +456,9 @@ struct ConversationLinkView: View {
 
   @State private var isOpening = false
   @State private var isUnavailable = false
+  @State private var isCopyingLink = false
+  @State private var shareLinkFeedback: ConversationShareLinkFeedback?
+  @State private var shareLinkFeedbackGeneration = 0
 
   var body: some View {
     Group {
@@ -467,16 +471,57 @@ struct ConversationLinkView: View {
           summary: summary,
           actionTitle: "Open conversation",
           isOpening: isOpening,
-          accessibilityID: "chat-first-conversation-\(conversationID)-open"
-        ) {
-          openConversation()
-        }
+          accessibilityID: "chat-first-conversation-\(conversationID)-open",
+          action: { openConversation() },
+          secondaryActionTitle: "Copy share link",
+          secondaryActionSystemImage: "link",
+          isSecondaryBusy: isCopyingLink,
+          secondaryAccessibilityID: "chat-first-conversation-\(conversationID)-copy-link",
+          secondaryHelp: "Copy share link — anyone with the link can view",
+          secondaryAction: { copyShareLink() },
+          statusMessage: shareLinkFeedback?.message,
+          statusSystemImage: shareLinkFeedback?.systemImage,
+          statusColor: shareLinkFeedback == .copied ? Ink.listeningGreen : Ink.errorRed
+        )
       }
     }
     .onAppear {
       AnalyticsManager.shared.chatFirst(
         .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
       )
+    }
+  }
+
+  /// Copies a public share link for the conversation. Minting the link flips
+  /// the conversation's visibility to shared, so the confirmation discloses
+  /// the audience. A failure here never touches `isUnavailable` — copy
+  /// problems must not block "Open conversation".
+  private func copyShareLink() {
+    guard !isCopyingLink else { return }
+    isCopyingLink = true
+    Task { @MainActor in
+      defer { isCopyingLink = false }
+      let feedback = await ConversationShareLinkAction.run(
+        mintLink: { try await APIClient.shared.getConversationShareLink(id: conversationID) },
+        copyToPasteboard: { link in
+          NSPasteboard.general.clearContents()
+          return NSPasteboard.general.setString(link, forType: .string)
+        }
+      )
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(
+          kind: .conversationLink,
+          outcome: feedback == .copied ? .acted : .rejected,
+          action: .copyLink
+        )
+      )
+      shareLinkFeedback = feedback
+      shareLinkFeedbackGeneration += 1
+      let generation = shareLinkFeedbackGeneration
+      DispatchQueue.main.asyncAfter(deadline: .now() + ConversationShareLinkFeedback.displaySeconds) {
+        guard shareLinkFeedbackGeneration == generation else { return }
+        shareLinkFeedback = nil
+      }
     }
   }
 
@@ -563,6 +608,19 @@ private struct ChatFirstLinkBlockView: View {
   let isOpening: Bool
   let accessibilityID: String
   let action: () -> Void
+  // Optional secondary chip rendered beside the primary destination chip
+  // (e.g. "Copy share link" beside "Open conversation"). The transient
+  // status renders on its own caption line under the chips so a long
+  // confirmation never stretches or clips the chip row.
+  var secondaryActionTitle: String? = nil
+  var secondaryActionSystemImage: String = "link"
+  var isSecondaryBusy: Bool = false
+  var secondaryAccessibilityID: String = ""
+  var secondaryHelp: String? = nil
+  var secondaryAction: (() -> Void)? = nil
+  var statusMessage: String? = nil
+  var statusSystemImage: String? = nil
+  var statusColor: Color = Ink.secondary
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -575,25 +633,57 @@ private struct ChatFirstLinkBlockView: View {
         .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
-      Button(action: action) {
-        HStack(spacing: OmiSpacing.xs) {
-          if isOpening {
-            ProgressView()
-              .controlSize(.small)
+      HStack(spacing: OmiSpacing.sm) {
+        Button(action: action) {
+          HStack(spacing: OmiSpacing.xs) {
+            if isOpening {
+              ProgressView()
+                .controlSize(.small)
+            }
+            Text(actionTitle)
+            Image(systemName: "arrow.up.right")
           }
-          Text(actionTitle)
-          Image(systemName: "arrow.up.right")
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xs)
+          .glassChip()
         }
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(Ink.primary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.xs)
-        .glassChip()
+        .buttonStyle(.plain)
+        .disabled(isOpening)
+        .accessibilityLabel(actionTitle)
+        .accessibilityIdentifier(accessibilityID)
+
+        if let secondaryActionTitle, let secondaryAction {
+          Button(action: secondaryAction) {
+            HStack(spacing: OmiSpacing.xs) {
+              if isSecondaryBusy {
+                ProgressView()
+                  .controlSize(.small)
+              }
+              Text(secondaryActionTitle)
+              Image(systemName: secondaryActionSystemImage)
+            }
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .glassChip()
+          }
+          .buttonStyle(.plain)
+          .disabled(isSecondaryBusy)
+          .help(secondaryHelp ?? secondaryActionTitle)
+          .accessibilityLabel(secondaryHelp ?? secondaryActionTitle)
+          .accessibilityIdentifier(secondaryAccessibilityID)
+        }
       }
-      .buttonStyle(.plain)
-      .disabled(isOpening)
-      .accessibilityLabel(actionTitle)
-      .accessibilityIdentifier(accessibilityID)
+
+      if let statusMessage {
+        Label(statusMessage, systemImage: statusSystemImage ?? "checkmark")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(statusColor)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)

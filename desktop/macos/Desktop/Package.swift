@@ -1,6 +1,15 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+// Frameworks such as Sparkle are built into Products/<config>/, but a test bundle's
+// generated rpaths only cover PackageFrameworks/. Without this the bundle builds and
+// then fails to dlopen, which reads as an unrelated test failure.
+// ponytail: one rpath on every test target, rather than working out which ones link
+// Sparkle transitively.
+let testBundleFrameworkSearchPath = LinkerSetting.unsafeFlags([
+  "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../../..",
+])
+
 let package = Package(
   name: "Omi Computer",
   platforms: [
@@ -129,7 +138,8 @@ let package = Package(
       ],
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ]
+      ],
+      linkerSettings: [testBundleFrameworkSearchPath]
     ),
     .testTarget(
       name: "OmiSupportTests",
@@ -137,7 +147,8 @@ let package = Package(
       path: "Tests/OmiSupportTests",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ]
+      ],
+      linkerSettings: [testBundleFrameworkSearchPath]
     ),
     .testTarget(
       name: "OmiWALTests",
@@ -145,7 +156,8 @@ let package = Package(
       path: "Tests/OmiWALTests",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ]
+      ],
+      linkerSettings: [testBundleFrameworkSearchPath]
     ),
     .testTarget(
       name: "VoiceTurnDomainTests",
@@ -153,7 +165,8 @@ let package = Package(
         .target(name: "Omi Computer"),
         "VoiceTurnDomain",
       ],
-      path: "Tests/VoiceTurnDomainTests"
+      path: "Tests/VoiceTurnDomainTests",
+      linkerSettings: [testBundleFrameworkSearchPath]
     ),
     .testTarget(
       name: "SemanticFeatureSentinels",
@@ -161,7 +174,8 @@ let package = Package(
       path: "Tests/SemanticFeatureSentinels",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete"])
-      ]
+      ],
+      linkerSettings: [testBundleFrameworkSearchPath]
     ),
   ],
   swiftLanguageModes: [.v6]

@@ -18,6 +18,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
@@ -978,6 +979,24 @@ void main() {
       provider.dispose();
     });
 
+    test('keeps native Omi background audio disabled when Custom STT raw forwarding is off', () async {
+      await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(
+          provider: SttProvider.onDeviceWhisper,
+          sendRawAudioToOmi: false,
+        ),
+      );
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      final result = await provider.setBackgroundModeEnabled(true);
+
+      expect(result, isTrue);
+      expect(SharedPreferencesUtil().backgroundModeEnabled, isTrue);
+      expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+      provider.dispose();
+    });
+
     test('enable preserves foreground-ready when foreground streaming is already active', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
@@ -1061,6 +1080,40 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
 
       provider.dispose();
+    });
+  });
+
+  group('unsupported Custom STT codec privacy recovery', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      await SharedPreferencesUtil().saveCustomSttConfig(
+        const CustomSttConfig(
+          provider: SttProvider.onDeviceWhisper,
+          sendRawAudioToOmi: false,
+        ),
+      );
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+    });
+
+    tearDown(() async {
+      await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
+    });
+
+    test('disables native Omi audio and schedules a websocket retry', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider();
+        final timersBefore = async.pendingTimers.length;
+        var completed = false;
+
+        provider.changeAudioRecordProfile(audioCodec: BleAudioCodec.lc3FS1030).then((_) => completed = true);
+        async.flushMicrotasks();
+
+        expect(completed, isTrue);
+        expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+        expect(async.pendingTimers.length, timersBefore + 1);
+        provider.dispose();
+      });
     });
   });
 

@@ -5,6 +5,9 @@ extension Notification.Name {
   /// without a user-initiated sign-out. Observers should stop auth-dependent work
   /// (e.g. agent bridge) but must NOT wipe onboarding or stop capture.
   static let sessionDidInvalidate = Notification.Name("com.omi.desktop.sessionDidInvalidate")
+  /// Posted after a session is restored or a sign-in commits. Notification
+  /// settings sync uses this so a pending PATCH is retried without opening Settings.
+  static let sessionDidAuthenticate = Notification.Name("com.omi.desktop.sessionDidAuthenticate")
 }
 
 // MARK: - Session phase
@@ -209,5 +212,6 @@ final class AuthSessionCoordinator {
     refreshFlightAttempt = nil
     lastProactiveValidation = nil
     AuthState.shared.transition(to: .authenticated)
+    NotificationCenter.default.post(name: .sessionDidAuthenticate, object: nil)
   }
 }

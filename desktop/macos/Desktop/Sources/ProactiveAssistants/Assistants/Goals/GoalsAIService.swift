@@ -28,7 +28,7 @@ actor GoalsAIService {
     guard APIKeyService.keysAvailable || !geminiClientInitAttempted else { return nil }
     geminiClientInitAttempted = true
     do {
-      let client = try GeminiClient()
+      let client = try GeminiClient(model: ModelQoS.Gemini.lightweight, workload: .interactive)
       geminiClient = client
       return client
     } catch {

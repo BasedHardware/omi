@@ -58,7 +58,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         workflows = ROOT / ".github" / "workflows"
         cls.dev = (workflows / "desktop_backend_auto_dev.yml").read_text(encoding="utf-8")
         cls.prod = (workflows / "desktop_backend_prod.yml").read_text(encoding="utf-8")
-        cls.qualification = (workflows / "desktop_qualify_beta.yml").read_text(encoding="utf-8")
         cls.stable = (workflows / "desktop_promote_prod.yml").read_text(encoding="utf-8")
         cls.recovery = (workflows / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8")
         cls.dockerfile = (ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8")
@@ -70,7 +69,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
             POLICY.validate_all(
                 dev=self.dev,
                 prod=self.prod,
-                qualification=self.qualification,
                 stable=self.stable,
                 recovery=self.recovery,
                 dockerfile=self.dockerfile,
@@ -103,12 +101,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                     )
                     self.assertTrue(any(required in error for error in errors), errors)
 
-    def test_requires_production_agent_vm_artifacts(self) -> None:
-        errors = POLICY.validate_deploy_workflow(
-            self.prod.replace("      - name: Build and publish Agent VM image", "      - name: Omitted agent VM", 1),
-            production=True,
-        )
-        self.assertTrue(any("Build and publish Agent VM image" in error for error in errors), errors)
+
 
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
@@ -243,31 +236,14 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_rejects_missing_release_compatibility_gate(self) -> None:
         mutated = self.stable.replace("Verify live desktop-backend chat compatibility", "Compatibility omitted")
-        errors = POLICY.validate_desktop_release_gates(self.qualification, mutated)
+        errors = POLICY.validate_desktop_release_gates(mutated)
         self.assertTrue(any("desktop_promote_prod.yml" in error for error in errors), errors)
 
-    def test_rejects_beta_qualification_against_production_desktop_backend(self) -> None:
-        mutated = self.qualification.replace(
-            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-            "https://desktop-backend-hhibjajaja-uc.a.run.app",
-            1,
-        )
-        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
-        self.assertTrue(any("desktop_qualify_beta.yml" in error for error in errors), errors)
-
-    def test_rejects_an_agent_vm_job_argument_that_deploy_cloudrun_would_split(self) -> None:
-        mutated = self.dev.replace("'--args=-m,jobs.agent_vm_reconciler'", "--args=-m,jobs.agent_vm_reconciler", 1)
-
-        errors = POLICY.validate_deploy_workflow(mutated, production=False)
-
-        self.assertTrue(any("action-parser-safe" in error for error in errors), errors)
-
-    def test_requires_private_agent_vm_readiness_on_each_request_service(self) -> None:
+    def test_requires_private_network_egress_on_each_request_service(self) -> None:
         contracts = (
             "--network=default",
             "--subnet=default",
             "--vpc-egress=private-ranges-only",
-            "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
         )
         for workflow, production, step in (
             (self.dev, False, "Deploy desktop-backend to Cloud Run"),
@@ -284,23 +260,6 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         errors = POLICY.validate_deploy_workflow(mutated, production=production)
                         self.assertTrue(any(contract in error and "request service" in error for error in errors), errors)
 
-    def test_rejects_beta_qualification_without_development_python_health(self) -> None:
-        mutated = self.qualification.replace(
-            "https://api.omiapi.com/v1/health",
-            "https://api.omi.me/v1/health",
-            1,
-        )
-        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
-        self.assertTrue(any("development Python" in error for error in errors), errors)
-
-    def test_rejects_beta_qualification_without_production_firebase_uid_continuity(self) -> None:
-        mutated = self.qualification.replace(
-            "Prove production Firebase UID continuity on Beta development authorities",
-            "UID continuity omitted",
-            1,
-        )
-        errors = POLICY.validate_desktop_release_gates(mutated, self.stable)
-        self.assertTrue(any("UID continuity" in error for error in errors), errors)
 
     def test_rejects_development_serving_with_a_development_firebase_project(self) -> None:
         mutated = self.dev.replace(
@@ -316,7 +275,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         self.assertTrue(any("production Firebase project" in error for error in errors), errors)
 
     def test_requires_isolated_runtime_env_for_each_development_deployment(self) -> None:
-        for step in ("Deploy desktop-backend to Cloud Run", "Deploy Agent VM reconciler Cloud Run Job"):
+        for step in ("Deploy desktop-backend to Cloud Run",):
             with self.subTest(step=step):
                 start = self.dev.index(f"      - name: {step}\n")
                 end = self.dev.find("\n      - name: ", start + 1)
@@ -330,16 +289,10 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 errors = POLICY.validate_deploy_workflow(mutated, production=False)
                 self.assertTrue(any(step in error and "GOOGLE_CLOUD_PROJECT" in error for error in errors), errors)
 
-                mutated_block = block.replace("GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}", "", 1)
-                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
-                errors = POLICY.validate_deploy_workflow(mutated, production=False)
-                self.assertTrue(any(step in error and "GCE_PROJECT_ID" in error for error in errors), errors)
-
                 for env_var in (
                     "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
                     "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
                     "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-                    "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
                 ):
                     with self.subTest(step=step, env_var=env_var):
                         commented_block = block.replace(env_var, f"# {env_var}", 1)

@@ -74,6 +74,7 @@ from models.users import (
     Subscription,
     SubscriptionPlan,
     SubscriptionStatus,
+    PlanLimits,
     PlanType,
     PricingOption,
     PhoneCallQuota,
@@ -95,7 +96,6 @@ from utils.subscription import (
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
-    has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     wire_plan_for_client,
@@ -1260,10 +1260,7 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    ever_purchased = has_ever_purchased(uid, raw_subscription)
-    definitions_for_user = filter_plans_for_user(
-        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
-    )
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -2011,6 +2008,10 @@ class FloatingBarSettings(BaseModel):
     elevenlabs_voice_id: str | None = Field(None, max_length=200)
 
 
+class WebSearchAssistantSettings(BaseModel):
+    enabled: bool | None = None
+
+
 class UpdateAssistantSettingsRequest(BaseModel):
     shared: SharedAssistantSettings | None = None
     focus: FocusAssistantSettings | None = None
@@ -2018,6 +2019,7 @@ class UpdateAssistantSettingsRequest(BaseModel):
     advice: AdviceAssistantSettings | None = None
     memory: MemoryAssistantSettings | None = None
     floating_bar: FloatingBarSettings | None = None
+    web_search: WebSearchAssistantSettings | None = None
     update_channel: str | None = Field(None, max_length=50)
 
 

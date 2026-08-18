@@ -143,6 +143,13 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
     assert 'value: {{ required "image.tag is required" .Values.image.tag | quote }}' in deployment
 
 
+def test_gateway_ingress_timeout_can_carry_the_flex_route_deadline():
+    backend_config = (BACKEND_ROOT / 'charts/llm-gateway/templates/backendconfig.yaml').read_text(encoding='utf-8')
+
+    assert '  timeoutSec: 960\n' in backend_config
+    assert '    timeoutSec: 5\n' in backend_config
+
+
 def test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']

@@ -29,7 +29,6 @@ from models.users import (
     SubscriptionStatus,
 )
 from models.other import Person
-from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1547,6 +1546,11 @@ def get_user_subscription(uid: str, *, firestore_client: Any | None = None) -> S
             return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
+    # Imported here, not at module scope: utils.subscription imports this module, so a
+    # module-level import makes utils.subscription unimportable on its own (see
+    # get_user_valid_subscription, which defers the same import for the same reason).
+    from utils.subscription import get_default_basic_subscription
+
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
     sub_to_store = default_subscription.model_dump()
@@ -1678,6 +1682,11 @@ def get_user_valid_subscription(
     quota must use that mode against the customer Firestore so a miss cannot
     stamp ``plan: basic`` onto a paying user.
     """
+    # Imported here, not at module scope: utils.subscription imports this module, and a
+    # module-level import back into it forms a cycle that makes utils.subscription raise
+    # ImportError whenever it is the first of the pair to be imported.
+    from utils.subscription import get_default_basic_subscription
+
     if provision:
         subscription = get_user_subscription(uid, firestore_client=firestore_client)
     else:

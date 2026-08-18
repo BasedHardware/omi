@@ -871,7 +871,8 @@ void main() {
       query: '',
       folderId: null,
       speakerId: null,
-      date: null,
+      startDate: null,
+      endDate: null,
       starredOnly: false,
       discarded: false,
       shortOnly: false,
@@ -882,7 +883,8 @@ void main() {
         query: '',
         folderId: null,
         speakerId: null,
-        date: null,
+        startDate: null,
+        endDate: null,
         starredOnly: false,
         discarded: true,
         shortOnly: false,
@@ -895,7 +897,8 @@ void main() {
         query: '',
         folderId: null,
         speakerId: null,
-        date: null,
+        startDate: null,
+        endDate: null,
         starredOnly: false,
         discarded: false,
         shortOnly: true,
@@ -977,7 +980,8 @@ void main() {
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
-    provider.selectedDate = selectedDate;
+    provider.selectedStartDate = selectedDate;
+    provider.selectedEndDate = selectedDate;
     provider.addProcessingConversation(
       _conversation('c1', status: ConversationStatus.processing, createdAt: DateTime.utc(2026, 1, 1)),
     );

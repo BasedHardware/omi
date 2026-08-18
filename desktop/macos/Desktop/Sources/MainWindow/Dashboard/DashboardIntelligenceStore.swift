@@ -400,7 +400,10 @@ final class DashboardIntelligenceStore: ObservableObject {
     do {
       let task = try await client.getActionItem(id: taskID)
       guard requireCurrentOwner(ownerScope) else { return nil }
-      guard task.id == taskID else {
+      // The detail response is the freshest word on retirement, and it projects
+      // it through canonical lifecycle status — a recommendation minted before
+      // the task was cancelled/superseded/deleted must not open it as live.
+      guard task.id == taskID, !task.isRetired else {
         error = "This task is no longer available."
         return nil
       }

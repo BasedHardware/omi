@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import {
+  applyFirestoreActivationCompat,
+  type FirestoreActivationCompat,
+} from "@/lib/activation-compat";
+import { activationCacheKey } from "@/app/api/omi/stats/activation/route";
+import { getPayload } from "@/lib/payload-cache";
 import { posthogResults } from "@/lib/posthog";
+import {
+  summarizeActivation,
+  type DailyActivationPoint,
+} from "@/lib/growth-metrics";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * First desktop build that emits `Memory Created` on the normal durable-session
+ * path. Before 98f1ee7c7f the event only fired for recordings that failed to
+ * bind a local session, so activation was structurally unreportable.
+ */
+const MIN_ACTIVATION_TELEMETRY_VERSION = [0, 12, 167] as const;
 
 let cache: { data: any; days: number; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
@@ -31,7 +48,13 @@ export async function GET(request: NextRequest) {
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
 
     if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
-      return NextResponse.json(cache.data);
+      return NextResponse.json(
+        applyFirestoreActivationCompat(
+          cache.data,
+          (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
+            ?.data ?? null,
+        ),
+      );
     }
 
     // Run all queries in parallel - each is lightweight
@@ -128,40 +151,60 @@ export async function GET(request: NextRequest) {
         ORDER BY days_active
       `),
 
-      // 6. Activation: signups who created a Memory within 7 days
+      // 6. Activation: new signups who created a Memory within 7 days.
+      //
+      // Three things this query has to get right, each of which silently
+      // understated the rate before:
+      //   - The cohort is the user's FIRST-EVER sign-in, matching query 1.
+      //     Filtering by timestamp *before* the min() made every returning user
+      //     who re-authenticated inside the window look like a new signup.
+      //   - Activation tests for ANY memory inside the window. Keying off the
+      //     user's earliest memory marked a returning user unactivated because
+      //     their first-ever memory predates their window.
+      //   - `reports_activation` records whether the build they signed up on can
+      //     emit `Memory Created` at all. Desktop only began emitting it on the
+      //     normal (durable-session) path in 98f1ee7c7f, first shipped in
+      //     ${MIN_ACTIVATION_TELEMETRY_VERSION.join(".")}. Users on older builds
+      //     cannot activate no matter what they do, so pooling them reports a
+      //     rollout gap as a product failure.
       hogql(apiKey, projectId, host, `
         SELECT
-          toDate(toString(signup_ts)) as day,
+          toDate(toString(s_ts)) as day,
           count(*) as signups,
-          countIf(has_memory = 1) as activated
+          countIf(memories_in_window > 0) as activated,
+          countIf(reports_activation) as capable_signups,
+          countIf(reports_activation AND memories_in_window > 0) as capable_activated
         FROM (
           SELECT
-            s_id,
-            s_ts as signup_ts,
-            if(m_count > 0, 1, 0) as has_memory
+            signups.s_id as s_id,
+            signups.s_ts as s_ts,
+            signups.reports_activation as reports_activation,
+            countIf(
+              memories.m_ts >= signups.s_ts
+              AND memories.m_ts <= signups.s_ts + interval 7 day
+            ) as memories_in_window
           FROM (
             SELECT
               distinct_id as s_id,
-              min(timestamp) as s_ts
+              min(timestamp) as s_ts,
+              arrayMap(
+                part -> toIntOrZero(part),
+                splitByChar('.', coalesce(argMin(properties.$app_version, timestamp), '0'))
+              ) >= [${MIN_ACTIVATION_TELEMETRY_VERSION.join(", ")}] as reports_activation
             FROM events
             WHERE event = 'Sign In Completed'
               AND properties.$os_name = 'macOS'
-              AND timestamp >= now() - interval ${days} day
             GROUP BY distinct_id
           ) signups
           LEFT JOIN (
-            SELECT
-              distinct_id as m_id,
-              min(timestamp) as m_ts,
-              count(*) as m_count
+            SELECT distinct_id as m_id, timestamp as m_ts
             FROM events
             WHERE event = 'Memory Created'
               AND properties.$os_name = 'macOS'
               AND timestamp >= now() - interval ${days + 7} day
-            GROUP BY distinct_id
           ) memories ON signups.s_id = memories.m_id
-            AND memories.m_ts >= signups.s_ts
-            AND memories.m_ts <= signups.s_ts + interval 7 day
+          WHERE signups.s_ts >= now() - interval ${days} day
+          GROUP BY s_id, s_ts, reports_activation
         )
         GROUP BY day
         ORDER BY day
@@ -293,21 +336,22 @@ export async function GET(request: NextRequest) {
       : 0;
 
     // ── Process Activation ──
-    const activation: { date: string; signups: number; activated: number; rate: number }[] = [];
-    for (const [day, signups, activated] of activationResults as any[]) {
+    const activation: (DailyActivationPoint & { rate: number })[] = [];
+    for (const [day, signups, activated, capableSignups, capableActivated] of
+      activationResults as any[]) {
       activation.push({
         date: day,
         signups,
         activated,
+        capableSignups,
+        capableActivated,
         rate: signups > 0 ? Math.round((activated / signups) * 1000) / 10 : 0,
       });
     }
 
-    const totalSignups = activation.reduce((s, d) => s + d.signups, 0);
-    const totalActivated = activation.reduce((s, d) => s + d.activated, 0);
-    const overallActivationRate = totalSignups > 0
-      ? Math.round((totalActivated / totalSignups) * 1000) / 10
-      : null;
+    // Pooling every signup, including yesterday's, counts a guaranteed-zero
+    // numerator against a real denominator; only matured days are summarised.
+    const activationSummary = summarizeActivation(activation);
 
     // ── Quick Ratio ──
     const recentGA = growthAccounting.slice(-4);
@@ -318,24 +362,34 @@ export async function GET(request: NextRequest) {
       ? Math.round(((totalNewGA + totalResurrectedGA) / totalChurnedGA) * 100) / 100
       : null;
 
-    const result = {
-      growthAccounting,
-      stickinessTrend,
-      dailyDau,
-      powerUserCurve,
-      activation,
-      summary: {
-        quickRatio,
-        activationRate: overallActivationRate,
-        dauMau,
-        dauWau,
-        dau: avgDau,
-        wau,
-        mau,
-        l5PlusPct,
-        totalUsers: totalPowerUsers,
+    const result = applyFirestoreActivationCompat(
+      {
+        growthAccounting,
+        stickinessTrend,
+        dailyDau,
+        powerUserCurve,
+        activation,
+        summary: {
+          quickRatio,
+          // Capability-aware until the Firestore activation cache exists. The
+          // one-release compat shim below overlays the conversation-derived
+          // rate so live Infinity panels do not stay blank.
+          activationRate: activationSummary.capableRate,
+          activationTelemetryCoverage: activationSummary.telemetryCoverage,
+          activationSignups: activationSummary.capableSignups,
+          activationPooledRate: activationSummary.rate,
+          dauMau,
+          dauWau,
+          dau: avgDau,
+          wau,
+          mau,
+          l5PlusPct,
+          totalUsers: totalPowerUsers,
+        },
       },
-    };
+      (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
+        ?.data ?? null,
+    );
 
     cache = { data: result, days, timestamp: Date.now() };
     return NextResponse.json(result);

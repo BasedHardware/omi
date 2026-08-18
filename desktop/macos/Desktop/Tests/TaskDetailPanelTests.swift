@@ -130,7 +130,6 @@ final class TaskDetailPanelTests: XCTestCase {
     XCTAssertFalse(
       TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: true,
-        isPriorityPickerPresented: false,
         isMultiSelectMode: false,
         isDeletedTask: false,
         isTextFieldFocused: false,
@@ -140,7 +139,6 @@ final class TaskDetailPanelTests: XCTestCase {
     XCTAssertTrue(
       TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: true,
-        isPriorityPickerPresented: false,
         isMultiSelectMode: false,
         isDeletedTask: false,
         isTextFieldFocused: false,
@@ -150,13 +148,30 @@ final class TaskDetailPanelTests: XCTestCase {
     XCTAssertFalse(
       TaskDetailPanelPresentationPolicy.showsHoverActions(
         isRowHovering: true,
-        isPriorityPickerPresented: false,
         isMultiSelectMode: true,
         isDeletedTask: false,
         isTextFieldFocused: false,
         isDetailPanelPresented: false
       )
     )
+  }
+
+  /// Priority moved off the task row's hover strip into the detail panel, where
+  /// it is an editable control rather than a duplicated read-only field.
+  func testPriorityIsNotDuplicatedAsAReadOnlyDetailField() {
+    let task = TaskActionItem(
+      id: "task-priority",
+      description: "Ship the build",
+      completed: false,
+      createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+      priority: "high"
+    )
+
+    let fields = TaskDetailPanelContent.make(for: task).fields
+
+    XCTAssertFalse(
+      fields.contains { $0.label == "Priority" },
+      "the panel edits priority directly, so it must not also list it as a read-only field")
   }
 
   private func makeTask(

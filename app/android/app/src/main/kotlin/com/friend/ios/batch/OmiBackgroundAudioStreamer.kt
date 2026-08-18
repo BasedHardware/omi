@@ -272,6 +272,10 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
 
     private fun loadConfig(): Config? {
         if (!boolPref("nativeBleStreamingEnabled", false)) return null
+        if (!CustomSttRawAudioPolicy.allowsForwarding(stringPref("customSttConfig"))) {
+            Log.i(TAG, "Raw Omi audio blocked by Custom STT forwarding policy")
+            return null
+        }
         val raw = stringPref("nativeBleStreamConfig")
         if (raw.isEmpty()) return null
 

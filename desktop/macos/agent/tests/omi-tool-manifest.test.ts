@@ -36,7 +36,11 @@ describe("omi tool manifest", () => {
     expect(tool?.inputSchema).toEqual({
       type: "object",
       properties: {
-        content: { type: "string", description: "The exact user-provided content to save as a short-term memory." },
+        content: {
+          type: "string",
+          description:
+            "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+        },
       },
       required: ["content"],
       additionalProperties: false,

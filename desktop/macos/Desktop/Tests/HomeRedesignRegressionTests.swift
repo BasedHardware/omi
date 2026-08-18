@@ -363,7 +363,19 @@ final class ChatRowPresentationTests: XCTestCase {
 
 /// The stamp under a reply is read to the minute, not to the year.
 final class ChatMessageTimestampFormatTests: XCTestCase {
-  private let calendar = Calendar(identifier: .gregorian)
+  /// Fixtures are built and rendered in one pinned zone, so neither the machine's zone nor its
+  /// language decides whether these assertions hold. `America/New_York` matches what the rest of
+  /// the desktop suite pins; the month and year below are only stable against a pinned `locale`,
+  /// since production deliberately renders in the user's own (`ja_JP` says 6月, not "Jun").
+  private var calendar = Calendar(identifier: .gregorian)
+  private let locale = Locale(identifier: "en_US_POSIX")
+
+  override func setUpWithError() throws {
+    try super.setUpWithError()
+    calendar.timeZone = try XCTUnwrap(
+      TimeZone(identifier: "America/New_York"),
+      "the pinned fixture zone must exist in the system time zone database")
+  }
 
   private func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ min: Int) -> Date {
     var components = DateComponents()
@@ -378,7 +390,8 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testTodayIsJustTheTime() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar)
+    let text = ChatMessageTimestampFormat.text(
+      for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar, locale: locale)
 
     XCTAssertFalse(text.contains("2026"), "the year on a message sent hours ago is chrome")
     XCTAssertFalse(text.contains("Aug"))
@@ -387,7 +400,8 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testAnEarlierDayThisYearAddsTheDayButNotTheYear() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar)
+    let text = ChatMessageTimestampFormat.text(
+      for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar, locale: locale)
 
     XCTAssertTrue(text.contains("Jun"))
     XCTAssertFalse(text.contains("2026"))
@@ -395,7 +409,8 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testAnotherYearIsTheOnlyCaseWorthNamingTheYearFor() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar)
+    let text = ChatMessageTimestampFormat.text(
+      for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar, locale: locale)
 
     XCTAssertTrue(text.contains("2025"))
   }

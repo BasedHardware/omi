@@ -41,9 +41,36 @@ void main() {
     expect(rowSemantics.properties.onTap, isNotNull);
     semantics.dispose();
   });
+
+  testWidgets('empty-address pins at distinct GPS points render as separate Unknown rows', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(
+          summaryId: 'summary-empty-addr',
+          summary: _summary(
+            locations: [
+              LocationPin(latitude: 37.7749, longitude: -122.4194, time: '08:00'),
+              LocationPin(latitude: 37.7849, longitude: -122.4094, time: '10:00'),
+            ],
+          ),
+          tileProvider: _MemoryTileProvider(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(find.byKey(const ValueKey('daily_summary_location_row_0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('daily_summary_location_row_1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('daily_summary_location_row_2')), findsNothing);
+    expect(find.text('Unknown'), findsNWidgets(2));
+  });
 }
 
-DailySummary _summary() {
+DailySummary _summary({List<LocationPin>? locations}) {
   return DailySummary(
     id: 'summary-1',
     date: '2026-07-15',
@@ -51,10 +78,11 @@ DailySummary _summary() {
     headline: 'A day around the city',
     overview: 'A productive day.',
     stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
-    locations: [
-      LocationPin(latitude: 37.7749, longitude: -122.4194, address: 'Home, San Francisco', time: '08:00'),
-      LocationPin(latitude: 37.7849, longitude: -122.4094, address: 'Office, San Francisco', time: '10:00'),
-    ],
+    locations: locations ??
+        [
+          LocationPin(latitude: 37.7749, longitude: -122.4194, address: 'Home, San Francisco', time: '08:00'),
+          LocationPin(latitude: 37.7849, longitude: -122.4094, address: 'Office, San Francisco', time: '10:00'),
+        ],
   );
 }
 

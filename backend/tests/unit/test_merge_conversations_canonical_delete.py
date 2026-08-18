@@ -21,9 +21,35 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
+_ORIGINAL_ATTRS: dict[tuple[str, str], object] = {}
+_STUBBED_ATTRS = (
+    ("database.conversations", "delete_conversation"),
+    ("database.conversations", "delete_conversation_photos"),
+    ("database.action_items", "delete_action_items_for_conversation"),
+)
+
+
+def _remember_original_attrs() -> None:
+    for module_name, attr in _STUBBED_ATTRS:
+        key = (module_name, attr)
+        if key in _ORIGINAL_ATTRS:
+            continue
+        module = sys.modules.get(module_name)
+        if module is not None and hasattr(module, attr):
+            _ORIGINAL_ATTRS[key] = getattr(module, attr)
+
+
+def _restore_original_attrs() -> None:
+    for module_name, attr in _STUBBED_ATTRS:
+        module = sys.modules.get(module_name)
+        original = _ORIGINAL_ATTRS.get((module_name, attr))
+        if module is not None and original is not None:
+            setattr(module, attr, original)
+
 
 def _install_merge_conversations_stubs() -> list[str]:
     touched = install_ws_i_heavy_import_stubs()
+    _remember_original_attrs()
     conversations_mod = sys.modules["database.conversations"]
     conversations_mod.delete_conversation = MagicMock()
     conversations_mod.delete_conversation_photos = MagicMock()
@@ -52,12 +78,32 @@ def _merge_conversations_import_isolation():
 
     globals()["_delete_conversation_and_related_data"] = _delete_conversation_and_related_data
     yield
+    # These stubs replace *attributes* on real modules; restore_sys_modules
+    # cannot undo that, so without this any later suite calling the real
+    # database.conversations helpers fails. CI only escapes it because
+    # collection is alphabetical and this file sorts after them.
+    _restore_original_attrs()
     restore_sys_modules(saved)
 
 
 @pytest.fixture(autouse=True)
 def _reinstall_merge_conversations_stubs():
     _install_merge_conversations_stubs()
+
+
+@pytest.fixture(autouse=True)
+def _source_has_memories_to_retract():
+    """These cases all describe a source that *has* canonical memories.
+
+    Retraction is skipped when a source has none (nothing can dangle), so the
+    precondition is stated here rather than rewriting each assertion below.
+    See test_merge_skips_retraction_without_canonical_memories.py.
+    """
+    with patch(
+        "utils.conversations.merge_conversations.retraction_can_be_skipped",
+        return_value=False,
+    ):
+        yield
 
 
 def test_delete_conversation_related_data_always_retracts_through_universal_service():

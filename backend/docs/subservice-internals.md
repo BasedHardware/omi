@@ -22,12 +22,6 @@ diarizer/               # Subservice: speaker audio analysis (separate Docker, G
                         #   - POST /v1/embedding — speaker vector extraction (pyannote/embedding)
                         #   - POST /v2/embedding — alt speaker vectors (wespeaker-voxceleb-resnet34-LM)
 
-agent-proxy/            # Subservice: WebSocket bridge between mobile app and user's agent VM
-                        #   - Firebase auth → Firestore VM lookup → GCE lifecycle (start/reset/health)
-                        #   - Bidirectional message pump with keepalive (120s)
-                        #   - Chat history injection (last 10 messages on first query)
-                        #   - Optional AES-256-GCM message encryption
-
 nllb_translation/       # Subservice: self-hosted NLLB translation (separate Docker, GPU/CUDA)
                         #   - POST /v1/translate — batch sentence translation (NLLB-200 + CTranslate2)
                         #   - Prometheus metrics at /metrics, health at /health, readiness at /ready

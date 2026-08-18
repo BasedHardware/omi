@@ -14,7 +14,9 @@ import { net } from 'electron'
 import { getAbortSignal, type BackendSession } from '../core/session'
 import { FOCUS_RESPONSE_SCHEMA, parseScreenAnalysis, type ScreenAnalysis } from './models'
 
-const MODEL = 'gemini-2.5-flash'
+// Focus stays on the PT model: small payloads, and the lane earns its cost
+// (CTR 1.275%, one of the best) — see modelPins.test.ts for the reservation ratchet.
+export const MODEL = 'gemini-2.5-flash'
 const REQUEST_TIMEOUT_MS = 30_000
 /** 3 attempts total. Mac's backoff, exactly: 2s then 8s. */
 const RETRY_DELAYS_MS = [2_000, 8_000]

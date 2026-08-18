@@ -188,8 +188,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   private let capturePollInterval: TimeInterval = 1.0
   /// Exempts HID idleness while another process plays media (movie night ≠ away).
   private let mediaPlaybackDetector = MediaPlaybackDetector()
-  /// One log line per idle-but-watching episode, not one per poll tick.
-  private var didLogMediaIdleExemption = false
   /// Apps whose content changes slowly. The value is the heartbeat interval in seconds.
   /// Uses bundle ID when available, falling back to localized app name.
   private let appSpecificHeartbeatIntervals: [String: TimeInterval] = [
@@ -785,22 +783,13 @@ public class ProactiveAssistantsPlugin: NSObject {
     // for an hour but is still watching — MediaPlaybackIdlePolicy), and Maximum
     // notification level additionally extends the window to 300s for HID-idle WITHOUT
     // media (reading a static feed). Calmer levels keep the 60s threshold.
-    let hidIdleSeconds = systemIdleSeconds()
-    let idleSeconds = MediaPlaybackIdlePolicy.effectiveIdleSeconds(
-      hidIdleSeconds: hidIdleSeconds,
-      isDisplaySleepPrevented: mediaPlaybackDetector.isDisplaySleepPrevented())
     let idleThreshold = SuggestionPacing.captureIdleThreshold(
       frequencyLevel: NotificationService.currentFrequencyLevel(),
       base: captureTrigger.idleThreshold
     )
-    if hidIdleSeconds >= idleThreshold, idleSeconds < idleThreshold,
-      !didLogMediaIdleExemption
-    {
-      didLogMediaIdleExemption = true
-      log("CaptureGate: HID-idle but media playback active — capture continues")
-    } else if hidIdleSeconds < idleThreshold {
-      didLogMediaIdleExemption = false
-    }
+    let idleSeconds = mediaPlaybackDetector.effectiveIdleSeconds(
+      hidIdleSeconds: systemIdleSeconds(),
+      threshold: idleThreshold)
     if idleSeconds >= idleThreshold {
       logCaptureGate("idle")
       return
@@ -978,11 +967,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
-        // A full-screen `CGImage` redrawn into a 9x8 grayscale context — a real decode and
-        // downscale, and it was on the main actor for every captured frame. `CGImage` is immutable,
-        // and the hash is a pure function of it, so nothing about this needed the main thread.
+        // Off the main actor on purpose: `CGImage` is immutable and the hash is a pure function.
+        // Hashed at preview scale: this enters the same history the ≤80px preview grabs are
+        // compared against, and a full-resolution dHash aliases differently (see previewScaleDHash).
         let fullHash = await Task.detached(priority: .userInitiated) {
-          RewindOCRService.dHash(of: cgImage)
+          RewindOCRService.previewScaleDHash(of: cgImage)
         }.value
         captureTrigger.markCaptured(
           app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
@@ -1237,13 +1226,21 @@ public class ProactiveAssistantsPlugin: NSObject {
         detail: payload["detail"]
       )
 
-      log("NotificationTestCLI: Received test trigger (title=\(resolvedTitle), assistantId=\(resolvedAssistantId))")
+      // Functional notices (screen-recording repair, meeting hand-off) opt into a system
+      // banner; the proactive default does not. The CLI carries the flag so both delivery
+      // contracts stay exercisable against a real running bundle.
+      let deliverSystemBanner = payload["deliverSystemBanner"] == "true"
+
+      log(
+        "NotificationTestCLI: Received test trigger (title=\(resolvedTitle), "
+          + "assistantId=\(resolvedAssistantId), deliverSystemBanner=\(deliverSystemBanner))")
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
         title: resolvedTitle,
         message: resolvedMessage,
         assistantId: resolvedAssistantId,
-        context: context
+        context: context,
+        deliverSystemBanner: deliverSystemBanner
       )
     }
   }

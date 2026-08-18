@@ -28,13 +28,14 @@
 //    AppKit from `.closable` / `.miniaturizable`; hiding `standardWindowButton(_:)` hides a view and
 //    changes no behaviour. `dress` re-asserts both bits so a future window-construction change cannot
 //    strand a user in a window with no visible close control *and* no keyboard one.
-//  - **Moving has two handles, deliberately.** `.hiddenTitleBar` keeps a real (transparent) title bar
-//    over the top band, which still drags — that band is why the shell reserves
-//    `GlassShell.titlebarClearance` and draws nothing in it. A simultaneous SwiftUI drag gesture is
-//    confined to the visible top bar. The native `isMovableByWindowBackground` switch cannot do that safely:
-//    AppKit sees a SwiftUI `Button` as its transparent `NSHostingView`, classifies it as background,
-//    and steals its click. A root SwiftUI gesture also competes with every Button, Menu, search field,
-//    and filter in the shell. The top-bar-only simultaneous gesture preserves those child controls.
+//  - **Moving has one handle.** The hidden title bar is occupied by the visible
+//    top bar (`GlassShell.titlebarClearance` is 0), so there is no empty band to
+//    drag from above the glass. The visible top bar still drags (`ShellWindowDragHandle`).
+//    The native `isMovableByWindowBackground` switch cannot do that safely: AppKit sees a
+//    SwiftUI `Button` as its transparent `NSHostingView`, classifies it as background, and
+//    steals its click. A root SwiftUI gesture also competes with every Button, Menu, search
+//    field, and filter in the shell. The top-bar-only simultaneous gesture preserves those
+//    child controls.
 //
 //  ## It is still an ordinary application window
 //
@@ -103,11 +104,9 @@ enum ShellWindowChrome {
   /// panel's edge, so AppKit's window shadow is the correct one and the only one.
   ///
   /// The ground is gone. In **both** presentations the window is now a transparent rectangle
-  /// noticeably larger than the panels floating inside it, which is precisely the case
-  /// `WindowGlass.Kind.summoned` was written for — AppKit's shadow traces empty air. On the first-run
-  /// window it did, and it is the most visible thing on the screen: a large rounded rectangle hanging
-  /// on the wallpaper around a 540 × 640 onboarding card, reading as a second sheet of glass that the
-  /// desktop is supposed to show through untouched.
+  /// the size of the glass (`DesktopWindowLayoutPolicy.windowInset` is 0). AppKit's shadow
+  /// would still trace the rectangular frame, including the squircle's leftover corner
+  /// triangles, so it stays off. The panels draw their own ambient lift.
   ///
   /// A constant rather than a function of the presentation, because that parameter had one job and no
   /// longer has it. `Presentation` is behavioural — level, Spaces, whether the window survives losing

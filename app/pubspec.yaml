@@ -62,7 +62,12 @@ dependencies:
   pdf: ^3.11.0
   intl: ^0.20.2
   permission_handler: ^12.0.0+1
-  flutter_contacts: ^1.1.9+2
+  # Must stay >=2.0.0 — 1.x's iOS registration force-unwraps
+  # UIApplication.shared.delegate!.window!!.rootViewController!, which is nil under the
+  # UIScene lifecycle and crashes on launch (EXC_BREAKPOINT), taking every alphabetically
+  # later plugin down with it since GeneratedPluginRegistrant registers synchronously.
+  # 2.x's rewritten registration doesn't touch window at all. See #11568.
+  flutter_contacts: ^2.3.1
   intl_country_data:
     git:
       url: https://github.com/mdmohsin7/intl_country_data.git
@@ -176,6 +181,14 @@ flutter_launcher_icons:
   image_path: "assets/images/app_launcher_icon.png"
 
 flutter:
+  # Flutter 3.44 turned Swift Package Manager on by default for iOS/macOS.
+  # firebase_crashlytics 4.3.2 is built against firebase_core 3.11.0 while
+  # firebase_messaging 15.2.5 is built against 3.13.0, so SPM cannot resolve a
+  # single `flutterfire` package version and every iOS archive fails. CocoaPods
+  # tolerates the skew. Re-enable once the Firebase plugin versions are aligned;
+  # Flutter will eventually stop honouring this. https://github.com/BasedHardware/omi/issues/11676
+  config:
+    enable-swift-package-manager: false
   generate: true
   uses-material-design: true
   assets:

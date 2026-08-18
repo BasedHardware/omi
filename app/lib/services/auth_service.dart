@@ -84,6 +84,7 @@ class AuthService {
 
   AuthService._internal()
       : _tokenGateway = _FirebaseAuthTokenGateway(),
+        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
         _refreshDelay = _defaultRefreshDelay,
         _recordTelemetry = _recordProductionTelemetry,
         _telemetryContextProvider = _productionTelemetryContext;
@@ -92,14 +93,28 @@ class AuthService {
   AuthService.forTesting({
     required AuthTokenGateway tokenGateway,
     AuthRefreshDelay? refreshDelay,
+    Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
   })  : _tokenGateway = tokenGateway,
+        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
         _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
   static const int _maxRefreshAttempts = 3;
+
+  /// Per-attempt ceiling on the Firebase forced token refresh.
+  ///
+  /// `forceRefresh()` can hang indefinitely rather than fail: measured on
+  /// iPhone 17 Pro / iOS 27.0 against a Firebase Auth emulator on a non-loopback
+  /// host, it never returned at all. Because `shared.dart` refreshes on the way
+  /// into *every* authenticated request, an unbounded stall here silently freezes
+  /// all backend traffic app-wide — no error, no timeout, nothing to report.
+  ///
+  /// A timed-out attempt is reported as a transient failure, which the retry loop
+  /// below and every existing caller already handle.
+  static const Duration _defaultRefreshAttemptTimeout = Duration(seconds: 8);
   static const List<Duration> _refreshRetryDelays = [Duration(milliseconds: 200), Duration(milliseconds: 500)];
   static const Set<String> _terminalTokenErrorCodes = {
     'invalid-user-token',
@@ -111,6 +126,7 @@ class AuthService {
   static Future<void> _defaultRefreshDelay(Duration duration) => Future<void>.delayed(duration);
 
   final AuthTokenGateway _tokenGateway;
+  final Duration _refreshAttemptTimeout;
   final AuthRefreshDelay _refreshDelay;
   final AuthTelemetryRecorder _recordTelemetry;
   final AuthTelemetryContextProvider _telemetryContextProvider;
@@ -368,7 +384,7 @@ class AuthService {
 
   Future<AuthTokenResult> _refreshIdTokenOnce(int generation, String expectedUid) async {
     try {
-      final refreshed = await _tokenGateway.forceRefresh();
+      final refreshed = await _tokenGateway.forceRefresh().timeout(_refreshAttemptTimeout);
       if (generation != _sessionGeneration || _tokenGateway.currentUser?.uid != expectedUid) {
         return const AuthTokenMissingUser();
       }
@@ -398,6 +414,12 @@ class AuthService {
       }
       _sessionExpired = false;
       return AuthTokenSuccess(token: token, expirationTime: refreshed?.expirationTime);
+    } on TimeoutException {
+      if (generation != _sessionGeneration) return const AuthTokenMissingUser();
+      Logger.debug('refreshIdToken: forceRefresh timed out after $_refreshAttemptTimeout');
+      // Distinct class so a stalled refresh is distinguishable in telemetry from
+      // one that actually failed — they have very different causes.
+      return const AuthTokenTransientFailure(failureClass: 'refresh_timeout');
     } on FirebaseAuthException catch (e) {
       if (generation != _sessionGeneration) return const AuthTokenMissingUser();
       Logger.debug('refreshIdToken: FirebaseAuthException: ${e.code}');

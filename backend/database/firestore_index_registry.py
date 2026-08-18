@@ -284,6 +284,28 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_policy_expired_short_term_by_capture',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('source_state'),
+        _asc('captured_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
     identifier='memory_items_canonical_graph_read',
     collection_group='memory_items',
@@ -329,8 +351,9 @@ CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
 # Collection-scoped newest-first scan for universal mixed list cursor paging.
 # Equality filters are intentionally empty: access/device/pending/archive are
 # applied after each bounded raw page so filtered rows still advance the keyset.
-# Firestore manages the single-field updated_at index (plus automatic __name__
-# tie-break) itself — this spec records the serving query contract only.
+# Firestore auto single-field indexes only cover field+__name__ in the *same*
+# direction (DESC+DESC / ASC+ASC). updated_at DESC + __name__ ASC is a real
+# composite and must be declared (#11684).
 UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     identifier='memory_items_universal_list_scan',
     collection_group='memory_items',
@@ -341,8 +364,8 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
 
 # Historical dual-stream keysets for effective updated_at-or-created_at order.
 # Docs with updated_at ride the updated stream; created stream skips those
-# duplicates in Python so each document is emitted once. Single-field+__name__
-# indexes stay out of the composite manifest.
+# duplicates in Python so each document is emitted once. Opposite-direction
+# __name__ tie-breaks need composite indexes (same class as #11684).
 UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
     identifier='memories_universal_list_scan_updated_at',
     collection_group='memories',
@@ -572,6 +595,7 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    POLICY_EXPIRED_SHORT_TERM_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -590,18 +614,49 @@ QUERY_SPECS = (
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
 
+
+def _index_fields_need_composite_manifest(index_fields: tuple[FirestoreIndexField, ...]) -> bool:
+    """Return True when Firestore will not serve this order from automatic indexes.
+
+    Automatic single-field indexes cover ``field ASC, __name__ ASC`` and
+    ``field DESC, __name__ DESC`` only. A lone ordered field with an opposite
+    ``__name__`` direction is a composite Firestore must be given explicitly
+    (#11684). Multi-field orders always need the composite manifest.
+    Array-contains (+ ``__name__``) stays out of the composite manifest — the
+    existing unified-memory index contract keeps those automatic.
+    """
+
+    non_name = [field for field in index_fields if field.field_path != '__name__']
+    name_fields = [field for field in index_fields if field.field_path == '__name__']
+    if len(non_name) > 1:
+        return True
+    if len(non_name) != 1 or len(name_fields) != 1:
+        return False
+    ordered = non_name[0]
+    name = name_fields[0]
+    if ordered.order is None or name.order is None:
+        return False
+    return ordered.order != name.order
+
+
+def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
+    """One composite index per signature, even when two serving queries share it."""
+    seen = set(_INDEX_ONLY_REQUIREMENT_SIGNATURES)
+    requirements: list[FirestoreIndexRequirement] = []
+    for spec in QUERY_SPECS:
+        if not _index_fields_need_composite_manifest(spec.index_fields):
+            continue
+        signature = spec.index_requirement.signature
+        if signature in seen:
+            continue
+        seen.add(signature)
+        requirements.append(spec.index_requirement)
+    return tuple(requirements)
+
+
 INDEX_REQUIREMENTS = (
     *INDEX_ONLY_REQUIREMENTS,
-    *(
-        spec.index_requirement
-        for spec in QUERY_SPECS
-        # Firestore manages one-field indexes (including document-ID ordering)
-        # itself and rejects them in the composite-index manifest.
-        if len([field for field in spec.index_fields if field.field_path != '__name__']) > 1
-        # Explicit requirements own legacy manifests while their callers migrate
-        # to query specs. Avoid declaring the same composite index twice.
-        and spec.index_requirement.signature not in _INDEX_ONLY_REQUIREMENT_SIGNATURES
-    ),
+    *_query_spec_index_requirements(),
 )
 
 
