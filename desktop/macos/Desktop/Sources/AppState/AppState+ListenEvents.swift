@@ -23,7 +23,7 @@ extension AppState {
         isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking
       ) {
         log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
-        FloatingBarVoicePlaybackService.shared.stop()
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
       }
 
       // Convert backend segment to local SpeakerSegment
