@@ -2,13 +2,51 @@ import { Hono } from "hono";
 import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/projections/synthesized";
 
 import { AccountBackend } from "./account";
+import {
+  gatewayConfig,
+  gatewayModeEnabled,
+  type GatewaySecretEnv,
+} from "./openrouter";
+import { parseTaskLimit, readTasks } from "./tasks";
 import { backendError, isChatCreate, json } from "./wire";
 
-type WorkerEnv = Env & { API_TOKEN: string };
-type Variables = { accountId: string };
+type WorkerEnv = Omit<Env, "DB"> &
+  GatewaySecretEnv & { API_TOKEN: string; DB?: D1Database };
+type Variables = { accountId: string; requestId: string };
+
+type ObservableContext = {
+  req: { method: string; routePath: string };
+  res: { status: number };
+  set(key: "requestId", value: string): void;
+  get(key: "requestId"): string | undefined;
+  header(name: string, value: string): void;
+};
 
 const app = new Hono<{ Bindings: WorkerEnv; Variables: Variables }>({
   strict: true,
+});
+
+// Emit one small, schema-stable JSON event for every request. Cloudflare
+// Workers Observability can retain it natively and Better Stack can ingest the
+// same line without a Worker-specific SDK. The event intentionally carries no
+// URL, query, authorization header, account identifier, request body, prompt,
+// or completion content.
+app.use("*", async (context, next) => {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  context.set("requestId", requestId);
+  await next();
+  context.header("x-omi-request-id", requestId);
+  console.log(
+    JSON.stringify({
+      event: "request_completed",
+      request_id: requestId,
+      method: context.req.method,
+      route: safeRoute(context),
+      status: context.res.status,
+      duration_ms: Math.max(0, Date.now() - startedAt),
+    })
+  );
 });
 
 app.get("/health", (context) =>
@@ -36,8 +74,9 @@ app.use("/v1/*", async (context, next) => {
     // refusal, so a misconfigured deployment is not advertised over the wire.
     console.error(
       JSON.stringify({
-        message: "configuration_not_ready",
-        path: context.req.path,
+        event: "configuration_not_ready",
+        request_id: context.get("requestId") ?? "unavailable",
+        route: safeRoute(context),
       })
     );
     return backendError("unauthorized", "reauthenticate", 401);
@@ -137,15 +176,30 @@ app.delete("/v1/chat-generations/:id", async (context) => {
 
 app.get("/v1/conversations", () => json([]));
 app.get("/v1/memories", () => json(emptyPage("recall-completeness-v1")));
-app.get("/v1/tasks", () => json(emptyPage("tasks-completeness-v1")));
+app.get("/v1/tasks", async (context) => {
+  const query = new URL(context.req.url).searchParams;
+  if (
+    [...query.keys()].some((key) => key !== "limit" && key !== "cursor") ||
+    query.getAll("limit").length > 1 ||
+    query.getAll("cursor").length > 1
+  ) {
+    return backendError("bad_request", "edit_request", 400);
+  }
+  const db = context.env.DB;
+  if (db === undefined) return json(emptyPage("tasks-completeness-v1"));
+  const limit = parseTaskLimit(query.get("limit"));
+  const cursor = query.get("cursor") ?? undefined;
+  return json(await readTasks(db, context.get("accountId"), limit, cursor));
+});
 
 app.notFound(() => backendError("not_found", "edit_request", 404));
 app.onError((error, context) => {
   console.error(
     JSON.stringify({
-      message: "request_failed",
+      event: "request_failed",
+      request_id: context.get("requestId") ?? "unavailable",
       name: error.name,
-      path: context.req.path,
+      route: safeRoute(context),
     })
   );
   return backendError("internal_server_error", "retry", 500, true);
@@ -157,6 +211,11 @@ const handler = {
 
 export { AccountBackend };
 export default handler;
+
+function safeRoute(context: Pick<ObservableContext, "req">): string {
+  const route = context.req.routePath;
+  return route.startsWith("/") && route.length <= 200 ? route : "unmatched";
+}
 
 function account(context: { env: WorkerEnv; get(key: "accountId"): string }) {
   return context.env.ACCOUNTS.getByName(context.get("accountId"));
@@ -175,7 +234,7 @@ function constantTimeEqual(
 }
 
 function configurationReady(env: WorkerEnv): boolean {
-  return (
+  const base =
     typeof env.API_TOKEN === "string" &&
     env.API_TOKEN.length > 0 &&
     typeof env.STAGING_ACCOUNT_ID === "string" &&
@@ -185,8 +244,10 @@ function configurationReady(env: WorkerEnv): boolean {
     Number.isSafeInteger(env.STAGING_CHAT_LIMIT) &&
     env.STAGING_CHAT_LIMIT >= 0 &&
     env.ACCOUNTS !== undefined &&
-    env.AI !== undefined
-  );
+    env.AI !== undefined;
+  if (!base) return false;
+  if (gatewayModeEnabled(env)) return gatewayConfig(env) !== null;
+  return true;
 }
 
 async function configureAccount(

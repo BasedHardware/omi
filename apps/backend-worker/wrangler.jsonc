@@ -11,7 +11,9 @@
     "STAGING_DISPLAY_NAME": "Omi Staging",
     "STAGING_EMAIL": "staging@omi.invalid",
     "STAGING_PLAN_LABEL": "Staging",
-    "STAGING_CHAT_LIMIT": 1000
+    "STAGING_CHAT_LIMIT": 1000,
+    "OPENROUTER_GATEWAY_ENABLED": "false",
+    "OPENROUTER_MODEL": ""
   },
   "ai": {
     "binding": "AI"
@@ -20,6 +22,13 @@
     "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountBackend" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "omi-v5-backend-staging-tasks",
+      "database_id": "028f665e-87df-4329-b794-b0811a6e24a4"
+    }
+  ],
   "observability": {
     "enabled": true,
     "logs": { "head_sampling_rate": 1 },

@@ -11,10 +11,15 @@
     "STAGING_DISPLAY_NAME": "Test Account",
     "STAGING_EMAIL": "test@example.invalid",
     "STAGING_PLAN_LABEL": "Test",
-    "STAGING_CHAT_LIMIT": 10
+    "STAGING_CHAT_LIMIT": 10,
+    "OPENROUTER_GATEWAY_ENABLED": "false",
+    "OPENROUTER_MODEL": ""
   },
   "durable_objects": {
     "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountBackend" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "omi-v5-backend-test-tasks" }
+  ]
 }
