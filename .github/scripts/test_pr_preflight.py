@@ -646,12 +646,20 @@ class SingleFlightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
             counter = temp / "counter"
-            code = (
-                "from pathlib import Path; import time; "
-                f"p=Path({str(counter)!r}); p.write_text(p.read_text()+'x' if p.exists() else 'x'); "
-                "print('==> focused-tests', flush=True); time.sleep(.5)"
+            hold = temp / "hold"
+            hold.write_text("1", encoding="utf-8")
+            script = (
+                "from pathlib import Path\n"
+                "import time\n"
+                f"p = Path({str(counter)!r})\n"
+                f"hold = Path({str(hold)!r})\n"
+                "p.write_text(p.read_text() + 'x' if p.exists() else 'x')\n"
+                "print('==> focused-tests', flush=True)\n"
+                "deadline = time.monotonic() + 10\n"
+                "while hold.exists() and time.monotonic() < deadline:\n"
+                "    time.sleep(0.02)\n"
             )
-            command = [sys.executable, "-c", code]
+            command = [sys.executable, "-c", script]
             first = self.run_runner(temp, command)
             assert first.stdin is not None
             first.stdin.write("same\n")
@@ -661,6 +669,8 @@ class SingleFlightTests(unittest.TestCase):
             assert second.stdin is not None
             second.stdin.write("same\n")
             second.stdin.close()
+            time.sleep(0.3)
+            hold.unlink(missing_ok=True)
             first_output = first.stdout.read() if first.stdout else ""
             second_output = second.stdout.read() if second.stdout else ""
             self.assertEqual(first.wait(), 0, first_output)
