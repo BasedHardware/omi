@@ -120,7 +120,7 @@ class TranscriptQueueItem(TypedDict):
 class AudioBytesQueueItem(TypedDict):
     type: str
     sample_rate: int
-    data: bytearray
+    data: bytes | bytearray
 
 
 class PrivateCloudChunk(TypedDict):
