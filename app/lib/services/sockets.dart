@@ -208,6 +208,13 @@ class SocketServicePool extends ISocketService {
       // Use separate socket for speech profile to avoid conflicts with conversation socket
       await _speechProfileSocket?.stop();
 
+      final stoppedConfig = SharedPreferencesUtil().customSttConfig;
+      if (stoppedConfig.isLocalOnlyPolicy) {
+        Logger.debug("socket speech profile > blocked after stop: localOnly policy active");
+        DebugLogManager.logWarning('speech_profile_socket_blocked_local_only', {'reason': 'local_only_policy'});
+        return null;
+      }
+
       _speechProfileSocket = _speechProfileFactory(
         sampleRate,
         codec,

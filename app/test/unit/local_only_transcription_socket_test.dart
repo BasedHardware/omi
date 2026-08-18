@@ -286,6 +286,34 @@ void main() {
     expect(speechSocket.stopCalls, 1);
     expect(speechSocket.status, PureSocketStatus.disconnected);
   });
+
+  test('speech-profile revalidates policy after stopping the previous socket', () async {
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(
+        provider: SttProvider.customLive,
+        privacyPolicy: SttPrivacyPolicy.full,
+      ),
+    );
+    final speechSocket = _FakeSocket();
+    var factoryCalls = 0;
+    final pool = SocketServicePool(
+      speechProfileFactory: (_, __, ___, {String? source}) {
+        factoryCalls++;
+        return TranscriptSegmentSocketService.withSocket(16000, BleAudioCodec.pcm16, 'en', speechSocket);
+      },
+    );
+
+    expect(await pool.speechProfile(codec: BleAudioCodec.pcm16, sampleRate: 16000, language: 'en'), isNotNull);
+    speechSocket.onStop = () => SharedPreferencesUtil().saveCustomSttConfig(
+          const CustomSttConfig(
+            provider: SttProvider.customLive,
+            privacyPolicy: SttPrivacyPolicy.localOnly,
+          ),
+        );
+
+    expect(await pool.speechProfile(codec: BleAudioCodec.pcm16, sampleRate: 16000, language: 'en'), isNull);
+    expect(factoryCalls, 1);
+  });
 }
 
 class _TestEnvFields implements EnvFields {
@@ -327,6 +355,7 @@ class _FakeSocket implements IPureSocket {
   int connectCalls = 0;
   int disconnectCalls = 0;
   int stopCalls = 0;
+  Future<void> Function()? onStop;
 
   @override
   PureSocketStatus get status => _status;
@@ -349,6 +378,7 @@ class _FakeSocket implements IPureSocket {
   Future<void> stop() async {
     stopCalls++;
     await disconnect();
+    await onStop?.call();
   }
 
   @override

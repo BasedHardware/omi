@@ -286,6 +286,7 @@ class OmiBleForegroundService : Service() {
     }
 
     private fun fireDeviceReady(address: String, services: List<BleService>) {
+        if (isDestroying) return
         val addr = address.uppercase()
         ensureBackgroundAudioSubscription(addr, services)
         limitlessDrainEngine.onDeviceReady(addr)
