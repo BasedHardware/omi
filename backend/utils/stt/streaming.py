@@ -340,6 +340,27 @@ def modulate_is_configured_fallback(language: Optional[str]) -> bool:
     )
 
 
+def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
+    """Return the Deepgram model that may take over a session whose primary failed.
+
+    Same contract as ``modulate_is_configured_fallback``, but it resolves a model
+    rather than answering yes/no: a Modulate primary resolved ``stt_model`` and
+    ``stt_language`` for Velma-2, so the caller has no Deepgram model to reuse and
+    cannot know which ``dg-*`` deployment the runtime actually lists. ``None``
+    means Deepgram must not be offered the session at all.
+    """
+    if not provider_is_enabled(deepgram_provider_for_runtime(is_dg_self_hosted), STTServingSurface.STREAMING):
+        return None
+    if not _deepgram_is_available():
+        return None
+    if language not in deepgram_nova3_multi_languages and language not in deepgram_nova3_languages:
+        return None
+    for model in (model.strip() for model in stt_service_models):
+        if model.startswith('dg-'):
+            return model.replace('dg-', '', 1)
+    return None
+
+
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
     """Return whether Parakeet may take over a session whose earlier providers failed.
 
