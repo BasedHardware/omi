@@ -29,6 +29,7 @@ const baseEnv = {
   STAGING_EMAIL: "test@example.invalid",
   STAGING_PLAN_LABEL: "Test",
   STAGING_CHAT_LIMIT: 10,
+  OBSERVABILITY_SINK_MODE: "cloudflare_only",
 };
 
 const executionContext = {

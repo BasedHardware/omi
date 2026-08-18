@@ -9,6 +9,7 @@ import {
   generateViaGateway,
   type GatewaySecretEnv,
 } from "./openrouter";
+import { gatewayFailureEvent } from "./observability";
 import {
   CHAT_CAPABILITIES,
   type ChatCreate,
@@ -450,10 +451,14 @@ export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
       const config = gatewayConfig(this.env);
       if (config === null) {
         console.error(
-          JSON.stringify({
-            message: "gateway_unconfigured",
-            correlationId: generationId,
-          })
+          JSON.stringify(
+            gatewayFailureEvent({
+              message: "gateway_unconfigured",
+              correlationId: generationId,
+              model: "unconfigured",
+              status: 0,
+            })
+          )
         );
         await this.fail(generationId);
         return;

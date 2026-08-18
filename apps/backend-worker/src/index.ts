@@ -7,11 +7,21 @@ import {
   gatewayModeEnabled,
   type GatewaySecretEnv,
 } from "./openrouter";
+import {
+  configurationNotReadyEvent,
+  generationAdmittedEvent,
+  observabilityConfigured,
+  parseObservabilitySinkMode,
+  requestCompletedEvent,
+  requestFailedEvent,
+  type ObservabilityEnv,
+} from "./observability";
 import { parseTaskLimit, readTasks } from "./tasks";
 import { backendError, isChatCreate, json } from "./wire";
 
-type WorkerEnv = Omit<Env, "DB"> &
-  GatewaySecretEnv & { API_TOKEN: string; DB?: D1Database };
+type WorkerEnv = Omit<Env, "DB" | "OBSERVABILITY_SINK_MODE"> &
+  GatewaySecretEnv &
+  ObservabilityEnv & { API_TOKEN: string; DB?: D1Database };
 type Variables = { accountId: string; requestId: string };
 
 type ObservableContext = {
@@ -38,14 +48,15 @@ app.use("*", async (context, next) => {
   await next();
   context.header("x-omi-request-id", requestId);
   console.log(
-    JSON.stringify({
-      event: "request_completed",
-      request_id: requestId,
-      method: context.req.method,
-      route: safeRoute(context),
-      status: context.res.status,
-      duration_ms: Math.max(0, Date.now() - startedAt),
-    })
+    JSON.stringify(
+      requestCompletedEvent({
+        requestId,
+        method: context.req.method,
+        route: safeRoute(context),
+        status: context.res.status,
+        durationMs: Math.max(0, Date.now() - startedAt),
+      })
+    )
   );
 });
 
@@ -53,8 +64,13 @@ app.get("/health", (context) =>
   json({ status: "ok", environment: context.env.ENVIRONMENT })
 );
 app.get("/ready", (context) =>
-  configurationReady(context.env)
-    ? json({ status: "ready", environment: context.env.ENVIRONMENT })
+  configurationReady(context.env) &&
+  parseObservabilitySinkMode(context.env.OBSERVABILITY_SINK_MODE) !== null
+    ? json({
+        status: "ready",
+        environment: context.env.ENVIRONMENT,
+        observability_sink_mode: context.env.OBSERVABILITY_SINK_MODE,
+      })
     : backendError("service_unavailable", "retry", 503, true)
 );
 
@@ -73,11 +89,12 @@ app.use("/v1/*", async (context, next) => {
     // Operator-visible, client-opaque: the caller still gets the ordinary
     // refusal, so a misconfigured deployment is not advertised over the wire.
     console.error(
-      JSON.stringify({
-        event: "configuration_not_ready",
-        request_id: context.get("requestId") ?? "unavailable",
-        route: safeRoute(context),
-      })
+      JSON.stringify(
+        configurationNotReadyEvent({
+          requestId: context.get("requestId") ?? "unavailable",
+          route: safeRoute(context),
+        })
+      )
     );
     return backendError("unauthorized", "reauthenticate", 401);
   }
@@ -147,6 +164,14 @@ app.post("/v1/chat-messages", async (context) => {
   if (admission === "entitlement") {
     return backendError("entitlement", "upgrade", 402);
   }
+  console.log(
+    JSON.stringify(
+      generationAdmittedEvent({
+        requestId: context.get("requestId") ?? "unavailable",
+        generationId: admission.generation.id,
+      })
+    )
+  );
   return json(
     { message: admission.message, generation: admission.generation },
     admission.created ? 201 : 200
@@ -195,12 +220,13 @@ app.get("/v1/tasks", async (context) => {
 app.notFound(() => backendError("not_found", "edit_request", 404));
 app.onError((error, context) => {
   console.error(
-    JSON.stringify({
-      event: "request_failed",
-      request_id: context.get("requestId") ?? "unavailable",
-      name: error.name,
-      route: safeRoute(context),
-    })
+    JSON.stringify(
+      requestFailedEvent({
+        requestId: context.get("requestId") ?? "unavailable",
+        name: error.name,
+        route: safeRoute(context),
+      })
+    )
   );
   return backendError("internal_server_error", "retry", 500, true);
 });
@@ -244,7 +270,8 @@ function configurationReady(env: WorkerEnv): boolean {
     Number.isSafeInteger(env.STAGING_CHAT_LIMIT) &&
     env.STAGING_CHAT_LIMIT >= 0 &&
     env.ACCOUNTS !== undefined &&
-    env.AI !== undefined;
+    env.AI !== undefined &&
+    observabilityConfigured(env);
   if (!base) return false;
   if (gatewayModeEnabled(env)) return gatewayConfig(env) !== null;
   return true;

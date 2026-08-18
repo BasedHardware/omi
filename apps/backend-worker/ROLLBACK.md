@@ -8,6 +8,8 @@ This runbook reverts the Cloudflare Worker to a previously uploaded version usin
 - `CLOUDFLARE_API_TOKEN`: the API token that owns the Worker.
 - `CLOUDFLARE_ACCOUNT_ID`: the account that owns the Worker.
 - `STAGING_WORKER_URL`: the public URL used by `verify:ready` after the rollback.
+- `STAGING_OBSERVABILITY_SINK_MODE`: `cloudflare_only` or `better_stack`.
+- `STAGING_BETTER_STACK_EVIDENCE_ID`: an opaque operator evidence identifier required only for `better_stack`.
 
 ## Steps
 
@@ -35,12 +37,18 @@ This runbook reverts the Cloudflare Worker to a previously uploaded version usin
      bun x wrangler versions deploy "${VERSION_ID}@100" --config wrangler.jsonc
    ```
 
-5. Verify the rolled-back worker:
+5. Verify the rolled-back worker and release configuration:
 
    ```bash
-   bun run verify:ready "${STAGING_WORKER_URL}/ready"
+   bun run verify:release "${STAGING_WORKER_URL}/ready" \
+     --environment staging \
+     --observability-sink-mode "${STAGING_OBSERVABILITY_SINK_MODE}"
    ```
+
+   For `better_stack`, append `--better-stack-evidence "${STAGING_BETTER_STACK_EVIDENCE_ID}"`.
+
+`cloudflare_only` means native Workers Observability is the configured sink. `better_stack` requires an operator to provision the external Cloudflare log delivery and verify a matching correlation-safe event in Better Stack before issuing the opaque evidence identifier. This repository never contains the delivery URL or source token, and the release verifier validates the identifier shape only; it does not prove external ingestion.
 
 ## First-release no-rollback boundary
 
-Do not roll back a first release. When `wrangler versions list` shows a single version, fix forward or redeploy from the repository instead. The CI `deploy` job also stops and requires operator confirmation because it runs only on `workflow_dispatch`.
+Do not roll back a first release. When `wrangler versions list` shows a single version, fix forward or redeploy from the repository instead. The CI `deploy` job also stops and requires operator confirmation because it runs only on `workflow_dispatch`. Preserve the rollback command output, release-gate result, worker version selected, and any Better Stack evidence identifier in the operator change record; none is telemetry proof unless the external sink was verified separately.

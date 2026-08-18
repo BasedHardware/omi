@@ -12,6 +12,7 @@
     "STAGING_EMAIL": "staging@omi.invalid",
     "STAGING_PLAN_LABEL": "Staging",
     "STAGING_CHAT_LIMIT": 1000,
+    "OBSERVABILITY_SINK_MODE": "cloudflare_only",
     "OPENROUTER_GATEWAY_ENABLED": "false",
     "OPENROUTER_MODEL": "openai/gpt-5.6-luna"
   },

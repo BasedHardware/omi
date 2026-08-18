@@ -1,15 +1,20 @@
+import {
+  parseObservabilitySinkMode,
+  type ObservabilitySinkMode,
+} from "../src/observability";
+
 export type ReadyResult =
-  | { kind: "ready"; environment: string }
+  | {
+      kind: "ready";
+      environment: string;
+      sinkMode: ObservabilitySinkMode;
+    }
   | { kind: "error"; reason: string };
 
 export function sanitizeDisplayUrl(input: string): string {
   try {
-    const parsed = new URL(input);
-    parsed.username = "";
-    parsed.password = "";
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString();
+    new URL(input);
+    return "[endpoint]";
   } catch {
     return "[invalid]";
   }
@@ -62,7 +67,15 @@ export async function verifyReady(url: string): Promise<ReadyResult> {
     return { kind: "error", reason: "invalid /ready envelope" };
   }
 
-  return { kind: "ready", environment: record["environment"] };
+  const sinkMode = parseObservabilitySinkMode(
+    typeof record["observability_sink_mode"] === "string"
+      ? record["observability_sink_mode"]
+      : undefined
+  );
+  if (sinkMode === null)
+    return { kind: "error", reason: "invalid observability sink mode" };
+
+  return { kind: "ready", environment: record["environment"], sinkMode };
 }
 
 export async function main(args: string[]): Promise<number> {
@@ -74,7 +87,7 @@ export async function main(args: string[]): Promise<number> {
 
   const result = await verifyReady(url);
   if (result.kind === "ready") {
-    console.log(`ready: ${result.environment}`);
+    console.log(`ready: ${result.environment} sink_mode=${result.sinkMode}`);
     return 0;
   }
 

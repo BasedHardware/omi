@@ -121,6 +121,7 @@ const env = {
   STAGING_EMAIL: identity.email,
   STAGING_PLAN_LABEL: initialEntitlement.planLabel,
   STAGING_CHAT_LIMIT: initialEntitlement.limit,
+  OBSERVABILITY_SINK_MODE: "cloudflare_only",
 };
 
 const executionContext = {
@@ -176,6 +177,7 @@ describe("worker request contract", () => {
     expect((await ready.json()) as unknown).toEqual({
       status: "ready",
       environment: "test",
+      observability_sink_mode: "cloudflare_only",
     });
     expect(health.headers.get("cache-control")).toBe("no-store");
     expect(accountCalls).toEqual([]);
@@ -226,6 +228,16 @@ describe("worker request contract", () => {
         action: "retry",
       },
     });
+  });
+
+  test("readiness fails closed when the observability sink mode is absent", async () => {
+    const response = await handler.fetch(
+      new Request("https://worker.test/ready"),
+      { ...env, OBSERVABILITY_SINK_MODE: "" } as never,
+      executionContext as never
+    );
+
+    expect(response.status).toBe(503);
   });
 
   test("configuration failures log a route template rather than user input", async () => {

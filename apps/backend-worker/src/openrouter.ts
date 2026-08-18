@@ -1,3 +1,5 @@
+import { gatewayFailureEvent } from "./observability";
+
 const SYSTEM_PROMPT = "You are Omi, a concise and helpful personal assistant.";
 const MAX_TOKENS = 768;
 const MAX_RESPONSE_TEXT = 32_768;
@@ -132,7 +134,11 @@ function logGateway(
   model: string,
   status: number
 ): void {
-  console.error(JSON.stringify({ message, correlationId, model, status }));
+  console.error(
+    JSON.stringify(
+      gatewayFailureEvent({ message, correlationId, model, status })
+    )
+  );
 }
 
 export const openrouter = {

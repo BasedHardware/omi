@@ -4,24 +4,36 @@ import { main, sanitizeDisplayUrl, verifyReady } from "../scripts/verify-ready";
 function startServer(
   handler: (request: Request) => Response | Promise<Response>
 ) {
-  const server = Bun.serve({ port: 0, fetch: handler });
-  return { server, url: `http://${server.hostname}:${server.port}/ready` };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+    handler(new Request(input, init))) as typeof fetch;
+  return {
+    server: { stop: async () => (globalThis.fetch = originalFetch) },
+    url: "https://ready.test/ready",
+  };
 }
 
 const readyEnvelope = (environment: string) =>
-  new Response(JSON.stringify({ status: "ready", environment }), {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "no-store",
-    },
-  });
+  new Response(
+    JSON.stringify({
+      status: "ready",
+      environment,
+      observability_sink_mode: "cloudflare_only",
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      },
+    }
+  );
 
 describe("sanitizeDisplayUrl", () => {
-  test("strips userinfo, query, and fragment", () => {
+  test("redacts a valid endpoint", () => {
     expect(
       sanitizeDisplayUrl("https://user:pass@example.com/ready?secret=1#frag")
-    ).toBe("https://example.com/ready");
+    ).toBe("[endpoint]");
   });
 
   test("returns placeholder for invalid url", () => {
@@ -34,7 +46,11 @@ describe("verifyReady", () => {
     const { server, url } = startServer(() => readyEnvelope("staging"));
     try {
       const result = await verifyReady(url);
-      expect(result).toEqual({ kind: "ready", environment: "staging" });
+      expect(result).toEqual({
+        kind: "ready",
+        environment: "staging",
+        sinkMode: "cloudflare_only",
+      });
     } finally {
       await await server.stop();
     }
@@ -144,6 +160,28 @@ describe("verifyReady", () => {
       expect(result.kind).toBe("error");
     } finally {
       await await server.stop();
+    }
+  });
+
+  test("rejects a missing observability sink mode", async () => {
+    const { server, url } = startServer(
+      () =>
+        new Response(
+          JSON.stringify({ status: "ready", environment: "staging" }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "cache-control": "no-store",
+            },
+          }
+        )
+    );
+    try {
+      const result = await verifyReady(url);
+      expect(result.kind).toBe("error");
+    } finally {
+      await server.stop();
     }
   });
 
