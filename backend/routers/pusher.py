@@ -637,8 +637,8 @@ async def _websocket_util_trigger(
                             {
                                 'type': 'webhook',
                                 'sample_rate': sample_rate,
-                                'data': take_bounded_chunk(
-                                    audiobuffer, sample_rate * audio_bytes_webhook_delay_seconds * 2
+                                'data': bytearray(
+                                    take_bounded_chunk(audiobuffer, sample_rate * audio_bytes_webhook_delay_seconds * 2)
                                 ),
                             },
                             'audio_bytes',
