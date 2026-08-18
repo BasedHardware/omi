@@ -233,6 +233,7 @@ class TestSendAudioBytesDeveloperWebhook:
         mock_response = MagicMock(status_code=200)
         mock_client = AsyncMock()
         mock_client.post = AsyncMock()
+        events = []
 
         async def post(*_args, **_kwargs):
             if mock_client.post.call_count == 1:
@@ -245,12 +246,18 @@ class TestSendAudioBytesDeveloperWebhook:
 
         @asynccontextmanager
         async def tracked_semaphore():
+            events.append('semaphore-enter')
             yield
+            events.append('semaphore-exit')
+
+        def acquire_lock(*_args, **_kwargs):
+            events.append('lock-acquire')
+            return 'lock-token'
 
         with patch.object(
             webhooks_module, "get_webhook_semaphore", side_effect=lambda: tracked_semaphore()
         ), patch.object(
-            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
         ) as acquire_lock, patch.object(
             webhooks_module,
             "get_webhook_circuit_breaker",
@@ -265,6 +272,9 @@ class TestSendAudioBytesDeveloperWebhook:
             await delivery
 
         assert mock_client.post.call_count == 2
+        assert events[0] == 'semaphore-enter'
+        assert events.index('lock-acquire') > events.index('semaphore-enter')
+        assert events.count('semaphore-enter') == 2
 
     @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):
