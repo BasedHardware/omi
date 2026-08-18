@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth'
 import { teardownUserData } from './authTeardown'
 import { encryptedAuthPersistence, scrubLegacyPlaintextAuth } from './encryptedAuthPersistence'
+import { isByokActive } from '../../../shared/byok'
 import type { SignInProvider } from '../../../shared/types'
 
 const app = initializeApp({
@@ -53,10 +54,7 @@ onAuthStateChanged(auth, (user) => {
     .getIdToken()
     .then(async (token) => {
       const keys = await window.omi?.byokGetAll?.()
-      if (
-        keys &&
-        Object.keys(keys).some((provider) => keys[provider as keyof typeof keys]?.trim())
-      ) {
+      if (keys && isByokActive(keys)) {
         await window.omi?.byokEnroll?.(token)
       }
     })
