@@ -254,6 +254,7 @@ final class OmiAuth: ObservableObject {
         userId = nil
         email = nil
         isSignedIn = false
+        ContextAnalytics.record(.accountStateChanged(signedIn: false))
         // Signing out is a clean slate, and the popover offers a Sign in link the instant this
         // lands — under which a previous attempt's failure would read as this one's.
         lastSignInError = nil
@@ -644,6 +645,10 @@ final class OmiAuth: ObservableObject {
         userId = session.tokenUserId.isEmpty ? nil : session.tokenUserId
         self.email = email
         isSignedIn = true
+        // Whether, never who. `AnalyticsIdentity` stays a salted hash of the install id after
+        // sign-in — see `ContextAnalytics` — so this reports that an account exists without making
+        // the anonymous series joinable to it.
+        ContextAnalytics.record(.accountStateChanged(signedIn: true))
     }
 
     private static func authError(from error: Error) -> OmiAuthError {

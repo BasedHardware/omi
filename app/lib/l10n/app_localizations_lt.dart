@@ -9869,4 +9869,7 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.';
+
+  @override
+  String get findDevice => 'Rasti';
 }

@@ -334,6 +334,14 @@ environments:
           X_OAUTH_REDIRECT_URI:
             source: environment
     region: us-central1
+    desktop_backend:
+      env:
+        USE_VERTEX_AI:
+          value: 'true'
+        GOOGLE_CLOUD_PROJECT:
+          value: based-hardware-dev
+        GCP_LOCATION:
+          value: us-central1
     cloud_run:
       network:
         flags:
@@ -1238,6 +1246,14 @@ environments:
           SYNC_TASKS_INVOKER_SA:
             source: environment
     region: us-central1
+    desktop_backend:
+      env:
+        USE_VERTEX_AI:
+          value: 'true'
+        GOOGLE_CLOUD_PROJECT:
+          value: based-hardware
+        GCP_LOCATION:
+          value: us-central1
     cloud_run:
       network:
         flags:

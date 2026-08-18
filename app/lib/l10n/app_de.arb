@@ -3194,5 +3194,6 @@
     "accountCutoverOpenStore": "Store öffnen",
     "signInWithSSO": "Mit SSO anmelden",
     "sendRawAudioToOmi": "Roh-Audio an Omi senden",
-    "sendRawAudioToOmiDescription": "Deaktivieren, damit kein Roh-Audio an Omi gesendet wird. Transkripte und für Cloud-Funktionen benötigte Daten können weiterhin an Omi gesendet werden."
+    "sendRawAudioToOmiDescription": "Deaktivieren, damit kein Roh-Audio an Omi gesendet wird. Transkripte und für Cloud-Funktionen benötigte Daten können weiterhin an Omi gesendet werden.",
+    "findDevice": "Finden"
 }

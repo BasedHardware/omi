@@ -28,7 +28,21 @@ export async function GET(request: NextRequest) {
     const intervals = parseInt(searchParams.get('intervals') || '10', 10);
     const platform = searchParams.get('platform') || '';
 
-    const eventFilter = platform === 'macos' ? `AND properties.$os = 'macOS'` : '';
+    // Context for Claude is a *second product* reporting into this same PostHog project. Its events
+    // are namespaced `cfc_*` (see `desktop/context-for-claude/docs/analytics.md`) and set no `$os`,
+    // so the `macos` branch below already excludes them — but this route's default branch applies no
+    // event filter at all and would otherwise cohort every actor in the project, quietly counting
+    // Context installs as new Omi users and folding them into this curve.
+    //
+    // Excluded on the event name rather than on `properties.app` because a property comparison is
+    // NULL for every Omi event, and `properties.app != '…'` would therefore drop the entire
+    // numerator instead of the intended rows. `startsWith(event, …)` is total: never NULL, and true
+    // for exactly the events the other product emits.
+    const excludeOtherProducts = `AND NOT startsWith(event, 'cfc_')`;
+    const eventFilter =
+      platform === 'macos'
+        ? `AND properties.$os = 'macOS' ${excludeOtherProducts}`
+        : excludeOtherProducts;
     const url = `${host}/api/projects/${projectId}/query/`;
 
     const cohortRows = await posthogQuery(

@@ -9794,4 +9794,7 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'ปิดเพื่อไม่ให้ส่งเสียงดิบไปยัง Omi ข้อความถอดเสียงและข้อมูลที่ฟีเจอร์คลาวด์ต้องใช้อาจยังถูกส่งไปยัง Omi';
+
+  @override
+  String get findDevice => 'ค้นหา';
 }

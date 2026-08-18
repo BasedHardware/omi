@@ -30,6 +30,7 @@ RELEASE = AgentVmRelease.from_mapping(
 class FakeApi:
     instances: dict[str, dict[str, Any]] = {
         "omi-agent-user": {
+            "id": "8080706050",
             "status": "STOPPED",
             "metadata": {},
             "serviceAccounts": [],
@@ -37,12 +38,22 @@ class FakeApi:
         }
     }
     starts = 0
+    deletes = 0
 
     def __init__(self, _project: str, _zone: str) -> None:
         pass
 
     async def get_instance(self, vm_name: str) -> dict[str, Any] | None:
         return self.instances.get(vm_name)
+
+    async def delete_instance(self, vm_name: str, expected_instance_id: str) -> bool:
+        instance = self.instances.get(vm_name)
+        if instance is None:
+            return True
+        if str(instance.get("id") or "") != expected_instance_id:
+            return False
+        type(self).deletes += 1
+        return True
 
     async def request(self, _method: str, _url: str) -> Any:
         class Response:
@@ -66,13 +77,56 @@ class FakeApi:
         self.starts += 1
 
 
-def test_reconcile_preserves_a_healthy_stopped_vm(monkeypatch):
-    updates: list[dict[str, Any]] = []
+def test_reconcile_deletes_a_stopped_vm_without_session_demand(monkeypatch):
+    """Cost policy: undemanded stopped capacity is deleted, never preserved or repaired.
+
+    Drift reasons are present on purpose — the teardown gate runs before drift
+    handling so a drifted stopped VM is deleted instead of being metadata-repaired
+    and restarted (the August 2026 resurrection loop).
+    """
+    updates: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
     FakeApi.starts = 0
+    FakeApi.deletes = 0
     monkeypatch.setattr(reconciler, "GceAgentVmClient", FakeApi)
     monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: ["metadata"])
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args, kwargs)) or True
+    )
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token"},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "ready"
+    assert result.detail == "deleted stopped VM; no session demand"
+    assert FakeApi.starts == 0
+    assert FakeApi.deletes == 1
+    fields = updates[-1][0][4]
+    assert fields["state"] == "missing"
+    assert fields["lastError"] == "undemanded VM torn down"
+    assert updates[-1][1].get("vm_fields") is None
+
+
+def test_reconcile_preserves_a_stopped_vm_with_an_active_session(monkeypatch):
+    updates: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    FakeApi.starts = 0
+    FakeApi.deletes = 0
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", FakeApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 1)
     monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
-    monkeypatch.setattr(reconciler, "update_vm_reconcile", lambda *_args, **kwargs: updates.append(kwargs) or True)
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args, kwargs)) or True
+    )
 
     result = asyncio.run(
         reconciler.reconcile_one(
@@ -87,7 +141,356 @@ def test_reconcile_preserves_a_healthy_stopped_vm(monkeypatch):
     assert result.state == "ready"
     assert "idle self-stop preserved" in result.detail
     assert FakeApi.starts == 0
-    assert updates[-1]["vm_fields"] == {"status": "stopped"}
+    assert FakeApi.deletes == 0
+    assert updates[-1][1]["vm_fields"] == {"status": "stopped"}
+
+
+def test_stopped_teardown_stale_on_identity_fence_change(monkeypatch):
+    class FencedApi(FakeApi):
+        async def delete_instance(self, _vm_name: str, _expected_instance_id: str) -> bool:
+            return False
+
+    FakeApi.starts = 0
+    FakeApi.deletes = 0
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", FencedApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: 0)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
+    monkeypatch.setattr(reconciler, "update_vm_reconcile", lambda *_args, **_kwargs: True)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token"},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "stale"
+    assert result.detail == "instance identity changed before teardown"
+    assert FakeApi.deletes == 0
+
+
+class IdleRunningApi:
+    stops = 0
+    starts = 0
+    deletes = 0
+    metadata_writes = 0
+
+    def __init__(self, _project: str, _zone: str) -> None:
+        self.instance = {
+            "id": "9090807060",
+            "status": "RUNNING",
+            "metadata": {},
+            "serviceAccounts": [],
+            "disks": [{"boot": True, "source": "projects/project/zones/us-central1-a/disks/omi-agent-user"}],
+            "networkInterfaces": [{"networkIP": "10.128.0.9", "accessConfigs": [{"natIP": "34.1.2.3"}]}],
+        }
+
+    async def delete_instance(self, _vm_name: str, expected_instance_id: str) -> bool:
+        if str(self.instance.get("id") or "") != expected_instance_id:
+            return False
+        type(self).deletes += 1
+        return True
+
+    async def get_instance(self, _vm_name: str) -> dict[str, Any]:
+        return self.instance
+
+    async def request(self, _method: str, _url: str) -> Any:
+        class Response:
+            @staticmethod
+            def raise_for_status() -> None:
+                return None
+
+            @staticmethod
+            def json() -> dict[str, str]:
+                return {"sourceImage": "projects/project/global/images/omi-agent-20260805"}
+
+        return Response()
+
+    async def stop(self, _vm_name: str) -> None:
+        type(self).stops += 1
+        self.instance["status"] = "TERMINATED"
+
+    async def start(self, _vm_name: str) -> None:
+        type(self).starts += 1
+
+    async def set_metadata(self, *_args: Any) -> None:
+        type(self).metadata_writes += 1
+
+    async def set_service_account(self, *_args: Any) -> None:
+        type(self).metadata_writes += 1
+
+    def private_instance_ip(self, _instance: dict[str, Any]) -> str:
+        return "10.128.0.9"
+
+    def instance_ip(self, _instance: dict[str, Any]) -> str:
+        return "34.1.2.3"
+
+    async def runtime_is_current(self, *_args: Any, **_kwargs: Any) -> bool:
+        return True
+
+    async def wait_for_runtime(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
+def _patch_idle_reconcile(monkeypatch, *, sessions: int = 0):
+    updates: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    IdleRunningApi.stops = 0
+    IdleRunningApi.starts = 0
+    IdleRunningApi.deletes = 0
+    IdleRunningApi.metadata_writes = 0
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", IdleRunningApi)
+    monkeypatch.setattr(reconciler, "claim_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "renew_vm_lease", lambda *_args: True)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: [])
+    monkeypatch.setattr(reconciler, "active_session_count", lambda *_args: sessions)
+    monkeypatch.setattr(
+        reconciler, "update_vm_reconcile", lambda *args, **kwargs: updates.append((args, kwargs)) or True
+    )
+    return updates
+
+
+def test_idle_running_vm_past_ttl_is_deleted_without_restart(monkeypatch):
+    updates = _patch_idle_reconcile(monkeypatch)
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "reconcile": {"idleSince": now - 7200},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            idle_teardown_seconds=3600,
+        )
+    )
+
+    assert result.state == "ready"
+    assert result.detail == "deleted idle VM; idle TTL elapsed"
+    assert IdleRunningApi.stops == 0
+    assert IdleRunningApi.starts == 0
+    assert IdleRunningApi.deletes == 1
+    assert IdleRunningApi.metadata_writes == 0
+    fields = updates[-1][0][4]
+    assert fields["state"] == "missing"
+    assert fields["missingSince"] == now
+    assert fields["idleSince"] is reconciler.sentinels.DELETE
+    assert updates[-1][1].get("vm_fields") is None
+
+
+def test_drifted_running_vm_without_demand_is_drained_and_deleted(monkeypatch):
+    """The drift path repairs and restarts only on demand; otherwise it deletes."""
+    updates = _patch_idle_reconcile(monkeypatch)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: ["runtime"])
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token"},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "ready"
+    assert result.detail == "deleted drifted VM; no session demand"
+    assert IdleRunningApi.stops == 1
+    assert IdleRunningApi.deletes == 1
+    assert IdleRunningApi.starts == 0
+    assert IdleRunningApi.metadata_writes == 0
+    drain_fields = updates[0][0][4]
+    assert drain_fields["state"] == "draining"
+    fields = updates[-1][0][4]
+    assert fields["state"] == "missing"
+
+
+def test_drifted_running_vm_with_start_demand_is_repaired_and_restarted(monkeypatch):
+    updates = _patch_idle_reconcile(monkeypatch)
+    monkeypatch.setattr(reconciler, "drift_reasons", lambda *_args: ["metadata"])
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "reconcile": {"startRequested": True, "startRequestedAt": now},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "ready"
+    assert IdleRunningApi.stops == 1
+    assert IdleRunningApi.deletes == 0
+    assert IdleRunningApi.starts == 1
+    assert IdleRunningApi.metadata_writes == 2
+    assert updates[-1][1]["vm_fields"]["status"] == "ready"
+
+
+def test_boot_drift_without_demand_stops_the_running_vm_before_recreate_required(monkeypatch):
+    class BootDriftApi(IdleRunningApi):
+        async def request(self, _method: str, _url: str) -> Any:
+            class Response:
+                @staticmethod
+                def raise_for_status() -> None:
+                    return None
+
+                @staticmethod
+                def json() -> dict[str, str]:
+                    return {"sourceImage": "projects/project/global/images/omi-agent-older"}
+
+            return Response()
+
+    updates = _patch_idle_reconcile(monkeypatch)
+    monkeypatch.setattr(reconciler, "GceAgentVmClient", BootDriftApi)
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {"vmName": "omi-agent-user", "authToken": "token"},
+            RELEASE,
+            owner="worker",
+            project="project",
+        )
+    )
+
+    assert result.state == "recreate_required"
+    assert BootDriftApi.stops == 1
+    assert BootDriftApi.starts == 0
+    assert BootDriftApi.deletes == 0
+    fields = updates[-1][0][4]
+    assert fields["state"] == "recreate_required"
+
+
+def test_idle_running_vm_with_active_session_is_not_torn_down(monkeypatch):
+    updates = _patch_idle_reconcile(monkeypatch, sessions=1)
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "reconcile": {"idleSince": now - 7200},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            idle_teardown_seconds=3600,
+        )
+    )
+
+    assert result.state == "ready"
+    assert IdleRunningApi.stops == 0
+    assert IdleRunningApi.starts == 0
+    fields = updates[-1][0][4]
+    assert fields["state"] == "ready"
+    assert fields["idleSince"] is reconciler.sentinels.DELETE
+    assert updates[-1][1]["vm_fields"]["status"] == "ready"
+
+
+def test_idle_running_vm_with_start_request_is_not_torn_down(monkeypatch):
+    updates = _patch_idle_reconcile(monkeypatch)
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "reconcile": {"startRequested": True, "startRequestedAt": now, "idleSince": now - 7200},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            idle_teardown_seconds=3600,
+        )
+    )
+
+    assert result.state == "ready"
+    assert IdleRunningApi.stops == 0
+    fields = updates[-1][0][4]
+    assert fields["idleSince"] is reconciler.sentinels.DELETE
+    assert updates[-1][1]["vm_fields"]["status"] == "ready"
+
+
+def test_idle_ttl_not_reached_persists_idle_since_without_stop(monkeypatch):
+    updates = _patch_idle_reconcile(monkeypatch)
+    now = 1_700_000_000.0
+    monkeypatch.setattr(reconciler.time, "time", lambda: now)
+
+    result = asyncio.run(
+        reconciler.reconcile_one(
+            "user",
+            {
+                "vmName": "omi-agent-user",
+                "authToken": "token",
+                "reconcile": {"idleSince": now - 10},
+            },
+            RELEASE,
+            owner="worker",
+            project="project",
+            idle_teardown_seconds=3600,
+        )
+    )
+
+    assert result.state == "ready"
+    assert result.detail == "idle; waiting for TTL"
+    assert IdleRunningApi.stops == 0
+    assert IdleRunningApi.starts == 0
+    fields = updates[-1][0][4]
+    assert fields["idleSince"] == now - 10
+
+
+def test_idle_is_never_a_drift_reason():
+    assert "idle" not in lifecycle.drift_reasons(
+        {
+            "serviceAccounts": [{"email": RELEASE.service_account}],
+            "metadata": {"items": []},
+        },
+        RELEASE,
+    )
+    assert not reconciler.idle_teardown_due(
+        status="RUNNING",
+        reasons=["runtime"],
+        start_requested=False,
+        active_sessions=0,
+        idle_since=0.0,
+        now=10_000.0,
+        idle_teardown_seconds=3600,
+    )
+    assert reconciler.idle_teardown_due(
+        status="RUNNING",
+        reasons=[],
+        start_requested=False,
+        active_sessions=0,
+        idle_since=0.0,
+        now=10_000.0,
+        idle_teardown_seconds=3600,
+    )
 
 
 def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypatch):
@@ -162,7 +565,7 @@ def test_reconcile_starts_a_current_vm_only_after_fenced_start_request(monkeypat
     assert updates[-1][1]["vm_fields"] == {"status": "ready", "privateIp": "10.128.0.9", "ip": "34.1.2.3"}
 
 
-def test_boot_image_drift_requires_operator_recreate_without_mutating_vm(monkeypatch):
+def test_boot_image_drift_on_a_demanded_vm_requires_operator_recreate_without_mutating_vm(monkeypatch):
     class DriftApi(FakeApi):
         mutated = False
 
@@ -198,7 +601,9 @@ def test_boot_image_drift_requires_operator_recreate_without_mutating_vm(monkeyp
     result = asyncio.run(
         reconciler.reconcile_one(
             "user",
-            {"vmName": "omi-agent-user", "authToken": "token"},
+            # A start demand keeps the stopped VM out of the undemanded-teardown
+            # gate; boot-image drift must then fail closed without mutation.
+            {"vmName": "omi-agent-user", "authToken": "token", "reconcile": {"startRequested": True}},
             RELEASE,
             owner="worker",
             project="project",
@@ -207,6 +612,7 @@ def test_boot_image_drift_requires_operator_recreate_without_mutating_vm(monkeyp
 
     assert result.state == "recreate_required"
     assert "operator must recreate" in result.detail
+    assert DriftApi.mutated is False
     assert updates[-1]["state"] == "recreate_required"
     assert updates[-1]["observedBootImage"].endswith("/omi-agent-old")
     assert not DriftApi.mutated
@@ -3404,6 +3810,25 @@ def test_missing_cleanup_grace_rejects_unsafe_configuration(monkeypatch, value):
     monkeypatch.setenv("AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS", value)
     with pytest.raises(ValueError, match="AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS"):
         reconciler._missing_cleanup_grace_seconds()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(None, reconciler.DEFAULT_IDLE_TEARDOWN_SECONDS), ("1800", 1800)],
+)
+def test_idle_teardown_seconds_uses_a_safe_default_or_valid_override(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("AGENT_VM_IDLE_TEARDOWN_SECONDS", raising=False)
+    else:
+        monkeypatch.setenv("AGENT_VM_IDLE_TEARDOWN_SECONDS", value)
+    assert reconciler._idle_teardown_seconds() == expected
+
+
+@pytest.mark.parametrize("value", ["not-a-number", "1799"])
+def test_idle_teardown_seconds_rejects_unsafe_configuration(monkeypatch, value):
+    monkeypatch.setenv("AGENT_VM_IDLE_TEARDOWN_SECONDS", value)
+    with pytest.raises(ValueError, match="AGENT_VM_IDLE_TEARDOWN_SECONDS"):
+        reconciler._idle_teardown_seconds()
 
 
 @pytest.mark.parametrize("state", ["quarantined", "missing", "stale", "recreate_required"])

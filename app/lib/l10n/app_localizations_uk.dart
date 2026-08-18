@@ -9872,4 +9872,7 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.';
+
+  @override
+  String get findDevice => 'Знайти';
 }

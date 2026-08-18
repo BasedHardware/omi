@@ -244,6 +244,42 @@ def test_apply_script_refuses_without_gate():
     assert "REFUSED" in proc.stderr
 
 
+def test_readme_does_not_reap_running_by_creation_age():
+    readme = (ROOT / "backend" / "charts" / "agent-vm-reaper" / "README.md").read_text(encoding="utf-8")
+    assert "creationTimestamp older than **2d**" not in readme
+    assert "Never deleted here" in readme
+    assert "reconciler" in readme.lower()
+
+
+def test_inventory_lists_running_without_selecting_them(reaper):
+    instances = [
+        _inst("omi-agent-old", "RUNNING", created_hours_ago=49),
+        _inst("omi-agent-aged", "TERMINATED", created_hours_ago=40, stopped_hours_ago=13),
+        _inst("other-vm", "RUNNING", created_hours_ago=49),
+    ]
+    text = reaper.format_inventory(instances)
+    assert "RUNNING: 1" in text
+    assert "omi-agent-old" in text
+    assert "other-vm" not in text
+    assert "Ownerless" in text
+    assert reaper.select_reapable(instances, now=NOW, terminated_min_age_hours=12)[0]["name"] == "omi-agent-aged"
+
+
+def test_cli_inventory_does_not_delete(tmp_path, monkeypatch, reaper):
+    import json
+
+    fixture = tmp_path / "instances.json"
+    fixture.write_text(
+        json.dumps([_inst("omi-agent-old", "RUNNING", created_hours_ago=49)]),
+        encoding="utf-8",
+    )
+    deleted = []
+    monkeypatch.setattr(reaper, "delete_instance", lambda *_a, **_k: deleted.append(True))
+    rc = reaper.main(["--instances-json", str(fixture), "--inventory"])
+    assert rc == 0
+    assert deleted == []
+
+
 def test_cronjob_manifest_defaults_are_safe():
     docs = list(yaml.safe_load_all(MANIFEST.read_text(encoding="utf-8")))
     cron = next(d for d in docs if d and d.get("kind") == "CronJob")

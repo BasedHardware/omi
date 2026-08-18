@@ -9902,4 +9902,7 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.';
+
+  @override
+  String get findDevice => 'Пронајди';
 }

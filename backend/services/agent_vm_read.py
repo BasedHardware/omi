@@ -51,10 +51,17 @@ class AgentVmProviderObservation:
 
 @dataclass(frozen=True)
 class AgentVmReadDecision:
-    """Shared status/read decision for desktop, tools, and proxy paths."""
+    """Shared status/read decision for desktop, tools, and proxy paths.
+
+    Read paths are observational: they may demote a stale ``ready`` cache and
+    record a provider-confirmed 404, but they never queue reconciler start
+    demand. Only a real session (agent-proxy connect) or an explicit ensure
+    call may wake or repair a VM — status polling must not keep undemanded
+    VMs alive (measured wake-on-open: 135 status-driven restart attempts in
+    24h against zero successful sessions, 2026-08-17).
+    """
 
     client_status: str
-    queue_start: bool
     preserve_owner: bool
     clear_cached_ip: bool = False
     record_missing: bool = False
@@ -92,16 +99,17 @@ def decide_agent_vm_read(
     Behavior contract:
     - Reconciler already owns the record → demote to ``updating``, do not probe
       demand again from this helper (callers skip provider lookups first).
-    - Provider ``NOT_FOUND`` → demote to ``updating``, queue reconciler demand,
-      and record ``missing`` so provisioning can claim a replacement.
+    - Provider ``NOT_FOUND`` → demote to ``updating`` and record ``missing`` so
+      provisioning can claim a replacement. No start demand is queued.
     - Provider API blip (``unknown``) → preserve the owner pointer and status.
     - Provider running with a healthy ready cache → leave unchanged.
+    - Stopped/unhealthy instances are never woken from a read path; the proxy
+      queues demand when a real session connects.
     """
     stored = str(vm.get("status") or "provisioning")
     if reconcile_in_progress(vm, now):
         return AgentVmReadDecision(
             client_status="updating",
-            queue_start=False,
             preserve_owner=True,
             clear_cached_ip=True,
         )
@@ -110,33 +118,28 @@ def decide_agent_vm_read(
             if usable_cached_ip is False:
                 return AgentVmReadDecision(
                     client_status="updating",
-                    queue_start=True,
                     preserve_owner=True,
                     clear_cached_ip=True,
                 )
             return AgentVmReadDecision(
                 client_status="ready",
-                queue_start=False,
                 preserve_owner=True,
                 clear_cached_ip=False,
             )
         return AgentVmReadDecision(
             client_status=stored,
-            queue_start=False,
             preserve_owner=True,
             clear_cached_ip=False,
         )
     if observation.kind == "unknown":
         return AgentVmReadDecision(
             client_status=stored,
-            queue_start=False,
             preserve_owner=True,
             clear_cached_ip=False,
         )
     if observation.kind == "not_found":
         return AgentVmReadDecision(
             client_status="updating",
-            queue_start=True,
             preserve_owner=True,
             clear_cached_ip=True,
             record_missing=True,
@@ -144,7 +147,6 @@ def decide_agent_vm_read(
     if observation.kind == "stopped":
         return AgentVmReadDecision(
             client_status="updating",
-            queue_start=True,
             preserve_owner=True,
             clear_cached_ip=True,
         )
@@ -153,13 +155,11 @@ def decide_agent_vm_read(
         if needs_repair:
             return AgentVmReadDecision(
                 client_status="updating",
-                queue_start=True,
                 preserve_owner=True,
                 clear_cached_ip=True,
             )
         return AgentVmReadDecision(
             client_status=stored,
-            queue_start=False,
             preserve_owner=True,
             clear_cached_ip=False,
         )
@@ -168,13 +168,11 @@ def decide_agent_vm_read(
     if stored == "ready":
         return AgentVmReadDecision(
             client_status="updating",
-            queue_start=False,
             preserve_owner=True,
             clear_cached_ip=True,
         )
     return AgentVmReadDecision(
         client_status=stored,
-        queue_start=False,
         preserve_owner=True,
         clear_cached_ip=False,
     )

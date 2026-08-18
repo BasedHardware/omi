@@ -9880,4 +9880,7 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Izklopite, da preprečite pošiljanje neobdelanega zvoka v Omi. Prepisi in podatki, potrebni za funkcije v oblaku, se lahko še vedno pošiljajo v Omi.';
+
+  @override
+  String get findDevice => 'Poišči';
 }

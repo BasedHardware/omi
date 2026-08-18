@@ -272,6 +272,12 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
             // `Permissions.noteGrantsAtLaunch()`.
             Permissions.noteGrantsAtLaunch()
 
+            // Immediately after the grant snapshot and before anything else can act on it, because
+            // `start()` decides first-launch from a `UserDefaults` key that onboarding also writes:
+            // reaching it second would report every install as a returning one.
+            ContextAnalytics.start()
+            ContextAnalytics.recordPermissionSnapshot()
+
             // Before Engine.start(), so the icon exists the moment there is state to show — and
             // before onboarding, which finishes by pointing at it.
             StatusItemController.shared.install()
@@ -343,6 +349,10 @@ final class ContextAppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     @discardableResult
     static func shortcutFired(_ action: GlobalShortcuts.Action, on window: HotkeyToggle) -> HotkeyPress {
+        // Recorded here rather than inside `GlobalShortcuts` because this is where a press becomes a
+        // press that *did* something. The monitor also fires on chords the app decided not to act
+        // on, and counting those would report a gesture as working on machines where it does not.
+        ContextAnalytics.record(.gestureFired)
         switch action {
         case .openActivity:
             return window.press()

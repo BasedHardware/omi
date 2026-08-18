@@ -3,6 +3,7 @@ import base64
 import copy
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -130,6 +131,7 @@ class Runtime:
 
 
 runtime = Runtime()
+logger = logging.getLogger("agent-vm")
 
 
 @asynccontextmanager
@@ -178,6 +180,7 @@ async def stop_instance() -> None:
     audience = os.environ.get("AGENT_VM_STOP_AUDIENCE", "").strip()
     backend_url = runtime.backend_url.rstrip("/")
     if not audience or not backend_url:
+        logger.warning("idle-stop skipped: AGENT_VM_STOP_AUDIENCE or BACKEND_URL unset")
         return
     try:
         identity = await metadata(
@@ -189,7 +192,8 @@ async def stop_instance() -> None:
                 headers={"Authorization": f"Bearer {identity}"},
             )
             response.raise_for_status()
-    except (httpx.HTTPError, OSError):
+    except (httpx.HTTPError, OSError) as exc:
+        logger.warning("idle-stop broker call failed: %s", type(exc).__name__)
         return
 
 

@@ -9887,4 +9887,7 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Изключете, за да спрете изпращането на необработен звук към Omi. Транскрипции и данни, нужни за облачните функции, все още може да се изпращат към Omi.';
+
+  @override
+  String get findDevice => 'Намери';
 }

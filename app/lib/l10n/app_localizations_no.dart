@@ -9849,4 +9849,7 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.';
+
+  @override
+  String get findDevice => 'Finn';
 }
