@@ -14,13 +14,10 @@ import asyncio
 import json
 import logging
 import threading
-from typing import TYPE_CHECKING, Any, Dict, List, Set
+from typing import Any, Dict, List, Set
 
 from database.redis_db import PROACTIVE_MESSAGE_CHANNEL, get_async_redis_client
 from models.message_event import ProactiveMessageEvent
-
-if TYPE_CHECKING:
-    from .runtime import ListenSessionRuntime
 
 logger = logging.getLogger(__name__)
 

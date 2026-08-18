@@ -528,7 +528,7 @@ def get_async_redis_client() -> Any:
         import redis.asyncio as _asyncio_redis
 
         _async_redis_client = _asyncio_redis.Redis(
-            host=_redis_host,
+            host=cast(str, _redis_host),
             port=int(_redis_port_env) if _redis_port_env is not None else 6379,
             username='default',
             password=os.getenv('REDIS_DB_PASSWORD'),
