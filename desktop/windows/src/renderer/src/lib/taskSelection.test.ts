@@ -27,7 +27,7 @@ describe('applySelectionClick', () => {
     expect(s2.anchor).toBe(40)
     const s3 = applySelectionClick(order, s2, 20, { ctrl: true, shift: false })
     expect(new Set(s3.selected)).toEqual(new Set([40]))
-    expect(s3.anchor).toBe(20)
+    expect(s3.anchor).toBeNull()
   })
 
   it('shift click unions the contiguous range from the anchor into the selection', () => {

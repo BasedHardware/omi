@@ -46,7 +46,7 @@ export function applySelectionClick(
     const next = new Set(current.selected)
     if (next.has(id)) next.delete(id)
     else next.add(id)
-    return { selected: next, anchor: id }
+    return { selected: next, anchor: next.has(id) ? id : null }
   }
   return { selected: new Set([id]), anchor: id }
 }

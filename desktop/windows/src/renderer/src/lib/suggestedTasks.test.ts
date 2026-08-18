@@ -188,6 +188,11 @@ describe('accept / reject', () => {
     )
   })
 
+  it('rejects an accept receipt without a task id', async () => {
+    const post = vi.fn().mockResolvedValue({ data: {} })
+    await expect(acceptSuggestedCandidate(card(), { post })).rejects.toThrow('task_id')
+  })
+
   it('dismiss feedback registers the intervention first and carries its id', async () => {
     // FeedbackCreate.validate_action rejects dismiss without an intervention_id,
     // so a bare dismiss would 422 server-side and attribution would never record.

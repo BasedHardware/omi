@@ -272,7 +272,9 @@ export async function acceptSuggestedCandidate(
   )
   sendFeedback(post, candidate, 'accept_candidate')
   const receipt = res.data as { task_id?: string | null } | null
-  return { taskId: receipt?.task_id ?? null }
+  const taskId = receipt?.task_id ?? null
+  if (!taskId) throw new Error('accept response did not include task_id')
+  return { taskId }
 }
 
 export async function rejectSuggestedCandidate(
