@@ -127,6 +127,22 @@ class TestAppWebhookSuccessReset:
         with patch("database.webhook_health._get_success_script", return_value=mock_script):
             record_app_webhook_success("app-1")
 
+    def test_success_clears_redirect_state(self):
+        from database.webhook_health import record_app_webhook_success
+
+        mock_script = MagicMock(return_value=1)
+        mock_r = MagicMock()
+        with (
+            patch("database.webhook_health._get_success_script", return_value=mock_script),
+            patch("database.webhook_health.r", mock_r),
+        ):
+            record_app_webhook_success("app-1")
+
+        mock_r.hdel.assert_called_once_with(
+            'app_webhook_health:app-1:realtime', 'last_redirect_at', 'last_redirect_status'
+        )
+        mock_r.delete.assert_called_once_with('app_webhook_redirect_notice:app-1:realtime')
+
 
 class TestIsAppWebhookDisabled:
     """Test the disabled check function."""
@@ -1183,6 +1199,19 @@ class TestMarketplaceIntegrationHealthPaths:
         with patch.object(_app_tools, '_notify_app_owner') as mock_notify:
             _app_tools._handle_app_webhook_disable('app-1', 0, 'error')
         mock_notify.assert_not_called()
+
+    def test_action_4_notifies_owner_without_disabling(self):
+        _app_tools = _load_app_tools_module()
+
+        with (
+            patch.object(_app_tools, '_notify_app_owner') as mock_notify,
+            patch.object(_app_tools, 'disable_app_in_firestore') as mock_disable,
+        ):
+            _app_tools._handle_app_webhook_disable('app-1', 4, 'HTTP 307')
+
+        mock_notify.assert_called_once()
+        mock_disable.assert_not_called()
+        assert 'redirect' in mock_notify.call_args[0][1].lower()
 
     @pytest.mark.asyncio
     async def test_http_connect_error_records_failure(self):

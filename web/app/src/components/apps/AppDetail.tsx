@@ -80,6 +80,7 @@ export function AppDetail({ appId }: AppDetailProps) {
     async function loadApp() {
       setIsLoading(true);
       setError(null);
+      setReEnableError(null);
       try {
         const appData = await getApp(appId);
         setApp(appData);
@@ -249,7 +250,9 @@ export function AppDetail({ appId }: AppDetailProps) {
               <div className="flex items-center justify-center sm:justify-start gap-3 mt-4">
                 <button
                   onClick={handleToggle}
-                  disabled={isToggling || (!!app.disabled && !app.enabled)}
+                  disabled={
+                    isToggling || isReEnabling || (!!app.disabled && !app.enabled)
+                  }
                   title={
                     app.disabled && !app.enabled
                       ? 'This app is disabled and cannot be installed'

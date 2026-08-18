@@ -259,6 +259,8 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
         now_ts = int(time.time())
         script = _get_success_script()
         script(keys=[key], args=[now_ts, _SUCCESS_DEBOUNCE, _HEALTH_TTL])
+        r.hdel(key, 'last_redirect_at', 'last_redirect_status')
+        r.delete(f'app_webhook_redirect_notice:{app_id}:{endpoint}')
     except Exception as e:
         logger.warning(f'record_app_webhook_success redis error app_id={app_id}: {e}')
 

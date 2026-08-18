@@ -145,7 +145,7 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
             # redirects. Checking with redirects followed passed endpoints that then
             # failed on the very first real webhook.
             resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=False)
-            if 300 <= resp.status_code < 400:
+            if label != 'MCP server' and 300 <= resp.status_code < 400:
                 raise HTTPException(
                     status_code=400,
                     detail=(

@@ -189,6 +189,11 @@ class TestReEnableHealthCheckMatchesDelivery:
         with patch('utils.apps.httpx.request', return_value=httpx.Response(200)):
             validate_app_endpoints_for_reenable(app, {}, 'app-1')
 
+    def test_redirecting_mcp_server_is_allowed(self):
+        app = {'external_integration': {'mcp_server_url': 'https://mcp.example.com/mcp'}}
+        with patch('utils.apps.httpx.request', return_value=httpx.Response(307)):
+            validate_app_endpoints_for_reenable(app, {}, 'app-1')
+
 
 class TestBlockedInstallExplainsItself:
     def test_owner_is_told_what_to_fix_and_how_to_recover(self):
