@@ -172,7 +172,7 @@ config OMI_ENABLE_BATTERY_LOW_LED
     depends on OMI_ENABLE_BATTERY
     default n
     help
-        "Blink the red LED when the battery level drops to or below
+        "Double-blink the red LED when the battery level drops to or below
          OMI_BATTERY_LOW_THRESHOLD percent and the device is not charging."
 
 config OMI_BATTERY_LOW_THRESHOLD

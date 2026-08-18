@@ -38,6 +38,7 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
+static uint8_t low_battery_phase = 0;
 #ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
 bool is_capturing = false;
 #endif
@@ -143,7 +144,7 @@ static void boot_ready_sequence(void)
 // Opt-in patterns, off in the shipping config so the default language above is
 // unchanged; enable only together with an app-side explanation:
 //   CONFIG_OMI_ENABLE_CAPTURE_LED       blue only while audio capture is subscribed
-//   CONFIG_OMI_ENABLE_BATTERY_LOW_LED   blink red at or below the low threshold
+//   CONFIG_OMI_ENABLE_BATTERY_LOW_LED   double-blink red at or below the low threshold
 void set_led_state()
 {
     // If device is off, turn off all LEDs immediately
@@ -191,10 +192,12 @@ void set_led_state()
 #endif
 #if defined(CONFIG_OMI_ENABLE_BATTERY) && defined(CONFIG_OMI_ENABLE_BATTERY_LOW_LED)
         if (battery_percentage > 0 && battery_percentage <= CONFIG_OMI_BATTERY_LOW_THRESHOLD) {
-            // Low battery warning: blink red regardless of connection state
+            // Low battery warning: double-blink red regardless of connection state
             blue = false;
-            red = blink_toggle;
-            blink_toggle = !blink_toggle;
+            red = low_battery_phase < 2;
+            low_battery_phase = (low_battery_phase + 1) % 3;
+        } else {
+            low_battery_phase = 0;
         }
 #endif
     }
