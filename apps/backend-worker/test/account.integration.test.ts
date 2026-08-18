@@ -1,6 +1,27 @@
+import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
-import { describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
+
+import handler from "../src/index";
+
+const chatSchema = [
+  "CREATE TABLE IF NOT EXISTS chat_messages (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, text TEXT NOT NULL, sender TEXT NOT NULL, created_at INTEGER NOT NULL, generation_outcome TEXT, position INTEGER NOT NULL, payload TEXT)",
+  "CREATE INDEX IF NOT EXISTS chat_messages_account_position ON chat_messages (account_id, position)",
+  "CREATE TABLE IF NOT EXISTS chat_admissions (message_id TEXT PRIMARY KEY, account_id TEXT NOT NULL, op_id TEXT NOT NULL, payload TEXT NOT NULL, generation_id TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS chat_admissions_account ON chat_admissions (account_id)",
+  "CREATE INDEX IF NOT EXISTS chat_admissions_generation ON chat_admissions (generation_id)",
+  "CREATE TABLE IF NOT EXISTS chat_generation_events (generation_id TEXT NOT NULL, account_id TEXT NOT NULL, event_id TEXT NOT NULL, ordinal INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY (generation_id, event_id))",
+  "CREATE INDEX IF NOT EXISTS chat_generation_events_account ON chat_generation_events (account_id)",
+];
+
+const taskSchema =
+  "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, description TEXT NOT NULL, completed INTEGER NOT NULL, completed_at INTEGER, due_at INTEGER, owner TEXT, source TEXT NOT NULL, provenance TEXT NOT NULL, sort_order REAL NOT NULL, indent_level INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, revision TEXT)";
+
+const authenticatedHeaders = {
+  authorization: "Bearer test-token",
+  "x-omi-client-id": "test-client",
+};
 
 const create = (id: string) => ({
   op: "create" as const,
@@ -15,89 +36,125 @@ const create = (id: string) => ({
   attachmentIds: [],
 });
 
-describe("AccountBackend persistence", () => {
-  test("configuration updates identity and limits without resetting usage", async () => {
-    const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
-    await stub.configure({
-      displayName: "Before",
-      email: "before@example.invalid",
-      planLabel: "Original",
-      chatLimit: 2,
-    });
-    const first = await stub.admit(create("first"));
-    expect(typeof first).not.toBe("string");
-    if (typeof first === "string") throw new Error("first admission refused");
-    expect(first.created).toBe(true);
+const fetchWorker = (path: string, init?: RequestInit) =>
+  handler.fetch(
+    new Request(`https://worker.test${path}`, init),
+    {
+      ...env,
+      API_TOKEN: "test-token",
+      AI: { run: async () => ({ response: "test response" }) },
+    } as never,
+    createExecutionContext()
+  );
 
-    await stub.configure({
-      displayName: "After",
-      email: "after@example.invalid",
-      planLabel: "Reduced",
-      chatLimit: 1,
-    });
+beforeEach(async () => {
+  for (const statement of chatSchema) {
+    await env.DB.exec(statement);
+  }
+  await env.DB.exec(taskSchema);
+  await env.DB.prepare("DELETE FROM chat_messages").run();
+  await env.DB.prepare("DELETE FROM chat_admissions").run();
+  await env.DB.prepare("DELETE FROM chat_generation_events").run();
+});
 
-    expect(await stub.settings()).toEqual({
+describe("AccountBackend D1-backed coordination", () => {
+  test("settings reflects env config and D1 admission count without resetting usage", async () => {
+    const before = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect((await before.json()) as unknown).toMatchObject({
       identity: {
-        displayName: "After",
-        email: "after@example.invalid",
+        displayName: "Test Account",
+        email: "test@example.invalid",
       },
-      entitlement: {
-        planLabel: "Reduced",
-        limitKey: "chat",
-        used: 1,
-        limit: 1,
-        limitReached: true,
-        upgradeAvailable: true,
-      },
+      entitlement: { used: 0, limit: 10, limitReached: false },
     });
-    expect(await stub.admit(create("second"))).toBe("entitlement");
+
+    const admitted = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("first")),
+    });
+    expect(admitted.status).toBe(201);
+
+    const after = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect((await after.json()) as unknown).toMatchObject({
+      identity: {
+        displayName: "Test Account",
+        email: "test@example.invalid",
+      },
+      entitlement: { used: 1, limit: 10, limitReached: false },
+    });
   });
 
-  test("admission persists canonical state and schedules recoverable generation work", async () => {
-    const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
-    await stub.configure({
-      displayName: "Account",
-      email: "account@example.invalid",
-      planLabel: "Metered",
-      chatLimit: 1,
+  test("admission persists canonical state to D1 and schedules recoverable generation work", async () => {
+    const admission = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("message")),
     });
+    expect(admission.status).toBe(201);
+    const admissionBody = (await admission.json()) as {
+      message: { id: string };
+    };
+    expect(admissionBody.message.id).toBe("message");
 
-    const admission = await stub.admit(create("message"));
-    if (typeof admission === "string") throw new Error("admission refused");
-    expect(admission.created).toBe(true);
-    const history = await stub.history(50);
-    if (history === "invalid_cursor")
-      throw new Error("history cursor rejected");
-    expect(history.messages).toEqual([admission.message]);
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    const historyBody = (await history.json()) as {
+      messages: Array<{ id: string }>;
+    };
+    expect(historyBody.messages).toHaveLength(1);
+    expect(historyBody.messages[0]!.id).toBe("message");
+
+    const stub = env.ACCOUNTS.getByName("test-account");
     expect(
       await runInDurableObject(stub, (_instance, state) =>
         state.storage.getAlarm()
       )
     ).not.toBeNull();
-    const replay = await stub.admit(create("message"));
-    if (typeof replay === "string") throw new Error("replay refused");
-    expect(replay.created).toBe(false);
-    expect((await stub.settings()).entitlement?.used).toBe(1);
+
+    const replay = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("message")),
+    });
+    expect(replay.status).toBe(200);
+
+    const settings = await fetchWorker("/v1/settings", {
+      headers: authenticatedHeaders,
+    });
+    expect((await settings.json()) as unknown).toMatchObject({
+      entitlement: { used: 1 },
+    });
   });
 
   test("provider failure terminates its generation and advances queued work", async () => {
-    const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
-    await stub.configure({
-      displayName: "Account",
-      email: "account@example.invalid",
-      planLabel: "Metered",
-      chatLimit: 2,
+    const first = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("first")),
     });
-    const first = await stub.admit(create("first"));
-    const second = await stub.admit(create("second"));
-    if (typeof first === "string" || typeof second === "string")
-      throw new Error("admission refused");
+    const second = await fetchWorker("/v1/chat-messages", {
+      method: "POST",
+      headers: { ...authenticatedHeaders, "content-type": "application/json" },
+      body: JSON.stringify(create("second")),
+    });
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
 
+    const firstBody = (await first.json()) as { generation: { id: string } };
+    const secondBody = (await second.json()) as { generation: { id: string } };
+
+    const stub = env.ACCOUNTS.getByName("test-account");
     await runInDurableObject(stub, (instance) => {
       Object.defineProperty(instance, "env", {
         configurable: true,
         value: {
-          AI_MODEL: "test-model",
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
           AI: {
             run: async () => {
               throw new Error("provider unavailable");
@@ -108,7 +165,7 @@ describe("AccountBackend persistence", () => {
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     const failed = await stub.fetch(
-      `https://account.internal/events?generationId=${first.generation.id}`
+      `https://account.internal/events?generationId=${firstBody.generation.id}`
     );
     expect(await failed.text()).toContain("event: failed");
     expect(
@@ -121,20 +178,24 @@ describe("AccountBackend persistence", () => {
       Object.defineProperty(instance, "env", {
         configurable: true,
         value: {
-          AI_MODEL: "test-model",
+          ...(instance as unknown as { env: Record<string, unknown> }).env,
           AI: { run: async () => ({ response: "second completed" }) },
         },
       });
     });
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     const completed = await stub.fetch(
-      `https://account.internal/events?generationId=${second.generation.id}`
+      `https://account.internal/events?generationId=${secondBody.generation.id}`
     );
     expect(await completed.text()).toContain("event: done");
-    const history = await stub.history(50);
-    if (history === "invalid_cursor")
-      throw new Error("history cursor rejected");
-    expect(history.messages.map((message) => message.text)).toEqual([
+
+    const history = await fetchWorker("/v1/chat-messages?limit=50", {
+      headers: authenticatedHeaders,
+    });
+    const historyBody = (await history.json()) as {
+      messages: Array<{ text: string }>;
+    };
+    expect(historyBody.messages.map((message) => message.text)).toEqual([
       "hello",
       "hello",
       "second completed",

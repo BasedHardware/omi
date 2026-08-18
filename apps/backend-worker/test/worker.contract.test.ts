@@ -9,6 +9,7 @@ import {
 
 import type { AccountBackend } from "../src/account";
 import { CHAT_CAPABILITIES, isChatCreate } from "../src/wire";
+import { createD1Mock } from "./d1-mock";
 
 let handler: typeof import("../src/index")["default"];
 let accountBackend: typeof AccountBackend;
@@ -26,13 +27,12 @@ const accountCalls: string[] = [];
 const identity = { displayName: "Test Account", email: "test@example.invalid" };
 const initialEntitlement = {
   planLabel: "Metered",
-  limitKey: "chat_messages",
+  limitKey: "chat",
   used: 0,
   limit: 1,
   limitReached: false,
   upgradeAvailable: true,
 };
-let entitlement = { ...initialEntitlement };
 const admissions = new Map<
   string,
   {
@@ -63,42 +63,41 @@ const canonicalMessage = (
   attachments: [],
 });
 let cancellation: "accepted" | "terminal" | "not_found" = "accepted";
+let d1Mock: D1Database;
 const accountStub = {
-  configure: async () => undefined,
-  history: async (limit: number) => {
-    accountCalls.push(`history:${limit}`);
-    return {
-      messages: [],
-      page: { olderCursor: null, hasOlder: false },
-      capabilities: CHAT_CAPABILITIES,
-    };
-  },
-  settings: async () => ({ identity, entitlement: { ...entitlement } }),
-  admit: async (input: Record<string, unknown>) => {
+  admit: async (
+    _accountId: string,
+    input: Record<string, unknown>,
+    chatLimit: number
+  ) => {
     const payload = JSON.stringify(input);
     const prior = admissions.get(String(input["id"]));
     if (prior !== undefined) {
       if (prior.payload !== payload) return "conflict" as const;
       return { ...prior, created: false };
     }
-    if (entitlement.limitReached || entitlement.used >= entitlement.limit)
-      return "entitlement" as const;
-    entitlement = {
-      ...entitlement,
-      used: entitlement.used + 1,
-      limitReached: entitlement.used + 1 >= entitlement.limit,
-    };
+    if (admissions.size >= chatLimit) return "entitlement" as const;
     const admission = {
       payload,
       message: canonicalMessage(input),
       generation: { id: `generation-${String(input["id"])}` },
     };
     admissions.set(String(input["id"]), admission);
+    await d1Mock
+      .prepare(
+        "INSERT OR IGNORE INTO chat_admissions (message_id, account_id, op_id, payload, generation_id) VALUES (?, ?, ?, ?, ?)"
+      )
+      .bind(
+        String(input["id"]),
+        "test-account",
+        String(input["opId"]),
+        payload,
+        admission.generation.id
+      )
+      .run();
     return { ...admission, created: true };
   },
-  complete: async () => undefined,
-  fail: async () => undefined,
-  cancel: async () => cancellation,
+  cancel: async (_accountId: string, _generationId: string) => cancellation,
   fetch: async () =>
     new Response(
       'id: 1\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n'
@@ -122,6 +121,11 @@ const env = {
   STAGING_PLAN_LABEL: initialEntitlement.planLabel,
   STAGING_CHAT_LIMIT: initialEntitlement.limit,
   OBSERVABILITY_SINK_MODE: "cloudflare_only",
+  OPENROUTER_GATEWAY_ENABLED: "false",
+  OPENROUTER_MODEL: "openai/gpt-5.6-luna",
+  get DB() {
+    return d1Mock;
+  },
 };
 
 const executionContext = {
@@ -156,15 +160,14 @@ const chatCreate = (id: string) => ({
 });
 
 beforeEach(() => {
-  entitlement = { ...initialEntitlement };
+  d1Mock = createD1Mock();
   admissions.clear();
   cancellation = "accepted";
+  accountCalls.length = 0;
 });
 
 describe("worker request contract", () => {
   test("health and readiness do not require account storage", async () => {
-    accountCalls.length = 0;
-
     const health = await fetchWorker("/health");
     const ready = await fetchWorker("/ready");
 
@@ -310,8 +313,6 @@ describe("worker request contract", () => {
   ])(
     "an %s API_TOKEN secret refuses an empty bearer credential",
     async (_label, secret) => {
-      accountCalls.length = 0;
-
       const response = await handler.fetch(
         onTheWireRequest("/v1/settings", anonymousHeaders),
         { ...env, API_TOKEN: secret } as never,
@@ -332,8 +333,6 @@ describe("worker request contract", () => {
   );
 
   test("an unprovisioned API_TOKEN secret refuses every protected route", async () => {
-    accountCalls.length = 0;
-
     const paths = [
       "/v1/settings",
       "/v1/chat-messages",
@@ -379,8 +378,6 @@ describe("worker request contract", () => {
   });
 
   test("protected routes reject absent credentials before account access", async () => {
-    accountCalls.length = 0;
-
     const response = await fetchWorker("/v1/chat-messages");
 
     expect(response.status).toBe(401);
@@ -395,8 +392,6 @@ describe("worker request contract", () => {
   });
 
   test("protected routes reject invalid credentials and missing client identity", async () => {
-    accountCalls.length = 0;
-
     const invalidToken = await fetchWorker("/v1/conversations", {
       headers: { ...authenticatedHeaders, authorization: "Bearer wrong-token" },
     });
@@ -475,8 +470,6 @@ describe("worker request contract", () => {
   });
 
   test("chat history validates pagination before resolving the account", async () => {
-    accountCalls.length = 0;
-
     const invalidLimit = await fetchWorker("/v1/chat-messages?limit=0", {
       headers: authenticatedHeaders,
     });
@@ -492,9 +485,7 @@ describe("worker request contract", () => {
     expect(accountCalls).toEqual([]);
   });
 
-  test("chat history resolves the authenticated account and forwards a bounded limit", async () => {
-    accountCalls.length = 0;
-
+  test("chat history reads persisted messages from D1 without resolving the DO", async () => {
     const response = await fetchWorker("/v1/chat-messages?limit=100", {
       headers: authenticatedHeaders,
     });
@@ -512,13 +503,10 @@ describe("worker request contract", () => {
         capabilities: CHAT_CAPABILITIES,
       })
     ).not.toBeNull();
-    expect(accountCalls).toHaveLength(2);
-    expect(accountCalls[0]).toBe("account:test-account");
-    expect(accountCalls[1]).toBe("history:100");
+    expect(accountCalls).toEqual([]);
   });
 
   test("credential rotation preserves the configured account identity", async () => {
-    accountCalls.length = 0;
     const response = await handler.fetch(
       new Request("https://worker.test/v1/chat-messages?limit=10", {
         headers: {
@@ -531,7 +519,6 @@ describe("worker request contract", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(accountCalls[0]).toBe("account:test-account");
   });
 
   test("unknown routes use the stable backend error envelope", async () => {
@@ -651,7 +638,7 @@ describe("settings entitlement admission contract", () => {
   });
 
   test("an exhausted entitlement returns the stable 402 refusal without consumption", async () => {
-    entitlement = { ...initialEntitlement, used: 1, limitReached: true };
+    await accountStub.admit("test-account", chatCreate("seed"), 1);
 
     const response = await fetchWorker("/v1/chat-messages", {
       method: "POST",
@@ -692,7 +679,6 @@ describe("settings entitlement admission contract", () => {
   });
 
   test("oversized send bodies fail before account storage", async () => {
-    accountCalls.length = 0;
     const response = await fetchWorker("/v1/chat-messages", {
       method: "POST",
       headers: { ...authenticatedHeaders, "content-type": "application/json" },
