@@ -317,24 +317,51 @@ def test_claim_txn_claims_stale_pending_marker():
     assert 'wipe_claimed_at' in updates[0][1]
 
 
-def test_claim_txn_skips_recently_failed_marker():
-    """A failure inside ``failed_retry_after`` is NOT re-claimed.
+def test_claim_txn_claims_first_retry_of_a_fresh_failure_immediately():
+    """A record that has never been retried is claimed at once, however fresh.
+
+    This is the contract the durable-deletion e2e drives end to end
+    (``test_queue_not_found_preserves_auth_and_reconciles_from_the_marker``):
+    enqueue 404s, the marker goes ``failed``, and the very next reconcile must
+    report ``requeued: 1``.
+
+    It is also the reason this gate counts *retries* rather than the age of a
+    single failure. A transient failure an operator fixes in thirty seconds
+    would otherwise make that user's account deletion wait out the full
+    window — a worse defect than the storm the gate exists to stop, and one
+    with a real person on the other end of it.
+    """
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'failed',
+        'wipe_failed_at': now - timedelta(seconds=5),  # failed a moment ago
+    }
+    result, updates = _run_claim(data)
+    assert result == 'uid1'
+    assert updates[0][1]['wipe_status'] == 'retrying'
+    assert updates[0][1]['wipe_failed_retry_count'] == 1, 'the claim must record the retry it just spent'
+
+
+def test_claim_txn_skips_recently_failed_marker_once_a_retry_was_spent():
+    """A *repeat* failure inside ``failed_retry_after`` is NOT re-claimed.
 
     Regression test for the retry storm: production's ``account-deletion``
     Cloud Tasks queue did not exist, so every enqueue 404'd and immediately
     marked the record ``failed`` again. ``failed`` was the only wipe status
-    with no age gate in either the query or this transaction, so the record
-    was re-claimed on every reconciler pass — a claim transaction plus an
-    error log per pod per pass, indefinitely.
+    with no gate in either the query or this transaction, so the record was
+    re-claimed on every reconciler pass — a claim transaction plus an error
+    log per pod per pass, indefinitely.
 
-    This test asserted the opposite before the fix ("always claimable
-    regardless of age") and is the behaviour change the fix makes.
+    The immediate retry above has already been spent here, so the failure is
+    no longer plausibly transient and the window applies.
     """
     now = datetime.now(timezone.utc)
     data = {
         'uid': 'uid1',
         'wipe_status': 'failed',
         'wipe_failed_at': now - timedelta(seconds=5),  # recent failure
+        'wipe_failed_retry_count': 1,
     }
     result, updates = _run_claim(data)
     assert result is None
@@ -352,11 +379,13 @@ def test_claim_txn_claims_aged_failed_marker():
         'uid': 'uid1',
         'wipe_status': 'failed',
         'wipe_failed_at': now - timedelta(minutes=15),
+        'wipe_failed_retry_count': 7,  # long past the immediate retry
     }
     result, updates = _run_claim(data)
     assert result == 'uid1'
     assert updates[0][1]['wipe_status'] == 'retrying'
     assert 'wipe_claimed_at' in updates[0][1]
+    assert updates[0][1]['wipe_failed_retry_count'] == 8, 'the counter must keep counting, not saturate'
 
 
 def test_claim_txn_claims_failed_marker_without_timestamp():
@@ -380,19 +409,32 @@ def test_claim_txn_failed_retry_window_is_honoured_across_repeated_passes():
     runs on every pod start, so the observed rate was 30+ claim transactions
     per minute against a single uid. The gate is on the record rather than on
     the caller, so the bound holds however many pods run however often.
+
+    This drives the loop the way production runs it instead of replaying one
+    frozen document: every claim writes the counter back, and every enqueue
+    against the absent queue 404s and re-stamps ``wipe_failed_at``. Replaying a
+    fixed dict would have hidden exactly the bug this design has to get right —
+    that an ever-refreshed timestamp must still converge to one retry.
     """
     now = datetime.now(timezone.utc)
-    failed_at = now - timedelta(seconds=30)
+    record = {'uid': 'uid1', 'wipe_status': 'failed', 'wipe_failed_at': now - timedelta(seconds=30)}
     claims = 0
     for _ in range(20):  # 20 passes, all inside the 10-minute window
-        result, _updates = _run_claim({'uid': 'uid1', 'wipe_status': 'failed', 'wipe_failed_at': failed_at})
-        if result is not None:
-            claims += 1
-    assert claims == 0, 'a record failed 30s ago must not be re-claimed by any pass in the window'
+        result, updates = _run_claim(dict(record))
+        if result is None:
+            continue
+        claims += 1
+        record.update(updates[0][1])
+        # The enqueue 404s again, exactly as it did in #11680: back to failed,
+        # with the failure timestamp refreshed by mark_user_deletion_wipe_failed.
+        record['wipe_status'] = 'failed'
+        record['wipe_failed_at'] = datetime.now(timezone.utc)
+    assert claims == 1, 'a permanently-failing record gets its one immediate retry and no more per window'
 
-    # ...and the same record, once its window has elapsed, is claimed again.
-    aged = _run_claim({'uid': 'uid1', 'wipe_status': 'failed', 'wipe_failed_at': now - timedelta(minutes=11)})[0]
-    assert aged == 'uid1'
+    # ...and once the window has elapsed the same record is retried again, so
+    # the gate throttles the storm without ever abandoning the user's deletion.
+    record['wipe_failed_at'] = datetime.now(timezone.utc) - timedelta(minutes=11)
+    assert _run_claim(record)[0] == 'uid1'
 
 
 def test_claim_txn_skips_fresh_retrying_claim():
@@ -657,21 +699,36 @@ def test_get_pending_deletion_wipes_includes_stale_running():
     assert 'live1' not in uids, 'fresh running record must not be recovered'
 
 
-def test_get_pending_deletion_wipes_age_gates_failed_records():
-    """``failed`` records are age-gated like every other status.
+def test_get_pending_deletion_wipes_gates_repeatedly_failed_records():
+    """``failed`` records are gated like every other status, from the 2nd retry.
 
     The query returned every ``failed`` doc unconditionally ("always
     actionable"), which is the other half of the retry storm: the reconciler
     re-fetched the permanently-failing record on every pass before the claim
-    transaction ever saw it. An undated record stays eligible so a legacy
-    ``failed`` row is never stranded.
+    transaction ever saw it. It must apply the same predicate the claim
+    transaction does, or the two disagree about what is actionable and the
+    query goes back to re-fetching records the claim will only refuse.
+
+    An undated record and a never-retried one both stay eligible, so neither a
+    legacy ``failed`` row nor a fresh transient failure is ever stranded.
     """
     now = datetime.now(timezone.utc)
     docs_by_status = {
         'failed': [
-            {'uid': 'justfailed', 'wipe_status': 'failed', 'wipe_failed_at': now - timedelta(seconds=30)},
-            {'uid': 'aged', 'wipe_status': 'failed', 'wipe_failed_at': now - timedelta(minutes=15)},
-            {'uid': 'undated', 'wipe_status': 'failed'},
+            {
+                'uid': 'justfailed',
+                'wipe_status': 'failed',
+                'wipe_failed_at': now - timedelta(seconds=30),
+                'wipe_failed_retry_count': 1,
+            },
+            {'uid': 'neverretried', 'wipe_status': 'failed', 'wipe_failed_at': now - timedelta(seconds=30)},
+            {
+                'uid': 'aged',
+                'wipe_status': 'failed',
+                'wipe_failed_at': now - timedelta(minutes=15),
+                'wipe_failed_retry_count': 4,
+            },
+            {'uid': 'undated', 'wipe_status': 'failed', 'wipe_failed_retry_count': 4},
         ],
         'pending': [],
         'retrying': [],
@@ -685,7 +742,8 @@ def test_get_pending_deletion_wipes_age_gates_failed_records():
         result = users_db.get_pending_deletion_wipes(limit=100)
 
     uids = [r['uid'] for r in result]
-    assert 'justfailed' not in uids, 'a record that failed 30s ago must not be re-fetched every pass'
+    assert 'justfailed' not in uids, 'a record that already spent its retry 30s ago must not be re-fetched'
+    assert 'neverretried' in uids, 'a first failure is actionable immediately, however recent'
     assert 'aged' in uids, 'a failure past the window must still drain'
     assert 'undated' in uids, 'a failed record with no timestamp must never be stranded'
 
@@ -700,8 +758,18 @@ def test_get_pending_deletion_wipes_failed_over_fetch_beats_a_fresh_page():
     """
     now = datetime.now(timezone.utc)
     docs_by_status = {
-        'failed': [{'uid': f'fresh{i}', 'wipe_status': 'failed', 'wipe_failed_at': now} for i in range(5)]
-        + [{'uid': 'aged', 'wipe_status': 'failed', 'wipe_failed_at': now - timedelta(minutes=30)}],
+        'failed': [
+            {'uid': f'fresh{i}', 'wipe_status': 'failed', 'wipe_failed_at': now, 'wipe_failed_retry_count': 1}
+            for i in range(5)
+        ]
+        + [
+            {
+                'uid': 'aged',
+                'wipe_status': 'failed',
+                'wipe_failed_at': now - timedelta(minutes=30),
+                'wipe_failed_retry_count': 1,
+            }
+        ],
         'pending': [],
         'retrying': [],
     }
