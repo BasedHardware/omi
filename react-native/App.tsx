@@ -190,25 +190,30 @@ function NavItem({
 
 function OmiMark({
   accessibilityLabel = 'Omi',
+  height,
   size = 40,
   source = omiLogo,
 }: {
   accessibilityLabel?: string;
+  height?: number;
   size?: number;
   source?: ImageSourcePropType;
 }) {
+  const imageHeight = height ?? size;
   return (
     <View
       accessibilityLabel={accessibilityLabel}
       style={
-        size === 40 ? styles.mark : [styles.mark, {height: size, width: size}]
+        size === 40 && height === undefined
+          ? styles.mark
+          : [styles.mark, {height: imageHeight, width: size}]
       }>
       <Image
         resizeMode="contain"
         source={source}
         style={[
           styles.markImage,
-          {borderRadius: size / 2, height: size, width: size},
+          {borderRadius: size / 2, height: imageHeight, width: size},
         ]}
       />
     </View>
@@ -1940,46 +1945,119 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     </View>
   );
 
+  const connectedDevice =
+    nativeSnapshot?.devices.find(device => device.connected) ?? null;
+  const homeStatus =
+    connectedDevice === null
+      ? nativeSnapshot === null
+        ? 'Checking Bluetooth…'
+        : nativeSnapshot.bluetooth === 'poweredOn'
+        ? 'Omi disconnected'
+        : nativeSnapshot.bluetooth === 'unauthorized'
+        ? 'Bluetooth permission needed'
+        : 'Bluetooth off'
+      : `Connected · ${
+          nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
+        }`;
+  const currentItems = reads.slice(0, 2);
+
   const homeOverview = (
-    <View style={styles.homeOverview}>
-      <OmiMark
-        accessibilityLabel="Home pendant"
-        size={248}
-        source={omiPendant}
-      />
-      {nativeSnapshot?.devices.map(device => (
-        <FocusPressable
-          accessibilityLabel={`${device.connected ? 'Disconnect' : 'Connect'} ${
-            device.name
-          }`}
-          accessibilityRole="button"
-          key={device.id}
-          disabled={deviceBusy}
-          onPress={() => toggleDevice(device.id, device.connected)}
-          style={({pressed}) => [styles.deviceChip, pressed && styles.pressed]}>
-          <Text style={styles.deviceChipText}>
-            {device.name} · {device.connected ? 'Connected' : 'Nearby'}
-            {device.battery !== undefined ? ` · ${device.battery}%` : ''}
+    <ScrollView
+      accessibilityLabel="Home overview"
+      contentContainerStyle={styles.homeOverviewContent}
+      style={styles.homeOverview}>
+      <View style={styles.pendantHero}>
+        <OmiMark
+          accessibilityLabel="Home pendant"
+          height={184}
+          size={160}
+          source={omiPendant}
+        />
+        <Text style={styles.pendantName}>Omi</Text>
+        <Text style={styles.pendantStatus}>{homeStatus}</Text>
+        {connectedDevice?.battery !== undefined && (
+          <Text style={styles.pendantBattery}>
+            {connectedDevice.battery}% battery
           </Text>
-        </FocusPressable>
-      ))}
-      {nativeSnapshot?.bluetooth === 'poweredOn' &&
-        nativeSnapshot.devices.length === 0 && (
-          <FocusPressable
-            accessibilityLabel="Scan for Omi devices"
-            accessibilityRole="button"
-            disabled={deviceBusy}
-            onPress={scanForOmi}
-            style={({pressed}) => [
-              styles.scanButton,
-              pressed && styles.pressed,
-            ]}>
-            <Text style={styles.scanButtonText}>
-              {deviceBusy ? 'Scanning…' : 'Find Omi'}
-            </Text>
-          </FocusPressable>
         )}
-    </View>
+      </View>
+
+      {compact && (
+        <>
+          <View style={styles.homeSection}>
+            <Text style={styles.sectionLabel}>Currents</Text>
+            {currentItems.length > 0 ? (
+              currentItems.map(item => (
+                <ProjectionRow item={item} key={item.id} />
+              ))
+            ) : readsPhase === 'initial-loading' ? (
+              <Text style={styles.homeHint}>Loading Currents…</Text>
+            ) : (
+              <Text style={styles.homeHint}>Nothing current right now.</Text>
+            )}
+          </View>
+
+          <View style={styles.homeSection}>
+            <View style={styles.deviceHeader}>
+              <View>
+                <Text style={styles.sectionLabel}>Devices</Text>
+                <Text style={styles.deviceState}>
+                  {nativeSnapshot === null
+                    ? 'Checking Bluetooth…'
+                    : nativeSnapshot.bluetooth === 'poweredOn'
+                    ? 'Bluetooth on'
+                    : nativeSnapshot.bluetooth === 'unauthorized'
+                    ? 'Bluetooth permission needed'
+                    : 'Bluetooth off'}
+                </Text>
+              </View>
+              <FocusPressable
+                accessibilityLabel="Scan for Omi devices"
+                accessibilityRole="button"
+                disabled={
+                  deviceBusy || nativeSnapshot?.bluetooth !== 'poweredOn'
+                }
+                onPress={scanForOmi}
+                style={({pressed}) => [
+                  styles.scanButton,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.scanButtonText}>
+                  {deviceBusy ? 'Scanning…' : 'Scan'}
+                </Text>
+              </FocusPressable>
+            </View>
+            {nativeSnapshot?.devices.map(device => (
+              <FocusPressable
+                accessibilityLabel={`${
+                  device.connected ? 'Disconnect' : 'Connect'
+                } ${device.name}`}
+                accessibilityRole="button"
+                key={device.id}
+                disabled={deviceBusy}
+                onPress={() => toggleDevice(device.id, device.connected)}
+                style={({pressed}) => [
+                  styles.deviceRow,
+                  pressed && styles.pressed,
+                ]}>
+                <View>
+                  <Text style={styles.deviceName}>{device.name}</Text>
+                  <Text style={styles.deviceMeta}>
+                    {device.connected ? 'Connected' : `${device.rssi} dBm`}
+                  </Text>
+                </View>
+                {device.battery !== undefined && (
+                  <Text style={styles.deviceBattery}>{device.battery}%</Text>
+                )}
+              </FocusPressable>
+            ))}
+            {nativeSnapshot !== null && nativeSnapshot.devices.length === 0 && (
+              <Text style={styles.deviceHint}>{nativeSnapshot.lastEvent}</Text>
+            )}
+          </View>
+        </>
+      )}
+    </ScrollView>
   );
 
   return (
@@ -2554,14 +2632,25 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     width: '100%',
   },
-  homeOverview: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 14,
-    justifyContent: 'center',
-    paddingBottom: 28,
-    paddingTop: 16,
+  homeOverview: {flex: 1, width: '100%'},
+  homeOverviewContent: {paddingBottom: 20, paddingTop: 4},
+  pendantHero: {alignItems: 'center', paddingBottom: 18},
+  pendantName: {
+    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.6,
+    marginTop: -12,
   },
+  pendantStatus: {color: '#b8b8b8', fontSize: 14, marginTop: 3},
+  pendantBattery: {
+    color: '#d8d8d8',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 7,
+  },
+  homeSection: {gap: 8, marginTop: 18, width: '100%'},
+  homeHint: {color: '#929292', fontSize: 13, paddingVertical: 4},
   homeResults: {flex: 1},
   deviceChip: {
     backgroundColor: '#242424',
