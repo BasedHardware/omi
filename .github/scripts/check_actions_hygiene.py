@@ -15,15 +15,16 @@ SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
 # same operator selection in workflow_dispatch/workflow_call context. Both name
 # a ref the operator chose, which is not what the run SHA describes.
 OPERATOR_REF_CHECKOUT_RE = re.compile(
-    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*(?:github\.event\.)?inputs\."
+    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*(?:github\.event\.)?inputs(?:\.|\[\s*['\"][^'\"]+['\"]\s*\])"
 )
 WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(
-    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*github\.event\.inputs\."
+    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*github\.event\.inputs(?:\.|\[\s*['\"][^'\"]+['\"]\s*\])"
 )
 RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
 JOB_START_RE = re.compile(r"^ {2}[A-Za-z_][\w-]*:\s*(?:#.*)?$")
 STEP_START_RE = re.compile(r"^(\s*)-\s+")
 CHECKOUT_STEP_RE = re.compile(r"^\s*-\s+uses:\s*['\"]?actions/checkout(?:@|['\"]|\s|$)")
+CHECKOUT_USES_RE = re.compile(r"^\s+uses:\s*['\"]?actions/checkout(?:@|['\"]|\s|$)")
 TRAILING_COMMENT_RE = re.compile(r"\s+#.*$")
 
 # Mutable refs that have already caused (or clearly invite) supply-chain risk.
@@ -83,8 +84,18 @@ def _nested_workflow_dirs(root: Path) -> list[str]:
         rel = current.relative_to(root).as_posix()
         if rel == ".github/workflows":
             continue
-        if any(current.glob("*.yml")) or any(current.glob("*.yaml")):
+        if _workflow_files_under(current):
             found.append(rel)
+    return sorted(found)
+
+
+def _workflow_files_under(root: Path) -> list[Path]:
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in PRUNED_DIR_NAMES]
+        for filename in filenames:
+            if filename.endswith((".yml", ".yaml")):
+                found.append(Path(dirpath) / filename)
     return sorted(found)
 
 
@@ -116,10 +127,7 @@ def _join_folded_scalars(lines: list[str]) -> list[str]:
         continuation = index + 1
         while continuation < len(lines):
             candidate = lines[continuation]
-            if (
-                candidate.strip()
-                and len(candidate) - len(candidate.lstrip()) <= base_indent
-            ):
+            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= base_indent:
                 break
             parts.append(candidate.strip())
             continuation += 1
@@ -139,10 +147,7 @@ def _property_blocks(lines: list[str], property_name: str) -> list[tuple[int, st
         continuation = index + 1
         while continuation < len(lines):
             candidate = lines[continuation]
-            if (
-                candidate.strip()
-                and len(candidate) - len(candidate.lstrip()) <= base_indent
-            ):
+            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= base_indent:
                 break
             parts.append(candidate)
             continuation += 1
@@ -150,9 +155,7 @@ def _property_blocks(lines: list[str], property_name: str) -> list[tuple[int, st
     return blocks
 
 
-def _operator_ref_scopes(
-    text: str, ref_re: re.Pattern[str], is_workflow: bool
-) -> set[int]:
+def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) -> set[int]:
     """Line numbers belonging to a scope that checks out an operator-selected ref.
 
     A job owns one workspace, so provenance is a per-job property: a sibling job
@@ -167,6 +170,7 @@ def _operator_ref_scopes(
     start = 0
     selected = False
     checkout_step_indent: int | None = None
+    current_step_indent: int | None = None
 
     def close(end: int) -> None:
         if selected and start:
@@ -179,15 +183,20 @@ def _operator_ref_scopes(
             continue
         if JOB_START_RE.match(line):
             close(index - 1)
-            start, selected, checkout_step_indent = index, False, None
+            start, selected, checkout_step_indent, current_step_indent = index, False, None, None
         elif (step_match := STEP_START_RE.match(line)) is not None:
             step_indent = len(step_match.group(1))
+            current_step_indent = step_indent
             if CHECKOUT_STEP_RE.match(line):
                 checkout_step_indent = step_indent
-            elif (
-                checkout_step_indent is not None and step_indent <= checkout_step_indent
-            ):
+            else:
                 checkout_step_indent = None
+        elif (
+            current_step_indent is not None
+            and len(line) - len(line.lstrip()) > current_step_indent
+            and CHECKOUT_USES_RE.match(line)
+        ):
+            checkout_step_indent = current_step_indent
         elif checkout_step_indent is not None and ref_re.search(line):
             selected = True
     close(len(lines))
@@ -206,7 +215,7 @@ def validate(root: Path) -> list[str]:
             )
             continue
         nested_path = root / nested
-        for path in sorted((*nested_path.glob("*.yml"), *nested_path.glob("*.yaml"))):
+        for path in _workflow_files_under(nested_path):
             rel = path.relative_to(root).as_posix()
             if rel not in KNOWN_NESTED_WORKFLOW_FILES:
                 errors.append(
@@ -220,11 +229,7 @@ def validate(root: Path) -> list[str]:
         is_workflow = path.parent.name == "workflows"
         # A composite action's `inputs.*` are supplied by the calling workflow,
         # not by an operator, so only the dispatch payload counts there.
-        ref_re = (
-            OPERATOR_REF_CHECKOUT_RE
-            if is_workflow
-            else WORKFLOW_DISPATCH_REF_CHECKOUT_RE
-        )
+        ref_re = OPERATOR_REF_CHECKOUT_RE if is_workflow else WORKFLOW_DISPATCH_REF_CHECKOUT_RE
         operator_ref_scopes = _operator_ref_scopes(text, ref_re, is_workflow)
         lines = text.splitlines()
         for line_number, block in _property_blocks(lines, "key"):
@@ -267,11 +272,7 @@ def validate(root: Path) -> list[str]:
                     "include github.run_id (exact key never hits; parallel jobs race)"
                 )
             code = TRAILING_COMMENT_RE.sub("", line)
-            if (
-                line_number in operator_ref_scopes
-                and RUN_SHA_RE.search(code)
-                and not code.lstrip().startswith("#")
-            ):
+            if line_number in operator_ref_scopes and RUN_SHA_RE.search(code) and not code.lstrip().startswith("#"):
                 errors.append(
                     f"{rel}:{line_number}: workflow checks out an operator-selected "
                     "ref, so the run SHA is not the checked-out commit; derive "

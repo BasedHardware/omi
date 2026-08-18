@@ -58,9 +58,7 @@ class ActionsHygieneTests(unittest.TestCase):
                 ".github/workflows/publish.yml",
                 "jobs:\n  p:\n    steps:\n      - uses: pypa/gh-action-pypi-publish@release/v1\n",
             )
-            self.assertTrue(
-                any("pypa/gh-action-pypi-publish@release/" in e for e in validate(root))
-            )
+            self.assertTrue(any("pypa/gh-action-pypi-publish@release/" in e for e in validate(root)))
 
     def test_rejects_rust_toolchain_channel_ref(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -70,9 +68,7 @@ class ActionsHygieneTests(unittest.TestCase):
                 ".github/workflows/rust.yml",
                 "jobs:\n  r:\n    steps:\n      - uses: dtolnay/rust-toolchain@stable\n",
             )
-            self.assertTrue(
-                any("dtolnay/rust-toolchain@stable" in e for e in validate(root))
-            )
+            self.assertTrue(any("dtolnay/rust-toolchain@stable" in e for e in validate(root)))
 
     def test_rejects_flutter_cache_run_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,9 +154,19 @@ class ActionsHygieneTests(unittest.TestCase):
             write(root, ".github/workflows/noop.yml", "name: noop\n")
             write(root, "some-component/.github/workflows/local.yml", "name: local\n")
             errors = validate(root)
-            self.assertTrue(
-                any("some-component/.github/workflows" in e for e in errors)
+            self.assertTrue(any("some-component/.github/workflows" in e for e in errors))
+
+    def test_rejects_nested_workflow_group(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".github/workflows/noop.yml", "name: noop\n")
+            write(
+                root,
+                "some-component/.github/workflows/group/local.yml",
+                "name: local\n",
             )
+            errors = validate(root)
+            self.assertTrue(any("some-component/.github/workflows" in e for e in errors))
 
     def test_ignores_vendored_nested_workflow_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -198,6 +204,43 @@ class ActionsHygieneTests(unittest.TestCase):
                 "  d:\n"
                 "    steps:\n"
                 "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ inputs.release_tag }}\n"
+                '      - run: echo "tag=${GITHUB_SHA::7}"\n',
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_rejects_run_sha_with_indexed_workflow_input_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ inputs['release-tag'] }}\n"
+                '      - run: echo "tag=${GITHUB_SHA::7}"\n',
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_rejects_run_sha_with_named_checkout_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - name: Checkout\n"
+                "        uses: actions/checkout@v7\n"
                 "        with:\n"
                 "          ref: ${{ inputs.release_tag }}\n"
                 '      - run: echo "tag=${GITHUB_SHA::7}"\n',
@@ -249,11 +292,7 @@ class ActionsHygieneTests(unittest.TestCase):
             write(
                 root,
                 ".github/workflows/bad.yml",
-                "jobs:\n"
-                "  t:\n"
-                "    steps:\n"
-                "      - uses: >-\n"
-                "          some-org/tool@main\n",
+                "jobs:\n" "  t:\n" "    steps:\n" "      - uses: >-\n" "          some-org/tool@main\n",
             )
             self.assertTrue(any("@main" in error for error in validate(root)))
 
@@ -277,9 +316,7 @@ class ActionsHygieneTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write(root, ".github/workflows/noop.yml", "name: noop\n")
-            write(
-                root, "desktop/macos/.github/workflows/test-install.yml", "name: old\n"
-            )
+            write(root, "desktop/macos/.github/workflows/test-install.yml", "name: old\n")
             write(root, "desktop/macos/.github/workflows/new.yml", "name: new\n")
             errors = validate(root)
             self.assertEqual(len(errors), 1)
@@ -292,10 +329,7 @@ class ActionsHygieneTests(unittest.TestCase):
             write(
                 root,
                 ".github/actions/deploy/release/action.yaml",
-                "runs:\n"
-                "  using: composite\n"
-                "  steps:\n"
-                "    - uses: some-org/tool@main\n",
+                "runs:\n" "  using: composite\n" "  steps:\n" "    - uses: some-org/tool@main\n",
             )
             self.assertTrue(any("@main" in e for e in validate(root)))
 
