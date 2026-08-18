@@ -14,10 +14,16 @@ SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
 # `github.event.inputs.*` is the workflow_dispatch payload; `inputs.*` is the
 # same operator selection in workflow_dispatch/workflow_call context. Both name
 # a ref the operator chose, which is not what the run SHA describes.
-OPERATOR_REF_CHECKOUT_RE = re.compile(r"ref:\s*(?:[|>][-+]?\s*)?\$\{\{\s*(?:github\.event\.)?inputs\.")
-WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(r"ref:\s*(?:[|>][-+]?\s*)?\$\{\{\s*github\.event\.inputs\.")
+OPERATOR_REF_CHECKOUT_RE = re.compile(
+    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*(?:github\.event\.)?inputs\."
+)
+WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(
+    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*github\.event\.inputs\."
+)
 RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
 JOB_START_RE = re.compile(r"^ {2}[A-Za-z_][\w-]*:\s*(?:#.*)?$")
+STEP_START_RE = re.compile(r"^(\s*)-\s+")
+CHECKOUT_STEP_RE = re.compile(r"^\s*-\s+uses:\s*['\"]?actions/checkout(?:@|['\"]|\s|$)")
 TRAILING_COMMENT_RE = re.compile(r"\s+#.*$")
 
 # Mutable refs that have already caused (or clearly invite) supply-chain risk.
@@ -56,6 +62,12 @@ KNOWN_NESTED_WORKFLOW_DIRS = frozenset(
     {
         "desktop/macos/.github/workflows",
         "plugins/omi-github-app/.github/workflows",
+    }
+)
+KNOWN_NESTED_WORKFLOW_FILES = frozenset(
+    {
+        "desktop/macos/.github/workflows/test-install.yml",
+        "plugins/omi-github-app/.github/workflows/create-pr.yml",
     }
 )
 
@@ -104,7 +116,10 @@ def _join_folded_scalars(lines: list[str]) -> list[str]:
         continuation = index + 1
         while continuation < len(lines):
             candidate = lines[continuation]
-            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= base_indent:
+            if (
+                candidate.strip()
+                and len(candidate) - len(candidate.lstrip()) <= base_indent
+            ):
                 break
             parts.append(candidate.strip())
             continuation += 1
@@ -114,7 +129,7 @@ def _join_folded_scalars(lines: list[str]) -> list[str]:
 
 def _property_blocks(lines: list[str], property_name: str) -> list[tuple[int, str]]:
     blocks: list[tuple[int, str]] = []
-    property_re = re.compile(rf"^(\s*){re.escape(property_name)}:\s*[|>]" )
+    property_re = re.compile(rf"^(\s*)(?:-\s*)?{re.escape(property_name)}:\s*[|>]")
     for index, line in enumerate(lines):
         match = property_re.match(line)
         if not match:
@@ -124,7 +139,10 @@ def _property_blocks(lines: list[str], property_name: str) -> list[tuple[int, st
         continuation = index + 1
         while continuation < len(lines):
             candidate = lines[continuation]
-            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= base_indent:
+            if (
+                candidate.strip()
+                and len(candidate) - len(candidate.lstrip()) <= base_indent
+            ):
                 break
             parts.append(candidate)
             continuation += 1
@@ -132,7 +150,9 @@ def _property_blocks(lines: list[str], property_name: str) -> list[tuple[int, st
     return blocks
 
 
-def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) -> set[int]:
+def _operator_ref_scopes(
+    text: str, ref_re: re.Pattern[str], is_workflow: bool
+) -> set[int]:
     """Line numbers belonging to a scope that checks out an operator-selected ref.
 
     A job owns one workspace, so provenance is a per-job property: a sibling job
@@ -146,6 +166,7 @@ def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) 
     in_jobs = False
     start = 0
     selected = False
+    checkout_step_indent: int | None = None
 
     def close(end: int) -> None:
         if selected and start:
@@ -158,8 +179,16 @@ def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) 
             continue
         if JOB_START_RE.match(line):
             close(index - 1)
-            start, selected = index, False
-        elif ref_re.search(line):
+            start, selected, checkout_step_indent = index, False, None
+        elif (step_match := STEP_START_RE.match(line)) is not None:
+            step_indent = len(step_match.group(1))
+            if CHECKOUT_STEP_RE.match(line):
+                checkout_step_indent = step_indent
+            elif (
+                checkout_step_indent is not None and step_indent <= checkout_step_indent
+            ):
+                checkout_step_indent = None
+        elif checkout_step_indent is not None and ref_re.search(line):
             selected = True
     close(len(lines))
     return scopes
@@ -169,13 +198,21 @@ def validate(root: Path) -> list[str]:
     errors: list[str] = []
 
     for nested in _nested_workflow_dirs(root):
-        if nested in KNOWN_NESTED_WORKFLOW_DIRS:
+        if nested not in KNOWN_NESTED_WORKFLOW_DIRS:
+            errors.append(
+                f"{nested}: nested GitHub Actions workflows are forbidden; "
+                "root .github/workflows/ is the only Actions entrypoint (stale "
+                "deploy templates have previously looked like live prod pipelines)"
+            )
             continue
-        errors.append(
-            f"{nested}: nested GitHub Actions workflows are forbidden; "
-            "root .github/workflows/ is the only Actions entrypoint (stale "
-            "deploy templates have previously looked like live prod pipelines)"
-        )
+        nested_path = root / nested
+        for path in sorted((*nested_path.glob("*.yml"), *nested_path.glob("*.yaml"))):
+            rel = path.relative_to(root).as_posix()
+            if rel not in KNOWN_NESTED_WORKFLOW_FILES:
+                errors.append(
+                    f"{rel}: nested workflow file is not in the ratchet baseline; "
+                    "remove it or register the exact legacy file"
+                )
 
     for path in (*_workflow_paths(root), *_action_paths(root)):
         rel = path.relative_to(root).as_posix()
@@ -183,22 +220,58 @@ def validate(root: Path) -> list[str]:
         is_workflow = path.parent.name == "workflows"
         # A composite action's `inputs.*` are supplied by the calling workflow,
         # not by an operator, so only the dispatch payload counts there.
-        ref_re = OPERATOR_REF_CHECKOUT_RE if is_workflow else WORKFLOW_DISPATCH_REF_CHECKOUT_RE
+        ref_re = (
+            OPERATOR_REF_CHECKOUT_RE
+            if is_workflow
+            else WORKFLOW_DISPATCH_REF_CHECKOUT_RE
+        )
         operator_ref_scopes = _operator_ref_scopes(text, ref_re, is_workflow)
-        for line_number, block in _property_blocks(text.splitlines(), "key"):
+        lines = text.splitlines()
+        for line_number, block in _property_blocks(lines, "key"):
             if "flutter-buildrunner" in block and "github.run_id" in block:
                 errors.append(
                     f"{rel}:{line_number}: flutter-buildrunner cache key must not "
                     "include github.run_id (exact key never hits; parallel jobs race)"
                 )
-        for line_number, line in enumerate(text.splitlines(), start=1):
+
+        def check_uses(line_number: int, uses: str) -> None:
+            for forbidden in FORBIDDEN_USES_SUBSTRINGS:
+                if forbidden in uses:
+                    errors.append(
+                        f"{rel}:{line_number}: mutable or retired action ref "
+                        f"{uses!r} is forbidden; pin a full commit SHA "
+                        f"(matched {forbidden!r})"
+                    )
+            if uses.startswith(("actions/", "./")):
+                return
+            if uses.endswith(("@master", "@main")) and not SHA_REF_RE.search(uses):
+                errors.append(
+                    f"{rel}:{line_number}: third-party action {uses!r} must not "
+                    "track a moving branch; pin a full commit SHA"
+                )
+
+        for line_number, block in _property_blocks(lines, "uses"):
+            block_lines = block.splitlines()
+            first, *continuation = block_lines
+            prefix = re.match(r"^(\s*-?\s*uses:)\s*[|>][-+]?\s*", first)
+            if prefix is not None:
+                synthetic = f"{prefix.group(1)} {' '.join(part.strip() for part in continuation)}"
+                match = USES_RE.match(synthetic)
+                if match:
+                    check_uses(line_number, match.group(1))
+
+        for line_number, line in enumerate(lines, start=1):
             if FLUTTER_CACHE_KEY_RE.search(line) and "github.run_id" in line:
                 errors.append(
                     f"{rel}:{line_number}: flutter-buildrunner cache key must not "
                     "include github.run_id (exact key never hits; parallel jobs race)"
                 )
             code = TRAILING_COMMENT_RE.sub("", line)
-            if line_number in operator_ref_scopes and RUN_SHA_RE.search(code) and not code.lstrip().startswith("#"):
+            if (
+                line_number in operator_ref_scopes
+                and RUN_SHA_RE.search(code)
+                and not code.lstrip().startswith("#")
+            ):
                 errors.append(
                     f"{rel}:{line_number}: workflow checks out an operator-selected "
                     "ref, so the run SHA is not the checked-out commit; derive "
@@ -208,21 +281,7 @@ def validate(root: Path) -> list[str]:
 
             match = USES_RE.match(line)
             if match:
-                uses = match.group(1)
-                for forbidden in FORBIDDEN_USES_SUBSTRINGS:
-                    if forbidden in uses:
-                        errors.append(
-                            f"{rel}:{line_number}: mutable or retired action ref "
-                            f"{uses!r} is forbidden; pin a full commit SHA "
-                            f"(matched {forbidden!r})"
-                        )
-                if uses.startswith(("actions/", "./")):
-                    pass
-                elif uses.endswith(("@master", "@main")) and not SHA_REF_RE.search(uses):
-                    errors.append(
-                        f"{rel}:{line_number}: third-party action {uses!r} must not "
-                        "track a moving branch; pin a full commit SHA"
-                    )
+                check_uses(line_number, match.group(1))
 
     return errors
 
