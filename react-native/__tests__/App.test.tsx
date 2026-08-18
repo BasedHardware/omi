@@ -434,7 +434,7 @@ test('renders the collapsed reference rail and search-first desktop Home', async
 
   expect(output).toContain('Search Omi');
   expect(output).not.toContain('Search what you’ve seen and heard');
-  expect(output).toContain('QA bridge check');
+  expect(output).not.toContain('QA bridge check');
   expect(output).toContain('Open Chat');
   expect(output).not.toContain('I’m ready.');
   expect(output).not.toContain('Ask anything...');
@@ -489,12 +489,32 @@ test('renders the compact native-device fallback, Currents, and bottom-search Ho
   expect(output).toContain('Checking Bluetooth…');
   expect(output).toContain('Scan');
   expect(output).toContain('Currents');
-  expect(output).toContain('QA bridge check');
+  expect(output).not.toContain('QA bridge check');
   expect(output).toContain('Search Omi');
   expect(output).toContain('Home search dock');
   expect(output).not.toContain('HOME');
   expect(output).not.toContain('LATEST');
 });
+test('keeps Home calm until a search begins, then fades in matching results', async () => {
+  mockViewportWidth = 390;
+  const renderer = await renderApp();
+  const beforeSearch = JSON.stringify(renderer.toJSON());
+
+  expect(beforeSearch).toContain('Currents');
+  expect(beforeSearch).toContain('Omi');
+  expect(beforeSearch).not.toContain('QA bridge check');
+  const search = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Search Home',
+  );
+  await ReactTestRenderer.act(async () => search.props.onChangeText('bridge'));
+
+  expect(JSON.stringify(renderer.toJSON())).toContain('QA bridge check');
+  expect(Animated.timing).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({duration: 180, toValue: 1}),
+  );
+});
+
 test('keeps Home limited to chronological conversations and memories', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
@@ -565,6 +585,16 @@ test('keeps Home limited to chronological conversations and memories', async () 
   });
 
   const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.onChangeText('');
+  });
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.onChangeText('e');
+  });
   const output = JSON.stringify(renderer.toJSON());
   expect(output.indexOf('Newer memory')).toBeLessThan(
     output.indexOf('Older conversation'),
@@ -1206,6 +1236,11 @@ test('keeps successful reads visible and reports each unavailable domain', async
   });
 
   const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.onChangeText('saved');
+  });
   const home = JSON.stringify(renderer.toJSON());
   expect(home).not.toContain('Keep the successful task');
   expect(home).toContain('Conversations');
@@ -1243,29 +1278,20 @@ test('keeps successful reads visible and reports each unavailable domain', async
   expect(JSON.stringify(renderer.toJSON())).toContain('Tasks are incomplete.');
 });
 
-test('uses a full pane with bottom navigation on mobile', async () => {
+test('uses a full, navigation-free pane on mobile', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();
-  const tablist = renderer.root.find(
-    node => node.props.accessibilityRole === 'tablist',
-  );
 
-  expect(tablist.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
-  );
   expect(
-    renderer.root.findAll(
-      node => String(node.type) === 'Text' && node.props.children === 'omi',
-    ),
+    renderer.root.findAll(node => node.props.accessibilityRole === 'tablist'),
   ).toHaveLength(0);
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
       .props.value,
   ).toBe('');
-  expect(Animated.timing).toHaveBeenCalledWith(
-    expect.anything(),
-    expect.objectContaining({duration: 200, toValue: 1}),
-  );
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Omi'),
+  ).toBeDefined();
 });
 
 test('uses transparent separated macOS desktop chrome', async () => {
@@ -1389,7 +1415,7 @@ test.each([800, 960, 1440])(
   },
 );
 
-test('keeps non-macOS mobile navigation and pane composition unchanged', async () => {
+test('keeps non-macOS mobile navigation-free and pane-focused', async () => {
   mockPlatformOS = 'ios';
   mockViewportWidth = 390;
   const renderer = await renderApp();
@@ -1405,24 +1431,18 @@ test('keeps non-macOS mobile navigation and pane composition unchanged', async (
     ),
   ).toHaveLength(0);
   expect(
-    renderer.root.find(node => node.props.accessibilityRole === 'tablist').props
-      .style,
-  ).toEqual(
-    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
-  );
+    renderer.root.findAll(node => node.props.accessibilityRole === 'tablist'),
+  ).toHaveLength(0);
 });
 
 test('resizes pane and rail at their independent reference breakpoints', async () => {
   mockViewportWidth = 700;
   const tablet = await renderApp();
-  const tabletTablist = tablet.root.find(
-    node => node.props.accessibilityRole === 'tablist',
-  );
+  expect(
+    tablet.root.findAll(node => node.props.accessibilityRole === 'tablist'),
+  ).toHaveLength(0);
   const tabletPane = tablet.root.find(
     node => String(node.type) === 'KeyboardAvoidingView',
-  );
-  expect(tabletTablist.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
   );
   expect(tabletPane.props.style).toEqual(
     expect.arrayContaining([expect.objectContaining({borderRadius: 26})]),
@@ -1432,11 +1452,10 @@ test('resizes pane and rail at their independent reference breakpoints', async (
   mockViewportWidth = 1000;
   const intermediate = await renderApp();
   expect(
-    intermediate.root.find(node => node.props.accessibilityRole === 'tablist')
-      .props.style,
-  ).toEqual(
-    expect.arrayContaining([expect.objectContaining({borderTopWidth: 1})]),
-  );
+    intermediate.root.findAll(
+      node => node.props.accessibilityRole === 'tablist',
+    ),
+  ).toHaveLength(0);
   await ReactTestRenderer.act(async () => intermediate.unmount());
 
   mockViewportWidth = 1024;
@@ -1560,15 +1579,8 @@ test('removes translation and shortens fades when reduced motion is enabled', as
   const stage = renderer.root.find(
     node => node.props.accessibilityLabel === 'Home stage',
   );
-  const tablist = renderer.root.find(
-    node => node.props.accessibilityRole === 'tablist',
-  );
   expect(
     stage.props.style[1].transform[0].translateY.setValue,
-  ).toHaveBeenCalledWith(0);
-  expect(
-    tablist.props.style.find((style: {transform?: unknown}) => style?.transform)
-      .transform[0].translateY.setValue,
   ).toHaveBeenCalledWith(0);
 });
 
