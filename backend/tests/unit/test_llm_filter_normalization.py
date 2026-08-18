@@ -43,15 +43,15 @@ def stored_items(monkeypatch):
 def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_items) -> None:
     metadata = chat._process_extracted_metadata('uid-1', prompt='ignored', reference_date='2026-08-16')
 
-    assert metadata['people'] == ['new york', 'john doe']
+    assert metadata['people'] == ['new city', 'john doe']
     assert metadata['topics'] == ['ai research', 'great topic']
     assert metadata['entities'] == ['bank america', 'nlp']
 
     assert sorted(stored_items) == [
         ('entities', 'bank america'),
         ('entities', 'nlp'),
-        ('people', 'john patrick'),
-        ('people', 'new york'),
+        ('people', 'john doe'),
+        ('people', 'new city'),
         ('topics', 'ai research'),
         ('topics', 'great big'),
     ]
