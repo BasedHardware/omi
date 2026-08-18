@@ -227,20 +227,29 @@ class TestSendAudioBytesDeveloperWebhook:
         webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_lock_acquisition_waits_for_webhook_semaphore(self):
-        semaphore_entered = asyncio.Event()
-        allow_semaphore = asyncio.Event()
+    async def test_retry_backoff_releases_webhook_semaphore(self):
+        first_post_started = asyncio.Event()
+        allow_first_post_to_finish = asyncio.Event()
         mock_response = MagicMock(status_code=200)
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.post = AsyncMock()
+
+        async def post(*_args, **_kwargs):
+            if mock_client.post.call_count == 1:
+                first_post_started.set()
+                await allow_first_post_to_finish.wait()
+                raise RuntimeError('retry')
+            return mock_response
+
+        mock_client.post.side_effect = post
 
         @asynccontextmanager
-        async def delayed_semaphore():
-            semaphore_entered.set()
-            await allow_semaphore.wait()
+        async def tracked_semaphore():
             yield
 
-        with patch.object(webhooks_module, "get_webhook_semaphore", return_value=delayed_semaphore()), patch.object(
+        with patch.object(
+            webhooks_module, "get_webhook_semaphore", side_effect=lambda: tracked_semaphore()
+        ), patch.object(
             webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
         ) as acquire_lock, patch.object(
             webhooks_module,
@@ -250,12 +259,12 @@ class TestSendAudioBytesDeveloperWebhook:
             webhooks_module, "get_webhook_client", return_value=mock_client
         ):
             delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100)))
-            await semaphore_entered.wait()
-            acquire_lock.assert_not_called()
-            allow_semaphore.set()
+            await first_post_started.wait()
+            acquire_lock.assert_called_once()
+            allow_first_post_to_finish.set()
             await delivery
 
-        acquire_lock.assert_called_once()
+        assert mock_client.post.call_count == 2
 
     @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):

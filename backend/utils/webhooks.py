@@ -349,49 +349,48 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         logger.info(f'send_audio_bytes_developer_webhook: circuit breaker open for {webhook_url[:80]}')
         return
 
-    async with get_webhook_semaphore():
-        lock_token = await run_blocking(
-            db_executor,
-            redis_db.try_acquire_audio_bytes_webhook_lock,
-            uid,
-            _audio_bytes_webhook_lock_ttl(retry_delays),
-        )
-        if not lock_token:
-            return
+    lock_token = await run_blocking(
+        db_executor,
+        redis_db.try_acquire_audio_bytes_webhook_lock,
+        uid,
+        _audio_bytes_webhook_lock_ttl(retry_delays),
+    )
+    if not lock_token:
+        cb.release_probe()
+        return
 
-        try:
-            max_bytes = sample_rate * 2 * configured_seconds
-            response = await _post_dev_webhook(
-                'send_audio_bytes_developer_webhook',
-                webhook_url,
-                retry_delays=retry_delays,
-                acquire_semaphore=False,
-                content=bytes(data[:max_bytes]),
-                headers={'Content-Type': 'application/octet-stream'},
-            )
-            if response.status_code >= 200 and response.status_code < 300:
-                cb.record_success()
-                await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.audio_bytes)
-            else:
-                cb.record_failure()
-                should_disable = await run_blocking(
-                    db_executor,
-                    record_dev_webhook_failure,
-                    uid,
-                    WebhookType.audio_bytes,
-                    response.status_code,
-                    f'HTTP {response.status_code}',
-                )
-                await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
-        except Exception as e:
+    try:
+        max_bytes = sample_rate * 2 * configured_seconds
+        response = await _post_dev_webhook(
+            'send_audio_bytes_developer_webhook',
+            webhook_url,
+            retry_delays=retry_delays,
+            content=bytes(data[:max_bytes]),
+            headers={'Content-Type': 'application/octet-stream'},
+        )
+        if response.status_code >= 200 and response.status_code < 300:
+            cb.record_success()
+            await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.audio_bytes)
+        else:
             cb.record_failure()
             should_disable = await run_blocking(
-                db_executor, record_dev_webhook_failure, uid, WebhookType.audio_bytes, 0, type(e).__name__
+                db_executor,
+                record_dev_webhook_failure,
+                uid,
+                WebhookType.audio_bytes,
+                response.status_code,
+                f'HTTP {response.status_code}',
             )
             await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
-            logger.error(f"Error sending audio bytes to developer webhook: {e}")
-        finally:
-            await run_blocking(db_executor, redis_db.release_audio_bytes_webhook_lock, uid, lock_token)
+    except Exception as e:
+        cb.record_failure()
+        should_disable = await run_blocking(
+            db_executor, record_dev_webhook_failure, uid, WebhookType.audio_bytes, 0, type(e).__name__
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
+        logger.error(f"Error sending audio bytes to developer webhook: {e}")
+    finally:
+        await run_blocking(db_executor, redis_db.release_audio_bytes_webhook_lock, uid, lock_token)
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
