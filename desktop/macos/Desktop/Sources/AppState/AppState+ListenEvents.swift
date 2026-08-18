@@ -453,7 +453,7 @@ extension AppState {
       // BYOK users must never be paywalled. The backend exempts them, but a
       // heartbeat/Firestore lag can briefly let this event slip through right
       // after activation — ignore it so we don't kill a BYOK user's capture.
-      if APIKeyService.isByokActive {
+      if APIKeyService.selectedBYOKLLMProvider != nil {
         log("Paywall: ignoring freemium threshold — BYOK active locally")
         if isPaywalled { isPaywalled = false }
         break

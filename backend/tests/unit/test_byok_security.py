@@ -667,6 +667,7 @@ class TestBYOKSubscriptionEntitlements:
         subscription = Subscription(plan=PlanType.basic)
         byok_key = MagicMock(return_value=None)
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'has_validated_byok_keys', lambda: False)
         monkeypatch.setattr(users, 'get_byok_key', byok_key)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
@@ -700,7 +701,84 @@ class TestBYOKSubscriptionEntitlements:
 
         assert response.subscription.plan == PlanType.basic
         assert response.transcription_seconds_limit == 37
-        byok_key.assert_called_once_with('deepgram')
+        byok_key.assert_not_called()
+
+    def test_validated_deepgram_byok_gets_unlimited_subscription(self, monkeypatch):
+        from models.users import PlanType
+        from routers import users
+
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'has_validated_byok_keys', lambda: True)
+        monkeypatch.setattr(users, 'get_byok_key', lambda provider: 'dg-key' if provider == 'deepgram' else None)
+
+        response = users.get_user_subscription_endpoint(uid='validated-byok-user')
+
+        assert response.subscription.plan == PlanType.unlimited
+        assert response.subscription.features == ['byok']
+
+
+class TestBYOKMiddlewareValidation:
+    @staticmethod
+    def _request(headers):
+        from starlette.requests import Request
+
+        return Request(
+            {
+                'type': 'http',
+                'method': 'GET',
+                'path': '/v1/test',
+                'headers': [(key.lower().encode(), value.encode()) for key, value in headers.items()],
+                'query_string': b'',
+                'scheme': 'http',
+                'server': ('testserver', 80),
+                'client': ('testclient', 1234),
+                'http_version': '1.1',
+            }
+        )
+
+    def test_validated_keys_survive_async_middleware_boundary(self, monkeypatch):
+        from utils.byok import BYOKMiddleware, get_byok_keys, has_validated_byok_keys
+
+        async def run_blocking(_executor, function, *args):
+            if function.__name__ == 'verify_token':
+                return 'middleware-user'
+            if function.__name__ == '_validated_byok_keys':
+                return args[1], None
+            return function(*args)
+
+        monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
+        middleware = BYOKMiddleware(MagicMock())
+        request = self._request({'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-valid'})
+
+        async def call_next(_request):
+            assert has_validated_byok_keys()
+            assert get_byok_keys() == {'openai': 'sk-valid'}
+            return 'ok'
+
+        assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'ok'
+
+    def test_mismatched_keys_are_rejected_before_route(self, monkeypatch):
+        from utils.byok import BYOKMiddleware
+
+        async def run_blocking(_executor, function, *args):
+            if function.__name__ == 'verify_token':
+                return 'middleware-user'
+            return {}, 'BYOK key fingerprint mismatch for provider: openai'
+
+        monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
+        middleware = BYOKMiddleware(MagicMock())
+        request = self._request({'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'})
+        called = False
+
+        async def call_next(_request):
+            nonlocal called
+            called = True
+            return 'unreachable'
+
+        response = __import__('asyncio').run(middleware.dispatch(request, call_next))
+
+        assert response.status_code == 403
+        assert not called
 
 
 # ---------------------------------------------------------------------------
