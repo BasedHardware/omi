@@ -14,8 +14,8 @@ SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
 # `github.event.inputs.*` is the workflow_dispatch payload; `inputs.*` is the
 # same operator selection in workflow_dispatch/workflow_call context. Both name
 # a ref the operator chose, which is not what the run SHA describes.
-OPERATOR_REF_CHECKOUT_RE = re.compile(r"ref:\s*\$\{\{\s*(?:github\.event\.)?inputs\.")
-WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(r"ref:\s*\$\{\{\s*github\.event\.inputs\.")
+OPERATOR_REF_CHECKOUT_RE = re.compile(r"ref:\s*(?:[|>][-+]?\s*)?\$\{\{\s*(?:github\.event\.)?inputs\.")
+WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(r"ref:\s*(?:[|>][-+]?\s*)?\$\{\{\s*github\.event\.inputs\.")
 RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
 JOB_START_RE = re.compile(r"^ {2}[A-Za-z_][\w-]*:\s*(?:#.*)?$")
 TRAILING_COMMENT_RE = re.compile(r"\s+#.*$")
@@ -85,7 +85,51 @@ def _action_paths(root: Path) -> list[Path]:
     actions = root / ".github" / "actions"
     if not actions.is_dir():
         return []
-    return sorted(actions.glob("*/action.y*ml"))
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(actions):
+        dirnames[:] = [d for d in dirnames if d not in PRUNED_DIR_NAMES]
+        for filename in filenames:
+            if filename in {"action.yml", "action.yaml"}:
+                found.append(Path(dirpath) / filename)
+    return sorted(found)
+
+
+def _join_folded_scalars(lines: list[str]) -> list[str]:
+    joined = list(lines)
+    for index, line in enumerate(lines):
+        if not re.search(r"^\s*ref:\s*[|>]", line):
+            continue
+        base_indent = len(line) - len(line.lstrip())
+        parts: list[str] = []
+        continuation = index + 1
+        while continuation < len(lines):
+            candidate = lines[continuation]
+            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= base_indent:
+                break
+            parts.append(candidate.strip())
+            continuation += 1
+        joined[index] = f"{line} {' '.join(parts)}"
+    return joined
+
+
+def _property_blocks(lines: list[str], property_name: str) -> list[tuple[int, str]]:
+    blocks: list[tuple[int, str]] = []
+    property_re = re.compile(rf"^(\s*){re.escape(property_name)}:\s*[|>]" )
+    for index, line in enumerate(lines):
+        match = property_re.match(line)
+        if not match:
+            continue
+        base_indent = len(match.group(1))
+        parts = [line]
+        continuation = index + 1
+        while continuation < len(lines):
+            candidate = lines[continuation]
+            if candidate.strip() and len(candidate) - len(candidate.lstrip()) <= base_indent:
+                break
+            parts.append(candidate)
+            continuation += 1
+        blocks.append((index + 1, "\n".join(parts)))
+    return blocks
 
 
 def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) -> set[int]:
@@ -94,7 +138,7 @@ def _operator_ref_scopes(text: str, ref_re: re.Pattern[str], is_workflow: bool) 
     A job owns one workspace, so provenance is a per-job property: a sibling job
     that checks out the default ref may legitimately use the run SHA.
     """
-    lines = text.splitlines()
+    lines = _join_folded_scalars(text.splitlines())
     if not is_workflow:
         return set(range(1, len(lines) + 1)) if ref_re.search(text) else set()
 
@@ -141,7 +185,18 @@ def validate(root: Path) -> list[str]:
         # not by an operator, so only the dispatch payload counts there.
         ref_re = OPERATOR_REF_CHECKOUT_RE if is_workflow else WORKFLOW_DISPATCH_REF_CHECKOUT_RE
         operator_ref_scopes = _operator_ref_scopes(text, ref_re, is_workflow)
+        for line_number, block in _property_blocks(text.splitlines(), "key"):
+            if "flutter-buildrunner" in block and "github.run_id" in block:
+                errors.append(
+                    f"{rel}:{line_number}: flutter-buildrunner cache key must not "
+                    "include github.run_id (exact key never hits; parallel jobs race)"
+                )
         for line_number, line in enumerate(text.splitlines(), start=1):
+            if FLUTTER_CACHE_KEY_RE.search(line) and "github.run_id" in line:
+                errors.append(
+                    f"{rel}:{line_number}: flutter-buildrunner cache key must not "
+                    "include github.run_id (exact key never hits; parallel jobs race)"
+                )
             code = TRAILING_COMMENT_RE.sub("", line)
             if line_number in operator_ref_scopes and RUN_SHA_RE.search(code) and not code.lstrip().startswith("#"):
                 errors.append(
@@ -168,12 +223,6 @@ def validate(root: Path) -> list[str]:
                         f"{rel}:{line_number}: third-party action {uses!r} must not "
                         "track a moving branch; pin a full commit SHA"
                     )
-
-            if FLUTTER_CACHE_KEY_RE.search(line) and "github.run_id" in line:
-                errors.append(
-                    f"{rel}:{line_number}: flutter-buildrunner cache key must not "
-                    "include github.run_id (exact key never hits; parallel jobs race)"
-                )
 
     return errors
 

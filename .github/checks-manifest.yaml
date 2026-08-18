@@ -302,7 +302,7 @@ checks:
     reason: "runner cost-policy fixtures must keep rejecting the paid larger-runner label"
   - id: github-actions-hygiene
     command: ["python3", ".github/scripts/check_actions_hygiene.py"]
-    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/actions/**/action.yml", ".github/actions/**/action.yaml", ".github/scripts/check_actions_hygiene.py", ".github/scripts/test_check_actions_hygiene.py", ".github/checks-manifest.yaml", "backend/.github/workflows/**"]
+    triggers: [".github/workflows/**/*.yml", ".github/workflows/**/*.yaml", ".github/actions/**/action.yml", ".github/actions/**/action.yaml", ".github/scripts/check_actions_hygiene.py", ".github/scripts/test_check_actions_hygiene.py", ".github/checks-manifest.yaml", "**/.github/workflows/**"]
     lanes: ["local", "ci"]
     reason: "reject mutable third-party action refs, retired Entelligence@latest, nested backend workflow templates, and flutter-buildrunner cache keys that embed github.run_id"
   - id: github-actions-hygiene-fixtures

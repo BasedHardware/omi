@@ -87,6 +87,25 @@ class ActionsHygieneTests(unittest.TestCase):
             self.assertEqual(len(errors), 1)
             self.assertIn("github.run_id", errors[0])
 
+    def test_rejects_flutter_cache_run_id_in_folded_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/mobile.yml",
+                "jobs:\n"
+                "  g:\n"
+                "    steps:\n"
+                "      - uses: actions/cache@v6\n"
+                "        with:\n"
+                "          key: >-\n"
+                "            ${{ runner.os }}-flutter-buildrunner-abc-\n"
+                "            ${{ github.run_id }}\n",
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("github.run_id", errors[0])
+
     def test_rejects_nested_backend_workflows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -172,6 +191,39 @@ class ActionsHygieneTests(unittest.TestCase):
             errors = validate(root)
             self.assertEqual(len(errors), 1)
             self.assertIn("operator-selected", errors[0])
+
+    def test_rejects_run_sha_with_folded_operator_selected_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: >-\n"
+                "            ${{ github.event.inputs.release_tag }}\n"
+                "      - run: echo \"tag=${GITHUB_SHA::7}\"\n",
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_rejects_nested_custom_action_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(root, ".github/workflows/noop.yml", "name: noop\n")
+            write(
+                root,
+                ".github/actions/deploy/release/action.yaml",
+                "runs:\n"
+                "  using: composite\n"
+                "  steps:\n"
+                "    - uses: some-org/tool@main\n",
+            )
+            self.assertTrue(any("@main" in e for e in validate(root)))
 
     def test_accepts_composite_action_inputs_ref(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
