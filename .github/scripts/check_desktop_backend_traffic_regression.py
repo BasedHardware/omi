@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--serving-release-sha",
         default="",
-        help="Release SHA recorded on the revision serving 100% traffic; empty when unknown.",
+        help="Release SHA recorded on the revision serving 100%% traffic; empty when unknown.",
     )
     args = parser.parse_args(argv)
 
