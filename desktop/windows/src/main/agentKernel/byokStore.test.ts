@@ -42,6 +42,13 @@ describe('ByokKeyStore', () => {
     expect(store.getCodexKey()).toBeNull()
   })
 
+  it('migrates a legacy OpenAI Codex key without removing the BYOK slot', () => {
+    store.setKey('openai', 'sk-legacy-codex')
+    expect(store.getCodexKey()).toBe('sk-legacy-codex')
+    store.clearKey('openai')
+    expect(store.getCodexKey()).toBe('sk-legacy-codex')
+  })
+
   it('getAllKeys returns every stored provider', () => {
     store.setKey('openai', 'sk-openai')
     store.setKey('anthropic', 'sk-ant')
@@ -70,11 +77,13 @@ describe('ByokKeyStore', () => {
     expect(store.getKey('anthropic')).toBe('sk-ant')
   })
 
-  it('clearAll removes everything', () => {
+  it('clearAll removes BYOK keys while preserving the Codex key', () => {
     store.setKey('openai', 'sk-openai')
     store.setKey('anthropic', 'sk-ant')
+    store.setCodexKey('sk-codex')
     store.clearAll()
     expect(store.getAllKeys()).toEqual({})
+    expect(store.getCodexKey()).toBe('sk-codex')
   })
 
   it('after sign-out (clearAll on a full set) getAllKeys is empty AND isActive is false', () => {

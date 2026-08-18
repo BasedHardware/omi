@@ -109,6 +109,14 @@ BYOK_HEADERS = {
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
 _byok_uid_ctx: ContextVar[Optional[str]] = ContextVar('byok_uid', default=None)
 _byok_validated_ctx: ContextVar[bool] = ContextVar('byok_validated', default=False)
+_BYOK_RECOVERY_PATHS = frozenset(
+    {
+        '/v1/payments/available-plans',
+        '/v1/payments/overage-info',
+        '/v1/users/me/byok-active',
+        '/v1/users/me/subscription',
+    }
+)
 
 
 def get_byok_keys() -> Dict[str, str]:
@@ -199,8 +207,11 @@ class BYOKMiddleware(BaseHTTPMiddleware):
                         uid = await run_blocking(critical_executor, verify_token, parts[1])
                         validated_keys, error = await run_blocking(critical_executor, _validated_byok_keys, uid, keys)
                         if error:
-                            return JSONResponse(status_code=403, content={'detail': error})
-                        set_validated_byok_keys(validated_keys, uid)
+                            if request.url.path not in _BYOK_RECOVERY_PATHS:
+                                return JSONResponse(status_code=403, content={'detail': error})
+                            set_validated_byok_keys({}, uid)
+                        else:
+                            set_validated_byok_keys(validated_keys, uid)
                     except Exception:
                         pass
             return await call_next(request)

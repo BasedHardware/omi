@@ -59,11 +59,17 @@ export class ByokKeyStore {
   }
 
   getCodexKey(): string | null {
-    const enc = this.readFile().codex
+    const stored = this.readFile()
+    const enc = stored.codex ?? stored.openai
     if (!enc) return null
     try {
       this.requireEncryption()
-      return safeStorage.decryptString(Buffer.from(enc, 'base64'))
+      const key = safeStorage.decryptString(Buffer.from(enc, 'base64'))
+      if (!stored.codex && stored.openai) {
+        stored.codex = stored.openai
+        this.writeFile(stored)
+      }
+      return key
     } catch {
       return null
     }
@@ -132,7 +138,10 @@ export class ByokKeyStore {
   /** Remove all stored keys (deletes the backing file). */
   clearAll(): void {
     try {
-      rmSync(this.filePath, { force: true })
+      const data = this.readFile()
+      for (const provider of BYOK_PROVIDERS) delete data[provider]
+      if (Object.keys(data).length === 0) rmSync(this.filePath, { force: true })
+      else this.writeFile(data)
     } catch {
       /* best-effort */
     }

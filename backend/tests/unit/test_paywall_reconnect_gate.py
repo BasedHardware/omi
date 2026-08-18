@@ -154,8 +154,8 @@ class TestCacheInvalidationBehavioral:
         assert 'trial_paywall:expired:' in fn_body
         delete_count = fn_body.count('delete_generic_cache')
         assert (
-            delete_count == 1
-        ), f"clear_trial_paywall_cache should call delete_generic_cache exactly once, got {delete_count}"
+            delete_count == 2
+        ), f"clear_trial_paywall_cache should clear general and provider-specific keys, got {delete_count}"
 
 
 class TestPlatformFiltering:
@@ -173,7 +173,7 @@ class TestPlatformFiltering:
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
         filter_pos = fn_body.find('platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS')
-        expiry_pos = fn_body.find('_is_trial_expired_cached(uid')
+        expiry_pos = fn_body.find('_is_trial_expired_cached')
         assert filter_pos != -1, "is_trial_paywalled must filter non-desktop platforms"
         assert expiry_pos != -1, "is_trial_paywalled must call the cached expiry lookup"
         assert filter_pos < expiry_pos, "platform filtering must happen before the expiry lookup"
@@ -183,9 +183,7 @@ class TestPlatformFiltering:
         fn_start = src.find('def is_trial_paywalled(')
         assert fn_start != -1
         fn_body = src[fn_start : src.find('\ndef ', fn_start + 1)]
-        assert (
-            'return _is_trial_expired_cached(uid' in fn_body
-        ), "desktop paywall decisions must use the cached expiry lookup"
+        assert '_is_trial_expired_cached' in fn_body, "desktop paywall decisions must use the cached expiry lookup"
 
     def test_is_trial_paywalled_uses_lower_for_case_insensitivity(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)

@@ -140,11 +140,11 @@ def test_vertex_embedding_translation_round_trip():
 
 @pytest.mark.asyncio
 async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
-    async def run_blocking(_, function, *args):
-        return function(*args)
+    async def run_blocking(_, function, *args, **kwargs):
+        return function(*args, **kwargs)
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform: True)
+    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform, **kwargs: True)
 
     with pytest.raises(HTTPException) as error:
         await desktop_proxy._authorized_desktop_user("user")
