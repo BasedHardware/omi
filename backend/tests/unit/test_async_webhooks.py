@@ -6,6 +6,7 @@ use httpx.AsyncClient instead of blocking requests.post.
 
 import ast
 import asyncio
+from contextlib import asynccontextmanager
 import os
 import re
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -213,7 +214,7 @@ class TestSendAudioBytesDeveloperWebhook:
         webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "first-token")
 
     @pytest.mark.asyncio
-    async def test_invalid_url_releases_lock_without_delivery(self):
+    async def test_invalid_url_skips_lock_and_delivery(self):
         mock_client = AsyncMock()
 
         with patch.object(
@@ -222,7 +223,39 @@ class TestSendAudioBytesDeveloperWebhook:
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
 
         mock_client.post.assert_not_called()
-        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
+        webhooks_module.redis_db.try_acquire_audio_bytes_webhook_lock.assert_not_called()
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_lock_acquisition_waits_for_webhook_semaphore(self):
+        semaphore_entered = asyncio.Event()
+        allow_semaphore = asyncio.Event()
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        @asynccontextmanager
+        async def delayed_semaphore():
+            semaphore_entered.set()
+            await allow_semaphore.wait()
+            yield
+
+        with patch.object(webhooks_module, "get_webhook_semaphore", return_value=delayed_semaphore()), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
+        ) as acquire_lock, patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=MagicMock(allow_request=MagicMock(return_value=True)),
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100)))
+            await semaphore_entered.wait()
+            acquire_lock.assert_not_called()
+            allow_semaphore.set()
+            await delivery
+
+        acquire_lock.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):
