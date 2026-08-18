@@ -588,11 +588,16 @@ def get_memories(
             # First page must succeed whenever the legacy offset read can serve
             # it. The cursor path 503s on a missing cursor secret
             # ("Memory cursor unavailable"); the canonical keyset scan wraps any
-            # underlying failure as "Canonical memory unavailable". Both fall
-            # back to read(); unrelated errors (4xx, other 503s) propagate.
+            # underlying failure as "Canonical memory unavailable"; the
+            # historical keyset scan wraps its own as "Historical memory
+            # unavailable". The keyset scans order by (updated_at DESC,
+            # __name__) and so fail while that composite index is building,
+            # which the offset read's single-field order does not — so all three
+            # fall back to read(); unrelated errors (4xx, other 503s) propagate.
             if exc.status_code != 503 or exc.detail not in (
                 "Memory cursor unavailable",
                 "Canonical memory unavailable",
+                "Historical memory unavailable",
             ):
                 raise
         else:
