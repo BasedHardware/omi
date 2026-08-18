@@ -309,7 +309,7 @@ describe("main", () => {
 
 describe("D1 migration manifest", () => {
   test("covers the migration files and pins their exact bytes", () => {
-    const files = ["0001_tasks.sql", "0002_chat.sql"];
+    const files = ["0001_tasks.sql", "0002_chat.sql", "0003_attachments.sql"];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 
     for (const migration of D1_MIGRATIONS) {

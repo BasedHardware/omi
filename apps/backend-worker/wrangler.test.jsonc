@@ -14,17 +14,51 @@
     "STAGING_CHAT_LIMIT": 10,
     "OBSERVABILITY_SINK_MODE": "cloudflare_only",
     "OPENROUTER_GATEWAY_ENABLED": "false",
-    "OPENROUTER_MODEL": ""
+    "OPENROUTER_MODEL": "",
+    "R2_ACCOUNT_ID": "test-r2-account",
+    "R2_BUCKET_NAME": "omi-v5-backend-test-attachments",
+    "R2_SIGNED_URL_TTL_SECONDS": "900"
   },
   "durable_objects": {
-    "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountBackend" }]
+    "bindings": [
+      {
+        "name": "ACCOUNTS",
+        "class_name": "AccountBackend"
+      }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AccountBackend"]
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "omi-v5-backend-test-tasks",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "omi-v5-backend-test-attachments"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "ATTACHMENT_INGEST",
+        "queue": "omi-v5-test-attachment-ingest"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "omi-v5-test-attachment-ingest",
+        "max_batch_size": 10,
+        "max_retries": 5
+      }
+    ]
+  }
 }

@@ -14,15 +14,28 @@
     "STAGING_CHAT_LIMIT": 1000,
     "OBSERVABILITY_SINK_MODE": "cloudflare_only",
     "OPENROUTER_GATEWAY_ENABLED": "false",
-    "OPENROUTER_MODEL": "openai/gpt-5.6-luna"
+    "OPENROUTER_MODEL": "openai/gpt-5.6-luna",
+    "R2_ACCOUNT_ID": "",
+    "R2_BUCKET_NAME": "omi-v5-backend-staging-attachments",
+    "R2_SIGNED_URL_TTL_SECONDS": "900"
   },
   "ai": {
     "binding": "AI"
   },
   "durable_objects": {
-    "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountBackend" }]
+    "bindings": [
+      {
+        "name": "ACCOUNTS",
+        "class_name": "AccountBackend"
+      }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountBackend"] }],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["AccountBackend"]
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
@@ -33,7 +46,33 @@
   ],
   "observability": {
     "enabled": true,
-    "logs": { "head_sampling_rate": 1 },
-    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  },
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "omi-v5-backend-staging-attachments"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "ATTACHMENT_INGEST",
+        "queue": "omi-v5-attachment-ingest"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "omi-v5-attachment-ingest",
+        "max_batch_size": 10,
+        "max_retries": 5
+      }
+    ]
   }
 }

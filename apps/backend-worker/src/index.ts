@@ -17,12 +17,35 @@ import {
   requestFailedEvent,
   type ObservabilityEnv,
 } from "./observability";
+import {
+  ATTACHMENT_CAPABILITIES,
+  completeAttachment,
+  consumeAttachmentIngest,
+  makeR2UploadUrlSigner,
+  parseAttachmentStageRequest,
+  parseSignedUploadConfig,
+  stageAttachment,
+  type AttachmentIngestMessage,
+} from "./attachments";
 import { parseTaskLimit, readTasks } from "./tasks";
 import { backendError, isChatCreate, json } from "./wire";
 
-type WorkerEnv = Omit<Env, "DB" | "OBSERVABILITY_SINK_MODE"> &
+type WorkerEnv = Omit<
+  Env,
+  "DB" | "OBSERVABILITY_SINK_MODE" | "ATTACHMENTS" | "ATTACHMENT_INGEST"
+> &
   GatewaySecretEnv &
-  ObservabilityEnv & { API_TOKEN: string; DB?: D1Database };
+  ObservabilityEnv & {
+    API_TOKEN: string;
+    DB?: D1Database;
+    ATTACHMENTS?: R2Bucket;
+    ATTACHMENT_INGEST?: Queue<AttachmentIngestMessage>;
+    R2_ACCOUNT_ID?: string;
+    R2_BUCKET_NAME?: string;
+    R2_ACCESS_KEY_ID?: string;
+    R2_SECRET_ACCESS_KEY?: string;
+    R2_SIGNED_URL_TTL_SECONDS?: string | number;
+  };
 type Variables = { accountId: string; requestId: string };
 
 type ObservableContext = {
@@ -224,6 +247,79 @@ app.delete("/v1/chat-generations/:id", async (context) => {
     : json({ cancellation: { state: "accepted" } }, 202);
 });
 
+app.post("/v1/chat-attachments", async (context) => {
+  const r2 = context.env.ATTACHMENTS;
+  if (r2 === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const parsed = await readBoundedJson(context.req.raw, 65_536);
+  if (parsed.kind === "too_large")
+    return backendError("attachment_too_large", "edit_request", 413);
+  if (parsed.kind === "invalid")
+    return backendError("bad_request", "edit_request", 400);
+  const request = parseAttachmentStageRequest(parsed.value);
+  if (request === null)
+    return backendError("attachment_rejected", "edit_request", 422);
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const signedConfig = parseSignedUploadConfig(context.env);
+  if (signedConfig === null)
+    return backendError("service_unavailable", "retry", 503, true);
+  const signer = makeR2UploadUrlSigner(signedConfig);
+  const result = await stageAttachment(
+    db,
+    context.get("accountId"),
+    request,
+    ATTACHMENT_CAPABILITIES,
+    "attachments",
+    signer
+  );
+  if (result.kind === "conflict")
+    return backendError("attachment_rejected", "edit_request", 409);
+  return json(result.response, result.created ? 201 : 200);
+});
+
+app.post("/v1/chat-attachments/:id/complete", async (context) => {
+  const r2 = context.env.ATTACHMENTS;
+  const ingest = context.env.ATTACHMENT_INGEST;
+  const db = context.env.DB;
+  if (r2 === undefined || ingest === undefined || db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const attachmentId = context.req.param("id");
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      attachmentId
+    )
+  )
+    return backendError("bad_request", "edit_request", 400);
+  const outcome = await completeAttachment(
+    db,
+    r2,
+    ingest,
+    context.get("accountId"),
+    attachmentId,
+    Date.now()
+  );
+  switch (outcome.kind) {
+    case "accepted":
+      return json({ attachment: outcome.attachment }, 202);
+    case "queued":
+      return json({ attachment: outcome.attachment }, 202);
+    case "ingested":
+      return json({ attachment: outcome.attachment }, 200);
+    case "not_found":
+      return backendError("not_found", "refresh_history", 404);
+    case "expired":
+      return backendError("attachment_expired", "edit_request", 410);
+    case "absent":
+      return backendError("attachment_not_uploaded", "retry", 422, true);
+    case "mismatch":
+      return backendError("attachment_metadata_mismatch", "edit_request", 422);
+    case "conflict":
+      return backendError("attachment_rejected", "edit_request", 409);
+  }
+});
+
 app.get("/v1/conversations", () => json([]));
 app.get("/v1/memories", () => json(emptyPage("recall-completeness-v1")));
 app.get("/v1/tasks", async (context) => {
@@ -258,7 +354,36 @@ app.onError((error, context) => {
 
 const handler = {
   fetch: app.fetch,
-} satisfies ExportedHandler<WorkerEnv>;
+  queue: async (batch, env) => {
+    const db = env.DB;
+    const r2 = env.ATTACHMENTS;
+    if (db === undefined || r2 === undefined) {
+      batch.retryAll();
+      return;
+    }
+    await Promise.all(
+      batch.messages.map(async (message) => {
+        try {
+          await consumeAttachmentIngest(
+            db,
+            r2,
+            message.body as AttachmentIngestMessage,
+            Date.now()
+          );
+          message.ack();
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: "attachment_ingest_failed",
+              name: error instanceof Error ? error.name : "unknown",
+            })
+          );
+          message.retry();
+        }
+      })
+    );
+  },
+} satisfies ExportedHandler<WorkerEnv, AttachmentIngestMessage>;
 
 export { AccountBackend };
 export {
