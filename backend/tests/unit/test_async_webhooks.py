@@ -436,6 +436,11 @@ class TestSendAudioBytesDeveloperWebhook:
             with pytest.raises(asyncio.CancelledError):
                 await delivery
 
+            for _ in range(20):
+                if webhooks_module.redis_db.release_audio_bytes_webhook_lock.called:
+                    break
+                await asyncio.sleep(0.01)
+
         webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
 
     @pytest.mark.asyncio
@@ -458,6 +463,11 @@ class TestSendAudioBytesDeveloperWebhook:
             delivery.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await delivery
+
+            for _ in range(20):
+                if webhooks_module.redis_db.release_audio_bytes_webhook_lock.called:
+                    break
+                await asyncio.sleep(0.01)
 
         webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
 

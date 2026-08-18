@@ -42,6 +42,22 @@ class _WebhookAdmissionTimeout(Exception):
     pass
 
 
+def _release_audio_lock_after_acquisition(uid: str, future) -> None:
+    if future.cancelled():
+        return
+    try:
+        lock_token = future.result()
+    except Exception as exc:
+        logger.warning(f'Audio webhook lock acquisition failed after cancellation: {type(exc).__name__}')
+        return
+    if not lock_token:
+        return
+    try:
+        redis_db.release_audio_bytes_webhook_lock(uid, lock_token)
+    except Exception as exc:
+        logger.warning(f'Audio webhook late lock release failed: {type(exc).__name__}')
+
+
 def _get_dev_webhook_retry_delays() -> tuple[float, ...]:
     raw_delays = os.getenv('DEV_WEBHOOK_RETRY_DELAYS')
     if raw_delays is None:
@@ -400,23 +416,17 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
 
     async def acquire_audio_lock():
         nonlocal lock_token
-        acquisition = asyncio.wrap_future(
-            submit_with_context(
-                db_executor,
-                redis_db.try_acquire_audio_bytes_webhook_lock,
-                uid,
-                _audio_bytes_webhook_lock_ttl(retry_delays),
-            )
+        acquisition_future = submit_with_context(
+            db_executor,
+            redis_db.try_acquire_audio_bytes_webhook_lock,
+            uid,
+            _audio_bytes_webhook_lock_ttl(retry_delays),
         )
+        acquisition = asyncio.wrap_future(acquisition_future)
         try:
             lock_token = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
-            while True:
-                try:
-                    lock_token = await asyncio.shield(acquisition)
-                    break
-                except asyncio.CancelledError:
-                    continue
+            acquisition_future.add_done_callback(lambda future: _release_audio_lock_after_acquisition(uid, future))
             raise
         if not lock_token:
             raise _WebhookLockUnavailable()

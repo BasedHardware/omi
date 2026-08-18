@@ -62,6 +62,12 @@ def extend_bounded(buffer: bytearray, data: bytes, queue_name: str, byte_budget:
     return True
 
 
+def take_bounded_chunk(buffer: bytearray, size: int) -> bytes:
+    chunk = bytes(buffer[:size])
+    del buffer[:size]
+    return chunk
+
+
 def bound_private_pending(pending: Dict[str, Dict[str, Any]], byte_budget: ByteBudget) -> None:
     if len(pending) < PRIVATE_CLOUD_PENDING_MAX_CONVERSATIONS:
         return
