@@ -327,7 +327,7 @@ require_flutter_generated_prerequisites() {
     echo "      Run: cd app && flutter pub get" >&2
     # make setup provisions the backend venv only, so a contributor who never
     # touches app/ can reach this with no Flutter toolchain at all -- and the
-    # selector wakes this lane for any ROUTING_INPUTS edit. CI still runs it.
+    # selector wakes this lane for generator inputs and workflow definitions. CI still runs it.
     echo "      Deliberate hatch: PRE_PUSH_SKIP_FLUTTER_GENERATED=1 git push" >&2
     return 1
   fi
