@@ -12,11 +12,11 @@ class DeviceUtils {
     switch (device.type) {
       case DeviceType.omi:
         final identity = '${device.modelNumber} ${device.name}'.toUpperCase();
+        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_cv1';
+        if (identity.contains('FRIEND')) return 'friend_devkit';
         if (isOmiDevKit(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_devkit';
         if (identity.contains('GLASS')) return 'omi_glass';
         if (identity.contains('NEO')) return 'omi_neo';
-        if (identity.contains('FRIEND')) return 'friend_devkit';
-        if (isOmiCv1(modelNumber: device.modelNumber, deviceName: device.name)) return 'omi_cv1';
         return 'omi_unknown';
       case DeviceType.openglass:
         return 'omi_glass';

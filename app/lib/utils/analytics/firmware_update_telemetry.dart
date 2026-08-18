@@ -33,6 +33,11 @@ class FirmwareUpdateTelemetry {
         'protocol': protocol,
         'from_version': _fromVersion.isEmpty ? 'unknown' : _fromVersion,
         if (toVersion != null) 'to_version': toVersion,
-        if (failureClass != null) 'failure_class': failureClass,
+        if (failureClass != null) 'failure_class': _normalizeFailureClass(failureClass),
+      };
+
+  static String _normalizeFailureClass(String failureClass) => switch (failureClass) {
+        'firmware_file_missing' || 'native_dfu_error' || 'unknown' => failureClass,
+        _ => 'unknown',
       };
 }
