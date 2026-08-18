@@ -2,8 +2,9 @@
 
 Synthetic-only, local-first benchmark harness to select between **Cloudflare
 Vectorize** and **Cloudflare AI Search** for derived retrieval in
-`apps/backend-worker`. No hosted index is created, no credentials are used, no
-production-like content is loaded, and no deploy or network calls are made.
+`apps/backend-worker`. The harness itself is local-only: it does not require
+credentials or make network calls. Hosted smoke tests, when deliberately run,
+are synthetic-only and are documented below.
 
 ## Scope
 
@@ -55,6 +56,25 @@ Cloudflare staging run against synthetic staging resources:
 4. **Index lag p95** is tolerable for the derived-content freshness SLA.
 5. **Operational fit:** index/metadata limits, per-account isolation primitives,
    delete/tombstone semantics, and cost fit the Worker's deployment model.
+
+## Hosted Vectorize smoke evidence
+
+A deliberately empty, synthetic-only staging index named
+`omi-v5-retrieval-benchmark-staging` was created with the
+`@cf/baai/bge-small-en-v1.5` preset (384 dimensions, cosine), then exercised
+with two synthetic records only. `account_id` was enabled as a string metadata
+index.
+
+- A filtered alpha-scope nearest-neighbor query returned only
+  `synthetic-alpha-1` with its alpha metadata.
+- The same query filtered to beta returned only `synthetic-beta-1`; no alpha id
+  crossed the account boundary.
+- Both synthetic vectors were deleted. Vectorize reported `vectorCount: 0` once
+  the queued deletion mutation had been processed.
+
+This validates the Vectorize account-filter and eventual-delete mechanics, but
+is **not** a quality or latency benchmark: it uses hand-constructed vectors and
+a two-record corpus. The staging index remains empty; it contains no user data.
 
 ## No winner claimed here
 
