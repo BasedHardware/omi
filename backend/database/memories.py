@@ -180,6 +180,11 @@ def _prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) ->
     return memory_data
 
 
+def prepare_memory_for_read(memory_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+    """Decrypt one historical memory document for non-decorated readers."""
+    return _prepare_memory_for_read(memory_data, uid)
+
+
 # *****************************
 # ********** CRUD *************
 # *****************************

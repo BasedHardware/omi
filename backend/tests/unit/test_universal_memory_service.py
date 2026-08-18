@@ -201,7 +201,7 @@ def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(ser
         assert [record.memory.id for record in records] == ["legacy"]
         return [_historical(service_mod, "legacy", content="legacy-full")]
 
-    monkeypatch.setattr(service.history, "_hydrate_records", hydrate_page_stubs)
+    monkeypatch.setattr(service.history, "hydrate_records", hydrate_page_stubs)
 
     result = service.read("uid-test", limit=10)
     assert {item.id for item in result} == {"same", "legacy"}

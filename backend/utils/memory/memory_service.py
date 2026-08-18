@@ -589,7 +589,7 @@ class HistoricalMemoryAdapter:
             hydrated=False,
         )
 
-    def _hydrate_records(self, uid: str, records: List[HistoricalMemoryRecord]) -> List[HistoricalMemoryRecord]:
+    def hydrate_records(self, uid: str, records: List[HistoricalMemoryRecord]) -> List[HistoricalMemoryRecord]:
         memory_ids = [record.memory.id for record in records if not record.hydrated]
         if not memory_ids:
             return records
@@ -673,7 +673,7 @@ class HistoricalMemoryAdapter:
         page = records[bounded_offset : bounded_offset + bounded_limit]
         if not hydrate or not page:
             return page
-        return self._hydrate_records(uid, page)
+        return self.hydrate_records(uid, page)
 
     def read_scan_page(
         self,
@@ -710,7 +710,7 @@ class HistoricalMemoryAdapter:
             if raw.get('user_review') is False or raw.get('invalid_at') is not None:
                 slots.append((None, scan_cursor))
                 continue
-            decrypted = memories_db._prepare_memory_for_read(raw, uid) or raw
+            decrypted = memories_db.prepare_memory_for_read(raw, uid) or raw
             decrypted = dict(decrypted)
             decrypted['id'] = raw.get('id')
             record = self._adapt(uid, decrypted, include_locked_content=include_locked_content)
@@ -1765,7 +1765,7 @@ class MemoryService:
         page_stub_ids = [memory.id for memory in page if memory.id in stub_ids]
         if not page_stub_ids:
             return page
-        hydrated_records = self.history._hydrate_records(
+        hydrated_records = self.history.hydrate_records(
             uid,
             [
                 HistoricalMemoryRecord(
