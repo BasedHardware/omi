@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 /// How long startup will wait for an id-token refresh before giving up and
 /// continuing unauthenticated. Generous enough not to log out a user on a slow
 /// network, short enough that a stalled refresh cannot hold the first frame.
@@ -22,7 +20,9 @@ const Duration startupAuthTimeout = Duration(seconds: 10);
 ///
 /// Kept in its own library, free of Firebase and generated-env imports, so it is
 /// testable without codegen — the same reason `startup_routing.dart` is separate.
-@visibleForTesting
+///
+/// Not test-only: called from [main] to gate the first frame, and directly by
+/// startup_auth_timeout_test.dart.
 Future<bool> resolveStartupAuth(
   Future<String?> Function() getIdToken, {
   Duration timeout = startupAuthTimeout,
