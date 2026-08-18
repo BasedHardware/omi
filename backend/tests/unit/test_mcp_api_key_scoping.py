@@ -18,6 +18,8 @@ def test_normalize_keeps_requested_scopes_and_drops_unknown_ones():
     assert normalize_mcp_scopes(["memories.read"]) == ["memories.read"]
     assert normalize_mcp_scopes(["memories.read", "not.a.scope"]) == ["memories.read"]
     assert normalize_mcp_scopes(["memories.write", "memories.read"]) == ["memories.read", "memories.write"]
+    assert normalize_mcp_scopes([]) == []
+    assert normalize_mcp_scopes(["not.a.scope"]) == []
 
 
 def test_unmigrated_key_without_recorded_scopes_still_authorizes_with_full_access(monkeypatch):

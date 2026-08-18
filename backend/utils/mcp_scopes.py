@@ -29,4 +29,4 @@ def normalize_mcp_scopes(scopes: Optional[list[Any]]) -> list[str]:
         return sorted(MCP_FULL_ACCESS_SCOPES)
     allowed = set(MCP_FULL_ACCESS_SCOPES)
     resolved = sorted({scope for scope in scopes if isinstance(scope, str) and scope in allowed})
-    return resolved or sorted(MCP_FULL_ACCESS_SCOPES)
+    return resolved
