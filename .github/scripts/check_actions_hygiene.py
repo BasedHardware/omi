@@ -23,9 +23,9 @@ WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(
 RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
 JOB_START_RE = re.compile(r"^ {2}[A-Za-z_][\w-]*:\s*(?:#.*)?$")
 STEP_START_RE = re.compile(r"^(\s*)-\s+")
-CHECKOUT_STEP_RE = re.compile(r"^\s*-\s+uses:\s*['\"]?actions/checkout(?:@|['\"]|\s|$)")
-CHECKOUT_USES_RE = re.compile(r"^\s+uses:\s*['\"]?actions/checkout(?:@|['\"]|\s|$)")
-TRAILING_COMMENT_RE = re.compile(r"\s+#.*$")
+CHECKOUT_STEP_RE = re.compile(r"^\s*-\s+uses:\s*(?:[|>][-+]?\s*)?['\"]?actions/checkout(?:@|['\"]|\s|$)")
+CHECKOUT_USES_RE = re.compile(r"^\s+uses:\s*(?:[|>][-+]?\s*)?['\"]?actions/checkout(?:@|['\"]|\s|$)")
+DOCKER_LATEST_RE = re.compile(r"^docker://[^\s]+:latest$")
 
 # Mutable refs that have already caused (or clearly invite) supply-chain risk.
 FORBIDDEN_USES_SUBSTRINGS = (
@@ -120,7 +120,7 @@ def _action_paths(root: Path) -> list[Path]:
 def _join_folded_scalars(lines: list[str]) -> list[str]:
     joined = list(lines)
     for index, line in enumerate(lines):
-        if not re.search(r"^\s*ref:\s*[|>]", line):
+        if not re.search(r"^\s*(?:ref|uses):\s*[|>]", line):
             continue
         base_indent = len(line) - len(line.lstrip())
         parts: list[str] = []
@@ -249,6 +249,9 @@ def validate(root: Path) -> list[str]:
                     )
             if uses.startswith(("actions/", "./")):
                 return
+            if DOCKER_LATEST_RE.fullmatch(uses):
+                errors.append(f"{rel}:{line_number}: Docker action {uses!r} must use an immutable image digest")
+                return
             if uses.endswith(("@master", "@main")) and not SHA_REF_RE.search(uses):
                 errors.append(
                     f"{rel}:{line_number}: third-party action {uses!r} must not "
@@ -271,7 +274,18 @@ def validate(root: Path) -> list[str]:
                     f"{rel}:{line_number}: flutter-buildrunner cache key must not "
                     "include github.run_id (exact key never hits; parallel jobs race)"
                 )
-            code = TRAILING_COMMENT_RE.sub("", line)
+            quote: str | None = None
+            comment_index: int | None = None
+            for index, character in enumerate(line):
+                if character in {'"', "'"}:
+                    if quote is None:
+                        quote = character
+                    elif quote == character and (index == 0 or line[index - 1] != "\\"):
+                        quote = None
+                elif character == "#" and quote is None and (index == 0 or line[index - 1].isspace()):
+                    comment_index = index
+                    break
+            code = line if comment_index is None else line[:comment_index].rstrip()
             if line_number in operator_ref_scopes and RUN_SHA_RE.search(code) and not code.lstrip().startswith("#"):
                 errors.append(
                     f"{rel}:{line_number}: workflow checks out an operator-selected "

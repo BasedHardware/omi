@@ -249,6 +249,26 @@ class ActionsHygieneTests(unittest.TestCase):
             self.assertEqual(len(errors), 1)
             self.assertIn("operator-selected", errors[0])
 
+    def test_rejects_run_sha_with_folded_named_checkout_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - name: Checkout\n"
+                "        uses: >-\n"
+                "          actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ inputs.branch }}\n"
+                '      - run: echo "tag=${{ github.sha }}"\n',
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
     def test_rejects_run_sha_with_folded_operator_selected_ref(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -386,6 +406,36 @@ class ActionsHygieneTests(unittest.TestCase):
                 "      - run: echo ok  # never tag from GITHUB_SHA here\n",
             )
             self.assertEqual(validate(root), [])
+
+    def test_rejects_run_sha_inside_quoted_shell_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/deploy.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ inputs.branch }}\n"
+                '      - run: echo "source # ${{ github.sha }}"\n',
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_rejects_latest_docker_action_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/bad.yml",
+                "jobs:\n  t:\n    steps:\n      - uses: docker://ghcr.io/vendor/tool:latest\n",
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("immutable image digest", errors[0])
 
     def test_rejects_third_party_master_branch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
