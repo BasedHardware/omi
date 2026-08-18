@@ -37,7 +37,6 @@ router = APIRouter()
 # IP poll timed out. Never written any more; still read so already-poisoned
 # records are re-provisioned instead of being reported ready.
 UNRESOLVED_VM_IP = "unknown"
-AGENT_VM_UNSUPPORTED_TOOL_NAMES = frozenset({"fetch_url_tool"})
 
 
 class AgentVmInfo(BaseModel):
@@ -202,6 +201,9 @@ def list_tools(uid: str = Depends(get_current_user_uid)):
         )
 
     return {"tools": tools}
+
+
+AGENT_VM_UNSUPPORTED_TOOL_NAMES = frozenset({"fetch_url_tool"})
 
 
 class ExecuteToolRequest(BaseModel):
