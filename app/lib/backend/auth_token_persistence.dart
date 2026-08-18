@@ -45,10 +45,12 @@ final class AuthTokenPersistence {
     return const _FlutterSecureAuthTokenStorage(FlutterSecureStorage());
   }
 
-  Future<T> _withRetry<T>(Future<T> Function() operation, String label, {int maxAttempts = 3}) async {
+  Future<T> _withRetry<T>(Future<T> Function() operation, String label,
+      {int maxAttempts = 3, Duration? timeout}) async {
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await operation();
+        final result = operation();
+        return timeout == null ? await result : await result.timeout(timeout);
       } catch (e) {
         if (attempt == maxAttempts) rethrow;
         await Future.delayed(Duration(milliseconds: 100 * attempt));
@@ -59,7 +61,11 @@ final class AuthTokenPersistence {
 
   Future<String?> readSecureAuthToken() async {
     try {
-      return await _withRetry(() => _storage.read(), 'readAuthToken from secure storage');
+      return await _withRetry(
+        () => _storage.read(),
+        'readAuthToken from secure storage',
+        timeout: const Duration(seconds: 1),
+      );
     } catch (e) {
       Logger.error('Failed to read authToken from secure storage: ${e.runtimeType}');
       return null;

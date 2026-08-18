@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,13 +116,40 @@ void main() {
     expect(storage.value, isNull);
     expect(preferences.containsKey('authTokenDeletePending'), isFalse);
   });
+
+  test('startup completes when secure storage is unavailable', () async {
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(_HangingAuthTokenStorage());
+    SharedPreferences.setMockInitialValues({});
+
+    await expectLater(SharedPreferencesUtil.init(), completes);
+    expect(SharedPreferencesUtil().authToken, isEmpty);
+  });
+
+  test('serializes a late secure write before sign out deletes the token', () async {
+    final storage = _FakeAuthTokenStorage(writeDelay: const Duration(milliseconds: 1100));
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(storage);
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+
+    final write = SharedPreferencesUtil().persistAuthToken('late-token');
+    while (storage.writeCalls == 0) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    final delete = SharedPreferencesUtil().persistAuthToken('');
+
+    await Future.wait([write, delete]);
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+    expect(storage.value, isNull);
+  });
 }
 
 final class _FakeAuthTokenStorage implements AuthTokenStorage {
-  _FakeAuthTokenStorage({this.failWrites = 0});
+  _FakeAuthTokenStorage({this.failWrites = 0, this.writeDelay = Duration.zero});
 
   String? value;
   int failWrites;
+  final Duration writeDelay;
   int failDeletes = 0;
   int writeCalls = 0;
 
@@ -130,6 +159,7 @@ final class _FakeAuthTokenStorage implements AuthTokenStorage {
   @override
   Future<void> write(String value) async {
     writeCalls++;
+    if (writeDelay > Duration.zero) await Future<void>.delayed(writeDelay);
     if (failWrites > 0) {
       failWrites--;
       throw StateError('write failed');
@@ -163,4 +193,15 @@ final class _FakeAuthTokenGateway implements AuthTokenGateway {
     signOutCalls++;
     user = null;
   }
+}
+
+final class _HangingAuthTokenStorage implements AuthTokenStorage {
+  @override
+  Future<String?> read() => Completer<String?>().future;
+
+  @override
+  Future<void> write(String value) => Completer<void>().future;
+
+  @override
+  Future<void> delete() => Completer<void>().future;
 }
