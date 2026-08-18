@@ -720,14 +720,14 @@ class TestBYOKSubscriptionEntitlements:
 
 class TestBYOKMiddlewareValidation:
     @staticmethod
-    def _request(headers):
+    def _request(headers, path='/v1/test'):
         from starlette.requests import Request
 
         return Request(
             {
                 'type': 'http',
                 'method': 'GET',
-                'path': '/v1/test',
+                'path': path,
                 'headers': [(key.lower().encode(), value.encode()) for key, value in headers.items()],
                 'query_string': b'',
                 'scheme': 'http',
@@ -780,6 +780,27 @@ class TestBYOKMiddlewareValidation:
 
         assert response.status_code == 403
         assert not called
+
+    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch):
+        from utils.byok import BYOKMiddleware, get_byok_keys
+
+        async def run_blocking(_executor, function, *args):
+            if function.__name__ == 'verify_token':
+                return 'middleware-user'
+            return {}, 'BYOK key fingerprint mismatch for provider: openai'
+
+        monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
+        middleware = BYOKMiddleware(MagicMock())
+        request = self._request(
+            {'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'},
+            path='/v1/users/me/subscription',
+        )
+
+        async def call_next(_request):
+            assert get_byok_keys() == {}
+            return 'recovery'
+
+        assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'recovery'
 
 
 # ---------------------------------------------------------------------------

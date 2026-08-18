@@ -51,7 +51,15 @@ onAuthStateChanged(auth, (user) => {
   if (!user || typeof window === 'undefined') return
   void user
     .getIdToken()
-    .then((token) => window.omi?.byokEnroll?.(token))
+    .then(async (token) => {
+      const keys = await window.omi?.byokGetAll?.()
+      if (
+        keys &&
+        Object.keys(keys).some((provider) => keys[provider as keyof typeof keys]?.trim())
+      ) {
+        await window.omi?.byokEnroll?.(token)
+      }
+    })
     .catch(() => undefined)
 })
 
