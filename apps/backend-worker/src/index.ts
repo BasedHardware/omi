@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/projections/synthesized";
 
 import { AccountBackend } from "./account";
+import { readHistory, readSettings } from "./chat";
 import {
   gatewayConfig,
   gatewayModeEnabled,
@@ -118,9 +119,21 @@ app.use("/v1/*", async (context, next) => {
 });
 
 app.get("/v1/settings", async (context) => {
-  const stub = account(context);
-  await configureAccount(context.env, stub);
-  return json(await stub.settings());
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  return json(
+    await readSettings(
+      db,
+      context.get("accountId"),
+      {
+        displayName: context.env.STAGING_DISPLAY_NAME,
+        email: context.env.STAGING_EMAIL,
+      },
+      context.env.STAGING_PLAN_LABEL,
+      context.env.STAGING_CHAT_LIMIT
+    )
+  );
 });
 
 app.get("/v1/chat-messages", async (context) => {
@@ -136,9 +149,15 @@ app.get("/v1/chat-messages", async (context) => {
   const olderCursor = query.get("olderCursor") ?? undefined;
   if (limit === null || olderCursor === "")
     return backendError("bad_request", "edit_request", 400);
-  const stub = account(context);
-  await configureAccount(context.env, stub);
-  const history = await stub.history(limit, olderCursor);
+  const db = context.env.DB;
+  if (db === undefined)
+    return backendError("service_unavailable", "retry", 503, true);
+  const history = await readHistory(
+    db,
+    context.get("accountId"),
+    limit,
+    olderCursor
+  );
   return history === "invalid_cursor"
     ? backendError("bad_request", "edit_request", 400)
     : json(history);
@@ -156,8 +175,11 @@ app.post("/v1/chat-messages", async (context) => {
   if ((body.attachmentIds?.length ?? 0) > 0)
     return backendError("attachment_rejected", "edit_request", 422);
   const stub = account(context);
-  await configureAccount(context.env, stub);
-  const admission = await stub.admit(body);
+  const admission = await stub.admit(
+    context.get("accountId"),
+    body,
+    context.env.STAGING_CHAT_LIMIT
+  );
   if (admission === "conflict") {
     return backendError("client_message_id_conflict", "edit_request", 409);
   }
@@ -188,7 +210,10 @@ app.get("/v1/chat-generations/:id/events", (context) => {
 });
 
 app.delete("/v1/chat-generations/:id", async (context) => {
-  const cancellation = await account(context).cancel(context.req.param("id"));
+  const cancellation = await account(context).cancel(
+    context.get("accountId"),
+    context.req.param("id")
+  );
   if (cancellation === "not_found")
     return backendError("not_found", "refresh_history", 404);
   return cancellation === "terminal"
@@ -277,22 +302,11 @@ function configurationReady(env: WorkerEnv): boolean {
     env.STAGING_CHAT_LIMIT >= 0 &&
     env.ACCOUNTS !== undefined &&
     env.AI !== undefined &&
+    env.DB !== undefined &&
     observabilityConfigured(env);
   if (!base) return false;
   if (gatewayModeEnabled(env)) return gatewayConfig(env) !== null;
   return true;
-}
-
-async function configureAccount(
-  env: WorkerEnv,
-  stub: DurableObjectStub<AccountBackend>
-): Promise<void> {
-  await stub.configure({
-    displayName: env.STAGING_DISPLAY_NAME,
-    email: env.STAGING_EMAIL,
-    planLabel: env.STAGING_PLAN_LABEL,
-    chatLimit: env.STAGING_CHAT_LIMIT,
-  });
 }
 
 function parseLimit(value: string | undefined): number | null {
