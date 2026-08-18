@@ -2,9 +2,14 @@ import { Hono } from "hono";
 import { SYNTHESIZED_READ_CONTRACT_VERSION } from "@omi-core/ratified-contracts/projections/synthesized";
 
 import { AccountBackend } from "./account";
+import {
+  gatewayConfig,
+  gatewayModeEnabled,
+  type GatewaySecretEnv,
+} from "./openrouter";
 import { backendError, isChatCreate, json } from "./wire";
 
-type WorkerEnv = Env & { API_TOKEN: string };
+type WorkerEnv = Env & GatewaySecretEnv & { API_TOKEN: string };
 type Variables = { accountId: string; requestId: string };
 
 type ObservableContext = {
@@ -213,7 +218,7 @@ function constantTimeEqual(
 }
 
 function configurationReady(env: WorkerEnv): boolean {
-  return (
+  const base =
     typeof env.API_TOKEN === "string" &&
     env.API_TOKEN.length > 0 &&
     typeof env.STAGING_ACCOUNT_ID === "string" &&
@@ -223,8 +228,10 @@ function configurationReady(env: WorkerEnv): boolean {
     Number.isSafeInteger(env.STAGING_CHAT_LIMIT) &&
     env.STAGING_CHAT_LIMIT >= 0 &&
     env.ACCOUNTS !== undefined &&
-    env.AI !== undefined
-  );
+    env.AI !== undefined;
+  if (!base) return false;
+  if (gatewayModeEnabled(env)) return gatewayConfig(env) !== null;
+  return true;
 }
 
 async function configureAccount(

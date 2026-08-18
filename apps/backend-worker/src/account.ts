@@ -4,6 +4,12 @@ import { parseRecordId } from "@omi-core/contracts";
 import type { ChatCompletedAssistantMessage } from "@omi-core/contracts";
 
 import {
+  gatewayConfig,
+  gatewayModeEnabled,
+  generateViaGateway,
+  type GatewaySecretEnv,
+} from "./openrouter";
+import {
   CHAT_CAPABILITIES,
   type ChatCreate,
   type ChatMessage,
@@ -60,13 +66,13 @@ type HistoryResult =
     }
   | "invalid_cursor";
 
-export class AccountBackend extends DurableObject<Env> {
+export class AccountBackend extends DurableObject<Env & GatewaySecretEnv> {
   private readonly waiters = new Map<
     string,
     Set<(event: GenerationEvent) => void>
   >();
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: Env & GatewaySecretEnv) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(async () => {
       this.ctx.storage.sql.exec(`
@@ -440,6 +446,26 @@ export class AccountBackend extends DurableObject<Env> {
     generationId: string,
     prompt: string
   ): Promise<void> {
+    if (gatewayModeEnabled(this.env)) {
+      const config = gatewayConfig(this.env);
+      if (config === null) {
+        console.error(
+          JSON.stringify({
+            message: "gateway_unconfigured",
+            correlationId: generationId,
+          })
+        );
+        await this.fail(generationId);
+        return;
+      }
+      const result = await generateViaGateway(config, prompt, generationId);
+      if (result.kind === "error") {
+        await this.fail(generationId);
+      } else {
+        await this.complete(generationId, result.text);
+      }
+      return;
+    }
     try {
       const result = await this.env.AI.run(
         this.env.AI_MODEL as keyof AiModels,

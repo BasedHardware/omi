@@ -11,7 +11,9 @@
     "STAGING_DISPLAY_NAME": "Omi Staging",
     "STAGING_EMAIL": "staging@omi.invalid",
     "STAGING_PLAN_LABEL": "Staging",
-    "STAGING_CHAT_LIMIT": 1000
+    "STAGING_CHAT_LIMIT": 1000,
+    "OPENROUTER_GATEWAY_ENABLED": "false",
+    "OPENROUTER_MODEL": ""
   },
   "ai": {
     "binding": "AI"
