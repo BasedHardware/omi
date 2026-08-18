@@ -1428,6 +1428,65 @@ def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(mon
     assert '_save_action_items' in {getattr(call.args[1], '__name__', '') for call in submitted.call_args_list}
 
 
+def test_finalization_survives_an_unavailable_memory_extractor(monkeypatch):
+    """Regression: an LLM invoke failure inside canonical extraction (prod:
+    openai.APITimeoutError -> WorkingObservationExtractionError) propagated out
+    of finalization, so the conversation also lost its action items, goal
+    progress, audio files and created webhook and the caller returned 500. A
+    provider that did not answer is a verdict on the memories only."""
+    from models.transcript_segment import TranscriptSegment
+    from models.memory_contracts import WorkingObservationExtractionError
+
+    completed_conversation = Conversation(
+        id='conversation-extractor-unavailable',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[
+            TranscriptSegment(
+                text='We discussed ordinary weekend plans and a grocery list.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    memory_service = MagicMock()
+    submitted = MagicMock()
+
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
+    monkeypatch.setattr(process_conversation.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(
+        process_conversation,
+        'extract_canonical_l1_memory_candidates',
+        MagicMock(side_effect=WorkingObservationExtractionError("invoke")),
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation)
+
+    # Prior memories are neither replaced nor retracted ...
+    memory_service.replace_conversation_memories.assert_not_called()
+    # ... and the effects sequenced after extraction still ran.
+    assert '_save_action_items' in {getattr(call.args[1], '__name__', '') for call in submitted.call_args_list}
+
+
 def test_dedup_candidates_exclude_own_and_merge_source_items():
     """Regression: on reprocess/merge, the conversation's own previous action
     items (and the merge sources') came back as dedup candidates — the LLM

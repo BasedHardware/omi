@@ -839,6 +839,33 @@ class HistoricalMemoryAdapter:
             cls.cleanup(uid, memory_id, db_client=db_client)
 
 
+# A page walks past rows it must not emit (canonical-suppressed historical rows,
+# lineage-filtered canonical rows) before it can fill `limit`. That walk is
+# proportional to the account's skipped prefix, not to the page size: an account
+# whose whole historical set is suppressed by canonical scans every historical
+# document for a `limit=8` first page. In prod on 2026-08-18 that walk ran past
+# the 30s edge timeout and GET /v3/memories 504'd (~100/h, first pages only,
+# offset=0) once the `memories` composite indexes went READY and the keyset scans
+# actually started serving. Bound the skipped work per request so a page either
+# lands or fails fast into the route's offset-read fallback.
+MEMORY_LIST_SCAN_ROW_BUDGET = 4000
+MEMORY_LIST_SCAN_BUDGET_DETAIL = "Memory scan budget exceeded"
+
+
+class _ScanRowBudget:
+    """Bounds the rows one ``read_page`` call may skip without emitting."""
+
+    def __init__(self, limit: Optional[int] = None) -> None:
+        # Read the module constant at construction, not as a default argument,
+        # so the bound stays tunable in one place.
+        self._remaining = max(1, int(MEMORY_LIST_SCAN_ROW_BUDGET if limit is None else limit))
+
+    def charge(self) -> None:
+        self._remaining -= 1
+        if self._remaining < 0:
+            raise HTTPException(status_code=503, detail=MEMORY_LIST_SCAN_BUDGET_DETAIL)
+
+
 class _HistoricalRawStream:
     """Peekable keyset stream over one historical Firestore order field."""
 
@@ -852,12 +879,14 @@ class _HistoricalRawStream:
         exhausted: bool,
         device_scope_request: Optional[DeviceScopeRequest],
         page_limit: int,
+        budget: Optional[_ScanRowBudget] = None,
     ) -> None:
         self._service = service
         self._uid = uid
         self._kind = kind
         self.scan_keyset = scan
         self.exhausted = bool(exhausted)
+        self._budget = budget or _ScanRowBudget()
         self._device_scope_request = device_scope_request
         self._page_limit = max(1, int(page_limit or 100))
         self._peek: Optional[MemoryDB] = None
@@ -917,6 +946,7 @@ class _HistoricalRawStream:
                 return None
             record, scan_keyset = self._slots[self._slot_index]
             if record is None:
+                self._budget.charge()
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
@@ -927,11 +957,13 @@ class _HistoricalRawStream:
             )
             if reason == "canonical_identity":
                 self.identity_suppressed += 1
+                self._budget.charge()
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
             if reason == "canonical_state":
                 self.state_suppressed += 1
+                self._budget.charge()
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
@@ -977,9 +1009,11 @@ class _HistoricalCursorStream:
         created_exhausted: bool,
         device_scope_request: Optional[DeviceScopeRequest],
         page_limit: int,
+        budget: Optional[_ScanRowBudget] = None,
     ) -> None:
         self._service = service
         self.consumed_keyset = after
+        budget = budget or _ScanRowBudget()
         self._updated = _HistoricalRawStream(
             service=service,
             uid=uid,
@@ -988,6 +1022,7 @@ class _HistoricalCursorStream:
             exhausted=updated_exhausted,
             device_scope_request=device_scope_request,
             page_limit=page_limit,
+            budget=budget,
         )
         self._created = _HistoricalRawStream(
             service=service,
@@ -997,6 +1032,7 @@ class _HistoricalCursorStream:
             exhausted=created_exhausted,
             device_scope_request=device_scope_request,
             page_limit=page_limit,
+            budget=budget,
         )
         self._peek_source: Optional[str] = None
 
@@ -1077,12 +1113,14 @@ class _CanonicalCursorStream:
         include_archive: bool,
         now: Optional[datetime],
         page_limit: int,
+        budget: Optional[_ScanRowBudget] = None,
     ) -> None:
         self._service = service
         self._uid = uid
         self.emitted_keyset = emitted
         self.scan_keyset = scan
         self.exhausted = bool(exhausted)
+        self._budget = budget or _ScanRowBudget()
         self._device_scope_request = device_scope_request
         self._include_pending_processing = include_pending_processing
         self._include_archive = include_archive
@@ -1147,12 +1185,14 @@ class _CanonicalCursorStream:
             memory, scan_keyset = self._slots[self._slot_index]
             # Raw scan position advances for filtered rows too.
             if memory is None:
+                self._budget.charge()
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
             if self.emitted_keyset is not None and self._service.memory_cursor_sort_key(memory) <= (
                 self._service.keyset_sort_key(self.emitted_keyset)
             ):
+                self._budget.charge()
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
                 continue
@@ -1687,6 +1727,9 @@ class MemoryService:
                 historical_created_exhausted=False,
             )
 
+        # One budget per request, shared by both streams: the cost that has to
+        # stay bounded is the total skipped-row walk behind a single page.
+        budget = _ScanRowBudget()
         canonical = _CanonicalCursorStream(
             service=self,
             uid=uid,
@@ -1698,6 +1741,7 @@ class MemoryService:
             include_archive=include_archive,
             now=now,
             page_limit=bounded_limit,
+            budget=budget,
         )
         historical = _HistoricalCursorStream(
             service=self,
@@ -1709,6 +1753,7 @@ class MemoryService:
             created_exhausted=state.historical_created_exhausted,
             device_scope_request=device_scope_request,
             page_limit=bounded_limit,
+            budget=budget,
         )
 
         page: List[MemoryDB] = []

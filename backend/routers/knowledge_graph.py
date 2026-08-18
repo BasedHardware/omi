@@ -1,22 +1,32 @@
 import importlib
 import sys
+from enum import Enum
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Callable, Optional, cast
 
 from database import knowledge_graph as kg_db
+from database._client import get_firestore_client
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
+from utils.memory.memory_service import MemoryService
 from utils.executors import db_executor, llm_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
 from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
+Payload = Dict[str, Any]
+MemoryPayloads = List[Payload]
+RebuildKnowledgeGraph = Callable[[str, MemoryPayloads, str], Payload]
 RateLimitFactory = Callable[[Any, str], Any]
 with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(auth, "with_rate_limit"))
 CANONICAL_GRAPH_MUTATION_CONFLICT = (
     "Canonical knowledge graph state is derived from canonical memories and cannot be deleted or rebuilt directly."
+)
+CANONICAL_GRAPH_STATE_UNVERIFIED = (
+    "Knowledge graph state could not be verified right now, so it was left untouched. Please try again."
 )
 
 
@@ -24,17 +34,68 @@ def _knowledge_graph_llm_module() -> Any:
     return sys.modules.get("utils.llm.knowledge_graph") or importlib.import_module("utils.llm.knowledge_graph")
 
 
-def _is_assertion_backed_graph_account(uid: str) -> bool:
-    """All authenticated accounts use assertion-backed graph semantics."""
-    return True
+def _run_rebuild_knowledge_graph(uid: str, memories: MemoryPayloads, user_name: str) -> Payload:
+    rebuild_knowledge_graph = cast(
+        RebuildKnowledgeGraph, getattr(_knowledge_graph_llm_module(), "rebuild_knowledge_graph")
+    )
+    return rebuild_knowledge_graph(uid, memories, user_name)
+
+
+class LegacyGraphMutation(str, Enum):
+    """Whether the legacy rebuild/delete path may run for this account."""
+
+    ALLOWED = 'allowed'
+    #: Derived state exists and owns this graph — the legacy mutation is a conflict.
+    CONFLICT = 'conflict'
+    #: We could not establish whether derived state exists. Not the same as "it does not".
+    UNVERIFIED = 'unverified'
+
+
+def _legacy_graph_mutation_decision(uid: str) -> LegacyGraphMutation:
+    """Decide, per account, whether the legacy graph may still be rebuilt or deleted.
+
+    This must stay a real per-account probe. Answering ``CONFLICT`` unconditionally
+    protects derived state that does not exist and denies every account the legacy
+    rebuild/delete their graph still needs.
+
+    The probe is deliberately tri-state. ``GET`` may fail open on any unavailable
+    canonical read because the worst case is a stale view; these routes destroy the
+    legacy store, so only a *positive* "there is no state head" answer may unlock
+    them. A read timeout, a corrupt head, or an unsupported schema is an unanswered
+    question, and answering it as "unestablished" would let a transient Firestore
+    blip delete the graph.
+    """
+    state = canonical_graph_service.probe_canonical_graph_state(uid)
+    if state is canonical_graph_service.CanonicalGraphState.ESTABLISHED:
+        return LegacyGraphMutation.CONFLICT
+    if state is canonical_graph_service.CanonicalGraphState.INDETERMINATE:
+        return LegacyGraphMutation.UNVERIFIED
+    if kg_db.has_stored_memory_graph_assertions(uid, db_client=get_firestore_client()):
+        return LegacyGraphMutation.CONFLICT
+    return LegacyGraphMutation.ALLOWED
 
 
 def _require_legacy_graph_mutation(uid: str) -> None:
-    if _is_assertion_backed_graph_account(uid):
+    decision = _legacy_graph_mutation_decision(uid)
+    if decision is LegacyGraphMutation.CONFLICT:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=CANONICAL_GRAPH_MUTATION_CONFLICT,
         )
+    if decision is LegacyGraphMutation.UNVERIFIED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=CANONICAL_GRAPH_STATE_UNVERIFIED,
+        )
+    # Fail-open path: this account has no canonical state, so the mutation is
+    # served by the pre-canonical store instead of the derived one.
+    record_fallback(
+        component='knowledge_graph',
+        from_mode='canonical_graph',
+        to_mode='legacy_graph',
+        reason='unmigrated_principal',
+        outcome='degraded',
+    )
 
 
 class KnowledgeNode(BaseModel):
@@ -186,12 +247,27 @@ def get_canonical_knowledge_graph(
     )
 
 
+def _rebuild_graph_task(uid: str, user_name: str) -> None:
+    if _legacy_graph_mutation_decision(uid) is not LegacyGraphMutation.ALLOWED:
+        return
+    memories: MemoryPayloads = [
+        {"id": memory.id, "content": memory.content}
+        for memory in MemoryService(db_client=get_firestore_client()).read(uid, limit=500)
+        if not getattr(memory, "is_locked", False)
+    ]
+    _run_rebuild_knowledge_graph(uid, memories, user_name)
+
+
 @router.post('/v1/knowledge-graph/rebuild', tags=['knowledge_graph'], response_model=RebuildResponse)
 def rebuild_graph(
     background_tasks: BackgroundTasks,
     uid: str = Depends(with_rate_limit(auth.get_current_user_uid, "knowledge_graph:rebuild")),
 ):
     _require_legacy_graph_mutation(uid)
+    user_name = get_user_name(uid) or ""
+    kg_db.delete_knowledge_graph(uid)
+    background_tasks.add_task(_rebuild_graph_task, uid, user_name)
+    return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 
 
 @router.post(
@@ -236,4 +312,6 @@ async def extract_knowledge_graph(
 
 @router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)
 def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
-    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=CANONICAL_GRAPH_MUTATION_CONFLICT)
+    _require_legacy_graph_mutation(uid)
+    kg_db.delete_knowledge_graph(uid)
+    return DeleteKnowledgeGraphResponse(status="deleted")
