@@ -277,6 +277,49 @@ class TestSendAudioBytesDeveloperWebhook:
         assert events.count('semaphore-enter') == 2
 
     @pytest.mark.asyncio
+    async def test_retry_semaphore_wait_is_bounded_by_audio_lock_lease(self):
+        semaphore_started = asyncio.Event()
+        release_semaphore = asyncio.Event()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=RuntimeError("retry"))
+        semaphore_calls = 0
+
+        @asynccontextmanager
+        async def blocked_semaphore():
+            nonlocal semaphore_calls
+            semaphore_calls += 1
+            if semaphore_calls > 1:
+                semaphore_started.set()
+                await release_semaphore.wait()
+            yield
+
+        with patch.object(
+            webhooks_module, "get_webhook_semaphore", side_effect=lambda: blocked_semaphore()
+        ), patch.object(
+            webhooks_module,
+            "_get_dev_webhook_retry_delays",
+            return_value=(0,),
+        ), patch.object(
+            webhooks_module,
+            "_WEBHOOK_REQUEST_TIMEOUT_SECONDS",
+            0.01,
+        ), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
+        ), patch.object(
+            webhooks_module.redis_db, "release_audio_bytes_webhook_lock"
+        ), patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=MagicMock(allow_request=MagicMock(return_value=True)),
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        await semaphore_started.wait()
+        assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_configured_duration_controls_payload_truncation(self):
         mock_response = MagicMock(status_code=200)
         mock_client = AsyncMock()

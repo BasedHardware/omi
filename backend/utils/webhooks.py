@@ -66,6 +66,7 @@ async def _post_dev_webhook(
     idempotency_key: Optional[str] = None,
     acquire_semaphore: bool = True,
     before_first_request=None,
+    attempt_timeout: Optional[float] = None,
     **request_kwargs,
 ):
     if retry_delays is None:
@@ -84,15 +85,22 @@ async def _post_dev_webhook(
         attempt_number = attempt_index + 1
         failure_reason = None
         try:
-            if acquire_semaphore:
-                async with get_webhook_semaphore():
-                    if attempt_index == 0 and before_first_request is not None:
-                        await before_first_request()
-                    response = await client.post(webhook_url, **request_kwargs)
-            else:
+
+            async def send_request():
+                if acquire_semaphore:
+                    async with get_webhook_semaphore():
+                        if attempt_index == 0 and before_first_request is not None:
+                            await before_first_request()
+                        return await client.post(webhook_url, **request_kwargs)
                 if attempt_index == 0 and before_first_request is not None:
                     await before_first_request()
-                response = await client.post(webhook_url, **request_kwargs)
+                return await client.post(webhook_url, **request_kwargs)
+
+            if attempt_timeout is None:
+                response = await send_request()
+            else:
+                async with asyncio.timeout(attempt_timeout):
+                    response = await send_request()
             last_response = response
             last_exception = None
             if 200 <= response.status_code < 300:
@@ -381,6 +389,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             webhook_url,
             retry_delays=retry_delays,
             before_first_request=acquire_audio_lock,
+            attempt_timeout=_WEBHOOK_REQUEST_TIMEOUT_SECONDS,
             content=bytes(data[:max_bytes]),
             headers={'Content-Type': 'application/octet-stream'},
         )
