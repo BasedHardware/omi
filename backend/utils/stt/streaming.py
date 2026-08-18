@@ -83,11 +83,19 @@ _deepgram_circuit = ProviderCircuitBreaker(
 )
 
 
+_modulate_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
+
+
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
     if primary_service == STTService.parakeet:
         return _parakeet_circuit
     if primary_service == STTService.deepgram:
         return _deepgram_circuit
+    if primary_service == STTService.modulate:
+        return _modulate_circuit
     raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
 
 
@@ -149,6 +157,9 @@ async def connect_stt_socket_with_fallback(
     (#11695). The chain must not stop at Modulate either: with Deepgram at HTTP
     402 and Modulate answering 500/over quota, an English session died while a
     healthy Parakeet deployment sat idle behind them in the same list (#11752).
+    Modulate is a primary as well as a fallback: a deployment listing
+    ``modulate-velma-2,dg-nova-3,parakeet`` lost 100% of its sessions for ~50
+    minutes because a Modulate primary bypassed this helper entirely (#11752).
 
     The circuit is deliberately process-local and never owns capacity. The
     Parakeet service rejects excess streams at its GPU boundary; this helper
