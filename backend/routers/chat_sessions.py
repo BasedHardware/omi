@@ -6,7 +6,9 @@ Messages are persistence-only writes (no LLM streaming) — they use
 streams AI responses.
 """
 
+import asyncio
 import logging
+import time
 from typing import Any, Callable, List, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -25,13 +27,21 @@ from models.chat_session import (
 )
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
+from utils.executors import db_executor, llm_executor, run_blocking
+from utils.llm import agent_pill_title as agent_pill_title_llm
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
+from utils.subscription import is_trial_paywalled
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+AGENT_PILL_TITLE_TRANSPORT_HEADROOM_SECONDS = 0.5
+AGENT_PILL_TITLE_ROUTE_TIMEOUT_SECONDS = (
+    agent_pill_title_llm.AGENT_PILL_TITLE_TIMEOUT_SECONDS - AGENT_PILL_TITLE_TRANSPORT_HEADROOM_SECONDS
+)
 
 # `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
 # parameter; route access through a cast so this strict-checked file sees a
@@ -306,6 +316,57 @@ def generate_session_title(
 
     chat_db.update_chat_session(uid, request.session_id, title=title)
     return {'title': title}
+
+
+class AgentPillTitleRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    query: str = Field(..., min_length=1, max_length=agent_pill_title_llm.MAX_QUERY_CHARS)
+
+
+class AgentPillTitleResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    title: str = ""
+    ack: str = ""
+
+
+@router.post(
+    '/v1/desktop/agent-pill/title',
+    tags=['chat-sessions'],
+    response_model=AgentPillTitleResponse,
+)
+async def generate_agent_pill_title(
+    body: AgentPillTitleRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "desktop:agent_pill_title"))
+    ),
+):
+    """Return-only AgentPill title + spoken ack through the managed session_titles feature.
+
+    Does not write Firestore. Desktop AgentPill should call this instead of inventing
+    title/ack via Anthropic Haiku chat completions.
+    """
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+
+    deadline = time.monotonic() + AGENT_PILL_TITLE_ROUTE_TIMEOUT_SECONDS
+    try:
+        result = await asyncio.wait_for(
+            run_blocking(
+                llm_executor,
+                agent_pill_title_llm.generate_agent_pill_title_ack,
+                uid,
+                body.query,
+                deadline,
+            ),
+            timeout=AGENT_PILL_TITLE_ROUTE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=502, detail="agent_pill_title_timeout")
+    if result is None:
+        raise HTTPException(status_code=502, detail="agent_pill_title_failed")
+    return AgentPillTitleResponse(title=result.title or "", ack=result.ack or "")
 
 
 @router.get('/v1/users/stats/chat-messages', tags=['chat-sessions'], response_model=ChatMessageCountResponse)

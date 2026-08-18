@@ -503,7 +503,12 @@ final class AgentPillsManager: ObservableObject {
     if preFetchedTitle == nil {
       Task { [weak pill] in
         guard let pill else { return }
-        guard let result = await AgentPillsManager.generateTitleAndAck(for: pill.query) else { return }
+        guard
+          let result = await AgentPillsManager.generateTitleAndAck(
+            for: pill.query,
+            ownerID: pill.ownerID
+          )
+        else { return }
         await MainActor.run {
           guard RuntimeOwnerIdentity.currentOwnerId() == pill.ownerID else { return }
           pill.title = result.title
@@ -2291,85 +2296,39 @@ final class AgentPillsManager: ObservableObject {
     instantAcks.randomElement() ?? "On it."
   }
 
-  fileprivate static func generateTitleAndAck(for query: String) async -> (title: String, ack: String)? {
-    // Route through the desktop-backend's OpenAI-compatible proxy at
-    // /v2/chat/completions instead of hitting api.anthropic.com directly.
-    // This way we don't need a BYOK key (no partial-BYOK 403 risk), and
-    // the request goes through the user's existing Firebase auth + plan.
-    let baseURL = await APIClient.shared.rustBackendURL
-    guard !baseURL.isEmpty else {
-      log("AgentPill: title gen skipped — rustBackendURL empty")
-      return nil
-    }
-    let normalized = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
-    guard let url = URL(string: normalized + "v2/chat/completions") else {
-      log("AgentPill: title gen failed — bad URL")
-      return nil
-    }
-
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.timeoutInterval = 8
+  fileprivate static func generateTitleAndAck(
+    for query: String,
+    ownerID: String
+  ) async -> (title: String, ack: String)? {
+    // Prompt + model live behind POST /v1/desktop/agent-pill/title (session_titles SSOT).
+    // Keep a local heuristic fallback when the backend call fails so the pill still titles.
     do {
-      let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
-      for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-    } catch {
-      log("AgentPill: title gen skipped — auth header unavailable (\(error.localizedDescription))")
-      return nil
-    }
-
-    let prompt = """
-      The user just kicked off a background agent with this request:
-
-      "\(query)"
-
-      Reply with a JSON object on a single line, no prose, no markdown:
-      {"title":"<3-5 word imperative title in Title Case, no trailing punctuation>","ack":"<one short spoken acknowledgement, max 7 words, friendly tone, e.g. 'Got it, building Mario now.'>"}
-      """
-
-    // OpenAI-compatible body. The backend translates to Anthropic upstream.
-    let body: [String: Any] = [
-      "model": "claude-haiku-4-5-20251001",
-      "max_tokens": 120,
-      "messages": [["role": "user", "content": prompt]],
-      "stream": false,
-    ]
-    do {
-      request.httpBody = try JSONSerialization.data(withJSONObject: body)
-      let (data, response) = try await URLSession.shared.data(for: request)
-      guard let http = response as? HTTPURLResponse else {
-        log("AgentPill: title gen failed — no HTTP response")
-        return nil
-      }
-      guard (200..<300).contains(http.statusCode) else {
-        let body = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
-        log("AgentPill: title gen HTTP \(http.statusCode) — \(body)")
-        return nil
-      }
-      // OpenAI shape: { choices: [{ message: { content: "..." } }] }
-      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-        let choices = json["choices"] as? [[String: Any]],
-        let firstChoice = choices.first,
-        let message = firstChoice["message"] as? [String: Any],
-        let text = message["content"] as? String
-      else {
-        log("AgentPill: title gen response shape unexpected")
-        return nil
-      }
-      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard let payloadData = trimmed.data(using: .utf8),
-        let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
-        let title = (payload["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-        let ack = (payload["ack"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-        !title.isEmpty, !ack.isEmpty
-      else {
-        log("AgentPill: title gen JSON parse failed — raw: \(String(trimmed.prefix(200)))")
+      let response = try await APIClient.shared.generateAgentPillTitle(
+        query: query,
+        expectedOwnerId: ownerID.isEmpty ? nil : ownerID
+      )
+      let title = response.title.trimmingCharacters(in: .whitespacesAndNewlines)
+      let ack = response.ack.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !title.isEmpty, !ack.isEmpty else {
+        log("AgentPill: title gen empty response")
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "agent_pill_title",
+          from: "backend_title_service",
+          to: "heuristic_title",
+          reason: "empty_response",
+          outcome: .recovered)
         return nil
       }
       log("AgentPill: title gen ok — title=\"\(title)\" ack=\"\(ack)\"")
       return (title: String(title.prefix(40)), ack: String(ack.prefix(120)))
     } catch {
       log("AgentPill: title gen threw — \(error.localizedDescription)")
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "agent_pill_title",
+        from: "backend_title_service",
+        to: "heuristic_title",
+        reason: "request_failed",
+        outcome: .recovered)
       return nil
     }
   }

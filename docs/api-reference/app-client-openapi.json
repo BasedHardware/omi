@@ -1423,6 +1423,39 @@
         "title": "AgentKeepaliveResponse",
         "type": "object"
       },
+      "AgentPillTitleRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "AgentPillTitleRequest",
+        "type": "object"
+      },
+      "AgentPillTitleResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ack": {
+            "default": "",
+            "title": "Ack",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "AgentPillTitleResponse",
+        "type": "object"
+      },
       "AgentToolSchema": {
         "properties": {
           "description": {
@@ -36952,6 +36985,94 @@
         "summary": "Set Conversation Visibility",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/v1/desktop/agent-pill/title": {
+      "post": {
+        "description": "Return-only AgentPill title + spoken ack through the managed session_titles feature.\n\nDoes not write Firestore. Desktop AgentPill should call this instead of inventing\ntitle/ack via Anthropic Haiku chat completions.",
+        "operationId": "generate_agent_pill_title_v1_desktop_agent_pill_title_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentPillTitleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPillTitleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Generate Agent Pill Title",
+        "tags": [
+          "chat-sessions"
         ]
       }
     },

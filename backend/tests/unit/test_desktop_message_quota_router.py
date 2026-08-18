@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+_ROUTER_HARNESS = None
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -37,6 +38,10 @@ def _install_module(name: str, module=None):
 
 
 def _make_client():
+    global _ROUTER_HARNESS
+    if _ROUTER_HARNESS is not None:
+        return _ROUTER_HARNESS
+
     saved = {k: v for k, v in sys.modules.items()}
 
     _install_package('database', BACKEND_DIR / 'database')
@@ -65,6 +70,8 @@ def _make_client():
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = _install_module('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    subscription = _install_module('utils.subscription', ModuleType('utils.subscription'))
+    subscription.is_trial_paywalled = MagicMock(return_value=False)
 
     chat_utils = _install_module('utils.chat', ModuleType('utils.chat'))
     chat_utils.initial_message_util = MagicMock()
@@ -83,14 +90,26 @@ def _make_client():
 
     app = FastAPI()
     app.include_router(module.router)
-    return TestClient(app), module, saved
+    _ROUTER_HARNESS = TestClient(app), module, saved
+    # Restore the real sys.modules graph immediately so the fake harness
+    # modules never leak to other test files, while the router module keeps
+    # its own references to the fakes for assertions.
+    sys.modules.clear()
+    sys.modules.update(saved)
+    return _ROUTER_HARNESS
 
 
 def _cleanup(saved):
-    for name in [k for k in sys.modules if k not in saved]:
-        del sys.modules[name]
-    for name, module in saved.items():
-        sys.modules[name] = module
+    _, module, _ = _ROUTER_HARNESS
+    module.chat_db.save_message.reset_mock(return_value=True, side_effect=True)
+    module.chat_db.save_message.return_value = {
+        'id': 'client-msg-1',
+        'created_at': '2026-07-02T00:00:00+00:00',
+        'created': True,
+    }
+    module.chat_db.get_messages_reconcile_page.reset_mock(return_value=True, side_effect=True)
+    module.chat_db.get_messages_reconcile_page.return_value = ([], None, False)
+    module.llm_usage_db.record_chat_quota_question.reset_mock()
 
 
 def test_desktop_human_message_records_quota_once_after_persistence_acceptance():

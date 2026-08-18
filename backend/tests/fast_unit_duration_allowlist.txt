@@ -276,3 +276,5 @@ tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle
 tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
+# Building the router harness for test_desktop_message_quota_router amortizes the import into the first test.
+tests/unit/test_desktop_message_quota_router.py::test_desktop_human_message_records_quota_once_after_persistence_acceptance

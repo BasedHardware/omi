@@ -100,6 +100,14 @@ for mod_name in [
 
 sys.modules["utils.chat"].initial_message_util = MagicMock()
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
+agent_pill_title_stub = _stub_module("utils.llm.agent_pill_title")
+agent_pill_title_stub.generate_agent_pill_title_ack = MagicMock()
+agent_pill_title_stub.AGENT_PILL_TITLE_TIMEOUT_SECONDS = 8.0
+agent_pill_title_stub.MAX_QUERY_CHARS = 2000
+executors_stub = _stub_module("utils.executors")
+executors_stub.db_executor = MagicMock()
+executors_stub.llm_executor = MagicMock()
+executors_stub.run_blocking = MagicMock()
 usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
 
 
@@ -166,6 +174,7 @@ _stub_package("utils")
 _stub_package("utils.other")
 utils_sub_stub = _stub_module("utils.subscription")
 utils_sub_stub.get_default_basic_subscription = MagicMock()
+utils_sub_stub.is_trial_paywalled = MagicMock(return_value=False)
 utils_enc_stub = _stub_module("utils.encryption")
 utils_enc_stub.encrypt = MagicMock(return_value="encrypted")
 utils_enc_stub.decrypt = MagicMock(return_value="decrypted")

@@ -66,6 +66,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/connectors',
     '/v1/conversations',
     '/v1/dev',
+    '/v1/desktop',
     '/v1/fair-use',
     '/v1/folders',
     '/v1/goals',

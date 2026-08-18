@@ -3,7 +3,7 @@ import hashlib
 import logging
 import os
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import anthropic
 import httpx
@@ -377,13 +377,22 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
 
 
 def _create_byok_client(
-    model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
+    model: str,
+    provider: str,
+    byok_key: str,
+    streaming: bool = False,
+    feature: str = '',
+    request_timeout: float | None = None,
+    max_retries: int | None = None,
 ) -> Optional[ChatOpenAI]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
     callback_provider = _effective_byok_provider(model, provider)
-    kwargs: Dict[str, Any] = _with_llm_callbacks(
-        {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
-    )
+    kwargs: Dict[str, Any] = {'request_timeout': 120, 'max_retries': 1}
+    if request_timeout is not None:
+        kwargs['request_timeout'] = request_timeout
+    if max_retries is not None:
+        kwargs['max_retries'] = max_retries
+    kwargs = _with_llm_callbacks(kwargs, callback_provider, model=model, feature=feature)
     if supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
@@ -459,7 +468,9 @@ def get_llm(
     cache_key: Optional[str] = None,
     prompt_cache_options: Optional[dict[str, str]] = None,
     request_timeout: float | None = None,
+    max_tokens: int | None = None,
     max_retries: int | None = None,
+    allow_byok: bool = True,
 ) -> BaseChatModel:
     """Get the LLM client for a feature based on the active Model QoS profile.
 
@@ -498,8 +509,8 @@ def get_llm(
         )
 
     byok_provider = _effective_byok_provider(model, provider)
-    byok_key = get_byok_key(byok_provider)
-    byok_profile = get_byok_profile()
+    byok_key = get_byok_key(byok_provider) if allow_byok else None
+    byok_profile = get_byok_profile() if allow_byok else None
 
     if byok_key and byok_profile:
         byok_model, byok_prov = byok_profile.get(feature, (model, provider))
@@ -511,26 +522,41 @@ def get_llm(
             byok_key = byok_key_for_profile
 
     if byok_key and gateway_feature_mode:
+        gateway_options: dict[str, Any] = {}
+        if request_timeout is not None:
+            gateway_options['request_timeout'] = request_timeout
+        if max_retries is not None:
+            gateway_options['max_retries'] = max_retries
+        gateway_kwargs = {'options': gateway_options} if gateway_options else {}
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=_effective_byok_provider(model, provider),
             api_key=byok_key,
             streaming=streaming,
+            **gateway_kwargs,
             feature=feature,
         )
     elif byok_key:
-        byok_client = _create_byok_client(model, provider, byok_key, streaming, feature)
+        byok_client = _create_byok_client(
+            model,
+            provider,
+            byok_key,
+            streaming,
+            feature,
+            request_timeout=request_timeout,
+            max_retries=max_retries,
+        )
         result = (
             byok_client
             if byok_client is not None
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
     elif gateway_feature_mode:
-        gateway_options = {}
+        gateway_options: dict[str, Any] = {}
         if request_timeout is not None:
-            gateway_options["request_timeout"] = request_timeout
+            gateway_options['request_timeout'] = request_timeout
         if max_retries is not None:
-            gateway_options["max_retries"] = max_retries
+            gateway_options['max_retries'] = max_retries
         result = get_or_create_omi_gateway_llm(
             feature_auto_lane_id(feature), streaming, gateway_options or None, feature=feature
         )
@@ -549,6 +575,12 @@ def get_llm(
         streaming=streaming,
         legacy_model=result,
     )
+
+    if max_tokens is not None:
+        output_limit_key = (
+            'max_output_tokens' if provider == 'gemini' and not byok_key and not gateway_feature_mode else 'max_tokens'
+        )
+        result = cast(BaseChatModel, result.bind(**{output_limit_key: max_tokens}))
 
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
