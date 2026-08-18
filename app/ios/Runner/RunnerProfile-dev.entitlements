@@ -25,5 +25,7 @@
 	<array>
 		<string>group.com.friend-app-with-wearable.ios12</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array/>
 </dict>
 </plist>
