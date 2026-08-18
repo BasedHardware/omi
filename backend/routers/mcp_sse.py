@@ -1834,7 +1834,10 @@ async def mcp_streamable_http(
 
 
 @router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
-def mcp_sse_get() -> Response:
+def mcp_sse_get(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
+) -> Response:
     return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
 

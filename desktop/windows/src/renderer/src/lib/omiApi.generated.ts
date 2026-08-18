@@ -7021,6 +7021,7 @@ export interface OmiApiPaths {
       responses: {
         "200": void;
         "401": void;
+        "422": HTTPValidationError;
       };
     };
     post: {
@@ -13297,7 +13298,7 @@ export async function get_screen_activity_v1_mcp_screen_activity_get(query: { st
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function mcp_sse_get_v1_mcp_sse_get(init?: OmiApiClientInit): Promise<void> {
+export async function mcp_sse_get_v1_mcp_sse_get(header: { Authorization?: string | null, Mcp_Session_Id?: string | null }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/sse`;
   const _search = "";
@@ -13306,6 +13307,8 @@ export async function mcp_sse_get_v1_mcp_sse_get(init?: OmiApiClientInit): Promi
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
+      ...(header.Authorization !== undefined ? { "Authorization": String(header.Authorization) } : {}),
+      ...(header.Mcp_Session_Id !== undefined ? { "Mcp-Session-Id": String(header.Mcp_Session_Id) } : {}),
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
