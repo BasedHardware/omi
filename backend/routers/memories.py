@@ -14,7 +14,12 @@ from database import review_queue
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.memory_service import MemoryPayload, MemoryService, fetch_memory_dict
+from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
+    MemoryPayload,
+    MemoryService,
+    fetch_memory_dict,
+)
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
@@ -588,11 +593,23 @@ def get_memories(
             # First page must succeed whenever the legacy offset read can serve
             # it. The cursor path 503s on a missing cursor secret
             # ("Memory cursor unavailable"); the canonical keyset scan wraps any
-            # underlying failure as "Canonical memory unavailable". Both fall
-            # back to read(); unrelated errors (4xx, other 503s) propagate.
+            # underlying failure as "Canonical memory unavailable"; the
+            # historical keyset scan wraps its own as "Historical memory
+            # unavailable". The keyset scans order by (updated_at DESC,
+            # __name__) and so fail while that composite index is building,
+            # which the offset read's single-field order does not — so all three
+            # fall back to read(). The keyset scans also walk past every row they
+            # must not emit before they can fill the page, so an account whose
+            # historical set is fully suppressed by canonical exhausts the scan
+            # row budget ("Memory scan budget exceeded") — that walk is what took
+            # the first page past the 30s edge timeout in prod on 2026-08-18, and
+            # the offset read serves it without the walk.
+            # Unrelated errors (4xx, other 503s) propagate.
             if exc.status_code != 503 or exc.detail not in (
                 "Memory cursor unavailable",
                 "Canonical memory unavailable",
+                "Historical memory unavailable",
+                MEMORY_LIST_SCAN_BUDGET_DETAIL,
             ):
                 raise
         else:

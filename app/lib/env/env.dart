@@ -6,7 +6,6 @@ import 'environment_profile.dart';
 
 abstract class Env {
   static const productionApiBaseUrl = 'https://api.omi.me/';
-  static const productionAgentProxyWsUrl = 'wss://agent.omi.me/v1/agent/ws';
   static const _apiBaseUrlFromDefine = String.fromEnvironment(
     'OMI_API_BASE_URL',
   );
@@ -20,7 +19,6 @@ abstract class Env {
   );
   static late final EnvFields _instance;
   static String? _apiBaseUrlOverride;
-  static String? _agentProxyWsUrlOverride;
   static bool isTestFlight = false;
 
   static AppEnvironmentProfile get profile => AppEnvironmentProfile.forFlavor(
@@ -37,10 +35,6 @@ abstract class Env {
 
   static void clearApiBaseUrlOverrideForTesting() {
     _apiBaseUrlOverride = null;
-  }
-
-  static void overrideAgentProxyWsUrl(String url) {
-    _agentProxyWsUrlOverride = url;
   }
 
   static String? get posthogApiKey => _instance.posthogApiKey;
@@ -142,29 +136,9 @@ abstract class Env {
         'Profile ${effectiveProfile.name} requires API_BASE_URL=${effectiveProfile.defaultApiBaseUrl}',
       );
     }
-
-    if (effectiveProfile == AppEnvironmentProfile.production &&
-        _agentProxyWsUrlFor(normalized) != productionAgentProxyWsUrl) {
-      throw StateError(
-        'Production packages require the production agent WebSocket endpoint.',
-      );
-    }
   }
 
   static void requireProductionRouting() => validateStartupRouting(productionFamily: true);
-
-  /// WebSocket URL for the agent proxy service.
-  /// Derives from apiBaseUrl: api.omi.me → agent.omi.me, api.omiapi.com → agent.omiapi.com.
-  /// Can be overridden via Env.overrideAgentProxyWsUrl() for local testing.
-  static String get agentProxyWsUrl {
-    if (_agentProxyWsUrlOverride != null) return _agentProxyWsUrlOverride!;
-    return _agentProxyWsUrlFor(apiBaseUrl ?? productionApiBaseUrl);
-  }
-
-  static String _agentProxyWsUrlFor(String base) {
-    final host = Uri.parse(base).host.replaceFirst('api.', 'agent.');
-    return 'wss://$host/v1/agent/ws';
-  }
 
   static bool _isLocalDevelopmentApi(String base) {
     final uri = Uri.tryParse(base);
