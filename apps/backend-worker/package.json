@@ -12,7 +12,7 @@
     "dev": "WRANGLER_SEND_METRICS=false wrangler dev",
     "deploy:dry-run": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run --strict",
     "deploy:staging": "WRANGLER_SEND_METRICS=false wrangler deploy --strict",
-    "migrate:staging": "WRANGLER_SEND_METRICS=false wrangler d1 migrations apply omi-v5-backend-staging-tasks --config wrangler.jsonc",
+    "migrate:staging": "WRANGLER_SEND_METRICS=false WRANGLER_WRITE_LOGS=false wrangler d1 migrations apply omi-v5-backend-staging-tasks --remote --config wrangler.jsonc",
     "verify:ready": "bun run scripts/verify-ready.ts",
     "verify:release": "bun run scripts/verify-release.ts",
     "verify:migrations": "bun run scripts/verify-migrations.ts"
