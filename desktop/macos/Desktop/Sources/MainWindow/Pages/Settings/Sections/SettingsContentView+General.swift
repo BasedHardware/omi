@@ -91,6 +91,35 @@ extension SettingsContentView {
         }
       }
 
+      // Wake word trigger (opt-in; needs ambient listening active to hear it)
+      settingsCard(settingId: "general.wakeword") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack(spacing: OmiSpacing.lg) {
+            SettingsIconTile(symbol: "waveform.and.mic")
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Wake Word")
+                .scaledFont(size: OmiType.subheading, weight: .semibold)
+                .foregroundColor(Ink.primary)
+
+              Text(wakeWordSubtitle)
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+            }
+
+            Spacer()
+
+            Toggle(
+              "",
+              isOn: wakeWordEnabledBinding
+            )
+            .toggleStyle(OmiToggleStyle())
+            .labelsHidden()
+            .frame(width: 36, height: 20)
+          }
+        }
+      }
+
       // Notifications toggle
       settingsCard(settingId: "general.notifications") {
         VStack(spacing: OmiSpacing.md) {
@@ -261,6 +290,23 @@ extension SettingsContentView {
 
   private var audioRecordingNeedsAttention: Bool {
     audioRecordingMode != .off && !appState.hasMicrophonePermission
+  }
+
+  private var wakeWordEnabledBinding: Binding<Bool> {
+    Binding(
+      get: { AssistantSettings.shared.wakeWordEnabled },
+      set: { AssistantSettings.shared.wakeWordEnabled = $0 }
+    )
+  }
+
+  private var wakeWordSubtitle: String {
+    let requiresListeningText: String
+    switch audioRecordingMode {
+    case .off: requiresListeningText = "Requires Audio Recording to be on"
+    case .onlyMeetings: requiresListeningText = "Listens during meetings and calls"
+    case .always: requiresListeningText = "Listens in the background"
+    }
+    return "Say \"\(AssistantSettings.shared.wakeWordPhrase)\" then a command, hands-free. \(requiresListeningText)."
   }
 
   private var audioRecordingStatusText: String {
