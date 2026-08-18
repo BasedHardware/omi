@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Callable, Optional, cast
 
 from database import knowledge_graph as kg_db
-from database._client import db as firestore_db
+from database._client import get_firestore_client
 from database.auth import get_user_name
 from utils.memory import canonical_graph as canonical_graph_service
 from utils.memory.memory_service import MemoryService
@@ -60,7 +60,7 @@ def _is_assertion_backed_graph_account(uid: str) -> bool:
     """
     if _has_canonical_graph_state(uid):
         return True
-    return kg_db.has_stored_memory_graph_assertions(uid, db_client=firestore_db)
+    return kg_db.has_stored_memory_graph_assertions(uid, db_client=get_firestore_client())
 
 
 def _require_legacy_graph_mutation(uid: str) -> None:
@@ -225,7 +225,7 @@ def _rebuild_graph_task(uid: str, user_name: str) -> None:
         return
     memories: MemoryPayloads = [
         {"id": memory.id, "content": memory.content}
-        for memory in MemoryService(db_client=firestore_db).read(uid, limit=500)
+        for memory in MemoryService(db_client=get_firestore_client()).read(uid, limit=500)
         if not getattr(memory, "is_locked", False)
     ]
     _run_rebuild_knowledge_graph(uid, memories, user_name)
