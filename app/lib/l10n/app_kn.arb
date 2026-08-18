@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "ನನ್ನ ಅಪ್ಲಿಕೇಶನ",
+    "myApps": "ನಾನು ರಚಿಸಿದವು",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },

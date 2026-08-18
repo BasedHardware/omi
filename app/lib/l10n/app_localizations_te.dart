@@ -323,7 +323,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get searchApps => 'అనువర్తనాలను శోధించండి...';
 
   @override
-  String get myApps => 'నా అనువర్తనాలు';
+  String get myApps => 'నా సృష్టి';
 
   @override
   String get installedApps => 'ఇన్‌స్టాల్ చేసిన అనువర్తనాలు';

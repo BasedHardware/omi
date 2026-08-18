@@ -324,7 +324,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get searchApps => 'Rechercher des applications...';
 
   @override
-  String get myApps => 'Mes applications';
+  String get myApps => 'Créé par moi';
 
   @override
   String get installedApps => 'Applications installées';

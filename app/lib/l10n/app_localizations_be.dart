@@ -321,7 +321,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get searchApps => 'Поіск дадатаў...';
 
   @override
-  String get myApps => 'Мае дадатыі';
+  String get myApps => 'Створана мной';
 
   @override
   String get installedApps => 'Усталяваныя дадатыі';

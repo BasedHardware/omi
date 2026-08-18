@@ -323,7 +323,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get searchApps => 'Поиск приложений...';
 
   @override
-  String get myApps => 'Мои приложения';
+  String get myApps => 'Создано мной';
 
   @override
   String get installedApps => 'Установленные приложения';

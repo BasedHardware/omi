@@ -323,7 +323,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get searchApps => 'Hľadať aplikácie...';
 
   @override
-  String get myApps => 'Moje aplikácie';
+  String get myApps => 'Vytvorené mnou';
 
   @override
   String get installedApps => 'Nainštalované aplikácie';

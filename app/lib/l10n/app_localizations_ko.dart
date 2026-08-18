@@ -320,7 +320,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchApps => '앱 검색...';
 
   @override
-  String get myApps => '내 앱';
+  String get myApps => '내가 만듦';
 
   @override
   String get installedApps => '설치된 앱';

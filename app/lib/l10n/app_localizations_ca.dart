@@ -323,7 +323,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get searchApps => 'Cerca aplicacions...';
 
   @override
-  String get myApps => 'Les meves aplicacions';
+  String get myApps => 'Creat per mi';
 
   @override
   String get installedApps => 'Aplicacions instal·lades';

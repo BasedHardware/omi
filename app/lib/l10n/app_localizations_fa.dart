@@ -322,7 +322,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get searchApps => 'جستجوی اپلیکیشن‌ها...';
 
   @override
-  String get myApps => 'اپلیکیشن‌های من';
+  String get myApps => 'ساخته‌شده توسط من';
 
   @override
   String get installedApps => 'اپلیکیشن‌های نصب‌شده';

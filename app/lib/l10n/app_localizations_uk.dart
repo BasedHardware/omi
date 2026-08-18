@@ -323,7 +323,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchApps => 'Шукати додатки...';
 
   @override
-  String get myApps => 'Мої додатки';
+  String get myApps => 'Створено мною';
 
   @override
   String get installedApps => 'Встановлені додатки';

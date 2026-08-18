@@ -427,7 +427,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "My Apps",
+    "myApps": "Created by me",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },

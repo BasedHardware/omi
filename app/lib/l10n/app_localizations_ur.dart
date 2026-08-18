@@ -322,7 +322,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchApps => 'ایپلیکیشنز تلاش کریں...';
 
   @override
-  String get myApps => 'میری ایپلیکیشنز';
+  String get myApps => 'میری بنائی ہوئی';
 
   @override
   String get installedApps => 'انسٹال شدہ ایپلیکیشنز';
