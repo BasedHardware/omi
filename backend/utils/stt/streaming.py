@@ -101,6 +101,23 @@ def _fallback_failure_reason(error: BaseException) -> str:
     return 'provider_5xx'
 
 
+# Deepgram and Parakeet refuse at connect time, so a returned socket is proof
+# enough. Velma-2 accepts the upgrade and only then answers "Monthly usage limit
+# reached.", so a Modulate socket is not evidence that the session is served.
+_POST_CONNECT_REJECTING_PRIMARIES: Final = frozenset({STTService.modulate})
+
+
+async def _primary_is_serving(primary_service: STTService, socket: STTSocket) -> bool:
+    """Return whether a connected primary is actually serving the session.
+
+    Only providers that reject after the upgrade pay the liveness grace, so live
+    session setup keeps its hot path for the providers that fail at connect.
+    """
+    if primary_service not in _POST_CONNECT_REJECTING_PRIMARIES:
+        return True
+    return await fallback_socket_is_serving(socket)
+
+
 async def _connect_serving_fallback(
     connect: Callable[[], Awaitable[Optional[STTSocket]]], service: STTService
 ) -> STTSocket:
@@ -143,11 +160,19 @@ async def connect_stt_socket_with_fallback(
     if circuit.allow_request():
         try:
             socket = await connect_primary()
-            if socket is not None:
+            if socket is None:
+                reason = 'config_incomplete'
+                circuit.record_failure()
+            elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
                 return socket, primary_service
-            reason = 'config_incomplete'
-            circuit.record_failure()
+            else:
+                # The primary took the session and then refused it. Release the
+                # socket and walk the chain instead of serving a dead stream.
+                detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                close_rejected_socket(socket)
+                reason = _fallback_failure_reason(RuntimeError(detail))
+                circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
             if reason in EXPECTED_REJECTIONS:
