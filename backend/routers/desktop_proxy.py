@@ -449,6 +449,12 @@ def _use_vertex_ai() -> bool:
 # safely — requests 429 and overflow absorbs them — and the operator override
 # pins the model outright if that is ever not enough.
 _pt_target_ready = False
+# Whether the migration target answers at all for this project. Publisher
+# models must be enabled per project: on 2026-08-18 every gemini-3.x model was
+# present in the global catalog and 404 on the project-scoped endpoint, so
+# "listed" is not "callable". This is re-checked on a TTL so access being
+# granted later promotes the proxy with no deploy, exactly like capacity.
+_target_model_unavailable_at: float | None = None
 # None means "never probed", which is distinct from "probed at monotonic 0".
 # time.monotonic() is measured from an arbitrary origin — on a freshly started
 # container it can legitimately be smaller than the TTL, so seeding this with
@@ -458,7 +464,32 @@ _pt_target_probed_at: float | None = None
 
 
 def _pt_target_is_ready() -> bool:
-    return _pt_target_ready
+    return _pt_target_ready and _target_model_believed_available()
+
+
+def _target_model_believed_available() -> bool:
+    if _target_model_unavailable_at is None:
+        return True
+    return (time.monotonic() - _target_model_unavailable_at) >= _PT_PROBE_TTL_SECONDS
+
+
+def _record_target_model_unavailable() -> None:
+    global _target_model_unavailable_at, _pt_target_ready
+    if _target_model_believed_available():
+        print(
+            f'desktop_proxy target_model_unavailable model={VERTEX_PT_TARGET_MODEL} '
+            f'reason=publisher_model_not_enabled_for_project',
+            file=sys.stderr,
+            flush=True,
+        )
+    _target_model_unavailable_at = time.monotonic()
+    # A model the project cannot call cannot be holding prepaid capacity.
+    _pt_target_ready = False
+
+
+def _record_target_model_available() -> None:
+    global _target_model_unavailable_at
+    _target_model_unavailable_at = None
 
 
 def _pt_probe_due() -> bool:
@@ -496,10 +527,6 @@ def _provisioned_model() -> str:
     )
 
 
-def _overflow_model(pt_model: str) -> str:
-    return ptr.resolve_overflow_model(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
-
-
 def _overflow_enabled() -> bool:
     return os.getenv(_OVERFLOW_ENABLED_ENV, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
 
@@ -520,7 +547,11 @@ def _serving_model(model: str) -> str:
     if get_byok_key('gemini'):
         return model
     if model == 'gemini-2.5-pro':
-        return VERTEX_PT_TARGET_MODEL
+        if _target_model_believed_available():
+            return VERTEX_PT_TARGET_MODEL
+        # The target is not callable for this project; keep Pro on the model
+        # the quota path has always demoted to rather than failing the request.
+        return _QUOTA_DEMOTION_MODEL
     if model == ptr.PT_MODEL_CURRENT:
         return _provisioned_model()
     return model
@@ -675,14 +706,47 @@ def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
     if served_model != pt_model:
         return []
     try:
-        overflow = _overflow_model(pt_model)
+        ladder = ptr.resolve_overflow_ladder(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
     except ValueError:
         return []
     plan: list[tuple[str, str]] = []
-    if overflow == ptr.PT_MODEL_TARGET and _pt_probe_due():
-        plan.append((overflow, ptr.REQUEST_TYPE_DEDICATED))
-    plan.append((overflow, ptr.REQUEST_TYPE_SHARED))
+    for rung in ladder:
+        if rung == ptr.PT_MODEL_TARGET:
+            if not _target_model_believed_available():
+                # Skip a rung the project cannot call at all; trying it would
+                # spend a round trip to fail on every single overflow request.
+                continue
+            if _pt_probe_due():
+                plan.append((rung, ptr.REQUEST_TYPE_DEDICATED))
+        plan.append((rung, ptr.REQUEST_TYPE_SHARED))
     return plan
+
+
+def _safe_rungs() -> list[tuple[str, str]]:
+    """On-demand models this project can actually call, best first."""
+    try:
+        ladder = ptr.resolve_overflow_ladder(
+            pt_model=_provisioned_model(), override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, '')
+        )
+    except ValueError:
+        return []
+    return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in ladder if rung != ptr.PT_MODEL_TARGET]
+
+
+def _recovery_plan(served_model: str, status: int, message: str) -> list[tuple[str, str]]:
+    """Attempts to make after a response this proxy can route around.
+
+    Two distinct recoverable conditions:
+      * the reservation is full          -> walk the overflow ladder
+      * the target model is not callable -> fall back to a model that is, and
+        latch the observation so later requests skip the dead rung entirely
+    """
+    if served_model == ptr.PT_MODEL_TARGET and ptr.is_model_unavailable(status, message):
+        _record_target_model_unavailable()
+        return _safe_rungs()
+    if _overflow_triggered(status, message):
+        return _overflow_plan(served_model)
+    return []
 
 
 def _overflow_triggered(status: int, message: str) -> bool:
@@ -1011,11 +1075,16 @@ async def _stream_provider(
             # The body carries the difference between 'reservation full' and
             # ordinary rate limiting, and a streamed error body is not read yet.
             await upstream.aread()
+            unavailable = ptr.is_model_unavailable(upstream.status_code, upstream.text)
             exhausted = _overflow_triggered(upstream.status_code, upstream.text)
-            if capacity == ptr.REQUEST_TYPE_DEDICATED:
+            if attempt_model == ptr.PT_MODEL_TARGET and not unavailable and upstream.status_code < 400:
+                _record_target_model_available()
+            if capacity == ptr.REQUEST_TYPE_DEDICATED and not unavailable:
                 _record_pt_target_observation(not exhausted)
-            if exhausted and not pending and query is not None:
-                for overflow_model, overflow_capacity in _overflow_plan(attempt_model):
+            if not pending and query is not None:
+                for overflow_model, overflow_capacity in _recovery_plan(
+                    attempt_model, upstream.status_code, upstream.text
+                ):
                     pending.append(
                         (
                             await _upstream(
@@ -1163,9 +1232,10 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
                     semaphore.release()
 
             response = await _cancel_on_disconnect(request, post(route, body))
-            if _overflow_triggered(response.status_code, response.text):
+            recovery = _recovery_plan(model, response.status_code, response.text)
+            if recovery:
                 query = dict(request.query_params)
-                for overflow_model, capacity in _overflow_plan(model):
+                for overflow_model, capacity in recovery:
                     overflow_path = f'models/{overflow_model}:{action}'
                     overflow_body = _retarget_thinking(body, overflow_model)
                     overflow_route = await _upstream(
@@ -1175,10 +1245,15 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
                     telemetry.model = overflow_model
                     response = await _cancel_on_disconnect(request, post(overflow_route, overflow_body))
                     probing = capacity == ptr.REQUEST_TYPE_DEDICATED
+                    unavailable = ptr.is_model_unavailable(response.status_code, response.text)
                     exhausted = _overflow_triggered(response.status_code, response.text)
-                    if probing:
+                    if unavailable and overflow_model == ptr.PT_MODEL_TARGET:
+                        _record_target_model_unavailable()
+                    elif overflow_model == ptr.PT_MODEL_TARGET and response.status_code < 400:
+                        _record_target_model_available()
+                    if probing and not unavailable:
                         _record_pt_target_observation(not exhausted)
-                    if not exhausted:
+                    if not exhausted and not unavailable:
                         break
             telemetry.phase = 'body'
     except HTTPException as exc:

@@ -55,6 +55,56 @@ absorbs overflow and Pro. Promoting the client-pinned Lite lanes
 large cost regression, not a saving. Those pins are deliberately untouched and
 `test_client_pinned_flash_lite_is_never_promoted` holds that boundary.
 
+## Publisher models are enabled per project
+
+**Listing the catalog does not prove availability.** `GET /publishers/google/models`
+(no project in the path) enumerates models that exist in Vertex. The
+project-scoped `projects/{p}/locations/{l}/publishers/google/models/{m}` path
+is what decides whether this project may call one.
+
+Measured 2026-08-18 on `based-hardware` / `us-central1` with credentials that
+can invoke inference:
+
+| Model | Global catalog | Project endpoint |
+| --- | --- | --- |
+| `gemini-2.5-flash-lite` | listed | **200** |
+| `gemini-3.1-flash-lite` | listed | **404** |
+| `gemini-3.1-flash-lite-preview` | listed | **404** |
+| `gemini-3-flash-preview` | listed | **404** |
+| `gemini-3.5-flash-lite` | listed | **404** |
+
+No Gemini 3.x model is callable by this project yet, on `v1` or `v1beta1`, in
+`us-central1` or `global`. **Access must be enabled before any 3.x routing or
+any 3.x Provisioned Throughput purchase can do anything** — you cannot buy PT
+for a model the project cannot call.
+
+The proxy treats this as a first-class state rather than an error: a 404 from
+the target latches `_target_model_unavailable_at`, Pro falls back to
+`_QUOTA_DEMOTION_MODEL`, and the overflow ladder drops the dead rung so no
+request pays a round trip to fail. The latch is re-checked on the same TTL as
+capacity, so **enabling 3.x access later recovers the routing with no deploy**,
+exactly like the reservation promotion.
+
+## Thinking contract, measured
+
+Run 2026-08-18 via `backend/scripts/probe_gemini_thinking_contract.py`:
+
+| Model | Config | thoughts | output |
+| --- | --- | ---: | ---: |
+| `gemini-2.5-flash-lite` | `thinkingBudget: 0` | 0 | 225 |
+| `gemini-2.5-flash-lite` | `thinkingBudget: 1024` | 863 | 300 |
+| `gemini-2.5-flash-lite` | `thinkingLevel: minimal` | **HTTP 400 — not supported** | |
+| `gemini-2.5-flash` | `thinkingBudget: 0` | 0 | 309 |
+| `gemini-2.5-flash` | no config | 516 | 213 |
+
+Two things this settles. 2.5 models **honor** `thinkingBudget` (0 really is 0),
+and they **reject** `thinkingLevel` outright with a 400 — so the family split
+is required in both directions, not a precaution. It also shows why the proxy
+injects a budget at all: `gemini-2.5-flash` with no thinking config spent 516
+thinking tokens on a trivial prompt, all billed as output.
+
+The 3.x half is still unmeasured because the project cannot call those models.
+
 ## Migrating the reservation to `gemini-3.1-flash-lite`
 
 Requested 2026-08-18; PT orders provision in ~10 business days. **No deploy is

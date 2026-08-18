@@ -856,9 +856,11 @@ def _reset_pt_promotion_state():
     """The observed-capacity latch is module state; never leak it between tests."""
     desktop_proxy._pt_target_ready = False
     desktop_proxy._pt_target_probed_at = None
+    desktop_proxy._target_model_unavailable_at = None
     yield
     desktop_proxy._pt_target_ready = False
     desktop_proxy._pt_target_probed_at = None
+    desktop_proxy._target_model_unavailable_at = None
 
 
 def _retarget(path: str) -> str:
@@ -908,8 +910,11 @@ def test_operator_override_pins_the_reservation_back(monkeypatch):
 def test_overflow_never_targets_the_live_reservation(monkeypatch):
     """FC-degraded-fallback-consumes-protected-budget across the migration."""
     monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
-    assert desktop_proxy._overflow_model("gemini-2.5-flash") == "gemini-3.1-flash-lite"
-    assert desktop_proxy._overflow_model("gemini-3.1-flash-lite") == "gemini-2.5-flash-lite"
+    ladder = desktop_proxy.ptr.resolve_overflow_ladder
+    assert ladder(pt_model="gemini-2.5-flash")[0] == "gemini-3.1-flash-lite"
+    assert ladder(pt_model="gemini-3.1-flash-lite")[0] == "gemini-2.5-flash-lite"
+    for pt in ("gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"):
+        assert pt not in ladder(pt_model=pt)
 
 
 def test_overflow_plan_is_empty_for_traffic_that_cannot_exhaust_the_reservation(monkeypatch):
@@ -923,7 +928,39 @@ def test_overflow_plan_probes_the_target_before_paying_on_demand(monkeypatch):
     assert plan == [
         ("gemini-3.1-flash-lite", "dedicated"),
         ("gemini-3.1-flash-lite", "shared"),
+        ("gemini-2.5-flash-lite", "shared"),
     ]
+
+
+def test_overflow_skips_a_target_the_project_cannot_call(monkeypatch):
+    """Publisher models are enabled per project. Keeping an unreachable rung in
+    the plan would spend a round trip to 404 on every overflow request."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    desktop_proxy._record_target_model_unavailable()
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == [("gemini-2.5-flash-lite", "shared")]
+
+
+def test_pro_falls_back_when_the_target_is_not_enabled_for_the_project(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    desktop_proxy._record_target_model_unavailable()
+    assert _retarget("models/gemini-2.5-pro:generateContent") == (
+        f"models/{desktop_proxy._QUOTA_DEMOTION_MODEL}:generateContent"
+    )
+
+
+def test_an_unavailable_target_cannot_be_considered_a_live_reservation():
+    """A model the project cannot call cannot be holding prepaid capacity."""
+    desktop_proxy._record_pt_target_observation(True)
+    assert desktop_proxy._pt_target_is_ready() is True
+    desktop_proxy._record_target_model_unavailable()
+    assert desktop_proxy._pt_target_is_ready() is False
+
+
+def test_model_unavailability_is_distinguished_from_capacity_conditions():
+    not_enabled = "Publisher model `projects/p/locations/l/publishers/google/models/m` was not found"
+    assert desktop_proxy.ptr.is_model_unavailable(404, not_enabled)
+    assert not desktop_proxy.ptr.is_model_unavailable(429, "Exceeded the Provisioned Throughput.")
+    assert not desktop_proxy._overflow_triggered(404, not_enabled)
 
 
 def test_overflow_can_be_disabled_for_an_emergency(monkeypatch):
@@ -1210,3 +1247,68 @@ def test_a_new_instance_probes_immediately_regardless_of_uptime(monkeypatch):
 
     desktop_proxy._record_pt_target_observation(False)
     assert desktop_proxy._pt_probe_due() is False
+
+
+def _model_not_found_response(url: str) -> httpx.Response:
+    model = url.rsplit("/", 1)[-1]
+    return httpx.Response(
+        404,
+        request=httpx.Request("POST", url),
+        json={
+            "error": {
+                "code": 404,
+                "message": (
+                    f"Publisher model `projects/based-hardware/locations/us-central1"
+                    f"/publishers/google/models/{model}` was not found or your project "
+                    f"does not have access to it."
+                ),
+            }
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_pro_recovers_when_the_target_model_is_not_enabled(monkeypatch):
+    """Observed in production 2026-08-18: every gemini-3.x model was listed in
+    the global publisher catalog and 404 on the project-scoped endpoint. A Pro
+    request remapped onto it must still be served, not fail."""
+    client = _ScriptedClient([_model_not_found_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+
+    assert response.status_code == 200
+    assert routed == [
+        ("gemini-3.1-flash-lite", ""),
+        ("gemini-2.5-flash-lite", "shared"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_404_stops_the_whole_fleet_retrying_a_dead_model(monkeypatch):
+    """The latch is what keeps a project-wide access gap from costing a wasted
+    round trip on every single request."""
+    client = _ScriptedClient([_model_not_found_response, _ok_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+    assert desktop_proxy._target_model_believed_available() is False
+
+    await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+    # Second request goes straight to a model the project can call.
+    assert routed[-1] == ("gemini-2.5-flash-lite", "")
+
+
+@pytest.mark.asyncio
+async def test_access_granted_later_promotes_without_a_deploy(monkeypatch):
+    """Availability is re-checked on the same TTL as capacity, so enabling
+    gemini-3.x for the project recovers the routing on its own."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: clock["now"])
+
+    desktop_proxy._record_target_model_unavailable()
+    assert _retarget("models/gemini-2.5-pro:generateContent") != ("models/gemini-3.1-flash-lite:generateContent")
+
+    clock["now"] += desktop_proxy._PT_PROBE_TTL_SECONDS + 1
+    assert _retarget("models/gemini-2.5-pro:generateContent") == ("models/gemini-3.1-flash-lite:generateContent")

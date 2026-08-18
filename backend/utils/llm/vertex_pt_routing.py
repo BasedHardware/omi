@@ -111,6 +111,28 @@ def resolve_overflow_model(*, pt_model: str, override: str = '') -> str:
     raise ValueError(f'no overflow model available outside the provisioned model {protected!r}')
 
 
+def resolve_overflow_ladder(*, pt_model: str, override: str = '') -> tuple[str, ...]:
+    """Every on-demand model that may absorb work, best first.
+
+    A ladder rather than a single model so a rung that cannot be called at all
+    falls through to one that can, instead of failing the request. Never
+    includes `pt_model` (FC-degraded-fallback-consumes-protected-budget).
+    """
+    protected = _normalize(pt_model)
+    pinned = _normalize(override)
+    if pinned:
+        if pinned == protected:
+            raise ValueError(
+                f'overflow override {pinned!r} equals the provisioned model; '
+                'overflow must never consume the protected reservation'
+            )
+        return (pinned,)
+    ladder = tuple(c for c in OVERFLOW_PREFERENCE if c != protected)
+    if not ladder:
+        raise ValueError(f'no overflow model available outside the provisioned model {protected!r}')
+    return ladder
+
+
 def request_type_for(*, model: str, pt_model: str) -> str:
     """Header value for a model: prepaid capacity only exists for the PT model.
 
@@ -132,6 +154,26 @@ def is_provisioned_capacity_exhausted(status: int, message: str) -> bool:
         return False
     text = (message or '').casefold()
     return 'provisioned throughput' in text or 'dedicated' in text
+
+
+def is_model_unavailable(status: int, message: str) -> bool:
+    """Whether a model cannot be called by this project at all.
+
+    Distinct from both exhaustion and absent capacity: those mean "the model
+    works but prepaid throughput did not serve this request". This means the
+    publisher model is not enabled for the project, so every request to it
+    fails no matter how it is routed.
+
+    Listing the global publisher catalog does NOT prove availability — the
+    catalog enumerates models that exist in Vertex, while the project-scoped
+    endpoint is what decides whether this project may call one. On
+    2026-08-18 every gemini-3.x model was in the catalog and 404 on the
+    project path, which is the case this predicate exists to survive.
+    """
+    if status != 404:
+        return False
+    text = (message or '').casefold()
+    return 'publisher model' in text or 'was not found' in text
 
 
 def is_provisioned_capacity_absent(status: int, message: str) -> bool:
