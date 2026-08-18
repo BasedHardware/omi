@@ -139,7 +139,6 @@ def test_desktop_reconcile_response_preserves_canonical_identity_and_artifacts()
                     'sender': 'ai',
                     'type': 'text',
                     'app_id': None,
-                    'plugin_id': None,
                     'session_id': 'session-1',
                     'chat_session_id': 'session-1',
                     'reported': False,

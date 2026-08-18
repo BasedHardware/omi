@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class MessageSender(str, Enum):
@@ -68,8 +68,6 @@ class Message(BaseModel):
     created_at: datetime
     sender: MessageSender
     app_id: Optional[str] = None
-    # TODO: remove plugin_id after migration
-    plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
     memories_id: List[str] = []  # used in db
@@ -93,19 +91,6 @@ class Message(BaseModel):
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
     chart_data: Optional[Union[ChartData, dict]] = None  # Inline chart visualization data
-
-    @model_validator(mode='before')
-    @classmethod
-    def _sync_app_and_plugin_ids(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            app_id_val = data.get('app_id')
-            plugin_id_val = data.get('plugin_id')
-
-            if app_id_val is not None:
-                data['plugin_id'] = app_id_val
-            elif plugin_id_val is not None:
-                data['app_id'] = plugin_id_val
-        return data
 
     @classmethod
     def deserialize_many_safe(cls, records, on_error=None) -> List['Message']:
@@ -253,23 +238,9 @@ class ChatSession(BaseModel):
     message_ids: Optional[List[str]] = []
     file_ids: Optional[List[str]] = []
     app_id: Optional[str] = None
-    plugin_id: Optional[str] = None
     created_at: datetime
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None
-
-    @model_validator(mode='before')
-    @classmethod
-    def _sync_chat_session_app_and_plugin_ids(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            app_id_val = data.get('app_id')
-            plugin_id_val = data.get('plugin_id')
-
-            if app_id_val is not None:
-                data['plugin_id'] = app_id_val
-            elif plugin_id_val is not None:
-                data['app_id'] = plugin_id_val
-        return data
 
     def add_file_ids(self, new_file_ids: List[str]):
         if self.file_ids is None:

@@ -210,6 +210,34 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('account_generation'), _asc('status'), _asc('__name__')),
     ),
+    # App-scoped chat history is filtered by app_id and ordered by created_at
+    # (chat.py get_app_messages / get_messages). These replaced the retired
+    # plugin_id composite indexes, so the app_id equivalents must exist before
+    # the plugin_id-based serving queries are switched over.
+    FirestoreIndexRequirement(
+        'messages_app_id_created_at',
+        'messages',
+        'COLLECTION',
+        (_asc('app_id'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'messages_app_id_chat_session_id',
+        'messages',
+        'COLLECTION',
+        (_asc('app_id'), _asc('chat_session_id'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'chat_sessions_updated_at_app_id',
+        'chat_sessions',
+        'COLLECTION',
+        (_desc('updated_at'), _asc('app_id'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'chat_sessions_updated_at_app_id_starred',
+        'chat_sessions',
+        'COLLECTION',
+        (_desc('updated_at'), _asc('app_id'), _asc('starred'), _asc('__name__')),
+    ),
 )
 
 
