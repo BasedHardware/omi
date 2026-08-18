@@ -12,7 +12,7 @@ import { join } from 'path'
 import { BYOK_PROVIDERS, isByokActive, type ByokKeys, type ByokProvider } from '../../shared/byok'
 
 /** On-disk shape: provider → base64-encoded safeStorage ciphertext. */
-type StoredFile = Partial<Record<ByokProvider, string>>
+type StoredFile = Partial<Record<ByokProvider | 'codex', string>>
 
 /**
  * Encrypted-at-rest store for the four BYOK provider keys. Reads/writes are
@@ -58,6 +58,17 @@ export class ByokKeyStore {
     }
   }
 
+  getCodexKey(): string | null {
+    const enc = this.readFile().codex
+    if (!enc) return null
+    try {
+      this.requireEncryption()
+      return safeStorage.decryptString(Buffer.from(enc, 'base64'))
+    } catch {
+      return null
+    }
+  }
+
   /** Decrypt and return every stored provider key. */
   getAllKeys(): ByokKeys {
     const stored = this.readFile()
@@ -91,11 +102,30 @@ export class ByokKeyStore {
     this.writeFile(data)
   }
 
+  setCodexKey(key: string): void {
+    const trimmed = key.trim()
+    if (!trimmed) {
+      this.clearCodexKey()
+      return
+    }
+    this.requireEncryption()
+    const data = this.readFile()
+    data.codex = safeStorage.encryptString(trimmed).toString('base64')
+    this.writeFile(data)
+  }
+
   /** Remove one provider's key. */
   clearKey(provider: ByokProvider): void {
     const data = this.readFile()
     if (!(provider in data)) return
     delete data[provider]
+    this.writeFile(data)
+  }
+
+  clearCodexKey(): void {
+    const data = this.readFile()
+    if (!('codex' in data)) return
+    delete data.codex
     this.writeFile(data)
   }
 

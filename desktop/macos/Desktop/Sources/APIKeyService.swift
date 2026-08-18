@@ -244,6 +244,10 @@ final class APIKeyService: ObservableObject {
     selectedBYOKLLMProvider != nil
   }
 
+  nonisolated static var hasTranscriptionBYOK: Bool {
+    selectedBYOKLLMProvider != nil && byokKey(.deepgram) != nil
+  }
+
   nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
     let requested: BYOKLLMProvider
     if let stored = UserDefaults.standard.string(forKey: .byokLLMProvider),
