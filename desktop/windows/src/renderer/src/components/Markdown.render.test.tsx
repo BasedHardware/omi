@@ -64,7 +64,7 @@ describe('blocks', () => {
   })
 
   it('renders a task item as a read-only checkbox', () => {
-    render(<Markdown text={'- [ ] todo\n- [x] done'} />)
+    render(<Markdown text={'- [ ] buy milk\n- [x] done'} />)
     const boxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
     expect(boxes.map((b) => b.checked)).toEqual([false, true])
     // A rendered reply is a transcript; the box reports, it does not edit.

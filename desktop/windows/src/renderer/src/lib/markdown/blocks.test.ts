@@ -146,10 +146,13 @@ describe('lists', () => {
   })
 
   it('reads task items', () => {
-    // Measured: rendered as literal `[ ] todo` and `[x] done`.
-    const list = firstList(parseBlocks('- [ ] todo\n- [x] done\n- plain'))
+    // Measured: rendered as literal `[ ] buy milk` and `[x] done`.
+    // The sample avoids the bare word the deferred-work-marker check scans
+    // for; it read this line's task text as an un-tracked marker and failed
+    // the PR (run 32117987727).
+    const list = firstList(parseBlocks('- [ ] buy milk\n- [x] done\n- plain'))
     expect(list.items.map((i) => i.checked)).toEqual([false, true, null])
-    expect(list.items.map((i) => i.text)).toEqual(['todo', 'done', 'plain'])
+    expect(list.items.map((i) => i.text)).toEqual(['buy milk', 'done', 'plain'])
   })
 
   it('accepts an uppercase X', () => {
