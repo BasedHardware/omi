@@ -34,7 +34,6 @@ from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import pin_memory_system
 from dependencies import (
     get_uid_from_mcp_api_key,
     get_current_user_id,
