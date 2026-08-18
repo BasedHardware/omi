@@ -46,8 +46,13 @@ export const auth = (() => {
 // `firebase:authUser:*` key that Firebase's own migration didn't clear (e.g. a
 // window that loaded mid-migration). Guarded so it only removes a key the
 // encrypted store already holds. Fire-and-forget; never blocks boot.
-onAuthStateChanged(auth, () => {
+onAuthStateChanged(auth, (user) => {
   void scrubLegacyPlaintextAuth()
+  if (!user || typeof window === 'undefined') return
+  void user
+    .getIdToken()
+    .then((token) => window.omi?.byokEnroll?.(token))
+    .catch(() => undefined)
 })
 
 /**

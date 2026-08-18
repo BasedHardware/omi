@@ -34,6 +34,14 @@ describe('ByokKeyStore', () => {
     expect(store.getKey('anthropic')).toBeNull()
   })
 
+  it('stores the Codex key separately from BYOK providers', () => {
+    store.setCodexKey('sk-codex')
+    expect(store.getCodexKey()).toBe('sk-codex')
+    expect(store.getAllKeys()).toEqual({})
+    store.clearCodexKey()
+    expect(store.getCodexKey()).toBeNull()
+  })
+
   it('getAllKeys returns every stored provider', () => {
     store.setKey('openai', 'sk-openai')
     store.setKey('anthropic', 'sk-ant')

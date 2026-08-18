@@ -26,7 +26,7 @@ extension AppState {
   /// the persisted `desktop_isPaywalled` flag, which can lag behind BYOK
   /// activation. Use this anywhere that only has UserDefaults access.
   nonisolated static var isPaywalledEffective: Bool {
-    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    !APIKeyService.hasTranscriptionBYOK && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.
@@ -52,7 +52,7 @@ extension AppState {
     // exempts the user — so the client must not block capture either, even if
     // a stale `isPaywalled` flag is still set (e.g. trial expired *before*
     // they added keys, and the backend heartbeat hasn't refreshed yet).
-    if APIKeyService.isByokActive {
+    if APIKeyService.hasTranscriptionBYOK {
       if isPaywalled { isPaywalled = false }
       return false
     }
@@ -85,7 +85,7 @@ extension AppState {
         // Local BYOK always wins — never re-block a user who has all four keys
         // configured, regardless of what the (possibly heartbeat-lagged)
         // backend trial state says.
-        if APIKeyService.isByokActive {
+        if APIKeyService.hasTranscriptionBYOK {
           if self.isPaywalled { self.isPaywalled = false }
         } else if metadata.trialExpired && !self.isPaywalled {
           self.isPaywalled = true
