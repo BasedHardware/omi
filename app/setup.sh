@@ -267,7 +267,14 @@ function check_ios_prerequisites() {
   else
     local xcode_version
     xcode_version=$(xcodebuild -version 2>/dev/null | awk '/^Xcode/ {print $2; exit}')
-    if [[ -n "$xcode_version" ]] && ! _version_at_least "$xcode_version" "16.4"; then
+    if [[ -z "$xcode_version" ]]; then
+      # xcodebuild is on PATH but produced no version line — an unaccepted
+      # license or missing components, not a real "Xcode is fine" signal.
+      # Left unchecked, this passes the gate silently and surfaces as a
+      # confusing failure deep into the build, exactly what this check exists
+      # to prevent.
+      missing+=("xcodebuild is on PATH but not usable (license not accepted or components missing) — run: sudo xcodebuild -license accept && sudo xcodebuild -runFirstLaunch")
+    elif ! _version_at_least "$xcode_version" "16.4"; then
       missing+=("Xcode ${xcode_version} found, but v16.4 or later is required — update via the App Store")
     fi
   fi
@@ -278,7 +285,7 @@ function check_ios_prerequisites() {
     local pod_version
     pod_version=$(pod --version 2>/dev/null)
     if [[ -n "$pod_version" ]] && ! _version_at_least "$pod_version" "1.16.2"; then
-      missing+=("CocoaPods ${pod_version} found, but v1.16.2 or later is required — update with: sudo gem install cocoapods")
+      missing+=("CocoaPods ${pod_version} found, but v1.16.2 or later is required — update with: brew upgrade cocoapods (Homebrew) or sudo gem install cocoapods (gem)")
     fi
   fi
 
@@ -330,8 +337,8 @@ function select_ios_device() {
     echo "   $i) $line" >&2
   done < <(echo "$ios_devices" | jq -r '.[] | "\(.name) (\(.id))"')
 
-  # Same reasoning as detect_apple_team_id's prompt: never block on read
-  # without a TTY, or a non-interactive run (CI, nested automation) hangs.
+  # Never block on read without a TTY, or a non-interactive run (CI, nested
+  # automation) hangs indefinitely instead of failing with a usable message.
   if [[ ! -t 0 ]]; then
     echo "   ❌ No terminal available to choose a device." >&2
     echo "      Disconnect the extras, or boot only the simulator you want, and re-run." >&2

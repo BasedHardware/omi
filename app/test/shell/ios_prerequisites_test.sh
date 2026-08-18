@@ -61,7 +61,16 @@ exit 0
 EOF
     chmod +x "$root/bin/flutter"
   fi
-  if [[ -n "$xcode_version" ]]; then
+  if [[ "$xcode_version" == "broken" ]]; then
+    # xcodebuild is on PATH but produces no "Xcode X.Y" line — an unaccepted
+    # license or missing components, matching the real command's behavior.
+    cat > "$root/bin/xcodebuild" <<'EOF'
+#!/usr/bin/env bash
+echo "xcodebuild: error: unable to build chip due to missing license agreement." >&2
+exit 1
+EOF
+    chmod +x "$root/bin/xcodebuild"
+  elif [[ -n "$xcode_version" ]]; then
     cat > "$root/bin/xcodebuild" <<EOF
 #!/usr/bin/env bash
 [[ "\$1" == "-version" ]] && printf 'Xcode %s\nBuild version 0000000\n' "${xcode_version}"
@@ -116,6 +125,16 @@ if [[ "$rc" -ne 0 ]] && [[ "$out" == *"Flutter 3.40.0 found"* ]]; then
   pass "names an outdated Flutter version with the found version and a remedy"
 else
   fail "expected a named outdated-Flutter failure, got (rc=$rc): $out"
+fi
+
+root=$(mktemp -d -t omi_ios_prereq_broken_xcode_XXXXXX)
+stub_toolchain "$root" "3.44.9" "broken" "1.16.2" "yes"
+out=$(run_with_toolchain "$root"); rc=$?
+rm -rf "$root"
+if [[ "$rc" -ne 0 ]] && [[ "$out" == *"xcodebuild is on PATH but not usable"* ]]; then
+  pass "names an unaccepted-license/broken Xcode install, not a silent pass"
+else
+  fail "expected a named broken-xcodebuild failure, got (rc=$rc): $out"
 fi
 
 root=$(mktemp -d -t omi_ios_prereq_no_xcode_XXXXXX)
