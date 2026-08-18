@@ -17,6 +17,24 @@ const mockSearchFocus = jest.fn();
 const mockChatScrollToEnd = jest.fn();
 type MockRequest = {body?: string; id: string; method: string; path: string};
 type MockResponse = {body: string | null; id: string; status: number};
+const mockNative = {
+  connectDevice: jest.fn(async (_deviceId: string) => undefined),
+  disconnectDevice: jest.fn(async (_deviceId: string) => undefined),
+  getSnapshot: jest.fn(async () => ({
+    audioRoute: 'phone-mic',
+    background: 'inactive',
+    bluetooth: 'poweredOn',
+    capture: 'idle',
+    captureMode: 'stream',
+    devices: [
+      {battery: 82, connected: true, id: 'omi-1', name: 'Omi', rssi: -54},
+    ],
+    lastEvent: 'Connected to Omi',
+    microphone: 'granted',
+    notifications: 'granted',
+  })),
+  startScan: jest.fn(async () => []),
+};
 const mockBackend = {
   cancelGenerationEvents: jest.fn(async (_generationId: string) => undefined),
   generationEvents: jest.fn<Promise<MockResponse>, [string, string | null]>(
@@ -276,6 +294,7 @@ jest.mock('../src/omiNative', () => ({
       mockBackend.generationEvents(generationId, lastEventId),
     request: (request: MockRequest) => mockBackend.request(request),
   },
+  omiNative: mockNative,
 }));
 
 import App, {omiDotColor, resolveInitialRoute} from '../App';
@@ -370,6 +389,7 @@ async function renderApp(initialRoute?: string) {
   await ReactTestRenderer.act(async () => {
     renderer = ReactTestRenderer.create(<App initialRoute={initialRoute} />);
     await Promise.resolve();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
   });
   return renderer!;
 }
@@ -399,7 +419,7 @@ test('opens host-selected Chat without changing the default route', async () => 
 
   const homeRenderer = await renderApp();
   const homeOutput = JSON.stringify(homeRenderer.toJSON());
-  expect(homeOutput).toContain('Search conversations and memories');
+  expect(homeOutput).toContain('Search Omi');
   expect(homeOutput).not.toContain('I’m ready.');
 });
 
@@ -412,7 +432,7 @@ test('renders the collapsed reference rail and search-first desktop Home', async
       node.props.accessibilityRole === 'tab',
   );
 
-  expect(output).toContain('Search conversations and memories');
+  expect(output).toContain('Search Omi');
   expect(output).not.toContain('Search what you’ve seen and heard');
   expect(output).toContain('QA bridge check');
   expect(output).toContain('Open Chat');
@@ -462,6 +482,19 @@ test('renders the collapsed reference rail and search-first desktop Home', async
   ).toHaveLength(1);
 });
 
+test('renders the compact native-device fallback, Currents, and bottom-search Home', async () => {
+  const renderer = await renderApp();
+  const output = JSON.stringify(renderer.toJSON());
+
+  expect(output).toContain('Checking Bluetooth…');
+  expect(output).toContain('Scan');
+  expect(output).toContain('Currents');
+  expect(output).toContain('QA bridge check');
+  expect(output).toContain('Search Omi');
+  expect(output).toContain('Home search dock');
+  expect(output).not.toContain('HOME');
+  expect(output).not.toContain('LATEST');
+});
 test('keeps Home limited to chronological conversations and memories', async () => {
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
@@ -549,17 +582,15 @@ test('keeps Home limited to chronological conversations and memories', async () 
     )
     .map(node => node.props.children.props?.children)
     .filter(Boolean);
-  expect(filters).toEqual(['All', 'Conversations', 'Memories']);
+  expect(filters).toEqual([]);
   const search = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search Home',
   );
   expect(search.props.autoFocus).toBeUndefined();
+  expect(search.props.showSoftInputOnFocus).toBe(false);
   await ReactTestRenderer.act(async () => search.props.onChangeText('missing'));
   expect(JSON.stringify(renderer.toJSON())).toContain('No results');
-  const clear = renderer.root.find(
-    node => node.props.accessibilityLabel === 'Clear search',
-  );
-  await ReactTestRenderer.act(async () => clear.props.onPress());
+  await ReactTestRenderer.act(async () => search.props.onChangeText(''));
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
       .props.value,

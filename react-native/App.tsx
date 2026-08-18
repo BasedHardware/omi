@@ -13,6 +13,7 @@ import {
   Easing,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -35,7 +36,6 @@ import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import GanttChartSquare from 'lucide-react-native/icons/square-chart-gantt';
 import House from 'lucide-react-native/icons/house';
 import ListChecks from 'lucide-react-native/icons/list-checks';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
 import Mic from 'lucide-react-native/icons/mic';
 import PanelLeft from 'lucide-react-native/icons/panel-left';
 import PanelLeftClose from 'lucide-react-native/icons/panel-left-close';
@@ -54,7 +54,7 @@ import {
   sendChatMessage,
   type ChatMessage,
 } from './src/chatClient';
-import {omiBackend} from './src/omiNative';
+import {omiBackend, omiNative, type NativeSnapshot} from './src/omiNative';
 import {
   conversationGroupLabel,
   loadDesktopReads,
@@ -280,12 +280,6 @@ function OmiAvatar({
     </View>
   );
 }
-
-const filterLabels: Array<{label: string; value: ProjectionFilter}> = [
-  {label: 'All', value: 'all'},
-  {label: 'Conversations', value: 'conversation'},
-  {label: 'Memories', value: 'memory'},
-];
 
 function displayTitle(item: DesktopReadProjection): string {
   return item.kind === 'memory'
@@ -1237,9 +1231,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [readsPhase, setReadsPhase] = useState<ReadsPhase>('initial-loading');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchArmed, setSearchArmed] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
-  const [projectionFilter, setProjectionFilter] =
-    useState<ProjectionFilter>('all');
+  const projectionFilter: ProjectionFilter = 'all';
+  const [nativeSnapshot, setNativeSnapshot] = useState<NativeSnapshot | null>(
+    null,
+  );
+  const [deviceBusy, setDeviceBusy] = useState(false);
   const searchRef = useRef<TextInput>(null);
   const activeNavigationIndex = navigation.findIndex(
     item => route === item.label,
@@ -1271,6 +1269,65 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       active = false;
     };
   }, [stableChatMessageIds]);
+
+  useEffect(() => {
+    let active = true;
+    if (omiNative === undefined || omiNative === null) {
+      return () => undefined;
+    }
+    omiNative
+      .getSnapshot()
+      .then(snapshot => {
+        if (active) {
+          setNativeSnapshot(snapshot);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (route === 'Home') {
+      Keyboard?.dismiss?.();
+    }
+  }, [route]);
+
+  const scanForOmi = useCallback(async () => {
+    if (omiNative === undefined || omiNative === null) {
+      return;
+    }
+    setDeviceBusy(true);
+    try {
+      const devices = await omiNative.startScan(8);
+      const snapshot = await omiNative.getSnapshot();
+      setNativeSnapshot({...snapshot, devices});
+    } catch {
+      // The native module owns the actual adapter error; preserve its last snapshot.
+    } finally {
+      setDeviceBusy(false);
+    }
+  }, []);
+
+  const toggleDevice = useCallback(async (id: string, connected: boolean) => {
+    if (omiNative === undefined || omiNative === null) {
+      return;
+    }
+    setDeviceBusy(true);
+    try {
+      if (connected) {
+        await omiNative.disconnectDevice(id);
+      } else {
+        await omiNative.connectDevice(id);
+      }
+      setNativeSnapshot(await omiNative.getSnapshot());
+    } catch {
+      // Connection errors remain native-owned and are reflected on the next snapshot.
+    } finally {
+      setDeviceBusy(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (route === 'Chat' && shouldFollowChat.current) {
@@ -1397,8 +1454,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         (query === '' ||
           item.searchableText.toLocaleLowerCase().includes(query)),
     );
-  }, [projectionFilter, reads, searchQuery]);
-  const homeFiltering = searchQuery.trim() !== '' || projectionFilter !== 'all';
+  }, [reads, searchQuery]);
+  const homeFiltering = searchQuery.trim() !== '';
 
   useEffect(() => {
     if (route === 'Home') {
@@ -1960,95 +2017,126 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                           </View>
                         }
                         header={
-                          <View style={styles.searchHeader}>
-                            <View
-                              style={[
-                                styles.searchBox,
-                                searchFocused && styles.focusRing,
-                              ]}>
-                              <Search
-                                accessible={false}
-                                color="#888888"
-                                size={18}
-                                strokeWidth={2}
-                              />
-                              <TextInput
-                                accessibilityLabel="Search Home"
-                                onBlur={() => setSearchFocused(false)}
-                                onChangeText={setSearchQuery}
-                                onFocus={() => setSearchFocused(true)}
-                                placeholder="Search conversations and memories"
-                                placeholderTextColor="#777777"
-                                ref={searchRef}
-                                style={[
-                                  styles.searchInput,
-                                  macDesktop && styles.macPrimaryText,
-                                ]}
-                                value={searchQuery}
-                              />
-                              {searchQuery !== '' && (
-                                <FocusPressable
-                                  accessibilityLabel="Clear search"
-                                  accessibilityRole="button"
-                                  onPress={() => {
-                                    setSearchQuery('');
-                                    searchRef.current?.focus();
-                                  }}
-                                  style={({pressed}) => [
-                                    styles.clearSearch,
-                                    pressed && styles.pressed,
-                                  ]}>
-                                  <Text style={styles.clearSearchText}>×</Text>
-                                </FocusPressable>
-                              )}
-                            </View>
-                            <View style={styles.searchActions}>
-                              <View style={styles.filters}>
-                                {filterLabels.map(filter => (
-                                  <FocusPressable
-                                    accessibilityRole="button"
-                                    key={filter.value}
-                                    onPress={() =>
-                                      setProjectionFilter(filter.value)
-                                    }
-                                    style={[
-                                      styles.filterChip,
-                                      projectionFilter === filter.value &&
-                                        styles.filterChipActive,
-                                    ]}>
-                                    <Text
-                                      style={[
-                                        styles.filterText,
-                                        projectionFilter === filter.value &&
-                                          styles.filterTextActive,
-                                      ]}>
-                                      {filter.label}
-                                    </Text>
-                                  </FocusPressable>
-                                ))}
+                          <View style={styles.homeOverview}>
+                            <View style={styles.deviceHeader}>
+                              <View>
+                                <Text style={styles.sectionLabel}>Devices</Text>
+                                <Text style={styles.deviceState}>
+                                  {nativeSnapshot === null
+                                    ? 'Checking Bluetooth…'
+                                    : nativeSnapshot.bluetooth === 'poweredOn'
+                                    ? 'Bluetooth on'
+                                    : nativeSnapshot.bluetooth ===
+                                      'unauthorized'
+                                    ? 'Bluetooth permission needed'
+                                    : 'Bluetooth off'}
+                                </Text>
                               </View>
                               <FocusPressable
-                                accessibilityLabel="Open Chat"
+                                accessibilityLabel="Scan for Omi devices"
                                 accessibilityRole="button"
-                                onPress={() => setRoute('Chat')}
+                                disabled={
+                                  deviceBusy ||
+                                  nativeSnapshot?.bluetooth !== 'poweredOn'
+                                }
+                                onPress={scanForOmi}
                                 style={({pressed}) => [
-                                  styles.chatPill,
+                                  styles.scanButton,
                                   pressed && styles.pressed,
                                 ]}>
-                                <MessageCircle
-                                  color="#141414"
-                                  size={17}
-                                  strokeWidth={2}
-                                />
-                                <Text style={styles.chatPillText}>Chat</Text>
+                                <Text style={styles.scanButtonText}>
+                                  {deviceBusy ? 'Scanning…' : 'Scan'}
+                                </Text>
                               </FocusPressable>
                             </View>
+                            {nativeSnapshot?.devices.map(device => (
+                              <FocusPressable
+                                accessibilityLabel={`${
+                                  device.connected ? 'Disconnect' : 'Connect'
+                                } ${device.name}`}
+                                accessibilityRole="button"
+                                key={device.id}
+                                disabled={deviceBusy}
+                                onPress={() =>
+                                  toggleDevice(device.id, device.connected)
+                                }
+                                style={({pressed}) => [
+                                  styles.deviceRow,
+                                  pressed && styles.pressed,
+                                ]}>
+                                <View>
+                                  <Text style={styles.deviceName}>
+                                    {device.name}
+                                  </Text>
+                                  <Text style={styles.deviceMeta}>
+                                    {device.connected
+                                      ? 'Connected'
+                                      : `${device.rssi} dBm`}
+                                  </Text>
+                                </View>
+                                {device.battery !== undefined && (
+                                  <Text style={styles.deviceBattery}>
+                                    {device.battery}%
+                                  </Text>
+                                )}
+                              </FocusPressable>
+                            ))}
+                            {nativeSnapshot !== null &&
+                              nativeSnapshot.devices.length === 0 && (
+                                <Text style={styles.deviceHint}>
+                                  {nativeSnapshot.lastEvent}
+                                </Text>
+                              )}
+                            <Text style={styles.sectionLabel}>Currents</Text>
                           </View>
                         }
                         items={homeResults}
                         loading={readsPhase === 'initial-loading'}
                         suppressEmpty={readsPhase !== 'ready'}
                       />
+                      <View
+                        accessibilityLabel="Home search dock"
+                        style={[
+                          styles.homeSearchDock,
+                          searchFocused && styles.focusRing,
+                        ]}>
+                        <Search
+                          accessible={false}
+                          color="#888888"
+                          size={18}
+                          strokeWidth={2}
+                        />
+                        <TextInput
+                          accessibilityLabel="Search Home"
+                          onBlur={() => setSearchFocused(false)}
+                          onChangeText={setSearchQuery}
+                          onFocus={() => setSearchFocused(true)}
+                          onPressIn={() => setSearchArmed(true)}
+                          placeholder="Search Omi"
+                          placeholderTextColor="#777777"
+                          ref={searchRef}
+                          showSoftInputOnFocus={searchArmed}
+                          style={[
+                            styles.searchInput,
+                            macDesktop && styles.macPrimaryText,
+                          ]}
+                          value={searchQuery}
+                        />
+                        <FocusPressable
+                          accessibilityLabel="Open Chat"
+                          accessibilityRole="button"
+                          onPress={() => setRoute('Chat')}
+                          style={({pressed}) => [
+                            styles.askOmiButton,
+                            pressed && styles.pressed,
+                          ]}>
+                          <ArrowUp
+                            color="#141414"
+                            size={17}
+                            strokeWidth={2.5}
+                          />
+                        </FocusPressable>
+                      </View>
                     </View>
                   ) : route === 'Chat' ? (
                     <ScrollView
@@ -2370,6 +2458,67 @@ const styles = StyleSheet.create({
     flex: 1,
     maxWidth: 900,
     width: '100%',
+  },
+  homeOverview: {gap: 10, paddingBottom: 14, paddingTop: 16},
+  deviceHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  deviceState: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  scanButton: {
+    borderColor: '#525252',
+    borderRadius: 16,
+    borderWidth: 1,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    justifyContent: 'center',
+  },
+  scanButtonText: {color: '#ffffff', fontSize: 12, fontWeight: '700'},
+  deviceRow: {
+    alignItems: 'center',
+    backgroundColor: '#232323',
+    borderColor: '#353535',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 60,
+    paddingHorizontal: 14,
+  },
+  deviceName: {color: '#ffffff', fontSize: 15, fontWeight: '700'},
+  deviceMeta: {color: '#9b9b9b', fontSize: 12, marginTop: 2},
+  deviceBattery: {color: '#d8d8d8', fontSize: 13, fontWeight: '700'},
+  deviceHint: {color: '#9b9b9b', fontSize: 13},
+  homeSearchDock: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#292929',
+    borderColor: '#4a4a4a',
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+    marginTop: 8,
+    maxWidth: 680,
+    minHeight: 52,
+    paddingLeft: 15,
+    paddingRight: 6,
+    width: '100%',
+  },
+  askOmiButton: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 19,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
   },
   searchHeader: {paddingBottom: 12, paddingTop: 16},
   searchBox: {
