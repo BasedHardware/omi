@@ -27,7 +27,8 @@
     {
       "binding": "DB",
       "database_name": "omi-v5-backend-staging-tasks",
-      "database_id": "028f665e-87df-4329-b794-b0811a6e24a4"
+      "database_id": "028f665e-87df-4329-b794-b0811a6e24a4",
+      "migrations_dir": "migrations"
     }
   ],
   "observability": {
