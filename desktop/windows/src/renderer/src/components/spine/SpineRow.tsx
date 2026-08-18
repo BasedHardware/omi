@@ -47,54 +47,50 @@ export function SpineRowView(props: {
       <Gutter time={row.isAttached ? null : formatRowTime(row.anchor)} />
       <div className={`min-w-0 flex-1 ${nested ? 'pl-7' : 'pl-4'}`}>
         {row.content.type === 'conversation' && (
-          <button
-            type="button"
-            onClick={() =>
-              props.onOpenConversation(
-                row.content.type === 'conversation' ? row.content.conversation.id : ''
-              )
-            }
-            className="group flex w-full items-center gap-3 rounded-xl bg-white/[0.04] px-4 py-3 text-left hover:bg-white/[0.07]"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg">
-              {row.content.conversation.emoji}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-white/90">
-                {row.content.conversation.title || 'Untitled conversation'}
+          <div className="group flex w-full items-center gap-3 rounded-xl bg-white/[0.04] pr-2 hover:bg-white/[0.07]">
+            <button
+              type="button"
+              onClick={() =>
+                props.onOpenConversation(
+                  row.content.type === 'conversation' ? row.content.conversation.id : ''
+                )
+              }
+              className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-lg">
+                {row.content.conversation.emoji}
               </span>
-              <span className="block truncate text-xs text-white/40">
-                {row.content.conversation.overview}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-white/90">
+                  {row.content.conversation.title || 'Untitled conversation'}
+                </span>
+                <span className="block truncate text-xs text-white/40">
+                  {row.content.conversation.overview}
+                </span>
               </span>
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
+            </button>
+            {/* A sibling of the open button, not nested inside it: an interactive
+                element inside another is unreachable by keyboard in the order a
+                reader expects, and it needed stopPropagation to work at all. */}
+            <button
+              type="button"
               aria-label={row.content.conversation.starred ? 'Unstar' : 'Star'}
-              onClick={(e) => {
-                e.stopPropagation()
-                if (row.content.type !== 'conversation') return
-                props.onToggleStar(row.content.conversation.id, row.content.conversation.starred)
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter' && e.key !== ' ') return
-                e.preventDefault()
-                e.stopPropagation()
+              onClick={() => {
                 if (row.content.type !== 'conversation') return
                 props.onToggleStar(row.content.conversation.id, row.content.conversation.starred)
               }}
               className={`shrink-0 rounded p-1 ${
                 row.content.conversation.starred
                   ? 'text-amber-300'
-                  : 'text-white/35 opacity-0 group-hover:opacity-100'
+                  : 'text-white/35 opacity-0 focus:opacity-100 group-hover:opacity-100'
               }`}
             >
               <Star
                 className="h-3.5 w-3.5"
                 fill={row.content.conversation.starred ? 'currentColor' : 'none'}
               />
-            </span>
-          </button>
+            </button>
+          </div>
         )}
 
         {row.content.type === 'memories' && (

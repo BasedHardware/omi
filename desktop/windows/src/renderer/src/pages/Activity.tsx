@@ -18,7 +18,7 @@ import { SpineHourRail } from '../components/spine/SpineHourRail'
 import { SpineRowView } from '../components/spine/SpineRow'
 import { useSpine } from '../hooks/useSpine'
 import { countRows, localHour, startOfLocalDay, type SpineKind } from '../lib/spine/spineModel'
-import { omiApi } from '../lib/apiClient'
+import { setConversationStarred } from '../lib/conversations/mutations'
 import { toast } from '../lib/toast'
 
 const CHIPS: Array<{ id: SpineKind | null; label: string }> = [
@@ -50,7 +50,10 @@ export function Activity(): React.JSX.Element {
 
   const toggleStar = async (id: string, starred: boolean): Promise<void> => {
     try {
-      await omiApi.patch(`/v1/conversations/${id}/starred`, null, { params: { value: !starred } })
+      // Through the shared mutation rather than a hand-rolled request: the
+      // endpoint names its query param `starred`, and a second call site
+      // spelling it itself is how that gets out of step with the backend.
+      await setConversationStarred(id, !starred)
       spine.reload()
     } catch {
       toast('Could not update that conversation.', { tone: 'warn' })

@@ -179,18 +179,28 @@ describe('Activity page', () => {
     expect(navigate).toHaveBeenCalledWith('/conversations/c1')
   })
 
-  it('stars a conversation without opening it', async () => {
+  it('stars a conversation with the query param the endpoint requires', async () => {
     mount()
     await waitFor(() => expect(screen.getByText('Lease renewal')).toBeTruthy())
 
     fireEvent.click(screen.getByRole('button', { name: 'Star' }))
+    // The endpoint's parameter is named `starred` (backend/routers/
+    // conversations.py, set_conversation_starred(conversation_id, starred:
+    // bool)). This asserted `value` before, so every star tap failed validation
+    // and the test enshrined the wrong contract rather than catching it.
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith('/v1/conversations/c1/starred', null, {
-        params: { value: true }
+        params: { starred: true }
       })
     )
-    // The star sits inside the row button; without stopPropagation it would also
-    // navigate away from the page it was pressed on.
+  })
+
+  it('does not open the conversation when the star is pressed', async () => {
+    mount()
+    await waitFor(() => expect(screen.getByText('Lease renewal')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Star' }))
+    // The star is a sibling of the open button rather than nested inside it, so
+    // this holds without any event-propagation handling.
     expect(navigate).not.toHaveBeenCalled()
   })
 
