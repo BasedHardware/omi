@@ -412,6 +412,8 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             lock_token = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
             while True:
+                if acquisition.cancelled():
+                    raise
                 try:
                     lock_token = await asyncio.shield(acquisition)
                     break
