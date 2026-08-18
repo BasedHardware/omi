@@ -137,6 +137,17 @@ Every model the proxy can route to declares its fallback chain as data, in
 | `gemini-2.5-flash-lite` | *(terminal)* |
 | `gemini-embedding-001` | *(terminal)* |
 
+**Reading this table correctly:** it lists chains for every model a client may
+**request**, which is not the same as the set of models server-paid traffic is
+ever **served** by. `gemini-2.5-pro` appears here because it stays
+proxy-allowlisted and BYOK users pay for it on their own key — but no
+server-paid request is dispatched as Pro. `_serving_model()` remaps it to
+`gemini-3.1-flash-lite` before dispatch, and over the daily soft limit the
+metering path demotes it to `gemini-2.5-flash-lite` first. Pro's chain is what
+would happen if it were ever dispatched anyway, not a route in normal use.
+`test_server_paid_traffic_never_dispatches_gemini_2_5_pro` asserts that across
+both reservation states and both reachability states.
+
 Three invariants, each enforced by a test rather than by convention:
 
 - **Never onto the reservation.** The live PT model is filtered out of every

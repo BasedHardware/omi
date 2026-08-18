@@ -1601,3 +1601,38 @@ async def test_streaming_unreachable_model_falls_back_and_leaks_no_provider_slot
     assert closed == 2
     assert semaphore.locked() is False
     assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
+
+
+@pytest.mark.parametrize("target_reachable", [True, False])
+@pytest.mark.parametrize("reservation_promoted", [True, False])
+def test_server_paid_traffic_never_dispatches_gemini_2_5_pro(monkeypatch, target_reachable, reservation_promoted):
+    """gemini-2.5-pro is $10.00/1M out — 6.7x gemini-3.1-flash-lite and 25x
+    gemini-2.5-flash-lite. No combination of reservation state and learned
+    reachability may leave a server-paid request actually being served by it.
+
+    MODEL_FALLBACKS still lists a chain for it because a client may still
+    *request* it (it stays proxy-allowlisted, and BYOK users pay for it
+    themselves), but no server-paid request reaches dispatch as Pro.
+    """
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    if reservation_promoted:
+        desktop_proxy._record_pt_target_observation(True)
+    if not target_reachable:
+        desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+
+    served = _retarget("models/gemini-2.5-pro:generateContent")
+
+    assert "gemini-2.5-pro" not in served
+    expected = (
+        f"models/{desktop_proxy.VERTEX_PT_TARGET_MODEL}:generateContent"
+        if target_reachable
+        else f"models/{desktop_proxy._QUOTA_DEMOTION_MODEL}:generateContent"
+    )
+    assert served == expected
+
+
+def test_byok_pro_is_still_honoured_because_the_user_pays_for_it(monkeypatch):
+    """The guarantee above is about company-paid spend, not about banning the
+    model: a BYOK user asking for Pro gets Pro on their own key."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    assert _retarget("models/gemini-2.5-pro:generateContent") == ("models/gemini-2.5-pro:generateContent")
