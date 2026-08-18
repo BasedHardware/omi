@@ -315,14 +315,15 @@ async def _call_tool_endpoint(
     if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
         return f"The {app_tool.name} tool is temporarily disabled due to sustained failures. The app developer has been notified."
 
-    try:
-        pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, app_tool.endpoint)
-    except (UnsafeWebhookURLError, ValueError):
-        return f"Error: The {app_tool.name} tool endpoint is invalid or unavailable."
-
     cb = get_webhook_circuit_breaker(app_tool.endpoint)
     if not cb.allow_request():
         return f"The {app_tool.name} tool is temporarily unavailable. Please try again shortly."
+
+    try:
+        pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, app_tool.endpoint)
+    except (UnsafeWebhookURLError, ValueError):
+        cb.release_probe()
+        return f"Error: The {app_tool.name} tool endpoint is invalid or unavailable."
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:

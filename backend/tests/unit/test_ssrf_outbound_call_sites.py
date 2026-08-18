@@ -168,6 +168,7 @@ async def _run_blocking(_executor, function, *args):
     return function(*args)
 
 
+@pytest.mark.slow
 def test_set_user_webhook_rejects_private_url():
     users_mod, SetUserWebhookUrlRequest = _load_users_router()
     users_mod.run_blocking = _run_blocking
@@ -193,6 +194,7 @@ def test_set_user_webhook_rejects_private_url():
     enable.assert_not_called()
 
 
+@pytest.mark.slow
 def test_set_user_webhook_empty_url_skips_ssrf_check():
     users_mod, SetUserWebhookUrlRequest = _load_users_router()
     users_mod.run_blocking = _run_blocking
@@ -262,6 +264,33 @@ async def test_post_dev_webhook_pins_and_disables_redirects():
     assert call_kwargs.kwargs['follow_redirects'] is False
     assert call_kwargs.kwargs['headers']['Host'] == 'hooks.example.com'
     assert call_kwargs.kwargs['extensions']['sni_hostname'] == 'hooks.example.com'
+
+
+@pytest.mark.asyncio
+async def test_post_dev_webhook_retries_each_validated_address():
+    mock_response = MagicMock(status_code=503)
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    pinned_targets = [_pin(f'https://hooks.example.com/x?edge={index}', f'8.8.8.{index + 1}') for index in range(5)]
+    mock_sem = AsyncMock()
+    mock_sem.__aenter__ = AsyncMock()
+    mock_sem.__aexit__ = AsyncMock()
+
+    with (
+        patch('utils.webhooks.get_pinned_webhook_client', return_value=mock_client),
+        patch('utils.webhooks.get_webhook_semaphore', return_value=mock_sem),
+        patch('utils.webhooks.safe_request_targets', return_value=pinned_targets),
+    ):
+        result = await _post_dev_webhook(
+            'test_webhook',
+            'https://hooks.example.com/x',
+            json={'a': 1},
+            retry_delays=(),
+        )
+
+    assert result is mock_response
+    assert mock_client.post.await_count == len(pinned_targets)
+    assert [call.args[0] for call in mock_client.post.await_args_list] == [target[0] for target in pinned_targets]
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +381,7 @@ def test_reenable_health_check_rejects_non_public_url(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.slow
 async def test_call_tool_endpoint_rejects_non_public():
     app_tools = _load_app_tools_module()
     tool = ChatTool(name='secret_tool', description='d', endpoint='http://127.0.0.1/tool', method='POST')
@@ -363,11 +393,13 @@ async def test_call_tool_endpoint_rejects_non_public():
         patch.object(app_tools, 'get_webhook_circuit_breaker') as mock_cb_factory,
         patch('httpx.AsyncClient') as mock_client_cls,
     ):
+        mock_cb_factory.return_value.allow_request.return_value = True
         result = await app_tools._call_tool_endpoint({}, config, tool, 'app-1')
 
     assert 'invalid or unavailable' in result
     assert '127.0.0.1' not in result
-    mock_cb_factory.assert_not_called()
+    mock_cb_factory.assert_called_once_with(tool.endpoint)
+    mock_cb_factory.return_value.release_probe.assert_called_once()
     mock_client_cls.assert_not_called()
 
 

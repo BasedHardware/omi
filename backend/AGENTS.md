@@ -253,7 +253,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - Semaphores: always wrap calls — `async with get_webhook_semaphore(): await client.post(...)`
   - Circuit breakers: `get_webhook_circuit_breaker(url)` for external targets — call `cb.record_success()`/`cb.record_failure()`
   - Lifecycle: lazy singletons, closed at shutdown via `close_all_clients()`
-- **Lane 2 — Executors** (`utils/executors.py`): 7 purpose-specific thread pools. Never ad-hoc `Thread`/`ThreadPoolExecutor`.
+- **Lane 2 — Executors** (`utils/executors.py`): 8 purpose-specific thread pools. Never ad-hoc `Thread`/`ThreadPoolExecutor`.
   - **Async dispatch rules** (choose the right primitive):
     - `await run_blocking(executor, fn)` — sync/CPU-bound work where the caller needs the result before continuing.
     - `start_background_task(coro, name=...)` — async fire-and-forget work (pipelines, post-processing). Tracks the task, logs exceptions, cleans up references. Never use bare `asyncio.create_task()` for production background work.
@@ -262,6 +262,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
   - **Pool assignment** (match work type to pool):
     - `critical_executor` (8w) — auth gates only: `_verify_ws_auth`, `validate_byok_websocket`, `check_rate_limit`, `is_hard_restricted`, session/code Redis ops in `auth.py`
     - `db_executor` (24w) — Firestore/Redis CRUD, vector DB queries
+    - `resolver_executor` (4w) — DNS resolution for user-supplied outbound URLs
     - `llm_executor` (6w) — LLM API calls (`get_llm().invoke()`, `get_app_result()`, persona generation, KG rebuild with cap 4)
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (16w) — sync endpoint pipeline work, parent calls that fan out to storage_executor

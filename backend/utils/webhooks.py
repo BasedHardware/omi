@@ -84,7 +84,7 @@ async def _post_dev_webhook(
     request_kwargs['follow_redirects'] = False
 
     client = get_pinned_webhook_client()
-    attempts = len(retry_delays) + 1
+    attempts = max(len(retry_delays) + 1, len(pinned_targets))
     last_response = None
     last_exception = None
 
