@@ -7,7 +7,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 from uuid import uuid4
 
 import httpx
@@ -24,6 +24,7 @@ from utils.http_client import (
     get_desktop_gemini_semaphore,
     get_desktop_gemini_stream_client,
 )
+from utils.llm import vertex_pt_routing as ptr
 from utils.llm.desktop_llm_stub import (
     llm_stub_enabled,
     stub_gemini_proxy_json,
@@ -36,8 +37,24 @@ from utils.subscription import is_desktop_trial_paywalled
 router = APIRouter()
 
 _ALLOWED_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
-_ALLOWED_MODELS = frozenset({'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-embedding-001'})
-_VERTEX_MODELS = frozenset({'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro', 'gemini-embedding-001'})
+_ALLOWED_MODELS = frozenset(
+    {
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-pro',
+        'gemini-3.1-flash-lite',
+        'gemini-embedding-001',
+    }
+)
+_VERTEX_MODELS = frozenset(
+    {
+        'gemini-2.5-flash',
+        'gemini-2.5-flash-lite',
+        'gemini-2.5-pro',
+        'gemini-3.1-flash-lite',
+        'gemini-embedding-001',
+    }
+)
 # Vertex batch embedding is not wire-compatible with the AI Studio batch method.
 # Keep the provider decision explicit instead of silently trying one API shape on
 # another provider.
@@ -45,7 +62,19 @@ _VERTEX_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedC
 # Company-paid Flash text is reserved on Vertex PT. Changing this pin without
 # updating the matching tests and backend/docs/vertex-pt-flash.md is the
 # 2026-08-04 AI Studio double-pay regression.
-VERTEX_PT_MODEL = 'gemini-2.5-flash'
+VERTEX_PT_MODEL = ptr.PT_MODEL_CURRENT
+# Migration target. A PT order for gemini-3.1-flash-lite provisions in ~10
+# business days; the proxy promotes itself the first time `dedicated` answers
+# on it, with no deploy. See backend/docs/vertex-pt-flash.md.
+VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
+# Emergency operator pins. Both beat auto-detection so a bad promotion or a
+# bad overflow target can be corrected without shipping code.
+_PT_MODEL_OVERRIDE_ENV = 'OMI_VERTEX_PT_MODEL'
+_OVERFLOW_MODEL_OVERRIDE_ENV = 'OMI_GEMINI_OVERFLOW_MODEL'
+_OVERFLOW_ENABLED_ENV = 'OMI_GEMINI_OVERFLOW_ENABLED'
+# How long a PT-capacity observation is trusted before it is re-probed. Bounds
+# both the promotion delay after the order lands and the cost of probing.
+_PT_PROBE_TTL_SECONDS = 600.0
 VERTEX_PT_LOCATION = 'us-central1'
 VERTEX_PT_EXPIRES = '~2027-05-28'
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
@@ -333,7 +362,13 @@ def _as_nonnegative_int(value: Any) -> int | None:
     return None
 
 
-def _sanitize(body: bytes, action: str, *, max_output_tokens: int = _MAX_OUTPUT_TOKENS) -> bytes:
+def _sanitize(
+    body: bytes,
+    action: str,
+    *,
+    max_output_tokens: int = _MAX_OUTPUT_TOKENS,
+    model: str = '',
+) -> bytes:
     try:
         payload = json.loads(body)
     except (TypeError, ValueError) as exc:
@@ -375,7 +410,7 @@ def _sanitize(body: bytes, action: str, *, max_output_tokens: int = _MAX_OUTPUT_
         if not generation_configs:
             payload['generationConfig'] = {
                 'maxOutputTokens': max_output_tokens,
-                'thinkingConfig': {'thinkingBudget': _DEFAULT_THINKING_BUDGET},
+                'thinkingConfig': ptr.thinking_config_for(model, budget=_DEFAULT_THINKING_BUDGET),
             }
         for config in generation_configs:
             for key in ('candidate_count', 'candidateCount'):
@@ -392,7 +427,7 @@ def _sanitize(body: bytes, action: str, *, max_output_tokens: int = _MAX_OUTPUT_
             if not output_key_present:
                 config['maxOutputTokens'] = max_output_tokens
             if 'thinking_config' not in config and 'thinkingConfig' not in config:
-                config['thinkingConfig'] = {'thinkingBudget': _DEFAULT_THINKING_BUDGET}
+                config['thinkingConfig'] = ptr.thinking_config_for(model, budget=_DEFAULT_THINKING_BUDGET)
     return json.dumps(payload, separators=(',', ':')).encode()
 
 
@@ -406,8 +441,136 @@ def _use_vertex_ai() -> bool:
     return os.getenv('USE_VERTEX_AI', '').strip().lower() in {'1', 'true', 'yes'}
 
 
+# Observed state of the pending gemini-3.1-flash-lite PT order.
+#
+# The positive observation is latched: a Provisioned Throughput purchase is a
+# long-lived commitment, and expiring it on a TTL would flap the serving model
+# every time overflow stopped re-probing. A vanished order still degrades
+# safely — requests 429 and overflow absorbs them — and the operator override
+# pins the model outright if that is ever not enough.
+_pt_target_ready = False
+# None means "never probed", which is distinct from "probed at monotonic 0".
+# time.monotonic() is measured from an arbitrary origin — on a freshly started
+# container it can legitimately be smaller than the TTL, so seeding this with
+# 0.0 would suppress the first probe for the first _PT_PROBE_TTL_SECONDS of
+# process uptime on every new instance.
+_pt_target_probed_at: float | None = None
+
+
+def _pt_target_is_ready() -> bool:
+    return _pt_target_ready
+
+
+def _pt_probe_due() -> bool:
+    """Whether the next overflow request should ask for `dedicated` capacity.
+
+    Probing rides an existing overflow request, so detection costs no extra
+    call: overflow only happens when the current reservation is already full,
+    which is exactly when a second order matters.
+    """
+    if _pt_target_ready:
+        return False
+    if _pt_target_probed_at is None:
+        return True
+    return (time.monotonic() - _pt_target_probed_at) >= _PT_PROBE_TTL_SECONDS
+
+
+def _record_pt_target_observation(ready: bool) -> None:
+    global _pt_target_ready, _pt_target_probed_at
+    _pt_target_probed_at = time.monotonic()
+    if ready and not _pt_target_ready:
+        _pt_target_ready = True
+        print(
+            f'desktop_proxy pt_promotion model={VERTEX_PT_TARGET_MODEL} '
+            f'reason=dedicated_capacity_observed previous={ptr.PT_MODEL_CURRENT}',
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+def _provisioned_model() -> str:
+    """The model that currently owns prepaid capacity."""
+    return ptr.resolve_pt_model(
+        target_dedicated_ready=_pt_target_is_ready(),
+        override=os.getenv(_PT_MODEL_OVERRIDE_ENV, ''),
+    )
+
+
+def _overflow_model(pt_model: str) -> str:
+    return ptr.resolve_overflow_model(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
+
+
+def _overflow_enabled() -> bool:
+    return os.getenv(_OVERFLOW_ENABLED_ENV, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
+def _serving_model(model: str) -> str:
+    """Map a requested model onto the model that will actually serve it.
+
+    BYOK is never remapped: the user pays for the model they asked for.
+
+    Two server-paid remaps, both cheaper per token than what they replace:
+      gemini-2.5-pro   -> gemini-3.1-flash-lite  ($10.00 -> $1.50 out)
+      gemini-2.5-flash -> whichever model holds prepaid capacity
+
+    Client-pinned gemini-2.5-flash-lite lanes are deliberately untouched:
+    gemini-3.1-flash-lite costs 3.75x more per output token, so promoting those
+    lanes would be a large cost regression, not a saving.
+    """
+    if get_byok_key('gemini'):
+        return model
+    if model == 'gemini-2.5-pro':
+        return VERTEX_PT_TARGET_MODEL
+    if model == ptr.PT_MODEL_CURRENT:
+        return _provisioned_model()
+    return model
+
+
+def _retarget_path(path: str, model: str, action: str) -> str:
+    served = _serving_model(model)
+    if served == model:
+        return path
+    return f'models/{served}:{action}'
+
+
+def _retarget_thinking(body: bytes, model: str) -> bytes:
+    """Rewrite thinkingConfig for a model in a different family.
+
+    Overflow crosses families (gemini-2.5-flash -> gemini-3.1-flash-lite), and
+    a 2.5-style integer budget is schema-valid but ignored on 3.x, so leaving
+    it in place would uncap reasoning tokens that bill as output.
+    """
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError):
+        return body
+    if not isinstance(payload, dict):
+        return body
+    replacement = ptr.thinking_config_for(model, budget=_DEFAULT_THINKING_BUDGET)
+    changed = False
+    for key in ('generation_config', 'generationConfig'):
+        config = payload.get(key)
+        if not isinstance(config, dict):
+            continue
+        for thinking_key in ('thinking_config', 'thinkingConfig'):
+            if thinking_key in config:
+                config[thinking_key] = dict(replacement)
+                changed = True
+    if not changed:
+        return body
+    return json.dumps(payload, separators=(',', ':')).encode()
+
+
 def _server_paid_flash_text(model: str, action: str) -> bool:
-    return model == VERTEX_PT_MODEL and action in {'generateContent', 'streamGenerateContent'}
+    """Whether this is company-paid PT-class text that must never reach AI Studio.
+
+    Covers both the current reservation and the migration target so the
+    2026-08-04 double-pay regression cannot reappear mid-migration.
+    """
+    return model in {ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET} and action in {
+        'generateContent',
+        'streamGenerateContent',
+    }
 
 
 def _vertex_required(model: str, action: str) -> bool:
@@ -435,7 +598,14 @@ def _safe_provider_query(query: dict[str, str]) -> dict[str, str]:
     return query
 
 
-async def _upstream(path: str, model: str, action: str, query: dict[str, str]) -> UpstreamRoute:
+async def _upstream(
+    path: str,
+    model: str,
+    action: str,
+    query: dict[str, str],
+    *,
+    request_type: str | None = None,
+) -> UpstreamRoute:
     query = _safe_provider_query(query)
     byok_key = get_byok_key('gemini')
     if byok_key:
@@ -458,9 +628,14 @@ async def _upstream(path: str, model: str, action: str, query: dict[str, str]) -
                 message='Gemini routing credentials are unavailable',
             ) from exc
         url = vertex_url.rsplit(':', 1)[0] + ':predict' if action == 'embedContent' else vertex_url
+        # Without this header Vertex silently spills over-cap requests onto
+        # pay-as-you-go. Asking for `dedicated` turns that into a 429 the proxy
+        # can route deliberately; everything else is pinned to `shared` so it
+        # can never draw down the reservation.
+        capacity = request_type or ptr.request_type_for(model=model, pt_model=_provisioned_model())
         return UpstreamRoute(
             url,
-            {'Authorization': f'Bearer {token}'},
+            {'Authorization': f'Bearer {token}', ptr.REQUEST_TYPE_HEADER: capacity},
             query,
             'vertex_ai',
             'application_default_credentials',
@@ -480,6 +655,38 @@ async def _upstream(path: str, model: str, action: str, query: dict[str, str]) -
             code='routing_not_configured', message='Gemini provider route is not configured', phase='routing'
         )
     return UpstreamRoute(_studio_url(path), {}, {**query, 'key': server_key}, 'ai_studio', 'server_key', 'global')
+
+
+def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
+    """Ordered (model, request_type) attempts to try after prepaid capacity is full.
+
+    Only traffic that was actually routed at the reservation can exhaust it, so
+    anything else returns an empty plan and keeps its own error.
+
+    When a probe is due the first attempt asks the migration target for
+    `dedicated` capacity. That single request is the whole auto-detection
+    mechanism: if a gemini-3.1-flash-lite PT order has landed it succeeds and
+    the proxy promotes itself permanently, and if it has not it 429s and the
+    plan falls through to the same on-demand call it would have made anyway.
+    """
+    if not _overflow_enabled():
+        return []
+    pt_model = _provisioned_model()
+    if served_model != pt_model:
+        return []
+    try:
+        overflow = _overflow_model(pt_model)
+    except ValueError:
+        return []
+    plan: list[tuple[str, str]] = []
+    if overflow == ptr.PT_MODEL_TARGET and _pt_probe_due():
+        plan.append((overflow, ptr.REQUEST_TYPE_DEDICATED))
+    plan.append((overflow, ptr.REQUEST_TYPE_SHARED))
+    return plan
+
+
+def _overflow_triggered(status: int, message: str) -> bool:
+    return ptr.is_provisioned_capacity_exhausted(status, message) or ptr.is_provisioned_capacity_absent(status, message)
 
 
 async def _meter_server_request(uid: str, path: str, model: str, action: str) -> str:
@@ -757,34 +964,87 @@ async def _stream_provider(
     route: UpstreamRoute,
     body: bytes,
     telemetry: ProxyTelemetry,
+    *,
+    model: str = '',
+    action: str = '',
+    query: Mapping[str, str] | None = None,
 ) -> AsyncIterator[bytes]:
     client = get_desktop_gemini_stream_client()
     semaphore = get_desktop_gemini_semaphore()
-    context: Any | None = None
-    acquired = False
-    opened = False
     usage_observer = _StreamingUsageObserver(telemetry)
-    try:
-        async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
-            telemetry.phase = 'pool'
-            await _acquire_provider_slot(semaphore)
-            acquired = True
+
+    async def open_attempt(attempt_route: UpstreamRoute, attempt_body: bytes) -> tuple[Any, httpx.Response]:
+        """Open one upstream stream, holding a provider slot. Caller closes both."""
+        telemetry.phase = 'pool'
+        await _acquire_provider_slot(semaphore)
+        try:
             telemetry.phase = 'connect'
             context = client.stream(
                 'POST',
-                route.url,
-                params=route.params,
-                content=body,
-                headers={'Content-Type': 'application/json', **route.headers},
+                attempt_route.url,
+                params=attempt_route.params,
+                content=attempt_body,
+                headers={'Content-Type': 'application/json', **attempt_route.headers},
             )
-            upstream = cast(httpx.Response, await _cancel_on_disconnect(request, context.__aenter__()))
-            opened = True
-        telemetry.phase = 'first_byte'
-        if upstream.status_code >= 400:
+            upstream = await _cancel_on_disconnect(request, context.__aenter__())
+        except BaseException:
+            semaphore.release()
+            raise
+        return context, upstream
+
+    context: Any | None = None
+    upstream: httpx.Response | None = None
+    held = False
+    try:
+        # Each entry is one upstream attempt. Overflow attempts are appended
+        # only after the reservation actually reports itself full, so the
+        # ordinary path opens exactly one stream as before.
+        pending: list[tuple[UpstreamRoute, bytes, str, str]] = [(route, body, model, '')]
+        while pending:
+            attempt_route, attempt_body, attempt_model, capacity = pending.pop(0)
+            async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
+                context, upstream = await open_attempt(attempt_route, attempt_body)
+                held = True
+            telemetry.phase = 'first_byte'
+            if upstream.status_code < 400:
+                break
+            # The body carries the difference between 'reservation full' and
+            # ordinary rate limiting, and a streamed error body is not read yet.
+            await upstream.aread()
+            exhausted = _overflow_triggered(upstream.status_code, upstream.text)
+            if capacity == ptr.REQUEST_TYPE_DEDICATED:
+                _record_pt_target_observation(not exhausted)
+            if exhausted and not pending and query is not None:
+                for overflow_model, overflow_capacity in _overflow_plan(attempt_model):
+                    pending.append(
+                        (
+                            await _upstream(
+                                f'models/{overflow_model}:{action}',
+                                overflow_model,
+                                action,
+                                dict(query),
+                                request_type=overflow_capacity,
+                            ),
+                            _retarget_thinking(body, overflow_model),
+                            overflow_model,
+                            overflow_capacity,
+                        )
+                    )
+            if pending:
+                if context is not None:
+                    with suppress(Exception):
+                        await context.__aexit__(None, None, None)
+                context = None
+                semaphore.release()
+                held = False
+                telemetry.set_route(pending[0][0])
+                telemetry.model = pending[0][2]
+                continue
             response = _provider_error(upstream, telemetry)
             event = json.loads(bytes(response.body))
             yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
             return
+        assert upstream is not None
         async for chunk in upstream.aiter_bytes():
             usage_observer.feed(chunk)
             yield chunk
@@ -808,10 +1068,10 @@ async def _stream_provider(
         telemetry.complete(outcome='transport_error', status_code=502, retryable=False, phase='body')
         yield _stream_error_event(code='provider_transport_error', phase=telemetry.phase, telemetry=telemetry)
     finally:
-        if opened and context is not None:
+        if context is not None:
             with suppress(Exception):
                 await context.__aexit__(None, None, None)
-        if acquired:
+        if held:
             semaphore.release()
 
 
@@ -847,10 +1107,11 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
             )
         telemetry.phase = 'metering'
         path = await _meter_server_request(uid, path, model, action)
+        path = _retarget_path(*_path_parts(path))
         _, model, action = _path_parts(path)
         telemetry.model = model
         telemetry.action = action
-        body = _sanitize(body, action, max_output_tokens=_output_token_cap())
+        body = _sanitize(body, action, max_output_tokens=_output_token_cap(), model=model)
         telemetry.shape = _payload_shape(body)
     except HTTPException as exc:
         outcome = 'rate_limited' if exc.status_code == 429 else 'validation_rejected'
@@ -872,28 +1133,53 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
                 body = _vertex_embedding_request(body)
             if streaming:
                 return StreamingResponse(
-                    _stream_provider(request, route, body, telemetry),
+                    _stream_provider(
+                        request,
+                        route,
+                        body,
+                        telemetry,
+                        model=model,
+                        action=action,
+                        query=dict(request.query_params),
+                    ),
                     media_type='text/event-stream',
                     headers=_response_headers(telemetry),
                 )
             client = get_desktop_gemini_client()
             semaphore = get_desktop_gemini_semaphore()
 
-            async def post() -> httpx.Response:
+            async def post(attempt_route: UpstreamRoute, attempt_body: bytes) -> httpx.Response:
                 telemetry.phase = 'pool'
                 await _acquire_provider_slot(semaphore)
                 try:
                     telemetry.phase = 'connect'
                     return await client.post(
-                        route.url,
-                        params=route.params,
-                        content=body,
-                        headers={'Content-Type': 'application/json', **route.headers},
+                        attempt_route.url,
+                        params=attempt_route.params,
+                        content=attempt_body,
+                        headers={'Content-Type': 'application/json', **attempt_route.headers},
                     )
                 finally:
                     semaphore.release()
 
-            response = await _cancel_on_disconnect(request, post())
+            response = await _cancel_on_disconnect(request, post(route, body))
+            if _overflow_triggered(response.status_code, response.text):
+                query = dict(request.query_params)
+                for overflow_model, capacity in _overflow_plan(model):
+                    overflow_path = f'models/{overflow_model}:{action}'
+                    overflow_body = _retarget_thinking(body, overflow_model)
+                    overflow_route = await _upstream(
+                        overflow_path, overflow_model, action, query, request_type=capacity
+                    )
+                    telemetry.set_route(overflow_route)
+                    telemetry.model = overflow_model
+                    response = await _cancel_on_disconnect(request, post(overflow_route, overflow_body))
+                    probing = capacity == ptr.REQUEST_TYPE_DEDICATED
+                    exhausted = _overflow_triggered(response.status_code, response.text)
+                    if probing:
+                        _record_pt_target_observation(not exhausted)
+                    if not exhausted:
+                        break
             telemetry.phase = 'body'
     except HTTPException as exc:
         phase = telemetry.phase if telemetry.phase in {'routing', 'credential'} else 'validation'
