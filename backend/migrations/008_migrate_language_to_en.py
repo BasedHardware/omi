@@ -187,6 +187,10 @@ def main():
     logger.info(
         'Results: %d conversations %s across %d users (%d writes).', total_updates, verb, users_processed, total_writes
     )
+    if contiguous_uid:
+        logger.info(
+            'Checkpoint: last processed user id=%s; resume with --start-after %s.', contiguous_uid, contiguous_uid
+        )
 
 
 if __name__ == '__main__':
