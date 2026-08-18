@@ -225,6 +225,88 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     mock_service.replace_conversation_memories.assert_not_called()
 
 
+def test_canonical_capture_preserves_prior_state_when_the_extractor_never_returns_a_batch(monkeypatch):
+    """A provider failure is not a verdict on the source's existing memories.
+
+    ``strict=True`` makes the extractor raise instead of returning an empty
+    batch that would retract them. Skipping the replacement is that whole
+    protection; propagating the raise additionally aborts the caller's
+    finalization.
+    """
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+    from models.memory_contracts import WorkingObservationExtractionError
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(side_effect=WorkingObservationExtractionError("invoke")),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-extractor-unavailable",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="We discussed ordinary weekend plans and a grocery list.",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+    )
+
+    result = pc._extract_memories_canonical("uid-extractor-unavailable", conversation, db_client=MagicMock())
+
+    assert result.count == 0
+    mock_service.replace_conversation_memories.assert_not_called()
+
+
+def test_canonical_capture_survives_an_external_text_extractor_failure(monkeypatch):
+    """External-integration intake has the same extractor-failure boundary."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.memory_contracts import MemoryExtractionError
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(
+        pc,
+        "extract_memories_from_text",
+        MagicMock(side_effect=MemoryExtractionError("external_text_memory_extractor")),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-external-extractor-unavailable",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.external_integration,
+        external_data={"text": "A long enough external note to reach the extractor.", "text_source": "other"},
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[],
+    )
+
+    result = pc._extract_memories_canonical("uid-external-extractor", conversation, db_client=MagicMock())
+
+    assert result.count == 0
+    mock_service.replace_conversation_memories.assert_not_called()
+
+
 def test_canonical_capture_drops_only_the_ungrounded_candidate(monkeypatch):
     """One ungrounded candidate must not discard its grounded siblings."""
     pc = _load_process_conversation()

@@ -70,6 +70,7 @@ from utils.llm.gateway_error_contract import conversation_processing_http_except
 from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
+from models.memory_contracts import MemoryExtractionError
 from utils.llm.memories import (
     extract_canonical_l1_memory_candidates,
     extract_memories_from_text,
@@ -862,6 +863,33 @@ def _canonical_conversation_write_payload(
     return payload
 
 
+def _canonical_extraction_unavailable(
+    conversation: Conversation, source: Any, exc: Exception
+) -> ConversationMemoryExtractionResult:
+    """The extractor never produced a batch, so this run has no verdict to apply.
+
+    ``strict=True`` exists so a provider failure cannot be mistaken for "no
+    memories" and submit the empty replacement that would retract the source's
+    existing memories. Skipping the replacement achieves that on its own;
+    raising additionally cancels the caller's finalization, which also drops
+    that conversation's action items, goal progress, audio files and created
+    webhook — an outcome a timed-out LLM call has no standing to decide.
+    """
+    logger.warning(
+        "canonical memory extraction skipped replacement: extractor unavailable conversation=%s reason=%s",
+        conversation.id,
+        type(exc).__name__,
+    )
+    record_fallback(
+        component='other',
+        from_mode='canonical_memory_extraction',
+        to_mode='replacement_skipped',
+        reason='provider_5xx',
+        outcome='degraded',
+    )
+    return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
+
+
 def _extract_memories_canonical(
     uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
@@ -887,9 +915,8 @@ def _extract_memories_canonical(
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
-            capture_candidates = [
-                (memory, [], "unknown", [], False)
-                for memory in extract_memories_from_text(
+            try:
+                extracted_memories = extract_memories_from_text(
                     uid,
                     text_content,
                     text_source,
@@ -897,18 +924,23 @@ def _extract_memories_canonical(
                     content_date=content_date,
                     strict=True,
                 )
-            ]
+            except MemoryExtractionError as exc:
+                return _canonical_extraction_unavailable(conversation, source, exc)
+            capture_candidates = [(memory, [], "unknown", [], False) for memory in extracted_memories]
     else:
         raw_user_name = get_user_name(uid)
         user_name = raw_user_name.strip() if isinstance(raw_user_name, str) and raw_user_name.strip() else "the user"
-        extracted_candidates = extract_canonical_l1_memory_candidates(
-            uid,
-            conversation.id,
-            conversation.transcript_segments,
-            user_name=user_name,
-            language=language,
-            strict=True,
-        )
+        try:
+            extracted_candidates = extract_canonical_l1_memory_candidates(
+                uid,
+                conversation.id,
+                conversation.transcript_segments,
+                user_name=user_name,
+                language=language,
+                strict=True,
+            )
+        except MemoryExtractionError as exc:
+            return _canonical_extraction_unavailable(conversation, source, exc)
         ungrounded_candidates = 0
         seen_candidates = 0
         for candidate in extracted_candidates:
