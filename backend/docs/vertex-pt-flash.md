@@ -55,35 +55,115 @@ absorbs overflow and Pro. Promoting the client-pinned Lite lanes
 large cost regression, not a saving. Those pins are deliberately untouched and
 `test_client_pinned_flash_lite_is_never_promoted` holds that boundary.
 
-## Publisher models are enabled per project
+## Gemini 3.x is multi-region only; regional URLs 404
 
-**Listing the catalog does not prove availability.** `GET /publishers/google/models`
-(no project in the path) enumerates models that exist in Vertex. The
-project-scoped `projects/{p}/locations/{l}/publishers/google/models/{m}` path
-is what decides whether this project may call one.
+**This was the production defect in #11826.** `_vertex_url()` built one
+regional URL for every model:
 
-Measured 2026-08-18 on `based-hardware` / `us-central1` with credentials that
-can invoke inference:
+```
+https://{loc}-aiplatform.googleapis.com/v1/projects/{p}/locations/{loc}/publishers/google/models/{m}:{action}
+```
 
-| Model | Global catalog | Project endpoint |
+Gemini 3.x has no regional endpoint, so that URL can never work for it. Every
+3.x request 404d, which reads exactly like a project access gap and is not one.
+
+Measured 2026-08-18 on `based-hardware` with credentials that can invoke
+inference:
+
+| Endpoint | `gemini-3.1-flash-lite` |
+| --- | --- |
+| `aiplatform.googleapis.com` + `locations/us` | **200** ON_DEMAND |
+| `aiplatform.googleapis.com` + `locations/global` | **200** ON_DEMAND |
+| `aiplatform.googleapis.com` + `locations/us` + `dedicated` | **429** provisioned throughput |
+| `us-central1` / `us-east5` / `us-west1` / `europe-west4` / `asia-northeast1` | **404** |
+| `eu-aiplatform.googleapis.com` + `locations/eu` | **404** |
+
+The host is always plain `aiplatform.googleapis.com` — `us-aiplatform.googleapis.com`
+is not a valid host (400 `Invalid hostname`). Only the `locations/{loc}` path
+segment changes.
+
+The 429 to a `dedicated` request is the "no PT order for this model" answer,
+which is what we expect while we own no 3.1 order. It also proves the capacity
+header is honored on the multi-region endpoint, so the auto-detect probe below
+works there. Note the message reads lowercase `provisioned throughput` where
+the regional endpoint uses title case; the matcher casefolds, and must keep
+doing so.
+
+### Why `us` and not `global`
+
+`MULTI_REGION_LOCATION` is `us`, overridable with `OMI_VERTEX_GLOBAL_LOCATION`.
+Both `us` and `global` answer, but **`global` may serve a request from anywhere
+in the world**, while `us` is the US multi-region. This path carries users'
+personal conversations, transcripts and memories, and every other server-paid
+Gemini call in this service runs in `us-central1`. `us` preserves that
+residency posture; `global` silently widens it. That is a deliberate operator
+decision, not something a routing change should make on its own — do not
+"simplify" `us` into `global`.
+
+### The reservation model must stay regional
+
+`gemini-2.5-flash` **also** returns 200 on `locations/us` and
+`locations/global` (trafficType=ON_DEMAND). Routing it there anyway would
+bypass the 5 GSU **us-central1** Provisioned Throughput order and bill
+on-demand while the reservation kept charging ~$290/day — paying twice for the
+same tokens, which is the 2026-08-04 incident above.
+
+So the endpoint rule is **by model family, never by what happens to answer**:
+
+| Model | Host | Location |
 | --- | --- | --- |
-| `gemini-2.5-flash-lite` | listed | **200** |
-| `gemini-3.1-flash-lite` | listed | **404** |
-| `gemini-3.1-flash-lite-preview` | listed | **404** |
-| `gemini-3-flash-preview` | listed | **404** |
-| `gemini-3.5-flash-lite` | listed | **404** |
+| `gemini-3.*` | `aiplatform.googleapis.com` | `us` (`OMI_VERTEX_GLOBAL_LOCATION`) |
+| everything else | `{loc}-aiplatform.googleapis.com` | `GCP_LOCATION`, default `us-central1` |
 
-No Gemini 3.x model is callable by this project yet, on `v1` or `v1beta1`, in
-`us-central1` or `global`. **Access must be enabled before any 3.x routing or
-any 3.x Provisioned Throughput purchase can do anything** — you cannot buy PT
-for a model the project cannot call.
+`test_the_reservation_model_is_never_routed_off_its_region` holds that
+boundary. Location is resolved **per model**, never once per process: a
+fallback chain crosses families, so the reservation and the model absorbing its
+overflow legitimately sit on different endpoints.
 
-The proxy treats this as a first-class state rather than an error: a 404 from
-the target latches `_target_model_unavailable_at`, Pro falls back to
-`_QUOTA_DEMOTION_MODEL`, and the overflow ladder drops the dead rung so no
-request pays a round trip to fail. The latch is re-checked on the same TTL as
-capacity, so **enabling 3.x access later recovers the routing with no deploy**,
-exactly like the reservation promotion.
+**Unresolved:** whether a Provisioned Throughput order for a 3.x model is
+purchased as a multi-region order and how that would interact with the existing
+regional `gemini-2.5-flash` order. Nothing in the code assumes an answer.
+
+## Fallback chains and learned reachability
+
+Every model the proxy can route to declares its fallback chain as data, in
+`MODEL_FALLBACKS` in `backend/utils/llm/vertex_pt_routing.py`:
+
+| Model | Falls back to |
+| --- | --- |
+| `gemini-2.5-pro` | `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite` |
+| `gemini-2.5-flash` | `gemini-3.1-flash-lite`, `gemini-2.5-flash-lite` |
+| `gemini-3.1-flash-lite` | `gemini-2.5-flash-lite` |
+| `gemini-2.5-flash-lite` | *(terminal)* |
+| `gemini-embedding-001` | *(terminal)* |
+
+Three invariants, each enforced by a test rather than by convention:
+
+- **Never onto the reservation.** The live PT model is filtered out of every
+  chain at resolution time, at both PT states
+  (FC-degraded-fallback-consumes-protected-budget). Degraded traffic must not
+  consume the budget the quota exists to protect.
+- **Never upward in price.** Each chain is non-increasing in output price
+  (`PRICE_PER_MTOK_OUT`), so a degraded request cannot cost more than the one
+  it replaces. This is also why `gemini-2.5-flash-lite` is terminal: it is the
+  floor of the ladder and the model the desktop clients pin directly.
+- **Never onto itself.** A chain never contains its own head, so a dead model
+  cannot retry itself.
+
+**Reachability is learned only from real `generateContent` attempts.** There is
+deliberately no startup probe. The metadata endpoint
+`GET .../publishers/google/models/{m}` is not an oracle — it 404s for
+`gemini-2.5-flash-lite`, which works fine — and burning one inference call per
+model per instance is unaffordable on Cloud Run, which churns instances
+constantly. When an attempt comes back "publisher model not found", the proxy
+latches that model for `_PT_PROBE_TTL_SECONDS` and skips it, then re-tries once
+the TTL lapses, so a routing fix or a serving change recovers with no deploy.
+BYOK responses never teach this table: they come from AI Studio on the user's
+own key, so one user must not be able to latch a model dead for the fleet.
+
+A generic 429 (`Quota exceeded for requests per minute`) is backpressure and
+never triggers a fallback. Only a PT-exhaustion 429 or a model-unavailable 404
+does.
 
 ## Thinking contract, measured
 
@@ -96,14 +176,28 @@ Run 2026-08-18 via `backend/scripts/probe_gemini_thinking_contract.py`:
 | `gemini-2.5-flash-lite` | `thinkingLevel: minimal` | **HTTP 400 — not supported** | |
 | `gemini-2.5-flash` | `thinkingBudget: 0` | 0 | 309 |
 | `gemini-2.5-flash` | no config | 516 | 213 |
+| `gemini-3.1-flash-lite` | `thinkingBudget: 0` | 0 | 64 |
+| `gemini-3.1-flash-lite` | `thinkingBudget: 1024` | 278 | 77 |
+| `gemini-3.1-flash-lite` | `thinkingLevel: minimal` | 0 | 75 |
+| `gemini-3.1-flash-lite` | `thinkingLevel: high` | 603 | 76 |
+| `gemini-3.1-flash-lite` | no config | 0 | 64 |
 
-Two things this settles. 2.5 models **honor** `thinkingBudget` (0 really is 0),
-and they **reject** `thinkingLevel` outright with a 400 — so the family split
-is required in both directions, not a precaution. It also shows why the proxy
-injects a budget at all: `gemini-2.5-flash` with no thinking config spent 516
-thinking tokens on a trivial prompt, all billed as output.
+The 3.x rows were measured on the multi-region endpoint once the routing fix
+made those models reachable.
 
-The 3.x half is still unmeasured because the project cannot call those models.
+**This table deleted a branch rather than justifying one.** `gemini-3.1-flash-lite`
+*honors* `thinkingBudget` — budget 0 really is 0 thoughts, budget 1024 spends
+278 — and 2.5 models *reject* `thinkingLevel` with HTTP 400
+(`thinking_level is not supported by this model`). So `thinkingBudget` is the
+one option both families accept and `thinkingLevel` is the one that works on
+neither universally. An earlier revision split on family from documentation
+rather than measurement and had the direction backwards. `ptr.thinking_config_for()`
+is now a single path, and a fallback that crosses families needs no body
+rewriting at all.
+
+It also shows why the proxy injects a budget: `gemini-2.5-flash` with no
+thinking config spent 516 thinking tokens on a trivial prompt, all billed as
+output.
 
 ## Migrating the reservation to `gemini-3.1-flash-lite`
 
@@ -163,33 +257,9 @@ budget the quota exists to protect — that is
 `FC-degraded-fallback-consumes-protected-budget` (PR #10686), and the guard is
 `test_overflow_never_targets_the_live_reservation`.
 
-## Gemini 3.x changed the thinking contract
-
-2.5 models take an integer `thinkingConfig.thinkingBudget`. 3.x models take
-`thinkingConfig.thinkingLevel`, and **thinking cannot be disabled** — the floor
-is `minimal`. Thinking tokens bill as *output*, so sending a 2.5-style budget
-to a 3.x model risks an uncapped reasoning trace at $1.50/1M: the field is
-schema-valid, so it is accepted and then ignored.
-
-`ptr.thinking_config_for()` picks by family prefix rather than exact model name,
-matching how `_CACHE_KEY_MODEL_PREFIXES` handles prompt caching, and
-`_retarget_thinking()` rewrites the body when overflow crosses families.
-
-**Unverified:** whether 3.x hard-errors on `thinkingBudget` or silently ignores
-it could not be settled from this host — `aiplatform.endpoints.predict` is
-denied to the read-only service account, and no human ADC was live. The code is
-correct either way, but the observed token counts are still worth capturing:
-
-```
-python3 backend/scripts/probe_gemini_thinking_contract.py
-```
-
-Run it with credentials that can call `generateContent` and paste the output
-into this section.
-
 ## Operator overrides
 
-All three are read per request, so a bad promotion can be corrected without
+All four are read per request, so a bad promotion can be corrected without
 shipping code.
 
 | Env | Effect |
@@ -197,6 +267,7 @@ shipping code.
 | `OMI_VERTEX_PT_MODEL` | Pins the reservation model, beating auto-detection in both directions. |
 | `OMI_GEMINI_OVERFLOW_MODEL` | Pins the overflow model. Rejected at resolution time if it equals the reservation. |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | `false` disables overflow entirely; a full reservation then returns 429 to the client. |
+| `OMI_VERTEX_GLOBAL_LOCATION` | Multi-region for families with no regional endpoint. Default `us`. Setting `global` widens data residency worldwide — see above before flipping it. |
 
 ## Keeping the reservation for work that must be Flash
 
