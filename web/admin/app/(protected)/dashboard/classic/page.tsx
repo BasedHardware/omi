@@ -225,6 +225,8 @@ interface ViralMetrics {
   dailyDau: { date: string; dau: number }[];
   powerUserCurve: { daysActive: number; users: number; pct: number }[];
   activation: { date: string; signups: number; activated: number; rate: number }[];
+  activationDaily?: { date: string; signups: number; activated: number; rate: number }[];
+  activationBucket?: "day" | "week";
   summary: {
     quickRatio: number | null;
     /** Telemetry-derived; unreliable while the fleet is mid-rollout. Prefer `ActivationStats`. */
@@ -665,7 +667,9 @@ export default function AnalyticsPage() {
   const vm = viralMetrics;
   const ga = vm?.growthAccounting ?? [];
   const powerCurve = vm?.powerUserCurve ?? [];
-  const activationData = vm?.activation ?? [];
+  const activationData =
+    vm?.activationDaily ??
+    (vm?.activationBucket === "week" ? [] : (vm?.activation ?? []));
   const stickinessData = vm?.stickinessTrend ?? [];
   const completedGrowthAccounting = useMemo(() => {
     const currentWeek = mondayKey(new Date());

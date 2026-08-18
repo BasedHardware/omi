@@ -3220,5 +3220,6 @@
     "chatScopeAbout": "Informazioni su: {title}",
     "askAboutThisConversation": "Chiedi informazioni",
     "sendRawAudioToOmi": "Invia l'audio grezzo a Omi",
-    "sendRawAudioToOmiDescription": "Disattiva per impedire l'invio dell'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi."
+    "sendRawAudioToOmiDescription": "Disattiva per impedire l'invio dell'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.",
+    "findDevice": "Trova"
 }

@@ -10,4 +10,6 @@ if git ls-files --error-unmatch backend/.env.local-dev >/dev/null 2>&1; then
   exit 1
 fi
 PYTHON_BIN="$(dev_harness_python)"
-PYTHONPATH="$(dev_harness_pythonpath "$PYTHON_BIN" scripts/dev-harness)" "$PYTHON_BIN" -m dev_harness.cli check
+HARNESS_PYTHONPATH="$(dev_harness_pythonpath "$PYTHON_BIN" scripts/dev-harness)"
+dev_harness_require_cli "$PYTHON_BIN" "$HARNESS_PYTHONPATH"
+PYTHONPATH="$HARNESS_PYTHONPATH" "$PYTHON_BIN" -m dev_harness.cli check

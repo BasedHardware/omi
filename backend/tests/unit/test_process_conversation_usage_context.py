@@ -18,7 +18,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
@@ -1355,6 +1355,136 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert results[0]['app_id'] == 'app-1'
     assert results[0]['content'] == 'APP SUMMARY'
     assert written.get('suggested_summarization_apps') == ['app-1']
+
+
+def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(monkeypatch):
+    """Regression: when every L1 candidate failed grounding, canonical extraction
+    raised and took the rest of finalization with it — action items, goal
+    progress, audio files and the created webhook never ran, and the caller
+    (developer conversation intake, sync enrichment) returned 500. Grounding is
+    a verdict on the memories only: the replacement is skipped, finalization
+    continues."""
+    from models.transcript_segment import TranscriptSegment
+
+    completed_conversation = Conversation(
+        id='conversation-ungrounded',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[
+            TranscriptSegment(
+                text='We discussed ordinary weekend plans and a grocery list.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    memory_service = MagicMock()
+    submitted = MagicMock()
+
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
+    monkeypatch.setattr(process_conversation.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(
+        process_conversation,
+        'extract_canonical_l1_memory_candidates',
+        MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    content='The user was diagnosed with condition X.',
+                    evidence_quotes=['I was diagnosed with condition X'],
+                    speaker_label='SPEAKER_00',
+                    speaker_scope='session-local',
+                    about='the user',
+                    risk_flags=[],
+                    archive_class='general',
+                )
+            ]
+        ),
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation)
+
+    # Nothing is written or retracted for the source ...
+    memory_service.replace_conversation_memories.assert_not_called()
+    # ... and the effects sequenced after extraction still ran.
+    assert '_save_action_items' in {getattr(call.args[1], '__name__', '') for call in submitted.call_args_list}
+
+
+def test_finalization_survives_an_unavailable_memory_extractor(monkeypatch):
+    """Regression: an LLM invoke failure inside canonical extraction (prod:
+    openai.APITimeoutError -> WorkingObservationExtractionError) propagated out
+    of finalization, so the conversation also lost its action items, goal
+    progress, audio files and created webhook and the caller returned 500. A
+    provider that did not answer is a verdict on the memories only."""
+    from models.transcript_segment import TranscriptSegment
+    from models.memory_contracts import WorkingObservationExtractionError
+
+    completed_conversation = Conversation(
+        id='conversation-extractor-unavailable',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[
+            TranscriptSegment(
+                text='We discussed ordinary weekend plans and a grocery list.',
+                speaker='SPEAKER_00',
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    memory_service = MagicMock()
+    submitted = MagicMock()
+
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation, '_trigger_apps', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submitted)
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', lambda *a, **k: None)
+    monkeypatch.setattr(process_conversation, 'MemoryService', lambda db_client: memory_service)
+    monkeypatch.setattr(process_conversation.users_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(
+        process_conversation,
+        'extract_canonical_l1_memory_candidates',
+        MagicMock(side_effect=WorkingObservationExtractionError("invoke")),
+    )
+
+    process_conversation.process_conversation('uid', 'en', input_conversation)
+
+    # Prior memories are neither replaced nor retracted ...
+    memory_service.replace_conversation_memories.assert_not_called()
+    # ... and the effects sequenced after extraction still ran.
+    assert '_save_action_items' in {getattr(call.args[1], '__name__', '') for call in submitted.call_args_list}
 
 
 def test_dedup_candidates_exclude_own_and_merge_source_items():

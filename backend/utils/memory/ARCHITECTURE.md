@@ -90,10 +90,10 @@ backend/modal/memory_maintenance_job.py
   canonical_short_term_maintenance_cron.py
   short_term_promotion.py
     memory_outbox_worker.py
-    canonical_required_processing.py
     TTL audit
     canonical_consolidation.py
-      promote | archive | review | reject
+      pending required submissions + processed Short-term
+      one Luna call: normalize if needed, then promote | archive | review | reject
     memory_outbox_worker.py
 ```
 
@@ -104,7 +104,7 @@ This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
 cadence; the job is the sole host of
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
 
-The scheduled final planner, required L2 normalizer, and six-hour X memory
+The scheduled final planner and six-hour X memory
 extractor share one optional OpenAI Flex switch and use dedicated gateway lanes.
 Manual and post-OAuth X syncs remain Standard. Ordinary `memory_conflict`,
 `memory_l2`, and `memories` traffic keeps its Standard timeout and cannot
@@ -119,16 +119,29 @@ exactly:
 {"enabled":false,"generation":1}
 ```
 
-Set `enabled` to `true` to route all three eligible scheduled workloads through
+Set `enabled` to `true` to route eligible scheduled workloads through
 Flex, and increment `generation` with every control change. Setting it back to
 `false` restores their legacy Standard paths without a redeploy. An in-flight
 response from an older generation is discarded before durable apply. Flex
-resource deferrals release L2/promotion leases for the next scheduled run and
+resource deferrals release promotion leases for the next scheduled run and
 do not consume model-output quality retry budgets; X raw posts remain pending.
-Flex-mode memory maintenance advances one UID and at most one required L2 item
-per run so its durable cursor cannot jump across work that the 15-minute Flex
-budget could not start. Both owning jobs use verified private gateway endpoints,
-zero SDK retries, and a one-hour Cloud Run task budget.
+Flex-mode memory maintenance scans a bounded registry page (up to 400 UIDs),
+skips accounts with no active Short-term row, and skips accounts dreamed in
+the last 20 hours unless they already have more than 10 active Short-term
+rows (hourly overflow drain). Remaining users run until the 15-minute Flex
+reservation no longer fits in the one-hour job budget. A Flex deferral leaves
+the durable cursor on the unfinished UID so later accounts are not skipped.
+The job does not run a separate required-processing LLM: explicit submissions
+enter the consolidation batch with `requires_normalization=true`, and apply
+stamps the L2 receipt then the route from that one decision. Promote
+`memory_text` is always rebound to the stored L2 content when
+`promotion.required` is set, including retries after L2 already committed.
+Consolidation
+keeps 20 Short-term items per Luna call and splits the planner rules onto a
+cached prefix so later batches of the same hour reuse that prefix; one pass
+can issue up to 25 such calls (500 items). Both owning
+jobs use verified private gateway endpoints, zero SDK retries, and a one-hour
+Cloud Run task budget.
 
 ## Search, graph, and derived providers
 
@@ -166,11 +179,12 @@ The supported controls and rollback floor are documented in
 `docs/runbooks/universal-memory-operations.md`.
 
 - `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
-  to off. `on` enables intake and list; it does not enable Gate 3 ST→LT
+  to off. `on` enables intake and list; it does not by itself enable ST→LT
   maintenance. `MEMORY_MODE` and `MEMORY_V3_GET_ENABLED` are one-deploy aliases
   only (`write|read` → on, `off|shadow` → off) and are not written in overlays.
 - `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only and stays a separate ops
-  switch. Do not derive it from `MEMORY_ENABLED=on`.
+  switch. Do not derive it from `MEMORY_ENABLED=on`. Both env overlays pin it
+  on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true`.
 - `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and its batch/candidate settings are
   global cost/incident controls.
 - `GET /v3/memories` first page uses `read_page`, which 503s

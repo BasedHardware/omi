@@ -3220,5 +3220,6 @@
     "chatScopeAbout": "Om: {title}",
     "askAboutThisConversation": "Fråga om detta",
     "sendRawAudioToOmi": "Skicka rått ljud till Omi",
-    "sendRawAudioToOmiDescription": "Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi."
+    "sendRawAudioToOmiDescription": "Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.",
+    "findDevice": "Hitta"
 }

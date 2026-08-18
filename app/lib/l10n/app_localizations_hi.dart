@@ -9840,4 +9840,7 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Omi को कच्चा ऑडियो भेजे जाने से रोकने के लिए इसे बंद करें। ट्रांसक्रिप्ट और क्लाउड सुविधाओं के लिए आवश्यक डेटा अभी भी Omi को भेजा जा सकता है।';
+
+  @override
+  String get findDevice => 'ढूँढें';
 }

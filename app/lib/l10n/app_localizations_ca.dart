@@ -9917,4 +9917,7 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Desactiva-ho per impedir que l\'àudio sense processar s\'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi.';
+
+  @override
+  String get findDevice => 'Troba';
 }

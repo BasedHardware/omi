@@ -3255,5 +3255,6 @@
     "chatScopeAbout": "Hakkında: {title}",
     "askAboutThisConversation": "Bunu sor",
     "sendRawAudioToOmi": "Ham sesi Omi'ye gönder",
-    "sendRawAudioToOmiDescription": "Ham sesin Omi'ye gönderilmesini önlemek için kapatın. Transkriptler ve bulut özelliklerinin gerektirdiği veriler yine de Omi'ye gönderilebilir."
+    "sendRawAudioToOmiDescription": "Ham sesin Omi'ye gönderilmesini önlemek için kapatın. Transkriptler ve bulut özelliklerinin gerektirdiği veriler yine de Omi'ye gönderilebilir.",
+    "findDevice": "Bul"
 }

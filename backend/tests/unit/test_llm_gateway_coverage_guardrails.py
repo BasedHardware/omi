@@ -48,7 +48,6 @@ class DirectUse:
 
 
 DIRECT_PROVIDER_ALLOWLIST = {
-    DirectUse('agent_vm/main.py', 'GEMINI_API_KEY'),
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),

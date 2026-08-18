@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
 from models.memories import Memory, MemoryCategory
-from models.memory_contracts import L1MemoryArchiveClass
+from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
@@ -86,14 +86,6 @@ class CanonicalL1MemoryCandidate(BaseModel):
     about: str = ""
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
-
-
-class MemoryExtractionError(RuntimeError):
-    """A strict memory extraction failed before producing a valid batch."""
-
-    def __init__(self, extractor: str):
-        self.extractor = extractor
-        super().__init__(f"{extractor} failed before producing a valid extraction result")
 
 
 class MemoriesByTexts(BaseModel):

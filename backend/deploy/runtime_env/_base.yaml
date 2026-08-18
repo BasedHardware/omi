@@ -150,6 +150,16 @@ environment_shared:
             key: MCP_RESOURCE_URL
       values_file: backend/charts/backend-listen/{env}_omi_backend_listen_values.yaml
   region: us-central1
+  # Separate Cloud Run release vector from gcp_backend.yml. Compose + tests pin
+  # Vertex PT; desktop_backend_*.yml is what actually deploys these env vars.
+  desktop_backend:
+    env:
+      USE_VERTEX_AI:
+        value: 'true'
+      GOOGLE_CLOUD_PROJECT:
+        value: '{compute_project}'
+      GCP_LOCATION:
+        value: us-central1
   cloud_run:
     network:
       flags:
@@ -562,6 +572,8 @@ environment_shared:
             value: 'false'
             category: rollout
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
+            category: memory_rollout
+          MEMORY_CANONICAL_MAINTENANCE_FLEX:
             category: memory_rollout
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             category: memory_rollout

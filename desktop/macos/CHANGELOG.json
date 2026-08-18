@@ -2,6 +2,57 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.188",
+      "date": "2026-08-18",
+      "changes": [
+        "Improved internal Gemini usage reporting so AI capacity and costs can be tracked by workload without collecting request content",
+        "Conversation summaries now show the selected summarization app's output (e.g. General Summary) as the main summary, with a picker to switch apps and set your default — falling back to Omi's own summary when no app result is available",
+        "Improved the efficiency of automatic task extraction without changing which tasks are captured",
+        "Capped very large window captures so high-resolution external displays send smaller images to the assistant"
+      ]
+    },
+    {
+      "version": "0.12.187",
+      "date": "2026-08-17",
+      "changes": [
+        "Tuned which AI model each background assistant uses and slowed the memory-extraction timer to reduce noise; fixed a screen-change detector bug that caused unnecessary captures",
+        "Stopped creating a new cloud agent computer on every app launch"
+      ]
+    },
+    {
+      "version": "0.12.185",
+      "date": "2026-08-17",
+      "changes": [
+        "Made Brain Map replay skip quiet stretches, finish in about four seconds, zoom to a selected entity and its connections, and keep Escape from leaving the map while something is selected",
+        "Fixed Rewind capture ownership checks dropping frames right after sign-in",
+        "While downloading an update, the loading spinner now sits right next to the version instead of leaving a blank gap",
+        "Fixed a memory leak where each window kept its mouse-tracking helper alive for as long as the app was running."
+      ]
+    },
+    {
+      "version": "0.12.183",
+      "date": "2026-08-17",
+      "changes": [
+        "Proactive notifications now surface timely connections to your open and overdue tasks instead of staying silent, and no longer discard facts that lack a ticket number or a name."
+      ]
+    },
+    {
+      "version": "0.12.182",
+      "date": "2026-08-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.181",
+      "date": "2026-08-16",
+      "changes": [
+        "Long-running work contexts now reuse their cached prompt history instead of rebuilding it on every visit",
+        "Fixed a task prompt customised on one Mac never reaching your other Macs, and reappearing after you reset it to the default",
+        "A workstream label now stays attached to the work it was earned from, so a label no longer shows up on another workstream's tasks"
+      ]
+    },
+    {
       "version": "0.12.180",
       "date": "2026-08-16",
       "changes": [

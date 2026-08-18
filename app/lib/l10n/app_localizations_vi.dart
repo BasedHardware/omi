@@ -9857,4 +9857,7 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi.';
+
+  @override
+  String get findDevice => 'Tìm';
 }

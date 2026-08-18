@@ -7,12 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
-PRIVATE_AGENT_VM_READINESS_CONTRACT = (
-    "--network=default",
-    "--subnet=default",
-    "--vpc-egress=private-ranges-only",
-    "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
-)
 
 
 def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[str]:
@@ -50,12 +44,10 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "--format='none'",
         "SERVICE_ACCOUNT_JSON",
         "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "USE_VERTEX_AI=true",
+        "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+        "GCP_LOCATION=us-central1",
         "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
-        "AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}",
-        "AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}",
-        "Build and publish Agent VM image",
-        "backend/agent_vm/Dockerfile",
-        "gs://$AGENT_GCS_BUCKET/startup.sh",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
@@ -87,25 +79,21 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
             (
                 "Preflight production desktop secret resource names",
                 "Build and push immutable Docker image",
-                "Build and publish Agent VM image",
             ),
             workflow=workflow,
         )
     )
     return errors
 
-
-def _validate_private_agent_vm_readiness(text: str, *, workflow: str, request_step: str) -> list[str]:
+def _validate_private_network_egress(text: str, *, workflow: str, request_step: str) -> list[str]:
     errors: list[str] = []
-    reconciler_block = _step_block(text, "Deploy Agent VM reconciler Cloud Run Job")
     request_block = _step_block(text, request_step)
-    for block_name, block in (("reconciler", reconciler_block), ("request service", request_block)):
-        if block is None:
-            errors.append(f"{workflow}: missing {block_name} deployment step for private Agent VM readiness")
-            continue
-        for fragment in PRIVATE_AGENT_VM_READINESS_CONTRACT:
-            if fragment not in block:
-                errors.append(f"{workflow}: {block_name} missing private Agent VM readiness contract {fragment!r}")
+    if request_block is None:
+        errors.append(f"{workflow}: missing request service deployment step for private network egress")
+        return errors
+    for fragment in ("--network=default", "--subnet=default", "--vpc-egress=private-ranges-only"):
+        if fragment not in request_block:
+            errors.append(f"{workflow}: request service missing private network egress contract {fragment!r}")
     return errors
 
 
@@ -180,14 +168,10 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             workflow=workflow,
         )
     )
-    request_step = "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
-    errors.extend(_validate_private_agent_vm_readiness(text, workflow=workflow, request_step=request_step))
-    # Static workflow tripwire: deploy-cloudrun's parseFlags splits an unquoted
-    # --args=-m,... token, making Python treat -m as a gcloud flag instead of a
-    # container argument.  The quoted full token preserves the intended argv.
-    if "'--args=-m,jobs.agent_vm_reconciler'" not in text:
-        errors.append(f"{workflow}: Agent VM reconciler Python module argument must remain action-parser-safe")
-
+    request_step = (
+        "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
+    )
+    errors.extend(_validate_private_network_egress(text, workflow=workflow, request_step=request_step))
     if production:
         for fragment in (
             "on:\n  workflow_dispatch:",
@@ -226,6 +210,8 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+            "USE_VERTEX_AI=true",
+            "GCP_LOCATION=us-central1",
             "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
             "${{ secrets.GCP_SERVICE_ACCOUNT }}",
@@ -253,13 +239,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")
         dev_runtime_steps = (
             "Deploy desktop-backend to Cloud Run",
-            "Deploy Agent VM reconciler Cloud Run Job",
         )
         dev_runtime_env = (
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-            "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
         )
         for step in dev_runtime_steps:
             block = _step_block(text, step)
@@ -277,6 +261,10 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             for line in desktop_block.splitlines()
         ):
             errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
+        if desktop_block is not None:
+            for env_var in ("USE_VERTEX_AI=true", "GCP_LOCATION=us-central1"):
+                if not any(line.strip() == env_var for line in desktop_block.splitlines()):
+                    errors.append(f"{workflow}: desktop candidate missing Vertex PT runtime env {env_var!r}")
     return errors
 
 

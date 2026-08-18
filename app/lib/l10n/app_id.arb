@@ -3262,5 +3262,6 @@
     "chatScopeAbout": "Tentang: {title}",
     "askAboutThisConversation": "Tanyakan tentang ini",
     "sendRawAudioToOmi": "Kirim audio mentah ke Omi",
-    "sendRawAudioToOmiDescription": "Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi."
+    "sendRawAudioToOmiDescription": "Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.",
+    "findDevice": "Temukan"
 }

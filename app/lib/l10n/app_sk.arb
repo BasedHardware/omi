@@ -3225,5 +3225,6 @@
     "chatScopeAbout": "O: {title}",
     "askAboutThisConversation": "Opýtať sa na to",
     "sendRawAudioToOmi": "Odosielať nespracovaný zvuk do Omi",
-    "sendRawAudioToOmiDescription": "Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi."
+    "sendRawAudioToOmiDescription": "Vypnutím zabránite odosielaniu nespracovaného zvuku do Omi. Prepisy a údaje potrebné pre cloudové funkcie sa môžu naďalej odosielať do Omi.",
+    "findDevice": "Nájsť"
 }

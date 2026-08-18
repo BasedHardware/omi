@@ -12,6 +12,9 @@
 # so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_FAIL_SECONDS.
 # Genuinely non-unit tests (real asyncio sleeps, network, stress, codebase greps, full-app wiring,
 # per-test fresh module reload) are marked `slow`/`integration` and are NOT listed here.
+# One full _proxy round trip (metering -> sanitize -> dispatch -> terminal telemetry) with an
+# in-process capturing client; hermetic, but the end-to-end path costs ~0.15-0.19s CPU.
+tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_the_2048_cap
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
@@ -34,7 +37,7 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_ht
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_CAPACITY-0-PARAKEET_STREAM_CAPACITY must be an integer >= 1]
 tests/unit/test_render_backend_runtime_env.py::test_selected_job_renders_only_shared_network_and_named_job_outputs
 tests/unit/test_render_backend_runtime_env.py::test_render_prod_gateway_callers_inject_verified_endpoint
-tests/unit/test_render_backend_runtime_env.py::test_render_prod_keeps_memory_maintenance_job_promotion_off
+tests/unit/test_render_backend_runtime_env.py::test_render_prod_emits_memory_maintenance_job_cron_on
 tests/unit/test_render_backend_runtime_env.py::test_render_prod_requires_vpc_env_vars_before_job_outputs
 tests/unit/test_render_backend_runtime_env.py::test_selected_job_rejects_unknown_name_without_emitting_partial_output
 # MEMORY_ENABLED product-flag tests parse the composed runtime manifest.
@@ -67,6 +70,7 @@ tests/unit/test_backend_runtime_env_validator.py::test_workflow_validation_uses_
 tests/unit/test_runtime_image_contracts.py::test_registered_runtime_image_sources_are_closed
 tests/unit/test_runtime_image_contracts.py::test_pusher_contract_rejects_omitted_shared_package
 tests/unit/test_runtime_image_contracts.py::test_pusher_dependency_probe_includes_jsonschema
+tests/unit/test_runtime_image_contracts.py::test_modal_contract_rejects_omitted_shared_package
 # Walk every registered import smoke's first-party closure through the AST; hermetic but CPU-bound.
 tests/unit/test_runtime_image_contracts.py::test_registered_import_smokes_declare_their_import_time_environment
 tests/unit/test_runtime_image_contracts.py::test_import_smoke_reaching_encryption_without_its_secret_is_rejected
@@ -245,6 +249,7 @@ tests/unit/test_verify_backend_release_vector.py::test_dev_deploy_migrates_only_
 tests/unit/test_verify_backend_release_vector.py::test_legacy_binding_migration_strips_prod_legacy_bindings
 tests/unit/test_voice_duration_limiter.py::TestPCMDurationComputation::test_16khz_mono_1s
 tests/unit/test_workflow_contracts.py::test_workflow_contracts_static_check_accepts_current_allowlist
+tests/unit/test_workflow_contracts.py::test_workflow_contract_sources_select_adjacent_tests
 tests/unit/test_ws_b_short_term_lifecycle.py::test_promoted_item_readable_and_idempotent_on_second_run
 tests/unit/test_ws_b_short_term_lifecycle.py::test_promotion_fires_on_batch_threshold_via_apply
 tests/unit/test_ws_b_short_term_lifecycle.py::test_required_promotion_merges_multiple_sources_in_same_run
@@ -270,6 +275,5 @@ tests/unit/test_sync_merge_target_selection.py::test_sync_target_attach_fallback
 tests/unit/test_bounded_firestore_list_reads.py::test_legacy_get_memories_no_first_page_5000_force
 # File-isolation amortizes llm_gateway app/provider imports into the first oracle call.
 tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle_bypasses_ambient_proxy_configuration
-tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key

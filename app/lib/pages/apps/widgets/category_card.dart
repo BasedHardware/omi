@@ -60,7 +60,7 @@ class CategoryCard extends StatelessWidget {
       case 'health':
         return Colors.green;
       case 'entertainment':
-        return Colors.purple;
+        return Colors.pinkAccent;
       case 'education':
         return Colors.orange;
       case 'social':
@@ -86,7 +86,7 @@ class CategoryCard extends StatelessWidget {
       case 'sports':
         return Colors.lime;
       case 'music':
-        return Colors.deepPurple;
+        return Colors.tealAccent;
       case 'photo':
         return Colors.brown;
       case 'gaming':

@@ -9909,4 +9909,7 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'ముడి ఆడియో Omiకి పంపబడకుండా ఉండటానికి దీన్ని ఆఫ్ చేయండి. ట్రాన్స్‌క్రిప్ట్‌లు మరియు క్లౌడ్ ఫీచర్లకు అవసరమైన డేటా ఇప్పటికీ Omiకి పంపబడవచ్చు.';
+
+  @override
+  String get findDevice => 'కనుగొనండి';
 }

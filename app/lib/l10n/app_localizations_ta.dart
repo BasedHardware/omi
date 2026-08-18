@@ -9930,4 +9930,7 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'மூல ஆடியோ Omi-க்கு அனுப்பப்படுவதைத் தடுக்க இதை அணைக்கவும். உரைமாற்றங்களும் கிளவுட் அம்சங்களுக்குத் தேவையான தரவும் இன்னும் Omi-க்கு அனுப்பப்படலாம்.';
+
+  @override
+  String get findDevice => 'கண்டறி';
 }

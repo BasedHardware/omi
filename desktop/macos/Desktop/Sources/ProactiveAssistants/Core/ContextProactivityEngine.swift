@@ -44,8 +44,32 @@ enum ContextDirectorEligibility {
 }
 
 enum ContextDirectorGrounding {
-  static func permitsNonSilence(entryRefs: [String], factIDs: [String]) -> Bool {
-    !entryRefs.isEmpty && !factIDs.isEmpty
+  /// Grounding requirement, per decision type.
+  ///
+  /// The old rule demanded a bucket-entry ref AND a validated-fact ref for every
+  /// non-silence decision. But a resurface grounds on an *open task* — supplied
+  /// in the prompt, not citable as a bucket entry — connected to the current
+  /// context, so its natural citation is the validated fact(s) evidencing the
+  /// connection, with no entry ref at all. Measured on two independent
+  /// installations: every suppressed row with non-empty fact_ids is a decision
+  /// the model made to speak that this guard overrode (the silence path forcibly
+  /// empties fact_ids), and there were 9 of them in our dogfood window and 7 of
+  /// 76 on an independent beta install — including "This is an overdue open task
+  /// with a timely connection to the active overnight fleetctl workflow", the
+  /// exact class resurface exists for. Cross-workstream pooling being enabled
+  /// did not prevent the vetoes, so the guard itself was the cause.
+  ///
+  /// Deliberately NOT relaxed to a blanket OR: insight, suggest, and
+  /// task_candidate make new claims about bucket content and keep the full
+  /// anti-hallucination invariant (at least one entry ref and one fact ref).
+  /// Resurface requires at least one citation of either kind — never zero.
+  static func permitsNonSilence(
+    decision: String, entryRefs: [String], factIDs: [String]
+  ) -> Bool {
+    if decision == "resurface" {
+      return !entryRefs.isEmpty || !factIDs.isEmpty
+    }
+    return !entryRefs.isEmpty && !factIDs.isEmpty
   }
 }
 
@@ -501,13 +525,22 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      // Deliberately evaluated on bucket refs alone: a delivery must still stand
-      // on at least one bucket entry and one validated bucket fact, exactly as
-      // before the retrieval hop existed. Retrieved refs are additive citations
-      // and can never substitute for bucket grounding.
-      guard ContextDirectorGrounding.permitsNonSilence(entryRefs: entryRefs, factIDs: factIDs) else {
+      // Deliberately evaluated on bucket refs alone: retrieved refs are additive
+      // citations and can never substitute for bucket grounding. When the guard
+      // vetoes, the row records what the model actually decided and why it was
+      // suppressed — a forced silence was previously indistinguishable from a
+      // model-chosen one, which made the veto rate invisible until it was
+      // recovered from the fact_ids side effect.
+      guard
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision.decision, entryRefs: entryRefs, factIDs: factIDs)
+      else {
+        provenance["suppression_reason"] = "grounding_veto"
+        provenance["model_decision"] = decision.decision
+        let vetoData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
         try await store.completeDelivery(
-          id: deliveryID, decisionType: "silence", provenanceJSON: provenanceJSON,
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: String(data: vetoData, encoding: .utf8) ?? provenanceJSON,
           message: nil, state: "suppressed")
         return
       }
@@ -666,6 +699,20 @@ actor ContextProactivityEngine {
         state: "suppressed")
       return
     }
+    // Candidate-mix ceiling, checked before the gate's model call so a capped
+    // candidate costs no tokens. The candidate is deliberately NOT declined:
+    // it stays armed for a window with headroom, unlike a gate refusal, which
+    // retires it. The visit's delivery row still terminates as suppressed.
+    let candidateShows = await store.candidateDeliveriesInWindow(now: currentFrame.captureTime)
+    guard candidateShows < ContextDeliveryBudget.candidateDailyShowCeiling else {
+      log("Context candidate suppressed before model: candidate_show_ceiling")
+      await terminalize(
+        deliveryID: deliveryID,
+        decisionType: "silence",
+        provenanceJSON: "{\"failure\":\"candidate_show_ceiling\"}",
+        state: "suppressed")
+      return
+    }
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh
@@ -677,16 +724,32 @@ actor ContextProactivityEngine {
         state: "failed")
       return
     }
+    // The facts the candidate was written from, not just this visit's facts:
+    // the gate is judging a claim made at write time, and without its original
+    // evidence it could only compare the claim against the current screen —
+    // which is how 13 of 14 live rejections came to read "not supported by the
+    // current screen" for candidates that were correct when written.
+    let groundingFacts = await store.groundingFactStatements(
+      candidate.groundingFactIDs, bucketID: candidate.bucketID)
     do {
       let result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: ContextProactiveCandidateGate.prompt(
           message: candidate.message,
+          groundingFacts: groundingFacts,
           validatedFacts: snapshot.validatedFacts,
           recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
-        maxCompletionTokens: 120,
+        // 400, not 120: the reasoning model bills its thinking into completion
+        // tokens. Measured directly against the same model with this exact
+        // prompt shape: at 120 the call finished with `finish_reason=length`,
+        // 120/120 tokens spent on reasoning, and EMPTY content in 2 of 3
+        // attempts — which parses as malformed and silently suppresses the
+        // candidate. At 400 every attempt finished clean (33-174 reasoning
+        // tokens plus the small JSON body). Live provenance shows the same
+        // degenerate shape (a bare "false" reason) at the old cap.
+        maxCompletionTokens: 400,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       // The gate awaited the model; ownership can be revoked or the visit can
@@ -703,9 +766,21 @@ actor ContextProactivityEngine {
           state: "failed")
         return
       }
-      let decision =
-        ContextProactiveCandidateGate.parse(result.content)
-        ?? ContextProactiveCandidateGate.Decision(show: false, reason: "malformed_gate_response")
+      // An unparseable body is not a decision. The reasoning model bills its
+      // thinking into completion tokens, so a budget that runs out returns
+      // `finish_reason=length` with empty content — which is silence about the
+      // question, not an answer of "no". Treating it as "no" retired the
+      // candidate permanently (`declineCandidate` below), so one truncated call
+      // destroyed a notification that no later visit could ever recover.
+      // Suppress this visit, leave the candidate armed, and let a later visit
+      // ask again or let it expire on its own.
+      guard let decision = ContextProactiveCandidateGate.parse(result.content) else {
+        try await store.completeDelivery(
+          id: deliveryID, decisionType: "silence",
+          provenanceJSON: "{\"reason\":\"malformed_gate_response\",\"source\":\"candidate\"}",
+          message: nil, state: "suppressed")
+        return
+      }
       let reason = String(decision.reason.prefix(1_200))
       var provenance: [String: Any] = [
         "source": "candidate",

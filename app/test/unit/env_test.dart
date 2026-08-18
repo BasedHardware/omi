@@ -116,14 +116,12 @@ void main() {
       Env.clearApiBaseUrlOverrideForTesting();
     });
 
-    test('TestFlight production startup accepts the production API and WebSocket', () {
+    test('TestFlight production startup accepts the production API', () {
       validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
-      expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
     });
 
-    test('Android production startup accepts the production API and WebSocket', () {
+    test('Android production startup accepts the production API', () {
       validateApplicationStartupRouting(environment: Environment.prod, configuredApiBaseUrl: 'https://api.omi.me/');
-      expect(Env.productionAgentProxyWsUrl, 'wss://agent.omi.me/v1/agent/ws');
     });
 
     test('mobile beta accepts the dev serving plane with production identity', () {

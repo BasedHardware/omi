@@ -118,13 +118,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         provider.refreshMessages();
       }
       // Fetch enabled chat apps
-      provider.fetchChatApps();
-      // Pre-connect agent WebSocket so it's ready when the user sends a message
-      provider.preConnectAgent();
       if (widget.initialChatContext != null) {
         setState(() => _chatScope = widget.initialChatContext);
       }
-      // Chat quota is checked via 402 error when sending messages
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
       // Auto-start voice recording if requested (e.g., from home chat bar mic button)

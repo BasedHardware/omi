@@ -282,6 +282,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         errors.append(ValidationError(scope, 'missing env MEMORY_ENABLED'))
     for required_env in (
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'OMI_BACKGROUND_FLEX_CAPABLE',
         'PINECONE_INDEX_NAME',
@@ -351,6 +352,14 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                         'OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE must be true for production canonical maintenance',
                     )
                 )
+        job_flex = (_manifest_literal_env_value(job_env, 'MEMORY_CANONICAL_MAINTENANCE_FLEX') or '').strip().lower()
+        if job_flex != 'true':
+            errors.append(
+                ValidationError(
+                    scope,
+                    'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled',
+                )
+            )
 
     # Non-job hosts must not enable the ST→LT cron (would duplicate maintenance).
     for other_job_name, raw_other_job in jobs.items():
@@ -415,14 +424,8 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         return errors
 
     if job_state == 'on':
-        # Product on = intake + list. ST→LT cron stays off until an explicit Gate 3 GO.
-        if job_cron == 'true':
-            errors.append(
-                ValidationError(
-                    scope,
-                    'MEMORY_CANONICAL_MAINTENANCE_ENABLED must be false while MEMORY_ENABLED is on',
-                )
-            )
+        # Product on = intake + list. ST→LT cron remains a separate job-only
+        # switch; both overlays pin it on with Flex.
         for surface_scope, _surface_env, surface_state in enabled_surfaces:
             if surface_state != 'on':
                 errors.append(
@@ -606,6 +609,31 @@ def _validate_sync_ledger_fence_mode(env_config: ConfigDict, cloud_run_state: Co
     return errors
 
 
+VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
+_DESKTOP_BACKEND_VERTEX_PT_ENV = {
+    'USE_VERTEX_AI': 'true',
+    'GCP_LOCATION': 'us-central1',
+}
+
+
+def _validate_desktop_backend_vertex_pt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    expected_project = 'based-hardware' if env == 'prod' else 'based-hardware-dev'
+    desktop = _as_config_dict(env_config.get('desktop_backend')) or {}
+    env_map = _as_config_dict(desktop.get('env')) or {}
+    required = {**_DESKTOP_BACKEND_VERTEX_PT_ENV, 'GOOGLE_CLOUD_PROJECT': expected_project}
+    errors: list[ValidationError] = []
+    for name, expected in required.items():
+        actual = _manifest_literal_env_value(env_map, name)
+        if actual != expected:
+            errors.append(
+                ValidationError(
+                    f'{env}/desktop_backend',
+                    f'{name} must be {expected!r} so company-paid Flash consumes Vertex PT. {VERTEX_PT_CONTRACT}',
+                )
+            )
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -623,6 +651,7 @@ def validate_runtime_env(
     if errors:
         return errors
 
+    errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))

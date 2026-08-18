@@ -10,7 +10,11 @@ from database.memory_non_active_routes import (
     NonActiveRouteOutcome,
     persist_non_active_route_outcome,
 )
-from models.memory_contracts import WorkingObservationArchiveItem, deterministic_contract_id
+from models.memory_contracts import (
+    WorkingObservationArchiveItem,
+    WorkingObservationExtractionError,
+    deterministic_contract_id,
+)
 from utils.llm.usage_tracker import Features, track_usage
 
 GetLlm = Callable[[str], object]
@@ -55,14 +59,6 @@ class WorkingObservationBatch(BaseModel):
 
 # Backward-compatible alias for callers/tests that still use the L1 name.
 L1MemoryArchiveItems = WorkingObservationBatch
-
-
-class WorkingObservationExtractionError(RuntimeError):
-    """A strict L1 extraction failed before producing a valid batch."""
-
-    def __init__(self, stage: str):
-        self.stage = stage
-        super().__init__(f"working observation extraction failed during {stage}")
 
 
 def _source_type_instructions(source_type: str, user_name: str) -> str:
