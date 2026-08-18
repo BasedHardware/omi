@@ -80,6 +80,10 @@ enum DefaultsKey: String {
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  /// Preferred summarization app for conversation summaries; locally mirrored
+  /// (the backend exposes no GET) and pushed via
+  /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
+  case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 

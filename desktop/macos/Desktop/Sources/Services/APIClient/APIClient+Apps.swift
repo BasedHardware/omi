@@ -452,17 +452,57 @@ extension APIClient {
 
   // MARK: - Conversation Reprocessing
 
-  /// Reprocess a conversation with a specific app
-  func reprocessConversation(conversationId: String, appId: String) async throws {
+  /// Reprocess a conversation with a specific app.
+  ///
+  /// The route returns the updated conversation (backend
+  /// `response_model=Conversation`); the caller adopts it so the summary pane
+  /// re-renders with the reprocessed app as primary. Decoding a synthetic
+  /// `{success, message}` envelope here used to throw on every successful call.
+  func reprocessConversation(conversationId: String, appId: String) async throws -> ServerConversation {
     struct ReprocessRequest: Encodable {
-      let app_id: String
+      let appId: String
+      enum CodingKeys: String, CodingKey {
+        case appId = "app_id"
+      }
     }
-    struct ReprocessResponse: Decodable {
-      let success: Bool
-      let message: String
+    let body = ReprocessRequest(appId: appId)
+    return try await post("v1/conversations/\(conversationId)/reprocess", body: body)
+  }
+
+  /// Sets the user's preferred summarization app; the backend keys future
+  /// conversation processing on it (mobile uses the same route).
+  func setPreferredSummarizationApp(appId: String) async throws {
+    struct StatusResponse: Decodable {
+      let status: String?
+      let message: String?
     }
-    let body = ReprocessRequest(app_id: appId)
-    let _: ReprocessResponse = try await post(
-      "v1/conversations/\(conversationId)/reprocess", body: body)
+    let _: StatusResponse = try await put("v1/users/preferences/app?app_id=\(appId)")
+  }
+
+  /// Bodyless PUT counterpart of the `post`/`patch` helpers, kept in this
+  /// extension so the oversized core transport file stays net-neutral.
+  func put<T: Decodable>(
+    _ endpoint: String,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> T {
+    let authPolicy = try resolvedRequestAuthPolicy(
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    let authOwnerId = authPolicy.expectedAuthOwnerId
+    try validateExpectedOwner(authPolicy)
+    let base = customBaseURL ?? baseURL
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.allHTTPHeaderFields = try await buildHeaders(
+      requireAuth: requireAuth,
+      expectedAuthOwnerId: authOwnerId)
+    try validateExpectedOwner(authPolicy)
+    return try await performRequest(request, authPolicy: authPolicy)
   }
 }
