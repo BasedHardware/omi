@@ -21,7 +21,7 @@ This runbook applies the D1-authoritative Tasks, Chat, and Attachments migration
 
    ```bash
    WRANGLER_SEND_METRICS=false WRANGLER_WRITE_LOGS=false \
-     bun x wrangler d1 migrations apply omi-v5-backend-staging-tasks --config wrangler.jsonc
+     bun x wrangler d1 migrations apply omi-v5-backend-staging-tasks --remote --config wrangler.jsonc
    ```
 
 3. Produce the safe evidence envelope. It must be valid JSON with `cache-control: no-store` and contain only the fields listed below. Do not include database IDs, tokens, D1 row data, or any other host or credential material.
