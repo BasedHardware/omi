@@ -7,6 +7,7 @@ fetch, re-enable health probes, chat-tool invocation, and MCP client helpers.
 import importlib.abc
 import importlib.machinery
 import importlib.util
+import asyncio
 import os
 import sys
 import types
@@ -163,8 +164,13 @@ def _load_users_router():
             sys.modules.pop('python_multipart', None)
 
 
+async def _run_blocking(_executor, function, *args):
+    return function(*args)
+
+
 def test_set_user_webhook_rejects_private_url():
     users_mod, SetUserWebhookUrlRequest = _load_users_router()
+    users_mod.run_blocking = _run_blocking
     # Stubbed import graph turns utils.http_client symbols into MagicMocks;
     # restore the real exception type so `except UnsafeWebhookURLError` works.
     users_mod.UnsafeWebhookURLError = UnsafeWebhookURLError
@@ -174,10 +180,12 @@ def test_set_user_webhook_rejects_private_url():
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
     ):
         with pytest.raises(HTTPException) as exc_info:
-            users_mod.set_user_webhook_endpoint(
-                wtype='memory_created',
-                data=SetUserWebhookUrlRequest(url='http://127.0.0.1/hook'),
-                uid='u1',
+            asyncio.run(
+                users_mod.set_user_webhook_endpoint(
+                    wtype='memory_created',
+                    data=SetUserWebhookUrlRequest(url='http://127.0.0.1/hook'),
+                    uid='u1',
+                )
             )
     assert exc_info.value.status_code == 400
     assert 'public' in exc_info.value.detail.lower()
@@ -187,6 +195,7 @@ def test_set_user_webhook_rejects_private_url():
 
 def test_set_user_webhook_empty_url_skips_ssrf_check():
     users_mod, SetUserWebhookUrlRequest = _load_users_router()
+    users_mod.run_blocking = _run_blocking
     users_mod.UnsafeWebhookURLError = UnsafeWebhookURLError
     users_mod.assert_public_http_url = MagicMock(side_effect=AssertionError('should not validate empty'))
     with (
@@ -194,10 +203,12 @@ def test_set_user_webhook_empty_url_skips_ssrf_check():
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
     ):
-        result = users_mod.set_user_webhook_endpoint(
-            wtype='memory_created',
-            data=SetUserWebhookUrlRequest(url=''),
-            uid='u1',
+        result = asyncio.run(
+            users_mod.set_user_webhook_endpoint(
+                wtype='memory_created',
+                data=SetUserWebhookUrlRequest(url=''),
+                uid='u1',
+            )
         )
     assert result['status'] == 'ok'
     disable.assert_called_once()

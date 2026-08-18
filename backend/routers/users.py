@@ -109,7 +109,7 @@ from utils.cloud_tasks import (
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
 )
-from utils.executors import cleanup_executor, db_executor, llm_executor, run_blocking
+from utils.executors import cleanup_executor, db_executor, llm_executor, resolver_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -479,23 +479,23 @@ class SetUserWebhookUrlRequest(BaseModel):
 
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'], response_model=UserStatusResponse)
-def set_user_webhook_endpoint(
+async def set_user_webhook_endpoint(
     wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     url = data.url
-    if url != '' and url != ',':
+    normalized_url = webhook_url_from_setting(wtype, url)
+    if normalized_url:
         # audio_bytes stores "url,seconds"; validate only the URL portion.
-        url_to_check = url.split(',', 1)[0] if wtype == WebhookType.audio_bytes else url
         try:
-            assert_public_http_url(url_to_check)
+            await run_blocking(resolver_executor, assert_public_http_url, normalized_url)
         except UnsafeWebhookURLError:
             raise HTTPException(status_code=400, detail='Webhook URL must be a public http(s) URL')
-    set_user_webhook_db(uid, wtype, url)
-    if not webhook_url_from_setting(wtype, url):
-        disable_user_webhook_db(uid, wtype)
+    await run_blocking(db_executor, set_user_webhook_db, uid, wtype, url)
+    if not normalized_url:
+        await run_blocking(db_executor, disable_user_webhook_db, uid, wtype)
     else:
-        enable_user_webhook_db(uid, wtype)
-        record_dev_webhook_success(uid, wtype)
+        await run_blocking(db_executor, enable_user_webhook_db, uid, wtype)
+        await run_blocking(db_executor, record_dev_webhook_success, uid, wtype)
     return {'status': 'ok'}
 
 

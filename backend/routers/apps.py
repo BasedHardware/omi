@@ -25,7 +25,7 @@ from utils.executors import (
     start_background_task,
 )
 from utils.http_client import (
-    get_webhook_client,
+    get_pinned_webhook_client,
     assert_public_http_url,
     safe_request_target,
     UnsafeWebhookURLError,
@@ -2152,10 +2152,10 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     if app.works_externally() and app.external_integration.setup_completed_url:
         setup_url = app.external_integration.setup_completed_url + f'?uid={uid}'
         try:
-            pinned_url, pin_kwargs = await run_blocking(db_executor, safe_request_target, setup_url)
+            pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, setup_url)
         except UnsafeWebhookURLError:
             raise HTTPException(status_code=400, detail='App setup URL must be a public http(s) URL')
-        client = get_webhook_client()
+        client = get_pinned_webhook_client()
         res = await client.get(
             pinned_url,
             headers=pin_kwargs['headers'],

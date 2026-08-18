@@ -77,7 +77,7 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
-from utils.executors import run_blocking, db_executor, llm_executor
+from utils.executors import run_blocking, db_executor, llm_executor, resolver_executor
 from utils.http_client import assert_public_http_url, safe_request_target, UnsafeWebhookURLError
 from utils.social import get_twitter_timeline
 import logging
@@ -142,7 +142,7 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
         )
     for label, url, method, require_2xx in endpoints_to_check:
         try:
-            pinned_url, pin_kwargs = safe_request_target(url)
+            pinned_url, pin_kwargs = resolver_executor.submit(safe_request_target, url).result()
         except UnsafeWebhookURLError:
             raise HTTPException(
                 status_code=400,

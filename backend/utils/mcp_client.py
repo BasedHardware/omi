@@ -20,7 +20,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 import httpx
 
 from models.app import ChatTool
-from utils.executors import db_executor, resolver_executor, run_blocking
+from utils.executors import resolver_executor, run_blocking
 from utils.http_client import safe_request_target
 from utils.log_sanitizer import sanitize
 import logging
@@ -426,7 +426,7 @@ async def _sse_send_and_receive_inner(
                             logger.info(f"[MCP SSE] Got endpoint: {sanitize(post_endpoint)}")
 
                             pinned_post_url, post_pin_kwargs = await run_blocking(
-                                db_executor, _safe_request_target, post_endpoint
+                                resolver_executor, _safe_request_target, post_endpoint
                             )
                             # Now send all payloads
                             post_headers = {"Content-Type": "application/json"}

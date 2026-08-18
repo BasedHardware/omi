@@ -109,6 +109,13 @@ def test_rejects_non_public_addresses(monkeypatch, unsafe_ip, label):
         assert_public_http_url('https://webhook.example.com/callback')
 
 
+@pytest.mark.parametrize('mapped_ip', ['::ffff:100.64.0.1', '::ffff:127.0.0.1', '::ffff:169.254.169.254'])
+def test_rejects_ipv4_mapped_non_public_addresses(monkeypatch, mapped_ip):
+    _mock_resolve(monkeypatch, mapped_ip)
+    with pytest.raises(UnsafeWebhookURLError, match='non-public address'):
+        assert_public_http_url('https://webhook.example.com/callback')
+
+
 # ---------------------------------------------------------------------------
 # Accepts ordinary public targets
 # ---------------------------------------------------------------------------
@@ -188,6 +195,13 @@ def test_pin_preserves_ipv6_literal_brackets_in_host_header():
     pinned_url, extra = pin_to_resolved_ip('http://[2001:db8::2]:9000/x', '2001:db8::2')
     assert pinned_url == 'http://[2001:db8::2]:9000/x'
     assert extra['headers']['Host'] == '[2001:db8::2]:9000'
+
+
+def test_pin_idna_encodes_host_authority():
+    pinned_url, extra = pin_to_resolved_ip('https://münich.example:8443/hook', '203.0.113.5')
+    assert pinned_url == 'https://203.0.113.5:8443/hook'
+    assert extra['headers']['Host'] == 'xn--mnich-kva.example:8443'
+    assert extra['extensions']['sni_hostname'] == 'xn--mnich-kva.example'
 
 
 def test_pin_preserves_url_credentials():

@@ -39,6 +39,8 @@ _CGNAT_NETWORK = ipaddress.ip_network('100.64.0.0/10')
 
 
 def _is_unsafe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _is_unsafe_ip(ip.ipv4_mapped)
     if isinstance(ip, ipaddress.IPv4Address) and ip in _CGNAT_NETWORK:
         return True
     return (
@@ -78,7 +80,7 @@ def _resolve_safe_ips(url: str) -> list[str]:
 
     try:
         addrinfo = socket.getaddrinfo(hostname, None)
-    except socket.gaierror as e:
+    except (socket.gaierror, UnicodeError) as e:
         raise UnsafeWebhookURLError(f'Could not resolve host {hostname!r}: {e}')
 
     safe_ips: list[str] = []
@@ -121,12 +123,19 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     """
     parsed = urlparse(url)
     hostname = parsed.hostname
+    if hostname is None:
+        raise ValueError('URL has no hostname')
     original_authority = parsed.netloc.rpartition('@')
     userinfo = original_authority[0]
+    sni_hostname = hostname.encode('idna').decode('ascii')
+    host_header = sni_hostname
+    if ':' in hostname:
+        host_header = f'[{host_header}]'
+    if parsed.port:
+        host_header += f':{parsed.port}'
     # Host must reproduce the original authority minus any userinfo: strict
     # virtual hosts reject a bare hostname when the request went to a
     # non-default port, and an IPv6 literal has to keep its brackets.
-    host_header = original_authority[2]
     netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
     if parsed.port:
         netloc += f':{parsed.port}'
@@ -135,7 +144,7 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
         # (httpx turns them into Basic auth); dropping them breaks the callback.
         netloc = f'{userinfo}@{netloc}'
     pinned_url = parsed._replace(netloc=netloc).geturl()
-    extra = {'headers': {'Host': host_header}, 'extensions': {'sni_hostname': hostname}}
+    extra = {'headers': {'Host': host_header}, 'extensions': {'sni_hostname': sni_hostname}}
     return pinned_url, extra
 
 
