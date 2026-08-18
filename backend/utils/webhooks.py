@@ -21,7 +21,7 @@ from models.users import WebhookType, webhook_url_from_setting
 import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, run_blocking, submit_with_context
 from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
 from utils.notifications import send_notification
 import logging
@@ -400,8 +400,8 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
 
     async def acquire_audio_lock():
         nonlocal lock_token
-        acquisition = asyncio.create_task(
-            run_blocking(
+        acquisition = asyncio.wrap_future(
+            submit_with_context(
                 db_executor,
                 redis_db.try_acquire_audio_bytes_webhook_lock,
                 uid,
@@ -412,8 +412,6 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             lock_token = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
             while True:
-                if acquisition.cancelled():
-                    raise
                 try:
                     lock_token = await asyncio.shield(acquisition)
                     break
