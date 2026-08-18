@@ -635,7 +635,6 @@ class MessageProvider extends ChangeNotifier {
 
     try {
       await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds, context: context)) {
-        chunkCount++;
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);
