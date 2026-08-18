@@ -8,9 +8,14 @@ any existing conversations with source 'friend' or 'friend_com' that have a null
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any, Dict, Iterator, List
 
 from google.cloud import firestore
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from database._client import get_firestore_client
 

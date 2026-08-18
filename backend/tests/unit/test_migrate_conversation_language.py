@@ -1,5 +1,9 @@
 from argparse import ArgumentTypeError
 from datetime import datetime, timezone
+import os
+from pathlib import Path
+import subprocess
+import sys
 from unittest.mock import MagicMock
 
 import pytest
@@ -88,6 +92,23 @@ def test_empty_uid_is_rejected_before_user_enumeration(monkeypatch):
 
     with pytest.raises(SystemExit):
         migrate_conversation_language.main()
+
+
+def test_executable_entrypoint_supports_help():
+    script = Path(__file__).resolve().parents[2] / 'scripts' / 'migrate_conversation_language.py'
+    environment = os.environ.copy()
+    environment['PATH'] = f'{Path(sys.executable).parent}{os.pathsep}{environment["PATH"]}'
+    result = subprocess.run(
+        [str(script), '--help'],
+        cwd=script.parents[1],
+        capture_output=True,
+        env=environment,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert 'Set default "en" language for Friend conversations' in result.stdout
 
 
 def test_migration_worker_reports_client_errors():
