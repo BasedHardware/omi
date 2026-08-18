@@ -73,7 +73,7 @@ class TelegramDraftRequest(BaseModel):
     person: str  # name, person id, or handle (e.g. 'tg:<user_id>')
     thread: List[TelegramDraftMessage] = []
     intent: Optional[str] = None  # optional steer, e.g. "politely decline"
-    is_group: bool = False  # group thread → drafter attributes senders and may abstain
+    is_group: bool  # group thread → drafter attributes senders and may abstain
 
     @model_validator(mode='after')
     def _bound_inline_images(self):

@@ -59,6 +59,7 @@ def test_limits_enforced_for_telegram_and_whatsapp():
         TelegramDraftRequest(
             person="tg:1",
             thread=[TelegramDraftMessage(text="hi", image_b64=_img(MAX_IMAGE_B64_CHARS + 1))],
+            is_group=False,
         )
     with pytest.raises(ValidationError):
         WhatsAppDraftRequest(
@@ -80,3 +81,10 @@ def test_aggregate_image_size_rejected():
             person="+1",
             thread=[IMessageDraftMessage(text="hi", image_b64=_img(per)) for _ in range(count)],
         )
+
+
+def test_telegram_group_flag_is_required():
+    with pytest.raises(ValidationError):
+        TelegramDraftRequest(person="tg:1")
+    req = TelegramDraftRequest(person="tg:1", is_group=False)
+    assert req.is_group is False
