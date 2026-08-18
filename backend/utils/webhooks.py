@@ -94,20 +94,19 @@ async def _post_dev_webhook(
 
             async def send_request():
                 if attempt_index == 0 and before_first_request is not None:
-                    if acquire_semaphore:
-                        async with get_webhook_semaphore():
-                            await before_first_request()
-                            return await post_with_timeout()
                     await before_first_request()
+                if not acquire_semaphore:
                     return await post_with_timeout()
-                if acquire_semaphore:
-                    if attempt_timeout is None:
-                        async with get_webhook_semaphore():
-                            return await client.post(webhook_url, **request_kwargs)
-                    async with asyncio.timeout(attempt_timeout):
-                        async with get_webhook_semaphore():
-                            return await client.post(webhook_url, **request_kwargs)
-                return await post_with_timeout()
+
+                semaphore_context = get_webhook_semaphore()
+                if attempt_timeout is None:
+                    await semaphore_context.__aenter__()
+                else:
+                    await asyncio.wait_for(semaphore_context.__aenter__(), timeout=attempt_timeout)
+                try:
+                    return await post_with_timeout()
+                finally:
+                    await semaphore_context.__aexit__(None, None, None)
 
             response = await send_request()
             last_response = response
@@ -147,9 +146,9 @@ async def _post_dev_webhook(
 
 
 def _audio_bytes_webhook_lock_ttl(retry_delays: tuple[float, ...]) -> int:
-    request_seconds = _WEBHOOK_REQUEST_TIMEOUT_SECONDS * (len(retry_delays) + 1)
+    attempt_seconds = 2 * _WEBHOOK_REQUEST_TIMEOUT_SECONDS * (len(retry_delays) + 1)
     delay_seconds = sum(max(delay, 0) for delay in retry_delays)
-    return max(_AUDIO_BYTES_WEBHOOK_LOCK_MIN_TTL_SECONDS, int(request_seconds + delay_seconds) + 1)
+    return max(_AUDIO_BYTES_WEBHOOK_LOCK_MIN_TTL_SECONDS, int(attempt_seconds + delay_seconds) + 1)
 
 
 def _parse_audio_bytes_webhook_config(webhook_url: str) -> tuple[str, int]:
@@ -426,8 +425,16 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
         await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
         logger.error(f"Error sending audio bytes to developer webhook: {e}")
     finally:
+        cb.release_probe()
         if lock_token:
-            await run_blocking(db_executor, redis_db.release_audio_bytes_webhook_lock, uid, lock_token)
+            release_task = asyncio.create_task(
+                run_blocking(db_executor, redis_db.release_audio_bytes_webhook_lock, uid, lock_token)
+            )
+            try:
+                await asyncio.shield(release_task)
+            except asyncio.CancelledError:
+                await asyncio.shield(release_task)
+                raise
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
