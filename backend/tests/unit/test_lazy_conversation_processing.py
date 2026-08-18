@@ -14,6 +14,13 @@ import pytest
 from unittest.mock import MagicMock
 
 
+@pytest.fixture(scope='module')
+def conversations_db():
+    import database.conversations as cdb
+
+    return cdb
+
+
 class TestShouldDeferDesktopProcessing:
     @pytest.fixture(autouse=True)
     def _setup_subscription(self):
@@ -128,9 +135,7 @@ class TestDeferredNotRequeuedBySweeper:
     get_processing_conversations (the listen-session sweeper re-sends those to pusher, which would
     background-process deferred rows and defeat the cost saving)."""
 
-    def test_get_processing_conversations_excludes_deferred(self):
-        import database.conversations as cdb
-
+    def test_get_processing_conversations_excludes_deferred(self, conversations_db):
         def _doc(d):
             m = MagicMock()
             m.to_dict.return_value = d
@@ -145,6 +150,6 @@ class TestDeferredNotRequeuedBySweeper:
         chain.stream.return_value = docs
         mock_db = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value.where.return_value = chain
-        with __import__('unittest.mock', fromlist=['patch']).patch.object(cdb, 'db', mock_db):
-            result = cdb.get_processing_conversations('uid-x')
+        with __import__('unittest.mock', fromlist=['patch']).patch.object(conversations_db, 'db', mock_db):
+            result = conversations_db.get_processing_conversations('uid-x')
         assert [c['id'] for c in result] == ['b', 'c']
