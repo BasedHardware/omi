@@ -25,3 +25,7 @@ class DevApiKeyCreate(BaseModel):
 
 class DevApiKeyCreated(DevApiKey):
     key: str
+
+
+class DevApiKeyRotated(DevApiKey):
+    key: str
