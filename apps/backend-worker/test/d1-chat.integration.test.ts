@@ -55,6 +55,15 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM chat_messages").run();
   await env.DB.prepare("DELETE FROM chat_admissions").run();
   await env.DB.prepare("DELETE FROM chat_generation_events").run();
+
+  const stub = env.ACCOUNTS.getByName("test-account");
+  await runInDurableObject(stub, (instance) =>
+    (
+      instance as unknown as {
+        ctx: { storage: { deleteAll: () => Promise<void> } };
+      }
+    ).ctx.storage.deleteAll()
+  );
 });
 
 describe("D1-authoritative chat persistence", () => {
