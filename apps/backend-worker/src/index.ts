@@ -236,6 +236,12 @@ const handler = {
 } satisfies ExportedHandler<WorkerEnv>;
 
 export { AccountBackend };
+export {
+  createVectorizeRetrievalBoundary,
+  type CanonicalMemoryStore,
+  type RetrievalBoundary,
+  type RetrievalEnv,
+} from "./retrieval";
 export default handler;
 
 function safeRoute(context: Pick<ObservableContext, "req">): string {
