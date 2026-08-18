@@ -1,6 +1,7 @@
 """Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
@@ -849,20 +850,37 @@ class HistoricalMemoryAdapter:
 # actually started serving. Bound the skipped work per request so a page either
 # lands or fails fast into the route's offset-read fallback.
 MEMORY_LIST_SCAN_ROW_BUDGET = 4000
+# The row budget alone does not bound the wall clock: 4000 skipped rows is ~80
+# sequential Firestore round trips, which at prod latency still lands near the
+# 30s edge timeout — and the offset-read fallback the budget exists to reach
+# then has no time left to answer. First pages kept 504ing after the row budget
+# shipped (~40/h on 2026-08-18T08:09Z+, offset=0 only) for exactly that reason.
+# Bound the skipped walk in seconds too, leaving the bulk of the request budget
+# for the fallback read.
+MEMORY_LIST_SCAN_DEADLINE_SECONDS = 6.0
 MEMORY_LIST_SCAN_BUDGET_DETAIL = "Memory scan budget exceeded"
 
 
 class _ScanRowBudget:
-    """Bounds the rows one ``read_page`` call may skip without emitting."""
+    """Bounds the rows and the seconds one ``read_page`` call may skip without emitting."""
 
-    def __init__(self, limit: Optional[int] = None) -> None:
-        # Read the module constant at construction, not as a default argument,
-        # so the bound stays tunable in one place.
+    def __init__(
+        self,
+        limit: Optional[int] = None,
+        *,
+        deadline_seconds: Optional[float] = None,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        # Read the module constants at construction, not as default arguments,
+        # so the bounds stay tunable in one place.
         self._remaining = max(1, int(MEMORY_LIST_SCAN_ROW_BUDGET if limit is None else limit))
+        self._clock = clock
+        seconds = MEMORY_LIST_SCAN_DEADLINE_SECONDS if deadline_seconds is None else deadline_seconds
+        self._deadline = clock() + max(0.0, float(seconds))
 
     def charge(self) -> None:
         self._remaining -= 1
-        if self._remaining < 0:
+        if self._remaining < 0 or self._clock() >= self._deadline:
             raise HTTPException(status_code=503, detail=MEMORY_LIST_SCAN_BUDGET_DETAIL)
 
 
