@@ -12,6 +12,10 @@
   // You can add your custom initial props in the dictionary below.
   // They will be passed down to the ViewController used by React Native.
   self.initialProps = @{};
+  NSString *metroPort = NSProcessInfo.processInfo.environment[@"OMI_METRO_PORT"];
+  if (metroPort.integerValue > 0 && metroPort.integerValue <= 65535) {
+    [RCTBundleURLProvider sharedSettings].jsLocation = [NSString stringWithFormat:@"localhost:%@", metroPort];
+  }
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
   [super applicationDidFinishLaunching:notification];
