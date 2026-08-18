@@ -33,10 +33,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 3,
-        "w": 4,
         "x": 0,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 6
       },
       "id": 1,
       "options": {
@@ -57,8 +57,8 @@
         {
           "columns": [
             {
-              "selector": "totalUsers",
-              "text": "Total users",
+              "selector": "totalUsersDesktop",
+              "text": "macOS users",
               "type": "number"
             }
           ],
@@ -69,101 +69,18 @@
           "format": "table",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "",
+          "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
           "url_options": {
             "data": "",
             "method": "GET"
           }
         }
       ],
-      "title": "Total users",
+      "title": "macOS users",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "description": "All-platform cumulative users vs the 1,000,000 goal.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "max": 1000000,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#3b82f6",
-                "value": null
-              },
-              {
-                "color": "#14b8a6",
-                "value": 500000
-              },
-              {
-                "color": "#22c55e",
-                "value": 900000
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 0,
-        "y": 3
-      },
-      "id": 2,
-      "options": {
-        "displayMode": "lcd",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "valueMode": "color"
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "totalUsers",
-              "text": "Total users",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "Users \u2192 1M goal",
-      "type": "bargauge"
     },
     {
       "datasource": {
@@ -223,10 +140,10 @@
         ]
       },
       "gridPos": {
-        "h": 6,
-        "w": 4,
         "x": 4,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 6
       },
       "id": 3,
       "options": {
@@ -346,10 +263,10 @@
         ]
       },
       "gridPos": {
-        "h": 6,
-        "w": 4,
         "x": 8,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 6
       },
       "id": 4,
       "options": {
@@ -390,14 +307,14 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fdaily-new-users%3Fdays%3Dall&root=data&fields=users&agg=sum&window=7",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=7",
           "url_options": {
             "data": "",
             "method": "GET"
           }
         }
       ],
-      "title": "Signups \u2014 last 7 days",
+      "title": "macOS signups \u2014 last 7 days",
       "type": "stat"
     },
     {
@@ -434,10 +351,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 4,
         "x": 12,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 6
       },
       "id": 5,
       "options": {
@@ -517,10 +434,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 4,
         "x": 16,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 6
       },
       "id": 6,
       "options": {
@@ -600,10 +517,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 4,
         "x": 20,
-        "y": 0
+        "y": 0,
+        "w": 4,
+        "h": 6
       },
       "id": 7,
       "options": {
@@ -696,10 +613,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 0,
-        "y": 6
+        "y": 6,
+        "w": 8,
+        "h": 8
       },
       "id": 8,
       "options": {
@@ -795,10 +712,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 8,
-        "y": 6
+        "y": 6,
+        "w": 8,
+        "h": 8
       },
       "id": 9,
       "options": {
@@ -818,11 +735,11 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
             },
             {
-              "selector": "users",
+              "selector": "desktop",
               "text": "New users",
               "type": "number"
             }
@@ -834,17 +751,17 @@
           "format": "timeseries",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "data",
+          "root_selector": "users",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
           }
         }
       ],
-      "timeFrom": "60d",
+      "timeFrom": "30d",
       "title": "Daily new users  \u00b7  ${d_daily}",
       "type": "timeseries"
     },
@@ -870,10 +787,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 16,
-        "y": 6
+        "y": 6,
+        "w": 8,
+        "h": 8
       },
       "id": 10,
       "options": {
@@ -951,10 +868,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 3,
         "x": 0,
-        "y": 14
+        "y": 14,
+        "w": 3,
+        "h": 4
       },
       "id": 11,
       "options": {
@@ -975,7 +892,7 @@
         {
           "columns": [
             {
-              "selector": "mrr",
+              "selector": "mrrDesktop",
               "text": "MRR",
               "type": "number"
             }
@@ -987,17 +904,17 @@
           "format": "table",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "",
+          "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/revenue",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
           "url_options": {
             "data": "",
             "method": "GET"
           }
         }
       ],
-      "title": "MRR",
+      "title": "MRR (macOS)",
       "type": "stat"
     },
     {
@@ -1008,250 +925,27 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "fixedColor": "#22c55e",
+            "fixedColor": "#3b82f6",
             "mode": "fixed"
           },
-          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "#22c55e",
+                "color": "#3b82f6",
                 "value": null
               }
             ]
           },
-          "unit": "currencyUSD"
+          "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 3,
         "x": 3,
-        "y": 14
-      },
-      "id": 12,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "arr",
-              "text": "ARR",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/revenue",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "ARR",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "#3b82f6",
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#3b82f6",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
+        "y": 14,
         "w": 3,
-        "x": 6,
-        "y": 14
-      },
-      "id": 13,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "totalSubscriptions",
-              "text": "Subs",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/subscriptions",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "Active subscriptions",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "#0ea5e9",
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ea5e9",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 9,
-        "y": 14
-      },
-      "id": 14,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "trialing",
-              "text": "Trialing",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/subscriptions",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "Trialing",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "#3b82f6",
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#3b82f6",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 12,
-        "y": 14
+        "h": 4
       },
       "id": 15,
       "options": {
@@ -1322,10 +1016,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 6,
+        "y": 14,
         "w": 3,
-        "x": 15,
-        "y": 14
+        "h": 4
       },
       "id": 16,
       "options": {
@@ -1396,10 +1090,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 9,
+        "y": 14,
         "w": 3,
-        "x": 18,
-        "y": 14
+        "h": 4
       },
       "id": 17,
       "options": {
@@ -1450,80 +1144,6 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "fixedColor": "#14b8a6",
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#14b8a6",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 21,
-        "y": 14
-      },
-      "id": 18,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "totalConversations",
-              "text": "Conversations",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/conversation-count",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "Conversations",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
       "description": "(new + resurrected) / churned, weekly",
       "fieldConfig": {
         "defaults": {
@@ -1546,10 +1166,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 12,
+        "y": 14,
         "w": 3,
-        "x": 0,
-        "y": 18
+        "h": 4
       },
       "id": 19,
       "options": {
@@ -1621,10 +1241,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 15,
+        "y": 14,
         "w": 3,
-        "x": 3,
-        "y": 18
+        "h": 4
       },
       "id": 20,
       "options": {
@@ -1697,10 +1317,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 18,
+        "y": 14,
         "w": 3,
-        "x": 6,
-        "y": 18
+        "h": 4
       },
       "id": 21,
       "options": {
@@ -1772,10 +1392,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 21,
+        "y": 14,
         "w": 3,
-        "x": 9,
-        "y": 18
+        "h": 4
       },
       "id": 22,
       "options": {
@@ -1847,10 +1467,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 0,
+        "y": 18,
         "w": 3,
-        "x": 12,
-        "y": 18
+        "h": 4
       },
       "id": 23,
       "options": {
@@ -1922,10 +1542,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 3,
+        "y": 18,
         "w": 3,
-        "x": 15,
-        "y": 18
+        "h": 4
       },
       "id": 24,
       "options": {
@@ -2002,10 +1622,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "x": 6,
+        "y": 18,
         "w": 3,
-        "x": 18,
-        "y": 18
+        "h": 4
       },
       "id": 25,
       "options": {
@@ -2059,298 +1679,6 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "fixedColor": "#0ea5e9",
-            "mode": "fixed"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#0ea5e9",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 3,
-        "x": 21,
-        "y": 18
-      },
-      "id": 26,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "trialingSubscriptions",
-              "text": "Trials",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/revenue",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "Trials in pipeline",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "gradientMode": "opacity",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            }
-          },
-          "unit": "currencyUSD"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "MRR"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#22c55e",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 22
-      },
-      "id": 27,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "monthKey",
-              "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
-            },
-            {
-              "selector": "mrr",
-              "text": "MRR",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "timeseries",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "data",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/mrr-trends?months=12&_tzdates=monthKey",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "timeFrom": "400d",
-      "title": "MRR over time  \u00b7  ${d_mrr}",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 65,
-            "gradientMode": "none",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Monthly"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#3b82f6",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Annual"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#22c55e",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 22
-      },
-      "id": 28,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "monthKey",
-              "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
-            },
-            {
-              "selector": "monthly",
-              "text": "Monthly",
-              "type": "number"
-            },
-            {
-              "selector": "annual",
-              "text": "Annual",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "timeseries",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "data",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/subscription-trends?months=12&_tzdates=monthKey",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "timeFrom": "400d",
-      "title": "New subscriptions / month  \u00b7  ${d_subs}",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
             "mode": "palette-classic"
           },
           "custom": {
@@ -2389,10 +1717,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 9,
+        "y": 18,
         "w": 8,
-        "x": 16,
-        "y": 22
+        "h": 8
       },
       "id": 29,
       "options": {
@@ -2412,11 +1740,11 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
             },
             {
-              "selector": "cumulative",
+              "selector": "desktop",
               "text": "Total users",
               "type": "number"
             }
@@ -2428,18 +1756,18 @@
           "format": "timeseries",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "data",
+          "root_selector": "cumulativeUsers",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
           }
         }
       ],
-      "timeFrom": "3y",
-      "title": "Cumulative users  \u00b7  ${d_cum}",
+      "timeFrom": "30d",
+      "title": "Cumulative users (macOS)  \u00b7  ${d_cum}",
       "type": "timeseries"
     },
     {
@@ -2488,10 +1816,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 0,
-        "y": 30
+        "y": 26,
+        "w": 8,
+        "h": 8
       },
       "id": 30,
       "options": {
@@ -2633,10 +1961,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 8,
-        "y": 30
+        "y": 26,
+        "w": 8,
+        "h": 8
       },
       "id": 31,
       "options": {
@@ -2804,10 +2132,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 16,
-        "y": 30
+        "y": 26,
+        "w": 8,
+        "h": 8
       },
       "id": 32,
       "options": {
@@ -2970,10 +2298,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 8,
         "x": 0,
-        "y": 38
+        "y": 34,
+        "w": 8,
+        "h": 8
       },
       "id": 33,
       "options": {
@@ -3038,172 +2366,6 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 65,
-            "gradientMode": "none",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Thumbs up"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#22c55e",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Thumbs down"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#ef4444",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Positive %"
-            },
-            "properties": [
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "custom.stacking",
-                "value": {
-                  "group": "A",
-                  "mode": "none"
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#f59e0b",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 38
-      },
-      "id": 34,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "date",
-              "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
-            },
-            {
-              "selector": "thumbs_up",
-              "text": "Thumbs up",
-              "type": "number"
-            },
-            {
-              "selector": "thumbs_down",
-              "text": "Thumbs down",
-              "type": "number"
-            },
-            {
-              "selector": "ratio",
-              "text": "Positive %",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "timeseries",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "data",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/message-ratings?days=30&_tzdates=date",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "timeFrom": "30d",
-      "title": "Message ratings  \u00b7  ${d_rate}",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
       "description": "Days active in the last 30, as % of MAU",
       "fieldConfig": {
         "defaults": {
@@ -3221,10 +2383,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "x": 8,
+        "y": 34,
         "w": 8,
-        "x": 16,
-        "y": 38
+        "h": 8
       },
       "id": 35,
       "options": {
@@ -3364,10 +2526,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 16,
+        "y": 34,
         "w": 8,
-        "x": 0,
-        "y": 46
+        "h": 8
       },
       "id": 36,
       "options": {
@@ -3483,10 +2645,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 42,
         "w": 8,
-        "x": 8,
-        "y": 46
+        "h": 8
       },
       "id": 37,
       "options": {
@@ -3644,10 +2806,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 8,
+        "y": 42,
         "w": 8,
-        "x": 16,
-        "y": 46
+        "h": 8
       },
       "id": 38,
       "options": {
@@ -3768,10 +2930,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 16,
+        "y": 42,
         "w": 8,
-        "x": 0,
-        "y": 54
+        "h": 8
       },
       "id": 39,
       "options": {
@@ -3929,10 +3091,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 50,
         "w": 8,
-        "x": 8,
-        "y": 54
+        "h": 8
       },
       "id": 40,
       "options": {
@@ -4039,10 +3201,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 8,
+        "y": 50,
         "w": 8,
-        "x": 16,
-        "y": 54
+        "h": 8
       },
       "id": 41,
       "options": {
@@ -4102,96 +3264,15 @@
           "color": {
             "mode": "palette-classic"
           },
-          "unit": "currencyUSD"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 62
-      },
-      "id": 42,
-      "options": {
-        "displayLabels": [
-          "name",
-          "percent"
-        ],
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "values": [
-            "value"
-          ]
-        },
-        "pieType": "donut",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "productName",
-              "text": "Product",
-              "type": "string"
-            },
-            {
-              "selector": "mrr",
-              "text": "MRR",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "byProduct",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/subscriptions",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "MRR by product",
-      "type": "piechart"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
           "unit": "short"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "x": 16,
+        "y": 50,
         "w": 8,
-        "x": 8,
-        "y": 62
+        "h": 8
       },
       "id": 43,
       "options": {
@@ -4269,10 +3350,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 58,
         "w": 8,
-        "x": 16,
-        "y": 62
+        "h": 8
       },
       "id": 44,
       "options": {
@@ -4396,10 +3477,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 8,
+        "y": 58,
         "w": 8,
-        "x": 0,
-        "y": 70
+        "h": 8
       },
       "id": 45,
       "options": {
@@ -4426,11 +3507,6 @@
               "selector": "desktop",
               "text": "Desktop",
               "type": "number"
-            },
-            {
-              "selector": "mobile",
-              "text": "Mobile",
-              "type": "number"
             }
           ],
           "datasource": {
@@ -4451,7 +3527,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "New users / day by platform  \u00b7  ${d_pusers}",
+      "title": "New users / day (desktop)  \u00b7  ${d_pusers}",
       "type": "timeseries"
     },
     {
@@ -4515,10 +3591,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 16,
+        "y": 58,
         "w": 8,
-        "x": 8,
-        "y": 70
+        "h": 8
       },
       "id": 46,
       "options": {
@@ -4545,11 +3621,6 @@
               "selector": "desktop",
               "text": "Desktop",
               "type": "number"
-            },
-            {
-              "selector": "mobile",
-              "text": "Mobile",
-              "type": "number"
             }
           ],
           "datasource": {
@@ -4570,7 +3641,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "Revenue / day by platform (est.)  \u00b7  ${d_prev}",
+      "title": "Revenue / day (desktop, est.)  \u00b7  ${d_prev}",
       "type": "timeseries"
     },
     {
@@ -4634,10 +3705,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 66,
         "w": 8,
-        "x": 16,
-        "y": 70
+        "h": 8
       },
       "id": 47,
       "options": {
@@ -4664,11 +3735,6 @@
               "selector": "desktop",
               "text": "Desktop",
               "type": "number"
-            },
-            {
-              "selector": "mobile",
-              "text": "Mobile",
-              "type": "number"
             }
           ],
           "datasource": {
@@ -4689,7 +3755,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "Infra cost / day by platform  \u00b7  ${d_cost}",
+      "title": "Infra cost / day (desktop)  \u00b7  ${d_cost}",
       "type": "timeseries"
     },
     {
@@ -4753,10 +3819,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 8,
+        "y": 66,
         "w": 8,
-        "x": 0,
-        "y": 78
+        "h": 8
       },
       "id": 48,
       "options": {
@@ -4783,11 +3849,6 @@
               "selector": "desktop",
               "text": "Desktop $/user",
               "type": "number"
-            },
-            {
-              "selector": "mobile",
-              "text": "Mobile $/user",
-              "type": "number"
             }
           ],
           "datasource": {
@@ -4808,7 +3869,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "Cost / user / day  \u00b7  ${d_cpu}",
+      "title": "Cost / user / day (desktop)  \u00b7  ${d_cpu}",
       "type": "timeseries"
     },
     {
@@ -4872,10 +3933,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
+        "x": 16,
+        "y": 66,
         "w": 8,
-        "x": 8,
-        "y": 78
+        "h": 8
       },
       "id": 49,
       "options": {
@@ -4902,11 +3963,6 @@
               "selector": "desktop",
               "text": "Desktop",
               "type": "number"
-            },
-            {
-              "selector": "mobile",
-              "text": "Mobile",
-              "type": "number"
             }
           ],
           "datasource": {
@@ -4927,7 +3983,7 @@
         }
       ],
       "timeFrom": "30d",
-      "title": "Free \u2192 paid conversion  \u00b7  ${d_conv}",
+      "title": "Free \u2192 paid conversion (desktop)  \u00b7  ${d_conv}",
       "type": "timeseries"
     },
     {
@@ -4962,10 +4018,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 74,
         "w": 8,
-        "x": 16,
-        "y": 78
+        "h": 8
       },
       "id": 50,
       "options": {
@@ -5089,10 +4145,10 @@
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
         "x": 0,
-        "y": 86
+        "y": 82,
+        "w": 24,
+        "h": 8
       },
       "id": 51,
       "options": {
@@ -5146,136 +4202,6 @@
       "timeFrom": "8d",
       "title": "Notifications sent \u2014 last 168 hours  \u00b7  ${d_hourly}",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Gross MTD $"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Last 30d $"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Desktop $"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Mobile $"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "currencyUSD"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 94
-      },
-      "id": 52,
-      "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Last 30d $"
-          }
-        ]
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "service",
-              "text": "Service",
-              "type": "string"
-            },
-            {
-              "selector": "mtdUsd",
-              "text": "Gross MTD $",
-              "type": "number"
-            },
-            {
-              "selector": "aprProjectionUsd",
-              "text": "Last 30d $",
-              "type": "number"
-            },
-            {
-              "selector": "desktopProjectionUsd",
-              "text": "Desktop $",
-              "type": "number"
-            },
-            {
-              "selector": "mobileProjectionUsd",
-              "text": "Mobile $",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "table",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "breakdown",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/infra-costs?days=30",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "title": "Infra cost by service \u2014 last 30 days",
-      "type": "table"
     }
   ],
   "refresh": "5m",
@@ -5347,81 +4273,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fdaily-new-users%3Fdays%3Dall&root=data&fields=users&agg=sum&window=30&label=vs+prev+30d",
-            "url_options": {
-              "data": "",
-              "method": "GET"
-            }
-          },
-          "query": "",
-          "queryType": "infinity"
-        },
-        "refresh": 2,
-        "skipUrlSync": true,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "omi-admin-api"
-        },
-        "hide": 2,
-        "name": "d_mrr",
-        "options": [],
-        "query": {
-          "infinityQuery": {
-            "columns": [
-              {
-                "selector": "value",
-                "text": "value",
-                "type": "string"
-              }
-            ],
-            "format": "table",
-            "parser": "backend",
-            "refId": "variable",
-            "root_selector": "",
-            "source": "url",
-            "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fmrr-trends%3Fmonths%3D12&root=data&fields=mrr&agg=last&window=1&label=vs+last+mo",
-            "url_options": {
-              "data": "",
-              "method": "GET"
-            }
-          },
-          "query": "",
-          "queryType": "infinity"
-        },
-        "refresh": 2,
-        "skipUrlSync": true,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "omi-admin-api"
-        },
-        "hide": 2,
-        "name": "d_subs",
-        "options": [],
-        "query": {
-          "infinityQuery": {
-            "columns": [
-              {
-                "selector": "value",
-                "text": "value",
-                "type": "string"
-              }
-            ],
-            "format": "table",
-            "parser": "backend",
-            "refId": "variable",
-            "root_selector": "",
-            "source": "url",
-            "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fsubscription-trends%3Fmonths%3D12&root=data&fields=monthly%2Cannual&agg=last&window=1&label=vs+last+mo",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -5458,7 +4310,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fdaily-new-users%3Fdays%3Dall&root=data&fields=users&agg=sum&window=30&label=vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -5607,43 +4459,6 @@
             "source": "url",
             "type": "json",
             "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60&root=activation&fields=rate&agg=avg&window=30&label=vs+prev+30d",
-            "url_options": {
-              "data": "",
-              "method": "GET"
-            }
-          },
-          "query": "",
-          "queryType": "infinity"
-        },
-        "refresh": 2,
-        "skipUrlSync": true,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "omi-admin-api"
-        },
-        "hide": 2,
-        "name": "d_rate",
-        "options": [],
-        "query": {
-          "infinityQuery": {
-            "columns": [
-              {
-                "selector": "value",
-                "text": "value",
-                "type": "string"
-              }
-            ],
-            "format": "table",
-            "parser": "backend",
-            "refId": "variable",
-            "root_selector": "",
-            "source": "url",
-            "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fmessage-ratings%3Fdays%3D30&root=data&fields=ratio&agg=avg&window=6&label=vs+prev+6d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -5902,7 +4717,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -5939,7 +4754,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=revenue&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=revenue&fields=desktop&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -5976,7 +4791,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=cost&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=cost&fields=desktop&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -6013,7 +4828,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=costPerUser&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=costPerUser&fields=desktop&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -6050,7 +4865,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=conversion&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=conversion&fields=desktop&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -6107,8 +4922,8 @@
     "to": "now"
   },
   "timezone": "America/New_York",
-  "title": "Omi TV",
-  "uid": "omi-tv",
+  "title": "Omi TV \u2014 macOS",
+  "uid": "omi-tv-macos",
   "links": [
     {
       "title": "All platforms",

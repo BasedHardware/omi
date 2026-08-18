@@ -355,7 +355,13 @@ class OmiTvDashboardContractTests(unittest.TestCase):
             for title, panel in panels.items()
             if title.startswith("Activation (signup")
         )
-        self.assertEqual(series["url"], "http://127.0.0.1:8899/api/omi/stats/activation?days=60")
+        # `_tzdates=week` is a proxy-side display rewrite (stripped before the
+        # upstream request); the Firestore activation route contract is the
+        # base URL.
+        self.assertEqual(
+            series["url"].split("&_tzdates=")[0],
+            "http://127.0.0.1:8899/api/omi/stats/activation?days=60",
+        )
         self.assertEqual(series["root_selector"], "weeks")
         self.assertEqual(
             [column["selector"] for column in series["columns"]],
