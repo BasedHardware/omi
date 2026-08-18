@@ -45,7 +45,8 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
   func testTwoSpeakersUnnamedIdentified() {
     let segments = [
       makeSegment(speaker: 0, text: "Hey, can you hear me?", start: 10.0, end: 12.0, isUser: true),
-      makeSegment(speaker: 1, text: "Yes, loud and clear! Let's go over the slides.", start: 13.0, end: 18.0, isUser: false),
+      makeSegment(
+        speaker: 1, text: "Yes, loud and clear! Let's go over the slides.", start: 13.0, end: 18.0, isUser: false),
     ]
 
     let signal = EnvironmentalSpeakerAnalyzer.analyze(segments: segments, now: 20.0)
@@ -58,7 +59,8 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
 
     let section = EnvironmentalSpeakerAnalyzer.promptSection(signal)
     XCTAssertNotNil(section)
-    XCTAssertTrue(section!.contains("Multi-party interaction detected: 2 active speakers (You + Participant (Speaker 1))"))
+    XCTAssertTrue(
+      section!.contains("Multi-party interaction detected: 2 active speakers (You + Participant (Speaker 1))"))
     XCTAssertTrue(section!.contains("Recent turns from other participant: 1."))
   }
 
@@ -92,7 +94,8 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
     let segments = [
       makeSegment(speaker: 0, text: "Let's start the standup.", start: 10.0, end: 12.0, isUser: true),
       makeSegment(speaker: 1, text: "I finished the API deployment yesterday.", start: 13.0, end: 16.0, isUser: false),
-      makeSegment(speaker: 2, text: "And I'm working on the design system today.", start: 17.0, end: 21.0, isUser: false),
+      makeSegment(
+        speaker: 2, text: "And I'm working on the design system today.", start: 17.0, end: 21.0, isUser: false),
     ]
 
     let personMap = [1: "Alex"]
@@ -106,7 +109,8 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
 
     let section = EnvironmentalSpeakerAnalyzer.promptSection(signal)
     XCTAssertNotNil(section)
-    XCTAssertTrue(section!.contains("Multi-party interaction detected: 3 active speakers (You + Alex, Participant (Speaker 2))"))
+    XCTAssertTrue(
+      section!.contains("Multi-party interaction detected: 3 active speakers (You + Alex, Participant (Speaker 2))"))
     XCTAssertTrue(section!.contains("Recent turns from other participants: 2."))
   }
 
@@ -114,7 +118,8 @@ final class EnvironmentalSpeakerContextTests: XCTestCase {
 
   func testOlderTurnsOutsideWindowArePruned() {
     let oldTurn = makeSegment(speaker: 1, text: "That was 10 minutes ago.", start: 10.0, end: 15.0, isUser: false)
-    let freshTurn = makeSegment(speaker: 0, text: "Now I'm working alone on code.", start: 500.0, end: 510.0, isUser: true)
+    let freshTurn = makeSegment(
+      speaker: 0, text: "Now I'm working alone on code.", start: 500.0, end: 510.0, isUser: true)
 
     // Reference time is 520s, active window is 180s (windowStart = 340s)
     let signal = EnvironmentalSpeakerAnalyzer.analyze(segments: [oldTurn, freshTurn], now: 520.0)

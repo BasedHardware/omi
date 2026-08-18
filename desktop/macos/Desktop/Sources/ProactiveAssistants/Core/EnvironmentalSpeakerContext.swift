@@ -86,7 +86,9 @@ enum EnvironmentalSpeakerAnalyzer {
 
     // Resolve human-readable labels for each non-user speaker
     let labels: [String] = otherSpeakers.sorted().map { speakerId in
-      if let personName = speakerPersonMap[speakerId], !personName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      if let personName = speakerPersonMap[speakerId],
+        !personName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      {
         return sanitizeLabel(personName)
       }
       return "Participant (Speaker \(speakerId))"
