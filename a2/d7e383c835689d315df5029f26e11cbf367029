@@ -1,0 +1,21 @@
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/AnalyticsSink.swift
+  s_7f7d27f6caa06a::t_4b3f93a233e0d1 53-56,62-63,67,93-101,104-111,132-133,135-136
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsSinkTests.swift
+  s_7f7d27f6caa06a::t_e88f790361c5b6 155-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a2d7e383c835689d315df5029f26e11cbf367029",
+  "prompts": {},
+  "sessions": {
+    "s_7f7d27f6caa06a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8d50e47a-f4b3-410c-bc7d-154822e9c288",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
