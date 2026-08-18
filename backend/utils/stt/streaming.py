@@ -119,7 +119,8 @@ async def connect_stt_socket_with_fallback(
     *,
     primary_service: STTService,
     connect_primary: Callable[[], Awaitable[Optional[STTSocket]]],
-    connect_modulate: Callable[[], Awaitable[Optional[STTSocket]]],
+    connect_modulate: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
+    connect_deepgram: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     connect_parakeet: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
 ) -> Tuple[STTSocket, STTService]:
     """Connect the selected primary before audio starts, walking the configured fallbacks.
@@ -160,11 +161,17 @@ async def connect_stt_socket_with_fallback(
             reason = 'provider_5xx'
             circuit.record_failure()
 
-    candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
-        (STTService.modulate, connect_modulate)
+    # Ordered by STT_SERVICE_MODELS preference. A provider is never offered its
+    # own failure as a fallback, so the chain is derived from the primary rather
+    # than fixed: a Modulate primary walks Deepgram then Parakeet (#11752).
+    ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [
+        (STTService.modulate, connect_modulate),
+        (STTService.deepgram, connect_deepgram),
+        (STTService.parakeet, connect_parakeet),
     ]
-    if connect_parakeet is not None and primary_service != STTService.parakeet:
-        candidates.append((STTService.parakeet, connect_parakeet))
+    candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
+        (service, connect) for service, connect in ordered if connect is not None and service != primary_service
+    ]
 
     from_mode = primary_service.value
     for service, connect in candidates:
