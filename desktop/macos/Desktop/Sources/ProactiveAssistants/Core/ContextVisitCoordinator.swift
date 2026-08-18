@@ -206,6 +206,10 @@ actor ContextVisitCoordinator {
 
   func activeFenceForTesting() -> ContextVisitFence? { state.activeFence }
 
+  /// The visit currently in progress, or nil when idle. Read-only production
+  /// accessor: speech-driven evaluation grounds on the live visit.
+  func activeFence() -> ContextVisitFence? { state.activeFence }
+
   func beginForTesting(_ fence: ContextVisitFence) {
     state.begin(fence)
   }
