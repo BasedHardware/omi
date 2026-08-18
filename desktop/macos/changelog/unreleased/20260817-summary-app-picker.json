@@ -1,3 +1,0 @@
-{
-  "change": "Conversation summaries now show the selected summarization app's output (e.g. General Summary) as the main summary, with a picker to switch apps and set your default — falling back to Omi's own summary when no app result is available"
-}
