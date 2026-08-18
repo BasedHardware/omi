@@ -427,6 +427,9 @@ class HistoricalMemoryRecord:
     memory: MemoryDB
     locator: MemoryLocator
     lifecycle: str = "grandfathered_long_term"
+    # False when the row is an index stub (id + sort timestamps only). Merge
+    # and suppression use stubs; the mixed list hydrates only the emitted page.
+    hydrated: bool = True
 
 
 class HistoricalMemoryAdapter:
@@ -531,6 +534,85 @@ class HistoricalMemoryAdapter:
         )
         return not known_devices or request.client_device_id in known_devices
 
+    def _stub_from_index(self, uid: str, raw: Dict[str, Any]) -> Optional[HistoricalMemoryRecord]:
+        memory_id = raw.get("id")
+        if not isinstance(memory_id, str) or not memory_id.strip():
+            return None
+
+        def _as_datetime(value: Any) -> Optional[datetime]:
+            if isinstance(value, datetime):
+                return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+            if isinstance(value, str):
+                try:
+                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+                except ValueError:
+                    return None
+                return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+            return None
+
+        created_at = _as_datetime(raw.get("created_at"))
+        updated_at = _as_datetime(raw.get("updated_at")) or created_at
+        if created_at is None and updated_at is None:
+            return None
+        created_value = created_at or updated_at
+        updated_value = updated_at or created_value
+        assert created_value is not None and updated_value is not None
+        visibility = raw.get("visibility")
+        if visibility is None or visibility == "":
+            # Missing visibility is the released legacy default, same as _adapt.
+            visibility = "public"
+        elif visibility not in {"private", "public", "shared"}:
+            return None
+        capture_ids = raw.get("capture_device_ids") or []
+        if not isinstance(capture_ids, list):
+            capture_ids = []
+        capture_ids = [device_id for device_id in capture_ids if isinstance(device_id, str) and device_id]
+        try:
+            memory = MemoryDB.model_validate(
+                {
+                    "id": memory_id,
+                    "uid": uid,
+                    "content": "",
+                    "category": "interesting",
+                    "created_at": created_value,
+                    "updated_at": updated_value,
+                    "visibility": visibility,
+                    "capture_device_ids": capture_ids,
+                }
+            )
+        except (ValidationError, TypeError, ValueError):
+            return None
+        memory = memory.model_copy(update={"memory_tier": MemoryTier.long_term})
+        return HistoricalMemoryRecord(
+            memory=memory,
+            locator=MemoryLocator(uid=uid, origin="legacy", physical_id=memory.id),
+            hydrated=False,
+        )
+
+    def _hydrate_records(self, uid: str, records: List[HistoricalMemoryRecord]) -> List[HistoricalMemoryRecord]:
+        memory_ids = [record.memory.id for record in records if not record.hydrated]
+        if not memory_ids:
+            return records
+        try:
+            raw_rows = memories_db.get_memories_by_ids(uid, memory_ids, **self._firestore_kwargs())
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
+        adapted: Dict[str, HistoricalMemoryRecord] = {}
+        for raw in raw_rows:
+            record = self._adapt(uid, raw)
+            if record is None:
+                continue
+            adapted[record.memory.id] = record
+        hydrated: List[HistoricalMemoryRecord] = []
+        for record in records:
+            if record.hydrated:
+                hydrated.append(record)
+                continue
+            replacement = adapted.get(record.memory.id)
+            if replacement is not None:
+                hydrated.append(replacement)
+        return hydrated
+
     def read(
         self,
         uid: str,
@@ -538,62 +620,60 @@ class HistoricalMemoryAdapter:
         limit: int = 100,
         offset: int = 0,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        hydrate: bool = True,
     ) -> List[HistoricalMemoryRecord]:
         bounded_limit = max(1, min(int(limit or 100), self.MAX_COMPATIBILITY_WINDOW))
         bounded_offset = max(0, int(offset or 0))
         needed = bounded_offset + bounded_limit
         if needed > self.MAX_COMPATIBILITY_WINDOW:
             raise HTTPException(status_code=413, detail="Historical memory pagination window exceeded")
-        # Over-fetch when adapt/device filters skip rows so a page of N valid
-        # memories is not silently shortened by malformed documents.
-        # Ask for the whole prefix in one query: the newest-first sort has no
-        # index, so ``get_memories`` streams two candidate windows of
-        # ``limit + offset`` documents and orders them in Python. An offset walk
-        # therefore re-reads every row it skips — chunking cost 105,000 reads
-        # over 25 queries for one page of a suppressed 5,000-row account, which
-        # is what took GET /v3/memories past the 30s edge timeout on 2026-08-18.
-        # ``needed`` is bounded by MAX_COMPATIBILITY_WINDOW above and each chunk's
-        # candidate window had grown that large anyway, so this reads no more at
-        # once than the last chunked query already did.
+        # Index the whole prefix in one dual-window metadata query, then hydrate
+        # only the returned page. ``updated_or_created_desc`` has no single index,
+        # so the helper streams two candidate windows of ``limit + offset``
+        # documents. Hydrating that prefix (and decrypting it) is what took
+        # GET /v3/memories past the 30s edge timeout on 2026-08-18 once first
+        # pages fell back here. Mixed-list expansion needs prefix ids and
+        # timestamps, not content — pass hydrate=False for that caller.
+        # Grow the indexed prefix when adapt/device filters skip rows so a page
+        # of N valid memories is not silently shortened by malformed documents.
+        index_limit = needed
         records: List[HistoricalMemoryRecord] = []
-        db_offset = 0
-        while len(records) < needed:
-            remaining_window = self.MAX_COMPATIBILITY_WINDOW - db_offset
-            if remaining_window <= 0:
-                break
-            fetch_size = min(
-                max(needed - len(records), bounded_limit),
-                remaining_window,
-            )
-            try:
-                raw_rows = memories_db.get_memories(
+        try:
+            while True:
+                index_rows = memories_db.list_memory_updated_or_created_index(
                     uid,
-                    fetch_size,
-                    db_offset,
-                    sort="updated_or_created_desc",
+                    index_limit,
+                    0,
                     **self._firestore_kwargs(),
                 )
-            except Exception as exc:
-                raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
-            if not raw_rows:
-                break
-            for raw in raw_rows:
-                record = self._adapt(uid, raw)
-                if record is None or not self.matches_device(record, device_scope_request):
-                    continue
-                records.append(record)
-                if len(records) >= needed:
+                records = []
+                for raw in index_rows:
+                    record = self._stub_from_index(uid, raw)
+                    if record is None or not self.matches_device(record, device_scope_request):
+                        continue
+                    records.append(record)
+                    if len(records) >= needed:
+                        break
+                if len(records) >= needed or len(index_rows) < index_limit:
                     break
-            db_offset += len(raw_rows)
-            if len(raw_rows) < fetch_size:
-                break
+                if index_limit >= self.MAX_COMPATIBILITY_WINDOW:
+                    break
+                index_limit = min(
+                    self.MAX_COMPATIBILITY_WINDOW,
+                    max(index_limit + bounded_limit, index_limit * 2),
+                )
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Historical memory unavailable") from exc
         records.sort(
             key=lambda record: (
                 -self._timestamp(record.memory).timestamp(),
                 record.memory.id,
             )
         )
-        return records[bounded_offset : bounded_offset + bounded_limit]
+        page = records[bounded_offset : bounded_offset + bounded_limit]
+        if not hydrate or not page:
+            return page
+        return self._hydrate_records(uid, page)
 
     def read_scan_page(
         self,
@@ -630,7 +710,10 @@ class HistoricalMemoryAdapter:
             if raw.get('user_review') is False or raw.get('invalid_at') is not None:
                 slots.append((None, scan_cursor))
                 continue
-            record = self._adapt(uid, raw, include_locked_content=include_locked_content)
+            decrypted = memories_db._prepare_memory_for_read(raw, uid) or raw
+            decrypted = dict(decrypted)
+            decrypted['id'] = raw.get('id')
+            record = self._adapt(uid, decrypted, include_locked_content=include_locked_content)
             if record is None or not self.matches_device(record, device_scope_request):
                 slots.append((None, scan_cursor))
             else:
@@ -867,6 +950,11 @@ MEMORY_LIST_SCAN_ROW_BUDGET = 4000
 # for the fallback read.
 MEMORY_LIST_SCAN_DEADLINE_SECONDS = 6.0
 MEMORY_LIST_SCAN_BUDGET_DETAIL = "Memory scan budget exceeded"
+# First-page 504s on 2026-08-18 still spent 17s+ inside ``read_page`` before
+# ``get_memories`` ran: ``max(page_limit, 50)`` fetched 500-doc chunks and
+# decrypted them before ``charge()`` could see the 6s deadline. Cap each
+# keyset fetch so the deadline is checked between small pages.
+MEMORY_LIST_SCAN_CHUNK_SIZE = 50
 
 
 class _ScanRowBudget:
@@ -886,10 +974,13 @@ class _ScanRowBudget:
         seconds = MEMORY_LIST_SCAN_DEADLINE_SECONDS if deadline_seconds is None else deadline_seconds
         self._deadline = clock() + max(0.0, float(seconds))
 
-    def charge(self) -> None:
-        self._remaining -= 1
+    def check(self) -> None:
         if self._remaining < 0 or self._clock() >= self._deadline:
             raise HTTPException(status_code=503, detail=MEMORY_LIST_SCAN_BUDGET_DETAIL)
+
+    def charge(self) -> None:
+        self._remaining -= 1
+        self.check()
 
 
 class _HistoricalRawStream:
@@ -928,6 +1019,7 @@ class _HistoricalRawStream:
     def _ensure_slots(self) -> None:
         if self._slot_index < len(self._slots) or self.exhausted:
             return
+        self._budget.check()
         start_after: Optional[Tuple[datetime, str]] = None
         if self.scan_keyset is not None:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
@@ -939,7 +1031,7 @@ class _HistoricalRawStream:
         try:
             raw_slots, stream_exhausted = reader(
                 self._uid,
-                limit=max(self._page_limit, 50),
+                limit=MEMORY_LIST_SCAN_CHUNK_SIZE,
                 start_after=start_after,
                 device_scope_request=self._device_scope_request,
             )
@@ -1162,13 +1254,14 @@ class _CanonicalCursorStream:
     def _ensure_slots(self) -> None:
         if self._slot_index < len(self._slots) or self.exhausted:
             return
+        self._budget.check()
         start_after: Optional[CanonicalScanCursor] = None
         if self.scan_keyset is not None:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
         try:
             raw_slots, stream_exhausted = read_canonical_scan_page(
                 self._uid,
-                limit=max(self._page_limit, 50),
+                limit=MEMORY_LIST_SCAN_CHUNK_SIZE,
                 start_after=start_after,
                 db_client=self._service.db_client,
                 device_scope_request=self._device_scope_request,
@@ -1584,6 +1677,7 @@ class MemoryService:
                 limit=historical_limit,
                 offset=0,
                 device_scope_request=device_scope_request,
+                hydrate=False,
             )
             merged = list(canonical)
             identity_suppressed = 0
@@ -1646,7 +1740,48 @@ class MemoryService:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_identity").inc(identity_suppressed)
         if state_suppressed:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(state_suppressed)
-        return merged[bounded_offset : bounded_offset + bounded_limit]
+        page = merged[bounded_offset : bounded_offset + bounded_limit]
+        stub_ids = {record.memory.id for record in historical if not record.hydrated}
+        if stub_ids:
+            page = self._hydrate_merged_historical_stubs(uid, page, stub_ids)
+        return page
+
+    def _hydrate_merged_historical_stubs(
+        self,
+        uid: str,
+        page: List[MemoryDB],
+        stub_ids: Set[str],
+    ) -> List[MemoryDB]:
+        """Replace mixed-list historical stubs with decrypted documents.
+
+        Canonical rows on the page are already hydrated. Index stubs exist so
+        expansion can suppress and sort without decrypting the prefix.
+        """
+        page_stub_ids = [memory.id for memory in page if memory.id in stub_ids]
+        if not page_stub_ids:
+            return page
+        hydrated_records = self.history._hydrate_records(
+            uid,
+            [
+                HistoricalMemoryRecord(
+                    memory=memory,
+                    locator=MemoryLocator(uid=uid, origin="legacy", physical_id=memory.id),
+                    hydrated=False,
+                )
+                for memory in page
+                if memory.id in stub_ids
+            ],
+        )
+        by_id = {record.memory.id: record.memory for record in hydrated_records}
+        hydrated_page: List[MemoryDB] = []
+        for memory in page:
+            if memory.id not in stub_ids:
+                hydrated_page.append(memory)
+                continue
+            replacement = by_id.get(memory.id)
+            if replacement is not None:
+                hydrated_page.append(replacement)
+        return hydrated_page
 
     @classmethod
     def _datetime_to_us(cls, value: datetime) -> int:
