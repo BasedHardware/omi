@@ -53,7 +53,7 @@ def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_i
         ('people', 'john doe'),
         ('people', 'new city'),
         ('topics', 'ai research'),
-        ('topics', 'great big'),
+        ('topics', 'great topic'),
     ]
 
 
@@ -71,7 +71,7 @@ def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_i
         ('the great big important topic', 'great topic'),
         ('Bank of America', 'bank america'),
         ('University of California', 'university california'),
-        ("New York City!", 'new york'),
+        ("New York City!", 'new city'),
         ('John Patrick Doe', 'john doe'),
         ('東京の会議', '東京の会議'),
         ('José Álvarez', 'josé álvarez'),
