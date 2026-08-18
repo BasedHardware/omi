@@ -1,0 +1,17 @@
+{
+  "name": "@omi-v5/backend-worker-benchmark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic-only local retrieval benchmark harness to select Cloudflare Vectorize vs AI Search for derived retrieval. No hosted indexes, credentials, production-like content, deploy, or network calls.",
+  "scripts": {
+    "test": "bun test",
+    "test:focused": "bun test test/fixtures.test.ts",
+    "typecheck": "bun x tsc --noEmit -p tsconfig.json",
+    "format": "bun x prettier --write 'src/**/*.ts' 'test/**/*.ts' '*.json' '*.cjs'",
+    "format:check": "bun x prettier --check 'src/**/*.ts' 'test/**/*.ts' '*.json' '*.cjs'",
+    "lint": "bun x eslint --config .eslintrc.cjs --max-warnings 0 'src/**/*.ts' 'test/**/*.ts'",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test",
+    "run": "bun run src/run.ts"
+  }
+}
