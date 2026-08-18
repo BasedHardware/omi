@@ -4,7 +4,7 @@ import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterable, Iterator, List, NoReturn, Optional, Tuple, cast
+from typing import Any, Callable, Dict, Iterable, Iterator, List, NoReturn, Optional, Set, Tuple, cast
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -1514,6 +1514,20 @@ class MemoryService:
     def _sort_memories(cls, memories: List[MemoryDB]) -> None:
         memories.sort(key=cls._memory_sort_key)
 
+    @staticmethod
+    def _next_historical_scan_limit(current: int, *, step: int) -> int:
+        """Grow the adaptive historical scan at least geometrically.
+
+        Every expansion round re-reads the whole newest-first prefix from the
+        start, so a linear step makes one page cost O(rounds x prefix): a fully
+        suppressed account at window=500 stepped 500, 1000, ... 5000 and read
+        27,500 documents over 55 queries for a single page. Doubling keeps the
+        light case identical (the first expansion is still ``current + step``)
+        and bounds the heavy case to a logarithmic number of rescans.
+        """
+        grown = max(current + max(1, int(step)), current * 2)
+        return min(HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW, grown)
+
     def read(
         self,
         uid: str,
@@ -1548,6 +1562,14 @@ class MemoryService:
         identity_suppressed = 0
         state_suppressed = 0
         historical_kept = 0
+        # Each expansion round rescans the same newest-first prefix with a
+        # larger limit, so an uncached status lookup pays for every earlier
+        # round again: a fully suppressed account at window=500 issued 275
+        # batch gets over 55,000 documents for one page and took the request
+        # past the 30s edge timeout. Canonical status is a stable read within
+        # one request, so ask for each memory id exactly once.
+        statuses: Dict[str, MemoryItemStatus] = {}
+        status_ids_read: Set[str] = set()
         while True:
             historical = self.history.read(
                 uid,
@@ -1559,7 +1581,14 @@ class MemoryService:
             identity_suppressed = 0
             state_suppressed = 0
             historical_kept = 0
-            statuses = self.canonical_statuses(uid, [record.memory.id for record in historical])
+            unread_ids = [
+                record.memory.id
+                for record in historical
+                if record.memory.id and record.memory.id not in status_ids_read
+            ]
+            if unread_ids:
+                statuses.update(self.canonical_statuses(uid, unread_ids))
+                status_ids_read.update(unread_ids)
             for record in historical:
                 if record.memory.id in canonical_ids:
                     identity_suppressed += 1
@@ -1583,9 +1612,9 @@ class MemoryService:
 
             if len(merged) < window:
                 missing = window - len(merged)
-                historical_limit = min(
-                    HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
-                    historical_limit + max(missing, bounded_limit),
+                historical_limit = self._next_historical_scan_limit(
+                    historical_limit,
+                    step=max(missing, bounded_limit),
                 )
                 continue
 
@@ -1596,9 +1625,9 @@ class MemoryService:
             oldest_scanned = historical[-1].memory
             if self._memory_sort_key(oldest_scanned) >= self._memory_sort_key(cutoff):
                 break
-            historical_limit = min(
-                HistoricalMemoryAdapter.MAX_COMPATIBILITY_WINDOW,
-                historical_limit + max(bounded_limit, window),
+            historical_limit = self._next_historical_scan_limit(
+                historical_limit,
+                step=max(bounded_limit, window),
             )
 
         # Emit telemetry once for the final scan only — retries must not
