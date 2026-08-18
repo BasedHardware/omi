@@ -1198,6 +1198,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const composerMaxWidth = width >= 1280 ? 820 : width >= 768 ? 720 : 640;
   const stageOpacity = useRef(new Animated.Value(0)).current;
   const stageTranslateY = useRef(new Animated.Value(8)).current;
+  const homeResultsOpacity = useRef(new Animated.Value(0)).current;
   const restingOpacity = useRef(new Animated.Value(0)).current;
   const restingTranslateY = useRef(new Animated.Value(8)).current;
   const mobileNavOpacity = useRef(new Animated.Value(0)).current;
@@ -1455,7 +1456,20 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           item.searchableText.toLocaleLowerCase().includes(query)),
     );
   }, [reads, searchQuery]);
-  const homeFiltering = searchQuery.trim() !== '';
+  const homeSearching = searchQuery.trim() !== '';
+
+  useEffect(() => {
+    homeResultsOpacity.setValue(0);
+    if (!homeSearching) {
+      return;
+    }
+    Animated.timing(homeResultsOpacity, {
+      duration: reduceMotion ? 1 : 180,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [homeResultsOpacity, homeSearching, reduceMotion]);
 
   useEffect(() => {
     if (route === 'Home') {
@@ -1905,6 +1919,66 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     </View>
   );
 
+  const homeOverview = (
+    <View style={styles.homeOverview}>
+      <View style={styles.homeMark}>
+        <OmiMark />
+      </View>
+      <View style={styles.deviceHeader}>
+        <View>
+          <Text style={styles.sectionLabel}>Devices</Text>
+          <Text style={styles.deviceState}>
+            {nativeSnapshot === null
+              ? 'Checking Bluetooth…'
+              : nativeSnapshot.bluetooth === 'poweredOn'
+              ? 'Bluetooth on'
+              : nativeSnapshot.bluetooth === 'unauthorized'
+              ? 'Bluetooth permission needed'
+              : 'Bluetooth off'}
+          </Text>
+        </View>
+        <FocusPressable
+          accessibilityLabel="Scan for Omi devices"
+          accessibilityRole="button"
+          disabled={deviceBusy || nativeSnapshot?.bluetooth !== 'poweredOn'}
+          onPress={scanForOmi}
+          style={({pressed}) => [styles.scanButton, pressed && styles.pressed]}>
+          <Text style={styles.scanButtonText}>
+            {deviceBusy ? 'Scanning…' : 'Scan'}
+          </Text>
+        </FocusPressable>
+      </View>
+      {nativeSnapshot?.devices.map(device => (
+        <FocusPressable
+          accessibilityLabel={`${device.connected ? 'Disconnect' : 'Connect'} ${
+            device.name
+          }`}
+          accessibilityRole="button"
+          key={device.id}
+          disabled={deviceBusy}
+          onPress={() => toggleDevice(device.id, device.connected)}
+          style={({pressed}) => [styles.deviceRow, pressed && styles.pressed]}>
+          <View>
+            <Text style={styles.deviceName}>{device.name}</Text>
+            <Text style={styles.deviceMeta}>
+              {device.connected ? 'Connected' : `${device.rssi} dBm`}
+            </Text>
+          </View>
+          {device.battery !== undefined && (
+            <Text style={styles.deviceBattery}>{device.battery}%</Text>
+          )}
+        </FocusPressable>
+      ))}
+      {nativeSnapshot !== null && nativeSnapshot.devices.length === 0 && (
+        <Text style={styles.deviceHint}>{nativeSnapshot.lastEvent}</Text>
+      )}
+      <Text style={styles.sectionLabel}>Currents</Text>
+      {!homeSearching && (
+        <Text style={styles.currentsPrompt}>Search to revisit a moment.</Text>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={[styles.outer, macDesktop && styles.macOuter]}>
       <View
@@ -1962,138 +2036,154 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 <View style={[styles.stage, compact && styles.stageCompact]}>
                   {route === 'Home' ? (
                     <View style={styles.searchHome}>
-                      <ProjectionList
-                        emptyCopy={
-                          homeFiltering
-                            ? 'Clear the search or filters to see saved items.'
-                            : 'Start typing to search what is saved.'
-                        }
-                        emptyTitle={
-                          homeFiltering ? 'No results' : 'Nothing saved yet'
-                        }
-                        error={null}
-                        footer={
-                          <View style={styles.readStatuses}>
-                            {readsPhase !== 'ready' && (
-                              <View style={styles.readStatus}>
-                                <Text style={styles.readStatusText}>
-                                  {readsPhase === 'initial-loading'
-                                    ? 'Loading saved data…'
-                                    : readsPhase === 'refreshing'
-                                    ? 'Refreshing saved data…'
-                                    : readsPhase === 'saved-but-refresh-failed'
-                                    ? 'Showing saved data. Could not refresh.'
-                                    : 'Saved data is unavailable.'}
-                                </Text>
-                                {(readsPhase === 'saved-but-refresh-failed' ||
-                                  readsPhase === 'unavailable') && (
+                      {!homeSearching && homeOverview}
+                      {homeSearching && (
+                        <Animated.View
+                          accessibilityLabel="Home search results"
+                          style={{opacity: homeResultsOpacity}}>
+                          <ProjectionList
+                            emptyCopy={
+                              homeSearching
+                                ? 'Clear the search to see saved items.'
+                                : 'Start typing to search what is saved.'
+                            }
+                            emptyTitle={
+                              homeSearching ? 'No results' : 'Nothing saved yet'
+                            }
+                            error={null}
+                            footer={
+                              <View style={styles.readStatuses}>
+                                {readsPhase !== 'ready' && (
+                                  <View style={styles.readStatus}>
+                                    <Text style={styles.readStatusText}>
+                                      {readsPhase === 'initial-loading'
+                                        ? 'Loading saved data…'
+                                        : readsPhase === 'refreshing'
+                                        ? 'Refreshing saved data…'
+                                        : readsPhase ===
+                                          'saved-but-refresh-failed'
+                                        ? 'Showing saved data. Could not refresh.'
+                                        : 'Saved data is unavailable.'}
+                                    </Text>
+                                    {(readsPhase ===
+                                      'saved-but-refresh-failed' ||
+                                      readsPhase === 'unavailable') && (
+                                      <FocusPressable
+                                        accessibilityLabel="Retry saved data"
+                                        accessibilityRole="button"
+                                        onPress={() => refreshReads(false)}
+                                        style={({pressed}) => [
+                                          styles.retryButton,
+                                          pressed && styles.pressed,
+                                        ]}>
+                                        <Text style={styles.retryButtonText}>
+                                          Retry
+                                        </Text>
+                                      </FocusPressable>
+                                    )}
+                                  </View>
+                                )}
+                                {readOutcomes !== null && (
+                                  <View style={styles.readStatuses}>
+                                    <OutcomeStatus
+                                      label="Conversations"
+                                      outcome={readOutcomes.conversations}
+                                    />
+                                    <OutcomeStatus
+                                      label="Memories"
+                                      outcome={readOutcomes.memories}
+                                    />
+                                  </View>
+                                )}
+                              </View>
+                            }
+                            header={
+                              <View style={styles.homeOverview}>
+                                <View style={styles.deviceHeader}>
+                                  <View>
+                                    <Text style={styles.sectionLabel}>
+                                      Devices
+                                    </Text>
+                                    <Text style={styles.deviceState}>
+                                      {nativeSnapshot === null
+                                        ? 'Checking Bluetooth…'
+                                        : nativeSnapshot.bluetooth ===
+                                          'poweredOn'
+                                        ? 'Bluetooth on'
+                                        : nativeSnapshot.bluetooth ===
+                                          'unauthorized'
+                                        ? 'Bluetooth permission needed'
+                                        : 'Bluetooth off'}
+                                    </Text>
+                                  </View>
                                   <FocusPressable
-                                    accessibilityLabel="Retry saved data"
+                                    accessibilityLabel="Scan for Omi devices"
                                     accessibilityRole="button"
-                                    onPress={() => refreshReads(false)}
+                                    disabled={
+                                      deviceBusy ||
+                                      nativeSnapshot?.bluetooth !== 'poweredOn'
+                                    }
+                                    onPress={scanForOmi}
                                     style={({pressed}) => [
-                                      styles.retryButton,
+                                      styles.scanButton,
                                       pressed && styles.pressed,
                                     ]}>
-                                    <Text style={styles.retryButtonText}>
-                                      Retry
+                                    <Text style={styles.scanButtonText}>
+                                      {deviceBusy ? 'Scanning…' : 'Scan'}
                                     </Text>
                                   </FocusPressable>
-                                )}
-                              </View>
-                            )}
-                            {readOutcomes !== null && (
-                              <View style={styles.readStatuses}>
-                                <OutcomeStatus
-                                  label="Conversations"
-                                  outcome={readOutcomes.conversations}
-                                />
-                                <OutcomeStatus
-                                  label="Memories"
-                                  outcome={readOutcomes.memories}
-                                />
-                              </View>
-                            )}
-                          </View>
-                        }
-                        header={
-                          <View style={styles.homeOverview}>
-                            <View style={styles.deviceHeader}>
-                              <View>
-                                <Text style={styles.sectionLabel}>Devices</Text>
-                                <Text style={styles.deviceState}>
-                                  {nativeSnapshot === null
-                                    ? 'Checking Bluetooth…'
-                                    : nativeSnapshot.bluetooth === 'poweredOn'
-                                    ? 'Bluetooth on'
-                                    : nativeSnapshot.bluetooth ===
-                                      'unauthorized'
-                                    ? 'Bluetooth permission needed'
-                                    : 'Bluetooth off'}
-                                </Text>
-                              </View>
-                              <FocusPressable
-                                accessibilityLabel="Scan for Omi devices"
-                                accessibilityRole="button"
-                                disabled={
-                                  deviceBusy ||
-                                  nativeSnapshot?.bluetooth !== 'poweredOn'
-                                }
-                                onPress={scanForOmi}
-                                style={({pressed}) => [
-                                  styles.scanButton,
-                                  pressed && styles.pressed,
-                                ]}>
-                                <Text style={styles.scanButtonText}>
-                                  {deviceBusy ? 'Scanning…' : 'Scan'}
-                                </Text>
-                              </FocusPressable>
-                            </View>
-                            {nativeSnapshot?.devices.map(device => (
-                              <FocusPressable
-                                accessibilityLabel={`${
-                                  device.connected ? 'Disconnect' : 'Connect'
-                                } ${device.name}`}
-                                accessibilityRole="button"
-                                key={device.id}
-                                disabled={deviceBusy}
-                                onPress={() =>
-                                  toggleDevice(device.id, device.connected)
-                                }
-                                style={({pressed}) => [
-                                  styles.deviceRow,
-                                  pressed && styles.pressed,
-                                ]}>
-                                <View>
-                                  <Text style={styles.deviceName}>
-                                    {device.name}
-                                  </Text>
-                                  <Text style={styles.deviceMeta}>
-                                    {device.connected
-                                      ? 'Connected'
-                                      : `${device.rssi} dBm`}
-                                  </Text>
                                 </View>
-                                {device.battery !== undefined && (
-                                  <Text style={styles.deviceBattery}>
-                                    {device.battery}%
-                                  </Text>
-                                )}
-                              </FocusPressable>
-                            ))}
-                            {nativeSnapshot !== null &&
-                              nativeSnapshot.devices.length === 0 && (
-                                <Text style={styles.deviceHint}>
-                                  {nativeSnapshot.lastEvent}
+                                {nativeSnapshot?.devices.map(device => (
+                                  <FocusPressable
+                                    accessibilityLabel={`${
+                                      device.connected
+                                        ? 'Disconnect'
+                                        : 'Connect'
+                                    } ${device.name}`}
+                                    accessibilityRole="button"
+                                    key={device.id}
+                                    disabled={deviceBusy}
+                                    onPress={() =>
+                                      toggleDevice(device.id, device.connected)
+                                    }
+                                    style={({pressed}) => [
+                                      styles.deviceRow,
+                                      pressed && styles.pressed,
+                                    ]}>
+                                    <View>
+                                      <Text style={styles.deviceName}>
+                                        {device.name}
+                                      </Text>
+                                      <Text style={styles.deviceMeta}>
+                                        {device.connected
+                                          ? 'Connected'
+                                          : `${device.rssi} dBm`}
+                                      </Text>
+                                    </View>
+                                    {device.battery !== undefined && (
+                                      <Text style={styles.deviceBattery}>
+                                        {device.battery}%
+                                      </Text>
+                                    )}
+                                  </FocusPressable>
+                                ))}
+                                {nativeSnapshot !== null &&
+                                  nativeSnapshot.devices.length === 0 && (
+                                    <Text style={styles.deviceHint}>
+                                      {nativeSnapshot.lastEvent}
+                                    </Text>
+                                  )}
+                                <Text style={styles.sectionLabel}>
+                                  Currents
                                 </Text>
-                              )}
-                            <Text style={styles.sectionLabel}>Currents</Text>
-                          </View>
-                        }
-                        items={homeResults}
-                        loading={readsPhase === 'initial-loading'}
-                        suppressEmpty={readsPhase !== 'ready'}
-                      />
+                              </View>
+                            }
+                            items={homeResults}
+                            loading={readsPhase === 'initial-loading'}
+                            suppressEmpty={readsPhase !== 'ready'}
+                          />
+                        </Animated.View>
+                      )}
                       <View
                         accessibilityLabel="Home search dock"
                         style={[
@@ -2300,7 +2390,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             </KeyboardAvoidingView>
           </View>
         </View>
-        {compact && !macDesktop && nav}
       </View>
     </SafeAreaView>
   );
@@ -2460,6 +2549,8 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   homeOverview: {gap: 10, paddingBottom: 14, paddingTop: 16},
+  homeMark: {alignSelf: 'center', marginBottom: 2},
+  currentsPrompt: {color: '#888888', fontSize: 13, marginTop: -4},
   deviceHeader: {
     alignItems: 'center',
     flexDirection: 'row',
