@@ -29,6 +29,10 @@
         "wrangler": "4.123.0",
       },
     },
+    "apps/backend-worker-benchmark": {
+      "name": "@omi-v5/backend-worker-benchmark",
+      "version": "0.1.0",
+    },
     "packages/adapters-platform": {
       "name": "@omi-core/adapters-platform",
       "version": "0.0.0",
@@ -605,6 +609,8 @@
     "@omi-core/wire-listen": ["@omi-core/wire-listen@workspace:packages/wire-listen"],
 
     "@omi-v5/backend-worker": ["@omi-v5/backend-worker@workspace:apps/backend-worker"],
+
+    "@omi-v5/backend-worker-benchmark": ["@omi-v5/backend-worker-benchmark@workspace:apps/backend-worker-benchmark"],
 
     "@omi-v5/client": ["@omi-v5/client@workspace:react-native"],
 
