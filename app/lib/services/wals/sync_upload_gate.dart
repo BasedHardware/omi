@@ -361,6 +361,10 @@ class RecordingUploadTelemetry {
     if (error is SyncRateLimitedException) return 'rate_limited';
     if (error is TimeoutException) return 'timeout';
     if (error is SocketException) return 'network';
+    if (error is SyncUploadHttpException) {
+      if (error.statusCode == 401 || error.statusCode == 403) return 'authentication';
+      if (error.statusCode >= 500) return 'server';
+    }
     final normalized = error.toString().toLowerCase();
     if (normalized.contains('401') || normalized.contains('403') || normalized.contains('unauthorized')) {
       return 'authentication';
@@ -387,6 +391,7 @@ class RecordingUploadTelemetry {
         'file_count': fileCount < 0 ? 0 : fileCount,
         'total_bytes': totalBytes < 0 ? 0 : totalBytes,
         'claims_live_capture': claimsLiveCapture,
+        'upload_source': 'offline_audio_queue',
       };
 }
 

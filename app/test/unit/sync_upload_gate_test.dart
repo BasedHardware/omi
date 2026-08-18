@@ -282,6 +282,7 @@ void main() {
       'file_count': 0,
       'total_bytes': 0,
       'claims_live_capture': true,
+      'upload_source': 'offline_audio_queue',
     });
     expect(events[1].properties, {...events[0].properties, 'duration_seconds': 1.25, 'result': 'accepted'});
   });
@@ -313,11 +314,17 @@ void main() {
       'file_count': 0,
       'total_bytes': 0,
       'claims_live_capture': false,
+      'upload_source': 'offline_audio_queue',
       'duration_seconds': 0.5,
       'failure_class': 'network',
     });
     expect(events[1].properties.toString(), isNot(contains('secret host')));
     expect(events[1].properties.keys, isNot(contains('error')));
+  });
+
+  test('classifies HTTP upload failures without reducing them to unknown', () {
+    expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(401, 'auth')), 'authentication');
+    expect(RecordingUploadTelemetry.failureClass(const SyncUploadHttpException(503, 'server')), 'server');
   });
 
   test('telemetry failure never changes an accepted upload', () async {
