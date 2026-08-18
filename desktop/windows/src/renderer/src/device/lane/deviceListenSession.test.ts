@@ -149,6 +149,19 @@ describe('DeviceListenSession', () => {
     expect(h.session.currentState).toBe('streaming')
   })
 
+  it('feeds audio while a reconnect handshake is in flight', async () => {
+    const h = harness()
+    await h.session.start()
+    h.handlers.connect()
+    h.handlers.close(1006, 'connection lost')
+    h.clock.advance(5_000)
+    await tick()
+
+    h.session.feed(Int16Array.from([1, 2]))
+
+    expect(h.transport.fed).toHaveLength(1)
+  })
+
   it('gives up on a quota close immediately and rescues retained segments', async () => {
     const h = harness()
     await h.session.start()

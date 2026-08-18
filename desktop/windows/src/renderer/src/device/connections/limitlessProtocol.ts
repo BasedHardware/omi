@@ -241,7 +241,7 @@ export const parseFlashPageInfo = (data: Uint8Array): FlashPageInfo => {
           if (inner[i] === 0x48 && inner[i + 1] !== 0) info.didStopRecording = true
         }
       }
-      cpos = innerStart + Math.max(innerBounded, 1)
+      cpos = innerStart + innerBounded
     }
     scan = chunkStart + chunkLength
   }
@@ -273,7 +273,7 @@ export const extractOpusRecursive = (data: Uint8Array): Uint8Array[] => {
       } else if (bounded > OPUS_FRAME_MIN_BYTES) {
         frames.push(...extractOpusRecursive(field))
       }
-      pos = start + Math.max(bounded, 1)
+      pos = start + bounded
     } else if (wireType === 0) {
       const value = decodeVarint(data, pos)
       if (value === null) break
@@ -338,7 +338,7 @@ export const extractOpusFramesFromFlashPage = (data: Uint8Array): Uint8Array[] =
             ...extractOpusRecursive(wrapper.subarray(fieldStart, fieldStart + fieldBounded))
           )
         }
-        wpos = fieldStart + Math.max(fieldBounded, 1)
+        wpos = fieldStart + fieldBounded
       } else if (wireType === 1) {
         // A fixed64/fixed32 field before the audio field must be stepped over,
         // not treated as the end of the wrapper, or the frames after it are lost.

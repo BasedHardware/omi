@@ -117,6 +117,16 @@ describe('opus extraction', () => {
     expect(extractOpusRecursive(tiny)).toEqual([])
   })
 
+  it('continues after an empty bytes field', () => {
+    const frame = opusFrame()
+    const data = Uint8Array.from([
+      ...encodeBytesField(1, bytes()),
+      ...encodeBytesField(2, frame)
+    ])
+
+    expect(extractOpusRecursive(data)).toEqual([frame])
+  })
+
   it('extractOpusFramesFromFlashPage skips the leading varints and walks 0x1a wrappers', () => {
     const frame = opusFrame(0x78)
     // Wrapper (field 3, tag 0x1a) holding an offset varint and the audio
@@ -133,6 +143,17 @@ describe('opus extraction', () => {
     const frames = extractOpusFramesFromFlashPage(page)
     expect(frames.length).toBe(1)
     expect(frames[0]).toEqual(frame)
+  })
+
+  it('continues after an empty wrapper field', () => {
+    const frame = opusFrame()
+    const inner = Uint8Array.from([
+      ...encodeBytesField(2, bytes()),
+      ...encodeBytesField(2, encodeBytesField(1, frame))
+    ])
+    const page = Uint8Array.from([...encodeBytesField(3, inner)])
+
+    expect(extractOpusFramesFromFlashPage(page)).toEqual([frame])
   })
 
   it('extractOpusFrames falls back to raw 0x22 marker scanning', () => {

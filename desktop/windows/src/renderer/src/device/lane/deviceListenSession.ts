@@ -169,7 +169,7 @@ export class DeviceListenSession {
 
   /** Feeds decoded PCM. Silently ignored unless the socket is live. */
   feed(pcm: Int16Array): void {
-    if (this.state !== 'streaming' && this.state !== 'connecting') return
+    if (this.state !== 'streaming' && this.state !== 'connecting' && this.state !== 'reconnecting') return
     const sessionId = this.sessionId
     if (sessionId === null) return
     // Copy out of the decoder's buffer: the frame is reused downstream.

@@ -220,7 +220,12 @@ export class DeviceSessionCoordinator {
     this.cancelScheduledReconnect()
     const connection = this.activeConnection
     if (connection === null) {
-      if (reconnectAfterMs !== null) this.scheduleReconnectIfNeeded(reconnectAfterMs)
+      if (reconnectAfterMs === null) {
+        this.phase = { kind: 'idle' }
+        this.publish()
+      } else {
+        this.scheduleReconnectIfNeeded(reconnectAfterMs)
+      }
       return
     }
 

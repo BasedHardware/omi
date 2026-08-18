@@ -292,6 +292,20 @@ describe('DeviceSessionCoordinator disconnect and unpair', () => {
     expect(reconnects.length).toBe(0)
   })
 
+  it('disconnect(null) cancels a pending reconnect with no active connection', async () => {
+    const { coordinator, reconnects } = setup({ connection: null, paired: DEVICE })
+    coordinator.startReconnecting()
+    await tick()
+    expect(coordinator.snapshot.phase.kind).toBe('waitingToReconnect')
+    const reconnectRequestsBeforeDisconnect = reconnects.length
+
+    await coordinator.disconnect(null)
+
+    expect(coordinator.snapshot.phase.kind).toBe('idle')
+    await tick()
+    expect(reconnects.length).toBe(reconnectRequestsBeforeDisconnect)
+  })
+
   it('a delayed disconnect scans before retrying', async () => {
     const connection = new StubConnection()
     const { coordinator, clock, reconnects, discoveries } = setup({ connection })
