@@ -321,7 +321,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get searchApps => 'חפש אפליקציות...';
 
   @override
-  String get myApps => 'האפליקציות שלי';
+  String get myApps => 'נוצר על ידי';
 
   @override
   String get installedApps => 'אפליקציות מותקנות';

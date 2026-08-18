@@ -323,7 +323,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get searchApps => 'Pretraži aplikacije...';
 
   @override
-  String get myApps => 'Moje aplikacije';
+  String get myApps => 'Moje kreacije';
 
   @override
   String get installedApps => 'Instalirane aplikacije';

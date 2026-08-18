@@ -323,7 +323,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get searchApps => 'Sök appar...';
 
   @override
-  String get myApps => 'Mina appar';
+  String get myApps => 'Skapad av mig';
 
   @override
   String get installedApps => 'Installerade appar';

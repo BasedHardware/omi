@@ -326,7 +326,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get searchApps => 'Apps suchen...';
 
   @override
-  String get myApps => 'Meine Apps';
+  String get myApps => 'Von mir erstellt';
 
   @override
   String get installedApps => 'Installierte Apps';

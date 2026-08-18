@@ -323,7 +323,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get searchApps => 'Uygulama ara...';
 
   @override
-  String get myApps => 'Uygulamalarım';
+  String get myApps => 'Benim oluşturduğum';
 
   @override
   String get installedApps => 'Yüklü Uygulamalar';

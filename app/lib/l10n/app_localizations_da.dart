@@ -323,7 +323,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get searchApps => 'Søg apps...';
 
   @override
-  String get myApps => 'Mine apps';
+  String get myApps => 'Oprettet af mig';
 
   @override
   String get installedApps => 'Installerede apps';

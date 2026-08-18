@@ -322,7 +322,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get searchApps => 'Cari aplikasi...';
 
   @override
-  String get myApps => 'Aplikasi Saya';
+  String get myApps => 'Dibuat oleh saya';
 
   @override
   String get installedApps => 'Aplikasi Terinstal';

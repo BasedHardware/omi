@@ -323,7 +323,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get searchApps => 'Meklēt lietotnes...';
 
   @override
-  String get myApps => 'Manas lietotnes';
+  String get myApps => 'Man radīts';
 
   @override
   String get installedApps => 'Instalētās lietotnes';

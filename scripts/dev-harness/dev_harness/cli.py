@@ -372,6 +372,8 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
+    if cfg.dev_bind_host != "127.0.0.1":
+        print(f"dev_bind_host: {cfg.dev_bind_host} (set via {config.DEV_BIND_HOST_ENV} or {config.APP_DEV_HOST_ENV})")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
@@ -606,7 +608,10 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     emulators = payload.setdefault("emulators", {})
     for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
         emulator = emulators.setdefault(name, {})
-        emulator["host"] = "127.0.0.1"
+        # The Auth emulator is what a physical device's Firebase SDK connects to
+        # directly (not through the backend), so it must bind wherever the
+        # backend does for device reachability to work at all (#11774).
+        emulator["host"] = cfg.dev_bind_host
         emulator["port"] = port
     firestore = payload.setdefault("firestore", {})
     firestore["rules"] = str(cfg.repo_root / "firestore.rules")
@@ -753,7 +758,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "llm_gateway.main:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.llm_gateway_port),
         ],
@@ -764,7 +769,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(cfg.backend_port)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host, "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
         port=cfg.backend_port,
@@ -778,7 +783,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "desktop_backend:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.desktop_backend_port),
         ],

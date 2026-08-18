@@ -48,6 +48,7 @@ from utils.stt.live_failure import (
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
+    deepgram_fallback_model,
     make_stream_callback,
     modulate_is_configured_fallback,
     parakeet_is_configured_fallback,
@@ -223,7 +224,50 @@ class ListenReceiver:
                 self.host.stt_model = 'velma-2'
             return socket
         if self.host.stt_service == STTService.modulate:
-            return await process_audio_modulate(modulate_callback or callback, sample_rate, self.host.stt_language)
+            # Velma-2 accepts the upgrade and only then reports being over quota,
+            # so a Modulate primary needs the same chain its siblings use (#11752).
+            dg_fallback_model = deepgram_fallback_model(self.host.stt_language)
+
+            def connect_deepgram_fallback() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=cast(str, dg_fallback_model),
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            def connect_parakeet_fallback() -> Any:
+                return process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model='parakeet',
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                primary_service=STTService.modulate,
+                connect_primary=lambda: process_audio_modulate(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
+                connect_deepgram=connect_deepgram_fallback if dg_fallback_model else None,
+                connect_parakeet=(
+                    connect_parakeet_fallback if parakeet_is_configured_fallback(self.host.stt_language) else None
+                ),
+            )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.deepgram:
+                self.host.stt_model = cast(str, dg_fallback_model)
+            elif actual_service == STTService.parakeet:
+                self.host.stt_model = 'parakeet'
+            return socket
         if self.host.stt_service == STTService.deepgram:
 
             def connect_deepgram() -> Any:

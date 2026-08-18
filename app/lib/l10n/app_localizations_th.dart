@@ -321,7 +321,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get searchApps => 'ค้นหาแอป...';
 
   @override
-  String get myApps => 'แอปของฉัน';
+  String get myApps => 'สร้างโดยฉัน';
 
   @override
   String get installedApps => 'แอปที่ติดตั้งแล้ว';

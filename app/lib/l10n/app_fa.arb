@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "اپلیکیشن‌های من",
+    "myApps": "ساخته‌شده توسط من",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },

@@ -321,7 +321,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get searchApps => 'البحث عن التطبيقات...';
 
   @override
-  String get myApps => 'تطبيقاتي';
+  String get myApps => 'من إنشائي';
 
   @override
   String get installedApps => 'التطبيقات المثبتة';
