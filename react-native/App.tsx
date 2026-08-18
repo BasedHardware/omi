@@ -1961,14 +1961,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         }
                         header={
                           <View style={styles.searchHeader}>
-                            <Text style={styles.searchEyebrow}>HOME</Text>
-                            <Text
-                              style={[
-                                styles.searchTitle,
-                                macDesktop && styles.macPrimaryText,
-                              ]}>
-                              Search what you’ve seen and heard
-                            </Text>
                             <View
                               style={[
                                 styles.searchBox,
@@ -1982,14 +1974,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                               />
                               <TextInput
                                 accessibilityLabel="Search Home"
-                                autoFocus
                                 onBlur={() => setSearchFocused(false)}
                                 onChangeText={setSearchQuery}
                                 onFocus={() => setSearchFocused(true)}
                                 placeholder="Search conversations and memories"
                                 placeholderTextColor="#777777"
                                 ref={searchRef}
-                                style={styles.searchInput}
+                                style={[
+                                  styles.searchInput,
+                                  macDesktop && styles.macPrimaryText,
+                                ]}
                                 value={searchQuery}
                               />
                               {searchQuery !== '' && (
@@ -2049,7 +2043,6 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                 <Text style={styles.chatPillText}>Chat</Text>
                               </FocusPressable>
                             </View>
-                            <Text style={styles.timelineLabel}>LATEST</Text>
                           </View>
                         }
                         items={homeResults}
@@ -2370,41 +2363,27 @@ const styles = StyleSheet.create({
   },
   paneCompact: {borderRadius: 0, borderWidth: 0},
   stageMotion: {flex: 1},
-  stage: {flexGrow: 1, paddingBottom: 20, paddingHorizontal: 20},
-  stageCompact: {paddingHorizontal: 16},
+  stage: {flexGrow: 1, paddingBottom: 16, paddingHorizontal: 16},
+  stageCompact: {paddingHorizontal: 12},
   searchHome: {
     alignSelf: 'center',
     flex: 1,
     maxWidth: 900,
     width: '100%',
   },
-  searchHeader: {paddingBottom: 18, paddingTop: 38},
-  searchEyebrow: {
-    color: '#777777',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-  },
-  searchTitle: {
-    color: '#ffffff',
-    fontSize: 30,
-    fontWeight: '600',
-    letterSpacing: -0.6,
-    marginTop: 8,
-  },
+  searchHeader: {paddingBottom: 12, paddingTop: 16},
   searchBox: {
     alignItems: 'center',
     backgroundColor: '#232323',
     borderColor: '#3a3a3a',
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 24,
-    minHeight: 58,
-    paddingHorizontal: 18,
+    gap: 8,
+    minHeight: 52,
+    paddingHorizontal: 14,
   },
-  searchInput: {color: '#ffffff', flex: 1, fontSize: 15, minHeight: 48},
+  searchInput: {color: '#ffffff', flex: 1, fontSize: 15, minHeight: 44},
   clearSearch: {
     alignItems: 'center',
     borderRadius: 22,
@@ -2416,9 +2395,9 @@ const styles = StyleSheet.create({
   searchActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
     justifyContent: 'space-between',
-    marginTop: 14,
+    marginTop: 10,
   },
   filters: {flexDirection: 'row', flexWrap: 'wrap', gap: 7},
   filterChip: {
@@ -2442,13 +2421,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
   },
   chatPillText: {color: '#141414', fontSize: 13, fontWeight: '700'},
-  timelineLabel: {
-    color: '#777777',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginTop: 28,
-  },
   chatScroll: {flex: 1},
   chatScrollContent: {flexGrow: 1},
   chatHistory: {

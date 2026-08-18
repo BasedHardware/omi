@@ -399,7 +399,7 @@ test('opens host-selected Chat without changing the default route', async () => 
 
   const homeRenderer = await renderApp();
   const homeOutput = JSON.stringify(homeRenderer.toJSON());
-  expect(homeOutput).toContain('Search what you’ve seen and heard');
+  expect(homeOutput).toContain('Search conversations and memories');
   expect(homeOutput).not.toContain('I’m ready.');
 });
 
@@ -412,12 +412,16 @@ test('renders the collapsed reference rail and search-first desktop Home', async
       node.props.accessibilityRole === 'tab',
   );
 
-  expect(output).toContain('Search what you’ve seen and heard');
   expect(output).toContain('Search conversations and memories');
+  expect(output).not.toContain('Search what you’ve seen and heard');
   expect(output).toContain('QA bridge check');
   expect(output).toContain('Open Chat');
   expect(output).not.toContain('I’m ready.');
   expect(output).not.toContain('Ask anything...');
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.autoFocus,
+  ).toBeUndefined();
   expect(output).not.toContain('Omi connection');
   expect(output).not.toContain('No nearby devices');
   expect(tabs.map(tab => tab.props.children[1].props.children)).toEqual([
@@ -533,6 +537,9 @@ test('keeps Home limited to chronological conversations and memories', async () 
     output.indexOf('Older conversation'),
   );
   expect(output).not.toContain('Search conversations, memories, and tasks');
+  expect(output).not.toContain('Search what you’ve seen and heard');
+  expect(output).not.toContain('HOME');
+  expect(output).not.toContain('LATEST');
   const filters = renderer.root
     .findAll(
       node =>
@@ -546,7 +553,7 @@ test('keeps Home limited to chronological conversations and memories', async () 
   const search = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search Home',
   );
-  expect(search.props.autoFocus).toBe(true);
+  expect(search.props.autoFocus).toBeUndefined();
   await ReactTestRenderer.act(async () => search.props.onChangeText('missing'));
   expect(JSON.stringify(renderer.toJSON())).toContain('No results');
   const clear = renderer.root.find(
@@ -1319,13 +1326,11 @@ test.each([800, 960, 1440])(
     mockPlatformOS = 'macos';
     mockViewportWidth = width;
     const renderer = await renderApp();
-    const homeTitle = renderer.root.find(
-      node =>
-        String(node.type) === 'Text' &&
-        node.props.children === 'Search what you’ve seen and heard',
+    const homeSearch = renderer.root.find(
+      node => node.props.accessibilityLabel === 'Search Home',
     );
 
-    expect(homeTitle.props.style).toEqual(
+    expect(homeSearch.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({color: '#141414'})]),
     );
     expect(
