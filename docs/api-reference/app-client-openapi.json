@@ -380,6 +380,18 @@
             "description": "True only when the commitment names a concrete deliverable or outcome",
             "title": "Concrete Deliverable"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One line explaining why or how the item matters",
+            "title": "Context"
+          },
           "conversation_id": {
             "anyOf": [
               {
@@ -422,6 +434,34 @@
             ],
             "description": "When the action item is due",
             "title": "Due At"
+          },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the due date was confirmed or only discussed tentatively",
+            "title": "Due Certainty"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person's name when the owner is known",
+            "title": "Owner Name"
           },
           "ownership_confidence": {
             "anyOf": [
@@ -18508,6 +18548,34 @@
         "title": "SearchedMemory",
         "type": "object"
       },
+      "Section": {
+        "properties": {
+          "body_markdown": {
+            "description": "Free-form markdown containing the section details",
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "description": "A descriptive heading chosen for this conversation",
+            "title": "Heading",
+            "type": "string"
+          },
+          "source_segment_ids": {
+            "description": "Transcript segment IDs that directly support this section",
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "Section",
+        "type": "object"
+      },
       "SendMessageRequest": {
         "properties": {
           "context": {
@@ -19898,6 +19966,14 @@
             "description": "A brief overview of the conversation, highlighting the key details from it",
             "title": "Overview",
             "type": "string"
+          },
+          "sections": {
+            "description": "Detailed, free-form note sections in the model-chosen structure",
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "title": {
             "default": "",

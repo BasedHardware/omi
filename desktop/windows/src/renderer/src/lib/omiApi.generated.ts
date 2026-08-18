@@ -63,10 +63,13 @@ export interface ActionItem {
   completed?: boolean;
   completed_at?: string | null;
   concrete_deliverable?: boolean | null;
+  context?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
+  owner_name?: string | null;
   ownership_confidence?: number | null;
   source_segment_ids?: Array<string>;
   target_task_id?: string | null;
@@ -3043,6 +3046,12 @@ export interface SearchedMemory {
   reviewed_source?: string | null;
 }
 
+export interface Section {
+  body_markdown: string;
+  heading: string;
+  source_segment_ids?: Array<string>;
+}
+
 export interface SendMessageRequest {
   context?: PageContext | null;
   file_ids?: Array<string> | null;
@@ -3298,6 +3307,7 @@ export interface Structured {
   emoji?: string;
   events?: Array<Event>;
   overview?: string;
+  sections?: Array<Section>;
   title?: string;
 }
 
@@ -4509,6 +4519,7 @@ export interface OmiApiSchemas {
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
+  "Section": Section;
   "SendMessageRequest": SendMessageRequest;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
