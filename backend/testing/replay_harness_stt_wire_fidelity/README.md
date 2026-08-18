@@ -4,7 +4,7 @@
 for the Parakeet live-STT WebSocket client. Run it with:
 
 ```bash
-npm run test:replay-stt-wire-fidelity
+bun run test:replay-stt-wire-fidelity
 ```
 
 The oracle starts a loopback-only controlled fake upstream and drives the

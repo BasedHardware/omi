@@ -3,7 +3,7 @@
 Run with:
 
 ```bash
-npm run test:replay-lc3-frame-timing
+bun run test:replay-lc3-frame-timing
 ```
 
 This is a Linux x86_64-only, loopback-only test harness. It requires the
