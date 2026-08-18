@@ -6,7 +6,9 @@
   "canonical_prevention_artifact": [
     "backend/routers/knowledge_graph.py",
     "backend/tests/unit/test_knowledge_graph_canonical_mutation_routes.py",
-    "backend/tests/unit/test_knowledge_graph_legacy_fallback.py"
+    "backend/tests/unit/test_knowledge_graph_legacy_fallback.py",
+    "backend/utils/memory/canonical_graph.py",
+    "backend/tests/unit/test_canonical_graph_state_probe.py"
   ],
   "evidence_prs": [
     11623,
