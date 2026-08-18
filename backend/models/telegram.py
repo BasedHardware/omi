@@ -78,6 +78,8 @@ class TelegramDraftRequest(BaseModel):
     @model_validator(mode='after')
     def _bound_inline_images(self):
         validate_draft_images(self.thread)
+        if self.is_group and any(not message.sender for message in self.thread):
+            raise ValueError('sender is required for every message in a group draft')
         return self
 
 

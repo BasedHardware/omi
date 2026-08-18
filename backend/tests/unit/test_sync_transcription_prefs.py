@@ -982,7 +982,7 @@ class TestIdentifySpeakersForSegments:
 
         # Embedding extraction fails (too short clip), so voice matching skips
         mock_extract.side_effect = ValueError("Audio too short")
-        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+        mock_users_db.get_people_by_name.return_value = [{'id': 'p2', 'name': 'Bob'}]
 
         cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
 
@@ -1000,7 +1000,7 @@ class TestIdentifySpeakersForSegments:
     def test_empty_cache_still_runs_text_detection(self, mock_users_db):
         from routers.sync import identify_speakers_for_segments
 
-        mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
+        mock_users_db.get_people_by_name.return_value = [{'id': 'p1', 'name': 'Alice'}]
 
         segments = [
             _make_transcript_segment(speaker_id=1, start=0.0, end=2.0, text='my name is Alice', seg_id='s1'),
@@ -1015,7 +1015,7 @@ class TestIdentifySpeakersForSegments:
     def test_no_audio_still_runs_text_detection(self, mock_users_db):
         from routers.sync import identify_speakers_for_segments
 
-        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+        mock_users_db.get_people_by_name.return_value = [{'id': 'p2', 'name': 'Bob'}]
 
         cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
 
@@ -1032,7 +1032,7 @@ class TestIdentifySpeakersForSegments:
     def test_undiarized_text_detection_assigns_per_segment(self, mock_users_db):
         from routers.sync import identify_speakers_for_segments
 
-        mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
+        mock_users_db.get_people_by_name.return_value = [{'id': 'p1', 'name': 'Alice'}]
 
         # speaker_id=0 (undiarized) — should still get per-segment assignment
         segments = [
@@ -1477,7 +1477,7 @@ class TestSpeakerIdBoundaries:
         far_emb = np.ones((1, 512), dtype=np.float32)
         cache = {'p1': {'embedding': far_emb, 'name': 'Alice'}}
 
-        mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
+        mock_users_db.get_people_by_name.return_value = [{'id': 'p2', 'name': 'Bob'}]
 
         segments = [
             _make_transcript_segment(speaker_id=2, start=0.0, end=2.0, text='my name is Bob', seg_id='s1'),

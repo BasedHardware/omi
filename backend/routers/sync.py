@@ -482,7 +482,8 @@ def identify_speakers_for_segments(
         for seg in segments:
             detected_name = detect_speaker_from_text(seg.text)
             if detected_name:
-                person = users_db.get_person_by_name(uid, detected_name)
+                matching_people = users_db.get_people_by_name(uid, detected_name)
+                person = matching_people[0] if len(matching_people) == 1 else None
                 if person:
                     # Per-segment assignment always applies
                     segment_person_assignment_map[seg.id] = person['id']

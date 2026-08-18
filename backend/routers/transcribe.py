@@ -1826,7 +1826,10 @@ async def _stream_handler(
                     # Text-based detection
                     detected_name = detect_speaker_from_text(segment.text)
                     if detected_name:
-                        person = user_db.get_person_by_name(uid, detected_name)
+                        matching_people = user_db.get_people_by_name(uid, detected_name)
+                        person = matching_people[0] if len(matching_people) == 1 else None
+                        if len(matching_people) > 1:
+                            continue
                         generated_person_id = str(uuid.uuid4()) if not person and create_speakers else ''
                         text_assignment = decide_text_speaker_assignment(
                             existing_person_id=person['id'] if person else None,
