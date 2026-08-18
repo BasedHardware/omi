@@ -383,6 +383,7 @@ class CaptureController extends ChangeNotifier
   /// an attempt with different parameters is a new intent (starting phone mic,
   /// a codec change), and a forced one replaces the socket outright.
   final Map<String, int> _websocketInitInFlight = {};
+  int _websocketInitGeneration = 0;
 
   /// Returns unsynced WALs belonging to the current capture session.
   /// Empty when all frames have been streamed successfully (clean UI).
@@ -669,6 +670,7 @@ class CaptureController extends ChangeNotifier
     // Counted, because a forced attempt can share the key of the non-forced one
     // it is replacing; whichever finishes first must not ungate the other.
     _websocketInitInFlight.update(attemptKey, (running) => running + 1, ifAbsent: () => 1);
+    final generation = ++_websocketInitGeneration;
     try {
       await _connectTranscriptionSocket(
         audioCodec: audioCodec,
@@ -677,6 +679,7 @@ class CaptureController extends ChangeNotifier
         isPcm: isPcm,
         force: force,
         source: source,
+        generation: generation,
       );
     } finally {
       final running = (_websocketInitInFlight[attemptKey] ?? 1) - 1;
@@ -718,6 +721,7 @@ class CaptureController extends ChangeNotifier
     bool? isPcm,
     bool force = false,
     String? source,
+    required int generation,
   }) async {
     Logger.debug('initiateWebsocket in capture_provider');
 
@@ -766,7 +770,7 @@ class CaptureController extends ChangeNotifier
     }
 
     // Connect to the transcript socket
-    _socket = await openConversationSocket(
+    final socket = await openConversationSocket(
       codec: codec,
       sampleRate: sampleRate,
       language: language,
@@ -775,11 +779,16 @@ class CaptureController extends ChangeNotifier
       clientConversationId: _recordingTelemetry.recordingId,
       customSttConfig: effectiveConfig,
     );
-    if (_socket == null) {
+    if (socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
       return;
     }
+    if (generation != _websocketInitGeneration) {
+      await socket.stop(reason: 'stale transcription socket attempt');
+      return;
+    }
+    _socket = socket;
     _socket?.subscribe(this, this);
     _transcriptServiceReady = true;
     if (_sessionStartSeconds == 0) {

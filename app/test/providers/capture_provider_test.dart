@@ -22,6 +22,7 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
 
@@ -90,6 +91,9 @@ BtDevice _device({required String id, required DeviceType type, String name = 'T
 /// start one, and each attempt can be released independently.
 class _GatedSocketCaptureProvider extends CaptureProvider {
   final List<Completer<void>> gates = [];
+  final List<_IdentifiedSocketService> sockets = [];
+  int? lastSubscribedId;
+  bool returnSockets = false;
 
   int get openCalls => gates.length;
 
@@ -106,7 +110,10 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     final gate = Completer<void>();
     gates.add(gate);
     await gate.future;
-    return null;
+    if (!returnSockets) return null;
+    final socket = _IdentifiedSocketService(gates.length - 1, (id) => lastSubscribedId = id);
+    sockets.add(socket);
+    return socket;
   }
 
   void release(int attempt) => gates[attempt].complete();
@@ -116,6 +123,52 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
       if (!gate.isCompleted) gate.complete();
     }
   }
+}
+
+class _IdentifiedSocketService extends TranscriptSegmentSocketService {
+  _IdentifiedSocketService(this.id, this.onSubscribed)
+      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+
+  final int id;
+  final void Function(int id) onSubscribed;
+
+  @override
+  void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
+    onSubscribed(id);
+    throw StateError('test socket subscribed');
+  }
+}
+
+class _TrackingSocket implements IPureSocket {
+  @override
+  PureSocketStatus get status => PureSocketStatus.connected;
+
+  @override
+  Future<bool> connect() async => true;
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  void send(dynamic message) {}
+
+  @override
+  void setListener(IPureSocketListener listener) {}
+
+  @override
+  void onMessage(dynamic message) {}
+
+  @override
+  void onConnected() {}
+
+  @override
+  void onClosed() {}
+
+  @override
+  void onError(Object err, StackTrace trace) {}
 }
 
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
@@ -1326,6 +1379,31 @@ void main() {
       provider.releaseAll();
       await first;
       await forced;
+      provider.dispose();
+    });
+
+    test('does not install a stale socket after a newer forced attempt', () async {
+      final provider = _GatedSocketCaptureProvider();
+      provider.returnSockets = true;
+
+      final first = startAttempt(provider);
+      await settle();
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      provider.release(1);
+      try {
+        await forced;
+      } catch (error) {
+        expect(error, isA<StateError>());
+      }
+      expect(provider.lastSubscribedId, 1);
+
+      provider.release(0);
+      await first;
+      expect(provider.lastSubscribedId, 1);
       provider.dispose();
     });
 
