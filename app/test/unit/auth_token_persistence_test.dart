@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -114,6 +116,14 @@ void main() {
     expect(storage.value, isNull);
     expect(preferences.containsKey('authTokenDeletePending'), isFalse);
   });
+
+  test('startup completes when secure storage is unavailable', () async {
+    SharedPreferencesUtil.setAuthTokenStorageForTesting(_HangingAuthTokenStorage());
+    SharedPreferences.setMockInitialValues({});
+
+    await expectLater(SharedPreferencesUtil.init(), completes);
+    expect(SharedPreferencesUtil().authToken, isEmpty);
+  });
 }
 
 final class _FakeAuthTokenStorage implements AuthTokenStorage {
@@ -163,4 +173,15 @@ final class _FakeAuthTokenGateway implements AuthTokenGateway {
     signOutCalls++;
     user = null;
   }
+}
+
+final class _HangingAuthTokenStorage implements AuthTokenStorage {
+  @override
+  Future<String?> read() => Completer<String?>().future;
+
+  @override
+  Future<void> write(String value) => Completer<void>().future;
+
+  @override
+  Future<void> delete() => Completer<void>().future;
 }

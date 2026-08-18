@@ -48,7 +48,7 @@ final class AuthTokenPersistence {
   Future<T> _withRetry<T>(Future<T> Function() operation, String label, {int maxAttempts = 3}) async {
     for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await operation();
+        return await operation().timeout(const Duration(seconds: 1));
       } catch (e) {
         if (attempt == maxAttempts) rethrow;
         await Future.delayed(Duration(milliseconds: 100 * attempt));
