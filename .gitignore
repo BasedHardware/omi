@@ -7,7 +7,6 @@
 !.env.prod.template
 !.env.offline.template
 !.envrc.example
-.personal_configs/
 *__pycache__/
 *venv/
 libraries/
