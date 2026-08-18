@@ -72,6 +72,9 @@ VERTEX_PT_TARGET_MODEL = ptr.PT_MODEL_TARGET
 _PT_MODEL_OVERRIDE_ENV = 'OMI_VERTEX_PT_MODEL'
 _OVERFLOW_MODEL_OVERRIDE_ENV = 'OMI_GEMINI_OVERFLOW_MODEL'
 _OVERFLOW_ENABLED_ENV = 'OMI_GEMINI_OVERFLOW_ENABLED'
+# Data-residency pin for the families that have no regional endpoint. `us`
+# keeps inference in the US multi-region; `global` would widen it worldwide.
+_MULTI_REGION_LOCATION_ENV = 'OMI_VERTEX_GLOBAL_LOCATION'
 # How long a PT-capacity observation is trusted before it is re-probed. Bounds
 # both the promotion delay after the order lands and the cost of probing.
 _PT_PROBE_TTL_SECONDS = 600.0
@@ -279,8 +282,11 @@ def _safe_revision(value: object) -> str:
 
 
 def _safe_region(value: object) -> str:
+    # Regional (`us-central1`) and multi-region (`us`, `eu`, `global`) labels
+    # are both legitimate now that 3.x traffic is addressed multi-region, so
+    # the bare form must survive telemetry instead of being logged as 'none'.
     text = str(value or '').strip().lower()
-    return text if text == 'global' or re.fullmatch(r'[a-z]+(?:-[a-z0-9]+)+', text) else 'none'
+    return text if re.fullmatch(r'[a-z]{2,16}(?:-[a-z0-9]{1,16}){0,2}', text) else 'none'
 
 
 def _status_class(status: int | None) -> str:
@@ -367,7 +373,6 @@ def _sanitize(
     action: str,
     *,
     max_output_tokens: int = _MAX_OUTPUT_TOKENS,
-    model: str = '',
 ) -> bytes:
     try:
         payload = json.loads(body)
@@ -410,7 +415,7 @@ def _sanitize(
         if not generation_configs:
             payload['generationConfig'] = {
                 'maxOutputTokens': max_output_tokens,
-                'thinkingConfig': ptr.thinking_config_for(model, budget=_DEFAULT_THINKING_BUDGET),
+                'thinkingConfig': ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET),
             }
         for config in generation_configs:
             for key in ('candidate_count', 'candidateCount'):
@@ -427,7 +432,7 @@ def _sanitize(
             if not output_key_present:
                 config['maxOutputTokens'] = max_output_tokens
             if 'thinking_config' not in config and 'thinkingConfig' not in config:
-                config['thinkingConfig'] = ptr.thinking_config_for(model, budget=_DEFAULT_THINKING_BUDGET)
+                config['thinkingConfig'] = ptr.thinking_config_for(budget=_DEFAULT_THINKING_BUDGET)
     return json.dumps(payload, separators=(',', ':')).encode()
 
 
@@ -449,16 +454,73 @@ def _use_vertex_ai() -> bool:
 # safely — requests 429 and overflow absorbs them — and the operator override
 # pins the model outright if that is ever not enough.
 _pt_target_ready = False
-# None means "never probed", which is distinct from "probed at monotonic 0".
-# time.monotonic() is measured from an arbitrary origin — on a freshly started
-# container it can legitimately be smaller than the TTL, so seeding this with
-# 0.0 would suppress the first probe for the first _PT_PROBE_TTL_SECONDS of
-# process uptime on every new instance.
+# Learned reachability, per model. A model is entered here only when a real
+# `generateContent` attempt came back "no such publisher model", and the entry
+# expires on the same TTL as capacity so a routing fix or a serving change
+# recovers with no deploy.
+#
+# Reachability is deliberately NOT probed at startup. The metadata endpoint
+# `GET .../publishers/google/models/{m}` is not an oracle — it 404s for
+# `gemini-2.5-flash-lite`, which works — so the only honest signal is a real
+# inference attempt, and burning one per model per instance is unaffordable on
+# Cloud Run, which churns instances constantly. Traffic teaches this table.
+#
+# Absent key means "never observed unreachable", which is distinct from
+# "observed at monotonic 0". time.monotonic() is measured from an arbitrary
+# origin — on a freshly started container it can legitimately be smaller than
+# the TTL, so seeding an observation with 0.0 would mark a model dead for the
+# first _PT_PROBE_TTL_SECONDS of every new instance's life.
+_model_unavailable_at: dict[str, float] = {}
+# None means "never probed", same sentinel rule as above.
 _pt_target_probed_at: float | None = None
 
 
 def _pt_target_is_ready() -> bool:
-    return _pt_target_ready
+    return _pt_target_ready and _model_believed_available(VERTEX_PT_TARGET_MODEL)
+
+
+def _model_believed_available(model: str) -> bool:
+    observed = _model_unavailable_at.get(model)
+    if observed is None:
+        return True
+    return (time.monotonic() - observed) >= _PT_PROBE_TTL_SECONDS
+
+
+def _unreachable_models() -> frozenset[str]:
+    return frozenset(model for model in _model_unavailable_at if not _model_believed_available(model))
+
+
+def _learns_reachability() -> bool:
+    """Whether the current request may teach the reachability table.
+
+    BYOK traffic goes to AI Studio on the user's own key, so its answers say
+    nothing about what this project can reach on Vertex. One user's key must
+    never be able to latch a model dead for the whole fleet.
+    """
+    return not get_byok_key('gemini')
+
+
+def _record_model_unavailable(model: str) -> None:
+    global _pt_target_ready
+    if not _learns_reachability():
+        return
+    if _model_believed_available(model):
+        print(
+            f'desktop_proxy model_unreachable model={model} '
+            f'location={_vertex_location(model)} reason=publisher_model_not_found_at_endpoint',
+            file=sys.stderr,
+            flush=True,
+        )
+    _model_unavailable_at[model] = time.monotonic()
+    if model == VERTEX_PT_TARGET_MODEL:
+        # A model that cannot be reached cannot be holding prepaid capacity.
+        _pt_target_ready = False
+
+
+def _record_model_available(model: str) -> None:
+    if not _learns_reachability():
+        return
+    _model_unavailable_at.pop(model, None)
 
 
 def _pt_probe_due() -> bool:
@@ -496,12 +558,36 @@ def _provisioned_model() -> str:
     )
 
 
-def _overflow_model(pt_model: str) -> str:
-    return ptr.resolve_overflow_model(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
-
-
 def _overflow_enabled() -> bool:
     return os.getenv(_OVERFLOW_ENABLED_ENV, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
+def _fallback_chain(model: str) -> tuple[str, ...]:
+    """Reachable models that may serve `model`'s traffic, best first."""
+    try:
+        return ptr.resolve_fallback_chain(
+            model=model,
+            pt_model=_provisioned_model(),
+            unreachable=_unreachable_models(),
+            override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
+        )
+    except ValueError:
+        return ()
+
+
+def _first_reachable(model: str) -> str:
+    """`model`, or the best rung of its chain if traffic has proved it dead.
+
+    Falling back before dispatch is what keeps a known-unreachable model from
+    costing a wasted round trip on every single request.
+    """
+    if _model_believed_available(model):
+        return model
+    for candidate in _fallback_chain(model):
+        return candidate
+    # Nothing declared and reachable. Keep the request honest and let the
+    # provider answer rather than inventing a substitute.
+    return model
 
 
 def _serving_model(model: str) -> str:
@@ -513,17 +599,24 @@ def _serving_model(model: str) -> str:
       gemini-2.5-pro   -> gemini-3.1-flash-lite  ($10.00 -> $1.50 out)
       gemini-2.5-flash -> whichever model holds prepaid capacity
 
+    Whatever comes out is then resolved against learned reachability, so a
+    model traffic has proved uncallable is stepped past using its declared
+    chain instead of failing the request.
+
     Client-pinned gemini-2.5-flash-lite lanes are deliberately untouched:
     gemini-3.1-flash-lite costs 3.75x more per output token, so promoting those
-    lanes would be a large cost regression, not a saving.
+    lanes would be a large cost regression, not a saving. Its chain is empty
+    for exactly that reason.
     """
     if get_byok_key('gemini'):
         return model
     if model == 'gemini-2.5-pro':
-        return VERTEX_PT_TARGET_MODEL
-    if model == ptr.PT_MODEL_CURRENT:
-        return _provisioned_model()
-    return model
+        intended = VERTEX_PT_TARGET_MODEL
+    elif model == ptr.PT_MODEL_CURRENT:
+        intended = _provisioned_model()
+    else:
+        intended = model
+    return _first_reachable(intended)
 
 
 def _retarget_path(path: str, model: str, action: str) -> str:
@@ -531,34 +624,6 @@ def _retarget_path(path: str, model: str, action: str) -> str:
     if served == model:
         return path
     return f'models/{served}:{action}'
-
-
-def _retarget_thinking(body: bytes, model: str) -> bytes:
-    """Rewrite thinkingConfig for a model in a different family.
-
-    Overflow crosses families (gemini-2.5-flash -> gemini-3.1-flash-lite), and
-    a 2.5-style integer budget is schema-valid but ignored on 3.x, so leaving
-    it in place would uncap reasoning tokens that bill as output.
-    """
-    try:
-        payload = json.loads(body)
-    except (TypeError, ValueError):
-        return body
-    if not isinstance(payload, dict):
-        return body
-    replacement = ptr.thinking_config_for(model, budget=_DEFAULT_THINKING_BUDGET)
-    changed = False
-    for key in ('generation_config', 'generationConfig'):
-        config = payload.get(key)
-        if not isinstance(config, dict):
-            continue
-        for thinking_key in ('thinking_config', 'thinkingConfig'):
-            if thinking_key in config:
-                config[thinking_key] = dict(replacement)
-                changed = True
-    if not changed:
-        return body
-    return json.dumps(payload, separators=(',', ':')).encode()
 
 
 def _server_paid_flash_text(model: str, action: str) -> bool:
@@ -579,12 +644,49 @@ def _vertex_required(model: str, action: str) -> bool:
     return _server_paid_flash_text(model, action) or _use_vertex_ai()
 
 
+def _regional_location() -> str:
+    return os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION
+
+
+def _multi_region_location() -> str:
+    """Multi-region for the model families that have no regional endpoint.
+
+    Defaults to `us`, not `global`: both answer, but `global` may serve from
+    anywhere in the world while every other server-paid call in this service
+    runs in `us-central1`. Widening the residency of users' conversations and
+    transcripts is an operator decision, so it is one env flip and not a
+    literal buried in a URL builder.
+    """
+    return os.getenv(_MULTI_REGION_LOCATION_ENV, ptr.MULTI_REGION_LOCATION).strip() or ptr.MULTI_REGION_LOCATION
+
+
+def _vertex_endpoint(model: str) -> tuple[str, str]:
+    """The (host, location) a model is actually addressed at.
+
+    Per model, never per process: `gemini-3.x` has no regional endpoint, so a
+    fallback chain that crosses families also crosses endpoints.
+    """
+    return ptr.vertex_endpoint(
+        model=model,
+        regional_location=_regional_location(),
+        multi_region_location=_multi_region_location(),
+    )
+
+
+def _vertex_location(model: str) -> str:
+    return _vertex_endpoint(model)[1]
+
+
 def _vertex_url(model: str, action: str) -> str | None:
     project = os.getenv('GOOGLE_CLOUD_PROJECT', '').strip()
     if model not in _VERTEX_MODELS or action not in _VERTEX_ACTIONS or not project:
         return None
-    location = os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION
-    return f'https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{action}'
+    # Gemini 3.x has no regional endpoint: it needs the un-prefixed host plus a
+    # multi-region `locations/{loc}`. Building a regional URL for it is what
+    # made every 3.x request 404 in production on 2026-08-18 while the model
+    # itself was perfectly callable.
+    host, location = _vertex_endpoint(model)
+    return f'https://{host}/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{action}'
 
 
 def _studio_url(path: str) -> str:
@@ -639,7 +741,7 @@ async def _upstream(
             query,
             'vertex_ai',
             'application_default_credentials',
-            os.getenv('GCP_LOCATION', VERTEX_PT_LOCATION).strip() or VERTEX_PT_LOCATION,
+            _vertex_location(model),
         )
     if _vertex_required(model, action):
         # Missing GOOGLE_CLOUD_PROJECT is the 2026-08-04 production bug: Flash
@@ -675,14 +777,42 @@ def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
     if served_model != pt_model:
         return []
     try:
-        overflow = _overflow_model(pt_model)
+        ladder = ptr.resolve_overflow_ladder(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
     except ValueError:
         return []
     plan: list[tuple[str, str]] = []
-    if overflow == ptr.PT_MODEL_TARGET and _pt_probe_due():
-        plan.append((overflow, ptr.REQUEST_TYPE_DEDICATED))
-    plan.append((overflow, ptr.REQUEST_TYPE_SHARED))
+    for rung in ladder:
+        if not _model_believed_available(rung):
+            # Skip a rung traffic has proved unreachable; trying it would spend
+            # a round trip to fail on every single overflow request.
+            continue
+        if rung == ptr.PT_MODEL_TARGET and _pt_probe_due():
+            plan.append((rung, ptr.REQUEST_TYPE_DEDICATED))
+        plan.append((rung, ptr.REQUEST_TYPE_SHARED))
     return plan
+
+
+def _recovery_plan(served_model: str, status: int, message: str) -> list[tuple[str, str]]:
+    """Attempts to make after a response this proxy can route around.
+
+    Two distinct recoverable conditions, for ANY routable model rather than
+    just the migration target:
+      * the model is not reachable  -> latch the observation so later requests
+        skip it entirely, and walk its declared fallback chain
+      * the reservation is full     -> walk the overflow ladder
+
+    BYOK responses teach this proxy nothing: they come from a different
+    provider and a different project, so one user's key must never latch a
+    model dead for everyone.
+    """
+    if get_byok_key('gemini'):
+        return []
+    if ptr.is_model_unavailable(status, message):
+        _record_model_unavailable(served_model)
+        return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model)]
+    if _overflow_triggered(status, message):
+        return _overflow_plan(served_model)
+    return []
 
 
 def _overflow_triggered(status: int, message: str) -> bool:
@@ -1007,15 +1137,21 @@ async def _stream_provider(
                 held = True
             telemetry.phase = 'first_byte'
             if upstream.status_code < 400:
+                # Positive proof of reachability, which is the only kind this
+                # proxy trusts. Clears any stale latch on this model.
+                _record_model_available(attempt_model)
                 break
             # The body carries the difference between 'reservation full' and
             # ordinary rate limiting, and a streamed error body is not read yet.
             await upstream.aread()
+            unavailable = ptr.is_model_unavailable(upstream.status_code, upstream.text)
             exhausted = _overflow_triggered(upstream.status_code, upstream.text)
-            if capacity == ptr.REQUEST_TYPE_DEDICATED:
+            if capacity == ptr.REQUEST_TYPE_DEDICATED and not unavailable:
                 _record_pt_target_observation(not exhausted)
-            if exhausted and not pending and query is not None:
-                for overflow_model, overflow_capacity in _overflow_plan(attempt_model):
+            if not pending and query is not None:
+                for overflow_model, overflow_capacity in _recovery_plan(
+                    attempt_model, upstream.status_code, upstream.text
+                ):
                     pending.append(
                         (
                             await _upstream(
@@ -1025,7 +1161,7 @@ async def _stream_provider(
                                 dict(query),
                                 request_type=overflow_capacity,
                             ),
-                            _retarget_thinking(body, overflow_model),
+                            body,
                             overflow_model,
                             overflow_capacity,
                         )
@@ -1111,7 +1247,7 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
         _, model, action = _path_parts(path)
         telemetry.model = model
         telemetry.action = action
-        body = _sanitize(body, action, max_output_tokens=_output_token_cap(), model=model)
+        body = _sanitize(body, action, max_output_tokens=_output_token_cap())
         telemetry.shape = _payload_shape(body)
     except HTTPException as exc:
         outcome = 'rate_limited' if exc.status_code == 429 else 'validation_rejected'
@@ -1163,22 +1299,29 @@ async def _proxy(request: Request, path: str, streaming: bool, uid: str) -> Resp
                     semaphore.release()
 
             response = await _cancel_on_disconnect(request, post(route, body))
-            if _overflow_triggered(response.status_code, response.text):
+            if response.status_code < 400:
+                _record_model_available(model)
+            recovery = _recovery_plan(model, response.status_code, response.text)
+            if recovery:
                 query = dict(request.query_params)
-                for overflow_model, capacity in _overflow_plan(model):
+                for overflow_model, capacity in recovery:
                     overflow_path = f'models/{overflow_model}:{action}'
-                    overflow_body = _retarget_thinking(body, overflow_model)
                     overflow_route = await _upstream(
                         overflow_path, overflow_model, action, query, request_type=capacity
                     )
                     telemetry.set_route(overflow_route)
                     telemetry.model = overflow_model
-                    response = await _cancel_on_disconnect(request, post(overflow_route, overflow_body))
+                    response = await _cancel_on_disconnect(request, post(overflow_route, body))
                     probing = capacity == ptr.REQUEST_TYPE_DEDICATED
+                    unavailable = ptr.is_model_unavailable(response.status_code, response.text)
                     exhausted = _overflow_triggered(response.status_code, response.text)
-                    if probing:
+                    if unavailable:
+                        _record_model_unavailable(overflow_model)
+                    elif response.status_code < 400:
+                        _record_model_available(overflow_model)
+                    if probing and not unavailable:
                         _record_pt_target_observation(not exhausted)
-                    if not exhausted:
+                    if not exhausted and not unavailable:
                         break
             telemetry.phase = 'body'
     except HTTPException as exc:
