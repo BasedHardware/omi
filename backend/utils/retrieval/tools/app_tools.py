@@ -231,6 +231,18 @@ def create_app_tool(
                     cb.record_success()
                     await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_MCP_TOOL)
                 return result
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                action = await run_blocking(
+                    db_executor,
+                    record_app_webhook_failure,
+                    app_id,
+                    status_code,
+                    f'HTTP {status_code}',
+                    ENDPOINT_MCP_TOOL,
+                )
+                await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, f'HTTP {status_code}')
+                return f'Error calling MCP tool {app_tool.name}: HTTP {status_code}'
             except Exception as e:
                 cb.record_failure()
                 action = await run_blocking(

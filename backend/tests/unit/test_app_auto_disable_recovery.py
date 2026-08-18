@@ -189,10 +189,14 @@ class TestReEnableHealthCheckMatchesDelivery:
         with patch('utils.apps.httpx.request', return_value=httpx.Response(200)):
             validate_app_endpoints_for_reenable(app, {}, 'app-1')
 
-    def test_redirecting_mcp_server_is_allowed(self):
+    def test_redirecting_mcp_server_is_rejected(self):
         app = {'external_integration': {'mcp_server_url': 'https://mcp.example.com/mcp'}}
         with patch('utils.apps.httpx.request', return_value=httpx.Response(307)):
-            validate_app_endpoints_for_reenable(app, {}, 'app-1')
+            with pytest.raises(HTTPException) as exc:
+                validate_app_endpoints_for_reenable(app, {}, 'app-1')
+
+        assert exc.value.status_code == 400
+        assert 'redirect' in exc.value.detail.lower()
 
 
 class TestBlockedInstallExplainsItself:
