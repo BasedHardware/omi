@@ -682,7 +682,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users, 'should_show_new_plans', lambda _platform, _version: True)
         monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {})
         monkeypatch.setattr(users, 'get_paid_plan_definitions', lambda: [])
-        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False)
+        monkeypatch.setattr(users, 'has_ever_purchased', lambda _uid, _subscription: False, raising=False)
         monkeypatch.setattr(users, 'filter_plans_for_user', lambda _definitions, _plan, **_kwargs: [])
         monkeypatch.setattr(users, 'should_hide_subscription_ui', lambda _uid, _platform, _version: False)
         monkeypatch.setattr(
