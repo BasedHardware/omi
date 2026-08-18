@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Require desktop user-facing PRs to add an unreleased changelog fragment."""
+"""Require desktop user-facing PRs to add an unreleased changelog fragment.
+
+Lane semantics: the pull_request/local lanes enforce the diff-scoped rule (the
+no-changelog-needed label is visible there). On the post-merge push lane PR
+labels are invisible, so the rule was already enforced by the PR lane and is
+skipped; the release lane's tree-fragment contract still applies (#11710).
+"""
 
 from __future__ import annotations
 
@@ -125,6 +131,19 @@ def tree_has_unreleased_fragment(head_ref: str) -> bool:
     return bool(fragment_paths)
 
 
+def is_push_lane() -> bool:
+    """Whether this run is the post-merge push lane, where PR labels are invisible.
+
+    main is merge-protected, so every push is a merge whose pull_request lane
+    already gated the diff-scoped rule with full no-changelog-needed label
+    context. Re-running that rule here — where labels cannot be read — only
+    false-reds main (#11710: the first internal-only desktop PR after a release
+    consolidation empties unreleased/). The release lane keeps its own
+    tree-fragment contract via --accept-tree-fragments.
+    """
+    return os.getenv("GITHUB_EVENT_NAME") == "push"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", required=True, help="Base git ref, usually origin/main")
@@ -156,12 +175,25 @@ def main() -> int:
         print("No desktop changes require a changelog entry.")
         return 0
 
-    if has_new_unreleased_fragment(args.base, args.head):
+    if not is_push_lane() and has_new_unreleased_fragment(args.base, args.head):
         print("Desktop changelog fragment found.")
         return 0
 
+    # The release lane passes when the NEXT RELEASE has notes — a valid fragment
+    # already in the tree — regardless of which push landed it (#11373).
     if args.accept_tree_fragments and tree_has_unreleased_fragment(args.head):
         print("Release lane: unreleased changelog fragments already present in the tree.")
+        return 0
+
+    if is_push_lane() and not args.accept_tree_fragments:
+        # Hygiene double-enforcement: the pull_request lane already evaluated
+        # this diff with full no-changelog-needed label context, and main is
+        # merge-protected, so a label-blind re-run here can only false-red
+        # (#11710). The release lane above still asserts the tree contract.
+        print(
+            "Push lane: the pull_request lane already enforced the diff-scoped "
+            "changelog gate (PR labels are invisible here)."
+        )
         return 0
 
     print("FAIL: desktop changes require an unreleased changelog fragment.", file=sys.stderr)

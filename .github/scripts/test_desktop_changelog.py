@@ -11,6 +11,8 @@ on every platform.
 from __future__ import annotations
 
 import importlib.util
+import os
+import sys
 import tempfile
 import unittest
 import unittest.mock
@@ -125,6 +127,77 @@ class ChangelogRequirementTests(unittest.TestCase):
         with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
             with self.assertRaises(SystemExit):
                 checker.tree_has_unreleased_fragment("HEAD")
+
+
+class PushLaneTests(unittest.TestCase):
+    """Regression coverage for #11710: the post-merge push lane reddened main.
+
+    On main pushes, GITHUB_EVENT_NAME == "push" and the merged PR's
+    no-changelog-needed label is invisible, so re-running the diff-scoped rule
+    is a blind evaluation that only false-reds (the first internal-only desktop
+    PR after a release consolidation empties unreleased/). The pull_request lane
+    already gated the diff with real label context, and the release lane keeps
+    its own tree-fragment contract.
+    """
+
+    def _git_runner(self, tree_fragment: str = "") -> object:
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "diff" and "--name-status" in args:
+                return ""
+            if args[0] == "diff" and "--name-only" in args:
+                return "desktop/macos/Desktop/Sources/AppDelegate.swift\n"
+            if args[0] == "ls-tree":
+                return tree_fragment
+            if args[0] == "show":
+                return '{"change": "Fixed a thing"}'
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        return fake_git
+
+    def _run_main(self, *, event_name: str, accept_tree_fragments: bool) -> int:
+        env = {"GITHUB_EVENT_NAME": event_name}
+        if accept_tree_fragments:
+            env["DESKTOP_CHANGELOG_ACCEPT_TREE_FRAGMENTS"] = "1"
+        argv = [
+            ".github/scripts/check-desktop-changelog.py",
+            "--base",
+            "BASE",
+            "--head",
+            "HEAD",
+        ]
+        with (
+            unittest.mock.patch.object(sys, "argv", argv),
+            unittest.mock.patch.dict(os.environ, env),
+        ):
+            return checker.main()
+
+    def test_push_lane_skips_diff_scoped_rule_when_labels_are_invisible(self) -> None:
+        # Regression for #11710: a no-changelog-needed desktop-source PR merge
+        # reddened main on the Hygiene push lane because the label is invisible
+        # there. The pull_request lane already enforced the rule; the push run
+        # must pass even with no new fragment and no tree fragment.
+        with unittest.mock.patch.object(checker, "run_git", side_effect=self._git_runner()):
+            self.assertEqual(
+                self._run_main(event_name="push", accept_tree_fragments=False), 0
+            )
+
+    def test_push_lane_release_contract_still_requires_a_tree_fragment(self) -> None:
+        # The release lane (DESKTOP_CHANGELOG_ACCEPT_TREE_FRAGMENTS=1) must keep
+        # asserting the NEXT RELEASE has notes even on push: an empty
+        # unreleased/ dir still blocks the release proof (#11710).
+        with unittest.mock.patch.object(checker, "run_git", side_effect=self._git_runner()):
+            self.assertEqual(
+                self._run_main(event_name="push", accept_tree_fragments=True), 1
+            )
+
+    def test_pr_lane_still_enforces_the_diff_scoped_rule(self) -> None:
+        # The push-lane exemption must not leak into the pull_request lane: a
+        # user-facing desktop change without a fragment (or no-changelog-needed
+        # label) still fails there.
+        with unittest.mock.patch.object(checker, "run_git", side_effect=self._git_runner()):
+            self.assertEqual(
+                self._run_main(event_name="pull_request", accept_tree_fragments=False), 1
+            )
 
 
 if __name__ == "__main__":
