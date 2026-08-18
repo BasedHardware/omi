@@ -179,6 +179,36 @@ def test_mixed_read_deduplicates_canonical_public_identity(service_mod, monkeypa
     assert next(item for item in result if item.id == "same").content == "canonical"
 
 
+def test_mixed_read_does_not_hydrate_canonical_identity_from_historical_stub(service_mod, monkeypatch):
+    """Index stubs share migrated ids. Hydrating the suppressed prefix would
+    replace the canonical row with the grandfathered document, or drop it."""
+    service = service_mod.MemoryService(db_client=_Db())
+    canonical = _memory(service_mod, "same", content="canonical")
+    service._canonical.read = MagicMock(return_value=[canonical])
+    colliding_stub = service_mod.HistoricalMemoryRecord(
+        memory=_memory(service_mod, "same", content=""),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "same"),
+        hydrated=False,
+    )
+    legacy_stub = service_mod.HistoricalMemoryRecord(
+        memory=_memory(service_mod, "legacy", content=""),
+        locator=service_mod.MemoryLocator("uid-test", "legacy", "legacy"),
+        hydrated=False,
+    )
+    service.history.read = MagicMock(return_value=[colliding_stub, legacy_stub])
+
+    def hydrate_page_stubs(_uid, records):
+        assert [record.memory.id for record in records] == ["legacy"]
+        return [_historical(service_mod, "legacy", content="legacy-full")]
+
+    monkeypatch.setattr(service.history, "_hydrate_records", hydrate_page_stubs)
+
+    result = service.read("uid-test", limit=10)
+    assert {item.id for item in result} == {"same", "legacy"}
+    assert next(item for item in result if item.id == "same").content == "canonical"
+    assert next(item for item in result if item.id == "legacy").content == "legacy-full"
+
+
 def test_canonical_read_preserves_lock_and_returns_only_a_preview(service_mod, monkeypatch):
     backend = service_mod.CanonicalMemoryBackend(db_client=_Db())
     secret = "LOCKED_SECRET_CONTENT_" * 10

@@ -1671,6 +1671,7 @@ class MemoryService:
         # one request, so ask for each memory id exactly once.
         statuses: Dict[str, MemoryItemStatus] = {}
         status_ids_read: Set[str] = set()
+        kept_stub_ids: Set[str] = set()
         while True:
             historical = self.history.read(
                 uid,
@@ -1683,6 +1684,7 @@ class MemoryService:
             identity_suppressed = 0
             state_suppressed = 0
             historical_kept = 0
+            kept_stub_ids = set()
             unread_ids = [
                 record.memory.id
                 for record in historical
@@ -1705,6 +1707,8 @@ class MemoryService:
                     continue
                 merged.append(record.memory)
                 historical_kept += 1
+                if not record.hydrated:
+                    kept_stub_ids.add(record.memory.id)
             self._sort_memories(merged)
 
             historical_exhausted = len(historical) < historical_limit
@@ -1741,9 +1745,8 @@ class MemoryService:
         if state_suppressed:
             MEMORY_HISTORICAL_SUPPRESSION_TOTAL.labels(reason="canonical_state").inc(state_suppressed)
         page = merged[bounded_offset : bounded_offset + bounded_limit]
-        stub_ids = {record.memory.id for record in historical if not record.hydrated}
-        if stub_ids:
-            page = self._hydrate_merged_historical_stubs(uid, page, stub_ids)
+        if kept_stub_ids:
+            page = self._hydrate_merged_historical_stubs(uid, page, kept_stub_ids)
         return page
 
     def _hydrate_merged_historical_stubs(
@@ -1754,8 +1757,10 @@ class MemoryService:
     ) -> List[MemoryDB]:
         """Replace mixed-list historical stubs with decrypted documents.
 
-        Canonical rows on the page are already hydrated. Index stubs exist so
-        expansion can suppress and sort without decrypting the prefix.
+        ``stub_ids`` must be ids that were actually appended from historical,
+        not the suppressed prefix. Migrated memories share ids across stores;
+        hydrating every historical stub id would replace (or drop) the
+        canonical row that already won identity suppression.
         """
         page_stub_ids = [memory.id for memory in page if memory.id in stub_ids]
         if not page_stub_ids:
