@@ -170,6 +170,18 @@ detect_with_fixture() {
 
 echo "detect_apple_team_id candidate filter:"
 
+# The real matching path extracts each embedded certificate with `plutil
+# -extract ... raw`, which is macOS-only — there is no Linux equivalent, and
+# this repo's CI runs shell tests on an Ubuntu runner. Without it, every
+# candidate certificate silently fails to decode and the function always
+# reports "no match": the two sub-tests below that expect rejection would
+# pass for the wrong reason (a broken matcher rejects everything, not just
+# the intended case), so skip the whole section rather than let those give a
+# false signal.
+if ! command -v plutil >/dev/null 2>&1; then
+  echo "  skip - candidate filtering needs plutil (macOS-only, unavailable on this host)"
+else
+
 # 1. The profile's team is offered when we hold its embedded certificate, even
 #    though that certificate's common name names a DIFFERENT team. This is the
 #    case the old name-matching check rejected.
@@ -220,6 +232,7 @@ if [ "$rc" -ne 0 ]; then
   pass "ignores a Mac-only Developer ID identity (rc=$rc)"
 else
   fail "accepted a team backed only by a Developer ID Application certificate"
+fi
 fi
 
 echo
