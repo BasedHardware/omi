@@ -67,6 +67,22 @@ def test_user_limit_must_be_nonnegative():
         migrate_conversation_language._build_parser().parse_args(['--limit', '-1'])
 
 
+def test_user_pages_are_bounded_and_resume_after_last_document():
+    first_page = [MagicMock(id='a'), MagicMock(id='b')]
+    second_page = [MagicMock(id='c')]
+    firestore_client = MagicMock()
+    users_query = firestore_client.collection.return_value.order_by.return_value
+    first_query = users_query
+    second_query = users_query.start_after.return_value
+    first_query.limit.return_value.stream.return_value = first_page
+    second_query.limit.return_value.stream.return_value = second_page
+
+    assert list(migrate_conversation_language._iter_user_pages(firestore_client, page_size=2)) == [['a', 'b'], ['c']]
+    users_query.start_after.assert_called_once_with(first_page[-1])
+    first_query.limit.assert_called_once_with(2)
+    second_query.limit.assert_called_once_with(2)
+
+
 def test_empty_uid_is_rejected_before_user_enumeration(monkeypatch):
     monkeypatch.setattr('sys.argv', ['migrate_conversation_language', '--uid', '  '])
 

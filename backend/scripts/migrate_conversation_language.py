@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """One-time migration: set default 'en' language for conversations from the Friend source.
 
 The Friend source will now use 'en' as the default language. This script updates
@@ -7,11 +8,27 @@ any existing conversations with source 'friend' or 'friend_com' that have a null
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterator, List
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client, get_users_uid
+from database._client import get_firestore_client
+
+USER_PAGE_SIZE = 1000
+
+
+def _iter_user_pages(firestore_client: Any, page_size: int = USER_PAGE_SIZE) -> Iterator[List[str]]:
+    users_query = firestore_client.collection('users').order_by('__name__')
+    cursor = None
+    while True:
+        page_query = users_query.start_after(cursor) if cursor is not None else users_query
+        documents = list(page_query.limit(page_size).stream())
+        if not documents:
+            return
+        yield [str(document.id) for document in documents]
+        if len(documents) < page_size:
+            return
+        cursor = documents[-1]
 
 
 def _positive_int(value: str) -> int:
@@ -77,29 +94,38 @@ def main() -> int:
     if args.uid is not None:
         if not args.uid.strip():
             parser.error('--uid must not be empty')
-        uids = [args.uid.strip()]
+        firestore_client = get_firestore_client()
+        user_pages = iter([[args.uid.strip()]])
     else:
-        uids = get_users_uid()
-        if args.limit:
-            uids = uids[: args.limit]
-    print(f'Processing {len(uids)} user(s) with {args.workers} workers')
+        firestore_client = get_firestore_client()
+        user_pages = _iter_user_pages(firestore_client)
+    total_label = '1' if args.uid is not None else (str(args.limit) if args.limit else 'all')
+    print(f'Processing {total_label} user(s) with {args.workers} workers')
 
-    results: List[Dict[str, Any]] = []
-    firestore_client = get_firestore_client()
+    users_scanned = 0
+    convs_fixed = 0
+    users_with_fixes = 0
+    errors: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = [executor.submit(process_user, uid, args.dry_run, firestore_client) for uid in uids]
-        for i, future in enumerate(futures):
-            results.append(future.result())
-            if (i + 1) % 1000 == 0:
-                done = sum(r['fixed'] for r in results)
-                print(f'  processed {i + 1}/{len(uids)} users, convs_fixed={done}...', flush=True)
-
-    convs_fixed = sum(r['fixed'] for r in results)
-    users_with_fixes = sum(1 for r in results if r['fixed'])
-    errors: List[Dict[str, Any]] = [r for r in results if r['status'].startswith('error')]
+        for page in user_pages:
+            if args.limit:
+                remaining = args.limit - users_scanned
+                if remaining <= 0:
+                    break
+                page = page[:remaining]
+            futures = [executor.submit(process_user, uid, args.dry_run, firestore_client) for uid in page]
+            for future in futures:
+                result = future.result()
+                users_scanned += 1
+                convs_fixed += result['fixed']
+                users_with_fixes += bool(result['fixed'])
+                if result['status'].startswith('error'):
+                    errors.append(result)
+                if users_scanned % 1000 == 0:
+                    print(f'  processed {users_scanned}/{total_label} users, convs_fixed={convs_fixed}...', flush=True)
 
     print('=' * 60)
-    print(f'users_scanned={len(results)} users_with_fixes={users_with_fixes} convs_fixed={convs_fixed}', end='')
+    print(f'users_scanned={users_scanned} users_with_fixes={users_with_fixes} convs_fixed={convs_fixed}', end='')
     print(' (dry-run, no writes)' if args.dry_run else '')
     print(f'errors={len(errors)}')
     for r in errors:
