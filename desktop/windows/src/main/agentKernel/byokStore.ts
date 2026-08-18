@@ -12,7 +12,9 @@ import { join } from 'path'
 import { BYOK_PROVIDERS, isByokActive, type ByokKeys, type ByokProvider } from '../../shared/byok'
 
 /** On-disk shape: provider → base64-encoded safeStorage ciphertext. */
-type StoredFile = Partial<Record<ByokProvider | 'codex', string>>
+type StoredFile = Partial<Record<ByokProvider | 'codex', string>> & {
+  codexMigrationComplete?: boolean
+}
 
 /**
  * Encrypted-at-rest store for the four BYOK provider keys. Reads/writes are
@@ -60,13 +62,14 @@ export class ByokKeyStore {
 
   getCodexKey(): string | null {
     const stored = this.readFile()
-    const enc = stored.codex ?? stored.openai
+    const enc = stored.codex ?? (stored.codexMigrationComplete ? undefined : stored.openai)
     if (!enc) return null
     try {
       this.requireEncryption()
       const key = safeStorage.decryptString(Buffer.from(enc, 'base64'))
-      if (!stored.codex && stored.openai) {
+      if (!stored.codex && stored.openai && !stored.codexMigrationComplete) {
         stored.codex = stored.openai
+        stored.codexMigrationComplete = true
         this.writeFile(stored)
       }
       return key
@@ -130,8 +133,9 @@ export class ByokKeyStore {
 
   clearCodexKey(): void {
     const data = this.readFile()
-    if (!('codex' in data)) return
+    if (!('codex' in data) && data.codexMigrationComplete) return
     delete data.codex
+    data.codexMigrationComplete = true
     this.writeFile(data)
   }
 

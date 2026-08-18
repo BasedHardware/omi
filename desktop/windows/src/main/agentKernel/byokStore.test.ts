@@ -86,6 +86,14 @@ describe('ByokKeyStore', () => {
     expect(store.getCodexKey()).toBe('sk-codex')
   })
 
+  it('does not restore an OpenAI BYOK key after Codex is explicitly cleared', () => {
+    store.setKey('openai', 'sk-openai')
+    store.setCodexKey('sk-codex')
+    store.clearCodexKey()
+    expect(store.getCodexKey()).toBeNull()
+    expect(store.getKey('openai')).toBe('sk-openai')
+  })
+
   it('after sign-out (clearAll on a full set) getAllKeys is empty AND isActive is false', () => {
     // Cross-account leak guard: a second account on this install must not inherit
     // the prior user's keys (which the REST/chat/WS lanes would otherwise send).
