@@ -482,15 +482,19 @@ test('renders the collapsed reference rail and search-first desktop Home', async
   ).toHaveLength(1);
 });
 
-test('renders a pendant-first Home with a bottom-anchored search dock', async () => {
+test('renders the v4-style Home hierarchy: top pendant, live status, Currents, device management, then the bottom search dock', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();
   const output = JSON.stringify(renderer.toJSON());
 
   expect(output).toContain('Home pendant');
-  expect(output).not.toContain('Devices');
-  expect(output).not.toContain('Currents');
-  expect(output).not.toContain('QA bridge check');
+  expect(output).toContain('Omi');
+  expect(output).toContain('Checking Bluetooth…');
+  expect(output).not.toContain('82% battery');
+  expect(output).toContain('Currents');
+  expect(output).toContain('QA bridge check');
+  expect(output).toContain('Devices');
+  expect(output).toContain('Checking Bluetooth…');
   expect(output).toContain('Search Omi');
   expect(output).toContain('Home search dock');
   expect(output).not.toContain('HOME');
@@ -503,7 +507,7 @@ test('renders a pendant-first Home with a bottom-anchored search dock', async ()
     pendant.find(node => String(node.type) === 'Image').props.style,
   ).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({height: 248, width: 248}),
+      expect.objectContaining({height: 184, width: 160}),
     ]),
   );
   const dock = renderer.root.find(
@@ -513,14 +517,20 @@ test('renders a pendant-first Home with a bottom-anchored search dock', async ()
     expect.arrayContaining([expect.objectContaining({marginTop: 'auto'})]),
   );
 });
-test('keeps Home calm until a search begins, then fades in matching results', async () => {
+test('keeps search results hidden until a search begins while retaining the v4 Currents feed', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();
   const beforeSearch = JSON.stringify(renderer.toJSON());
 
   expect(beforeSearch).toContain('Home pendant');
   expect(beforeSearch).toContain('Omi');
-  expect(beforeSearch).not.toContain('QA bridge check');
+  expect(beforeSearch).toContain('Currents');
+  expect(beforeSearch).toContain('QA bridge check');
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home search results',
+    ),
+  ).toHaveLength(0);
   const search = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search Home',
   );
