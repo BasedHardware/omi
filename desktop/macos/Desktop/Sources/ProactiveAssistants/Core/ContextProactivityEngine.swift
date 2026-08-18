@@ -364,12 +364,16 @@ actor ContextProactivityEngine {
     let retrievalHopEnabled = await MainActor.run { ContextBucketsFeature.isRetrievalHopEnabled }
     let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
       snapshot: snapshot, allowLookup: retrievalHopEnabled)
+    let envSignal = await MainActor.run {
+      EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
+    }
     var uncachedPrompt =
       ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: taskContext,
         frame: currentFrame,
         recentDeliveries: recentDeliveries,
-        visitCount: snapshot.visitCount)
+        visitCount: snapshot.visitCount,
+        environmentalSignal: envSignal)
       + (workstreamSection.map { "\n\n" + $0 } ?? "")
     if candidatesEnabled {
       let selected = ContextWorkstreamPooling.selectRecent(
