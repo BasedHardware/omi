@@ -168,11 +168,9 @@ in the first two sections below; the additional tools are hosted-server tools.
 | `get_goals` | `include_inactive?` (default false) | List goals, active by default |
 | `get_chat_messages` | `limit?` (default 50), `offset?` | List recent Omi chat messages, newest first |
 | `get_people` | None | List recognized people with speaker samples |
-| `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `summary?`, `limit?` | List synced screen activity or return a per-app summary |
 | `get_daily_summaries` | `start_date?`, `end_date?`, `limit?` (default 30), `offset?` | List Omi's daily summaries, newest first |
 
-Dates use `YYYY-MM-DD`. `get_screen_activity` defaults to 200 raw rows; `limit` is ignored
-when `summary` is true.
+Dates use `YYYY-MM-DD`.
 
 ---
 

@@ -96,6 +96,7 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/auth", json={"firebaseToken": "firebase"}).status_code == 401
         assert client.post("/ping").status_code == 401
         assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
+        assert client.post("/screen-activity-status").status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
 
@@ -149,6 +150,27 @@ def test_invalid_database_upload_preserves_open_database(tmp_path: Path) -> None
     assert response.json()["detail"] == "Uploaded database is not valid SQLite"
     assert value == "preserved"
     assert not module.runtime.db_path.with_suffix(".db.uploading").exists()
+
+
+def test_database_upload_rejects_screen_data(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    uploaded = tmp_path / "uploaded.db"
+    connection = sqlite3.connect(uploaded)
+    connection.execute("CREATE TABLE screenshots (id TEXT, ocrText TEXT)")
+    connection.execute("INSERT INTO screenshots VALUES ('one', 'secret')")
+    connection.commit()
+    connection.close()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/upload?token=test-token",
+            content=uploaded.read_bytes(),
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded database contains screen activity"
+    assert not module.runtime.db_path.exists()
 
 
 def test_malformed_database_validation_closes_connection_and_temp_file(tmp_path: Path, monkeypatch) -> None:
@@ -735,21 +757,147 @@ def test_dynamic_backend_tool_request_uses_authenticated_protocol(tmp_path: Path
 def test_execute_sql_serializes_sqlite_rows(tmp_path: Path) -> None:
     _, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT, appName TEXT)")
-    connection.execute("INSERT INTO screenshots VALUES ('one', 'Safari')")
+    connection.execute("CREATE TABLE memories (id TEXT, content TEXT)")
+    connection.execute("INSERT INTO memories VALUES ('one', 'Safari')")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
-    assert json.loads(module.execute_sql("SELECT id, appName FROM screenshots")) == {
-        "rows": [{"id": "one", "appName": "Safari"}],
+    assert json.loads(module.execute_sql("SELECT id, content FROM memories")) == {
+        "rows": [{"id": "one", "content": "Safari"}],
         "count": 1,
     }
+
+
+def test_sync_bootstraps_a_fresh_vm_without_a_prior_upload(tmp_path: Path) -> None:
+    """A fresh VM with no uploaded DB must still receive non-screen tables via /sync.
+
+    Closing screen egress may leave a newly provisioned VM with no ``omi.db``
+    upload at all. Incremental sync must initialize the sanitized non-screen
+    schema itself so the remaining context (action_items, memories,
+    transcription_*, ...) can land, while screen/OCR tables stay absent.
+    """
+    app, module = load_app(tmp_path)
+    assert not module.runtime.db_path.is_file()
+    assert module.runtime.db is None
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/sync?token=test-token",
+            json={
+                "table": "memories",
+                "rows": [{"id": "one", "content": "Safari"}],
+            },
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["applied"] == 1
+
+    # The non-screen table landed and the screen data tables never got created.
+    # The TestClient lifespan closes the DB on shutdown, so re-open it to inspect.
+    assert module.runtime.open_database()
+    tables = {
+        str(row[0]) for row in module.runtime.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    assert "memories" in tables
+    assert not tables & set(module.SCREEN_DATA_TABLES)
+
+
+def test_sync_creates_a_missing_whitelisted_table_on_a_loaded_database(tmp_path: Path) -> None:
+    """A loaded DB missing one sync table must self-heal instead of failing forever.
+
+    Full database upload is retired with screen egress, so the desktop can no
+    longer repair a partial schema by re-uploading ``omi.db``. ``/sync`` owns
+    that recovery for whitelisted non-screen tables; a non-whitelisted table is
+    still rejected rather than created.
+    """
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/sync?token=test-token",
+            json={"table": "action_items", "rows": [{"id": "one", "description": "ship"}]},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["applied"] == 1
+
+        rejected = client.post(
+            "/sync?token=test-token",
+            json={"table": "screenshots", "rows": [{"id": "one", "ocrText": "secret"}]},
+        )
+        assert rejected.status_code == 400
+
+    assert module.runtime.open_database()
+    tables = {
+        str(row[0]) for row in module.runtime.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    assert "action_items" in tables
+    assert not tables & set(module.SCREEN_DATA_TABLES)
+
+
+def test_execute_sql_allows_fts5_reads(tmp_path: Path) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE VIRTUAL TABLE documents USING fts5(title, body)")
+    connection.executemany(
+        "INSERT INTO documents (title, body) VALUES (?, ?)",
+        [("one", "hello world"), ("two", "other text")],
+    )
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    assert json.loads(module.execute_sql("SELECT rowid, title FROM documents WHERE documents MATCH 'hello'")) == {
+        "rows": [{"rowid": 1, "title": "one"}],
+        "count": 1,
+    }
+
+
+def test_execute_sql_clears_authorizer_after_error(tmp_path: Path) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    result = json.loads(module.execute_sql("SELECT missing FROM screenshots"))
+
+    assert result["error"]
+    module.runtime.db.execute("CREATE TABLE after_authorizer_cleanup (value TEXT)")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "DELETE FROM screenshots",
+        "UPDATE screenshots SET id = 'changed'",
+        "SELECT 1; DROP TABLE screenshots",
+        "SELECT * FROM pragma_journal_mode()",
+    ],
+)
+def test_execute_sql_denies_destructive_queries(tmp_path: Path, query: str) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.execute("INSERT INTO screenshots VALUES ('one')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    result = json.loads(module.execute_sql(query))
+
+    assert result["error"]
+    assert [tuple(row) for row in module.runtime.db.execute("SELECT id FROM screenshots").fetchall()] == [("one",)]
 
 
 def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
     app, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY, appName TEXT, ocrText TEXT)")
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT)")
     connection.commit()
     connection.close()
     assert module.runtime.open_database()
@@ -757,30 +905,139 @@ def test_sync_groups_rows_by_present_columns(tmp_path: Path) -> None:
         response = client.post(
             "/sync?token=test-token",
             json={
-                "table": "screenshots",
+                "table": "memories",
                 "rows": [
-                    {"id": "one", "appName": "Safari"},
-                    {"id": "two", "appName": "Terminal", "ocrText": "build passed"},
+                    {"id": "one", "content": "Safari"},
+                    {"id": "two", "content": "build passed"},
                     {},
                 ],
             },
         )
-        rows = [
-            tuple(row) for row in module.runtime.db.execute("SELECT id, appName, ocrText FROM screenshots ORDER BY id")
-        ]
+        rows = [tuple(row) for row in module.runtime.db.execute("SELECT id, content FROM memories ORDER BY id")]
 
     assert response.status_code == 200
-    assert response.json() == {"applied": 2, "table": "screenshots"}
+    assert response.json() == {"applied": 2, "table": "memories"}
     assert rows == [
-        ("one", "Safari", None),
-        ("two", "Terminal", "build passed"),
+        ("one", "Safari"),
+        ("two", "build passed"),
     ]
+
+
+def test_screen_activity_status_reports_without_deleting(tmp_path: Path) -> None:
+    """Legacy screen data is reported, never destroyed.
+
+    Purging existing records is deliberately out of scope: the VM reports what
+    it holds so the desktop can fail closed, and every row stays on disk.
+    """
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE screenshots (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE focus_sessions (id TEXT PRIMARY KEY)")
+    connection.execute("CREATE TABLE ocr_texts (id TEXT PRIMARY KEY, text TEXT)")
+    connection.executemany("INSERT INTO screenshots VALUES (?)", [("s1",), ("s2",)])
+    connection.execute("INSERT INTO ocr_texts VALUES ('t1', 'secret')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    with TestClient(app) as client:
+        rejected = client.post(
+            "/sync?token=test-token",
+            json={"table": "screenshots", "rows": [{"id": "s3"}]},
+        )
+        status = client.post("/screen-activity-status?token=test-token")
+
+    assert rejected.status_code == 400
+    assert rejected.json()["detail"] == "Table 'screenshots' not in sync whitelist"
+    assert status.status_code == 200
+    assert status.json()["present"] is True
+    assert "screenshots" in status.json()["tables"]
+    assert "ocr_texts" in status.json()["tables"]
+    # Nothing was deleted: the rows and their tables are still there.
+    assert module.runtime.open_database()
+    assert module.runtime.db.execute("SELECT COUNT(*) FROM screenshots").fetchone()[0] == 2
+    assert module.runtime.db.execute("SELECT COUNT(*) FROM ocr_texts").fetchone()[0] == 1
+
+
+def test_screen_activity_status_reports_absent_on_a_clean_vm(tmp_path: Path) -> None:
+    app, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE memories (id TEXT PRIMARY KEY, content TEXT)")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    with TestClient(app) as client:
+        status = client.post("/screen-activity-status?token=test-token")
+
+    assert status.status_code == 200
+    assert status.json()["present"] is False
+    assert status.json()["tables"] == []
+
+
+def test_agent_vm_hides_and_rejects_legacy_ocr_tables(tmp_path: Path) -> None:
+    _, module = load_app(tmp_path)
+    connection = sqlite3.connect(module.runtime.db_path)
+    connection.execute("CREATE TABLE memories (id TEXT)")
+    connection.execute("CREATE TABLE ocr_texts (id TEXT, text TEXT)")
+    connection.execute("INSERT INTO ocr_texts VALUES ('t1', 'secret')")
+    connection.commit()
+    connection.close()
+    assert module.runtime.open_database()
+
+    assert json.loads(module.execute_sql("SELECT text FROM ocr_texts")) == {"error": "Screen activity is unavailable"}
+    assert "ocr_texts:" not in module.database_schema()
+    assert "memories:" in module.database_schema()
+
+
+def test_agent_session_starts_without_local_database(tmp_path: Path, monkeypatch) -> None:
+    _, module = load_app(tmp_path)
+    options = {}
+
+    class Client:
+        def __init__(self, **_):
+            return None
+
+        async def connect(self):
+            return None
+
+        async def query(self, _):
+            return None
+
+        async def disconnect(self):
+            return None
+
+        async def receive_response(self):
+            yield {"type": "result", "subtype": "success", "result": "", "total_cost_usd": 0}
+
+    def tool(*_):
+        return lambda function: function
+
+    fake_sdk = types.SimpleNamespace(
+        ClaudeAgentOptions=lambda **kwargs: options.update(kwargs) or kwargs,
+        ClaudeSDKClient=Client,
+        create_sdk_mcp_server=lambda *_args, **_kwargs: object(),
+        tool=tool,
+    )
+    monkeypatch.setitem(sys.modules, "claude_agent_sdk", fake_sdk)
+
+    class Socket:
+        async def send_json(self, _event):
+            return None
+
+    async def run() -> None:
+        session = module.AgentSession(Socket())
+        assert await session.prewarm()
+        await session.close()
+
+    asyncio.run(run())
+    assert options["allowed_tools"] == ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"]
 
 
 def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_path: Path, monkeypatch) -> None:
     _, module = load_app(tmp_path)
     connection = sqlite3.connect(module.runtime.db_path)
-    connection.execute("CREATE TABLE screenshots (id TEXT)")
+    connection.execute("CREATE TABLE memories (id TEXT)")
     connection.close()
     assert module.runtime.open_database()
     schema = {
@@ -839,7 +1096,8 @@ def test_dynamic_tool_keeps_complete_json_schema_and_announces_sdk_session(tmp_p
     events = asyncio.run(run())
     assert captured["get_calendar_events"] == schema
     assert {"type": "init", "sessionId": "sdk-session"} in events
-    assert "screenshots:" in options["system_prompt"]
+    assert "memories:" in options["system_prompt"]
+    assert "screenshots:" not in options["system_prompt"]
     assert "WebSearch" in options["allowed_tools"]
 
 

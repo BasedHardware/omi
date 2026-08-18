@@ -149,7 +149,6 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
         "Canonical agent artifacts. Use artifactRef values internally for follow-up tool calls; do not say them aloud.\n- artifact_1: role result, state retained"
     case .updateAgentArtifactLifecycle: stub = "Artifact lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
-    case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."

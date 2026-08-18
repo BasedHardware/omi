@@ -34,74 +34,79 @@ extension SettingsContentView {
 
             GlassSeparator()
 
-            // Sits under the master toggle and the frequency slider because both gate it:
-            // frequency caps how often any proactive card is delivered, and this decides
-            // whether live suggestions are generated at all.
-            settingRow(
-              title: "Live Suggestions",
-              subtitle: "Suggest things in the notch, using what Omi already knows",
-              settingId: "notifications.livesuggestions"
-            ) {
-              Toggle("", isOn: $liveSuggestionsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: liveSuggestionsEnabled) { _, newValue in
-                  SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
-                }
-            }
+            // Every notification below is produced by a frame-driven assistant, so while
+            // screen frames are not distributed none of them can ever fire. Hidden rather
+            // than shown as dead switches; the persisted values are untouched.
+            if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+              // Sits under the master toggle and the frequency slider because both gate it:
+              // frequency caps how often any proactive card is delivered, and this decides
+              // whether live suggestions are generated at all.
+              settingRow(
+                title: "Live Suggestions",
+                subtitle: "Suggest things in the notch, using what Omi already knows",
+                settingId: "notifications.livesuggestions"
+              ) {
+                Toggle("", isOn: $liveSuggestionsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: liveSuggestionsEnabled) { _, newValue in
+                    SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
+                  }
+              }
 
-            GlassSeparator()
+              GlassSeparator()
 
-            settingRow(
-              title: "Task Notifications",
-              subtitle: "Allow interruptions when a task needs attention",
-              settingId: "notifications.task"
-            ) {
-              Toggle("", isOn: $taskNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: taskNotificationsEnabled) { _, newValue in
-                  TaskAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      task: TaskSettingsResponse(notificationsEnabled: newValue)))
-                }
-            }
+              settingRow(
+                title: "Task Notifications",
+                subtitle: "Allow interruptions when a task needs attention",
+                settingId: "notifications.task"
+              ) {
+                Toggle("", isOn: $taskNotificationsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: taskNotificationsEnabled) { _, newValue in
+                    TaskAssistantSettings.shared.notificationsEnabled = newValue
+                    SettingsSyncManager.shared.pushPartialUpdate(
+                      AssistantSettingsResponse(
+                        task: TaskSettingsResponse(notificationsEnabled: newValue)))
+                  }
+              }
 
-            GlassSeparator()
+              GlassSeparator()
 
-            settingRow(
-              title: "Insight Notifications",
-              subtitle: "Show notification when an insight is generated",
-              settingId: "notifications.insight"
-            ) {
-              Toggle("", isOn: $insightNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: insightNotificationsEnabled) { _, newValue in
-                  InsightAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      insight: InsightSettingsResponse(notificationsEnabled: newValue)))
-                }
-            }
+              settingRow(
+                title: "Insight Notifications",
+                subtitle: "Show notification when an insight is generated",
+                settingId: "notifications.insight"
+              ) {
+                Toggle("", isOn: $insightNotificationsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: insightNotificationsEnabled) { _, newValue in
+                    InsightAssistantSettings.shared.notificationsEnabled = newValue
+                    SettingsSyncManager.shared.pushPartialUpdate(
+                      AssistantSettingsResponse(
+                        insight: InsightSettingsResponse(notificationsEnabled: newValue)))
+                  }
+              }
 
-            GlassSeparator()
+              GlassSeparator()
 
-            settingRow(
-              title: "Memory Notifications",
-              subtitle: "Show notification when a memory is extracted",
-              settingId: "notifications.memory"
-            ) {
-              Toggle("", isOn: $memoryNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: memoryNotificationsEnabled) { _, newValue in
-                  MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      memory: MemorySettingsResponse(notificationsEnabled: newValue)))
-                }
+              settingRow(
+                title: "Memory Notifications",
+                subtitle: "Show notification when a memory is extracted",
+                settingId: "notifications.memory"
+              ) {
+                Toggle("", isOn: $memoryNotificationsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: memoryNotificationsEnabled) { _, newValue in
+                    MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
+                    SettingsSyncManager.shared.pushPartialUpdate(
+                      AssistantSettingsResponse(
+                        memory: MemorySettingsResponse(notificationsEnabled: newValue)))
+                  }
+              }
             }
           }
         }

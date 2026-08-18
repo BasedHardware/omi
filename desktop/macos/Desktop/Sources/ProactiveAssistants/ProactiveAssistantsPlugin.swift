@@ -16,6 +16,8 @@ enum ProactiveCapturePolicy {
     case paused
   }
 
+  static let assistantFrameProcessingEnabled = false
+
   static func captureTickAllowed(
     isMonitoring: Bool,
     isInRecoveryMode: Bool,
@@ -982,7 +984,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         // be stored as lastTrackedFrame.
         // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
         // (set by checkContextSwitch), not lastTrackedFrame.
-        if !isRewindExcluded {
+        if ProactiveCapturePolicy.assistantFrameProcessingEnabled && !isRewindExcluded {
           let frame = CapturedFrame(
             cgImage: cgImage,
             jpegQuality: 0.8,
@@ -1066,7 +1068,7 @@ public class ProactiveAssistantsPlugin: NSObject {
       if isRewindExcluded {
         log("PrivacyGate: Blocked frame from Rewind-excluded app '\(resolvedApp)' — not sent to assistants")
       }
-      if !isRewindExcluded {
+      if ProactiveCapturePolicy.assistantFrameProcessingEnabled && !isRewindExcluded {
         AssistantCoordinator.shared.trackFrame(frame)
         if !isInDelayPeriod {
           distributeFrameIfChanged(frame)
@@ -1132,6 +1134,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
   /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).
   private func flushDebouncedFrame() {
+    guard ProactiveCapturePolicy.assistantFrameProcessingEnabled else { return }
     guard let frame = latestCapturedFrame else { return }
 
     distributionGate.markFlushed(

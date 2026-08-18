@@ -29,6 +29,7 @@ from database._client import get_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 RECONCILER_SCHEMA_VERSION = 1
+SCREEN_PRIVACY_VERSION = 1
 DEFAULT_ZONE = "us-central1-a"
 LEASE_TTL_SECONDS = 900
 LEASE_HEARTBEAT_SECONDS = 60

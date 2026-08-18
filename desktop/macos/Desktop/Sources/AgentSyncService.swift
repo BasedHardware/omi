@@ -141,32 +141,72 @@ actor AgentSyncService {
     TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
     TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
     // Append-only (cursor by id) — segments after sessions
-    TableSpec(
-      name: "screenshots", appendOnly: true,
-      excludedColumns: [
-        "ocrDataJson"
-      ]),
     TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
   ]
-
-  static var syncedTableNames: Set<String> {
-    Set(tableSpecs.map(\.name))
-  }
 
   private let tables = AgentSyncService.tableSpecs
   private static let requiredRemoteTables = Set(tableSpecs.map(\.name))
+
+  /// The exact set of tables this service is allowed to push to the agent VM.
+  /// Read-only, and deliberately not `#if DEBUG`: the guard test that proves
+  /// `screenshots`/`focus_sessions`/`observations` are absent has to compile in
+  /// the release test lane too, which is where the DEBUG-only accessor broke.
+  static var syncedTableNames: Set<String> { requiredRemoteTables }
 
   // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
   // by id — handled via appendOnly=true above.
 
   // MARK: - Public API
 
-  /// Start the sync loop. Called after the VM is ready and DB is uploaded.
-  func start(vmIP: String, authToken: String) {
+  /// Start the sync loop. Called once the VM is ready and free of screen data.
+  ///
+  /// Retiring the database upload made the cursors load-bearing for
+  /// correctness: a replaced or reaped VM starts with no database, and resuming
+  /// from persisted cursors would send only rows changed since the *previous*
+  /// VM, silently leaving the new one without the user's existing action items,
+  /// memories, transcriptions, and notes. When the VM reports no database, the
+  /// cursors are discarded so the whitelisted tables are re-sent from scratch.
+  func start(vmIP: String, authToken: String) async {
     let generation = beginSync(vmIP: vmIP, authToken: authToken)
+    if await remoteDatabaseIsAbsent(vmIP: vmIP, generation: generation) {
+      guard syncGeneration == generation else { return }
+      resetCursorsForFreshRemote()
+    }
+    guard syncGeneration == generation else { return }
     syncLoop(generation: generation)
+  }
+
+  /// `true` only on an affirmative `databaseReady: false`. An unreachable or
+  /// unparseable health response leaves the cursors alone: resending everything
+  /// is safe but expensive, so it is reserved for a VM that positively reports
+  /// it has no database.
+  private func remoteDatabaseIsAbsent(vmIP: String, generation: UInt64) async -> Bool {
+    guard networkHooks.tableSyncEnabled else { return false }
+    guard let authToken else { return false }
+    guard let url = URL(string: "http://\(vmIP):8080/health?token=\(authToken)") else { return false }
+    var request = URLRequest(url: url)
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 15
+    do {
+      let (data, response) = try await networkHooks.dataForRequest(request)
+      guard syncGeneration == generation else { return false }
+      guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode),
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else { return false }
+      return Self.databaseReadiness(healthPayload: json) == .missingDatabase
+    } catch {
+      log("AgentSync: could not read VM database readiness — \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  private func resetCursorsForFreshRemote() {
+    guard !cursors.isEmpty else { return }
+    cursors.removeAll()
+    if let ownerID = cursorOwnerID, RuntimeOwnerIdentity.currentOwnerId() == ownerID {
+      UserDefaults.standard.removeObject(forKey: cursorDefaultsKey(ownerID: ownerID))
+    }
+    log("AgentSync: VM has no database — resetting cursors so the whitelisted tables re-sync in full")
   }
 
   private func beginSync(vmIP: String, authToken: String) -> UInt64 {

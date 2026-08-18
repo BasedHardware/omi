@@ -21,18 +21,26 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 
 SYNC_TABLES = frozenset(
     {
-        "screenshots",
         "action_items",
         "transcription_sessions",
         "transcription_segments",
         "memories",
         "staged_tasks",
-        "focus_sessions",
-        "observations",
         "live_notes",
         "ai_user_profiles",
         "task_dedup_log",
     }
+)
+SCREEN_DATA_TABLES = frozenset({"screenshots", "focus_sessions", "observations"})
+SCREEN_DATA_TABLE_PATTERN = re.compile(
+    r"(?:screenshots(?:_[A-Za-z0-9_]+)?|focus_sessions(?:_[A-Za-z0-9_]+)?|observations(?:_[A-Za-z0-9_]+)?|"
+    r"ocr_[A-Za-z0-9_]*|proactive_extractions(?:_[A-Za-z0-9_]+)?)",
+    re.I,
+)
+SCREEN_DATA_QUERY_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_])(?:screenshots(?:_[A-Za-z0-9_]+)?|focus_sessions(?:_[A-Za-z0-9_]+)?|"
+    r"observations(?:_[A-Za-z0-9_]+)?|ocr_[A-Za-z0-9_]*|proactive_extractions(?:_[A-Za-z0-9_]+)?)(?![A-Za-z0-9_])",
+    re.I,
 )
 IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024
@@ -210,6 +218,28 @@ def quoted(value: str) -> str:
     return f'"{value}"'
 
 
+def is_screen_data_table(name: str) -> bool:
+    return bool(SCREEN_DATA_TABLE_PATTERN.fullmatch(name))
+
+
+def screen_data_tables() -> list[str]:
+    if runtime.db is None:
+        return []
+    rows = runtime.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    return [str(row[0]) for row in rows if is_screen_data_table(str(row[0]))]
+
+
+def database_screen_data_tables(path: Path) -> list[str]:
+    connection: sqlite3.Connection | None = None
+    try:
+        connection = sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True)
+        rows = connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        return [str(row[0]) for row in rows if is_screen_data_table(str(row[0]))]
+    finally:
+        if connection is not None:
+            connection.close()
+
+
 def json_value(value: Any) -> Any:
     if isinstance(value, (dict, list)):
         return json.dumps(value, separators=(",", ":"))
@@ -230,7 +260,10 @@ def run_sync(table: str, rows: list[dict[str, Any]]) -> int:
     with runtime.lock:
         existing = {row[1] for row in runtime.db.execute(f"PRAGMA table_info({table_sql})")}
         if not existing:
-            raise ValueError(f"Table '{table}' does not exist")
+            if table not in SYNC_TABLES:
+                raise ValueError(f"Table '{table}' does not exist")
+            runtime.db.execute(f"CREATE TABLE IF NOT EXISTS {table_sql} (id TEXT PRIMARY KEY)")
+            existing = {row[1] for row in runtime.db.execute(f"PRAGMA table_info({table_sql})")}
         for column in {column for columns in groups for column in columns}:
             if column not in existing:
                 runtime.db.execute(f"ALTER TABLE {table_sql} ADD COLUMN {quoted(column)}")
@@ -254,6 +287,43 @@ def run_sync(table: str, rows: list[dict[str, Any]]) -> int:
             applied += len(values)
         runtime.db.commit()
     return applied
+
+
+def bootstrap_sync_schema() -> bool:
+    """Create a sanitized SQLite DB with the non-screen sync tables on a fresh VM.
+
+    Closing screen egress means a newly provisioned or restarted VM may never
+    receive a full ``omi.db`` upload, so the remaining non-screen context
+    (``action_items``, ``memories``, ``transcription_*``, and friends) would have
+    nowhere to land. ``/sync`` only needs the whitelisted tables to exist; the
+    sync writer adds any missing columns via ``ALTER TABLE ... ADD COLUMN``. This
+    creates those tables with a minimal ``id`` column so incremental sync works
+    from an empty machine while screen/OCR tables stay absent.
+
+    Returns:
+        True when the schema was created and opened, False if the DB already
+        existed or could not be created.
+    """
+    if runtime.db is not None:
+        return True
+    if runtime.db_path.is_file():
+        return runtime.open_database()
+    runtime.db_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        connection = sqlite3.connect(runtime.db_path, check_same_thread=False)
+        with runtime.lock:
+            for table in sorted(SYNC_TABLES):
+                connection.execute(f"CREATE TABLE IF NOT EXISTS {quoted(table)} (id TEXT PRIMARY KEY)")
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.commit()
+        connection.close()
+        return runtime.open_database()
+    except sqlite3.Error:
+        try:
+            runtime.db_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
 
 
 def validate_database_integrity(path: Path) -> list[Any]:
@@ -396,6 +466,30 @@ def install_uploaded_database(temporary: Path) -> None:
             raise
 
 
+def screen_data_report() -> dict[str, Any]:
+    """Report whether this VM still holds screen/OCR data, without deleting anything.
+
+    Historical data is deliberately left in place: this build closes the ingress
+    and refuses to run a session while legacy screen rows are present, rather
+    than destroying records that no other copy may hold. The desktop treats a
+    non-empty report as fail-closed.
+    """
+    with runtime.lock:
+        if runtime.db is None:
+            return {"present": False, "tables": []}
+        present: list[str] = []
+        for table in screen_data_tables():
+            try:
+                count = runtime.db.execute(f"SELECT COUNT(*) FROM {quoted(table)}").fetchone()
+            except sqlite3.OperationalError as exc:
+                if "no such table" in str(exc).lower():
+                    continue
+                raise
+            if count and int(count[0]) > 0:
+                present.append(table)
+        return {"present": bool(present), "tables": sorted(present)}
+
+
 async def upload_database(request: Request) -> tuple[int, int]:
     try:
         content_length = int(request.headers.get("content-length", "0"))
@@ -444,6 +538,11 @@ async def upload_database(request: Request) -> tuple[int, int]:
             raise HTTPException(status_code=400, detail="Uploaded database is not valid SQLite") from exc
         if integrity != ["ok"]:
             raise HTTPException(status_code=400, detail="Uploaded database failed SQLite integrity check")
+        try:
+            if await run_thread_operation(database_screen_data_tables, temporary):
+                raise HTTPException(status_code=400, detail="Uploaded database contains screen activity")
+        except sqlite3.Error as exc:
+            raise HTTPException(status_code=400, detail="Uploaded database is not valid SQLite") from exc
 
         await run_thread_operation(install_uploaded_database, temporary)
         runtime.last_activity_at = time.monotonic()
@@ -496,7 +595,7 @@ def read_only_sql_authorizer(
 
 def execute_sql(query: str) -> str:
     if runtime.db is None:
-        return json.dumps({"error": "Database not loaded. Upload omi.db first."})
+        return json.dumps({"error": "Database not loaded yet. It is created on the desktop's first sync."})
     upper = query.upper()
     if any(
         re.search(rf"\b{word}\b", upper) for word in ("DROP", "ALTER", "CREATE", "PRAGMA", "ATTACH", "DETACH", "VACUUM")
@@ -506,6 +605,8 @@ def execute_sql(query: str) -> str:
         return json.dumps({"error": "Multi-statement queries not allowed"})
     if not upper.lstrip().startswith("SELECT"):
         return json.dumps({"error": "Database is in read-only mode (cloud copy)"})
+    if SCREEN_DATA_QUERY_PATTERN.search(query):
+        return json.dumps({"error": "Screen activity is unavailable"})
     if not re.search(r"\bLIMIT\b", query, re.I):
         query = query.rstrip().rstrip(";") + " LIMIT 200"
     try:
@@ -517,76 +618,6 @@ def execute_sql(query: str) -> str:
             finally:
                 runtime.db.set_authorizer(None)
         return json.dumps({"rows": rows, "count": len(rows)}, default=str)
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc)})
-
-
-async def semantic_search(query: str, days: int = 7, app_filter: str | None = None) -> str:
-    if runtime.db is None:
-        return json.dumps({"error": "Database not loaded. Upload omi.db first."})
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return json.dumps({"error": "GEMINI_API_KEY not set"})
-    body = {
-        "model": "models/gemini-embedding-001",
-        "content": {"parts": [{"text": query}]},
-        "taskType": "RETRIEVAL_QUERY",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={api_key}",
-                json=body,
-            )
-            response.raise_for_status()
-            vector = [float(value) for value in response.json()["embedding"]["values"]]
-    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
-        return json.dumps({"error": str(exc)})
-    norm = sum(value * value for value in vector) ** 0.5
-    vector = [value / norm for value in vector] if norm else vector
-    parameters: list[Any] = [f"-{max(1, min(days, 3650))} days"]
-    sql = "SELECT id, timestamp, appName, windowTitle, substr(ocrText, 1, 300), embedding FROM screenshots WHERE embedding IS NOT NULL AND timestamp >= datetime('now', ?)"
-    if app_filter:
-        sql += " AND appName = ?"
-        parameters.append(app_filter)
-    sql += " ORDER BY timestamp DESC LIMIT 10000"
-    try:
-        with runtime.lock:
-            rows = runtime.db.execute(sql, parameters).fetchall()
-    except sqlite3.Error as exc:
-        return json.dumps({"error": str(exc)})
-    matches = []
-    for row in rows:
-        blob = row[5]
-        if not isinstance(blob, bytes) or len(blob) != len(vector) * 4:
-            continue
-        values = memoryview(blob).cast("f")
-        score = sum(left * right for left, right in zip(vector, values))
-        matches.append(
-            {
-                "id": row[0],
-                "timestamp": row[1],
-                "appName": row[2],
-                "windowTitle": row[3],
-                "ocrPreview": row[4],
-                "similarity": round(score, 3),
-            }
-        )
-    matches.sort(key=lambda item: item["similarity"], reverse=True)
-    return json.dumps({"results": matches[:20], "count": len(matches[:20])}, default=str)
-
-
-def daily_recap(days_ago: int = 0) -> str:
-    if runtime.db is None:
-        return json.dumps({"error": "Database not loaded. Upload omi.db first."})
-    days_ago = max(0, min(days_ago, 3650))
-    try:
-        with runtime.lock:
-            apps = runtime.db.execute(
-                "SELECT appName, COUNT(*) FROM screenshots WHERE timestamp >= datetime('now', 'start of day', ?, 'localtime') AND timestamp < datetime('now', 'start of day', ?, 'localtime') GROUP BY appName ORDER BY COUNT(*) DESC LIMIT 10",
-                (f"-{days_ago} days", f"-{days_ago - 1} days" if days_ago else "+1 day"),
-            ).fetchall()
-        return json.dumps({"apps": [{"appName": row[0], "screenshots": row[1]} for row in apps]})
     except sqlite3.Error as exc:
         return json.dumps({"error": str(exc)})
 
@@ -603,6 +634,8 @@ def database_schema() -> str:
             entries = []
             for table in tables:
                 name = table[0]
+                if is_screen_data_table(str(name)):
+                    continue
                 columns = runtime.db.execute(f"PRAGMA table_info({quoted(name)})").fetchall()
                 count = runtime.db.execute(f"SELECT COUNT(*) FROM {quoted(name)}").fetchone()[0]
                 entries.append(
@@ -615,21 +648,17 @@ def database_schema() -> str:
 
 def system_prompt() -> str:
     return """You are an AI assistant with access to the user's OMI desktop database and connected services.
-This database contains their screen history, tasks, transcriptions, memories, and focus sessions.
+This database contains their tasks, transcriptions, memories, and connected services.
 
 DATABASE SCHEMA:
 %s
 
 TOOLS:
 - execute_sql: Run read-only SQL queries. SELECT auto-limits to 200 rows. Use it for structured queries.
-- semantic_search: Search screenshot OCR text by semantic similarity for fuzzy or conceptual queries.
-- get_daily_recap: Use this for what the user did today, yesterday, or this week.
 - Backend tools: Use these for calendar, email, health, conversations, memories, action items, and web search.
 
 GUIDELINES:
-- For activity summaries, use get_daily_recap before issuing multiple SQL queries.
-- For time-filtered screenshots, use timestamp range comparisons instead of date() or strftime() in WHERE clauses.
-- Key tables include screenshots, action_items, memories, transcription_sessions, transcription_segments, focus_sessions, observations, and staged_tasks.
+- Key tables include action_items, memories, transcription_sessions, transcription_segments, and staged_tasks.
 - Be concise and helpful. Format results clearly.""" % database_schema()
 
 
@@ -653,8 +682,6 @@ class AgentSession:
         self.pending_tools: list[str] = []
 
     async def start(self) -> bool:
-        if runtime.db is None:
-            return False
         if self.task:
             return True
         try:
@@ -667,28 +694,11 @@ class AgentSession:
         async def sql_tool(arguments: dict[str, Any]) -> dict[str, Any]:
             return {"content": [{"type": "text", "text": execute_sql(str(arguments["query"]))}]}
 
-        @tool(
-            "semantic_search",
-            "Search screenshot OCR text by semantic similarity.",
-            {"query": str, "days": int, "app_filter": str},
-        )
-        async def search_tool(arguments: dict[str, Any]) -> dict[str, Any]:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": await semantic_search(
-                            str(arguments["query"]), int(arguments.get("days", 7)), arguments.get("app_filter") or None
-                        ),
-                    }
-                ]
-            }
-
-        @tool("get_daily_recap", "Get a compact activity recap for a day offset from today.", {"days_ago": int})
-        async def recap_tool(arguments: dict[str, Any]) -> dict[str, Any]:
-            return {"content": [{"type": "text", "text": daily_recap(int(arguments.get("days_ago", 0)))}]}
-
-        tools = [sql_tool, search_tool, recap_tool]
+        # Registered unconditionally: retiring the database upload means a fresh
+        # VM has no database until the desktop's first /sync bootstraps one, and
+        # a session started before that would otherwise lose execute_sql for its
+        # whole lifetime. execute_sql already reports the not-loaded state.
+        tools = [sql_tool]
         for definition in runtime.backend_tools:
             name = definition.get("name")
             if not isinstance(name, str) or not IDENTIFIER.fullmatch(name):
@@ -879,7 +889,7 @@ async def ping(request: Request) -> dict[str, str]:
 @app.post("/sync")
 async def sync(request: Request) -> dict[str, Any]:
     runtime.require_auth(request)
-    if runtime.db is None:
+    if runtime.db is None and not bootstrap_sync_schema():
         raise HTTPException(status_code=503, detail="Database not loaded. Upload omi.db first.")
     try:
         payload = await request.json()
@@ -902,6 +912,17 @@ async def sync(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     runtime.last_activity_at = time.monotonic()
     return {"applied": applied, "table": table}
+
+
+@app.post("/screen-activity-status")
+async def screen_activity_status(request: Request) -> dict[str, Any]:
+    runtime.require_auth(request)
+    try:
+        report = await run_thread_operation(screen_data_report)
+    except (OSError, RuntimeError, sqlite3.Error) as exc:
+        raise HTTPException(status_code=400, detail="Unable to inspect screen activity") from exc
+    runtime.last_activity_at = time.monotonic()
+    return {"status": "ok", **report}
 
 
 @app.websocket("/ws")

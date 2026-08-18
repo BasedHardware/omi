@@ -109,6 +109,7 @@ VISIBILITIES = {'public_documented', 'public_undocumented', 'first_party', 'inte
 DATA_DOMAINS = {
     'conversations',
     'memories',
+    'screen_activity',
     'action_items',
     'user_profile',
     'auth',

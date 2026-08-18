@@ -39,6 +39,7 @@ from utils.executors import (
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from services.agent_vm_lifecycle import (
     SESSION_LEASE_TTL_SECONDS,
+    SCREEN_PRIVACY_VERSION,
     claim_session_lease,
     heartbeat_session_lease,
     reconcile_requested,
@@ -70,6 +71,7 @@ AGENT_VM_SESSION_LEASES_ENABLED = os.getenv("AGENT_VM_SESSION_LEASES_ENABLED", "
     "true",
     "yes",
 }
+_SCREEN_PRIVACY_VERSION = SCREEN_PRIVACY_VERSION
 
 
 def _utc_now() -> datetime:
@@ -340,6 +342,11 @@ async def _ensure_vm_running_or_close(
         return None, True
 
 
+def _screen_privacy_migration_required(vm: Dict[str, Any]) -> bool:
+    version = vm.get("screenPrivacyVersion")
+    return not isinstance(version, int) or isinstance(version, bool) or version < _SCREEN_PRIVACY_VERSION
+
+
 async def _prepare_vm_for_session(
     websocket: WebSocket,
     uid: str,
@@ -349,6 +356,29 @@ async def _prepare_vm_for_session(
     """Resolve and verify the VM after transactional session admission."""
     vm_ip = vm.get("ip")
     vm_token = vm.get("authToken")
+
+    if _screen_privacy_migration_required(vm):
+        await _send_startup_event(websocket, uid, {"type": "status", "message": "Updating your agent VM..."})
+        candidate_vm, deletion_blocked = await _ensure_vm_running_or_close(websocket, uid, vm, health_failed=True)
+        if deletion_blocked or lease_lost.is_set():
+            return None
+        if candidate_vm is None:
+            await _send_startup_event(websocket, uid, await run_blocking(db_executor, _vm_unavailable_event, uid))
+            await _close_client(websocket, uid, 4002, "VM migration failed")
+            return None
+        await _send_startup_event(
+            websocket,
+            uid,
+            {
+                "type": "error",
+                "code": "agent_vm_draining",
+                "state": "updating",
+                "retryable": True,
+                "message": "Your agent is being updated. Please retry shortly.",
+            },
+        )
+        await _close_client(websocket, uid, 1013, "Agent VM is updating")
+        return None
 
     if vm.get("status") == "ready" and _is_usable_vm_ip(vm_ip):
         try:

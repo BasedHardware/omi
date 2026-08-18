@@ -73,7 +73,6 @@ describe("omi tool manifest", () => {
   it("projects the pi-mono task-agent surface", () => {
     expect(toolNamesForAdapter("pi-mono")).toEqual([
       "execute_sql",
-      "semantic_search",
       "get_daily_recap",
       "fill_cloud_connector_form",
       "list_agent_sessions",
@@ -317,13 +316,9 @@ describe("omi tool manifest", () => {
       canonicalName: "execute_sql",
       wasAlias: true,
     });
-    expect(normalizeOmiToolName("omi-tools-stdio", "omi-tools.semantic_search")).toEqual({
-      canonicalName: "semantic_search",
-      wasAlias: true,
-    });
     expect(normalizeOmiToolName("local-agent-api", "search_screen_history")).toEqual({
-      canonicalName: "semantic_search",
-      wasAlias: true,
+      canonicalName: "search_screen_history",
+      wasAlias: false,
     });
   });
 

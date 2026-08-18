@@ -83,7 +83,15 @@ def _stub_startup(agent_proxy: ModuleType, monkeypatch, *, ensure_result, health
     monkeypatch.setattr(
         agent_proxy,
         "_get_user_context",
-        lambda _uid: ({"vmName": "omi-agent-gone", "zone": "us-central1-a", "status": "stopped"}, "standard"),
+        lambda _uid: (
+            {
+                "vmName": "omi-agent-gone",
+                "zone": "us-central1-a",
+                "status": "stopped",
+                "screenPrivacyVersion": 1,
+            },
+            "standard",
+        ),
     )
     monkeypatch.setattr(agent_proxy, "_ensure_vm_running", ensure_vm_running)
     monkeypatch.setattr(agent_proxy, "_wait_for_vm_healthy", wait_for_vm_healthy)
@@ -102,7 +110,13 @@ class TestAgentWsStartupSurvivesAGoneClient:
         assert websocket.close_attempts == [4002], "the connection must still be closed with its startup-failure code"
 
     async def test_unhealthy_vm_does_not_raise_when_the_client_is_gone(self, agent_proxy, monkeypatch):
-        ready_vm = {"vmName": "omi-agent-gone", "status": "ready", "ip": "34.9.9.9", "authToken": "vm-token"}
+        ready_vm = {
+            "vmName": "omi-agent-gone",
+            "status": "ready",
+            "ip": "34.9.9.9",
+            "authToken": "vm-token",
+            "screenPrivacyVersion": 1,
+        }
         _stub_startup(agent_proxy, monkeypatch, ensure_result=ready_vm, healthy=False)
         websocket = _GoneClientWebSocket()
 

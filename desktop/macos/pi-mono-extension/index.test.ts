@@ -1166,7 +1166,6 @@ test("OMI_TOOLS: provider schemas do not advertise unsupported top-level composi
 test("OMI_TOOLS: required fields match expected per tool", () => {
   const expected: Record<string, string[]> = {
     execute_sql: ["query"],
-    semantic_search: ["query"],
     get_daily_recap: [],
     fill_cloud_connector_form: ["provider", "server_url"],
     list_agent_sessions: [],
@@ -1422,21 +1421,6 @@ test("OMI_TOOLS: execute_sql has 'query' as Type.String", () => {
   assert.ok(queryProp.description);
 });
 
-test("OMI_TOOLS: semantic_search optional fields exist and are not required", () => {
-  const tool = OMI_TOOLS.find(t => t.name === "semantic_search")!;
-  const props = (tool.parameters as any).properties;
-  const required = (tool.parameters as any).required ?? [];
-  // Verify optional properties exist in the schema
-  assert.ok(props.days, "days property must exist in schema");
-  assert.ok(props.app_filter, "app_filter property must exist in schema");
-  // Verify they are not in the required array
-  assert.ok(!required.includes("days"), "days should be optional");
-  assert.ok(!required.includes("app_filter"), "app_filter should be optional");
-  // Verify required field
-  assert.ok(required.includes("query"), "query should be required");
-  assert.ok(props.query, "query property must exist in schema");
-});
-
 test("OMI_TOOLS: cloud connector form filler is registered for pi-mono agents", () => {
   const tool = OMI_TOOLS.find(t => t.name === "fill_cloud_connector_form")!;
   assert.ok(tool, "fill_cloud_connector_form must be available to pi-mono task agents");
@@ -1467,12 +1451,6 @@ test("OMI_TOOLS: execute_sql has promptGuidelines", () => {
     tool.promptGuidelines!.some(g => g.includes("quantitative")),
     "execute_sql guideline should mention quantitative queries",
   );
-});
-
-test("OMI_TOOLS: semantic_search has promptGuidelines", () => {
-  const tool = OMI_TOOLS.find(t => t.name === "semantic_search")!;
-  assert.ok(tool.promptGuidelines, "semantic_search missing promptGuidelines");
-  assert.ok(tool.promptGuidelines!.length >= 1);
 });
 
 test("OMI_TOOL_TIMEOUT_MS: is 30 seconds", () => {

@@ -11,6 +11,10 @@ import XCTest
 /// appeared on but never captured. These tests pin the gating contract that
 /// makes clearing those flags on stop necessary and correct.
 final class ProactiveCapturePolicyTests: XCTestCase {
+  func testCapturedFramesAreNotSentToAssistants() {
+    XCTAssertFalse(ProactiveCapturePolicy.assistantFrameProcessingEnabled)
+  }
+
   func testCaptureAllowedOnlyWhenMonitoringAndNotRecoveringOrPolling() {
     XCTAssertTrue(
       ProactiveCapturePolicy.captureTickAllowed(

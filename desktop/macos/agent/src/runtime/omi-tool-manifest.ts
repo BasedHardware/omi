@@ -227,35 +227,8 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
         "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
         "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-        "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
       ],
     ),
-  },
-  semantic_search: {
-    surfaces: ["desktop_chat"],
-    capabilityDoc: doc(
-      "Semantic Search",
-      "Vector similarity search on the user's screen history.",
-      [
-        "Use for fuzzy/conceptual questions about what the user saw, read, or worked on where exact SQL keywords will not work.",
-        "Examples: \"reading about machine learning\", \"working on design mockups\".",
-        "Parameters: query (required), days (default 7), app_filter (optional).",
-      ],
-    ),
-    aliasCapabilityDocs: {
-      search_screen_history: {
-        ...doc(
-          "Search Screen History",
-          "Search the user's on-screen history by meaning.",
-          ["Use for what the user saw, read, or worked on. Speak a short summary of the result."],
-        ),
-        surfaces: ["realtime_voice"],
-      },
-    },
-    voice: {
-      realtimeDescription:
-        "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result.",
-    },
   },
   get_daily_recap: {
     surfaces: ["desktop_chat", "realtime_voice"],
@@ -675,7 +648,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)",
     promptGuidelines: [
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
     ],
     latency: "fast local",
     inputSchema: schema(
@@ -698,33 +670,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     adapters: {
       ...piAndStdio(),
       "local-agent-api": { advertised: true },
-    },
-  },
-  {
-    name: "semantic_search",
-    label: "Semantic Search",
-    description:
-      "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.",
-    promptSnippet: "semantic_search - Search screen history by meaning",
-    promptGuidelines: ["Prefer semantic_search over execute_sql when the user asks about something they 'saw' or worked on."],
-    latency: "fast local",
-    inputSchema: schema(
-      {
-        query: { type: "string", description: "Natural language search query" },
-        days: { type: "number", description: "Days to search back (default 7)" },
-        app_filter: { type: "string", description: "Filter to a specific app" },
-      },
-      ["query"],
-    ),
-    annotations: readOnlyLocal,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    aliases: ["search_screen_history"],
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires local Rewind screen-history data."],
-    adapters: {
-      ...piAndStdio(),
-      "local-agent-api": { advertised: true, adapterName: "search_screen_history", aliases: ["semantic_search"] },
     },
   },
   {
@@ -1430,7 +1375,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     description: "Fetch a local Rewind screenshot image by screenshot_id.",
     promptSnippet: "get_screenshot - Fetch a local screenshot image",
     latency: "fast local",
-    inputSchema: schema({ screenshot_id: { type: "number", description: "Screenshot ID from search_screen_history or screenshots table" } }, ["screenshot_id"]),
+    inputSchema: schema({ screenshot_id: { type: "number", description: "Screenshot ID from the local screenshots table" } }, ["screenshot_id"]),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "localApiOnly" },
@@ -1624,9 +1569,9 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
 }
 
 export const omiToolManifest: OmiToolManifestEntry[] = [
-  ...swiftToolManifest.slice(0, 4),
+  ...swiftToolManifest.slice(0, 3),
   ...agentControlCapabilityManifest.map(controlEntry),
-  ...swiftToolManifest.slice(4),
+  ...swiftToolManifest.slice(3),
 ] satisfies OmiToolManifestEntry[];
 
 /**
@@ -1747,7 +1692,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     inputSchema: schema({
       screenshot_id: {
         type: "number",
-        description: "Screenshot ID returned by search_screen_history or the local screenshots table.",
+        description: "Screenshot ID from the local screenshots table.",
       },
     }, ["screenshot_id"]),
     annotations: localWrite,

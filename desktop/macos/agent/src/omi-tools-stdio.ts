@@ -269,20 +269,6 @@ async function handleJsonRpc(
             result: { content: [{ type: "text", text: result }] },
           });
         }
-      } else if (toolName === "semantic_search") {
-        const input: Record<string, unknown> = {
-          query: args.query,
-          days: args.days ?? 7,
-        };
-        if (args.app_filter) input.app_filter = args.app_filter;
-        const result = await requestSwiftTool("semantic_search", input);
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
       } else if (toolName === "get_daily_recap") {
         const daysAgo = (args.days_ago as number) ?? 1;
         const result = await requestSwiftTool("get_daily_recap", { days_ago: daysAgo });

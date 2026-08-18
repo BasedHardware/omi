@@ -287,6 +287,59 @@ private actor AgentSyncDelayedTokenGate {
 /// on a compound `(updatedAt, id)` cursor.
 final class AgentSyncBatchQueryTests: XCTestCase {
 
+  func testScreenTableIsNotRegisteredForCloudSync() {
+    XCTAssertFalse(AgentSyncService.syncedTableNames.contains("screenshots"))
+    XCTAssertFalse(AgentSyncService.syncedTableNames.contains("focus_sessions"))
+    XCTAssertFalse(AgentSyncService.syncedTableNames.contains("observations"))
+  }
+
+  /// Retiring the database upload made the cursors load-bearing: a replacement
+  /// VM starts empty, so resuming from the previous VM's cursors would send it
+  /// only future rows and never the user's existing action items, memories,
+  /// transcriptions, or notes.
+  func testStartResetsCursorsWhenTheVMReportsNoDatabase() async {
+    let ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "agent-sync-cursor-owner")
+    defer { Task { await ownerFixture.restore() } }
+    let cursorKey = "agentSync_cursors.agent-sync-cursor-owner"
+    let seeded = #"{"memories":{"lastId":42,"lastUpdatedAt":"2026-01-01T00:00:00"}}"#.data(using: .utf8)
+    UserDefaults.standard.set(seeded, forKey: cursorKey)
+    defer { UserDefaults.standard.removeObject(forKey: cursorKey) }
+
+    let service = AgentSyncService(
+      networkHooks: AgentSyncService.NetworkHooks(
+        fetchIDToken: { "test-firebase-token" },
+        dataForRequest: { request in
+          // The health probe must authenticate as the VM token, otherwise a
+          // fresh VM (which the backend requires auth to report on) would be
+          // treated as reachable-but-ready and the persisted cursors kept.
+          XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer vm-token",
+            "the fresh-VM health probe must send the VM auth token")
+          XCTAssertEqual(
+            request.url?.query,
+            "token=vm-token",
+            "the fresh-VM health probe must send the VM auth token as the query token")
+          let body = try JSONSerialization.data(withJSONObject: ["databaseReady": false])
+          guard let url = request.url,
+            let response = HTTPURLResponse(
+              url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+          else { throw URLError(.badURL) }
+          return (body, response)
+        },
+        reuploadDatabase: { _, _ in false },
+        now: Date.init,
+        tableSyncEnabled: true))
+
+    await service.start(vmIP: "replacement-vm", authToken: "vm-token")
+    await service.stop(flushPendingChanges: false)
+
+    XCTAssertNil(
+      UserDefaults.standard.data(forKey: cursorKey),
+      "a VM reporting no database must clear the persisted cursors so every whitelisted table re-syncs")
+  }
+
   func testPartialSchemaIsNotReadyEvenWhenDatabaseReadyIsTrue() {
     let readiness = AgentSyncService.databaseReadiness(
       healthPayload: ["databaseReady": true],

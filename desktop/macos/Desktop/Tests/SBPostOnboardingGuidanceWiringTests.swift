@@ -269,10 +269,10 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     XCTAssertTrue(message.contains("turn it off"), "a capability this consequential must be presented as reversible")
   }
 
-  /// The local claim is scoped to the images on purpose: `RewindStorage` keeps them under
-  /// Application Support and nothing uploads them, but `ScreenActivitySyncService` does sync their
-  /// OCR text and embeddings to the backend. An unqualified "it stays on this Mac" would be false,
-  /// and a false reassurance here is worse than none.
+  /// The local claim stays scoped to the images on purpose. `RewindStorage` keeps them under
+  /// Application Support, and screen-activity cloud sync has been removed, but this step still
+  /// grants a capability whose derived data feeds on-device features. A blanket "nothing leaves"
+  /// is a promise the whole product would have to keep; a false reassurance here is worse than none.
   func testTheScreenStepDoesNotClaimEverythingStaysLocal() {
     let model = makeModel()
 
