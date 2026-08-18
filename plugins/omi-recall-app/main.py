@@ -72,6 +72,10 @@ def _init_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cards_uid_due ON cards(uid, due_at)")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_conversation_question "
+            "ON cards(uid, conversation_id, question) WHERE conversation_id <> ''"
+        )
 
 
 @contextmanager
@@ -246,15 +250,17 @@ async def conversation_webhook(request: Request, uid: str = Query(..., descripti
 
     now = time.time()
     with _db() as conn:
+        cards_created = 0
         for card in cards:
-            conn.execute(
-                "INSERT INTO cards (id, uid, question, answer, source_title, conversation_id, created_at, due_at)"
+            cursor = conn.execute(
+                "INSERT OR IGNORE INTO cards (id, uid, question, answer, source_title, conversation_id, created_at, due_at)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (uuid.uuid4().hex[:12], uid, card["question"], card["answer"], title, conversation_id, now, now),
             )
+            cards_created += cursor.rowcount
 
-    print(f"Created {len(cards)} card(s) for uid={uid} from conversation '{title}'", flush=True)
-    return {"status": "ok", "cards_created": len(cards)}
+    print(f"Created {cards_created} card(s) for uid={uid} from conversation '{title}'", flush=True)
+    return {"status": "ok", "cards_created": cards_created}
 
 
 # ---------------------------------------------------------------------------

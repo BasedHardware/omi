@@ -4,6 +4,8 @@ import os
 import tempfile
 import zipfile
 
+import pytest
+
 os.environ["RECALL_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "test.db")
 os.environ["OPENAI_API_KEY"] = ""  # force heuristic path in tests
 
@@ -32,6 +34,18 @@ SAMPLE_CONVERSATION = {
 }
 
 
+@pytest.fixture(autouse=True)
+def isolated_database(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "DB_PATH", str(tmp_path / "test.db"))
+    main._init_db()
+
+
+def _seed_cards():
+    response = client.post(f"/webhook?uid={UID}", json=SAMPLE_CONVERSATION)
+    assert response.status_code == 200
+    assert response.json()["cards_created"] > 0
+
+
 def test_health():
     assert client.get("/health").json() == {"status": "ok"}
 
@@ -51,13 +65,22 @@ def test_webhook_creates_cards():
     assert resp.json()["cards_created"] > 0
 
 
+def test_webhook_is_idempotent_for_a_conversation():
+    first = client.post(f"/webhook?uid={UID}", json=SAMPLE_CONVERSATION)
+    second = client.post(f"/webhook?uid={UID}", json=SAMPLE_CONVERSATION)
+    assert first.json()["cards_created"] > 0
+    assert second.json()["cards_created"] == 0
+
+
 def test_quiz_returns_due_cards():
+    _seed_cards()
     resp = client.post("/tools/quiz_me", json={"uid": UID, "limit": 5})
     result = resp.json()["result"]
     assert "card_id=" in result
 
 
 def _first_card_id() -> str:
+    _seed_cards()
     result = client.post("/tools/quiz_me", json={"uid": UID}).json()["result"]
     line = next((l for l in result.split("\n") if "card_id=" in l), None)
     assert line is not None, (
@@ -99,11 +122,13 @@ def test_sm2_intervals_grow():
 
 
 def test_deck_stats_includes_export_link():
+    _seed_cards()
     resp = client.post("/tools/deck_stats", json={"uid": UID})
     assert f"/deck/{UID}.apkg" in resp.json()["result"]
 
 
 def test_anki_export_is_valid_apkg():
+    _seed_cards()
     resp = client.get(f"/deck/{UID}.apkg")
     assert resp.status_code == 200
     assert resp.headers["content-disposition"].endswith('.apkg"')
