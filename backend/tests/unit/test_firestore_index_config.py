@@ -113,3 +113,40 @@ def test_firestore_config_declares_screen_activity_app_filter_index():
         and _fields(index) == required_fields
         for index in _index_specs()
     )
+
+
+def _reconcile_workflow():
+    path = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_firestore_indexes.yml'
+    return path.read_text()
+
+
+# Static tripwires, not behavioral coverage: the automatic lane can only be
+# exercised by a real push to main. They pin the two expressions whose failure
+# modes are silent -- an empty environment binds no GitHub Environment at all
+# (bypassing the prod approval), and an unresolved lock serializes nothing.
+def test_reconcile_workflow_applies_a_merged_manifest_change_automatically():
+    # #11684 / #11731: the manifest fix merged and changed nothing in prod for
+    # ~5h because workflow_dispatch was the only trigger.
+    workflow = _reconcile_workflow()
+    trigger, _, _ = workflow.partition('\njobs:')
+    assert '  push:\n' in trigger
+    assert "branches: [ \"main\" ]" in trigger
+    assert "      - 'firestore.indexes.json'" in trigger
+
+
+def test_reconcile_workflow_never_binds_an_empty_environment_on_an_automatic_run():
+    resolved = "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
+    workflow = _reconcile_workflow()
+    assert f'environment: {resolved}' in workflow
+    assert f'group: firestore-schema-{resolved}' in workflow
+    # A bare inputs reference renders empty on push.
+    assert 'environment: ${{ github.event.inputs.environment }}' not in workflow
+    assert 'group: deploy-backend-stack-' not in workflow
+
+
+def test_reconcile_workflow_keeps_the_typed_confirmation_on_the_manual_path():
+    workflow = _reconcile_workflow()
+    assert 'if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then' in workflow
+    assert 'APPLY_FIRESTORE_INDEXES' in workflow
+    # Any trigger other than the two authorized ones must fail closed.
+    assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' in workflow
