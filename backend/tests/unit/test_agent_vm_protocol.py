@@ -46,6 +46,15 @@ def read_database_value(path: Path, table: str) -> str:
         connection.close()
 
 
+# The offload tests below release a blocked worker through a hang guard. The guard is a
+# deadlock rescue, not a latency bound: it is armed from inside the worker once that
+# worker is actually blocking, so upload setup (payload stream, disk write, two fsync
+# thread hops) stays outside its window, and it fires only if the event loop never
+# resumes. The blocked worker outwaits the guard so the guard is always the rescue.
+HANG_GUARD_SECONDS = 2.0
+BLOCKED_WORKER_TIMEOUT_SECONDS = 10.0
+
+
 def test_health_requires_vm_token_and_reports_database_state(tmp_path: Path) -> None:
     app, _ = load_app(tmp_path)
     with TestClient(app) as client:
@@ -89,6 +98,35 @@ def test_http_protocol_requires_vm_token(tmp_path: Path) -> None:
         assert client.post("/sync", json={"table": "screenshots", "rows": [{"id": "1"}]}).status_code == 401
         assert client.post("/auth?token=test-token", json={}).status_code == 400
         assert client.post("/ping?token=test-token").json() == {"status": "ok"}
+
+
+def test_stop_instance_is_observable_when_audience_missing(tmp_path: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    _, module = load_app(tmp_path)
+    monkeypatch.delenv("AGENT_VM_STOP_AUDIENCE", raising=False)
+    module.runtime.backend_url = "https://api.example.test"
+    with caplog.at_level(logging.WARNING, logger="agent-vm"):
+        asyncio.run(module.stop_instance())
+    assert "idle-stop skipped" in caplog.text
+
+
+def test_stop_instance_is_observable_when_broker_fails(tmp_path: Path, monkeypatch, caplog) -> None:
+    import logging
+
+    import httpx
+
+    _, module = load_app(tmp_path)
+    monkeypatch.setenv("AGENT_VM_STOP_AUDIENCE", "https://api.example.test")
+    module.runtime.backend_url = "https://api.example.test"
+
+    async def boom(_path: str) -> str:
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(module, "metadata", boom)
+    with caplog.at_level(logging.WARNING, logger="agent-vm"):
+        asyncio.run(module.stop_instance())
+    assert "idle-stop broker call failed" in caplog.text
 
 
 def test_invalid_database_upload_preserves_open_database(tmp_path: Path) -> None:
@@ -151,7 +189,8 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
         nonlocal worker
         worker = threading.current_thread()
         started.set()
-        assert release.wait(2)
+        timer.start()
+        assert release.wait(BLOCKED_WORKER_TIMEOUT_SECONDS)
         return ["ok"]
 
     monkeypatch.setattr(module, "validate_database_integrity", slow_validation)
@@ -166,10 +205,8 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
         upload_task = asyncio.create_task(module.upload_database(Request()))
         assert await asyncio.to_thread(started.wait, 1)
         await asyncio.sleep(0.01)
-        elapsed = time.monotonic() - started_at
         release.set()
-        result = await upload_task
-        return elapsed, result
+        return await upload_task
 
     timer_fired = False
 
@@ -178,22 +215,18 @@ def test_database_integrity_check_does_not_block_event_loop(tmp_path: Path, monk
         timer_fired = True
         release.set()
 
-    timer = threading.Timer(0.2, hang_guard)
-    started_at = time.monotonic()
-    timer.start()
+    timer = threading.Timer(HANG_GUARD_SECONDS, hang_guard)
     try:
-        elapsed, result = asyncio.run(run_upload())
+        result = asyncio.run(run_upload())
     finally:
         release.set()
         timer.cancel()
         module.runtime.close_database()
 
-    # The upload must release through its own path, not the 0.2 s hang guard:
-    # if the offloaded work never resumed, only the timer unblocks the await
-    # and the guard flag is set. The elapsed bound is deliberately generous —
-    # the precise signal is whether the guard fired, not a wall-clock race.
+    # The upload must release through its own path, not the hang guard: if validation
+    # ran on the event loop the loop can never reach release.set(), so only the guard
+    # unblocks the await and the flag is set.
     assert not timer_fired
-    assert elapsed < 2.0
     assert worker is not threading.main_thread()
     assert result == (len(payload), len(payload))
 
@@ -212,7 +245,8 @@ def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeyp
         if calls == 1:
             worker = threading.current_thread()
             started.set()
-            assert release.wait(2)
+            timer.start()
+            assert release.wait(BLOCKED_WORKER_TIMEOUT_SECONDS)
 
     monkeypatch.setattr(module, "fsync_file", slow_fsync)
 
@@ -226,10 +260,8 @@ def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeyp
         upload_task = asyncio.create_task(module.upload_database(Request()))
         assert await asyncio.to_thread(started.wait, 1)
         await asyncio.sleep(0.01)
-        elapsed = time.monotonic() - started_at
         release.set()
-        result = await upload_task
-        return elapsed, result
+        return await upload_task
 
     timer_fired = False
 
@@ -238,11 +270,9 @@ def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeyp
         timer_fired = True
         release.set()
 
-    timer = threading.Timer(0.2, hang_guard)
-    started_at = time.monotonic()
-    timer.start()
+    timer = threading.Timer(HANG_GUARD_SECONDS, hang_guard)
     try:
-        elapsed, result = asyncio.run(run_upload())
+        result = asyncio.run(run_upload())
     finally:
         release.set()
         timer.cancel()
@@ -250,7 +280,6 @@ def test_database_upload_fsync_does_not_block_event_loop(tmp_path: Path, monkeyp
 
     # See the sibling test: the precise signal is the hang guard, not the wall clock.
     assert not timer_fired
-    assert elapsed < 2.0
     assert worker is not threading.main_thread()
     assert result == (len(payload), len(payload))
 
@@ -274,7 +303,8 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
         if not install_started.is_set():
             install_thread = threading.current_thread()
             install_started.set()
-            assert release_install.wait(2)
+            timer.start()
+            assert release_install.wait(BLOCKED_WORKER_TIMEOUT_SECONDS)
         return original_close()
 
     def tracked_execute_sql(query):
@@ -309,9 +339,7 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
         timer_fired = True
         release_install.set()
 
-    timer = threading.Timer(0.2, hang_guard)
-    started_at = time.monotonic()
-    timer.start()
+    timer = threading.Timer(HANG_GUARD_SECONDS, hang_guard)
     try:
         query_blocked, result, query_result = asyncio.run(run_upload())
     finally:
@@ -321,10 +349,8 @@ def test_database_installation_is_offloaded_and_serialized_with_db_use(tmp_path:
 
     # The install must release through its own path: if the query serialized
     # behind the database install (the deadlock this test guards), only the
-    # 0.2 s hang guard unblocks it. The wall-clock bound is intentionally
-    # generous; the precise signal is whether the guard fired.
+    # hang guard unblocks it.
     assert not timer_fired
-    assert time.monotonic() - started_at < 2.0
     assert install_thread is not threading.main_thread()
     assert query_blocked
     assert result == (len(payload), len(payload))

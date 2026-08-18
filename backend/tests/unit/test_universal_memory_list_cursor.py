@@ -585,7 +585,7 @@ def test_read_canonical_scan_page_snapshot_id_mismatch_and_lineage(monkeypatch):
         canonical_memory_id=None,
         doc_id=None,
     ):
-        stamp = now - timedelta(days=day)
+        stamp = now - timedelta(hours=day)
         evidence = MemoryEvidence(
             evidence_id=f"evidence-{memory_id}",
             source_id=f"source-{memory_id}",
@@ -893,7 +893,7 @@ def _canonical_scan_memory_item(
         tier = MemoryLayer.short_term
     if status is None:
         status = MemoryItemStatus.active
-    stamp = now - timedelta(days=day)
+    stamp = now - timedelta(hours=day)
     evidence = MemoryEvidence(
         evidence_id=f"evidence-{memory_id}",
         source_id=f"source-{memory_id}",
@@ -1101,7 +1101,7 @@ def test_read_canonical_scan_page_uses_keyset_order_and_filters(monkeypatch):
     now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
 
     def _item(memory_id: str, *, day: int, processing_state=ProcessingState.processed, tier=MemoryLayer.short_term):
-        stamp = now - timedelta(days=day)
+        stamp = now - timedelta(hours=day)
         evidence = MemoryEvidence(
             evidence_id=f"evidence-{memory_id}",
             source_id=f"source-{memory_id}",

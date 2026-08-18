@@ -3216,5 +3216,6 @@
     "accountCutoverMigrationRollbackMessage": "Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.",
     "accountCutoverOpenStore": "Store openen",
     "sendRawAudioToOmi": "Onbewerkte audio naar Omi sturen",
-    "sendRawAudioToOmiDescription": "Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd."
+    "sendRawAudioToOmiDescription": "Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.",
+    "findDevice": "Zoeken"
 }

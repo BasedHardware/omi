@@ -3251,5 +3251,6 @@
     "accountCutoverMigrationRollbackMessage": "Votre compte est en maintenance après un retour arrière de migration. Certaines données plus récentes peuvent être isolées.",
     "accountCutoverOpenStore": "Ouvrir le store",
     "sendRawAudioToOmi": "Envoyer l'audio brut à Omi",
-    "sendRawAudioToOmiDescription": "Désactivez cette option pour empêcher l'envoi de l'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi."
+    "sendRawAudioToOmiDescription": "Désactivez cette option pour empêcher l'envoi de l'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.",
+    "findDevice": "Localiser"
 }

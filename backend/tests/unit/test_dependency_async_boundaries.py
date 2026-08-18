@@ -282,7 +282,10 @@ def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_e
         assert policies == [
             'mcp:memories_read',
             'mcp:memories_write',
+            # Each conversation read charges the shared ceiling before its per-route budget.
+            'dev:conversation_reads_total',
             'dev:conversations_read',
+            'dev:conversation_reads_total',
             'dev:conversation_detail_read',
             'dev:conversations',
             'dev:memories_read',

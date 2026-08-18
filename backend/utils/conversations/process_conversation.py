@@ -910,7 +910,9 @@ def _extract_memories_canonical(
             strict=True,
         )
         ungrounded_candidates = 0
+        seen_candidates = 0
         for candidate in extracted_candidates:
+            seen_candidates += 1
             evidence_quotes = _grounded_l1_evidence_quotes(
                 candidate.evidence_quotes,
                 conversation.transcript_segments,
@@ -949,16 +951,35 @@ def _extract_memories_canonical(
                     True,
                 )
             )
-        if extracted_candidates and not capture_candidates:
+        if seen_candidates and not capture_candidates:
             # Every candidate failed grounding: the run itself is untrustworthy,
             # so it must not submit the empty replacement that would retract the
-            # source's existing memories.
-            raise ValueError("canonical memory extraction returned evidence without a unique source binding")
+            # source's existing memories. Skipping the replacement is the whole
+            # verdict — it leaves prior memories intact. Raising instead would
+            # abort the caller's finalization and additionally drop that
+            # conversation's action items, goal progress, audio files and
+            # created webhook, which this extraction has no standing to decide.
+            # Count what the loop actually yielded — the extractor's return
+            # value is only known to be iterable, so its truthiness is not a
+            # statement about how many candidates it holds.
+            logger.warning(
+                "canonical memory extraction skipped replacement: all %s candidates ungrounded conversation=%s",
+                seen_candidates,
+                conversation.id,
+            )
+            record_fallback(
+                component='other',
+                from_mode='canonical_memory_extraction',
+                to_mode='replacement_skipped',
+                reason='other',
+                outcome='degraded',
+            )
+            return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
         if ungrounded_candidates:
             logger.warning(
                 "canonical memory extraction dropped %s of %s ungrounded candidates conversation=%s",
                 ungrounded_candidates,
-                len(extracted_candidates),
+                seen_candidates,
                 conversation.id,
             )
             record_fallback(

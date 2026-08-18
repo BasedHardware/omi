@@ -9859,4 +9859,7 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔';
+
+  @override
+  String get findDevice => 'تلاش کریں';
 }

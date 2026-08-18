@@ -114,6 +114,26 @@ def test_gateway_flex_client_has_no_sdk_retry(monkeypatch):
     ]
 
 
+def test_conflict_flex_client_binds_explicit_prefix_cache(monkeypatch):
+    class _Bindable:
+        def bind(self, **kwargs):
+            self.bound = kwargs
+            return self
+
+    created = _Bindable()
+    monkeypatch.setattr(
+        promotion_flex,
+        "get_or_create_omi_gateway_llm",
+        lambda *args, **kwargs: created,
+    )
+
+    llm = promotion_flex._get_gateway_flex_llm("memory_conflict_flex", request_timeout=900.0)
+
+    assert llm is created
+    assert created.bound["prompt_cache_key"] == promotion_flex.CONSOLIDATION_FLEX_CACHE_KEY
+    assert created.bound["extra_body"] == {"prompt_cache_options": promotion_flex.EXPLICIT_CACHE_OPTIONS}
+
+
 @pytest.mark.parametrize(
     "payload",
     [None, {}, _flex_payload(enabled="yes"), _flex_payload(generation=0), {**_flex_payload(), "unexpected": True}],
@@ -230,6 +250,40 @@ def test_router_only_defers_transient_flex_errors():
     assert permanent_invoke is not None
     with pytest.raises(ValueError, match="bad request"):
         permanent_invoke("prompt")
+
+
+def test_force_enabled_routes_flex_and_skips_control_drift(monkeypatch):
+    monkeypatch.setenv(promotion_flex.BACKGROUND_FLEX_CAPABLE_ENV, "true")
+    monkeypatch.setenv("OMI_ENV_STAGE", "dev")
+    db = _Db({"enabled": False, "generation": 1})
+    calls = []
+    router = promotion_flex.PromotionFlexRunRouter(
+        db_client=db,
+        force_enabled=True,
+        flex_llm_factory=lambda *args, **kwargs: (calls.append(("factory", args, kwargs)) or _Model(calls)),
+    )
+
+    model = router.llm_for_uid(
+        "uid-a",
+        standard_feature="memory_l2",
+        flex_feature="memory_l2_flex",
+        workload="memory_l2",
+    )
+    assert model is not None
+    assert model.invoke("prompt").content == "result"
+    assert calls == [
+        (
+            "factory",
+            ("memory_l2_flex",),
+            {"request_timeout": promotion_flex.BACKGROUND_FLEX_TIMEOUT_SECONDS},
+        ),
+        ("bind", {"service_tier": "flex"}),
+        ("invoke", "prompt"),
+    ]
+    assert router.control.enabled is True
+    assert router.control.generation == 1
+    db.payload = _flex_payload(enabled=False, generation=9)
+    router.assert_control_current()
 
 
 def test_router_defers_instead_of_using_standard_when_flex_cannot_fit_job_budget():

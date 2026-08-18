@@ -9934,4 +9934,7 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Désactivez cette option pour empêcher l\'envoi de l\'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.';
+
+  @override
+  String get findDevice => 'Localiser';
 }

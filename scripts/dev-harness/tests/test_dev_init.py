@@ -139,3 +139,17 @@ def test_dev_init_installs_hooks_in_a_main_checkout(tmp_path: Path) -> None:
     hook = _hooks_dir(repo) / "pre-commit"
     assert hook.is_file() and os.access(hook, os.X_OK), result.stdout
     assert (repo / "backend/.env.local-dev").is_file(), result.stdout
+
+
+def test_dev_init_next_steps_cover_mobile_and_desktop(tmp_path: Path) -> None:
+    """The closing hint used to name only `make dev-desktop`, so anyone setting
+    up the harness for mobile/iOS testing against it (which needs `make
+    dev-up`, not the desktop app) was pointed at the wrong command.
+    """
+    repo = _fixture_repo(tmp_path)
+
+    result = _run_dev_init(repo)
+
+    assert result.returncode == 0, result.stdout
+    assert "make dev-up" in result.stdout, result.stdout
+    assert "make dev-desktop" in result.stdout, result.stdout

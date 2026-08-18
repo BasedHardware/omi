@@ -88,10 +88,11 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                       checkboxTheme: CheckboxThemeData(
                         fillColor: WidgetStateProperty.resolveWith<Color>((Set<WidgetState> states) {
                           if (states.contains(WidgetState.selected)) {
-                            return Colors.deepPurple;
+                            return Colors.white;
                           }
                           return Colors.grey.shade700;
                         }),
+                        checkColor: WidgetStateProperty.all(Colors.black),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
                     ),
@@ -117,8 +118,8 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
           TextButton(
             onPressed: widget.onConfirm,
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
-              backgroundColor: Colors.deepPurple,
+              foregroundColor: Colors.black,
+              backgroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -151,7 +152,8 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
                   CupertinoCheckbox(
                     value: _checkboxValue,
                     onChanged: _updateCheckboxValue,
-                    activeColor: Colors.deepPurple,
+                    activeColor: Colors.white,
+                    checkColor: CupertinoColors.black,
                   ),
                   const SizedBox(width: 8),
                   Text(widget.checkboxText!, style: TextStyle(fontSize: 14, color: Colors.grey.shade300)),
@@ -175,7 +177,7 @@ class _ConfirmationDialogState extends State<ConfirmationDialog> {
             isDefaultAction: true,
             child: Text(
               widget.confirmText ?? context.l10n.confirm,
-              style: const TextStyle(fontSize: 16, color: Colors.deepPurple, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w600),
             ),
           ),
         ],

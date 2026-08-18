@@ -89,6 +89,8 @@ OWNER_FALLBACK_SCAN_LIMIT = 1_000
 FAILED_JOB_STATES = {"retry", "quarantined", "missing", "stale", "recreate_required"}
 DEFAULT_MISSING_CLEANUP_GRACE_SECONDS = 24 * 60 * 60
 MIN_MISSING_CLEANUP_GRACE_SECONDS = 60
+DEFAULT_IDLE_TEARDOWN_SECONDS = 30 * 60
+MIN_IDLE_TEARDOWN_SECONDS = 30 * 60
 _IMMUTABLE_BOOT_IMAGE = re.compile(r"^projects/[^/]+/global/images/[^/]+$")
 _MIGRATION_ID = re.compile(r"^[0-9a-f]{24}$")
 
@@ -391,6 +393,42 @@ def _missing_cleanup_grace_seconds() -> int:
     if value < MIN_MISSING_CLEANUP_GRACE_SECONDS:
         raise ValueError(f"AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS must be at least {MIN_MISSING_CLEANUP_GRACE_SECONDS}")
     return value
+
+
+def _idle_teardown_seconds() -> int:
+    raw = os.getenv("AGENT_VM_IDLE_TEARDOWN_SECONDS")
+    if raw is None or not raw.strip():
+        return DEFAULT_IDLE_TEARDOWN_SECONDS
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError("AGENT_VM_IDLE_TEARDOWN_SECONDS must be an integer") from exc
+    if value < MIN_IDLE_TEARDOWN_SECONDS:
+        raise ValueError(f"AGENT_VM_IDLE_TEARDOWN_SECONDS must be at least {MIN_IDLE_TEARDOWN_SECONDS}")
+    return value
+
+
+def idle_teardown_due(
+    *,
+    status: str,
+    reasons: Sequence[str],
+    start_requested: bool,
+    active_sessions: int,
+    idle_since: float | None,
+    now: float,
+    idle_teardown_seconds: int,
+) -> bool:
+    """True only for a healthy RUNNING VM with no live session past the idle TTL.
+
+    Idle must never be folded into drift ``reasons``: that path stops and
+    rewrites metadata. This predicate is a terminal-for-this-run outcome: the
+    VM is deleted (disks reclaimed via ``autoDelete``), not stopped-and-kept.
+    """
+    if reasons or start_requested or active_sessions != 0:
+        return False
+    if status != "RUNNING" or idle_since is None:
+        return False
+    return idle_since <= now - idle_teardown_seconds
 
 
 def _canonical_image_ref(value: str) -> str:
@@ -1211,6 +1249,55 @@ async def _update_reconcile(
     )
 
 
+async def _teardown_undemanded_vm(
+    uid: str,
+    vm_name: str,
+    auth_token: str,
+    *,
+    api: GceAgentVmClient,
+    owner: str,
+    instance: Mapping[str, Any],
+    now: float,
+    observed_start_request_at: float | None,
+    detail: str,
+) -> ReconcileResult:
+    """Delete a VM that no session demands; cost policy owns undemanded capacity.
+
+    The caller has already verified: owner lease held, zero active session
+    leases, no start demand, and no active boot-image migration. Deletion
+    reclaims the boot and state disks through their ``autoDelete`` attachments;
+    the SQLite database on the state disk is a client-uploaded copy and the
+    Chrome profile is a tmpfs, so no unique data exists on the instance. The
+    owner record is marked ``missing`` so desktop provisioning can claim a
+    replacement immediately and terminal cleanup erases the record after grace.
+    """
+    instance_id = str(instance.get("id") or "")
+    if not instance_id:
+        raise RuntimeError("undemanded VM teardown identity is unavailable")
+    if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
+        return ReconcileResult(uid, "stale", "owner lease lost before teardown")
+    if not await api.delete_instance(vm_name, instance_id):
+        return ReconcileResult(uid, "stale", "instance identity changed before teardown")
+    if not await _update_reconcile(
+        uid,
+        vm_name,
+        auth_token,
+        owner,
+        {
+            "state": "missing",
+            "lastError": "undemanded VM torn down",
+            "missingSince": now,
+            "idleSince": DELETE_FIELD,
+            **clear_vm_reconcile_lease_fields(),
+        },
+        consume_start_request_at=observed_start_request_at,
+    ):
+        # The instance is already gone; the next run observes the provider 404
+        # and records missing itself.
+        return ReconcileResult(uid, "ready", f"{detail}; owner record update deferred")
+    return ReconcileResult(uid, "ready", detail)
+
+
 async def reconcile_one(
     uid: str,
     vm: Mapping[str, Any],
@@ -1220,6 +1307,7 @@ async def reconcile_one(
     project: str,
     dry_run: bool = False,
     missing_cleanup_grace_seconds: int | None = None,
+    idle_teardown_seconds: int | None = None,
     boot_image_migration: BootImageMigrationPlan | None = None,
 ) -> ReconcileResult:
     vm_name = str(vm["vmName"])
@@ -1265,6 +1353,7 @@ async def reconcile_one(
     missing_cleanup_grace_seconds = (
         _missing_cleanup_grace_seconds() if missing_cleanup_grace_seconds is None else missing_cleanup_grace_seconds
     )
+    idle_teardown_seconds = _idle_teardown_seconds() if idle_teardown_seconds is None else idle_teardown_seconds
     failed_candidate: dict[str, str] = {}
     try:
         instance = await api.get_instance(vm_name)
@@ -1371,6 +1460,31 @@ async def reconcile_one(
             retirement = await _retire_soaked_boot_image_predecessor(uid, vm, owner=owner, api=api, release=release)
             if retirement is not None:
                 return retirement
+        # Cost policy: a stopped VM without session demand is deleted, never
+        # preserved or repaired. This runs before drift/boot-image handling on
+        # purpose — an undemanded VM is not worth converging to the release.
+        # Boot-image migration allowlists and active migration journals keep
+        # their instances.
+        if (
+            str(instance.get("status") or "") in {"TERMINATED", "STOPPED"}
+            and not start_requested
+            and boot_image_migration is None
+            and not _active_migration_candidate(vm)
+        ):
+            active = await asyncio.to_thread(active_session_count, uid, vm_name)
+            if active == 0:
+                await _active_state_disk_info(api, uid, vm, instance)
+                return await _teardown_undemanded_vm(
+                    uid,
+                    vm_name,
+                    auth_token,
+                    api=api,
+                    owner=owner,
+                    instance=instance,
+                    now=now,
+                    observed_start_request_at=observed_start_request_at,
+                    detail="deleted stopped VM; no session demand",
+                )
         boot_drift = await _boot_image_drift(api, instance, release)
         if boot_drift:
             reason, actual = boot_drift
@@ -1439,6 +1553,15 @@ async def reconcile_one(
                 )
                 if migration.state != "recreate_required":
                     return migration
+            # Cost policy: never leave an undemanded RUNNING VM billing behind a
+            # terminal recreate_required record. Stop it now; the next run's
+            # stopped-teardown gate deletes it and reclaims the disks.
+            if str(instance.get("status") or "") == "RUNNING" and not start_requested:
+                active = await asyncio.to_thread(active_session_count, uid, vm_name)
+                if active == 0:
+                    if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
+                        return ReconcileResult(uid, "stale", "owner lease lost before boot-drift stop")
+                    await api.stop(vm_name)
             if not await _update_reconcile(
                 uid,
                 vm_name,
@@ -1510,6 +1633,8 @@ async def reconcile_one(
                     return ReconcileResult(uid, "stale", "owner lease lost while deferring drain")
                 return ReconcileResult(uid, "deferred", f"{active} active session(s)")
         status = str(instance.get("status") or "UNKNOWN")
+        idle_since_raw = reconcile_state.get("idleSince")
+        idle_since = float(idle_since_raw) if isinstance(idle_since_raw, (int, float)) else None
         if not reasons and status in {"TERMINATED", "STOPPED"} and not start_requested:
             if not await _update_reconcile(
                 uid,
@@ -1526,6 +1651,7 @@ async def reconcile_one(
                     "lastError": None,
                     "retryAt": None,
                     "missingSince": DELETE_FIELD,
+                    "idleSince": DELETE_FIELD,
                     **clear_vm_reconcile_lease_fields(),
                 },
                 vm_fields={
@@ -1536,11 +1662,65 @@ async def reconcile_one(
             ):
                 return ReconcileResult(uid, "stale", "owner lease lost while recording stopped VM")
             return ReconcileResult(uid, "ready", "stopped; idle self-stop preserved")
+        if not reasons and status == "RUNNING" and not start_requested:
+            active = await asyncio.to_thread(active_session_count, uid, vm_name)
+            if idle_teardown_due(
+                status=status,
+                reasons=reasons,
+                start_requested=start_requested,
+                active_sessions=active,
+                idle_since=idle_since,
+                now=now,
+                idle_teardown_seconds=idle_teardown_seconds,
+            ) and not _active_migration_candidate(vm):
+                return await _teardown_undemanded_vm(
+                    uid,
+                    vm_name,
+                    auth_token,
+                    api=api,
+                    owner=owner,
+                    instance=instance,
+                    now=now,
+                    observed_start_request_at=observed_start_request_at,
+                    detail="deleted idle VM; idle TTL elapsed",
+                )
+            if active == 0:
+                recorded_idle_since = idle_since if idle_since is not None else now
+                if not await _update_reconcile(
+                    uid,
+                    vm_name,
+                    auth_token,
+                    owner,
+                    {
+                        "state": "ready",
+                        "idleSince": recorded_idle_since,
+                        **clear_vm_reconcile_lease_fields(),
+                    },
+                ):
+                    return ReconcileResult(uid, "stale", "owner lease lost while recording idleSince")
+                return ReconcileResult(uid, "ready", "idle; waiting for TTL")
         if status == "RUNNING" and reasons:
             if not await asyncio.to_thread(renew_vm_lease, uid, vm_name, auth_token, owner):
                 return ReconcileResult(uid, "stale", "owner lease lost before stop")
             await api.stop(vm_name)
             status = "TERMINATED"
+            # Cost policy: only session demand justifies repairing and
+            # restarting a drifted VM. Without demand the drained instance is
+            # deleted here rather than converged back to RUNNING — this is what
+            # retires the stop-rewrite-restart loop on permanently broken
+            # guests.
+            if not start_requested and not _active_migration_candidate(vm):
+                return await _teardown_undemanded_vm(
+                    uid,
+                    vm_name,
+                    auth_token,
+                    api=api,
+                    owner=owner,
+                    instance=instance,
+                    now=now,
+                    observed_start_request_at=observed_start_request_at,
+                    detail="deleted drifted VM; no session demand",
+                )
         if status not in {"TERMINATED", "STOPPED"} and reasons:
             raise RuntimeError(f"provider status {status}")
         if reasons:
@@ -1589,6 +1769,7 @@ async def reconcile_one(
                 "lastError": None,
                 "retryAt": None,
                 "missingSince": DELETE_FIELD,
+                "idleSince": DELETE_FIELD,
                 **clear_vm_reconcile_lease_fields(),
             },
             vm_fields={

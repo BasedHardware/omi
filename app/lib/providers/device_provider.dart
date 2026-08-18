@@ -33,6 +33,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
+typedef FindDeviceRunner = Future<bool> Function(BtDevice device);
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
@@ -53,6 +54,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   BtDevice? pairedDevice;
   DateTime? _deviceSessionStartedAt;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
+  final FindDeviceRunner _findDeviceRunner;
+  Future<bool>? _findDeviceRequest;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
   StreamSubscription? _bleChargingStatusListener;
   int batteryLevel = -1;
@@ -94,8 +97,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
-  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader})
-      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics {
+  DeviceProvider({BleDiagnosticsLoader? bleDiagnosticsLoader, FindDeviceRunner? findDeviceRunner})
+      : _bleDiagnosticsLoader = bleDiagnosticsLoader ?? BleHostApi().getDeviceDiagnostics,
+        _findDeviceRunner = findDeviceRunner ?? _defaultFindDeviceRunner {
     ServiceManager.instance().device.subscribe(this, this);
     BleBridge.instance.pairingLostCallback = _showPairingLostDialog;
   }
@@ -216,6 +220,48 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
     }
     notifyListeners();
+  }
+
+  Future<bool> findDevice() {
+    final device = connectedDevice ?? pairedDevice;
+    if (!isConnected ||
+        device == null ||
+        device.type != DeviceType.omi ||
+        FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device)) {
+      return Future.value(false);
+    }
+
+    final existingRequest = _findDeviceRequest;
+    if (existingRequest != null) return existingRequest;
+
+    late final Future<bool> request;
+    request = _runFindDevice(device).whenComplete(() {
+      if (identical(_findDeviceRequest, request)) {
+        _findDeviceRequest = null;
+      }
+    });
+    _findDeviceRequest = request;
+    return request;
+  }
+
+  Future<bool> _runFindDevice(BtDevice device) async {
+    try {
+      return await _findDeviceRunner(device);
+    } catch (e) {
+      Logger.debug('DeviceProvider: Failed to play find-device pattern: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _defaultFindDeviceRunner(BtDevice device) async {
+    final connection = await ServiceManager.instance().device.ensureConnection(device.id).timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        Logger.debug('DeviceProvider: Timed out finding the active device connection');
+        return null;
+      },
+    );
+    return await connection?.playFindDevicePattern() ?? false;
   }
 
   Future _bleDisconnectDevice(BtDevice btDevice) async {

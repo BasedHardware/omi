@@ -16,6 +16,75 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from routers import desktop_agent_vm
 
 
+@pytest.fixture(autouse=True)
+def _agent_vm_provisioning_enabled(monkeypatch):
+    """Creation is dark by default; most tests exercise the enabled path."""
+    monkeypatch.setenv("AGENT_VM_PROVISIONING_ENABLED", "true")
+
+
+@pytest.mark.asyncio
+async def test_provision_refuses_to_create_when_provisioning_is_dark(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.delenv("AGENT_VM_PROVISIONING_ENABLED", raising=False)
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: None)
+
+    with pytest.raises(HTTPException) as excinfo:
+        await desktop_agent_vm.provision_agent_vm(BackgroundTasks(), "user")
+
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.detail == "agent_vm_provisioning_disabled"
+
+
+@pytest.mark.asyncio
+async def test_provision_refuses_to_replace_a_missing_pointer_when_dark(monkeypatch):
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    vm = {
+        "vmName": "omi-agent-user",
+        "authToken": "omi-token",
+        "status": "ready",
+        "reconcile": {"state": "missing", "missingSince": 1.0},
+    }
+    monkeypatch.delenv("AGENT_VM_PROVISIONING_ENABLED", raising=False)
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+
+    with pytest.raises(HTTPException) as excinfo:
+        await desktop_agent_vm.provision_agent_vm(BackgroundTasks(), "user")
+
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.detail == "agent_vm_provisioning_disabled"
+
+
+@pytest.mark.asyncio
+async def test_provision_still_serves_an_existing_live_owner_when_dark(monkeypatch):
+    """Legacy principal: released desktops with a live VM keep working un-flagged."""
+    vm = {"vmName": "omi-agent-user", "ip": "1.2.3.4", "authToken": "omi-token", "status": "ready"}
+
+    async def run_blocking(_, function, *args):
+        return function(*args)
+
+    monkeypatch.delenv("AGENT_VM_PROVISIONING_ENABLED", raising=False)
+    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
+    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
+    monkeypatch.setattr(desktop_agent_vm, "_source_image", lambda _project: "image")
+    monkeypatch.setattr(desktop_agent_vm, "_gcs_bucket", lambda: "bucket")
+    monkeypatch.setattr(desktop_agent_vm, "_service_account", lambda: "service-account")
+    monkeypatch.setattr(desktop_agent_vm, "_claim_vm_if_allowed", lambda _uid, _candidate: (vm, False))
+    tasks = BackgroundTasks()
+
+    response = await desktop_agent_vm.provision_agent_vm(tasks, "user")
+
+    assert response.status == "exists"
+    assert response.agent_status == "ready"
+    assert not tasks.tasks
+
+
 def test_vm_publish_transaction_refuses_deletion_admitted_before_commit():
     deletion = type('Snapshot', (), {'exists': True, 'to_dict': lambda self: {'wipe_status': 'running'}})()
 
@@ -178,36 +247,6 @@ def test_record_provider_missing_rejects_quarantined_state():
     assert marked is False
     assert database.rows[("users", "uid")]["agentVm"]["reconcile"]["state"] == "quarantined"
     assert database.transactions[-1].updates == []
-
-
-@pytest.mark.asyncio
-async def test_status_keeps_demotion_when_start_request_loses_same_owner_race(monkeypatch):
-    vm = {
-        "vmName": "omi-agent-stale",
-        "zone": "us-central1-a",
-        "ip": "34.1.2.3",
-        "authToken": "old-token",
-        "status": "ready",
-        "createdAt": "2026-07-26T00:00:00Z",
-    }
-
-    async def run_blocking(_, function, *args):
-        return function(*args)
-
-    async def not_found(*_args):
-        return "NOT_FOUND", None
-
-    monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
-    monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
-    monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
-    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *_args: False)
-    monkeypatch.setattr(desktop_agent_vm, "record_provider_missing_if_current", lambda *_args: True)
-
-    response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
-
-    assert response.status == "updating"
-    assert response.ip is None
 
 
 @pytest.mark.asyncio
@@ -462,7 +501,13 @@ def test_instance_address_parser_never_returns_unknown_placeholder():
 
 
 @pytest.mark.asyncio
-async def test_status_requests_reconciler_start_for_stopped_vm(monkeypatch):
+async def test_status_demotes_a_stopped_vm_without_waking_it(monkeypatch):
+    """Wake-on-open retired 2026-08-17: status polling must not restart VMs.
+
+    Measured basis: 135 status/poll-driven restart attempts in the trailing
+    24h of prod agent-proxy logs against zero successful sessions. A real
+    session connect (agent-proxy) is the only wake path.
+    """
     vm = {
         "vmName": "omi-agent-user",
         "zone": "us-central1-a",
@@ -471,23 +516,23 @@ async def test_status_requests_reconciler_start_for_stopped_vm(monkeypatch):
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    requests = []
+    writes = []
 
     async def run_blocking(_, function, *args):
-        return function(*args)
+        return writes.append(function) or function(*args)
 
     monkeypatch.setattr(desktop_agent_vm, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", lambda *args: _stopped_instance())
-    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
     tasks = BackgroundTasks()
 
     response = await desktop_agent_vm.get_agent_status(tasks, "user")
 
     assert response.status == "updating"
     assert response.ip is None
-    assert requests == [("user", "omi-agent-user", "omi-token")]
+    # The only offloaded work is the owner-record read: no demand write.
+    assert writes == [desktop_agent_vm._get_vm]
     assert not tasks.tasks
 
 
@@ -555,7 +600,6 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    requests = []
     marked = []
 
     async def run_blocking(_, function, *args):
@@ -568,7 +612,6 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
-    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
     monkeypatch.setattr(
         desktop_agent_vm, "record_provider_missing_if_current", lambda *args: marked.append(args) or True
     )
@@ -577,12 +620,11 @@ async def test_status_defers_missing_gce_pointer_to_the_fenced_reconciler(monkey
 
     assert response.status == "updating"
     assert response.ip is None
-    assert requests == [("uid", "omi-agent-stale", "old-token")]
     assert marked == [("uid", "omi-agent-stale", "us-central1-a", "old-token")]
 
 
 @pytest.mark.asyncio
-async def test_status_queues_start_when_missing_marker_raises(monkeypatch):
+async def test_status_records_fallback_when_missing_marker_raises(monkeypatch):
     vm = {
         "vmName": "omi-agent-stale",
         "zone": "us-central1-a",
@@ -591,7 +633,6 @@ async def test_status_queues_start_when_missing_marker_raises(monkeypatch):
         "status": "ready",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    requests = []
     fallbacks = []
 
     async def run_blocking(_, function, *args):
@@ -607,7 +648,6 @@ async def test_status_queues_start_when_missing_marker_raises(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", not_found)
-    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
     monkeypatch.setattr(desktop_agent_vm, "record_provider_missing_if_current", boom)
     monkeypatch.setattr(desktop_agent_vm, "record_fallback", lambda **fields: fallbacks.append(fields))
 
@@ -615,7 +655,6 @@ async def test_status_queues_start_when_missing_marker_raises(monkeypatch):
 
     assert response.status == "updating"
     assert response.ip is None
-    assert requests == [("uid", "omi-agent-stale", "old-token")]
     assert fallbacks and fallbacks[0]["from_mode"] == "missing_marker"
 
 
@@ -640,9 +679,6 @@ async def test_status_preserves_ready_when_gce_probe_fails(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", probe_failed)
-    monkeypatch.setattr(
-        desktop_agent_vm, "request_vm_start", lambda *_args: pytest.fail("API blip must preserve ownership")
-    )
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
@@ -671,9 +707,6 @@ async def test_status_leaves_ready_running_instance_unchanged(monkeypatch):
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", running)
-    monkeypatch.setattr(
-        desktop_agent_vm, "request_vm_start", lambda *_args: pytest.fail("healthy ready VM must not queue repair")
-    )
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
@@ -705,7 +738,7 @@ async def test_status_does_not_probe_a_missing_record_while_reconciler_cleanup_i
 
 
 @pytest.mark.asyncio
-async def test_status_defers_running_vm_without_usable_ip_to_reconciler(monkeypatch):
+async def test_status_demotes_running_vm_without_usable_ip_without_demand(monkeypatch):
     vm = {
         "vmName": "omi-agent-unreachable",
         "zone": "us-central1-a",
@@ -714,7 +747,6 @@ async def test_status_defers_running_vm_without_usable_ip_to_reconciler(monkeypa
         "status": "error",
         "createdAt": "2026-07-26T00:00:00Z",
     }
-    requests = []
 
     async def run_blocking(_, function, *args):
         return function(*args)
@@ -726,13 +758,11 @@ async def test_status_defers_running_vm_without_usable_ip_to_reconciler(monkeypa
     monkeypatch.setattr(desktop_agent_vm, "_get_vm", lambda _uid: vm)
     monkeypatch.setattr(desktop_agent_vm, "_project", lambda: "project")
     monkeypatch.setattr(desktop_agent_vm, "_instance", running_without_ip)
-    monkeypatch.setattr(desktop_agent_vm, "request_vm_start", lambda *args: requests.append(args) or True)
 
     response = await desktop_agent_vm.get_agent_status(BackgroundTasks(), "uid")
 
     assert response.status == "updating"
     assert response.ip is None
-    assert requests == [("uid", "omi-agent-unreachable", "current-token")]
 
 
 @pytest.mark.asyncio

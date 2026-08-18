@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import {
+  applyFirestoreActivationCompat,
+  type FirestoreActivationCompat,
+} from "@/lib/activation-compat";
+import { activationCacheKey } from "@/app/api/omi/stats/activation/route";
+import { getPayload } from "@/lib/payload-cache";
 import { posthogResults } from "@/lib/posthog";
 import {
   summarizeActivation,
@@ -42,7 +48,13 @@ export async function GET(request: NextRequest) {
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
 
     if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
-      return NextResponse.json(cache.data);
+      return NextResponse.json(
+        applyFirestoreActivationCompat(
+          cache.data,
+          (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
+            ?.data ?? null,
+        ),
+      );
     }
 
     // Run all queries in parallel - each is lightweight
@@ -350,30 +362,34 @@ export async function GET(request: NextRequest) {
       ? Math.round(((totalNewGA + totalResurrectedGA) / totalChurnedGA) * 100) / 100
       : null;
 
-    const result = {
-      growthAccounting,
-      stickinessTrend,
-      dailyDau,
-      powerUserCurve,
-      activation,
-      summary: {
-        quickRatio,
-        // The rate among users whose build can report it. Null while no matured
-        // signup ran a reporting build -- an unmeasurable metric must read as
-        // unmeasurable rather than as a confident near-zero.
-        activationRate: activationSummary.capableRate,
-        activationTelemetryCoverage: activationSummary.telemetryCoverage,
-        activationSignups: activationSummary.capableSignups,
-        activationPooledRate: activationSummary.rate,
-        dauMau,
-        dauWau,
-        dau: avgDau,
-        wau,
-        mau,
-        l5PlusPct,
-        totalUsers: totalPowerUsers,
+    const result = applyFirestoreActivationCompat(
+      {
+        growthAccounting,
+        stickinessTrend,
+        dailyDau,
+        powerUserCurve,
+        activation,
+        summary: {
+          quickRatio,
+          // Capability-aware until the Firestore activation cache exists. The
+          // one-release compat shim below overlays the conversation-derived
+          // rate so live Infinity panels do not stay blank.
+          activationRate: activationSummary.capableRate,
+          activationTelemetryCoverage: activationSummary.telemetryCoverage,
+          activationSignups: activationSummary.capableSignups,
+          activationPooledRate: activationSummary.rate,
+          dauMau,
+          dauWau,
+          dau: avgDau,
+          wau,
+          mau,
+          l5PlusPct,
+          totalUsers: totalPowerUsers,
+        },
       },
-    };
+      (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
+        ?.data ?? null,
+    );
 
     cache = { data: result, days, timestamp: Date.now() };
     return NextResponse.json(result);

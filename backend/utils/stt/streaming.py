@@ -33,7 +33,12 @@ from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
-from utils.stt.provider_resilience import EXPECTED_REJECTIONS, ProviderCircuitBreaker
+from utils.stt.provider_resilience import (
+    EXPECTED_REJECTIONS,
+    ProviderCircuitBreaker,
+    close_rejected_socket,
+    fallback_socket_is_serving,
+)
 from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
@@ -72,65 +77,123 @@ _parakeet_circuit = ProviderCircuitBreaker(
     cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
 )
 
+_deepgram_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('DEEPGRAM_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('DEEPGRAM_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
+
+
+def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
+    if primary_service == STTService.parakeet:
+        return _parakeet_circuit
+    if primary_service == STTService.deepgram:
+        return _deepgram_circuit
+    raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
+
+
+def _fallback_failure_reason(error: BaseException) -> str:
+    """Classify why a fallback provider could not serve, for the next leg's telemetry."""
+    if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
+        return 'timeout'
+    detail = str(error).lower()
+    if 'limit' in detail or 'quota' in detail:
+        return 'quota'
+    return 'provider_5xx'
+
+
+async def _connect_serving_fallback(
+    connect: Callable[[], Awaitable[Optional[STTSocket]]], service: STTService
+) -> STTSocket:
+    """Connect a fallback provider and prove it is actually serving before adopting it."""
+    socket = await connect()
+    if socket is None:
+        raise RuntimeError(f'{service.value} returned no socket')
+    if not await fallback_socket_is_serving(socket):
+        detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+        close_rejected_socket(socket)
+        raise RuntimeError(f'{service.value} rejected the stream: {detail}')
+    return socket
+
 
 async def connect_stt_socket_with_fallback(
     *,
     primary_service: STTService,
     connect_primary: Callable[[], Awaitable[Optional[STTSocket]]],
     connect_modulate: Callable[[], Awaitable[Optional[STTSocket]]],
+    connect_parakeet: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
 ) -> Tuple[STTSocket, STTService]:
-    """Connect Parakeet before audio starts, falling back once to Modulate.
+    """Connect the selected primary before audio starts, walking the configured fallbacks.
+
+    ``STT_SERVICE_MODELS`` states an ordered preference, so a primary that
+    cannot open a socket must advance to the next configured provider instead
+    of failing the session — a Deepgram account rejecting every connect with
+    HTTP 402 otherwise takes the whole deployment's live transcription down
+    (#11695). The chain must not stop at Modulate either: with Deepgram at HTTP
+    402 and Modulate answering 500/over quota, an English session died while a
+    healthy Parakeet deployment sat idle behind them in the same list (#11752).
 
     The circuit is deliberately process-local and never owns capacity. The
     Parakeet service rejects excess streams at its GPU boundary; this helper
-    only avoids repeated connection latency while that provider is unhealthy.
+    only avoids repeated connection latency while a provider is unhealthy.
     """
-    if primary_service != STTService.parakeet:
-        raise ValueError('connection fallback is defined only for a Parakeet primary')
+    circuit = _circuit_for_primary(primary_service)
 
     reason = 'circuit_open'
-    if _parakeet_circuit.allow_request():
+    if circuit.allow_request():
         try:
             socket = await connect_primary()
-            if socket is None:
-                raise ParakeetConnectionError('config_incomplete', 'Parakeet returned no socket')
-            _parakeet_circuit.record_success()
-            return socket, STTService.parakeet
+            if socket is not None:
+                circuit.record_success()
+                return socket, primary_service
+            reason = 'config_incomplete'
+            circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
             if reason in EXPECTED_REJECTIONS:
-                _parakeet_circuit.record_rejection(reason)
+                circuit.record_rejection(reason)
             else:
-                _parakeet_circuit.record_failure()
+                circuit.record_failure()
         except (asyncio.TimeoutError, TimeoutError):
             reason = 'timeout'
-            _parakeet_circuit.record_failure()
+            circuit.record_failure()
         except Exception:
             reason = 'provider_5xx'
-            _parakeet_circuit.record_failure()
+            circuit.record_failure()
 
-    try:
-        fallback_socket = await connect_modulate()
-        if fallback_socket is None:
-            raise RuntimeError('Modulate returned no socket')
-    except Exception:
+    candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
+        (STTService.modulate, connect_modulate)
+    ]
+    if connect_parakeet is not None and primary_service != STTService.parakeet:
+        candidates.append((STTService.parakeet, connect_parakeet))
+
+    from_mode = primary_service.value
+    for service, connect in candidates:
+        try:
+            fallback_socket = await _connect_serving_fallback(connect, service)
+        except Exception as error:
+            record_fallback(
+                component='stt_selection',
+                from_mode=from_mode,
+                to_mode=service.value,
+                reason=reason,
+                outcome='exhausted',
+            )
+            if service == candidates[-1][0]:
+                raise
+            from_mode = service.value
+            reason = _fallback_failure_reason(error)
+            continue
+
         record_fallback(
             component='stt_selection',
-            from_mode=STTService.parakeet.value,
-            to_mode=STTService.modulate.value,
+            from_mode=from_mode,
+            to_mode=service.value,
             reason=reason,
-            outcome='exhausted',
+            outcome='recovered',
         )
-        raise
+        return fallback_socket, service
 
-    record_fallback(
-        component='stt_selection',
-        from_mode=STTService.parakeet.value,
-        to_mode=STTService.modulate.value,
-        reason=reason,
-        outcome='recovered',
-    )
-    return fallback_socket, STTService.modulate
+    raise RuntimeError('No STT fallback provider was configured')
 
 
 async def drain_stt_socket(socket: STTSocket) -> None:
@@ -261,6 +324,36 @@ deepgram_nova3_languages = {
 # Compatibility export for callers. Its value is owned by stt_provider_policy.
 DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
 stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
+
+
+def modulate_is_configured_fallback(language: Optional[str]) -> bool:
+    """Return whether Modulate may take over a session whose primary failed.
+
+    ``STT_SERVICE_MODELS`` is an ordered preference list, so Modulate serves a
+    failed primary only where the deployment actually lists it and Velma-2
+    accepts the session language.
+    """
+    return (
+        'modulate-velma-2' in (model.strip() for model in stt_service_models)
+        and provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.STREAMING)
+        and modulate_supports_language(language)
+    )
+
+
+def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
+    """Return whether Parakeet may take over a session whose earlier providers failed.
+
+    Same contract as ``modulate_is_configured_fallback``, one provider further
+    down the ordered ``STT_SERVICE_MODELS`` preference: the deployment must list
+    Parakeet, the policy must serve it, its endpoint must be configured, and it
+    must support the session's resolved provider language.
+    """
+    return (
+        STTService.parakeet.value in (model.strip() for model in stt_service_models)
+        and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
+        and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
+        and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
+    )
 
 
 def _stt_selection_from_mode(_language: str, base_lang: str) -> str:

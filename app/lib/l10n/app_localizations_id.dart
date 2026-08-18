@@ -9857,4 +9857,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.';
+
+  @override
+  String get findDevice => 'Temukan';
 }
