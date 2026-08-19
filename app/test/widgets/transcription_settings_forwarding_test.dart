@@ -20,11 +20,11 @@ void main() {
 
     const onDeviceConfig = CustomSttConfig(
       provider: SttProvider.onDeviceWhisper,
-      sendRawAudioToOmi: false,
+      privacyPolicy: SttPrivacyPolicy.transcriptOnly,
     );
     const cloudConfig = CustomSttConfig(
       provider: SttProvider.openai,
-      sendRawAudioToOmi: true,
+      privacyPolicy: SttPrivacyPolicy.full,
     );
     await SharedPreferencesUtil().saveCustomSttConfig(onDeviceConfig);
     await SharedPreferencesUtil().saveConfigForProvider(SttProvider.onDeviceWhisper, onDeviceConfig);
@@ -78,8 +78,47 @@ void main() {
 
     expect(forwardingTile().value, isFalse);
     expect(
-      SharedPreferencesUtil().getConfigForProvider(SttProvider.onDeviceWhisper)?.sendRawAudioToOmi,
+      SharedPreferencesUtil().getConfigForProvider(SttProvider.onDeviceWhisper)?.forwardsRawAudioToOmi,
       isFalse,
     );
+  });
+
+  testWidgets('imported localOnly shows a read-only policy state without transcriptOnly copy', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+        privacyPolicy: SttPrivacyPolicy.localOnly,
+      ),
+    );
+
+    final captureProvider = CaptureProvider();
+    addTearDown(captureProvider.dispose);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<CaptureProvider>.value(
+        value: captureProvider,
+        child: const MaterialApp(
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: TranscriptionSettingsPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('localOnly'), findsOneWidget);
+    expect(
+        find.text(
+            'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.'),
+        findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
   });
 }

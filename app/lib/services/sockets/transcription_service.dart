@@ -9,6 +9,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/sockets/local_only_transcription_socket.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -288,6 +289,19 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   }
 }
 
+typedef CustomSttPrimarySocketFactory = IPureSocket Function(
+  int sampleRate,
+  BleAudioCodec codec,
+  CustomSttConfig config,
+);
+
+typedef CustomSttSecondaryServiceFactory = TranscriptSegmentSocketService Function(
+  int sampleRate,
+  BleAudioCodec codec,
+  String language, {
+  String? source,
+});
+
 class TranscriptSocketServiceFactory {
   TranscriptSocketServiceFactory._();
 
@@ -305,7 +319,7 @@ class TranscriptSocketServiceFactory {
   }
 
   static bool shouldBlockUnsupportedCodecFallback(BleAudioCodec codec, CustomSttConfig config) {
-    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.sendRawAudioToOmi;
+    return config.isEnabled && !isCodecSupportedForCustomStt(codec) && !config.forwardsRawAudioToOmi;
   }
 
   /// Create default Omi transcription service
@@ -345,6 +359,8 @@ class TranscriptSocketServiceFactory {
     String language,
     CustomSttConfig config, {
     String? source,
+    CustomSttPrimarySocketFactory? primarySocketFactory,
+    CustomSttSecondaryServiceFactory? secondaryServiceFactory,
   }) {
     if (!config.isEnabled) {
       return createDefault(sampleRate, codec, language, source: source);
@@ -358,9 +374,19 @@ class TranscriptSocketServiceFactory {
     );
 
     // Create primary socket based on isLive/isPolling
-    final primarySocket = config.isLive
-        ? _createStreamingSocket(sampleRate, codec, config)
-        : _createPollingSocket(sampleRate, codec, config);
+    final primarySocket = (primarySocketFactory ?? _createPrimarySocket)(sampleRate, codec, config);
+
+    if (config.isLocalOnlyPolicy) {
+      return TranscriptSegmentSocketService.withSocket(
+        sampleRate,
+        codec,
+        effectiveLang,
+        LocalOnlyTranscriptionSocket(primarySocket: primarySocket),
+        source: source,
+        customSttMode: true,
+        sttConfigId: sttConfigId,
+      );
+    }
 
     // Wrap with composite service (primary STT + Omi backend)
     return _createCompositeService(
@@ -371,8 +397,15 @@ class TranscriptSocketServiceFactory {
       source: source,
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
-      forwardRawAudioToSecondary: config.sendRawAudioToOmi,
+      forwardRawAudioToSecondary: config.forwardsRawAudioToOmi,
+      secondaryServiceFactory: secondaryServiceFactory ?? _createSecondaryService,
     );
+  }
+
+  static IPureSocket _createPrimarySocket(int sampleRate, BleAudioCodec codec, CustomSttConfig config) {
+    return config.isLive
+        ? _createStreamingSocket(sampleRate, codec, config)
+        : _createPollingSocket(sampleRate, codec, config);
   }
 
   /// Create streaming WebSocket for live STT
@@ -499,13 +532,9 @@ class TranscriptSocketServiceFactory {
     String? sttConfigId,
     String? sttProvider,
     required bool forwardRawAudioToSecondary,
+    required CustomSttSecondaryServiceFactory secondaryServiceFactory,
   }) {
-    final secondaryService = CustomSttTranscriptSegmentSocketService.create(
-      sampleRate,
-      codec,
-      language,
-      source: source,
-    );
+    final secondaryService = secondaryServiceFactory(sampleRate, codec, language, source: source);
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
       secondarySocket: secondaryService.socket,
@@ -521,5 +550,14 @@ class TranscriptSocketServiceFactory {
       customSttMode: true,
       sttConfigId: sttConfigId,
     );
+  }
+
+  static TranscriptSegmentSocketService _createSecondaryService(
+    int sampleRate,
+    BleAudioCodec codec,
+    String language, {
+    String? source,
+  }) {
+    return CustomSttTranscriptSegmentSocketService.create(sampleRate, codec, language, source: source);
   }
 }

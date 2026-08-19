@@ -20,6 +20,13 @@ enum SttProvider {
   static SttProvider fromString(String value) {
     return SttProvider.values.firstWhere((e) => e.name == value, orElse: () => SttProvider.omi);
   }
+
+  static SttProvider? tryFromString(String value) {
+    for (final provider in SttProvider.values) {
+      if (provider.name == value) return provider;
+    }
+    return null;
+  }
 }
 
 /// Request types determine how audio is sent and whether it's streaming

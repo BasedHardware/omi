@@ -101,7 +101,7 @@ void main() {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
         url: 'wss://stt.example.test/live',
-        sendRawAudioToOmi: false,
+        privacyPolicy: SttPrivacyPolicy.transcriptOnly,
       );
 
       final service = TranscriptSocketServiceFactory.createFromCustomConfig(
@@ -119,7 +119,7 @@ void main() {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
         url: 'wss://stt.example.test/live',
-        sendRawAudioToOmi: false,
+        privacyPolicy: SttPrivacyPolicy.transcriptOnly,
       );
 
       expect(
@@ -132,7 +132,7 @@ void main() {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
         url: 'wss://stt.example.test/live',
-        sendRawAudioToOmi: true,
+        privacyPolicy: SttPrivacyPolicy.full,
       );
 
       expect(
@@ -145,7 +145,7 @@ void main() {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
         url: 'wss://stt.example.test/live',
-        sendRawAudioToOmi: false,
+        privacyPolicy: SttPrivacyPolicy.transcriptOnly,
       );
 
       expect(
