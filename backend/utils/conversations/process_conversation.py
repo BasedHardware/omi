@@ -118,9 +118,11 @@ from utils.conversations.calendar_linking import (
 )
 from utils.conversations.meeting_context import (
     MAX_SCREEN_CONTEXT_ROWS,
+    MEETING_SEARCH_TOLERANCE_MINUTES,
     context_from_calendar_link,
     context_from_screen_activity,
-    merge_meeting_contexts,
+    resolve_meeting_context,
+    select_overlapping_meeting,
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
@@ -157,6 +159,14 @@ def _calendar_context_read_enabled() -> bool:
 
 def _ocr_meeting_context_enabled() -> bool:
     return _flag_enabled('CONVERSATION_OCR_CONTEXT_ENABLED')
+
+
+def _stored_meeting_lookup_enabled() -> bool:
+    # Defaults ON: this is a bounded, read-only query of the user's own stored
+    # meetings, wrapped in try/except, and it is the only identity source that
+    # does not require a Google OAuth grant or a Redis mapping that may never
+    # have been written. The env var exists as a kill switch.
+    return _flag_enabled('CONVERSATION_STORED_MEETING_CONTEXT_ENABLED', default=True)
 
 
 def _dedup_excluded_conversation_ids(conversation: Any) -> set:
@@ -1576,43 +1586,93 @@ def _store_meeting_context(conversation: Any, context: CalendarMeetingContext) -
     conversation.external_data = external_data
 
 
-def _enrich_meeting_context(uid: str, conversation: Any) -> None:
-    """Read identity context before summarization without mutating calendar providers."""
-    context = _stored_meeting_context(conversation)
-    conversation_id = getattr(conversation, 'id', None)
-    if isinstance(conversation, Conversation) and conversation_id:
-        meeting_id = redis_db.get_conversation_meeting_id(conversation_id)
-        if meeting_id:
-            try:
-                meeting_data = calendar_db.get_meeting(uid, meeting_id)
-                if meeting_data:
-                    context = merge_meeting_contexts(CalendarMeetingContext(**meeting_data), context)
-            except Exception as exc:
-                logger.error('Error retrieving stored meeting context for conversation %s: %s', conversation_id, exc)
+def _meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
+    """Exact conversation->meeting association, when one was recorded.
 
+    `redis_db.set_conversation_meeting_id` is written in exactly one place
+    (`routers/listen/conversations.py`, at desktop conversation creation) and only
+    when a stored meeting already overlaps that instant, so this is frequently
+    absent. It is an optimization, never the only path.
+    """
+    conversation_id = getattr(conversation, 'id', None)
+    if not isinstance(conversation, Conversation) or not conversation_id:
+        return None
+    try:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation_id)
+        if not meeting_id:
+            return None
+        meeting_data = calendar_db.get_meeting(uid, meeting_id)
+        if not meeting_data:
+            return None
+        parsed = CalendarMeetingContext.from_records([meeting_data])
+        return parsed[0] if parsed else None
+    except Exception as exc:
+        logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
+        return None
+
+
+def _meeting_context_from_time_overlap(
+    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
+) -> Optional[CalendarMeetingContext]:
+    """Time-overlap lookup against the user's stored meetings.
+
+    Independent of the Redis mapping and of any OAuth grant: it reads the same
+    `users/{uid}/meetings` collection that `POST /v1/calendar/meetings` writes.
+    """
+    if started_at is None or finished_at is None:
+        return None
+    try:
+        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
+        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
+        return select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at)
+    except Exception as exc:
+        logger.error('Error reading stored meetings by time range for uid %s: %s', uid, exc)
+        return None
+
+
+def _enrich_meeting_context(uid: str, conversation: Any) -> None:
+    """Read identity context before summarization without mutating calendar providers.
+
+    Sources, best first — each merges only the participants the better sources did
+    not already supply, and any failure degrades to the next source rather than
+    failing the conversation:
+      1. stored system-calendar meeting (exact Redis mapping, else time overlap)
+      2. `calendar_meeting_context` sent directly on the create request
+      3. Google Calendar event overlapping the conversation window (read-only)
+      4. conferencing-window OCR from screen activity
+    """
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)
-    if started_at and finished_at and _calendar_context_read_enabled():
-        try:
-            linked = asyncio.run(get_overlapping_calendar_event(uid, started_at, finished_at))
-            if linked:
-                context = merge_meeting_contexts(context, context_from_calendar_link(linked))
-        except Exception as exc:
-            logger.error('Error reading overlapping calendar context before summarization: %s', exc)
+    has_window = bool(started_at and finished_at)
 
-    if started_at and finished_at and _ocr_meeting_context_enabled():
-        try:
-            rows = screen_activity_db.get_screen_activity(
-                uid,
-                start_date=started_at,
-                end_date=finished_at,
-                limit=MAX_SCREEN_CONTEXT_ROWS,
-            )
-            screen_context = context_from_screen_activity(rows, started_at=started_at, finished_at=finished_at)
-            context = merge_meeting_contexts(context, screen_context)
-        except Exception as exc:
-            logger.error('Error reading screen meeting context before summarization: %s', exc)
+    def _stored() -> Optional[CalendarMeetingContext]:
+        mapped = _meeting_context_from_redis_mapping(uid, conversation)
+        if mapped is not None:
+            return mapped
+        return _meeting_context_from_time_overlap(uid, started_at, finished_at)
 
+    def _calendar() -> Optional[CalendarMeetingContext]:
+        linked = asyncio.run(get_overlapping_calendar_event(uid, started_at, finished_at))
+        return context_from_calendar_link(linked) if linked else None
+
+    def _screen() -> Optional[CalendarMeetingContext]:
+        rows = screen_activity_db.get_screen_activity(
+            uid,
+            start_date=started_at,
+            end_date=finished_at,
+            limit=MAX_SCREEN_CONTEXT_ROWS,
+        )
+        return context_from_screen_activity(rows, started_at=started_at, finished_at=finished_at)
+
+    context = resolve_meeting_context(
+        direct=_stored_meeting_context(conversation),
+        stored=_stored if _stored_meeting_lookup_enabled() else None,
+        calendar=_calendar if has_window and _calendar_context_read_enabled() else None,
+        screen=_screen if has_window and _ocr_meeting_context_enabled() else None,
+        on_error=lambda source, exc: logger.error(
+            'Error reading %s meeting context before summarization: %s', source, exc
+        ),
+    )
     if context:
         _store_meeting_context(conversation, context)
 
