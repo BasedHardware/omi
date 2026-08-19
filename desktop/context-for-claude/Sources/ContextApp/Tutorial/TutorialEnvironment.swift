@@ -551,11 +551,7 @@ enum ClaudeHandoff {
                     }
                 },
                 serverIsLoaded: {
-                    ClaudeServerLiveness.state(
-                        claudeDesktopPIDs: Set(
-                            NSRunningApplication.runningApplications(
-                                withBundleIdentifier: ClaudeRelaunch.bundleIdentifier
-                            ).map(\.processIdentifier)))
+                    ClaudeServerLiveness.state(claudeDesktopPIDs: ClaudeDesktopProcesses.pids)
                 })
         }
     }
@@ -774,7 +770,10 @@ enum ClaudeHandoff {
 /// opened Claude and a card telling them to type something.
 @MainActor
 enum ClaudeRelaunch {
-    static let bundleIdentifier = "com.anthropic.claudefordesktop"
+    /// Claude Desktop's bundle identifier lives on `ClaudeDesktopProcesses` now: the liveness probe
+    /// and the status surfaces need the same string, and two copies of it is one copy too many for a
+    /// constant that decides whether we can see Claude at all.
+    static var bundleIdentifier: String { ClaudeDesktopProcesses.bundleIdentifier }
 
     static var isInstalled: Bool {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) != nil

@@ -42,7 +42,10 @@ struct StatusView: View {
     @ObservedObject private var auth = OmiAuth.shared
     @ObservedObject private var uploads = ConversationUploader.shared
 
-    @State private var claude: (claudeCode: Bool, claudeDesktop: Bool) = (false, false)
+    /// What is registered on disk *and* whether the running Claude Desktop is serving us. The
+    /// default is the honest one for "not probed yet": nothing connected, nothing to restart.
+    @State private var claude = ClaudeConnection(
+        claudeCode: false, claudeDesktop: false, liveness: .unknown)
     @State private var claudeNote: String?
     /// True while the two config files are being rewritten. A second press cannot start a second
     /// write, which is the same rule the account line's round trip follows.
@@ -512,11 +515,7 @@ struct StatusView: View {
     /// The Claude line as a value, for the reason `account` is one: this view keeps no judgement of
     /// its own about a state it cannot be driven through in a test.
     private var connector: ClaudeConnectorLine {
-        ClaudeConnectorLine(
-            claudeCode: claude.claudeCode,
-            claudeDesktop: claude.claudeDesktop,
-            note: claudeNote,
-            isConnecting: isConnecting)
+        ClaudeConnectorLine(connection: claude, note: claudeNote, isConnecting: isConnecting)
     }
 
     /// Same shape as `refresh()`, and for the same reason: `register()` reads, decodes and rewrites
@@ -528,7 +527,16 @@ struct StatusView: View {
         claudeNote = nil
         Task {
             let result = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.register() }.value
-            claude = (result.claudeCode, result.claudeDesktop)
+            // Re-probed rather than built from `result`: registering writes the config, and Claude
+            // Desktop reads it at *its* launch, so the press that "connects" routinely leaves a
+            // Claude that still cannot answer. That is the state the user most needs to be told
+            // about, and it exists from the instant the write lands.
+            claude = await Task.detached(priority: .userInitiated) {
+                ClaudeConnection(
+                    claudeCode: result.claudeCode,
+                    claudeDesktop: result.claudeDesktop,
+                    liveness: ClaudeServerLiveness.state(claudeDesktopPIDs: ClaudeDesktopProcesses.pids))
+            }.value
             claudeNote = result.message
             isConnecting = false
         }
@@ -651,7 +659,7 @@ struct StatusView: View {
         readAskLedger()
         claudeNote = nil
         Task {
-            claude = await Task.detached(priority: .userInitiated) { ClaudeRegistrar.status() }.value
+            claude = await Task.detached(priority: .userInitiated) { ClaudeConnection.current() }.value
         }
     }
 }
