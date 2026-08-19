@@ -776,10 +776,14 @@ final class ScreenCaptureService: Sendable {
 
     // Try Accessibility API first (most accurate - gets actual focused window).
     // Skip if AX is disabled system-wide (apiDisabled) or this app exceeded the cannotComplete threshold.
-    let skipAX = axStateLock.withLock {
-      axSystemwideDisabled
-        || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
-    }
+    // Same-process accessibility reads re-enter our own view graph on the caller's thread, and
+    // this runs on the capture tick — see `AccessibilityProcessBoundary`. The window-list
+    // heuristic below still resolves our own window.
+    let skipAX = !AccessibilityProcessBoundary.isForeignProcess(activePID)
+      || axStateLock.withLock {
+        axSystemwideDisabled
+          || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
+      }
     if !skipAX,
       let axResult = getWindowInfoViaAccessibility(
         pid: activePID, bundleID: bundleID, windowList: windowList)
