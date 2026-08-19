@@ -51,7 +51,7 @@ spec:
       # existingClaim, provisioning is off and this wait is skipped.)
       initContainers:
         - name: wait-for-models
-          image: {{ include "omi-oss.image" (dict "root" $root "repo" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
           imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
           command: ["sh", "-c", "until [ -f /models/.provisioned ]; do echo 'waiting for model weights...'; sleep 5; done"]
           volumeMounts:
@@ -59,7 +59,7 @@ spec:
       {{- end }}
       containers:
         - name: {{ $name }}
-          image: {{ include "omi-oss.image" (dict "root" $root "repo" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" (required (printf "inference.inCluster.services.%s.image is required" $name) $svc.image)) }}
           imagePullPolicy: {{ $svc.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - name: http

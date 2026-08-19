@@ -405,7 +405,7 @@ checks:
     reason: "WP3 seal (ADR-0034/0004): utils/auth/ is the only door to Firebase Auth — no firebase_admin.auth import or attribute access outside it (initialize_app/messaging/firestore stay allowed), so the backend stays swappable (Firebase | OIDC/Keycloak). Analogue of firestore/object-store/vector boundary guards; catches a raw Firebase-auth call reintroduced by an upstream merge (ADR-0029/0030)"
   - id: oss-release
     command: ["python3", ".github/scripts/check_oss_release.py"]
-    triggers: ["deploy/onprem/omi.oss.release.env", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/.gitignore", ".github/scripts/check_oss_release.py", "backend/tests/unit/test_check_oss_release.py", ".github/checks-manifest.yaml"]
+    triggers: ["deploy/onprem/omi.oss.release.env", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/.gitignore", "deploy/onprem/helm/omi-oss/Chart.yaml", "deploy/onprem/helm/omi-oss/values-prod.yaml", "deploy/onprem/helm/omi-oss/values-k0s.yaml", ".github/scripts/check_oss_release.py", "backend/tests/unit/test_check_oss_release.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "ADR-0054: the images we build carry the release from one source (deploy/onprem/omi.oss.release.env), so a rebuild yields a NEW reference instead of overwriting a mutable :latest that `helm upgrade`/`up` then serve stale from cache. Also asserts the release file stays TRACKED — the repo-wide *.env ignore rule would otherwise make the release silently local to one machine"
   - id: oss-image-pins

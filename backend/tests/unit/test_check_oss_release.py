@@ -69,6 +69,28 @@ def test_prerelease_suffix_is_accepted():
     assert _MODULE.check('OMI_OSS_RELEASE=0.3.0-rc.1\n', COMPOSE, GITIGNORE) == []
 
 
+CHART = 'appVersion: "0.2.0"\n'
+
+
+def test_chart_appversion_matching_the_release_passes():
+    assert _MODULE.check(RELEASE, COMPOSE, GITIGNORE, CHART, {}) == []
+
+
+def test_chart_appversion_drifting_from_the_release_is_flagged():
+    problems = _MODULE.check(RELEASE, COMPOSE, GITIGNORE, 'appVersion: "0.1.0"\n', {})
+    assert any('appVersion' in p and '!=' in p for p in problems), problems
+
+
+def test_latest_pinned_in_a_production_overlay_is_flagged():
+    problems = _MODULE.check(RELEASE, COMPOSE, GITIGNORE, CHART, {'values-k0s.yaml': '  image:\n    tag: latest\n'})
+    assert any('dev-only' in p for p in problems), problems
+
+
+def test_empty_tag_in_a_production_overlay_is_fine():
+    # Empty = inherit the release from appVersion, which is the intended production shape.
+    assert _MODULE.check(RELEASE, COMPOSE, GITIGNORE, CHART, {'values-prod.yaml': '  image:\n    tag: ""\n'}) == []
+
+
 def test_the_real_repo_is_aligned():
     """The check as CI runs it — the tree in this commit must pass."""
     assert _MODULE.main() == 0

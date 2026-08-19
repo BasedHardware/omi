@@ -38,7 +38,7 @@ spec:
       initContainers:
         # STT engine — faster-whisper large-v3 (public). Download on CPU into the HF cache on the PVC.
         - name: whisper
-          image: {{ include "omi-oss.image" (dict "root" $root "repo" $ic.services.whisper.image) }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.whisper.image) }}
           imagePullPolicy: {{ $ic.services.whisper.imagePullPolicy | default "IfNotPresent" }}
           env:
             - name: HF_HOME
@@ -57,7 +57,7 @@ spec:
             - { name: models, mountPath: /models }
         # Speaker diarization — pyannote (GATED: needs a Hugging Face token that accepted the model terms).
         - name: diarizer
-          image: {{ include "omi-oss.image" (dict "root" $root "repo" $ic.services.diarizer.image) }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.diarizer.image) }}
           imagePullPolicy: {{ $ic.services.diarizer.imagePullPolicy | default "IfNotPresent" }}
           env:
             - name: HF_HOME
@@ -81,7 +81,7 @@ spec:
             - { name: models, mountPath: /models }
         # Translation — convert facebook/nllb-200-distilled-600M to the CTranslate2 int8 format on the PVC.
         - name: nllb
-          image: {{ include "omi-oss.image" (dict "root" $root "repo" $ic.services.nllb.image) }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.nllb.image) }}
           imagePullPolicy: {{ $ic.services.nllb.imagePullPolicy | default "IfNotPresent" }}
           env:
             - name: HF_HOME
@@ -107,7 +107,7 @@ spec:
             - { name: models, mountPath: /models }
       containers:
         - name: done
-          image: {{ include "omi-oss.image" (dict "root" $root "repo" $ic.services.nllb.image) }}
+          image: {{ include "omi-oss.image" (dict "root" $root "image" $ic.services.nllb.image) }}
           imagePullPolicy: {{ $ic.services.nllb.imagePullPolicy | default "IfNotPresent" }}
           # Write the readiness marker the inference pods wait for (see inference-incluster.yaml), so they
           # start only once every model is present instead of crash-looping against an empty volume.

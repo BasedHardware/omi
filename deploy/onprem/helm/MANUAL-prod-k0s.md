@@ -185,13 +185,24 @@ docker run -d --name omi-registry --restart=unless-stopped -p 0.0.0.0:5000:5000 
   -v omi-registry-data:/var/lib/registry registry:2
 ```
 
+The build tags every image with the **release** — one number describing this whole stack, kept in
+`deploy/onprem/omi.oss.release.env`. Read it once; the chart uses the same value by default, so the tag you
+push and the tag the cluster pulls cannot disagree:
+```bash
+RELEASE=$(grep '^OMI_OSS_RELEASE=' ../omi.oss.release.env | cut -d= -f2)
+echo $RELEASE                             # -> e.g. 0.2.0
+```
+
 **c.** Tag each of the five images for the registry and push them:
 ```bash
 for img in backend whisper parakeet diarizer nllb; do
-  docker tag  omi-oss-$img:latest $REG/omi-oss-$img:latest
-  docker push $REG/omi-oss-$img:latest
+  docker tag  omi-oss-$img:$RELEASE $REG/omi-oss-$img:$RELEASE
+  docker push $REG/omi-oss-$img:$RELEASE
 done
 ```
+(The build also produces `:latest` as a local alias for development. Do **not** push or deploy that one:
+a mutable tag makes a later `helm upgrade` leave the pod spec unchanged, so the node keeps serving the
+cached image and the upgrade silently does nothing.)
 ```bash
 curl -s http://$REG/v2/_catalog           # -> lists the 5 repositories
 ```

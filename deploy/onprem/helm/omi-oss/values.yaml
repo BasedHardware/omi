@@ -31,7 +31,11 @@ networkPolicy:
 storageClassName: ""
 
 backend:
-  image: omi-oss-backend:latest
+  # Repository + tag are separate so the tag can default to the release (Chart.AppVersion, ADR-0054)
+  # instead of being welded into the string. Empty tag = use the release; the dev overlay sets `latest`.
+  image:
+    repository: omi-oss-backend
+    tag: ""
   # Kind loads images with `kind load docker-image` (no registry, study §4.3) — Never avoids any pull.
   imagePullPolicy: Never
   replicas: 1
@@ -179,7 +183,9 @@ inference:
       # STT engine (faster-whisper, 99 languages) — GPU. Reached by the parakeet gateway, not the backend.
       whisper:
         enabled: true
-        image: omi-oss-whisper:latest
+        image:
+          repository: omi-oss-whisper
+          tag: ""      # empty = the release (Chart.AppVersion)
         port: 8000
         gpu: 1
         healthPath: /health
@@ -191,7 +197,9 @@ inference:
       # transcription to whisper. This is what the backend calls for STT.
       parakeet:
         enabled: true
-        image: omi-oss-parakeet:latest
+        image:
+          repository: omi-oss-parakeet
+          tag: ""      # empty = the release (Chart.AppVersion)
         port: 8080
         env:
           PARAKEET_INFERENCE_MODE: nim
@@ -206,7 +214,9 @@ inference:
       # Speaker diarization / embeddings — GPU.
       diarizer:
         enabled: true
-        image: omi-oss-diarizer:latest
+        image:
+          repository: omi-oss-diarizer
+          tag: ""      # empty = the release (Chart.AppVersion)
         port: 8080
         gpu: 1
         env:
@@ -217,7 +227,9 @@ inference:
       # Translation (NLLB, CTranslate2) — GPU.
       nllb:
         enabled: true
-        image: omi-oss-nllb:latest
+        image:
+          repository: omi-oss-nllb
+          tag: ""      # empty = the release (Chart.AppVersion)
         port: 8080
         gpu: 1
         env:

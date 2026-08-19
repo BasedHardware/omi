@@ -15,13 +15,22 @@ mongo-0.mongo.{{ .Release.Namespace }}.svc.cluster.local
 {{- end -}}
 
 {{/*
-Resolve one of OUR built images (backend + in-cluster inference). Prefix `imageRegistry` when set:
-empty  -> bare name (Kind: `kind load` + imagePullPolicy Never, no registry);
-<host> -> <host>/<repo> (k0s: the node pulls from the local registry). Call: (dict "root" $ "repo" "omi-oss-x:latest").
+Resolve one of OUR built images (backend + in-cluster inference) as <registry>/<repository>:<tag>.
+
+The TAG defaults to .Chart.AppVersion, which is this chart's projection of the compose-side release
+(deploy/onprem/omi.oss.release.env, ADR-0054 — a CI check fails if the two drift). An overlay may pin
+`tag` explicitly; the dev overlay uses `latest`, the alias the build produces next to the release for
+`kind load`. Prod/k0s must NOT use `latest` (checked).
+
+`imageRegistry` is prefixed when set: empty -> bare name (Kind: `kind load` + imagePullPolicy Never,
+no registry); <host> -> <host>/<repository> (k0s: the node pulls from the local registry).
+Call: (dict "root" $ "image" .Values.backend.image).
 */}}
 {{- define "omi-oss.image" -}}
 {{- $reg := .root.Values.imageRegistry | default "" | trimSuffix "/" -}}
-{{- if $reg }}{{ $reg }}/{{ .repo }}{{ else }}{{ .repo }}{{ end -}}
+{{- $repo := required "image.repository is required" .image.repository -}}
+{{- $tag := .image.tag | default .root.Chart.AppVersion -}}
+{{- if $reg }}{{ $reg }}/{{ $repo }}:{{ $tag }}{{ else }}{{ $repo }}:{{ $tag }}{{ end -}}
 {{- end -}}
 
 {{/*

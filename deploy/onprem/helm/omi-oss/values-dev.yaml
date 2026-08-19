@@ -7,6 +7,10 @@
 storageClassName: openebs-hostpath
 
 backend:
+  # Dev uses the :latest alias the build produces next to the release, because the Kind flow loads it
+  # by that name (`kind load docker-image omi-oss-backend:latest`). Prod/k0s must not (ADR-0054).
+  image:
+    tag: latest
   encryptionSecret: "dev-encryption-secret-not-for-production-32c"
   env:
     # Real OIDC auth (auth profile is on below), so NO dev-auth bypass — the backend validates real

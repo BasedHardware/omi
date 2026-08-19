@@ -15,7 +15,15 @@
     "backend": {
       "type": "object",
       "properties": {
-        "image": { "type": "string", "minLength": 1 },
+        "image": {
+          "type": "object",
+          "description": "repository + tag; an empty tag means the release (Chart.appVersion, ADR-0054)",
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" }
+          },
+          "required": ["repository"]
+        },
         "replicas": { "type": "integer", "minimum": 1 },
         "encryptionSecret": { "type": "string" }
       }

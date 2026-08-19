@@ -44,7 +44,7 @@ spec:
               echo "mongo primary ready."
       containers:
         - name: backend
-          image: {{ include "omi-oss.image" (dict "root" . "repo" .Values.backend.image) }}
+          image: {{ include "omi-oss.image" (dict "root" . "image" .Values.backend.image) }}
           imagePullPolicy: {{ .Values.backend.imagePullPolicy }}
           # Same entrypoint as compose.base: create the runtime temp dirs, then exec uvicorn.
           command:

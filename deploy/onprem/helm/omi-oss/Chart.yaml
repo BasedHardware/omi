@@ -5,7 +5,8 @@ description: >-
   (STORAGE_BACKEND=mongo), feature profiles (auth/chat/objstore/push/inference) off by default —
   the Helm mirror of the compose stack (study: docs/analysis/kubernetes-onprem-helm-kind-k0s.md).
 type: application
-# Chart version — bump on template changes. appVersion tracks the omi backend image, not pinned here
-# (the operator sets backend.image); 0.1.0 marks the first core scaffold validated on Kind.
-version: 0.1.0
-appVersion: "0.1.0"
+# appVersion is this chart's PROJECTION of the stack release (deploy/onprem/omi.oss.release.env,
+# ADR-0054): it is the default tag of every image we build, and a CI check fails if the two drift.
+# Bump both together with the release; `version` also moves on template-only changes.
+version: 0.2.0
+appVersion: "0.2.0"

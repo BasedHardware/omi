@@ -10,7 +10,9 @@ on:
       - "deploy/onprem/compose.base.yaml"
       - "deploy/onprem/compose.selfhost.yaml"
       - "deploy/onprem/omi.oss.release.pins"
+      - "deploy/onprem/omi.oss.release.env"
       - ".github/scripts/check_oss_image_parity.py"
+      - ".github/scripts/check_oss_release.py"
       - ".github/workflows/onprem_helm.yml"
 
 jobs:
@@ -35,8 +37,11 @@ jobs:
           helm template omi deploy/onprem/helm/omi-oss -n omi-prod \
             -f deploy/onprem/helm/omi-oss/values-prod.yaml > /dev/null
 
-      - name: image parity (compose <-> Helm)
+      - name: image pins (compose + Helm derive from omi.oss.release.pins)
         run: python3 .github/scripts/check_oss_image_parity.py
+
+      - name: release (appVersion mirrors omi.oss.release.env; no :latest in prod/k0s)
+        run: python3 .github/scripts/check_oss_release.py
 
       - name: helm package (installable .tgz artifact — ADR-0049 §4.3)
         run: helm package deploy/onprem/helm/omi-oss -d /tmp/helm-out

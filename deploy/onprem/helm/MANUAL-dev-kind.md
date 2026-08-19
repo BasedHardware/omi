@@ -56,7 +56,7 @@ kubectl cluster-info --context kind-omi-dev
 
 Kind has no registry — you build the backend image and load it straight into the cluster.
 ```bash
-# Build (from the repo). This builds omi-oss-backend:latest.
+# Build (from the repo). This tags the image with the release AND with :latest — the dev alias.
 docker compose -f ../compose.prod.yaml build backend
 kind load docker-image omi-oss-backend:latest --name omi-dev
 ```

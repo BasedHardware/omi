@@ -38,6 +38,7 @@ diarization and translation — runs on your hardware.
 | `--set` | What |
 |---|---|
 | `imageRegistry=<host:port>` | registry the node pulls our images from (empty on Kind, which uses `kind load`) |
+| `backend.image.tag=<release>` | normally unset: the images we build default to `Chart.appVersion`, the chart's mirror of `deploy/onprem/omi.oss.release.env`. Set it to roll back to a previously pushed release without touching the chart |
 | `ingress.loadBalancerIP=<free LAN IP>` | the entry-point IP (MetalLB); the OIDC issuer + TLS SAN derive from it |
 | `backend.encryptionSecret=<32-byte hex>` | `openssl rand -hex 32` |
 | `inference.openai.baseUrl` / `inference.embeddings.baseUrl` / `.model` | your external LLM + embeddings |

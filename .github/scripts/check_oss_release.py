@@ -6,13 +6,17 @@
 rebuild produces a NEW reference and `helm upgrade` / `docker compose up` can no longer serve stale code
 from a cache under an unchanged `:latest`.
 
-Invariants enforced here (the chart-side ones — appVersion, chart tags, no `:latest` in the prod/k0s
-overlays — land with the chart conversion):
+Invariants:
 
   1. the release file exists, parses, and carries a SemVer OMI_OSS_RELEASE;
   2. the release file is TRACKED by git — it is source, and the repo-wide `*.env` rule would otherwise
      swallow it, making the release silently local to one machine;
-  3. every `omi-oss-*` image in the compose files is tagged with the release, never a literal tag.
+  3. every `omi-oss-*` image in the compose files is tagged with the release, never a literal tag;
+  4. the chart's appVersion equals the release — it is the default tag of every image we build, so a
+     drift there ships a chart that deploys a different build than the compose stack of the same commit;
+  5. no prod/k0s overlay pins `tag: latest`. `:latest` is the dev alias the build produces next to the
+     release (Kind loads it by that name); in production it reintroduces exactly the stale-pull bug this
+     design removes.
 
 Stdlib only, like the other guards.
 
@@ -29,6 +33,12 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE_ENV = ROOT / "deploy/onprem/omi.oss.release.env"
 GITIGNORE = ROOT / "deploy/onprem/.gitignore"
 COMPOSE = [ROOT / "deploy/onprem/compose.base.yaml", ROOT / "deploy/onprem/compose.selfhost.yaml"]
+CHART = ROOT / "deploy/onprem/helm/omi-oss/Chart.yaml"
+# Overlays that deploy for real: :latest is a dev-only alias and must not appear here.
+PROD_VALUES = [
+    ROOT / "deploy/onprem/helm/omi-oss/values-prod.yaml",
+    ROOT / "deploy/onprem/helm/omi-oss/values-k0s.yaml",
+]
 
 VAR = "OMI_OSS_RELEASE"
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
@@ -50,7 +60,17 @@ def _images(text: str) -> list[str]:
     return [raw if raw.startswith("${") else raw.split("#", 1)[0].strip() for raw in _IMAGE_RE.findall(text)]
 
 
-def check(release_text: str, compose_texts: dict[str, str], gitignore_text: str) -> list[str]:
+_APPVERSION_RE = re.compile(r'^appVersion:\s*["\']?([^"\'\s]+)["\']?\s*$', re.MULTILINE)
+_LATEST_TAG_RE = re.compile(r'^\s*tag:\s*["\']?latest["\']?\s*$', re.MULTILINE)
+
+
+def check(
+    release_text: str,
+    compose_texts: dict[str, str],
+    gitignore_text: str,
+    chart_text: str = "",
+    prod_values: dict[str, str] | None = None,
+) -> list[str]:
     """The whole rule over source strings, so it is testable without a repo on disk."""
     problems: list[str] = []
 
@@ -75,6 +95,25 @@ def check(release_text: str, compose_texts: dict[str, str], gitignore_text: str)
                     f"{fname}: {img!r} is an image we build but is not tagged with the release — use "
                     f"omi-oss-<name>:${{{VAR}:?...}} (:latest is a dev alias produced by build.tags)"
                 )
+
+    # The chart is a PROJECTION of the release: appVersion is the default tag of our images.
+    if chart_text:
+        found = _APPVERSION_RE.search(chart_text)
+        if not found:
+            problems.append("Chart.yaml: no appVersion")
+        elif release is not None and found.group(1) != release:
+            problems.append(
+                f"Chart.yaml: appVersion {found.group(1)!r} != {VAR} {release!r} — the chart would deploy "
+                f"a different build than the compose stack of the same commit"
+            )
+
+    for fname, text in (prod_values or {}).items():
+        if _LATEST_TAG_RE.search(text):
+            problems.append(
+                f"{fname}: pins `tag: latest` — that alias is dev-only (Kind loads it by name); in "
+                f"production it reintroduces the stale-pull bug (a rebuild leaves the pod spec unchanged)"
+            )
+
     return problems
 
 
@@ -106,6 +145,8 @@ def main() -> int:
         RELEASE_ENV.read_text(encoding="utf-8"),
         {f.name: f.read_text(encoding="utf-8") for f in COMPOSE},
         GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.exists() else "",
+        CHART.read_text(encoding="utf-8") if CHART.exists() else "",
+        {f.name: f.read_text(encoding="utf-8") for f in PROD_VALUES if f.exists()},
     )
     untracked = _tracked_by_git()
     if untracked:
@@ -115,8 +156,8 @@ def main() -> int:
         print("Release check FAILED:\n  " + "\n  ".join(problems))
         return 1
 
-    print(f"Release OK — {VAR}={release_of(RELEASE_ENV.read_text(encoding='utf-8'))}, "
-          f"tracked, and every image we build in compose carries it.")
+    print(f"Release OK — {VAR}={release_of(RELEASE_ENV.read_text(encoding='utf-8'))}, tracked, carried by "
+          f"every image we build in compose, and mirrored by the chart's appVersion.")
     return 0
 
 
