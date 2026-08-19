@@ -91,7 +91,10 @@ protocol DesktopMeetingUploading: Sendable {
 }
 
 actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
-  private let eventStore = EKEventStore()
+  // EKEventStore is not Sendable, so Swift 6 rejects sending this actor-isolated reference into
+  // nonisolated SDK entry points (requestFullAccessToEvents). Every actual use stays confined to
+  // this actor; the unchecked annotation only covers the SDK-interop boundary.
+  private nonisolated(unsafe) let eventStore = EKEventStore()
 
   func authorizationState() -> SystemCalendarAuthorizationState {
     switch EKEventStore.authorizationStatus(for: .event) {
