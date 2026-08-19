@@ -11,6 +11,7 @@ import { ExportsConnector } from './ExportsConnector'
 import { ConnectorRow } from './ConnectorRow'
 import { ConnectTray } from './ConnectTray'
 import { McpExportDetail } from './McpExportDetail'
+import { ChatReplyConnector } from './ChatReplyConnector'
 
 // The Connections home — the content registered into the Hub's Connect stage (see
 // hubConnectSlot.ts). The Windows-native port of macOS's DashboardPage connect tray.
@@ -41,6 +42,7 @@ type View =
   | { kind: 'imports' }
   | { kind: 'exports' }
   | { kind: 'export'; id: ExportId }
+  | { kind: 'chat-reply' }
 
 // Title shown in the DetailShell header for each export destination.
 const EXPORT_TITLES: Record<ExportId, string> = {
@@ -146,6 +148,7 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
         onOpenExports={() => setView({ kind: 'exports' })}
         onOpenExport={(id) => setView({ kind: 'export', id })}
         onAskOmi={askOmi}
+        onOpenChatReply={() => setView({ kind: 'chat-reply' })}
         onOpenDevice={openDevice}
         onDismiss={onDismiss}
       />
@@ -196,10 +199,22 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
       <DetailShell title="Use omi memory anywhere" onBack={back} onDismiss={onDismiss}>
         <SectionHeader>Exports</SectionHeader>
         <div className="flex flex-col">
+          <ChatReplyConnector />
           <ExportsConnector />
         </div>
         <div className="mt-6">
           <MarketplaceLink onOpen={openApps} />
+        </div>
+      </DetailShell>
+    )
+  }
+
+  if (view.kind === 'chat-reply') {
+    return (
+      <DetailShell title="WhatsApp & Telegram" onBack={back} onDismiss={onDismiss}>
+        <SectionHeader>Use omi memory anywhere</SectionHeader>
+        <div className="flex flex-col">
+          <ChatReplyConnector />
         </div>
       </DetailShell>
     )

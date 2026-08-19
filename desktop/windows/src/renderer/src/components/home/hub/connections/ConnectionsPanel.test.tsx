@@ -31,7 +31,20 @@ beforeEach(() => {
       .fn()
       .mockResolvedValue({ connected: false, postCount: 0, memoryCount: 0, syncing: false }),
     xRunState: vi.fn().mockResolvedValue({ phase: 'idle', postCount: 0, memoryCount: 0 }),
-    onXProgress: vi.fn().mockReturnValue(() => {})
+    onXProgress: vi.fn().mockReturnValue(() => {}),
+    beeperStatus: vi.fn().mockResolvedValue({
+      running: false,
+      connected: false,
+      enabled: false,
+      sendMode: 'draft',
+      networks: ['whatsapp', 'telegram'],
+      accounts: [],
+      draftCount: 0,
+      imessageSupported: false
+    }),
+    beeperListDrafts: vi.fn().mockResolvedValue([]),
+    onBeeperChanged: vi.fn().mockReturnValue(() => {}),
+    beeperOpenDownload: vi.fn()
   }
 })
 
@@ -64,6 +77,7 @@ describe('ConnectionsPanel tray (top level)', () => {
       'tray-tile-omi-device',
       'tray-tile-more-imports',
       'tray-tile-ask-omi',
+      'tray-tile-whatsapp-telegram',
       'tray-tile-openclaw',
       'tray-tile-hermes',
       'tray-tile-more-exports'
@@ -92,6 +106,15 @@ describe('ConnectionsPanel tray (top level)', () => {
     expect(screen.getByTestId('connections-back')).toBeTruthy()
   })
 
+  it('drills into WhatsApp & Telegram chat-reply and shows the demo', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByTestId('tray-tile-whatsapp-telegram'))
+    await waitFor(() => expect(screen.getByTestId('chat-reply-demo')).toBeTruthy())
+    expect(screen.getByText(/what time does your flight land/)).toBeTruthy()
+    fireEvent.click(screen.getByTestId('connections-back'))
+    expect(screen.getByText('Connect data')).toBeTruthy()
+  })
+
   it('opens the full Imports list from the left "+ More"', async () => {
     renderPanel()
     fireEvent.click(screen.getByTestId('tray-tile-more-imports'))
@@ -105,7 +128,7 @@ describe('ConnectionsPanel tray (top level)', () => {
     renderPanel()
     fireEvent.click(screen.getByTestId('tray-tile-more-exports'))
     await waitFor(() => expect(screen.getByText('Exports')).toBeTruthy())
-    for (const title of ['Notion', 'Obsidian', 'Markdown file']) {
+    for (const title of ['WhatsApp & Telegram', 'Notion', 'Obsidian', 'Markdown file']) {
       expect(screen.getByText(title)).toBeTruthy()
     }
   })

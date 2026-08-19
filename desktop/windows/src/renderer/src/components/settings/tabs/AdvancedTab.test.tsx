@@ -64,7 +64,20 @@ beforeEach(() => {
     // SettingsSearchProvider mounts every settings tab (incl. IntegrationsTab) to
     // index its text; with the Gmail-session flag now ON by default, that tab's
     // mount effect reads the session status. Stub it so the effect resolves cleanly.
-    gmailSessionStatus: vi.fn().mockResolvedValue({ connected: false })
+    gmailSessionStatus: vi.fn().mockResolvedValue({ connected: false }),
+    beeperStatus: vi.fn().mockResolvedValue({
+      running: false,
+      connected: false,
+      enabled: false,
+      sendMode: 'draft',
+      networks: ['whatsapp', 'telegram'],
+      accounts: [],
+      draftCount: 0,
+      imessageSupported: false
+    }),
+    beeperListDrafts: vi.fn().mockResolvedValue([]),
+    onBeeperChanged: vi.fn().mockReturnValue(() => {}),
+    beeperOpenDownload: vi.fn()
   }
 })
 

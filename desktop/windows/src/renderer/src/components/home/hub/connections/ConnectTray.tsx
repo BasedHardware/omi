@@ -27,6 +27,8 @@ export interface ConnectTrayCallbacks {
   onOpenExport: (id: 'claude' | 'chatgpt' | 'openclaw' | 'hermes') => void
   /** RIGHT "Ask Omi" → close the panel and focus the hub ask bar. */
   onAskOmi: () => void
+  /** RIGHT "WhatsApp & Telegram" → chat-reply connector detail. */
+  onOpenChatReply: () => void
   /** LEFT "Omi Device" → open the omi.me device page (no drill-in, like Mac). */
   onOpenDevice: () => void
   /** The close X (top-right) → dismiss the Connect stage. */
@@ -57,6 +59,7 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
     onOpenExports,
     onOpenExport,
     onAskOmi,
+    onOpenChatReply,
     onOpenDevice,
     onDismiss
   } = props
@@ -168,6 +171,12 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
               <div className="flex flex-col gap-2.5">
                 <TrayTile title="Ask Omi" brand="omi" onClick={onAskOmi} />
                 <TrayTile
+                  title="WhatsApp & Telegram"
+                  brand="omi"
+                  testId="tray-tile-whatsapp-telegram"
+                  onClick={onOpenChatReply}
+                />
+                <TrayTile
                   title="Claude / Claude Code"
                   brand="claude"
                   onClick={() => onOpenExport('claude')}
@@ -177,7 +186,11 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
                   brand="chatgpt"
                   onClick={() => onOpenExport('chatgpt')}
                 />
-                <TrayTile title="OpenClaw" brand="openclaw" onClick={() => onOpenExport('openclaw')} />
+                <TrayTile
+                  title="OpenClaw"
+                  brand="openclaw"
+                  onClick={() => onOpenExport('openclaw')}
+                />
                 <TrayTile title="Hermes" brand="hermes" onClick={() => onOpenExport('hermes')} />
                 <TrayTile
                   title="More"
