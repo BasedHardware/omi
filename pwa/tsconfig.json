@@ -3,10 +3,11 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["src"]
+  "include": ["src", "tests", "vite.config.ts"]
 }

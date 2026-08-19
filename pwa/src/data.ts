@@ -122,8 +122,13 @@ export type BrowserReadTransport = {
   get(path: string): Promise<unknown>;
 };
 
+type BrowserFetcher = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>;
+
 export function createSameOriginReadTransport(
-  fetcher: typeof fetch = fetch
+  fetcher: BrowserFetcher = fetch
 ): BrowserReadTransport {
   return {
     async get(path: string) {
