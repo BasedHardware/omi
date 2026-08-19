@@ -1110,11 +1110,11 @@ def get_conversation_notes(
     current_local = current_time.astimezone(user_tz)
     transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     if transcript_word_count < 500:
-        density = 'Use 1-3 compact sections and keep only material details.'
+        density = 'Use 1-2 sections; target ~80 words.'
     elif transcript_word_count < 2500:
-        density = 'Use roughly 3-6 sections with enough bullets or paragraphs to preserve each substantive topic.'
+        density = 'Use 3-5 sections; target ~250 words.'
     else:
-        density = 'Use roughly 5-10 sections and preserve at least 1 concrete detail per ~250 transcript words.'
+        density = 'Use 5-8 sections; target ~500 words.'
 
     existing_lines: List[str] = []
     for item in existing_action_items or []:
@@ -1129,13 +1129,26 @@ def get_conversation_notes(
     task_instructions = f'''Create the canonical conversation note and return JSON matching the schema below.
 Respond entirely in {response_language}.
 
-NOTE BODY
-- Choose the section headings, nesting, paragraph style, and bullet density that best fit this conversation.
+NOTE BODY — WRITE FOR SKIMMING, NOT FOR READING
+- Bullets only. Never write narrative paragraphs. A section body is a list of '- ' bullets,
+  with indented '  - ' sub-bullets for supporting detail under a parent point.
+- Bullets are terse fragments, not sentences. Drop articles and connective filler.
+  Aim for under ~15 words per bullet; a sub-bullet may be shorter.
+- Lead each bullet with the specific: the name, number, product, or decision. Never open a
+  bullet with narration such as "They discussed", "The conversation turned to", or
+  "Speaker 1 said that". Attribute inline only when who-said-it is the point.
+- No preamble, no scene-setting, no wrap-up bullet restating the section.
+- Merge overlapping points instead of restating them across sections.
+- Headings are short noun phrases (2-5 words), specific to this conversation.
 - These are inspiration, not templates to fill:
-  * Founder/1:1: Context → technical/product threads → decisions → people/follow-ups.
-  * Standup: Goal → progress by workstream → blockers → decisions and next moves.
-  * Casual conversation: A few natural topic headings with memorable details and plans.
+  * Founder/1:1: what they built → shared thesis/overlap → follow-ups.
+  * Standup: progress by workstream → blockers → next moves.
+  * Casual conversation: a couple of topic headings with the memorable specifics.
 - {density}
+- COVERAGE BEATS BREVITY. The word target is met by tightening wording, never by dropping a
+  topic, a name, or a number. If you are over budget, shorten bullets — do not delete them.
+- Every bullet must carry at least one concrete specific: a name, number, product, org, tool,
+  date, or technical term. A bullet with no specific is filler; delete it and reclaim the words.
 - Preserve proper nouns, numbers, product names, organization names, dates, and unusual spellings VERBATIM.
 - Never normalize or "correct" an uncertain name. Prefer the exact transcript spelling; a short verbatim quote is allowed.
 - Every section should cite the smallest sufficient exact [segment:ID] values in source_segment_ids.
@@ -1146,9 +1159,11 @@ OVERVIEW
 ACTION ITEMS
 - Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
 - Set owner_name to the actual name when known and context to one line explaining why/detail.
-- Set due_certainty=confirmed only for a firm commitment; use tentative for soft language such as maybe or up in the air.
-- Resolve due_at in local wall-clock ISO without a timezone suffix. Do not invent an hour: omit due_at when no date is given;
-  when a tentative date has no time, use 12:00 local and retain due_certainty=tentative.
+- LEAVE due_at EMPTY BY DEFAULT. Only set it when the speakers explicitly committed to a specific
+  calendar date for completing the item. A date that was merely discussed, proposed, or floated is
+  NOT a due date; put it in context instead.
+- Never invent or approximate an hour. If a committed date has no stated time, omit due_at.
+- Set due_certainty only when due_at is set: confirmed for a firm commitment, tentative otherwise.
 - For task-intelligence capture, {'capture clear commitments and direct requests' if task_intelligence_capture else 'apply the conservative legacy task filter'}.
 - candidate_action update/complete may only target an exact supplied task ID; otherwise use create.
 - Potentially related open tasks:\n{existing_context}

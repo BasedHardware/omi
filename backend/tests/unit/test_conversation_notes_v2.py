@@ -3,6 +3,10 @@ from types import SimpleNamespace
 
 import pytest
 
+# firebase_admin reaches google.auth.credentials lazily. When an earlier test module has already
+# imported google.auth without that submodule, the attribute lookup fails during our imports below.
+import google.auth.credentials  # noqa: F401
+
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.structured import ActionItem, Structured
 from testing.import_isolation import stub_modules
