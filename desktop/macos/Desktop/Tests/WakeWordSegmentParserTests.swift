@@ -44,4 +44,32 @@ final class WakeWordSegmentParserTests: XCTestCase {
   func testEmptyPhraseReturnsNil() {
     XCTAssertNil(WakeWordSegmentParser.command(after: "Omi order pizza", wakePhrase: "  "))
   }
+
+  /// Regression: a live mic session transcribed "Omi, how are you?" as
+  /// "Oh me, how are you?" (Parakeet, conf=0.92) and the wake word silently
+  /// never fired. STT spells the phrase by sound, so homophones must match.
+  func testAcceptsSpeechToTextHomophones() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "Oh me, how are you?", wakePhrase: "Omi"),
+      "how are you?")
+    for rendering in ["Omni", "Ohmi", "Oh mi", "Omee", "O me"] {
+      XCTAssertEqual(
+        WakeWordSegmentParser.command(after: "\(rendering), order pizza", wakePhrase: "Omi"),
+        "order pizza",
+        "expected \(rendering) to be treated as the wake word")
+    }
+  }
+
+  func testAcceptsGreetingBeforeHomophone() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "Hey oh me, order pizza", wakePhrase: "Omi"),
+      "order pizza")
+  }
+
+  /// The wider match must not swallow ordinary speech: a homophone still needs a
+  /// word boundary and a real command behind it.
+  func testHomophoneWithoutBoundaryOrCommandIsIgnored() {
+    XCTAssertNil(WakeWordSegmentParser.command(after: "Omnibus schedule changed", wakePhrase: "Omi"))
+    XCTAssertNil(WakeWordSegmentParser.command(after: "Oh me", wakePhrase: "Omi"))
+  }
 }

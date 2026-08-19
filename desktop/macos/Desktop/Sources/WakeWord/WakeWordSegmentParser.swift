@@ -25,10 +25,23 @@ enum WakeWordSegmentParser {
     normalize(raw).trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
   }
 
+  /// Speech-to-text spells the wake word by sound, not by brand. "Omi" is
+  /// acoustically "oh-mee", so recognizers routinely emit "oh me", "omni", or
+  /// "ohmi" instead. Matching only the literal spelling makes the wake word fail
+  /// for reasons the user cannot see or correct, so known renderings are accepted
+  /// as the same phrase. Downstream guards (user speech only, 2+ word command,
+  /// cooldown, dedup) still bound the false-positive cost of the wider match.
+  static let sttHomophones: [String: [String]] = [
+    "omi": ["oh me", "ohmi", "omni", "oh mi", "omee", "o me", "oh-me"]
+  ]
+
   static func candidatePhrases(for phrase: String) -> [String] {
-    var phrases = [phrase]
-    for greeting in ["hey", "ok", "okay"] {
-      phrases.append("\(greeting) \(phrase)")
+    var phrases: [String] = []
+    for base in [phrase] + (sttHomophones[phrase] ?? []) {
+      phrases.append(base)
+      for greeting in ["hey", "ok", "okay"] {
+        phrases.append("\(greeting) \(base)")
+      }
     }
     return phrases
   }
