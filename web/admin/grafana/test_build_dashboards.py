@@ -251,6 +251,15 @@ class AccountLevelLeakTests(unittest.TestCase):
                         "All board must keep the account-level panels")
 
 
+class ShareTileDescriptionTests(unittest.TestCase):
+    def test_share_tile_description_names_its_board_scope(self) -> None:
+        for uid, label in [("omi-tv", "all platforms"), ("omi-tv-macos", "macOS"),
+                           ("omi-tv-mobile", "Mobile")]:
+            panel = next(p for p in load(uid)["panels"]
+                         if build_dashboards.base_title(p).startswith("Share rate"))
+            self.assertIn(f"last 30d ({label})", panel["description"], uid)
+
+
 class ExactRevenueTests(unittest.TestCase):
     def test_platform_revenue_never_includes_unknown_attribution(self) -> None:
         """profitability's plain desktop/mobile revenue fields smear
