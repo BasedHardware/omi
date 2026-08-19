@@ -1,0 +1,19 @@
+.github/failure-classes/FC-identity-fallback-used-as-authorization-gate.json
+  s_227233afb3b7ff::t_8dc2e2b263f239 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "30840455bf7b7da3d6b2cf939c5ac1e378c6cbdf",
+  "prompts": {},
+  "sessions": {
+    "s_227233afb3b7ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d72fbee-85a2-445b-a86d-7f95bf574311",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
