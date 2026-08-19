@@ -97,10 +97,18 @@ Don't.
    config we cannot parse may carry exclusions we cannot express. The second case is the one that
    matters in practice: it means a machine with a corrupt config stops reporting rather than
    reporting from a state where it cannot honour the user's exclusions.
-2. **Development builds report nothing.** `ContextPaths.isDevelopmentBuild` gates the whole path. This
+2. **Only the shipping app reports.** `ContextPaths.isShippingBundle` gates the whole path. This
    is not tidiness: for this app's first three weeks the Cloud Run logs show a `Context for Claude/1`
    user agent from up to twenty machines a day — the team's own builds, indistinguishable in
    aggregate from users.
+
+   **The gate asks "is this the release?", not "is this not a dev build?"** — it used to ask the
+   second, via `ContextPaths.isDevelopmentBuild`, which is derived from an identifier that falls back
+   to the shipping one for any process that is not ours. `swift test` runs under
+   `com.apple.dt.xctest.tool` and so counted as production: the suite POSTed to this project from the
+   real spool for as long as it has existed, 92 events before it was noticed, which is all of
+   `cfc_gesture_fired` and two thirds of `cfc_search_ran`. Anything queried before 2026-08-19 carries
+   that noise.
 3. **Nothing user-authored, ever** — enforced by construction, not by review.
 
 ## MCP tool calls cross a process boundary

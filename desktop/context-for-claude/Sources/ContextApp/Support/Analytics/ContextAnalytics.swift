@@ -21,10 +21,12 @@ import Foundation
 ///    case is the one to design for — a machine whose config cannot be parsed may be under
 ///    exclusions we cannot express, and reporting from it would be reporting from a state where we
 ///    cannot honour what the user asked to hide.
-/// 2. **Development builds.** A locally built app reports nothing. This is not tidiness: the Cloud
-///    Run logs for the first three weeks of this app show a `Context for Claude/1` user agent from up
-///    to twenty machines a day — the team's own builds, indistinguishable in aggregate from users.
-///    Analytics that count their own authors answer a different question than the one being asked.
+/// 2. **Anything that is not the shipping app.** A locally built app reports nothing, and neither
+///    does the test runner. This is not tidiness: the Cloud Run logs for the first three weeks of this
+///    app show a `Context for Claude/1` user agent from up to twenty machines a day — the team's own
+///    builds, indistinguishable in aggregate from users. Analytics that count their own authors
+///    answer a different question than the one being asked. See `isEnabled` for the shape of that
+///    question, which is the half this shipped getting wrong.
 /// 3. **Nothing user-authored, ever.** Enforced by construction in `AnalyticsEvent` — there is no
 ///    API here that accepts a string from a call site.
 ///
@@ -59,7 +61,16 @@ enum ContextAnalytics {
         Task { await AnalyticsSink.shared.enqueue(payload) }
     }
 
-    /// False on development builds, which report nothing at all. See refusal 2 above.
+    /// True only in the shipping app. See refusal 2 above.
+    ///
+    /// **Asked as "is this the release?", not as "is this not a dev build?", and the difference is
+    /// the whole of a defect this shipped with.** `ContextPaths.isDevelopmentBuild` is derived from
+    /// `ownIdentifier`, which falls back to the shipping identifier for any process that is not one
+    /// of ours — correct for the log subsystem and the Keychain service, and exactly wrong here. The
+    /// process it let through is the test runner: `swift test` runs under `com.apple.dt.xctest.tool`,
+    /// so the suite counted as production and POSTed to PostHog from the real spool. Measured: 92
+    /// events under a single distinct id derived from the xctest defaults domain's install id, every
+    /// `cfc_gesture_fired` in the project and two thirds of `cfc_search_ran`.
     ///
     /// `CONTEXT_ANALYTICS_FORCE=1` overrides it for one purpose: proving end to end, from a local
     /// build, that events actually arrive in PostHog. There is no way to verify this pipeline without
@@ -69,7 +80,7 @@ enum ContextAnalytics {
     /// series: use a throwaway `CONTEXT_ANALYTICS_FORCE` session, not a day of ordinary work.
     static var isEnabled: Bool {
         if ProcessInfo.processInfo.environment["CONTEXT_ANALYTICS_FORCE"] == "1" { return true }
-        return !ContextPaths.isDevelopmentBuild
+        return ContextPaths.isShippingBundle
     }
 
     // MARK: - Lifecycle

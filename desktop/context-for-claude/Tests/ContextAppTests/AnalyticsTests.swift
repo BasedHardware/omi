@@ -289,6 +289,33 @@ final class AnalyticsFallbackBridgeTests: XCTestCase {
     }
 }
 
+/// **Refusal 2, asserted from inside the process it failed to refuse.**
+///
+/// This is not a table test about a hypothetical build. The test runner *is* the failure: `swift
+/// test` runs under `com.apple.dt.xctest.tool`, `ContextPaths.ownIdentifier` falls back to the
+/// shipping identifier for any process that is not ours, and `isEnabled` — asking
+/// `!isDevelopmentBuild` — therefore answered true here. Every run of this suite spooled events to
+/// the real `analytics-spool.json` and POSTed them to production PostHog: 92 of them by the time it
+/// was noticed, all of `cfc_gesture_fired` and two thirds of `cfc_search_ran`.
+///
+/// So the strongest available seam is the one below — `isEnabled` read in the process that must be
+/// refused, rather than a rule read anywhere else.
+final class AnalyticsBuildRefusalTests: XCTestCase {
+
+    func testTheTestProcessItselfIsRefused() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CONTEXT_ANALYTICS_FORCE"] == "1",
+            "the override is deliberately absolute, and a run under it is a run that means to send")
+
+        XCTAssertFalse(
+            ContextAnalytics.isEnabled,
+            """
+            This process reports \(Bundle.main.bundleIdentifier ?? "nil") and is not the shipping \
+            app, so nothing it does may reach production analytics.
+            """)
+    }
+}
+
 /// The day boundary the whole DAU series rests on.
 final class ContextAnalyticsDayTests: XCTestCase {
 
