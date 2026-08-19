@@ -16,11 +16,13 @@ final class WakeWordService {
   var now: @MainActor () -> Date = { Date() }
   var onTrigger: @MainActor (String) -> Void = { command in
     log("WakeWord: submitting '\(command)' to the assistant")
-    // `fromVoice` is what makes the assistant speak its answer instead of only
-    // rendering text. A wake word is a hands-free entry point by definition — the
-    // user's hands and eyes are elsewhere — so a silent reply strands the whole
-    // interaction. Push-to-talk already passes true for the same reason.
-    FloatingControlBarManager.shared.openAIInputWithQuery(command, fromVoice: true)
+    // `fromVoice: true` is reserved for callers that own a voice-turn lifecycle:
+    // `openAIInputWithQuery` guards it behind `voiceTurnID` +
+    // `VoiceTurnCoordinator.requireCurrentOwner` and returns silently when either is
+    // missing, so passing it without a turn drops the query with no diagnostic.
+    // Push-to-talk owns a turn and passes both; the wake word, like the automation
+    // bridge, submits an already-transcribed command and owns no turn.
+    FloatingControlBarManager.shared.openAIInputWithQuery(command, fromVoice: false)
   }
   private(set) var lastTriggeredCommand: String?
 
