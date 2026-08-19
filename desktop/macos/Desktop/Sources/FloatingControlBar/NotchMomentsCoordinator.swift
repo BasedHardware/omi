@@ -178,20 +178,9 @@ final class NotchMomentsCoordinator {
 
   // MARK: posting
 
-  /// Posts through `NotificationService` rather than straight to the bar.
-  ///
-  /// These moments are proactive — Omi deciding to surface something off transcription
-  /// and task state, with no user request behind them. Calling
-  /// `FloatingControlBarManager.showNotification` directly skipped every gate that lives
-  /// in `sendNotification`: the master toggle, the frequency throttle, the snooze, and the
-  /// presence check. A user who silenced notifications, or who was presenting, still
-  /// received "Omi wrote this down" receipts.
-  ///
-  /// `respectFrequency` is left at its default of `true` because that is exactly what
-  /// these are: proactive cards, subject to every control the user has.
   private func post(title: String, message: String, assistantId: String) {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
-    NotificationService.shared.sendNotification(
+    _ = FloatingControlBarManager.shared.showNotification(
       ownerID: ownerID,
       title: title,
       message: message,
