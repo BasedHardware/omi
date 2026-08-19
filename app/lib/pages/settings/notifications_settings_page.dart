@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/daily_summary_settings_page.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
@@ -422,6 +424,21 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                   ],
                 ),
               ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: Colors.grey.shade800, height: 1),
+          ),
+
+          GestureDetector(
+            onTap: () => routeToPage(context, const DailySummarySettingsPage()),
+            behavior: HitTestBehavior.opaque,
+            child: _buildSettingRow(
+              icon: FontAwesomeIcons.calendar,
+              title: context.l10n.generateSummary,
+              trailing: Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
             ),
           ),
         ],

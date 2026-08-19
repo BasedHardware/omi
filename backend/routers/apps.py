@@ -643,6 +643,17 @@ def get_capability_apps_grouped_by_category(
     return res
 
 
+def _raw_app_matches_search(app: dict, query: str) -> bool:
+    """Whether a raw catalog dict matches a lowercased search query.
+
+    Filter *before* install-count and review enrichment so a keystroke does not
+    pay for the whole catalog (#11292).
+    """
+    name = (app.get('name') or '').lower()
+    description = (app.get('description') or '').lower()
+    return query in name or query in description
+
+
 def _matches_search_text(app: App, query: str) -> bool:
     """Whether `app` matches a lowercased search query.
 
@@ -710,6 +721,13 @@ def search_apps(
     if skipped_no_id:
         logger.warning("Skipping %d malformed app record(s) without an id in search results", skipped_no_id)
     apps_data = valid_apps_data
+
+    # Apply the text query before enrichment. Install counts and reviews are
+    # fetched per remaining id; running them over the whole catalog made every
+    # search keystroke cost the same as listing every app (#11292).
+    if q and q.strip():
+        search_query = q.strip().lower()
+        apps_data = [app for app in apps_data if _raw_app_matches_search(app, search_query)]
 
     app_ids = [app['id'] for app in apps_data]
     apps_installs = get_apps_installs_count(app_ids)

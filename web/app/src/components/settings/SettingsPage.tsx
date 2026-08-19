@@ -60,6 +60,7 @@ import {
   setUserLanguage,
   getDailySummarySettings,
   updateDailySummarySettings,
+  generateTestDailySummary,
   getRecordingPermission,
   setRecordingPermission,
   getTrainingDataOptIn,
@@ -393,6 +394,8 @@ function ProfileSection({
   dailySummary,
   onDailySummaryToggle,
   onDailySummaryHourChange,
+  onGenerateRecap,
+  generatingRecap,
 }: {
   user: any;
   onCopyUserId: () => void;
@@ -404,9 +407,12 @@ function ProfileSection({
   dailySummary: DailySummarySettings;
   onDailySummaryToggle: (enabled: boolean) => void;
   onDailySummaryHourChange: (hour: number) => void;
+  onGenerateRecap: (date: string) => Promise<void>;
+  generatingRecap: boolean;
 }) {
   const [copiedUserId, setCopiedUserId] = useState(false);
   const [newWord, setNewWord] = useState('');
+  const [recapDate, setRecapDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const handleCopy = () => {
     onCopyUserId();
@@ -592,6 +598,28 @@ function ProfileSection({
               <HourPicker value={dailySummary.hour} onChange={onDailySummaryHourChange} />
             </SettingRow>
           )}
+
+          <SettingRow
+            label="Generate a missed recap"
+            description="Create a recap for a past day after summaries were off"
+          >
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={recapDate}
+                onChange={(e) => setRecapDate(e.target.value)}
+                className="bg-bg-tertiary text-text-primary rounded-lg px-2 py-1 text-sm"
+              />
+              <button
+                type="button"
+                disabled={generatingRecap || !recapDate}
+                onClick={() => onGenerateRecap(recapDate)}
+                className="px-3 py-1.5 rounded-lg bg-purple-primary text-white text-sm disabled:opacity-50"
+              >
+                {generatingRecap ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </SettingRow>
         </Card>
       </div>
     </div>
@@ -3148,6 +3176,7 @@ export function SettingsPage() {
   const { user, signOut } = useAuth();
   const { showToast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
+  const [generatingRecap, setGeneratingRecap] = useState(false);
 
   // Get section from URL, default to 'profile'
   const sectionParam = searchParams.get('section');
@@ -3323,6 +3352,18 @@ export function SettingsPage() {
       await updateDailySummarySettings({ ...dailySummary, enabled });
     } catch {
       setDailySummary(oldSettings);
+    }
+  };
+
+  const handleGenerateRecap = async (date: string) => {
+    setGeneratingRecap(true);
+    try {
+      await generateTestDailySummary(date);
+      showToast('Recap generated', 'success');
+    } catch {
+      showToast('Could not generate recap for that date', 'error');
+    } finally {
+      setGeneratingRecap(false);
     }
   };
 
@@ -3522,6 +3563,8 @@ export function SettingsPage() {
             dailySummary={dailySummary}
             onDailySummaryToggle={handleDailySummaryToggle}
             onDailySummaryHourChange={handleDailySummaryHourChange}
+            onGenerateRecap={handleGenerateRecap}
+            generatingRecap={generatingRecap}
           />
         );
       case 'privacy':

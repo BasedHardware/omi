@@ -26,6 +26,10 @@ steps:
     press: { type: switch, index: 0, hint: "Daily Summary toggle switch" }
     screenshot: daily-summary-enabled
 
+  - name: Open daily summary generate page
+    press: { type: gesture, hint: "Generate Summary row on Notifications" }
+    screenshot: daily-summary-settings-page
+
   - name: Back to settings
     back: true
 

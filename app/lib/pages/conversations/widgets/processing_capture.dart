@@ -17,6 +17,8 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:timeago/timeago.dart' as timeago;
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/logger.dart';
@@ -845,6 +847,15 @@ getPhoneMicRecordingButton(
   );
 }
 
+@visibleForTesting
+bool processingConversationIsStale(
+  DateTime createdAt, {
+  DateTime? now,
+  Duration threshold = const Duration(minutes: 30),
+}) {
+  return (now ?? DateTime.now()).difference(createdAt) >= threshold;
+}
+
 Widget getProcessingConversationsWidget(List<ServerConversation> conversations) {
   // Only show at most 1 processing widget on homepage
   if (conversations.isEmpty) {
@@ -910,20 +921,33 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       ),
                     ),
                     const Spacer(),
-                    // Timestamp placeholder
-                    Container(
-                      width: 50,
-                      height: 14,
-                      decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
+                    Text(
+                      timeago.format(widget.conversation.createdAt),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                     ),
+                    if (processingConversationIsStale(widget.conversation.createdAt))
+                      IconButton(
+                        tooltip: context.l10n.delete,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          final provider = context.read<ConversationProvider>();
+                          provider.removeProcessingConversation(widget.conversation.id);
+                          if (widget.conversation.id != '0') {
+                            provider.deleteConversationOnServer(widget.conversation.id);
+                          }
+                        },
+                        icon: Icon(Icons.close, color: Colors.grey.shade500, size: 18),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                // Title placeholder
-                Container(
-                  width: double.maxFinite,
-                  height: 16,
-                  decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
+                Text(
+                  widget.conversation.structured.title.isNotEmpty
+                      ? widget.conversation.structured.title
+                      : context.l10n.processing,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 ),
               ],
             ),

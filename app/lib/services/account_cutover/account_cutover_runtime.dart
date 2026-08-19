@@ -13,6 +13,9 @@ class AccountCutoverRuntime extends ChangeNotifier {
   AccountCutoverRuntime._();
   static final AccountCutoverRuntime instance = AccountCutoverRuntime._();
 
+  @visibleForTesting
+  static Duration Function(int attempt) retryBackoff = (attempt) => Duration(milliseconds: 400 * attempt);
+
   final AccountCutoverGate _gate = const AccountCutoverGate();
   AccountCutoverControl _control = AccountCutoverControl.legacyDefault();
   bool _hasAuthoritative = false;
@@ -48,6 +51,7 @@ class AccountCutoverRuntime extends ChangeNotifier {
     _ownerUid = null;
     _refreshEpoch = 0;
     _resolvedForOwner = true;
+    retryBackoff = (attempt) => Duration(milliseconds: 400 * attempt);
   }
 
   /// Bind runtime state to the authenticated owner and refresh control.
@@ -80,12 +84,35 @@ class AccountCutoverRuntime extends ChangeNotifier {
     }
 
     final fetchClient = client ?? AccountCutoverControlClient();
-    final result = await fetchClient.fetchControl();
-    if (epoch != _refreshEpoch || _ownerUid != normalized) {
-      return;
+    AccountCutoverFetchResult? lastResult;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(retryBackoff(attempt));
+        if (epoch != _refreshEpoch || _ownerUid != normalized) {
+          return;
+        }
+      }
+      lastResult = await fetchClient.fetchControl();
+      if (epoch != _refreshEpoch || _ownerUid != normalized) {
+        return;
+      }
+      if (lastResult.kind != AccountCutoverFetchKind.transportFailure) {
+        break;
+      }
     }
 
-    applyFetchResult(result);
+    final result = lastResult;
+    if (result == null) {
+      return;
+    }
+    if (result.kind == AccountCutoverFetchKind.transportFailure && !_hasAuthoritative) {
+      // A missing control document is legacy/non-blocking. One transient fetch
+      // must not lock the whole app behind the migration screen (#11724).
+      _control = AccountCutoverControl.legacyDefault();
+      _hasAuthoritative = false;
+    } else {
+      applyFetchResult(result);
+    }
     _resolvedForOwner = true;
     notifyListeners();
   }

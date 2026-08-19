@@ -34,7 +34,24 @@ export function RecapSplitView() {
     loadMore,
     refresh,
     getRecapDetail,
+    generateForDate,
   } = useRecaps();
+  const [recapDate, setRecapDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerate = async () => {
+    if (!recapDate || generating) return;
+    setGenerating(true);
+    try {
+      const recap = await generateForDate(recapDate);
+      if (recap) {
+        setSelectedId(recap.id);
+        setSelectedRecap(recap);
+      }
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   // Chat context for passing selected recap info
   const { setContext } = useChatContext();
@@ -125,6 +142,22 @@ export function RecapSplitView() {
           Daily recaps will appear here once you have enough conversations.
           Make sure daily summaries are enabled in your settings.
         </p>
+        <div className="mt-6 flex items-center gap-2">
+          <input
+            type="date"
+            value={recapDate}
+            onChange={(e) => setRecapDate(e.target.value)}
+            className="bg-bg-tertiary text-text-primary rounded-lg px-2 py-1 text-sm"
+          />
+          <button
+            type="button"
+            disabled={generating}
+            onClick={handleGenerate}
+            className="px-3 py-1.5 rounded-lg bg-purple-primary text-white text-sm disabled:opacity-50"
+          >
+            {generating ? 'Generating…' : 'Generate recap'}
+          </button>
+        </div>
       </div>
     );
   }
@@ -144,18 +177,34 @@ export function RecapSplitView() {
             <h2 className="text-sm font-medium text-text-secondary">
               {recaps.length} recap{recaps.length !== 1 ? 's' : ''}
             </h2>
-            <button
-              onClick={refresh}
-              disabled={loading}
-              className={cn(
-                'p-1.5 rounded-lg transition-colors',
-                'hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary',
-                loading && 'animate-spin'
-              )}
-              title="Refresh"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={recapDate}
+                onChange={(e) => setRecapDate(e.target.value)}
+                className="bg-bg-tertiary text-text-primary rounded-lg px-2 py-1 text-xs"
+              />
+              <button
+                type="button"
+                disabled={generating}
+                onClick={handleGenerate}
+                className="px-2 py-1 rounded-lg bg-purple-primary text-white text-xs disabled:opacity-50"
+              >
+                {generating ? '…' : 'Generate'}
+              </button>
+              <button
+                onClick={refresh}
+                disabled={loading}
+                className={cn(
+                  'p-1.5 rounded-lg transition-colors',
+                  'hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary',
+                  loading && 'animate-spin'
+                )}
+                title="Refresh"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
 

@@ -38,7 +38,7 @@ export default function AppsLoading() {
         {/* Tabs */}
         <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
           <div className="flex items-center gap-1">
-            {['Explore', 'Installed', 'My Apps'].map((tab, i) => (
+            {['Explore', 'Installed', 'Created by me'].map((tab, i) => (
               <div
                 key={tab}
                 className={`px-4 py-2 rounded-lg ${

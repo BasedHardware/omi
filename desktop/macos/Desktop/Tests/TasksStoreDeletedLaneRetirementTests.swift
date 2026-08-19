@@ -91,6 +91,21 @@ final class TasksStoreDeletedLaneRetirementTests: XCTestCase {
     XCTAssertEqual(store.deletedTasks.map(\.id), ["cancelled-upstream"])
   }
 
+  /// Live-lane filters that read `deleted != true` treat a cancelled row with no
+  /// legacy `deleted` field as live. `isRetired` is the single projection.
+  func testStatusOnlyRetiredTasksAreExcludedFromLiveFilters() {
+    let cancelled = task(id: "cancelled", taskStatus: "cancelled")
+    let superseded = task(id: "superseded", taskStatus: "superseded")
+    let live = task(id: "live", taskStatus: "active")
+    let tasks = [cancelled, superseded, live]
+
+    XCTAssertEqual(tasks.filter { !$0.isRetired }.map(\.id), ["live"])
+    XCTAssertTrue(cancelled.isRetired)
+    XCTAssertTrue(superseded.isRetired)
+    XCTAssertFalse(live.isRetired)
+    XCTAssertNotEqual(cancelled.deleted, true, "the bug is a missing deleted field, not deleted=true")
+  }
+
   // MARK: - Helpers
 
   @MainActor

@@ -1,0 +1,20 @@
+name: Install Redis server
+description: Install redis-server with bounded apt timeouts and retries so a slow Ubuntu mirror fails fast instead of riding the job timeout.
+
+runs:
+  using: composite
+  steps:
+    - name: Install Redis server
+      timeout-minutes: 2
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update \
+          -o Acquire::Retries=3 \
+          -o Acquire::http::Timeout=10 \
+          -o Acquire::https::Timeout=10
+        sudo apt-get install --yes \
+          -o Acquire::Retries=3 \
+          -o Acquire::http::Timeout=10 \
+          -o Acquire::https::Timeout=10 \
+          redis-server

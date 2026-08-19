@@ -998,7 +998,7 @@ struct DashboardPage: View {
 
   private var homeKnowsTaskCandidates: [HomeKnowsTaskCandidate] {
     (viewModel.overdueTasks + viewModel.todaysTasks + viewModel.recentTasks)
-      .filter { !$0.completed && $0.deleted != true }
+      .filter { !$0.completed && !$0.isRetired }
       .map { HomeKnowsTaskCandidate(id: $0.id, text: $0.description) }
   }
 

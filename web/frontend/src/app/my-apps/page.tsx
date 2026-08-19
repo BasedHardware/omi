@@ -104,7 +104,7 @@ export default function MyAppsPage() {
               </Link>
               <div>
                 <h1 className="bg-gradient-to-r from-white to-gray-300 bg-clip-text text-2xl font-bold text-transparent">
-                  My Apps
+                  Created by me
                 </h1>
                 <p className="text-sm text-gray-400">Manage your created applications</p>
               </div>
