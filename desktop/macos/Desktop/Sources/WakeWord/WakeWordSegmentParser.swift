@@ -32,7 +32,15 @@ enum WakeWordSegmentParser {
   /// as the same phrase. Downstream guards (user speech only, 2+ word command,
   /// cooldown, dedup) still bound the false-positive cost of the wider match.
   static let sttHomophones: [String: [String]] = [
-    "omi": ["oh me", "ohmi", "omni", "oh mi", "omee", "o me", "oh-me"]
+    "omi": [
+      "oh me", "ohmi", "omni", "oh mi", "omee", "o me", "oh-me",
+      // On-device recognition has no keyword list, so it also fronts the vowel
+      // with an aspirate ("Homi what's the weather?", observed live). Deliberately
+      // excludes "homie": it is an ordinary English word, and accepting it as the
+      // wake phrase would fire on real speech. The fix for on-device misses is
+      // keyword boosting on the recognizer, not a longer list here.
+      "homi", "hommi",
+    ]
   ]
 
   static func candidatePhrases(for phrase: String) -> [String] {
