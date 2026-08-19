@@ -62,7 +62,7 @@ function errorName(error: unknown): string {
 }
 
 export function createBrowserCapabilityAdapter(
-  environment = defaultEnvironment(),
+  environment = defaultEnvironment()
 ) {
   const state: BrowserCapabilitySnapshot = {
     bluetooth:
@@ -117,8 +117,8 @@ export function createBrowserCapabilityAdapter(
           name === "NotFoundError"
             ? "cancelled"
             : name === "NotAllowedError"
-              ? "denied"
-              : "error";
+            ? "denied"
+            : "error";
         if (reason === "denied") state.bluetooth = "denied";
         if (reason === "error") state.bluetooth = "error";
         return { ok: false, reason };

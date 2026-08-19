@@ -59,8 +59,7 @@ import {
 import {
   omiBackend,
   omiNative,
-  type BluetoothState,
-  type NativeSnapshot,
+  type PlatformNativeSnapshot,
 } from './src/omiNative';
 import {
   conversationGroupLabel,
@@ -116,7 +115,7 @@ export function resolveInitialRoute(initialRoute?: string): Route {
     : 'Home';
 }
 
-function bluetoothStatusLabel(state: BluetoothState): string {
+function bluetoothStatusLabel(state: string): string {
   switch (state) {
     case 'poweredOn':
       return 'Bluetooth on';
@@ -135,6 +134,8 @@ function bluetoothStatusLabel(state: BluetoothState): string {
     case 'poweredOff':
       return 'Bluetooth off';
     case 'unknown':
+      return 'Bluetooth status unknown';
+    default:
       return 'Bluetooth status unknown';
   }
 }
@@ -431,7 +432,7 @@ function ProjectionList({
     <View style={styles.projectionEmpty}>
       <Text style={styles.projectionEmptyTitle}>
         {error === null
-          ? (emptyTitle ?? 'Nothing to show yet')
+          ? emptyTitle ?? 'Nothing to show yet'
           : 'Unable to load'}
       </Text>
       <Text style={styles.projectionEmptyCopy}>{error ?? emptyCopy}</Text>
@@ -1097,8 +1098,8 @@ function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
       ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
       : `More ${label.toLowerCase()} are available.`
     : page.completenessStatus === 'degraded'
-      ? `${label} may be temporarily incomplete.`
-      : `${label} are incomplete.`;
+    ? `${label} may be temporarily incomplete.`
+    : `${label} are incomplete.`;
   return (
     <View style={styles.readStatus}>
       <Text style={styles.readStatusText}>{detail}</Text>
@@ -1314,9 +1315,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [searchArmed, setSearchArmed] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const projectionFilter: ProjectionFilter = 'all';
-  const [nativeSnapshot, setNativeSnapshot] = useState<NativeSnapshot | null>(
-    null,
-  );
+  const [nativeSnapshot, setNativeSnapshot] =
+    useState<PlatformNativeSnapshot | null>(null);
   const [deviceBusy, setDeviceBusy] = useState(false);
   const searchRef = useRef<TextInput>(null);
   const activeNavigationIndex = navigation.findIndex(
@@ -1509,8 +1509,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         item.kind === 'conversation'
           ? Date.parse(item.startedAt ?? item.createdAt)
           : item.kind === 'memory'
-            ? (item.timestamp ?? 0)
-            : 0;
+          ? item.timestamp ?? 0
+          : 0;
       return timestamp(right) - timestamp(left);
     });
   }, [readOutcomes]);
@@ -1962,8 +1962,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               activeGenerationId !== null
                 ? 'Stop response'
                 : omiBackend === undefined || omiBackend === null
-                  ? 'Send message unavailable'
-                  : 'Send message'
+                ? 'Send message unavailable'
+                : 'Send message'
             }
             accessibilityRole="button"
             disabled={
@@ -2005,8 +2005,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ? nativeSnapshot === null
         ? 'Checking Bluetooth…'
         : nativeSnapshot.bluetooth === 'poweredOn'
-          ? 'Omi disconnected'
-          : bluetoothStatusLabel(nativeSnapshot.bluetooth)
+        ? 'Omi disconnected'
+        : bluetoothStatusLabel(nativeSnapshot.bluetooth)
       : `Connected · ${
           nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
         }`;
@@ -2014,14 +2014,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot === null
       ? '#b4ad9f'
       : connectedDevice === null
-        ? '#d9826f'
-        : '#45b79b';
+      ? '#d9826f'
+      : '#45b79b';
   const bluetoothStatusColor =
     nativeSnapshot === null
       ? '#b4ad9f'
       : nativeSnapshot.bluetooth === 'poweredOn'
-        ? '#45b79b'
-        : '#d9826f';
+      ? '#45b79b'
+      : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
   const homeOverview = (
@@ -2270,11 +2270,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                       {readsPhase === 'initial-loading'
                                         ? 'Loading saved data…'
                                         : readsPhase === 'refreshing'
-                                          ? 'Refreshing saved data…'
-                                          : readsPhase ===
-                                              'saved-but-refresh-failed'
-                                            ? 'Showing saved data. Could not refresh.'
-                                            : 'Saved data is unavailable.'}
+                                        ? 'Refreshing saved data…'
+                                        : readsPhase ===
+                                          'saved-but-refresh-failed'
+                                        ? 'Showing saved data. Could not refresh.'
+                                        : 'Saved data is unavailable.'}
                                     </Text>
                                     {(readsPhase ===
                                       'saved-but-refresh-failed' ||
@@ -2464,8 +2464,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                   : styles.chatHistoryCompact,
                               ]
                             : messages.length === 0 && !chatBusy
-                              ? styles.home
-                              : styles.chatHistory
+                            ? styles.home
+                            : styles.chatHistory
                         }>
                         <FocusPressable
                           accessibilityLabel="Back to Home"
