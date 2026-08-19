@@ -45,15 +45,15 @@ export type BrowserCapabilityResult =
 
 function defaultEnvironment(): BrowserEnvironment {
   if (typeof navigator === "undefined") return {};
-  const browserNavigator = navigator as Navigator & {
+  const browserNavigator = navigator as typeof navigator & {
     bluetooth?: BluetoothLike;
+    mediaDevices?: MediaDevicesLike;
+    permissions?: PermissionsLike;
   };
   return {
     bluetooth: browserNavigator.bluetooth,
-    mediaDevices: navigator.mediaDevices,
-    permissions: navigator.permissions as unknown as
-      | PermissionsLike
-      | undefined,
+    mediaDevices: browserNavigator.mediaDevices,
+    permissions: browserNavigator.permissions,
   };
 }
 
@@ -62,7 +62,7 @@ function errorName(error: unknown): string {
 }
 
 export function createBrowserCapabilityAdapter(
-  environment = defaultEnvironment()
+  environment = defaultEnvironment(),
 ) {
   const state: BrowserCapabilitySnapshot = {
     bluetooth:
@@ -117,8 +117,8 @@ export function createBrowserCapabilityAdapter(
           name === "NotFoundError"
             ? "cancelled"
             : name === "NotAllowedError"
-            ? "denied"
-            : "error";
+              ? "denied"
+              : "error";
         if (reason === "denied") state.bluetooth = "denied";
         if (reason === "error") state.bluetooth = "error";
         return { ok: false, reason };

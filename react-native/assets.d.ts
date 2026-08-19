@@ -1,4 +1,4 @@
 declare module '*.webp' {
-  const source: number;
+  const source: string | number;
   export default source;
 }

@@ -21,7 +21,6 @@ import {
   Platform,
   Pressable,
   type PressableProps,
-  requireNativeComponent,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,6 +31,7 @@ import {
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import omiPendant from './assets/omi-pendant.webp';
+import {requireNativeComponent} from './src/native-component';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import Brain from 'lucide-react-native/icons/brain';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
@@ -56,7 +56,12 @@ import {
   sendChatMessage,
   type ChatMessage,
 } from './src/chatClient';
-import {omiBackend, omiNative, type NativeSnapshot} from './src/omiNative';
+import {
+  omiBackend,
+  omiNative,
+  type BluetoothState,
+  type NativeSnapshot,
+} from './src/omiNative';
 import {
   conversationGroupLabel,
   loadDesktopReads,
@@ -110,6 +115,30 @@ export function resolveInitialRoute(initialRoute?: string): Route {
     ? (initialRoute as Route)
     : 'Home';
 }
+
+function bluetoothStatusLabel(state: BluetoothState): string {
+  switch (state) {
+    case 'poweredOn':
+      return 'Bluetooth on';
+    case 'unauthorized':
+      return 'Bluetooth permission needed';
+    case 'unsupported':
+      return 'Web Bluetooth unavailable';
+    case 'available':
+      return 'Browser Bluetooth available';
+    case 'selected':
+      return 'Browser device selected';
+    case 'denied':
+      return 'Bluetooth permission denied';
+    case 'error':
+      return 'Bluetooth check failed';
+    case 'poweredOff':
+      return 'Bluetooth off';
+    case 'unknown':
+      return 'Bluetooth status unknown';
+  }
+}
+
 const OmiGlassPanel =
   Platform.OS === 'macos'
     ? requireNativeComponent<ViewProps>('OmiGlassPanel')
@@ -218,6 +247,10 @@ function OmiMark({
       />
     </View>
   );
+}
+
+function bundledAssetSource(asset: string | number): ImageSourcePropType {
+  return typeof asset === 'string' ? {uri: asset} : asset;
 }
 
 export function omiDotColor(identity: string, index: number): string {
@@ -398,7 +431,7 @@ function ProjectionList({
     <View style={styles.projectionEmpty}>
       <Text style={styles.projectionEmptyTitle}>
         {error === null
-          ? emptyTitle ?? 'Nothing to show yet'
+          ? (emptyTitle ?? 'Nothing to show yet')
           : 'Unable to load'}
       </Text>
       <Text style={styles.projectionEmptyCopy}>{error ?? emptyCopy}</Text>
@@ -1064,8 +1097,8 @@ function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
       ? `Showing the first 50 ${label.toLowerCase()}. More may be available.`
       : `More ${label.toLowerCase()} are available.`
     : page.completenessStatus === 'degraded'
-    ? `${label} may be temporarily incomplete.`
-    : `${label} are incomplete.`;
+      ? `${label} may be temporarily incomplete.`
+      : `${label} are incomplete.`;
   return (
     <View style={styles.readStatus}>
       <Text style={styles.readStatusText}>{detail}</Text>
@@ -1476,8 +1509,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         item.kind === 'conversation'
           ? Date.parse(item.startedAt ?? item.createdAt)
           : item.kind === 'memory'
-          ? item.timestamp ?? 0
-          : 0;
+            ? (item.timestamp ?? 0)
+            : 0;
       return timestamp(right) - timestamp(left);
     });
   }, [readOutcomes]);
@@ -1929,8 +1962,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               activeGenerationId !== null
                 ? 'Stop response'
                 : omiBackend === undefined || omiBackend === null
-                ? 'Send message unavailable'
-                : 'Send message'
+                  ? 'Send message unavailable'
+                  : 'Send message'
             }
             accessibilityRole="button"
             disabled={
@@ -1972,10 +2005,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       ? nativeSnapshot === null
         ? 'Checking Bluetooth…'
         : nativeSnapshot.bluetooth === 'poweredOn'
-        ? 'Omi disconnected'
-        : nativeSnapshot.bluetooth === 'unauthorized'
-        ? 'Bluetooth permission needed'
-        : 'Bluetooth off'
+          ? 'Omi disconnected'
+          : bluetoothStatusLabel(nativeSnapshot.bluetooth)
       : `Connected · ${
           nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
         }`;
@@ -1983,14 +2014,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     nativeSnapshot === null
       ? '#b4ad9f'
       : connectedDevice === null
-      ? '#d9826f'
-      : '#45b79b';
+        ? '#d9826f'
+        : '#45b79b';
   const bluetoothStatusColor =
     nativeSnapshot === null
       ? '#b4ad9f'
       : nativeSnapshot.bluetooth === 'poweredOn'
-      ? '#45b79b'
-      : '#d9826f';
+        ? '#45b79b'
+        : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
   const homeOverview = (
@@ -2012,7 +2043,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             accessibilityLabel="Home pendant"
             height={compact ? 210 : 184}
             size={compact ? 210 : 160}
-            source={omiPendant}
+            source={bundledAssetSource(omiPendant)}
           />
         </View>
         <Text
@@ -2086,11 +2117,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                     <Text style={[styles.deviceState, styles.homeDeviceState]}>
                       {nativeSnapshot === null
                         ? 'Checking Bluetooth…'
-                        : nativeSnapshot.bluetooth === 'poweredOn'
-                        ? 'Bluetooth on'
-                        : nativeSnapshot.bluetooth === 'unauthorized'
-                        ? 'Bluetooth permission needed'
-                        : 'Bluetooth off'}
+                        : bluetoothStatusLabel(nativeSnapshot.bluetooth)}
                     </Text>
                   </View>
                 </View>
@@ -2243,11 +2270,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                       {readsPhase === 'initial-loading'
                                         ? 'Loading saved data…'
                                         : readsPhase === 'refreshing'
-                                        ? 'Refreshing saved data…'
-                                        : readsPhase ===
-                                          'saved-but-refresh-failed'
-                                        ? 'Showing saved data. Could not refresh.'
-                                        : 'Saved data is unavailable.'}
+                                          ? 'Refreshing saved data…'
+                                          : readsPhase ===
+                                              'saved-but-refresh-failed'
+                                            ? 'Showing saved data. Could not refresh.'
+                                            : 'Saved data is unavailable.'}
                                     </Text>
                                     {(readsPhase ===
                                       'saved-but-refresh-failed' ||
@@ -2291,13 +2318,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     <Text style={styles.deviceState}>
                                       {nativeSnapshot === null
                                         ? 'Checking Bluetooth…'
-                                        : nativeSnapshot.bluetooth ===
-                                          'poweredOn'
-                                        ? 'Bluetooth on'
-                                        : nativeSnapshot.bluetooth ===
-                                          'unauthorized'
-                                        ? 'Bluetooth permission needed'
-                                        : 'Bluetooth off'}
+                                        : bluetoothStatusLabel(
+                                            nativeSnapshot.bluetooth,
+                                          )}
                                     </Text>
                                   </View>
                                   <FocusPressable
@@ -2441,8 +2464,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                   : styles.chatHistoryCompact,
                               ]
                             : messages.length === 0 && !chatBusy
-                            ? styles.home
-                            : styles.chatHistory
+                              ? styles.home
+                              : styles.chatHistory
                         }>
                         <FocusPressable
                           accessibilityLabel="Back to Home"

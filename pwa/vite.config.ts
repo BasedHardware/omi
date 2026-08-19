@@ -1,19 +1,17 @@
-import { createRequire } from "node:module";
-import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   assertLoopbackBackendUrl,
   LOCAL_PROXY_PREFIX,
   rewriteLocalProxyPath,
 } from "./src/local-proxy.ts";
 
-const require = createRequire(import.meta.url);
-const reactNativeWebPath = dirname(
-  require.resolve("react-native-web/package.json")
+const reactNativeWebPath = fileURLToPath(
+  new URL("../node_modules/react-native-web", import.meta.url),
 );
 
 function localProxy() {
   const target = assertLoopbackBackendUrl(
-    process.env.OMI_LOCAL_BACKEND_URL ?? "http://127.0.0.1:8787"
+    process.env.OMI_LOCAL_BACKEND_URL ?? "http://127.0.0.1:8787",
   ).origin;
   const token = process.env.OMI_LOCAL_API_TOKEN?.trim();
   return {
@@ -39,7 +37,13 @@ export default () => {
       proxy,
     },
     resolve: {
-      alias: [{ find: /^react-native$/, replacement: reactNativeWebPath }],
+      alias: { "react-native": reactNativeWebPath },
+      dedupe: [
+        "@react-native/assets-registry",
+        "react",
+        "react-native-svg",
+        "react-native-web",
+      ],
       extensions: [
         ".web.ts",
         ".web.tsx",
@@ -52,6 +56,7 @@ export default () => {
         ".jsx",
         ".json",
       ],
+      preserveSymlinks: true,
     },
     server: {
       host: "127.0.0.1",
