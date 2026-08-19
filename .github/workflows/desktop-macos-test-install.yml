@@ -40,7 +40,12 @@ jobs:
             TAG="${{ github.event.client_payload.release_tag }}"
           fi
           if [ -z "$TAG" ] || [ "$TAG" = "latest" ]; then
-            TAG=$(gh release list --repo BasedHardware/omi --limit 1 --json tagName --jq '.[0].tagName')
+            TAG=$(gh release list --repo BasedHardware/omi --limit 50 --json tagName \
+              --jq 'map(select(.tagName | test("-macos$")))[0].tagName')
+            if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+              echo "No macOS release (tag ending in -macos) found" >&2
+              exit 1
+            fi
           fi
           echo "Testing release: $TAG"
           echo "release_tag=$TAG" >> $GITHUB_OUTPUT

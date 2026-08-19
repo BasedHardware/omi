@@ -1294,10 +1294,14 @@ export async function deleteDailySummary(id: string): Promise<void> {
  * Generate a test daily summary for a specific date
  */
 export async function generateTestDailySummary(date: string): Promise<DailySummary> {
-  return fetchWithAuth<DailySummary>('/v1/users/daily-summary-settings/test', {
+  const created = await fetchWithAuth<{ summary_id: string }>('/v1/users/daily-summary-settings/test', {
     method: 'POST',
     body: JSON.stringify({ date }),
   });
+  if (!created.summary_id) {
+    throw new Error('Recap generation did not return a summary id');
+  }
+  return getDailySummary(created.summary_id);
 }
 
 /**

@@ -21,7 +21,9 @@ class NestedWorkflowsRemovedTests(unittest.TestCase):
     def test_macos_install_smoke_is_promoted_to_root(self) -> None:
         promoted = ROOT / ".github/workflows/desktop-macos-test-install.yml"
         self.assertTrue(promoted.is_file())
-        self.assertIn("name: Test macOS Installation", promoted.read_text(encoding="utf-8"))
+        text = promoted.read_text(encoding="utf-8")
+        self.assertIn("name: Test macOS Installation", text)
+        self.assertIn('test("-macos$")', text)
 
 
 if __name__ == "__main__":

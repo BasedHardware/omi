@@ -163,6 +163,7 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
+        timeout-minutes: 2
         uses: ./.github/actions/install-redis
 
       - name: Run listen to pusher stack gauntlet
@@ -236,6 +237,7 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
+        timeout-minutes: 2
         uses: ./.github/actions/install-redis
 
       - name: Run Sync Cloud Tasks stack gauntlet
@@ -286,6 +288,7 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
+        timeout-minutes: 2
         uses: ./.github/actions/install-redis
 
       - name: Run Phase 0A replay harness feasibility experiment

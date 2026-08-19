@@ -101,6 +101,18 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("release eligibility must not path-filter or otherwise narrow main pushes", CHECKER.validate(root))
 
+    def test_missing_pull_request_read_permission_is_rejected(self) -> None:
+        root = self.fixture_root()
+        workflow = root / ".github/workflows/release-eligibility.yml"
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace("  pull-requests: read\n", "", 1),
+            encoding="utf-8",
+        )
+        self.assertIn(
+            "release eligibility must use only repository contents: read and pull-requests: read permissions",
+            CHECKER.validate(root),
+        )
+
     def test_missing_workflow_dispatch_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
@@ -167,7 +179,10 @@ class WorkflowContractTests(unittest.TestCase):
             workflow.read_text(encoding="utf-8").replace("  contents: read", "  contents: read\n  actions: write"),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility must use only repository contents: read permissions", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility must use only repository contents: read and pull-requests: read permissions",
+            CHECKER.validate(root),
+        )
 
     def test_ambiguous_workflow_sha_is_rejected(self) -> None:
         root = self.fixture_root()

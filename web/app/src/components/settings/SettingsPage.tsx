@@ -614,7 +614,7 @@ function ProfileSection({
                 type="button"
                 disabled={generatingRecap || !recapDate}
                 onClick={() => onGenerateRecap(recapDate)}
-                className="px-3 py-1.5 rounded-lg bg-purple-primary text-white text-sm disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg bg-white text-black text-sm disabled:opacity-50"
               >
                 {generatingRecap ? 'Generating…' : 'Generate'}
               </button>

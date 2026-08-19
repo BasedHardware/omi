@@ -649,9 +649,11 @@ def _raw_app_matches_search(app: dict, query: str) -> bool:
     Filter *before* install-count and review enrichment so a keystroke does not
     pay for the whole catalog (#11292).
     """
-    name = (app.get('name') or '').lower()
-    description = (app.get('description') or '').lower()
-    return query in name or query in description
+    name = app.get('name')
+    description = app.get('description')
+    name_text = name.lower() if isinstance(name, str) else ''
+    description_text = description.lower() if isinstance(description, str) else ''
+    return query in name_text or query in description_text
 
 
 def _matches_search_text(app: App, query: str) -> bool:

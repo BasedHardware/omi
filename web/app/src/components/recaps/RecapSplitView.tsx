@@ -153,7 +153,7 @@ export function RecapSplitView() {
             type="button"
             disabled={generating}
             onClick={handleGenerate}
-            className="px-3 py-1.5 rounded-lg bg-purple-primary text-white text-sm disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg bg-white text-black text-sm disabled:opacity-50"
           >
             {generating ? 'Generating…' : 'Generate recap'}
           </button>
@@ -188,7 +188,7 @@ export function RecapSplitView() {
                 type="button"
                 disabled={generating}
                 onClick={handleGenerate}
-                className="px-2 py-1 rounded-lg bg-purple-primary text-white text-xs disabled:opacity-50"
+                className="px-2 py-1 rounded-lg bg-white text-black text-xs disabled:opacity-50"
               >
                 {generating ? '…' : 'Generate'}
               </button>
