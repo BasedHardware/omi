@@ -728,7 +728,9 @@ test('shows a visible focus ring for keyboard-focused controls and search', asyn
   )[0];
   await ReactTestRenderer.act(async () => home.props.onFocus({}));
   expect(home.props.style({pressed: false})).toEqual(
-    expect.arrayContaining([expect.objectContaining({borderWidth: 2})]),
+    expect.arrayContaining([
+      expect.objectContaining({borderColor: '#78bda5', borderWidth: 1}),
+    ]),
   );
 
   const search = renderer.root.find(
@@ -737,7 +739,9 @@ test('shows a visible focus ring for keyboard-focused controls and search', asyn
   await ReactTestRenderer.act(async () => search.props.onFocus());
   const searchBox = search.parent!;
   expect(searchBox.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({borderWidth: 2})]),
+    expect.arrayContaining([
+      expect.objectContaining({borderColor: '#78bda5', borderWidth: 1}),
+    ]),
   );
 });
 
