@@ -3,7 +3,15 @@ import {
   type BrowserCapabilityResult,
   type BrowserCapabilitySnapshot,
   type BrowserEnvironment,
-} from './browser-adapters';
+} from './browser-adapters.web';
+import {
+  readBrowserGenerationEvents,
+  type BrowserGenerationStreamResult,
+} from './browser-sse.web';
+export {
+  BrowserGenerationCancelledError,
+  BrowserGenerationRecoveryError,
+} from './browser-sse.web';
 import {
   assertLocalProxyPath,
   LOCAL_PROXY_PREFIX,
@@ -66,6 +74,22 @@ export class BrowserScanError extends Error {
   constructor(readonly reason: BrowserScanFailureReason) {
     super(`Browser Bluetooth scan failed: ${reason}`);
     this.name = 'BrowserScanError';
+  }
+}
+
+export function browserScanErrorMessage(error: unknown): string | null {
+  if (!(error instanceof BrowserScanError)) {
+    return null;
+  }
+  switch (error.reason) {
+    case 'cancelled':
+      return 'Scan cancelled. No Omi device was discovered.';
+    case 'denied':
+      return 'Bluetooth permission was denied. No Omi device was discovered.';
+    case 'unsupported':
+      return 'Bluetooth scanning is not supported in this browser. No Omi device was discovered.';
+    case 'error':
+      return 'Bluetooth scanning failed. No Omi device was discovered.';
   }
 }
 
@@ -213,8 +237,54 @@ async function browserRequest(
   };
 }
 
+const generationControllers = new Map<string, AbortController>();
+
+async function browserGenerationEvents(
+  generationId: string,
+  lastEventId: string | null,
+): Promise<NativeHttpResponse> {
+  const controller = new AbortController();
+  generationControllers.set(generationId, controller);
+  let result: BrowserGenerationStreamResult;
+  try {
+    result = await readBrowserGenerationEvents({
+      initialLastEventId: lastEventId,
+      open: (resumeEventId, signal) =>
+        fetch(
+          proxyPath(
+            `/v1/chat-generations/${encodeURIComponent(generationId)}/events`,
+          ),
+          localProxyRequestInit({
+            credentials: 'omit',
+            headers:
+              resumeEventId === null
+                ? {'cache-control': 'no-cache'}
+                : {
+                    'cache-control': 'no-cache',
+                    'last-event-id': resumeEventId,
+                  },
+            method: 'GET',
+            signal,
+          }),
+        ),
+      signal: controller.signal,
+    });
+  } finally {
+    if (generationControllers.get(generationId) === controller) {
+      generationControllers.delete(generationId);
+    }
+  }
+  return {
+    body: result.body,
+    id: generationId,
+    retryAfterSeconds: result.retryAfterSeconds,
+    status: result.status,
+  };
+}
+
 const browserBackend: OmiBackend = {
   cancelGenerationEvents(generationId) {
+    generationControllers.get(generationId)?.abort();
     return browserRequest(
       {
         id: `cancel-${generationId}`,
@@ -229,18 +299,7 @@ const browserBackend: OmiBackend = {
     });
   },
   generationEvents(generationId, lastEventId) {
-    return browserRequest(
-      {
-        headers:
-          lastEventId === null
-            ? {'cache-control': 'no-cache'}
-            : {'cache-control': 'no-cache', 'last-event-id': lastEventId},
-        id: generationId,
-        method: 'GET',
-        path: `/v1/chat-generations/${encodeURIComponent(generationId)}/events`,
-      },
-      'text/event-stream',
-    );
+    return browserGenerationEvents(generationId, lastEventId);
   },
   request(request) {
     return browserRequest(request, 'application/json');

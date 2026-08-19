@@ -33,7 +33,7 @@ const mockNative = {
     microphone: 'granted',
     notifications: 'granted',
   })),
-  startScan: jest.fn(async () => []),
+  startScan: jest.fn(async (_timeoutSeconds?: number) => []),
 };
 const mockBackend = {
   cancelGenerationEvents: jest.fn(async (_generationId: string) => undefined),
@@ -287,6 +287,18 @@ jest.mock(
 );
 
 jest.mock('../src/omiNative', () => ({
+  browserScanErrorMessage: (error: {name?: string; reason?: string}) => {
+    if (error.name !== 'BrowserScanError') {
+      return null;
+    }
+    return {
+      cancelled: 'Scan cancelled. No Omi device was discovered.',
+      denied: 'Bluetooth permission was denied. No Omi device was discovered.',
+      error: 'Bluetooth scanning failed. No Omi device was discovered.',
+      unsupported:
+        'Bluetooth scanning is not supported in this browser. No Omi device was discovered.',
+    }[error.reason ?? ''];
+  },
   omiBackend: {
     cancelGenerationEvents: (generationId: string) =>
       mockBackend.cancelGenerationEvents(generationId),
@@ -296,7 +308,14 @@ jest.mock('../src/omiNative', () => ({
   },
   isBluetoothScanAvailable: (state: string | undefined) =>
     state === 'poweredOn' || state === 'available' || state === 'selected',
-  omiNative: mockNative,
+  omiNative: {
+    connectDevice: (deviceId: string) => mockNative.connectDevice(deviceId),
+    disconnectDevice: (deviceId: string) =>
+      mockNative.disconnectDevice(deviceId),
+    getSnapshot: () => mockNative.getSnapshot(),
+    startScan: (timeoutSeconds?: number) =>
+      mockNative.startScan(timeoutSeconds),
+  },
 }));
 
 import App, {omiDotColor, resolveInitialRoute} from '../App';
@@ -384,7 +403,54 @@ beforeEach(() => {
   mockBackend.request.mockImplementation(async request =>
     mockBackendResponse(request),
   );
+  mockNative.getSnapshot.mockImplementation(() => new Promise(() => {}));
+  mockNative.startScan.mockResolvedValue([]);
 });
+
+test.each([
+  ['cancelled', 'Scan cancelled. No Omi device was discovered.'],
+  ['denied', 'Bluetooth permission was denied. No Omi device was discovered.'],
+  [
+    'unsupported',
+    'Bluetooth scanning is not supported in this browser. No Omi device was discovered.',
+  ],
+  ['error', 'Bluetooth scanning failed. No Omi device was discovered.'],
+])(
+  'surfaces an honest browser scan outcome for %s',
+  async (reason, message) => {
+    mockViewportWidth = 390;
+    mockNative.getSnapshot.mockResolvedValue({
+      audioRoute: 'browser',
+      background: 'inactive',
+      bluetooth: 'poweredOn',
+      capture: 'idle',
+      captureMode: 'stream',
+      devices: [],
+      lastEvent: 'Omi device capture is not wired in the browser.',
+      microphone: 'unsupported',
+      notifications: 'unknown',
+    });
+    mockNative.startScan.mockRejectedValueOnce({
+      name: 'BrowserScanError',
+      reason,
+    });
+    const renderer = await renderApp();
+    expect(mockNative.getSnapshot).toHaveBeenCalled();
+
+    await ReactTestRenderer.act(async () => {
+      const scan = renderer.root.find(
+        node => node.props.accessibilityLabel === 'Scan for Omi devices',
+      );
+      expect(scan.props.onPress).toEqual(expect.any(Function));
+      await scan.props.onPress();
+    });
+
+    expect(mockNative.startScan).toHaveBeenCalledWith(8);
+    const output = JSON.stringify(renderer.toJSON());
+    expect(output).toContain(message);
+    expect(output).not.toContain('Browser device selected');
+  },
+);
 
 async function renderApp(initialRoute?: string) {
   let renderer: ReactTestRenderer.ReactTestRenderer;
