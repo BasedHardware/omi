@@ -537,6 +537,9 @@ enum ScreenContextWorkContextBuilder {
         "timeline": [],
         "memories_hint": memoriesHint,
         "guidance": handleFirstGuidance,
+        // The tape path reported `latest_capture_age_seconds`; this path reported nothing at
+        // all, leaving wall-clock visit times with no present to measure against.
+        "generated_at": formatter.string(from: now),
       ]
       attach(index, to: &cheap, now: now)
       return cheap
@@ -697,6 +700,7 @@ enum ScreenContextWorkContextBuilder {
       payload["latest_capture_age_seconds"] = latestCaptureAgeSeconds
     }
     payload["freshness_threshold_seconds"] = staleThresholdSeconds
+    payload["generated_at"] = formatter.string(from: now)
     return payload
   }
 

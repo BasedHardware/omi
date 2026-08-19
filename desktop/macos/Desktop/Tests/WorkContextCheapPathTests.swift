@@ -75,6 +75,48 @@ final class WorkContextCheapPathTests: XCTestCase {
     XCTAssertEqual(handles.first?["value"] as? String, url.value)
   }
 
+  /// "You last worked in Claude 2 hours ago", asked while Claude was on screen.
+  ///
+  /// The visit times are wall-clock strings, and this path used to emit no absolute timestamp
+  /// at all, so nothing in the payload said what "now" was. The only ISO timestamp left was
+  /// `briefs[].last_visit`, which pushed the reader onto bucket recency instead of the visit
+  /// actually in progress.
+  func testPayloadIsTemporallyAnchored() async throws {
+    try await seedVisit()
+
+    let payload = await ScreenContextWorkContextBuilder.payload(arguments: [:])
+
+    let generatedAt = try XCTUnwrap(
+      payload["generated_at"] as? String, "payload must say when it was produced")
+    XCTAssertNotNil(
+      ISO8601DateFormatter().date(from: generatedAt), "generated_at must be an absolute instant")
+
+    let visits = try XCTUnwrap(payload["visits"] as? [[String: Any]])
+    let visit = try XCTUnwrap(visits.first)
+    let startAt = try XCTUnwrap(visit["start_at"] as? String, "a visit must carry an absolute start")
+    let endAt = try XCTUnwrap(visit["end_at"] as? String, "a visit must carry an absolute end")
+    XCTAssertNotNil(ISO8601DateFormatter().date(from: startAt))
+    XCTAssertNotNil(ISO8601DateFormatter().date(from: endAt))
+    XCTAssertNotNil(visit["start"], "the readable wall-clock form stays")
+  }
+
+  /// A visit still in progress is the answer to "what am I in right now", so it must not look
+  /// like one that ended the instant it began.
+  func testOngoingVisitSaysSo() throws {
+    let url = try XCTUnwrap(WorkHistoryHandle.url("https://docs.google.com/spreadsheets/d/x/edit"))
+    let started = Date().addingTimeInterval(-60)
+    let open = WorkHistoryVisitRecord(
+      startedAt: started, endedAt: nil, appName: "Google Chrome", title: "Q3 pricing",
+      handles: [url], bucketID: nil, outcome: "active")
+    let json = open.jsonObject(clock: { _ in "15:25" })
+    XCTAssertEqual(json["ongoing"] as? Bool, true)
+
+    let closed = WorkHistoryVisitRecord(
+      startedAt: started, endedAt: started.addingTimeInterval(30), appName: "Google Chrome",
+      title: "Q3 pricing", handles: [url], bucketID: nil, outcome: "completed")
+    XCTAssertNil(closed.jsonObject(clock: { _ in "15:25" })["ongoing"])
+  }
+
   /// A visit whose only handle is the `app_window` fallback names nothing openable — it
   /// carries the same app and title the timeline already shows. Suppressing the tape for it
   /// would drop evidence and return no address in exchange, so the tool must fall through.

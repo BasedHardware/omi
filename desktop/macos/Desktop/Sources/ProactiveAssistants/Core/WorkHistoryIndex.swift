@@ -11,9 +11,16 @@ struct WorkHistoryVisitRecord: Equatable, Sendable {
   var outcome: String
 
   func jsonObject(clock: (Date) -> String) -> [String: Any] {
+    // `start`/`end` are wall-clock strings for the reader; `start_at`/`end_at` are the same
+    // instants absolutely. Without the absolute pair a bare "15:25" cannot be turned into "how
+    // long ago" by anything reading this payload — which is how a visit that had not yet ended
+    // got reported as hours old.
+    let formatter = ISO8601DateFormatter()
     var object: [String: Any] = [
       "start": clock(startedAt),
       "end": clock(endedAt ?? startedAt),
+      "start_at": formatter.string(from: startedAt),
+      "end_at": formatter.string(from: endedAt ?? startedAt),
       "app": appName,
       "title": title,
       "handles": handles.map { $0.jsonObject() },
@@ -21,6 +28,11 @@ struct WorkHistoryVisitRecord: Equatable, Sendable {
     ]
     if let bucketID {
       object["bucket_id"] = bucketID
+    }
+    if endedAt == nil {
+      // An open visit is the answer to "what am I in right now". Saying so beats letting a
+      // reader infer that it ended the moment it started.
+      object["ongoing"] = true
     }
     return object
   }
