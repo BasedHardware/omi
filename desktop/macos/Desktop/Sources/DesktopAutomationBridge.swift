@@ -3062,6 +3062,32 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "permissions_snapshot",
+      summary: "Return every permission row the Permissions page shows, with its state"
+    ) { _ in
+      guard let appState = AppState.current else {
+        return ["error": "app state unavailable"]
+      }
+      // Probe first. On a named dev bundle the accessibility flag is not read at startup, so a
+      // snapshot taken without this reports the default rather than the machine.
+      await MainActor.run { appState.refreshPermissionsForSettingsPage() }
+      _ = await appState.refreshAccessibilityPermission()
+      return await MainActor.run {
+        [
+          "microphone": appState.hasMicrophonePermission ? "granted" : "not_granted",
+          "screen_recording": appState.hasScreenRecordingPermission
+            ? (appState.isScreenRecordingStale ? "stale" : "granted") : "not_granted",
+          "system_audio": appState.systemAudioPermissionStatus.rawValue,
+          "notifications": appState.hasNotificationPermission ? "granted" : "not_granted",
+          "accessibility": appState.hasAccessibilityPermission
+            ? (appState.isAccessibilityBroken ? "broken" : "granted") : "not_granted",
+          "missing": appState.missingPermissions.joined(separator: ","),
+          "ax_suppressed": ScreenCaptureService.isAccessibilitySuppressedForTesting() ? "true" : "false",
+        ]
+      }
+    }
+
+    register(
       name: "create_test_folder",
       summary: "Create a hermetic conversation folder via the real API",
       params: ["name"]
