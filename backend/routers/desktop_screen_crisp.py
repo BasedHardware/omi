@@ -13,6 +13,7 @@ from database.screen_activity import normalize_screen_activity_timestamp, upsert
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, get_user
+from utils.subscription import grants_cloud_screen_vectors
 from utils.subscription import is_desktop_trial_paywalled
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 
@@ -139,7 +140,15 @@ async def sync_screen_activity(
         except Exception as exc:
             logger.exception("Screen activity Firestore write failed for uid=%s", uid)
             raise HTTPException(status_code=500, detail="Firestore write failed") from exc
-        embedded_rows = [row for row in rows if row.get("embedding")]
+        # The vector is the expensive half of a synced row and its only server-side purpose is
+        # semantic screen search, which is a paid desktop capability. Gate it here rather than on
+        # the client: the client cannot be trusted to know its own entitlement, and the row is
+        # still stored either way, so a later upgrade can backfill vectors from the stored text.
+        embedded_rows = (
+            [row for row in rows if row.get("embedding")]
+            if await run_blocking(db_executor, grants_cloud_screen_vectors, uid)
+            else []
+        )
         if embedded_rows:
             try:
                 await run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)
