@@ -2882,291 +2882,6 @@
           "custom": {
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 65,
-            "gradientMode": "none",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Omi says"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#3b82f6",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Marketplace"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#f59e0b",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 42,
-        "w": 8,
-        "h": 8
-      },
-      "id": 39,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "date",
-              "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
-            },
-            {
-              "selector": "mentorSent",
-              "text": "Omi says",
-              "type": "number"
-            },
-            {
-              "selector": "marketplaceMentorSent",
-              "text": "Marketplace",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "timeseries",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "dailyData",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30&_tzdates=date",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "timeFrom": "30d",
-      "title": "Daily notifications sent  \u00b7  ${d_notif}",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 65,
-            "gradientMode": "none",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Omi says sent"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#3b82f6",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Marketplace sent"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#f59e0b",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Unique users"
-            },
-            "properties": [
-              {
-                "id": "custom.axisPlacement",
-                "value": "right"
-              },
-              {
-                "id": "unit",
-                "value": "short"
-              },
-              {
-                "id": "custom.stacking",
-                "value": {
-                  "group": "A",
-                  "mode": "none"
-                }
-              },
-              {
-                "id": "custom.drawStyle",
-                "value": "line"
-              },
-              {
-                "id": "custom.fillOpacity",
-                "value": 0
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
-              },
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#22c55e",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 50,
-        "w": 8,
-        "h": 8
-      },
-      "id": 40,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "week",
-              "text": "time",
-              "timestampFormat": "2006-01-02T15:04:05Z07:00",
-              "type": "timestamp"
-            },
-            {
-              "selector": "mentorSent",
-              "text": "Omi says sent",
-              "type": "number"
-            },
-            {
-              "selector": "marketplaceMentorSent",
-              "text": "Marketplace sent",
-              "type": "number"
-            },
-            {
-              "selector": "uniqueUsersMentor",
-              "text": "Unique users",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "timeseries",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "weeklyData",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30&_tzdates=week",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "timeFrom": "45d",
-      "title": "Weekly notification reach  \u00b7  ${d_reach}",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "barAlignment": 0,
             "drawStyle": "line",
             "fillOpacity": 12,
             "gradientMode": "opacity",
@@ -3201,8 +2916,8 @@
         ]
       },
       "gridPos": {
-        "x": 8,
-        "y": 50,
+        "x": 16,
+        "y": 42,
         "w": 8,
         "h": 8
       },
@@ -3269,7 +2984,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 16,
+        "x": 0,
         "y": 50,
         "w": 8,
         "h": 8
@@ -3350,8 +3065,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 0,
-        "y": 58,
+        "x": 8,
+        "y": 50,
         "w": 8,
         "h": 8
       },
@@ -3477,8 +3192,8 @@
         ]
       },
       "gridPos": {
-        "x": 8,
-        "y": 58,
+        "x": 16,
+        "y": 50,
         "w": 8,
         "h": 8
       },
@@ -3591,7 +3306,7 @@
         ]
       },
       "gridPos": {
-        "x": 16,
+        "x": 0,
         "y": 58,
         "w": 8,
         "h": 8
@@ -3705,8 +3420,8 @@
         ]
       },
       "gridPos": {
-        "x": 0,
-        "y": 66,
+        "x": 8,
+        "y": 58,
         "w": 8,
         "h": 8
       },
@@ -3819,8 +3534,8 @@
         ]
       },
       "gridPos": {
-        "x": 8,
-        "y": 66,
+        "x": 16,
+        "y": 58,
         "w": 8,
         "h": 8
       },
@@ -3933,7 +3648,7 @@
         ]
       },
       "gridPos": {
-        "x": 16,
+        "x": 0,
         "y": 66,
         "w": 8,
         "h": 8
@@ -4018,8 +3733,8 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 0,
-        "y": 74,
+        "x": 8,
+        "y": 66,
         "w": 8,
         "h": 8
       },
@@ -4083,125 +3798,6 @@
         }
       ],
       "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "yesoreyeram-infinity-datasource",
-        "uid": "omi-admin-api"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 65,
-            "gradientMode": "none",
-            "lineWidth": 2,
-            "pointSize": 4,
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Omi says"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#3b82f6",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Marketplace"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "#f59e0b",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 82,
-        "w": 24,
-        "h": 8
-      },
-      "id": 51,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "columns": [
-            {
-              "selector": "hour",
-              "text": "time",
-              "timestampFormat": "2006-01-02T15",
-              "type": "timestamp"
-            },
-            {
-              "selector": "mentor",
-              "text": "Omi says",
-              "type": "number"
-            },
-            {
-              "selector": "marketplace",
-              "text": "Marketplace",
-              "type": "number"
-            }
-          ],
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "omi-admin-api"
-          },
-          "format": "timeseries",
-          "parser": "backend",
-          "refId": "A",
-          "root_selector": "hourlyData",
-          "source": "url",
-          "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30",
-          "url_options": {
-            "data": "",
-            "method": "GET"
-          }
-        }
-      ],
-      "timeFrom": "8d",
-      "title": "Notifications sent \u2014 last 168 hours  \u00b7  ${d_hourly}",
-      "type": "timeseries"
     }
   ],
   "refresh": "5m",
@@ -4589,80 +4185,6 @@
           "uid": "omi-admin-api"
         },
         "hide": 2,
-        "name": "d_notif",
-        "options": [],
-        "query": {
-          "infinityQuery": {
-            "columns": [
-              {
-                "selector": "value",
-                "text": "value",
-                "type": "string"
-              }
-            ],
-            "format": "table",
-            "parser": "backend",
-            "refId": "variable",
-            "root_selector": "",
-            "source": "url",
-            "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fnotifications%3Fdays%3D30&root=dailyData&fields=mentorSent%2CmarketplaceMentorSent&agg=sum&window=15&label=vs+prev+15d",
-            "url_options": {
-              "data": "",
-              "method": "GET"
-            }
-          },
-          "query": "",
-          "queryType": "infinity"
-        },
-        "refresh": 2,
-        "skipUrlSync": true,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "omi-admin-api"
-        },
-        "hide": 2,
-        "name": "d_reach",
-        "options": [],
-        "query": {
-          "infinityQuery": {
-            "columns": [
-              {
-                "selector": "value",
-                "text": "value",
-                "type": "string"
-              }
-            ],
-            "format": "table",
-            "parser": "backend",
-            "refId": "variable",
-            "root_selector": "",
-            "source": "url",
-            "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fnotifications%3Fdays%3D30&root=weeklyData&fields=mentorSent%2CmarketplaceMentorSent&agg=sum&window=2&label=vs+prev+2w",
-            "url_options": {
-              "data": "",
-              "method": "GET"
-            }
-          },
-          "query": "",
-          "queryType": "infinity"
-        },
-        "refresh": 2,
-        "skipUrlSync": true,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "omi-admin-api"
-        },
-        "hide": 2,
         "name": "d_crash",
         "options": [],
         "query": {
@@ -4866,43 +4388,6 @@
             "source": "url",
             "type": "json",
             "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=conversion&fields=desktop&agg=avg&window=15&label=vs+prev+15d",
-            "url_options": {
-              "data": "",
-              "method": "GET"
-            }
-          },
-          "query": "",
-          "queryType": "infinity"
-        },
-        "refresh": 2,
-        "skipUrlSync": true,
-        "type": "query"
-      },
-      {
-        "current": {},
-        "datasource": {
-          "type": "yesoreyeram-infinity-datasource",
-          "uid": "omi-admin-api"
-        },
-        "hide": 2,
-        "name": "d_hourly",
-        "options": [],
-        "query": {
-          "infinityQuery": {
-            "columns": [
-              {
-                "selector": "value",
-                "text": "value",
-                "type": "string"
-              }
-            ],
-            "format": "table",
-            "parser": "backend",
-            "refId": "variable",
-            "root_selector": "",
-            "source": "url",
-            "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fnotifications%3Fdays%3D30&root=hourlyData&fields=mentor%2Cmarketplace&agg=sum&window=84&label=vs+prev+84h",
             "url_options": {
               "data": "",
               "method": "GET"

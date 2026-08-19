@@ -253,6 +253,19 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          # The conversation summary pipeline runs in two services: backend-listen
+          # finalizes a live conversation, and this one runs process_conversation
+          # inline for POST /v1/conversations/{id}/reprocess. Declaring the rollout
+          # flags on only one of them makes regenerate disagree with live capture.
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'false'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9

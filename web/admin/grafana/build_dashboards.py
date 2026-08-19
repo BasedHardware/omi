@@ -51,10 +51,8 @@ PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor
 DESKTOP_ONLY_TITLES = {
     "Floating bar sessions per user", "Floating bar queries",
     "Floating bar notification CTR", "Crash-free rate (today)",
-    "Crash-free rate",
+    "Crash-free rate", "Notifications enabled",
 }
-# Notification panels stay real on both platform boards: mentor pushes are
-# account-level (delivered to whatever devices a user has), not per-platform.
 
 LINKS = [
     {"title": title, "type": "link", "url": f"/grafana/d/{uid}/", "icon": "dashboard",
@@ -261,10 +259,15 @@ def build_platform_board(base, scope: str) -> dict:
     apply_platform(dash, scope)
 
     # Cross-platform business panels that have no per-platform breakdown.
+    # Mentor "Omi says" pushes are account-level Firestore messages delivered
+    # to every device a user has, so notification volume cannot be split by
+    # platform either — those panels live on the All-platforms board only.
     drop_panels(dash, {
         "Users → 1M goal", "ARR", "Active subscriptions", "Trialing",
         "Trials in pipeline", "Conversations", "MRR by product", "MRR over time",
         "New subscriptions / month", "Message ratings",
+        "Daily notifications sent", "Notifications sent — last 168 hours",
+        "Weekly notification reach",
         "Infra cost by service — last 30 days",
     })
     if scope == "mobile":

@@ -41,9 +41,9 @@ export async function GET(request: NextRequest) {
     const excludeOtherProducts = `AND NOT startsWith(event, 'cfc_')`;
     const eventFilter =
       platform === 'macos'
-        ? `AND properties.$os = 'macOS' ${excludeOtherProducts}`
+        ? `AND properties.$os_name = 'macOS' ${excludeOtherProducts}`
         : platform === 'mobile'
-          ? `AND properties.$os IN ('iOS', 'Android', 'iPadOS') ${excludeOtherProducts}`
+          ? `AND properties.$os_name IN ('iOS', 'Android', 'iPadOS') ${excludeOtherProducts}`
           : excludeOtherProducts;
     const url = `${host}/api/projects/${projectId}/query/`;
 

@@ -38,6 +38,7 @@ from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
 from utils.translation_coordinator import TranslationCoordinator
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -263,12 +264,18 @@ class TranscriptProcessor:
         return False
 
     async def process_loop(self) -> None:
+        diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
         while self.host.state.active or self.segment_buffer or self.photo_buffer:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
                 break
             if not self.segment_buffer and not self.photo_buffer:
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
+            conversation_id = self.host.state.current_conversation_id
+            if conversation_id:
+                diarized_speaker_ids_by_conversation.setdefault(conversation_id, set()).update(
+                    int(segment['speaker_id']) for segment in raw_segments if isinstance(segment.get('speaker_id'), int)
+                )
             self.segment_buffer.clear()
             photos = list(self.photo_buffer)
             self.photo_buffer.clear()
@@ -358,6 +365,19 @@ class TranscriptProcessor:
             logger.warning('Timed out waiting for listen speaker identification to finish')
         await self.host.speakers.drain(timeout=10, label='listen_speaker_final')
         await self.flush_speaker_assignments(self.host.state.current_conversation_id)
+        for conversation_id, diarized_speaker_ids in diarized_speaker_ids_by_conversation.items():
+            if not diarized_speaker_ids:
+                continue
+            emit_product_event(
+                uid=self.host.request.uid,
+                event='Diarization Completed',
+                properties={
+                    'recording_id': getattr(self.host, 'recording_session_id', None),
+                    'conversation_id': conversation_id,
+                    'speaker_count': len(diarized_speaker_ids),
+                    'source': 'stt_provider',
+                },
+            )
 
     async def _write_fresh(
         self,

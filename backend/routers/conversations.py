@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Any, Dict, List, Optional
@@ -65,6 +66,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.product_telemetry import emit_product_event
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -89,6 +91,45 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     return conversation
+
+
+def _speaker_assignment(segment: TranscriptSegment) -> str:
+    if segment.is_user:
+        return 'self'
+    if segment.person_id:
+        return f"person:{hashlib.sha256(str(segment.person_id).encode('utf-8')).hexdigest()[:16]}"
+    return 'unassigned'
+
+
+def _speaker_assignment_kind(assignment: str) -> str:
+    return 'person' if assignment.startswith('person:') else assignment
+
+
+def _emit_speaker_identity_confirmed(
+    *,
+    uid: str,
+    conversation_id: str,
+    scope: str,
+    before: List[str],
+    after: List[str],
+) -> None:
+    if not after:
+        return
+    assignment_kinds = [_speaker_assignment_kind(value) for value in after]
+    properties = {
+        'conversation_id': conversation_id,
+        'confirmation': 'accepted' if before == after else 'corrected',
+        'assignment': assignment_kinds[0] if len(set(assignment_kinds)) == 1 else 'mixed',
+        'scope': scope,
+        'affected_segment_count': len(after),
+    }
+    if len(set(after)) == 1 and assignment_kinds[0] == 'person':
+        properties['assignment_id'] = after[0]
+    emit_product_event(
+        uid=uid,
+        event='Speaker Identity Confirmed',
+        properties=properties,
+    )
 
 
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
@@ -1021,6 +1062,7 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
         conversation.transcript_segments[segment_idx].person_id = None
@@ -1033,6 +1075,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='segment',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -1090,6 +1139,9 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
+    before = [_speaker_assignment(segment) for segment in targeted_segments]
+
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
@@ -1107,6 +1159,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='speaker',
+        before=before,
+        after=[_speaker_assignment(segment) for segment in targeted_segments],
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -1153,6 +1212,7 @@ def assign_segments_bulk(
 
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
+    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1165,6 +1225,13 @@ def assign_segments_bulk(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='bulk',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
 
     # Trigger speaker sample extraction when assigning to a person
