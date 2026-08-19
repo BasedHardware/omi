@@ -542,7 +542,7 @@ change, the FAIL set must equal that known-residual set; any other file failing 
 ### Regression guard
 
 ```bash
-python3 .github/scripts/check_firestore_persistence_boundary.py   # must exit 0 (0 violations)
+python3 .github/scripts/check_oss_firestore_persistence_boundary.py   # must exit 0 (0 violations)
 ```
 
 Runs bare with stdlib `python3` (no venv). It enforces the WP1 boundary: only `database/` may touch

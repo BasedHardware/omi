@@ -10,7 +10,7 @@ on:
       - "deploy/onprem/compose.base.yaml"
       - "deploy/onprem/compose.selfhost.yaml"
       - "deploy/onprem/omi.oss.release.pins"
-      - ".github/scripts/check_image_parity.py"
+      - ".github/scripts/check_oss_image_parity.py"
       - ".github/workflows/onprem_helm.yml"
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
             -f deploy/onprem/helm/omi-oss/values-prod.yaml > /dev/null
 
       - name: image parity (compose <-> Helm)
-        run: python3 .github/scripts/check_image_parity.py
+        run: python3 .github/scripts/check_oss_image_parity.py
 
       - name: helm package (installable .tgz artifact — ADR-0049 §4.3)
         run: helm package deploy/onprem/helm/omi-oss -d /tmp/helm-out

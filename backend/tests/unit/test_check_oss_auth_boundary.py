@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parents[3] / '.github' / 'scripts' / 'check_auth_boundary.py'
+_SCRIPT = Path(__file__).resolve().parents[3] / '.github' / 'scripts' / 'check_oss_auth_boundary.py'
 if not _SCRIPT.exists():
     # Repo-root guard script — absent when only backend/ is mounted (the offline test image).
     pytest.skip(f'guard script not present at {_SCRIPT}', allow_module_level=True)
-_SPEC = importlib.util.spec_from_file_location('check_auth_boundary', _SCRIPT)
+_SPEC = importlib.util.spec_from_file_location('check_oss_auth_boundary', _SCRIPT)
 assert _SPEC is not None and _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)

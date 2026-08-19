@@ -15,7 +15,7 @@ old check by design.
 Each pin holds the WHOLE image reference, so tag / tag@digest / bare digest are all fine: this check
 compares strings and never parses a version.
 
-Run:  python3 .github/scripts/check_image_parity.py   # exit 0 = in sync
+Run:  python3 .github/scripts/check_oss_image_parity.py   # exit 0 = in sync
 """
 from __future__ import annotations
 
