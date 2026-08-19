@@ -10,17 +10,19 @@ struct WorkHistoryVisitRecord: Equatable, Sendable {
   var bucketID: String?
   var outcome: String
 
-  func jsonObject(clock: (Date) -> String) -> [String: Any] {
-    // `start`/`end` are wall-clock strings for the reader; `start_at`/`end_at` are the same
-    // instants absolutely. Without the absolute pair a bare "15:25" cannot be turned into "how
-    // long ago" by anything reading this payload — which is how a visit that had not yet ended
-    // got reported as hours old.
-    let formatter = ISO8601DateFormatter()
+  /// - Parameter now: the instant `minutes_ago` is measured against — the same `generated_at`
+  ///   the payload reports, so every visit in one payload is anchored to one clock.
+  func jsonObject(clock: (Date) -> String, now: Date) -> [String: Any] {
+    // A bare "15:25" cannot be turned into "how long ago" by anything reading this payload, which
+    // is how a visit that had not yet ended got reported as hours old. Two ISO-8601 strings per
+    // visit fixed that and cost ~50 tokens each — up to 724 on a full 20-visit payload, most of
+    // the saving the handles-first path exists to produce. One integer says the same thing in
+    // four, and says it more directly than a timestamp the reader has to subtract.
+    let minutesAgo = max(0, Int(now.timeIntervalSince(endedAt ?? startedAt) / 60))
     var object: [String: Any] = [
       "start": clock(startedAt),
       "end": clock(endedAt ?? startedAt),
-      "start_at": formatter.string(from: startedAt),
-      "end_at": formatter.string(from: endedAt ?? startedAt),
+      "minutes_ago": minutesAgo,
       "app": appName,
       "title": title,
       "handles": handles.map { $0.jsonObject() },

@@ -755,7 +755,7 @@ enum ScreenContextWorkContextBuilder {
       let c = calendar.dateComponents([.hour, .minute], from: date)
       return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
     }
-    payload["visits"] = index.visits.map { $0.jsonObject(clock: clock) }
+    payload["visits"] = index.visits.map { $0.jsonObject(clock: clock, now: now) }
     payload["briefs"] = index.briefs.map { $0.jsonObject() }
   }
 

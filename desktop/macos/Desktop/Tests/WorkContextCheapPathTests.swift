@@ -93,11 +93,13 @@ final class WorkContextCheapPathTests: XCTestCase {
 
     let visits = try XCTUnwrap(payload["visits"] as? [[String: Any]])
     let visit = try XCTUnwrap(visits.first)
-    let startAt = try XCTUnwrap(visit["start_at"] as? String, "a visit must carry an absolute start")
-    let endAt = try XCTUnwrap(visit["end_at"] as? String, "a visit must carry an absolute end")
-    XCTAssertNotNil(ISO8601DateFormatter().date(from: startAt))
-    XCTAssertNotNil(ISO8601DateFormatter().date(from: endAt))
+    let minutesAgo = try XCTUnwrap(
+      visit["minutes_ago"] as? Int, "a visit must say how long ago it was, not only when")
+    // The fixture visit ended 60s before now, so this is the current minute or the one before it.
+    XCTAssertLessThanOrEqual(minutesAgo, 2)
+    XCTAssertGreaterThanOrEqual(minutesAgo, 0)
     XCTAssertNotNil(visit["start"], "the readable wall-clock form stays")
+    XCTAssertNil(visit["start_at"], "an ISO pair per visit costs ~50 tokens to say what one int says")
   }
 
   /// A visit still in progress is the answer to "what am I in right now", so it must not look
@@ -108,13 +110,13 @@ final class WorkContextCheapPathTests: XCTestCase {
     let open = WorkHistoryVisitRecord(
       startedAt: started, endedAt: nil, appName: "Google Chrome", title: "Q3 pricing",
       handles: [url], bucketID: nil, outcome: "active")
-    let json = open.jsonObject(clock: { _ in "15:25" })
+    let json = open.jsonObject(clock: { _ in "15:25" }, now: Date())
     XCTAssertEqual(json["ongoing"] as? Bool, true)
 
     let closed = WorkHistoryVisitRecord(
       startedAt: started, endedAt: started.addingTimeInterval(30), appName: "Google Chrome",
       title: "Q3 pricing", handles: [url], bucketID: nil, outcome: "completed")
-    XCTAssertNil(closed.jsonObject(clock: { _ in "15:25" })["ongoing"])
+    XCTAssertNil(closed.jsonObject(clock: { _ in "15:25" }, now: Date())["ongoing"])
   }
 
   /// A visit whose only handle is the `app_window` fallback names nothing openable — it

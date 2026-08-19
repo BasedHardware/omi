@@ -1,5 +1,4 @@
 import AppKit
-import ApplicationServices
 import CryptoKit
 import Foundation
 import Network
@@ -3062,35 +3061,8 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    register(
-      name: "permissions_snapshot",
-      summary: "Return every permission row the Permissions page shows, with its state"
-    ) { _ in
-      guard let appState = AppState.current else {
-        return ["error": "app state unavailable"]
-      }
-      // Probe first. On a named dev bundle the accessibility flag is not read at startup, so a
-      // snapshot taken without this reports the default rather than the machine.
-      await MainActor.run { appState.refreshPermissionsForSettingsPage() }
-      _ = await appState.refreshAccessibilityPermission()
-      return await MainActor.run {
-        [
-          "microphone": appState.hasMicrophonePermission ? "granted" : "not_granted",
-          "screen_recording": appState.hasScreenRecordingPermission
-            ? (appState.isScreenRecordingStale ? "stale" : "granted") : "not_granted",
-          "system_audio": appState.systemAudioPermissionStatus.rawValue,
-          "notifications": appState.hasNotificationPermission ? "granted" : "not_granted",
-          "accessibility": appState.hasAccessibilityPermission
-            ? (appState.isAccessibilityBroken ? "broken" : "granted") : "not_granted",
-          "bluetooth": appState.hasBluetoothPermission ? "granted" : "not_granted",
-          "full_disk_access": appState.hasFullDiskAccess ? "granted" : "not_granted",
-          "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
-          "missing": appState.missingPermissions.joined(separator: ","),
-          "ax_suppressed": ScreenCaptureService.isAccessibilitySuppressedForTesting() ? "true" : "false",
-          "ax_tcc_trusted": AXIsProcessTrusted() ? "true" : "false",
-          "ax_probe": AppState.axProbeResult(targets: AppState.accessibilityProbeTargets()).rawValue,
-        ]
-      }
+    register(name: "permissions_snapshot", summary: "Every permission row the Permissions page shows") {
+      _ in await PermissionsSnapshot.capture()
     }
 
     register(
