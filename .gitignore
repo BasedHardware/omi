@@ -13,4 +13,5 @@ packages/contracts/dist/
 packages/kernel/dist/
 packages/sync/dist/
 packages/wire-listen/dist/
+pwa/dist/
 apps/backend-worker/.wrangler/
