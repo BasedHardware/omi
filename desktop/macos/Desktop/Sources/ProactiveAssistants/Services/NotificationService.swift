@@ -26,6 +26,18 @@ enum NotificationSound {
 
 }
 
+/// Named delivery intent for notifications that must not become Chat rows.
+/// The default preserves the existing floating-bar presentation and journaling
+/// path; system-banner-only callers still pass every owner, toggle, and
+/// frequency gate in `NotificationService` before reaching UserNotifications.
+enum NotificationDeliveryMode: Equatable {
+  case standard
+  case systemBannerOnly
+
+  var presentsInFloatingBar: Bool { self == .standard }
+  var requiresSystemBanner: Bool { self == .systemBannerOnly }
+}
+
 @MainActor
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static let shared = NotificationService(registerWithSystemNotificationCenter: true)
@@ -363,6 +375,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
+    deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
@@ -467,10 +480,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
-    let floatingBarPreviewEnabled = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
-      deliverSystemBanner: deliverSystemBanner
-    )
+    let floatingBarPreviewEnabled =
+      deliveryMode.presentsInFloatingBar
+      && FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner
+      )
 
     var floatingBarMayDeliver = false
     var floatingBarQueued = false
@@ -518,7 +533,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // doc above). When the user explicitly muted in-bar previews (bar still enabled),
     // fall back to the system banner so the notification is never fully silenced.
     let shouldDeliverSystemBanner =
-      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+      deliveryMode.requiresSystemBanner
+      || FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
         previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
         deliverSystemBanner: deliverSystemBanner,
         floatingBarAccepted: floatingBarMayDeliver || floatingBarQueued

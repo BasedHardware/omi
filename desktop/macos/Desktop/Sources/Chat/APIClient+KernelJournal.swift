@@ -9,6 +9,7 @@ extension APIClient {
     sender: String,
     appId: String? = nil,
     sessionId: String? = nil,
+    contentBlocksJSON: String? = nil,
     metadata: String? = nil,
     clientMessageId: String? = nil,
     messageSource: String = "desktop_chat",
@@ -20,16 +21,22 @@ extension APIClient {
       let sender: String
       let app_id: String?
       let session_id: String?
+      let content_blocks: [OmiAnyCodable]?
       let metadata: String?
       let client_message_id: String?
       let message_source: String
       let journal_revision: Int?
+    }
+    let contentBlocks = contentBlocksJSON.flatMap { json -> [OmiAnyCodable]? in
+      guard let data = json.data(using: .utf8) else { return nil }
+      return try? JSONDecoder().decode([OmiAnyCodable].self, from: data)
     }
     let body = SaveRequest(
       text: text,
       sender: sender,
       app_id: appId,
       session_id: sessionId,
+      content_blocks: contentBlocks,
       metadata: metadata,
       client_message_id: clientMessageId,
       message_source: messageSource,
@@ -114,7 +121,7 @@ struct SaveMessageResponse: Codable {
   }
 }
 
-struct ChatMessageDB: Codable, Identifiable {
+struct ChatMessageDB: Decodable, Identifiable {
   let id: String
   let text: String
   let createdAt: Date
@@ -124,10 +131,12 @@ struct ChatMessageDB: Codable, Identifiable {
   let rating: Int?
   let reported: Bool
   let metadata: String?
+  let contentBlocksJSON: String?
   let clientMessageId: String?
 
   enum CodingKeys: String, CodingKey {
     case id, text, sender, rating, reported, metadata
+    case contentBlocks = "content_blocks"
     case clientMessageId = "client_message_id"
     case createdAt = "created_at"
     case appId = "app_id"
@@ -145,11 +154,18 @@ struct ChatMessageDB: Codable, Identifiable {
     rating = try container.decodeIfPresent(Int.self, forKey: .rating)
     reported = try container.decodeIfPresent(Bool.self, forKey: .reported) ?? false
     metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
+    if let blocks = try container.decodeIfPresent([OmiAnyCodable].self, forKey: .contentBlocks) {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      contentBlocksJSON = try String(decoding: encoder.encode(blocks), as: UTF8.self)
+    } else {
+      contentBlocksJSON = nil
+    }
     clientMessageId = try container.decodeIfPresent(String.self, forKey: .clientMessageId)
   }
 }
 
-struct DesktopMessageReconcilePage: Codable {
+struct DesktopMessageReconcilePage: Decodable {
   let messages: [ChatMessageDB]
   let nextCursor: String?
   let hasMore: Bool

@@ -502,6 +502,15 @@ class _StreamRecordingQuery:
     def order_by(self, field_path, direction):
         return _StreamRecordingQuery(self._recorder, self._filters, (*self._orders, (field_path, direction)))
 
+    def select(self, _fields):
+        return self
+
+    def offset(self, _n):
+        return self
+
+    def limit(self, _n):
+        return self
+
     def stream(self):
         self._recorder.append((self._filters, self._orders))
         return []

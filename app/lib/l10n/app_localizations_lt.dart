@@ -322,7 +322,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchApps => 'Ieškoti programų...';
 
   @override
-  String get myApps => 'Mano programėlės';
+  String get myApps => 'Sukurta manęs';
 
   @override
   String get installedApps => 'Įdiegtos programėlės';
@@ -9872,4 +9872,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get findDevice => 'Rasti';
+
+  @override
+  String get diagnosticsShareFailed => 'Nepavyko bendrinti diagnostikos. Bandykite dar kartą.';
 }

@@ -152,3 +152,63 @@ private actor RecordingTransport: AnalyticsTransport {
         return true
     }
 }
+
+/// The scheduled path — the only one production takes while the app is running.
+///
+/// Everything in `AnalyticsSinkTests` calls `flush()` directly, and that is exactly why 1.0.13
+/// shipped delivering nothing: with no timer pending, `flush()`'s `flushTask?.cancel()` is a no-op,
+/// so the direct path passed every test while the scheduled path cancelled itself on the first line
+/// and threw out of `URLSession`. A suite that only exercises the caller's convenience entry point is
+/// not testing the product.
+final class AnalyticsScheduledFlushTests: XCTestCase {
+
+    private var spoolURL: URL!
+
+    override func setUpWithError() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("sched-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        spoolURL = directory.appendingPathComponent("analytics-spool.json")
+    }
+
+    /// **The 1.0.13 regression.** Enqueue and then touch nothing: the timer alone must deliver.
+    func testTheScheduledFlushActuallyDelivers() async throws {
+        let transport = CancellationAwareTransport()
+        let sink = AnalyticsSink(spoolURL: spoolURL, transport: transport, flushInterval: 0.1)
+
+        await sink.enqueue(AnalyticsPayload(
+            event: .appLaunched,
+            distinctID: "cfc_0123456789abcdef",
+            timestamp: Date(timeIntervalSince1970: 1_760_000_000),
+            superProperties: AnalyticsPayload.superProperties(
+                version: "1.0.14", build: "1000014", macOSVersion: "test")))
+
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+
+        let delivered = await transport.deliveredCount
+        let sawCancellation = await transport.sawCancelledTask
+        let stillSpooled = await sink.spooledCountForTesting
+
+        XCTAssertFalse(
+            sawCancellation,
+            "the scheduled task cancelled itself — URLSession would have thrown and the batch would never send")
+        XCTAssertEqual(delivered, 1, "the timer alone must deliver; nothing else runs in production")
+        XCTAssertEqual(stillSpooled, 0, "a delivered batch must leave the spool")
+    }
+}
+
+/// Reports whether the task calling it had already been cancelled — which is precisely what the
+/// real `URLSession.data(for:)` reacts to, and what made the shipped build silent.
+private actor CancellationAwareTransport: AnalyticsTransport {
+    private(set) var deliveredCount = 0
+    private(set) var sawCancelledTask = false
+
+    func send(_ batch: [AnalyticsPayload], token: String, to endpoint: URL) async -> Bool {
+        if Task.isCancelled {
+            sawCancelledTask = true
+            return false  // exactly what URLSession does when its task is cancelled
+        }
+        deliveredCount += batch.count
+        return true
+    }
+}

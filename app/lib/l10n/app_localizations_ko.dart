@@ -320,7 +320,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchApps => '앱 검색...';
 
   @override
-  String get myApps => '내 앱';
+  String get myApps => '내가 만듦';
 
   @override
   String get installedApps => '설치된 앱';
@@ -9688,4 +9688,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get findDevice => '찾기';
+
+  @override
+  String get diagnosticsShareFailed => '진단 정보를 공유하지 못했습니다. 다시 시도해 주세요.';
 }

@@ -427,7 +427,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "My Apps",
+    "myApps": "Created by me",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -11650,5 +11650,9 @@
     "findDevice": "Find",
     "@findDevice": {
         "description": "Action that makes a nearby connected Omi pendant vibrate so the user can locate it"
+    },
+    "diagnosticsShareFailed": "Couldn't share diagnostics. Please try again.",
+    "@diagnosticsShareFailed": {
+        "description": "Snackbar shown when exporting device diagnostics to the share sheet fails"
     }
 }

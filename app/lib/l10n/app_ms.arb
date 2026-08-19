@@ -101,7 +101,7 @@
     "createYourOwnApp": "Cipta Aplikasi Anda Sendiri",
     "buildAndShareApp": "Bina dan kongsi aplikasi tersuai anda",
     "searchApps": "Cari apl...",
-    "myApps": "Aplikasi Saya",
+    "myApps": "Dicipta oleh saya",
     "installedApps": "Aplikasi Dipasang",
     "unableToFetchApps": "Tidak dapat mendapatkan aplikasi :(\n\nSila semak sambungan internet anda dan cuba lagi.",
     "aboutOmi": "Tentang Omi",
@@ -3218,5 +3218,6 @@
     "signInWithSSO": "Log masuk dengan SSO",
     "sendRawAudioToOmi": "Hantar audio mentah ke Omi",
     "sendRawAudioToOmiDescription": "Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.",
-    "findDevice": "Cari"
+    "findDevice": "Cari",
+    "diagnosticsShareFailed": "Tidak dapat berkongsi diagnostik. Sila cuba lagi."
 }

@@ -323,7 +323,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get searchApps => 'Hledat aplikace...';
 
   @override
-  String get myApps => 'Moje aplikace';
+  String get myApps => 'Vytvořeno mnou';
 
   @override
   String get installedApps => 'Nainstalované aplikace';
@@ -9854,4 +9854,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get findDevice => 'Najít';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiku se nepodařilo sdílet. Zkus to znovu.';
 }

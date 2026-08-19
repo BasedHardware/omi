@@ -321,7 +321,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get searchApps => 'Etsi sovelluksia...';
 
   @override
-  String get myApps => 'Omat sovellukset';
+  String get myApps => 'Minun luomani';
 
   @override
   String get installedApps => 'Asennetut sovellukset';
@@ -9853,4 +9853,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get findDevice => 'Etsi';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiikan jakaminen epäonnistui. Yritä uudelleen.';
 }

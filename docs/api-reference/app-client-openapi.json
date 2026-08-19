@@ -7284,6 +7284,11 @@
             "title": "Id",
             "type": "string"
           },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -7307,6 +7312,11 @@
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
           },
           "retryable": {
             "title": "Retryable",
@@ -7336,6 +7346,36 @@
         "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
+      "ConversationLinkActionItemSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ConversationLinkActionItemSpec",
+        "type": "object"
+      },
       "ConversationLinkSpec": {
         "additionalProperties": false,
         "properties": {
@@ -7345,6 +7385,14 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Conversation Id",
             "type": "string"
+          },
+          "recommended_action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationLinkActionItemSpec"
+            },
+            "maxItems": 8,
+            "title": "Recommended Action Items",
+            "type": "array"
           },
           "summary": {
             "maxLength": 200,
@@ -15301,6 +15349,15 @@
             ],
             "title": "Client Message Id"
           },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -17764,6 +17821,15 @@
               }
             ],
             "title": "Client Message Id"
+          },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",

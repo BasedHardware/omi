@@ -1061,6 +1061,7 @@ def _canonical_extraction_apply_write(
     data: Dict[str, Any],
     *,
     control: MemoryControlState,
+    evidence_items: Optional[List[MemoryEvidence]] = None,
 ) -> tuple[CanonicalApplyWrite, str]:
     content = (data.get("content") or "").strip()
     if not content:
@@ -1083,7 +1084,8 @@ def _canonical_extraction_apply_write(
         idempotency_identity,
     )
 
-    evidence_items = _evidence_items_from_payload(data)
+    if evidence_items is None:
+        evidence_items = _evidence_items_from_payload(data)
     raw_evidence = [
         cast(Payload, raw) for raw in cast(List[object], data.get("evidence") or []) if isinstance(raw, dict)
     ]
@@ -1154,11 +1156,22 @@ def _canonical_extraction_apply_write(
     )
 
 
-def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
+def write_canonical_extraction_memory(
+    uid: str,
+    data: Dict[str, Any],
+    *,
+    db_client: Any = None,
+    evidence_items: Optional[List[MemoryEvidence]] = None,
+) -> str:
     """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     client = db_client if db_client is not None else default_db_client
     control = _ensure_control_state(uid, db_client=client)
-    write, memory_id = _canonical_extraction_apply_write(uid, data, control=control)
+    write, memory_id = _canonical_extraction_apply_write(
+        uid,
+        data,
+        control=control,
+        evidence_items=evidence_items,
+    )
     for evidence in write.evidence:
         _persist_evidence(uid, evidence, db_client=client)
 
@@ -1199,9 +1212,67 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
     return committed_id
 
 
+_EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
+
+
+def _reissued_external_evidence(
+    uid: str,
+    evidence_items: List[MemoryEvidence],
+    *,
+    db_client: Any,
+) -> List[MemoryEvidence]:
+    """Mint a fresh evidence identity when an external submission reuses a retired one.
+
+    External evidence ids are derived from the submitted content, and evidence
+    source_state is monotonic per identity. Deleting a memory tombstones its
+    evidence, so re-adding the same text would otherwise reuse the tombstoned
+    identity and fail the apply source gate on every retry. The new submission is
+    a new source artifact and gets its own identity; the tombstone stays retired.
+    Conversation-sourced evidence keeps the retired identity: a deleted
+    conversation is a deleted source, not a fresh one.
+    """
+    collections = MemoryCollections(uid=uid)
+    reissued: List[MemoryEvidence] = []
+    for item in evidence_items:
+        if item.conversation_id or item.source_type == "conversation":
+            reissued.append(item)
+            continue
+        evidence_id = item.evidence_id
+        for attempt in range(1, _EXTERNAL_EVIDENCE_REISSUE_LIMIT + 1):
+            snapshot = db_client.document(f"{collections.memory_evidence}/{evidence_id}").get()
+            if not getattr(snapshot, "exists", False):
+                break
+            stored = _snapshot_payload(snapshot)
+            if SourceState(stored.get("source_state") or SourceState.active.value) == SourceState.active:
+                break
+            evidence_id = (
+                "ev_"
+                + deterministic_contract_id(
+                    "canonical-external-evidence-reissue",
+                    {"evidence_id": item.evidence_id, "attempt": attempt},
+                )[:32]
+            )
+        else:
+            raise RuntimeError("canonical external write exhausted evidence identity reissues")
+        reissued.append(
+            item if evidence_id == item.evidence_id else item.model_copy(update={"evidence_id": evidence_id})
+        )
+    return reissued
+
+
 def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client: Any = None) -> str:
     """Persist a manual/API/integration memory via the canonical apply path."""
-    return write_canonical_extraction_memory(uid, data, db_client=db_client)
+    client = db_client if db_client is not None else default_db_client
+    return write_canonical_extraction_memory(
+        uid,
+        data,
+        db_client=client,
+        evidence_items=_reissued_external_evidence(
+            uid,
+            _evidence_items_from_payload(data),
+            db_client=client,
+        ),
+    )
 
 
 def _read_replacement_control(uid: str, *, db_client: Any) -> MemoryControlState:

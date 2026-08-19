@@ -43,6 +43,8 @@ import XCTest
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "US.Zoom.XOS"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.microsoft.teams2"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.apple.facetime"))
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.tdesktop.Telegram"))
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "ru.keepcoder.telegram"))
       // Omi itself (which is always using the mic while recording) must not count as a meeting.
       XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.omi.omi-mtg-sysaudio"))
       XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.google.Chrome"))

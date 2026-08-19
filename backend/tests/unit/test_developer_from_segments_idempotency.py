@@ -173,6 +173,25 @@ def _request(**overrides):
     return developer.CreateConversationFromTranscriptRequest.model_validate(data)
 
 
+def _eligible_meeting_request(**overrides):
+    data = {
+        'transcript_segments': [
+            {
+                'text': 'substantive meeting discussion',
+                'speaker': 'SPEAKER_00',
+                'is_user': True,
+                'start': 0.0,
+                'end': 60.0,
+            }
+        ],
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(minutes=5),
+        'conversation_role': 'meeting',
+    }
+    data.update(overrides)
+    return _request(**data)
+
+
 def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     captured = {}
 
@@ -200,7 +219,7 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
 
     arrival = MagicMock()
     monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
-    response = developer._create_conversation_from_segments('uid1', _request(conversation_role='meeting'))
+    response = developer._create_conversation_from_segments('uid1', _eligible_meeting_request())
 
     assert response.id == 'random-process-id'
     assert isinstance(captured['conversation'], CreateConversation)
@@ -208,7 +227,11 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
     arrival.assert_called_once_with(
-        'uid1', conversation_id='random-process-id', summary='Design review', is_desktop_meeting=True
+        'uid1',
+        conversation_id='random-process-id',
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
 
@@ -281,12 +304,17 @@ def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypat
     monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
 
     response = developer._create_conversation_from_segments(
-        'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
+        'uid1', _eligible_meeting_request(client_session_id='meeting-session-1')
     )
 
     assert response.id == expected_id
+    assert response.meeting_treatment_eligible is True
     arrival.assert_called_once_with(
-        'uid1', conversation_id=expected_id, summary='Design review', is_desktop_meeting=True
+        'uid1',
+        conversation_id=expected_id,
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
 
@@ -342,6 +370,9 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
                 'source': 'desktop',
                 'status': 'completed',
                 'discarded': False,
+                'started_at': NOW,
+                'finished_at': NOW + timedelta(minutes=5),
+                'transcript_segments': [{'text': 'substantive meeting discussion', 'start': 0.0, 'end': 60.0}],
                 'structured': {'title': 'Design review'},
                 'external_data': {'conversation_role': 'meeting'},
             }
@@ -353,14 +384,48 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
     monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
 
     response = developer._create_conversation_from_segments(
-        'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')
+        'uid1', _eligible_meeting_request(client_session_id='meeting-session-1')
     )
 
     assert response.id == expected_id
+    assert response.meeting_treatment_eligible is True
     process.assert_not_called()
     arrival.assert_called_once_with(
-        'uid1', conversation_id=expected_id, summary='Design review', is_desktop_meeting=True
+        'uid1',
+        conversation_id=expected_id,
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
+
+
+def test_short_desktop_meeting_stays_ordinary_conversation(monkeypatch):
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock())
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock())
+
+    def _process(_uid, _language, conversation):
+        return Conversation(
+            id='short-meeting',
+            created_at=NOW,
+            started_at=conversation.started_at,
+            finished_at=conversation.finished_at,
+            source=conversation.source,
+            language=conversation.language,
+            structured={'title': 'Short call'},
+            transcript_segments=conversation.transcript_segments,
+            external_data=conversation.external_data,
+            status=ConversationStatus.completed,
+        )
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    arrival = MagicMock()
+    monkeypatch.setattr(proactive_engine, 'persist_capture_arrival_intent', arrival)
+
+    response = developer._create_conversation_from_segments('uid1', _request(conversation_role='meeting'))
+
+    assert response.status == 'completed'
+    assert response.meeting_treatment_eligible is False
+    arrival.assert_not_called()
 
 
 def test_completed_ambient_retry_cannot_reclassify_conversation_as_meeting(monkeypatch):

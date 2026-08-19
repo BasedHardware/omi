@@ -324,7 +324,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get searchApps => 'Căutați aplicații...';
 
   @override
-  String get myApps => 'Aplicațiile mele';
+  String get myApps => 'Creat de mine';
 
   @override
   String get installedApps => 'Aplicații instalate';
@@ -9900,4 +9900,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get findDevice => 'Găsește';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnosticul nu a putut fi partajat. Încearcă din nou.';
 }

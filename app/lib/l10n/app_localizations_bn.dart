@@ -321,7 +321,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get searchApps => 'অ্যাপস খুঁজুন...';
 
   @override
-  String get myApps => 'আমার অ্যাপস';
+  String get myApps => 'আমার তৈরি';
 
   @override
   String get installedApps => 'ইনস্টল করা অ্যাপস';
@@ -9858,4 +9858,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get findDevice => 'খুঁজুন';
+
+  @override
+  String get diagnosticsShareFailed => 'ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।';
 }

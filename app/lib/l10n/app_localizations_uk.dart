@@ -323,7 +323,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchApps => 'Шукати додатки...';
 
   @override
-  String get myApps => 'Мої додатки';
+  String get myApps => 'Створено мною';
 
   @override
   String get installedApps => 'Встановлені додатки';
@@ -9875,4 +9875,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get findDevice => 'Знайти';
+
+  @override
+  String get diagnosticsShareFailed => 'Не вдалося поділитися діагностикою. Спробуйте ще раз.';
 }

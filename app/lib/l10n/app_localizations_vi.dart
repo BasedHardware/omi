@@ -323,7 +323,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get searchApps => 'Tìm kiếm ứng dụng...';
 
   @override
-  String get myApps => 'Ứng dụng của tôi';
+  String get myApps => 'Do tôi tạo';
 
   @override
   String get installedApps => 'Ứng dụng đã cài đặt';
@@ -9849,4 +9849,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get findDevice => 'Tìm';
+
+  @override
+  String get diagnosticsShareFailed => 'Không thể chia sẻ chẩn đoán. Vui lòng thử lại.';
 }

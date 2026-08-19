@@ -59,6 +59,8 @@ class _FirestoreFake:
 def _empty_historical_store(monkeypatch):
     """Canonical fixtures in this module intentionally have no legacy rows."""
     monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
 
 
 def _evidence(source_id='conv1'):

@@ -798,7 +798,7 @@ abstract class AppLocalizations {
   /// Filter button for user's own apps
   ///
   /// In en, this message translates to:
-  /// **'My Apps'**
+  /// **'Created by me'**
   String get myApps;
 
   /// Filter button for installed apps
@@ -18356,6 +18356,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Find'**
   String get findDevice;
+
+  /// Snackbar shown when exporting device diagnostics to the share sheet fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share diagnostics. Please try again.'**
+  String get diagnosticsShareFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

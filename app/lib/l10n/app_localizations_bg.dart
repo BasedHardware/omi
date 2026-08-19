@@ -323,7 +323,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get searchApps => 'Търсене на приложения...';
 
   @override
-  String get myApps => 'Моите приложения';
+  String get myApps => 'Създадени от мен';
 
   @override
   String get installedApps => 'Инсталирани приложения';
@@ -9890,4 +9890,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get findDevice => 'Намери';
+
+  @override
+  String get diagnosticsShareFailed => 'Диагностиката не можа да бъде споделена. Опитайте отново.';
 }

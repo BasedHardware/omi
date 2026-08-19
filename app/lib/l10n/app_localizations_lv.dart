@@ -323,7 +323,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get searchApps => 'Meklēt lietotnes...';
 
   @override
-  String get myApps => 'Manas lietotnes';
+  String get myApps => 'Man radīts';
 
   @override
   String get installedApps => 'Instalētās lietotnes';
@@ -9876,4 +9876,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get findDevice => 'Atrast';
+
+  @override
+  String get diagnosticsShareFailed => 'Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz.';
 }

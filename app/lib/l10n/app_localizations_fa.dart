@@ -322,7 +322,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get searchApps => 'جستجوی اپلیکیشن‌ها...';
 
   @override
-  String get myApps => 'اپلیکیشن‌های من';
+  String get myApps => 'ساخته‌شده توسط من';
 
   @override
   String get installedApps => 'اپلیکیشن‌های نصب‌شده';
@@ -9853,4 +9853,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get findDevice => 'پیدا کردن';
+
+  @override
+  String get diagnosticsShareFailed => 'اشتراک‌گذاری اطلاعات تشخیصی ممکن نشد. لطفاً دوباره تلاش کنید.';
 }

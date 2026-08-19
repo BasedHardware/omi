@@ -324,7 +324,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get searchApps => 'Пребарај апликации...';
 
   @override
-  String get myApps => 'Мои апликации';
+  String get myApps => 'Создадено од мене';
 
   @override
   String get installedApps => 'Инсталирани апликации';
@@ -9905,4 +9905,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get findDevice => 'Пронајди';
+
+  @override
+  String get diagnosticsShareFailed => 'Дијагностиката не можеше да се сподели. Обидете се повторно.';
 }

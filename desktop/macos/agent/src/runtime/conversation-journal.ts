@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
@@ -284,6 +285,7 @@ export interface BackendTurnPayload {
   sender: "human" | "ai";
   appId: string | null;
   sessionId: string | null;
+  contentBlocks: ConversationContentBlock[];
   metadata: string | null;
   messageSource: "desktop_chat" | "realtime_voice";
 }
@@ -3725,13 +3727,30 @@ function chatFirstIntentBlocks(
           summary: nonEmptyString(block.summary, "chat-first capture summary"),
         };
       }
-      case "conversationLink":
+      case "conversationLink": {
+        const recommendedActionItems = block.recommended_action_items === undefined
+          ? []
+          : arrayValue(block.recommended_action_items, "chat-first recommended action items").map((rawItem) => {
+            const item = recordValue(rawItem, "chat-first recommended action item");
+            const taskId = item.task_id === undefined || item.task_id === null
+              ? undefined
+              : nonEmptyString(item.task_id, "chat-first recommended action item task ID");
+            return {
+              description: nonEmptyString(
+                item.description,
+                "chat-first recommended action item description",
+              ),
+              ...(taskId === undefined ? {} : { taskId }),
+            };
+          });
         return {
           type,
           id,
           conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
           summary: nonEmptyString(block.summary, "chat-first conversation summary"),
+          recommendedActionItems,
         };
+      }
       default:
         throw new Error("Chat-first intent block type is invalid");
     }
@@ -3887,7 +3906,18 @@ function boundedOutboxError(errorCode?: string): string {
 
 function validateContentBlocks(blocks: readonly ConversationContentBlock[]): ConversationContentBlock[] {
   const ids = new Set<string>();
-  return blocks.map((block) => {
+  return blocks.map((rawBlock) => {
+    // Persisted cards from before action-item recommendations omit this key.
+    // Normalize that legacy shape here while keeping it required for every new
+    // TypeScript producer through ConversationContentBlock.
+    const block: ConversationContentBlock = rawBlock.type === "conversationLink"
+      ? {
+          ...rawBlock,
+          recommendedActionItems: Array.isArray(rawBlock.recommendedActionItems)
+            ? rawBlock.recommendedActionItems
+            : [],
+        }
+      : rawBlock;
     const id = nonEmpty(block.id, "content block id");
     nonEmpty(block.type, "content block type");
     if (ids.has(id)) throw new Error(`Duplicate content block ID ${id}`);
@@ -3943,6 +3973,15 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
       nonEmpty(block.conversationId, "conversation ID");
       if (block.summary.length === 0 || block.summary.length > 200) {
         throw new Error("Conversation summary is out of bounds");
+      }
+      if (block.recommendedActionItems.length > 8) {
+        throw new Error("Conversation recommended action item count is out of bounds");
+      }
+      for (const item of block.recommendedActionItems) {
+        if (item.description.length === 0 || item.description.length > 300) {
+          throw new Error("Conversation recommended action item description is out of bounds");
+        }
+        if (item.taskId !== undefined) nonEmpty(item.taskId, "recommended action item task ID");
       }
     }
     return structuredClone(block);
@@ -4083,8 +4122,7 @@ function journalTurnPayloadHash(value: Record<string, unknown>): string {
 
 function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  const isChatFirstMaterialization = typeof metadata.chatFirstIntentId === "string"
-    && metadata.chatFirstIntentId.length > 0;
+  const { content_blocks: _legacyContentBlocks, ...messageMetadata } = metadata;
   // Rewind evidence is a device-local journal resource. The backend receives
   // enough metadata to preserve the card, but never the user's absolute local
   // filesystem path. Same-device reconciliation keeps the authoritative local
@@ -4097,18 +4135,15 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     return pathless;
   });
   const backendMetadata = {
-    ...metadata,
-    ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
+    ...messageMetadata,
     ...(backendResources.length > 0 ? { resources: backendResources } : {}),
   };
   const projectedText = turn.content.trim()
     ? turn.content
-    : isChatFirstMaterialization
-      ? ""
     : turn.role === "assistant"
       && turn.status === "completed"
       && (turn.contentBlocks.length > 0 || turn.resources.length > 0)
-      ? "Done."
+      ? structuredTurnFallbackText(turn.contentBlocks, backendResources)
       : "";
   return {
     turnId: turn.turnId,
@@ -4118,6 +4153,7 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     sender: turn.role === "user" ? "human" : "ai",
     appId: typeof metadata.appId === "string" ? metadata.appId : null,
     sessionId: typeof metadata.sessionId === "string" ? metadata.sessionId : null,
+    contentBlocks: turn.contentBlocks,
     metadata: Object.keys(backendMetadata).length === 0 ? null : stableJson(backendMetadata),
     messageSource: turn.origin === "realtime_voice" ? "realtime_voice" : "desktop_chat",
   };
@@ -4133,18 +4169,6 @@ function boundedJournalRevision(revision: number): number {
 function backendTombstoneCode(turn: ConversationTurn): string | null {
   const payload = backendTurnPayload(turn);
   if (payload.text.trim()) return null;
-  const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  if (
-    turn.role === "assistant"
-    && turn.status === "completed"
-    && typeof metadata.chatFirstIntentId === "string"
-    && metadata.chatFirstIntentId.length > 0
-    && turn.contentBlocks.length > 0
-  ) {
-    // The canonical structured blocks are the content. This must still use
-    // the normal reconciliation outbox, just without fabricating "Done.".
-    return null;
-  }
   if (turn.status === "failed") return "empty_failed_turn_cancelled";
   if (turn.status === "completed") return "empty_completed_turn_cancelled";
   return null;

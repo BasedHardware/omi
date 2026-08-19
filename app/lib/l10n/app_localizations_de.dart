@@ -326,7 +326,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get searchApps => 'Apps suchen...';
 
   @override
-  String get myApps => 'Meine Apps';
+  String get myApps => 'Von mir erstellt';
 
   @override
   String get installedApps => 'Installierte Apps';
@@ -9935,4 +9935,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get findDevice => 'Finden';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnose konnte nicht geteilt werden. Bitte versuche es erneut.';
 }

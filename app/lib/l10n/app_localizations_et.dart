@@ -323,7 +323,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get searchApps => 'Otsi rakendusi...';
 
   @override
-  String get myApps => 'Minu rakendused';
+  String get myApps => 'Minu loodud';
 
   @override
   String get installedApps => 'Paigaldatud rakendused';
@@ -9847,4 +9847,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get findDevice => 'Leia';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostikat ei õnnestunud jagada. Proovi uuesti.';
 }
