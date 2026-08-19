@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "Buka toko",
     "sendRawAudioToOmi": "Ipadala ang raw na audio sa Omi",
     "sendRawAudioToOmiDescription": "I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.",
-    "findDevice": "Hanapin"
+    "findDevice": "Hanapin",
+    "diagnosticsShareFailed": "Hindi maibahagi ang diagnostics. Pakisubukan ulit."
 }

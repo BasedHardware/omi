@@ -9940,4 +9940,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get findDevice => 'Hanapin';
+
+  @override
+  String get diagnosticsShareFailed => 'Hindi maibahagi ang diagnostics. Pakisubukan ulit.';
 }

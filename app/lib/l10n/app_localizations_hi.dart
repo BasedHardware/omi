@@ -9829,4 +9829,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get findDevice => 'ढूँढें';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।';
 }

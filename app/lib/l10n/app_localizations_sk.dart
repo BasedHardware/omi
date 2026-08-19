@@ -9843,4 +9843,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get findDevice => 'Nájsť';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiku sa nepodarilo zdieľať. Skús to znova.';
 }

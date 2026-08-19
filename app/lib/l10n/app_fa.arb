@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "فتح المتجر",
     "sendRawAudioToOmi": "ارسال صدای خام به Omi",
     "sendRawAudioToOmiDescription": "برای جلوگیری از ارسال صدای خام به Omi این گزینه را خاموش کنید. متن پیاده‌شده و داده‌های مورد نیاز قابلیت‌های ابری ممکن است همچنان به Omi ارسال شوند.",
-    "findDevice": "پیدا کردن"
+    "findDevice": "پیدا کردن",
+    "diagnosticsShareFailed": "اشتراک‌گذاری اطلاعات تشخیصی ممکن نشد. لطفاً دوباره تلاش کنید."
 }

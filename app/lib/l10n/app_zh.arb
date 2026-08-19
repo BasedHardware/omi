@@ -3239,5 +3239,6 @@
     "accountCutoverOpenStore": "打开应用商店",
     "sendRawAudioToOmi": "向 Omi 发送原始音频",
     "sendRawAudioToOmiDescription": "关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。",
-    "findDevice": "查找"
+    "findDevice": "查找",
+    "diagnosticsShareFailed": "无法分享诊断信息，请重试。"
 }

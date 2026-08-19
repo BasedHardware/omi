@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "स्टोर खोलें",
     "sendRawAudioToOmi": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ",
     "sendRawAudioToOmiDescription": "Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.",
-    "findDevice": "ಹುಡುಕಿ"
+    "findDevice": "ಹುಡುಕಿ",
+    "diagnosticsShareFailed": "ಡಯಾಗ್ನೋಸ್ಟಿಕ್ಸ್ ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
 }

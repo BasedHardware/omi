@@ -9855,4 +9855,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get findDevice => 'খুঁজুন';
+
+  @override
+  String get diagnosticsShareFailed => 'ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।';
 }

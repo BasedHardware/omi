@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "פתחו חנות",
     "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
     "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.",
-    "findDevice": "איתור"
+    "findDevice": "איתור",
+    "diagnosticsShareFailed": "לא ניתן היה לשתף את האבחון. נסה שוב."
 }

@@ -3194,5 +3194,6 @@
     "accountCutoverOpenStore": "Store öffnen",
     "sendRawAudioToOmi": "Roh-Audio an Omi senden",
     "sendRawAudioToOmiDescription": "Deaktivieren, damit kein Roh-Audio an Omi gesendet wird. Transkripte und für Cloud-Funktionen benötigte Daten können weiterhin an Omi gesendet werden.",
-    "findDevice": "Finden"
+    "findDevice": "Finden",
+    "diagnosticsShareFailed": "Diagnose konnte nicht geteilt werden. Bitte versuche es erneut."
 }

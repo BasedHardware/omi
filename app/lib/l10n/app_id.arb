@@ -3259,5 +3259,6 @@
     "accountCutoverOpenStore": "Buka toko",
     "sendRawAudioToOmi": "Kirim audio mentah ke Omi",
     "sendRawAudioToOmiDescription": "Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.",
-    "findDevice": "Temukan"
+    "findDevice": "Temukan",
+    "diagnosticsShareFailed": "Tidak dapat membagikan diagnostik. Silakan coba lagi."
 }

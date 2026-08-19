@@ -9844,4 +9844,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get findDevice => 'Leia';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostikat ei õnnestunud jagada. Proovi uuesti.';
 }

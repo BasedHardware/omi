@@ -9685,4 +9685,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get findDevice => '찾기';
+
+  @override
+  String get diagnosticsShareFailed => '진단 정보를 공유하지 못했습니다. 다시 시도해 주세요.';
 }

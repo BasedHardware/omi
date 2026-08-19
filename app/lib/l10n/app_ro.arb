@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "Deschide magazinul",
     "sendRawAudioToOmi": "Trimite sunetul brut către Omi",
     "sendRawAudioToOmiDescription": "Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.",
-    "findDevice": "Găsește"
+    "findDevice": "Găsește",
+    "diagnosticsShareFailed": "Diagnosticul nu a putut fi partajat. Încearcă din nou."
 }
