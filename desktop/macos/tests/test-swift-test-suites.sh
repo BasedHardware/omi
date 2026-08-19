@@ -79,6 +79,13 @@ final class OwnerAuthorityAdopterTests: XCTestCase {
 }
 SWIFT
 
+cat >"$TMPDIR/tests/PushToTalkStateMachineTests.swift" <<'SWIFT'
+import XCTest
+final class PushToTalkStateMachineTests: XCTestCase {
+    func testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession() {}
+}
+SWIFT
+
 cat >"$TMPDIR/bin/xcrun" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -133,7 +140,7 @@ if [[ "$*" == *"swift test"* ]]; then
 
   # Hold the worker briefly so a fast peer suite cannot finish before overlap
   # is observed when only two suites are in flight.
-  sleep 0.1
+  sleep 0.25
 fi
 
 if [ "$suite" = "AlphaTests" ]; then
@@ -226,6 +233,9 @@ if ! awk -F '\t' '{ expected = $4; sub(/\/home$/, "/tmp", expected); if ($5 != e
   "$FAKE_XCRUN_SCRATCH_LOG"; then
   fail "runner did not isolate CoreFoundation preferences and temporary files per worker"
 fi
+if ! grep -q -- "--skip PushToTalkStateMachineTests/testOwnerTransitionTerminatesActiveHubAndDrainsItsPhysicalSession" "$FAKE_XCRUN_LOG"; then
+  fail "runner did not pass PushToTalk hang skip to SwiftPM"
+fi
 
 # Local runs should get the same proven suite-level parallelism as CI unless a
 # diagnosis explicitly asks for fewer workers.
@@ -240,7 +250,7 @@ fi
 
 # A discovery set made entirely of serial suites still executes with one
 # effective worker and must not report the misleading zero-worker summary.
-export OMI_SWIFT_TEST_SERIAL_SUITES="ActionItemsFTSRepairTests AlphaTests APIClientRoutingTests AuthRefreshResilienceTests AuthTokenStorageTests BetaTests ChatDiscoverabilityTests PiMonoWiringTests"
+export OMI_SWIFT_TEST_SERIAL_SUITES="ActionItemsFTSRepairTests AlphaTests APIClientRoutingTests AuthRefreshResilienceTests AuthTokenStorageTests BetaTests ChatDiscoverabilityTests PiMonoWiringTests PushToTalkStateMachineTests"
 if "$RUNNER" >"$TMPDIR/all-serial-runner.out" 2>"$TMPDIR/all-serial-runner.err"; then
   fail "all-serial runner unexpectedly succeeded despite AlphaTests failure"
 fi

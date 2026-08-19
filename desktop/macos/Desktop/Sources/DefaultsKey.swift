@@ -134,6 +134,9 @@ struct ScopedDefaultsKey {
   static func importConnectorSourceCount(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorSourceCount.\(connectorID)")
   }
+  static func appleRemindersExportJournal(ownerHash: String) -> Self {
+    Self(rawValue: "apple_reminders_export_journal.v1.\(ownerHash)")
+  }
 
   static func taskInterruptionLedger(ownerID: String) -> Self {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
