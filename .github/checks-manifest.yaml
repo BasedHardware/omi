@@ -229,6 +229,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: desktop-proactive-notification-gate
+    command: ["python3", "desktop/macos/scripts/check-proactive-notification-gate.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-proactive-notification-gate.py"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "two proactive lanes reached the bar primitive directly and skipped the master toggle, frequency throttle, snooze and presence gates; a third must fail the build, not ship silent"
+  - id: desktop-proactive-notification-gate-tests
+    command: ["python3", "desktop/macos/tests/test_check_proactive_notification_gate.py"]
+    triggers: ["desktop/macos/scripts/check-proactive-notification-gate.py", "desktop/macos/tests/test_check_proactive_notification_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "a checker that has never failed is not a guard; these fixtures are the two lanes that actually bypassed the gates"
   - id: desktop-grdb-insert-idiom-tests
     command: ["python3", "desktop/macos/tests/test_check_grdb_insert_idiom.py"]
     triggers: ["desktop/macos/scripts/check-grdb-insert-idiom.py", "desktop/macos/tests/test_check_grdb_insert_idiom.py", ".github/checks-manifest.yaml"]
