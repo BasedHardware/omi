@@ -22,37 +22,37 @@ export async function computeKFactor(days: number, platform: PlatformScope = 'ma
     };
   }
 
-  const query = `
+  const shareQuery = `
           SELECT
-            event,
             uniq(COALESCE(person_id, distinct_id)) AS unique_users,
             count() AS total_events
           FROM events
-          WHERE event IN ('Sign In Completed', 'Memory Share Button Clicked')
+          WHERE event = 'Memory Share Button Clicked'
             AND timestamp >= now() - INTERVAL ${days} DAY
-            ${scopeFilterAnd(platform, 'properties.$os')}
-          GROUP BY event
+            ${scopeFilterAnd(platform, 'properties.$os_name')}
+        `;
+  // First-seen on this platform inside the window — mobile never emits
+  // `Sign In Completed`, and every acquisition metric uses this definition.
+  const newUserQuery = `
+          SELECT count(*)
+          FROM (
+            SELECT COALESCE(person_id, distinct_id) AS actor, min(timestamp) AS first_ts
+            FROM events
+            WHERE 1 = 1
+              ${scopeFilterAnd(platform, 'properties.$os_name')}
+            GROUP BY actor
+          )
+          WHERE first_ts >= now() - INTERVAL ${days} DAY
         `;
 
-  const rows = (await posthogResults(host, projectId, apiKey, query)) as any[];
+  const [shareRows, newUserRows] = await Promise.all([
+    posthogResults(host, projectId, apiKey, shareQuery) as Promise<any[]>,
+    posthogResults(host, projectId, apiKey, newUserQuery) as Promise<any[]>,
+  ]);
 
-  let newUsers = 0;
-  let sharers = 0;
-  let shareEvents = 0;
-
-  for (const row of rows) {
-    const eventName = row[0];
-    const uniqueUsers = Number(row[1] ?? 0);
-    const totalEvents = Number(row[2] ?? 0);
-
-    if (eventName === 'Sign In Completed') {
-      newUsers = uniqueUsers;
-    }
-    if (eventName === 'Memory Share Button Clicked') {
-      sharers = uniqueUsers;
-      shareEvents = totalEvents;
-    }
-  }
+  const newUsers = Number(newUserRows?.[0]?.[0] ?? 0);
+  const sharers = Number(shareRows?.[0]?.[0] ?? 0);
+  const shareEvents = Number(shareRows?.[0]?.[1] ?? 0);
 
   const shareRatePct = newUsers > 0 ? (sharers / newUsers) * 100 : 0;
   const sharesPerSharer = sharers > 0 ? shareEvents / sharers : 0;
