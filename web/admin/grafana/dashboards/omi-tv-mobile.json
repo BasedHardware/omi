@@ -3176,7 +3176,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "5m",
+  "refresh": "1h",
   "schemaVersion": 39,
   "tags": [
     "omi",
