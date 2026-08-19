@@ -152,11 +152,11 @@ env:
   - name: OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
-    value: "false"
+    value: "true"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE

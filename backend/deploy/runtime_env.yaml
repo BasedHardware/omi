@@ -65,13 +65,13 @@ environments:
               name: dev-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
           CONVERSATION_NOTES_V2_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
@@ -382,6 +382,15 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'true'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1308,6 +1317,15 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            CONVERSATION_NOTES_V2_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+              value: 'false'
+              category: rollout
+            CONVERSATION_OCR_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
