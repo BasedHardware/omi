@@ -185,22 +185,32 @@ describe('Tasks — local-first reads from the store', () => {
 })
 
 describe('Tasks — mutations are thin IPC calls', () => {
-  it('creates through tasksCreate and closes the composer', async () => {
+  it('creates due today through tasksCreate and stays open for the next entry', async () => {
     await renderTasks()
     await waitFor(() => expect(tasks.tasksListIncomplete).toHaveBeenCalled())
 
     fireEvent.click(screen.getByRole('button', { name: 'New' }))
-    const input = screen.getByPlaceholderText('What needs to get done?')
+    const input = screen.getByPlaceholderText('Add a task')
     fireEvent.change(input, { target: { value: 'new task' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Add task' }))
+    fireEvent.keyDown(input, { key: 'Enter' })
 
+    // Enter always creates the task due TODAY (mac's todayDueAt: 23:59 local).
+    await waitFor(() => expect(tasks.tasksCreate).toHaveBeenCalled())
+    const arg = tasks.tasksCreate.mock.calls[0][0] as { description: string; dueAt: number }
+    expect(arg.description).toBe('new task')
+    const due = new Date(arg.dueAt)
+    const today = new Date()
+    expect([due.getFullYear(), due.getMonth(), due.getDate()]).toEqual([
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate()
+    ])
+    expect([due.getHours(), due.getMinutes()]).toEqual([23, 59])
+
+    // The composer stays open with a cleared field for back-to-back entry (#11600).
     await waitFor(() =>
-      expect(tasks.tasksCreate).toHaveBeenCalledWith(
-        expect.objectContaining({ description: 'new task' })
-      )
+      expect((screen.getByPlaceholderText('Add a task') as HTMLInputElement).value).toBe('')
     )
-    // Composer closed — the create is surfaced by onTasksChanged, not a reload.
-    await waitFor(() => expect(screen.queryByPlaceholderText('What needs to get done?')).toBeNull())
   })
 
   it('toggles through tasksToggle with the row backendId', async () => {
@@ -420,11 +430,9 @@ describe('Tasks — keyboard navigation (mac parity, flat list)', () => {
     await renderTasks()
     await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
 
-    expect(screen.queryByPlaceholderText('What needs to get done?')).toBeNull()
+    expect(screen.queryByPlaceholderText('Add a task')).toBeNull()
     fireEvent.keyDown(document.body, { key: 'n', ctrlKey: true })
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText('What needs to get done?')).not.toBeNull()
-    )
+    await waitFor(() => expect(screen.queryByPlaceholderText('Add a task')).not.toBeNull())
   })
 
   it('Ctrl+D deletes the selected row and moves selection to the neighbour', async () => {
