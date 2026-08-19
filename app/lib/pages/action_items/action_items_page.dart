@@ -610,9 +610,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     // them via an inline CTA instead of silently flipping the view for them.
     // Distinguishes "genuinely no tasks" (cold-start) from "cleared active
     // tasks, completed still exist" (needs a hint that Completed tab has data).
-    final hasHiddenCompleted = !provider.showCompletedView &&
-        provider.incompleteItems.isEmpty &&
-        provider.completedItems.isNotEmpty;
+    final hasHiddenCompleted =
+        !provider.showCompletedView && provider.incompleteItems.isEmpty && provider.completedItems.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
       child: Column(

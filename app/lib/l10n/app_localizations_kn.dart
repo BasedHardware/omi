@@ -5102,6 +5102,25 @@ class AppLocalizationsKn extends AppLocalizations {
       'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.';
 
   @override
+  String get tasksAllCaughtUpTitle => 'All caught up';
+
+  @override
+  String tasksAllCaughtUpMessage(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count completed tasks are hidden',
+      one: 'One completed task is hidden',
+    );
+    return 'You\'ve cleared every active task. $_temp0 in the Completed view.';
+  }
+
+  @override
+  String tasksSeeCompletedCta(int count) {
+    return 'See $count completed';
+  }
+
+  @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
 
   @override

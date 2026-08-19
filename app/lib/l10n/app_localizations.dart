@@ -9633,6 +9633,24 @@ abstract class AppLocalizations {
   /// **'Tasks from your conversations will appear here.\nTap + to create one manually.'**
   String get tasksEmptyStateMessage;
 
+  /// Title shown on the Tasks empty state when the user has completed every active task but still has completed tasks in history
+  ///
+  /// In en, this message translates to:
+  /// **'All caught up'**
+  String get tasksAllCaughtUpTitle;
+
+  /// Subtitle shown on the Tasks empty state when the user has completed every active task but still has completed tasks
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve cleared every active task. {count, plural, =1{One completed task is hidden} other{{count} completed tasks are hidden}} in the Completed view.'**
+  String tasksAllCaughtUpMessage(int count);
+
+  /// CTA button on the Tasks empty state that toggles into the Completed view
+  ///
+  /// In en, this message translates to:
+  /// **'See {count} completed'**
+  String tasksSeeCompletedCta(int count);
+
   /// Menu item text for clearing chat history
   ///
   /// In en, this message translates to:

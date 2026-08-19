@@ -5117,6 +5117,25 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।';
 
   @override
+  String get tasksAllCaughtUpTitle => 'All caught up';
+
+  @override
+  String tasksAllCaughtUpMessage(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count completed tasks are hidden',
+      one: 'One completed task is hidden',
+    );
+    return 'You\'ve cleared every active task. $_temp0 in the Completed view.';
+  }
+
+  @override
+  String tasksSeeCompletedCta(int count) {
+    return 'See $count completed';
+  }
+
+  @override
   String get clearChatAction => 'உரையாடலைத் தெளிக்கவும்';
 
   @override

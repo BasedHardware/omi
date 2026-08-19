@@ -4986,6 +4986,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
 
   @override
+  String get tasksAllCaughtUpTitle => 'All caught up';
+
+  @override
+  String tasksAllCaughtUpMessage(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count completed tasks are hidden',
+      one: 'One completed task is hidden',
+    );
+    return 'You\'ve cleared every active task. $_temp0 in the Completed view.';
+  }
+
+  @override
+  String tasksSeeCompletedCta(int count) {
+    return 'See $count completed';
+  }
+
+  @override
   String get clearChatAction => '채팅 삭제';
 
   @override
