@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 import database.conversations as conversations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
-from database.apps import get_app_by_id_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector, delete_transcript_chunk_vectors
@@ -72,7 +71,6 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.product_telemetry import emit_product_event
-from utils.apps import get_available_app_model_by_id, is_user_app_enabled
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -436,6 +434,13 @@ def reprocess_conversation(
 
 def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
     """Resolve one explicit selection before reprocessing mutates the conversation."""
+
+    # Imported here, not at module scope, for the same reason line ~1510 already does: the
+    # apps chain pulls the memory/social graph at import time, and the sanctioned isolation
+    # seam (backend/docs/test_isolation.md) loads this router bare to test pure request
+    # validation. A module-level import would make those suites stub a graph they never call.
+    from database.apps import get_app_by_id_db
+    from utils.apps import get_available_app_model_by_id, is_user_app_enabled
 
     if get_app_by_id_db(app_id) is None:
         raise HTTPException(status_code=404, detail='App not found')

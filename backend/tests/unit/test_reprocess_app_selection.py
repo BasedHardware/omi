@@ -25,9 +25,12 @@ def _route_context(*, raw_app, available_app, enabled):
         patch.object(conv_router, '_get_valid_conversation_by_id', return_value=conversation),
         patch.object(conv_router.conversations_db, 'is_soft_deleted', return_value=False),
         patch.object(conv_router, 'deserialize_conversation', return_value=model),
-        patch.object(conv_router, 'get_app_by_id_db', return_value=raw_app),
-        patch.object(conv_router, 'get_available_app_model_by_id', return_value=available_app),
-        patch.object(conv_router, 'is_user_app_enabled', return_value=enabled),
+        # Patched at their source modules, not on the router: the validator imports these
+        # inside the function so the isolation seam can load this router without the apps
+        # chain (see the comment at _validate_reprocess_app_selection).
+        patch('database.apps.get_app_by_id_db', return_value=raw_app),
+        patch('utils.apps.get_available_app_model_by_id', return_value=available_app),
+        patch('utils.apps.is_user_app_enabled', return_value=enabled),
         patch.object(conv_router, 'process_conversation', return_value=model),
     )
 
