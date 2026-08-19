@@ -316,6 +316,99 @@ final class AnalyticsBuildRefusalTests: XCTestCase {
     }
 }
 
+/// **`cfc_onboarding_finished` has to survive the relaunch onboarding itself causes.**
+///
+/// Granting Screen Recording only takes effect in a new process, so the flow restarts the app from
+/// its own middle — the card's "Restart to finish", and macOS's "Quit & Reopen". The start instant
+/// used to be an in-memory static set only by `recordOnboardingStep`, so the process that actually
+/// reached `.done` frequently had no step transition of its own and `recordOnboardingFinished`
+/// returned having sent nothing. Live evidence: four of the five reporting installs have permissions
+/// granted and exactly one of them ever sent the event.
+///
+/// `recordOnboardingFinished` is `record(onboardingFinishedEvent())` and nothing else, so driving
+/// the decision over a scratch domain is driving the production rule — and it is the only way to
+/// drive it, because the suite is refused by `isEnabled`, as it must be.
+final class OnboardingCompletionReportTests: XCTestCase {
+
+    /// A scratch domain per test: the machine running the tests is the machine the app runs on, and
+    /// these are the very keys that decide whether a real install has already reported.
+    private func scratch() throws -> (UserDefaults, () -> Void) {
+        let suite = "com.omi.context-for-claude.OnboardingCompletionReportTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        return (defaults, { UserDefaults.standard.removePersistentDomain(forName: suite) })
+    }
+
+    private func seconds(_ event: AnalyticsEvent?) -> Int? {
+        guard case let .onboardingFinished(elapsed)? = event else { return nil }
+        return elapsed
+    }
+
+    /// The defect, driven: the first step happens in one process, the finish in another, and the
+    /// second process has nothing in memory from the first.
+    func testTheCompletionIsReportedByTheProcessThatComesBackFromTheGrant() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let started = Date(timeIntervalSince1970: 1_760_000_000)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started)
+
+        // — the Screen Recording grant ends the process here —
+
+        let event = ContextAnalytics.onboardingFinishedEvent(
+            in: defaults, at: started.addingTimeInterval(240))
+        XCTAssertEqual(event?.name, "cfc_onboarding_finished")
+        XCTAssertEqual(
+            seconds(event), 240,
+            "elapsed is measured from the first step, which was two processes ago and still counts")
+    }
+
+    /// Once per install, not once per run. The reported flag is deliberately not one of the three
+    /// records `OnboardingReset` spends, so "Run setup again" cannot add a second install-shaped
+    /// completion to the series.
+    func testNoSecondCompletionIsReportedHoweverManyTimesSetupIsRun() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let started = Date(timeIntervalSince1970: 1_760_000_000)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started)
+        XCTAssertNotNil(
+            ContextAnalytics.onboardingFinishedEvent(in: defaults, at: started.addingTimeInterval(90)))
+
+        // Settings → "Run setup again", walked all the way through a second time.
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started.addingTimeInterval(3_600))
+        XCTAssertNil(
+            ContextAnalytics.onboardingFinishedEvent(in: defaults, at: started.addingTimeInterval(3_700)),
+            "a second completion from one install reads as a second install that set itself up")
+        // And a relaunch in the middle of *that* run reports nothing either.
+        XCTAssertNil(ContextAnalytics.onboardingFinishedEvent(in: defaults, at: started))
+    }
+
+    /// A finish with no recorded start is the one case that must stay silent: an elapsed time
+    /// measured from nothing would be a zero, and a floor of zero-second setups is worse than a gap.
+    func testARunThatNeverRecordedAStepReportsNothing() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        XCTAssertNil(ContextAnalytics.onboardingFinishedEvent(in: defaults, at: Date()))
+    }
+
+    /// The stamp belongs to the run, so a later step must not move it — otherwise the elapsed time
+    /// shrinks to whatever the last card cost and the funnel's most useful number is a lie.
+    func testTheStartInstantIsTheFirstStepAndIsNotRestampedByLaterOnes() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let started = Date(timeIntervalSince1970: 1_760_000_000)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started.addingTimeInterval(120))
+
+        XCTAssertEqual(
+            seconds(ContextAnalytics.onboardingFinishedEvent(
+                in: defaults, at: started.addingTimeInterval(300))),
+            300)
+    }
+}
+
 /// The day boundary the whole DAU series rests on.
 final class ContextAnalyticsDayTests: XCTestCase {
 

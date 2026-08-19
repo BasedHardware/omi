@@ -47,6 +47,16 @@ enum; `AnalyticsEventTests.testNoEventCarriesFreeFormText` fails if a free strin
 | `cfc_update_outcome` | update health — a fleet that stops updating looks like a fleet nobody uses |
 | `cfc_fallback` | fail-open paths, mirroring `ContextTelemetry.recordFallback` |
 
+### `cfc_onboarding_finished` is once per install, across a relaunch
+
+Granting Screen Recording only takes effect in a new process, so onboarding restarts the app from its
+own middle and the run that reaches the last card often had no step transition of its own. The start
+instant is therefore persisted (`context.analytics.onboardingStartedAt`) rather than held in memory,
+and the completion is spent against a second default
+(`context.analytics.onboardingFinishedReported`) so that Settings' "Run setup again" cannot add a
+second install-shaped completion. Before that, four of the five reporting installs had permissions
+granted and exactly one had ever sent the event, which made the setup funnel unreadable.
+
 ### `cfc_daily_active` is the spine
 
 One event per install per **local calendar day**, carrying the day's rollup:

@@ -150,21 +150,57 @@ enum ContextAnalytics {
     @MainActor
     static func recordOnboardingStep(index: Int, of total: Int) {
         guard isEnabled else { return }
-        if onboardingStartedAt == nil { onboardingStartedAt = Date() }
+        noteOnboardingStarted()
         record(.onboardingStep(index: index, of: total))
     }
 
-    /// Records that first run ended.
+    /// Records that first run ended, at most once per install.
+    @MainActor
+    static func recordOnboardingFinished() {
+        guard isEnabled, let event = onboardingFinishedEvent() else { return }
+        record(event)
+    }
+
+    /// Stamps when this install's first run began, if nothing has stamped it yet.
+    ///
+    /// **On disk rather than in a static, because onboarding is the one flow a successful step ends
+    /// the process from the middle of.** Screen Recording only applies to a process that already held
+    /// it when it connected to the window server, so the card's own "Restart to finish" — and macOS's
+    /// own "Quit & Reopen" — kill the app between the grant and the finish. The run that actually
+    /// reaches `.done` therefore often had no `go(to:)` of its own, and an in-memory start instant
+    /// left `recordOnboardingFinished` with nothing to measure from and nothing to send. Live
+    /// evidence: four of the five reporting installs have permissions granted and only one of them
+    /// ever sent `cfc_onboarding_finished`. `OnboardingResume` persists the card for exactly the same
+    /// reason; this is the same fact about the same relaunch.
+    static func noteOnboardingStarted(in defaults: UserDefaults = .standard, at now: Date = Date()) {
+        guard defaults.object(forKey: onboardingStartedKey) == nil else { return }
+        defaults.set(now.timeIntervalSince1970, forKey: onboardingStartedKey)
+    }
+
+    /// The completion this install still owes, or nil — and calling it *spends* the record, so a
+    /// second call reports nothing.
     ///
     /// The elapsed time is measured from the first *step transition*, not from app launch: onboarding
     /// opens behind a permission prompt and a sign-in browser hop, and counting the seconds a person
     /// spent in System Settings as time spent in our flow would make every install look slow for a
-    /// reason we did not cause.
-    @MainActor
-    static func recordOnboardingFinished() {
-        guard isEnabled, let started = onboardingStartedAt else { return }
-        onboardingStartedAt = nil
-        record(.onboardingFinished(secondsElapsed: Int(Date().timeIntervalSince(started))))
+    /// reason we did not cause. Across a relaunch it is still that instant, which is the honest
+    /// answer to "how long did setup cost this person" — including the minutes they spent in System
+    /// Settings between the two processes, because those minutes were setup.
+    ///
+    /// **The reported flag is what makes it once per install rather than once per run.** "Run setup
+    /// again" (`OnboardingReset`) deliberately puts a finished install back through the flow, and it
+    /// clears the three records that describe *where the user is*; this is not one of them. A second
+    /// `cfc_onboarding_finished` from the same install would be counted as a second install setting
+    /// itself up, which is the one thing this series is the denominator for.
+    static func onboardingFinishedEvent(
+        in defaults: UserDefaults = .standard, at now: Date = Date()
+    ) -> AnalyticsEvent? {
+        guard !defaults.bool(forKey: onboardingReportedKey),
+            let started = defaults.object(forKey: onboardingStartedKey) as? Double
+        else { return nil }
+        defaults.set(true, forKey: onboardingReportedKey)
+        defaults.removeObject(forKey: onboardingStartedKey)
+        return .onboardingFinished(secondsElapsed: Int(max(0, now.timeIntervalSince1970 - started)))
     }
 
     // MARK: - Fallbacks
@@ -184,8 +220,6 @@ enum ContextAnalytics {
     ) {
         record(.fallback(area: area, outcome: outcome, reason: reason))
     }
-
-    @MainActor private static var onboardingStartedAt: Date?
 
     // MARK: - The daily rollup
 
@@ -248,6 +282,11 @@ enum ContextAnalytics {
 
     private static let hasLaunchedKey = "context.analytics.hasLaunched"
     private static let lastRollupDayKey = "context.analytics.lastRollupDay"
+    /// When this install's first run reached its first step, as seconds since the epoch. Survives the
+    /// relaunch the Screen Recording grant forces; see `noteOnboardingStarted`.
+    static let onboardingStartedKey = "context.analytics.onboardingStartedAt"
+    /// Whether the completion has already been reported. Once per install, never once per run.
+    static let onboardingReportedKey = "context.analytics.onboardingFinishedReported"
 
     @MainActor private static var rollupTimer: Timer?
 }
