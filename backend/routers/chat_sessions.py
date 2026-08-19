@@ -60,6 +60,10 @@ class SaveMessageRequest(BaseModel):
     app_id: str | None = Field(None, max_length=200)
     session_id: str | None = Field(None, max_length=200)
     metadata: str | None = None
+    content_blocks: list[dict[str, Any]] | None = Field(
+        None,
+        description='First-class structured chat content; message text remains the required fallback.',
+    )
     client_message_id: str | None = Field(None, pattern=r'^[A-Za-z0-9_-]{1,128}$')
     message_source: str = Field('desktop_chat', pattern=r'^(desktop_chat|realtime_voice)$')
     journal_revision: int | None = Field(None, ge=1, le=9_007_199_254_740_991)
@@ -172,6 +176,7 @@ def save_message(
             app_id=request.app_id,
             session_id=request.session_id,
             metadata=request.metadata,
+            content_blocks=request.content_blocks,
             client_message_id=request.client_message_id,
             message_source=request.message_source,
             journal_revision=request.journal_revision,

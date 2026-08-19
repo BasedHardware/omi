@@ -180,6 +180,13 @@ final class MeetingActionItemBannerServiceTests: XCTestCase {
     )
   }
 
+  func testSystemBannerOnlyDeliveryNeverPresentsOrJournalsThroughTheFloatingBar() {
+    XCTAssertFalse(NotificationDeliveryMode.systemBannerOnly.presentsInFloatingBar)
+    XCTAssertTrue(NotificationDeliveryMode.systemBannerOnly.requiresSystemBanner)
+    XCTAssertTrue(NotificationDeliveryMode.standard.presentsInFloatingBar)
+    XCTAssertFalse(NotificationDeliveryMode.standard.requiresSystemBanner)
+  }
+
   // MARK: - Fixtures
 
   private static func item(

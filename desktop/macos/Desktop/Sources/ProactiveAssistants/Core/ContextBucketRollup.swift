@@ -370,8 +370,51 @@ enum ContextProactivityPromptBuilder {
   /// simultaneously; every semantic rule from that version is preserved here,
   /// split so each can be applied independently.
   ///
+  /// The "Then say what it is about" block is the naming rule. A delivered
+  /// notification read "Insight / PR blocked, needs review", which tells the user
+  /// nothing about *which* pull request; the prompt above decides whether to speak
+  /// and which decision type to use, and never said what the spoken text must
+  /// contain, so that answer was fully compliant.
+  ///
+  /// Measured against the production reasoning model (gpt-5.6-luna,
+  /// reasoning_effort low) on the `referent-*` cases of the context-bucket
+  /// benchmark, 12 replicates per case. Scored on whether the user-visible text
+  /// contains one of the case's declared `referentTokens`:
+  ///
+  ///                        title        message      silence
+  ///   baseline             34/58 (59%)  58/58        26/84 (31%)
+  ///   schema text only     60/61 (98%)  57/61 (93%)  23/84 (27%)
+  ///   prose wording        61/61        61/61        23/84 (27%)
+  ///   this wording         67/67        67/67        17/84 (20%)
+  ///
+  /// The failure was in the title, not the body: the body already named the thing
+  /// 58/58 times, and the title only 34/58. Two wordings were tried. A one-
+  /// paragraph prose version reached 61/61 on both fields; this bulleted version
+  /// — the ordered-procedure shape the rest of this prompt already uses — matched
+  /// it and spoke more, and is kept for consistency with its neighbours.
+  ///
+  /// It does not buy the gain with silence. Silence *fell* (31% → 20%), the
+  /// benchmark's expected polarity improved (134/228 → 162/228 runs) and no
+  /// forbidden output term appeared in any of the 912 replayed runs. The
+  /// `referent-visible-on-screen` guard — the same blocked pull request, with the
+  /// review thread on screen — stayed silent 12/12 under every wording, so the
+  /// "already visible" rule is intact. On `referent-no-identifier`, whose context
+  /// supplies no handle at all, the rule invented none in 8/8 spoken runs; it
+  /// falls back to "the pull request you opened".
+  ///
+  /// Ceiling, for whoever tunes this next: wording cannot name what it was never
+  /// given. Across 69 spoken baseline runs the model named the referent whenever
+  /// one was anywhere in the prompt — including when it appeared only in an old
+  /// frozen-segment line among four distractor facts. The residual vague messages
+  /// all come from contexts carrying no identifier. `bucket_facts.identifiers` is
+  /// where extraction already stores the handles it was told to copy, and
+  /// `ContextBucketStore.snapshot` does not put that column into the fact lines
+  /// the director reads. That is the next lever, and it is a store change, not a
+  /// prompt change.
+  ///
   /// This text is the prompt-cache prefix: nothing volatile may be interpolated
-  /// into it, and it must stay byte-identical across calls for one bucket.
+  /// into it, and it must stay byte-identical across calls for one bucket. The
+  /// naming rule is static, so it invalidates the cached prefix exactly once.
   static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
     let lookup = allowLookup ? "\n" + directorLookupInstruction : ""
@@ -407,6 +450,17 @@ enum ContextProactivityPromptBuilder {
       - A commitment is required only for task_candidate. Insight, suggest, and resurface
         never require one: new, useful, grounded information the user has not seen is
         enough. Do not stay silent just because nobody made a commitment.
+      Then say what it is about:
+      - Name the specific thing in both the title and the message. The user reads them away
+        from the screen that produced them.
+      - Take the identifier from the supplied context: the pull-request number and repository,
+        the sender and the subject of the thread, the title of the document, the file and
+        branch, the name and time of the meeting, the person who asked.
+      - "PR blocked", "respond to the email", "document needs review" identify nothing. A
+        message the user cannot connect to one specific thing is not worth an interruption.
+      - Write identifiers exactly as the context spells them. Never invent one.
+      - The title is not a category. Never answer "Insight", "Suggestion", or "Task".
+      - A missing identifier is not a reason for silence. Speak with what the context supplies.
       Use only supplied bucket-entry refs.
       Timestamps supplied below are already in the user's local time zone. When a message
       mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)

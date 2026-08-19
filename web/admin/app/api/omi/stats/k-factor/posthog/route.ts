@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { posthogResults } from '@/lib/posthog';
+import { parsePlatformScope, scopeFilterAnd, type PlatformScope } from '@/lib/platform-scope';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 3600;
 
 // Run the k-factor proxy HogQL query through posthogResults (Firestore
 // query-cache + 429 backoff + stale fallback) and shape the panel payload.
 // Exported so the precompute cron can warm the underlying query cache.
-export async function computeKFactor(days: number) {
+export async function computeKFactor(days: number, platform: PlatformScope = 'macos') {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || 'https://us.posthog.com').replace(/\/$/, '');
@@ -29,7 +30,7 @@ export async function computeKFactor(days: number) {
           FROM events
           WHERE event IN ('Sign In Completed', 'Memory Share Button Clicked')
             AND timestamp >= now() - INTERVAL ${days} DAY
-            AND properties.$os = 'macOS'
+            ${scopeFilterAnd(platform, 'properties.$os')}
           GROUP BY event
         `;
 
@@ -80,9 +81,10 @@ export async function GET(request: NextRequest) {
 
   const searchParams = request.nextUrl.searchParams;
   const days = parseInt(searchParams.get('days') || '30', 10);
+  const platform = parsePlatformScope(searchParams.get('platform') ?? 'macos');
 
   try {
-    const payload = await computeKFactor(days);
+    const payload = await computeKFactor(days, platform);
     return NextResponse.json(payload);
   } catch (error) {
     // PostHog still failing (e.g. 429 with no cached fallback) — degrade

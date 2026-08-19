@@ -76,15 +76,27 @@ final class ChatFirstRichBlockTests: XCTestCase {
             ["type": "taskCard", "taskId": "task-1"],
             ["type": "goalLink", "goalId": "goal-1", "summary": "Ship the plan"],
             ["type": "memoryLink", "memoryId": "memory-1", "summary": "Remember the launch constraint"],
+            [
+              "type": "conversationLink",
+              "conversationId": "conversation-1",
+              "summary": "Meeting notes",
+              "recommendedActionItems": [
+                ["description": "Send the deck", "taskId": "task-2"],
+                ["description": "Book the follow-up"],
+              ],
+            ],
           ]
         ]
       )
     )
 
-    XCTAssertEqual(converted.count, 3)
+    XCTAssertEqual(converted.count, 4)
     XCTAssertEqual(converted[0]["task_id"] as? String, "task-1")
     XCTAssertEqual(converted[1]["goal_id"] as? String, "goal-1")
     XCTAssertEqual(converted[2]["memory_id"] as? String, "memory-1")
+    let actionItems = try XCTUnwrap(converted[3]["recommended_action_items"] as? [[String: Any]])
+    XCTAssertEqual(actionItems.map { $0["description"] as? String }, ["Send the deck", "Book the follow-up"])
+    XCTAssertEqual(actionItems.first?["task_id"] as? String, "task-2")
   }
 
   func testCodecRoundTripsEveryChatFirstBlock() throws {
@@ -115,7 +127,11 @@ final class ChatFirstRichBlockTests: XCTestCase {
       .conversationLink(
         id: "conversation-link",
         conversationId: "conversation-1",
-        summary: "Meeting notes"
+        summary: "Meeting notes",
+        recommendedActionItems: [
+          ConversationLinkActionItem(description: "Send the deck", taskID: "task-2"),
+          ConversationLinkActionItem(description: "Book the follow-up", taskID: nil),
+        ]
       ),
       .memoryLink(id: "memory-link", memoryId: "memory-1", summary: "Launch constraint"),
     ]
@@ -153,17 +169,44 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(timestamp, 42_000)
     XCTAssertEqual(captureSummary, "Planning conversation")
 
-    guard case .conversationLink(_, let conversationID, let conversationSummary) = restored[4] else {
+    guard
+      case .conversationLink(
+        _, let conversationID, let conversationSummary, let recommendedActionItems) = restored[4]
+    else {
       return XCTFail("conversation link should survive persisted replay")
     }
     XCTAssertEqual(conversationID, "conversation-1")
     XCTAssertEqual(conversationSummary, "Meeting notes")
+    XCTAssertEqual(
+      recommendedActionItems,
+      [
+        ConversationLinkActionItem(description: "Send the deck", taskID: "task-2"),
+        ConversationLinkActionItem(description: "Book the follow-up", taskID: nil),
+      ])
 
     guard case .memoryLink(_, let memoryID, let memorySummary) = restored[5] else {
       return XCTFail("memory link should survive persisted replay")
     }
     XCTAssertEqual(memoryID, "memory-1")
     XCTAssertEqual(memorySummary, "Launch constraint")
+  }
+
+  func testLegacyConversationLinkWithoutRecommendedItemsDegradesToTheExistingCard() {
+    let restored = ChatContentBlockCodec.decode([
+      [
+        "type": "conversationLink",
+        "id": "conversation-link",
+        "conversationId": "conversation-1",
+        "summary": "Meeting notes",
+      ]
+    ])
+
+    guard let first = restored.first,
+      case .conversationLink(_, _, _, let recommendedActionItems) = first
+    else {
+      return XCTFail("legacy conversation link should still decode")
+    }
+    XCTAssertTrue(recommendedActionItems.isEmpty)
   }
 
   func testQuestionSelectionReceiptRoundTripsAndRetiresTheOptions() throws {

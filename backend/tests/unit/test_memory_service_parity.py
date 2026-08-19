@@ -103,7 +103,16 @@ def _load_memory_service(monkeypatch):
 
         database.memories = memories_db_mod
         database.vector_db = vector_db_mod
+    service_mod._prod_get_memories = service_mod.memories_db.get_memories
+    service_mod._prod_list_memory_updated_or_created_index = (
+        service_mod.memories_db.list_memory_updated_or_created_index
+    )
     monkeypatch.setattr(service_mod.memories_db, "get_memories", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        service_mod.memories_db,
+        "list_memory_updated_or_created_index",
+        lambda *args, **kwargs: [],
+    )
     monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", lambda *args, **kwargs: [])
     monkeypatch.setattr(service_mod.memories_db, "get_memory", lambda *args, **kwargs: None)
     monkeypatch.setattr(service_mod.memories_db, "get_memory_ids", lambda *args, **kwargs: [])

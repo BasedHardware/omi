@@ -76,10 +76,16 @@ class CaptureLinkSpec(_StrictModel):
     summary: str = Field(min_length=1, max_length=200)
 
 
+class ConversationLinkActionItemSpec(_StrictModel):
+    description: str = Field(min_length=1, max_length=300)
+    task_id: StableId | None = None
+
+
 class ConversationLinkSpec(_StrictModel):
     type: Literal['conversationLink']
     conversation_id: StableId
     summary: str = Field(min_length=1, max_length=200)
+    recommended_action_items: list[ConversationLinkActionItemSpec] = Field(default_factory=list, max_length=8)
 
 
 class MemoryLinkSpec(_StrictModel):

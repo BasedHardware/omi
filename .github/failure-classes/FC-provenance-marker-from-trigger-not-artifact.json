@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-provenance-marker-from-trigger-not-artifact",
+  "violated_contract": "A deployment's published provenance marker must be derived from the artifact that was actually built and deployed, never from the workflow's trigger context. google-github-actions/deploy-cloudrun stamps a `commit-sha` label from GITHUB_SHA -- the ref the run was triggered on -- while a pinned deploy checks out and builds `release_sha`. The two differ on exactly the deploys that were deliberate, so the label names a commit that was never deployed at the moment operators most need the truth. This is worse than publishing nothing: `commit-sha` is the first marker an operator reads when answering 'what is running in production', and a marker that is confidently wrong converts verification into false belief. On 2026-08-19 it cost an incident responder two reversals -- first concluding production carried five commits it did not, then re-attributing a latency improvement to a fix that was not deployed -- while the truthful signals (revision-name suffix and image tag, both derived from the checked-out SHA) sat unread beside it.",
+  "canonical_prevention": "Publish a marker whose value is the admitted release SHA the job actually checked out, and prove it in the same job: read the value back off the revision that was created and fail the deploy on mismatch, so an untrue marker stops the release instead of outliving it. Never let a third-party action's trigger-derived default stand as the provenance of record, and when a service already exposes a correct marker, propagate that pattern rather than adding a second disagreeing one.",
+  "canonical_prevention_artifact": [
+    ".github/actions/deploy-backend-stack/action.yml"
+  ],
+  "evidence_prs": [
+    11841
+  ],
+  "scope_hints": [
+    ".github/actions/deploy-backend-stack/action.yml",
+    ".github/workflows/gcp_backend.yml",
+    ".github/workflows/desktop_backend_prod.yml"
+  ],
+  "status": "open"
+}
