@@ -54,7 +54,11 @@ import {
   promoteIfNeeded,
   __resetPromotionStateForTests
 } from './create'
-import { startTaskPromotionService, __resetPromotionServiceForTests } from './promotionService'
+import {
+  startTaskPromotionService,
+  stopTaskPromotionService,
+  __resetPromotionServiceForTests
+} from './promotionService'
 
 // --- FIFO fake backend -------------------------------------------------------
 // `POST /v1/staged-tasks` pushes an id; `POST /v1/staged-tasks/promote` pops the
@@ -232,11 +236,14 @@ describe('T-B — startup promote', () => {
     expect(promotedBackendIds()).toEqual(['ai-st-pre'])
 
     // The poll stopped after firing: advancing 5 more minutes over an empty FIFO
-    // yields only the 60s safety ticks (all promoted:false), no poll re-fires.
+    // yields only safety ticks (all promoted:false), no poll re-fires. Each of those
+    // finds nothing and steps down the backoff ladder (60s, then 120s, then 300s), so
+    // the window buys 2 ticks. The guard here is the poll — 60 five-second poll
+    // attempts would show up as ~60 posts, not 2.
     const postsBefore = promotePostCount
     await vi.advanceTimersByTimeAsync(5 * 60_000)
     const ticks = promotePostCount - postsBefore
-    expect(ticks).toBe(5) // exactly 5 safety-timer ticks, not 60 poll attempts
+    expect(ticks).toBe(2)
     expect(promotedBackendIds()).toEqual(['ai-st-pre']) // nothing left to promote
   })
 
@@ -273,6 +280,88 @@ describe('T-C — safety-timer bypass semantics', () => {
   })
 })
 
+describe('T-D — safety-net backoff (idle request volume)', () => {
+  // The regression: a flat 60s timer POSTed /v1/staged-tasks/promote 1,440x/day per
+  // client, essentially all returning promoted:false, each costing the backend two
+  // full collection scans to answer "nothing".
+  it('steps 60s -> 2m -> 5m -> 10m and holds at 10m while nothing is stageable', async () => {
+    startTaskPromotionService()
+    await vi.advanceTimersByTimeAsync(0) // startup promote (empty FIFO, no post)
+    const at = (): number => promotePostCount
+
+    // Each tick lands exactly at the ladder delay, and NOT one millisecond earlier.
+    for (const delay of [60_000, 120_000, 300_000, 600_000]) {
+      const before = at()
+      await vi.advanceTimersByTimeAsync(delay - 1)
+      expect(at()).toBe(before) // still armed
+      await vi.advanceTimersByTimeAsync(1)
+      expect(at()).toBe(before + 1) // fired
+    }
+
+    // Ladder is capped, not unbounded: the next tick is 10m again, not 20m.
+    const before = at()
+    await vi.advanceTimersByTimeAsync(600_000 - 1)
+    expect(at()).toBe(before)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(at()).toBe(before + 1)
+
+    // An idle hour costs single digits, where the flat timer cost 60.
+    expect(at()).toBeLessThanOrEqual(8)
+  })
+
+  it('a promote resets to the 60s floor, so a backlog still drains one per minute', async () => {
+    startTaskPromotionService()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // Walk down to the slow end of the ladder over an empty FIFO.
+    await vi.advanceTimersByTimeAsync(60_000 + 120_000 + 300_000)
+    const posts = promotePostCount
+
+    // Something is staged out of band and the next (10m) tick finds it.
+    stagedQueue.push('st-remote')
+    await vi.advanceTimersByTimeAsync(600_000)
+    expect(promotedBackendIds()).toEqual(['ai-st-remote'])
+    expect(promotePostCount).toBe(posts + 1)
+
+    // Reset proof: a second out-of-band row is picked up on the very next MINUTE,
+    // not 10 minutes later. Without the reset this assertion fails.
+    stagedQueue.push('st-remote-2')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(promotedBackendIds()).toEqual(['ai-st-remote', 'ai-st-remote-2'])
+  })
+
+  it('a failing backend backs off instead of retrying at a flat 60s forever', async () => {
+    h.fetch.mockImplementation(async () => ({ ok: false, status: 500, json: async () => ({}) }))
+    startTaskPromotionService()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // One hour against a hard-failing promote endpoint.
+    await vi.advanceTimersByTimeAsync(60 * 60_000)
+    // Flat-60s behavior would be ~60 posts. The ladder caps the hour in single digits.
+    expect(promotePostCount).toBeLessThanOrEqual(8)
+  })
+
+  it('a signed-out stretch does not strand a returning user on the slow cadence', async () => {
+    // Walk the ladder to its slow end WHILE SIGNED IN first — a service that starts
+    // signed out is already at the floor, so it would prove nothing about the reset.
+    startTaskPromotionService()
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(60_000 + 120_000 + 300_000) // now on the 10m rung
+
+    h.session = null
+    const postsBefore = promotePostCount
+    await vi.advanceTimersByTimeAsync(30 * 60_000) // half an hour signed out
+    expect(promotePostCount).toBe(postsBefore) // signed out costs nothing
+
+    // Signed-out ticks prove nothing about the backlog, so they must return the net to
+    // the floor: a row staged while away is picked up a minute after sign-in, not ten.
+    h.session = { apiBase: 'https://api', desktopApiBase: 'https://d', token: 't' }
+    stagedQueue.push('st-after-signin')
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(promotedBackendIds()).toEqual(['ai-st-after-signin'])
+  })
+})
+
 describe('T-E — safety negatives', () => {
   it('a timer tick with no session makes zero network calls', async () => {
     h.session = null
@@ -302,6 +391,26 @@ describe('T-E — safety negatives', () => {
     // The racing promote's write was dropped by the epoch guard — only the startup
     // promote's write survives.
     expect(promotedBackendIds()).toEqual(['ai-st-race'])
+  })
+
+  it('a stop that lands mid-promote does not leave the timer re-armed', async () => {
+    // The tick re-arms from inside its own promise chain, so a stop while a promote is
+    // in flight must not be undone by that chain finishing afterwards.
+    const gate: { resolve: (v: unknown) => void } = { resolve: () => {} }
+    stagedQueue.push('st-inflight')
+    startTaskPromotionService()
+    await vi.advanceTimersByTimeAsync(0) // startup promote drains it
+    stagedQueue.push('st-next')
+    deferPromote = gate
+    await vi.advanceTimersByTimeAsync(60_000) // tick fires, POST pending
+
+    stopTaskPromotionService()
+    gate.resolve(undefined)
+    await vi.advanceTimersByTimeAsync(0)
+
+    const after = promotePostCount
+    await vi.advanceTimersByTimeAsync(60 * 60_000) // an hour with the service stopped
+    expect(promotePostCount).toBe(after)
   })
 
   it('starting twice runs a single safety interval (idempotent)', async () => {
