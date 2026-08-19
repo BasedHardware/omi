@@ -1,0 +1,7 @@
+{
+  "version": "0.12.189",
+  "date": "2026-08-19",
+  "changes": [
+    "Fixed the Memory Atlas failing to load for accounts whose knowledge graph still lives in the legacy store"
+  ]
+}
