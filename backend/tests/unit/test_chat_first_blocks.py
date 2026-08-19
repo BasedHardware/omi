@@ -55,6 +55,10 @@ def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(
                     'type': 'conversationLink',
                     'conversation_id': 'conversation-1',
                     'summary': 'Meeting notes ready',
+                    'recommended_action_items': [
+                        {'description': 'Send the deck', 'task_id': 'task-1'},
+                        {'description': 'Book the follow-up'},
+                    ],
                 }
             ],
             'created_at': '2026-08-13T00:00:00Z',
@@ -197,13 +201,27 @@ def test_chat_first_validate_admits_completed_desktop_conversation_link(monkeypa
     response = _client().post(
         '/v1/chat-first/blocks/validate',
         json=_request(
-            blocks=[{'type': 'conversationLink', 'conversation_id': 'desktop-1', 'summary': 'Meeting notes ready'}]
+            blocks=[
+                {
+                    'type': 'conversationLink',
+                    'conversation_id': 'desktop-1',
+                    'summary': 'Meeting notes ready',
+                    'recommended_action_items': [
+                        {'description': 'Send the deck', 'task_id': 'task-1'},
+                        {'description': 'Book the follow-up'},
+                    ],
+                }
+            ]
         ),
     )
 
     assert response.status_code == 200
     assert response.json()['accepted'] is True
     assert response.json()['blocks'][0]['conversation_id'] == 'desktop-1'
+    assert response.json()['blocks'][0]['recommended_action_items'] == [
+        {'description': 'Send the deck', 'task_id': 'task-1'},
+        {'description': 'Book the follow-up'},
+    ]
 
 
 def test_chat_first_validate_rejects_ambient_desktop_conversation_link(monkeypatch):

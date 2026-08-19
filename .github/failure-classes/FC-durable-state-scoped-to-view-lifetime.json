@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-durable-state-scoped-to-view-lifetime",
+  "violated_contract": "State whose cost to rebuild exceeds the lifetime of the view that displays it must be owned by something that outlives the view. A corpus paged in over dozens of network requests, held as a SwiftUI @StateObject inside the surface that draws it, is discarded and re-derived on every ordinary re-entry — a window rebuilt on each present(), a branch of a switch the user leaves by typing — and the surface reads as slow for work it has already done. The owning scope is a property of what the state costs, not of who renders it.",
+  "canonical_prevention": "Own the store at the process (ActivitySpine.shared), hand it to the view, and make re-entry a revalidation that keeps every composed row and asks only what changed — on a cooldown, never clearing, never re-opening the window. State that now outlives a sign-out must be told to forget it, and the paint before the first answer comes from a bounded on-disk copy that is explicitly not an authority. Regression coverage in ActivityRevalidationTests asserts the list does not blink mid-request, that a second appearance revalidates rather than re-pages, and that the sign-out edge clears the account half.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Sources/ContextApp/Activity/ActivitySpine.swift",
+    "desktop/context-for-claude/Tests/ContextAppTests/ActivityRevalidationTests.swift"
+  ],
+  "evidence_prs": [
+    11641
+  ],
+  "scope_hints": [
+    "desktop/context-for-claude/**",
+    "desktop/macos/**"
+  ],
+  "status": "open"
+}

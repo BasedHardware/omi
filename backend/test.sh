@@ -28,10 +28,15 @@ fi
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
-# Direct focused runs and pre-push keep the strict default. The CI runner alone supplies
-# a 1.0-second ceiling so cross-machine CPU differences do not block unrelated PRs.
+# The warn value is the per-test CPU target; the fail value is the blocking budget and
+# must keep headroom above it. CPU time is less load-sensitive than wall-clock but not
+# immune: contention stall cycles are charged to the process, so identical work measured
+# ~2x higher with the machine saturated (0.03s -> 0.06s on an 8-core host). At the former
+# 0.12s budget -- only 1.2x the target -- a busy runner failed a shifting set of files
+# that all passed in isolation. CI already carries a 1.0-second ceiling for the same
+# reason; this is the local lane's equivalent headroom.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
-export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
+export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.30}"
 
 # The file-isolated runner already parallelizes pytest processes. Letting each process
 # start a native BLAS/OpenMP pool oversubscribes the machine and makes process CPU time

@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-state-gate-without-legacy-source-path",
+  "violated_contract": "When a route is repointed from a legacy store to derived canonical state, every principal whose canonical state is not yet provisioned must keep a served path, on the read side and the mutation side alike. A gate that assumes the derived state exists for all principals denies the feature to every unprovisioned account, and the denial reaches the user as an error.",
+  "canonical_prevention": "Gate on a per-account probe of whether the derived state is actually established rather than on a deployment-wide constant, and keep the pre-migration source path served for accounts that fail that probe until a backfill provisions them. Prove both directions at the route boundary with a legacy-principal test.",
+  "canonical_prevention_artifact": [
+    "backend/routers/knowledge_graph.py",
+    "backend/tests/unit/test_knowledge_graph_canonical_mutation_routes.py",
+    "backend/tests/unit/test_knowledge_graph_legacy_fallback.py",
+    "backend/utils/memory/canonical_graph.py",
+    "backend/tests/unit/test_canonical_graph_state_probe.py"
+  ],
+  "evidence_prs": [
+    11623,
+    11783
+  ],
+  "scope_hints": [
+    "backend/routers/knowledge_graph.py",
+    "backend/utils/memory/canonical_graph.py",
+    "backend/database/memory_apply_store.py"
+  ],
+  "status": "open"
+}

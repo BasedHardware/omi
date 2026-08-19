@@ -5,6 +5,8 @@ description: Hermetic conversation detail open + full-width transcript pane via 
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
   - desktop/macos/Desktop/Sources/MainWindow/ConversationDetailAutomationState.swift

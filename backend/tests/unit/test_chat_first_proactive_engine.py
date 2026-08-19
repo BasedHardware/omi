@@ -1,6 +1,6 @@
 """Failure-isolated, content-free proactive-judgment contracts."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -15,6 +15,12 @@ from models.chat_first import (
     QuestionOption,
 )
 from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility
+from utils.conversations.meeting_treatment import (
+    MIN_MEETING_DURATION_SECONDS,
+    MIN_TRANSCRIBED_SPEECH_SECONDS,
+    deduplicated_transcribed_speech_seconds,
+    is_meeting_treatment_eligible,
+)
 
 NOW = datetime(2026, 7, 15, 12, tzinfo=timezone.utc)
 SUBJECT = ChatFirstSubject(kind='goal', id='goal-1')
@@ -201,6 +207,7 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
         'type': 'conversationLink',
         'conversation_id': 'conversation-1',
         'summary': 'Weekly planning',
+        'recommended_action_items': [],
     }
 
     engine.persist_capture_arrival_intent(
@@ -215,6 +222,24 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
     assert created[1]['blocks'][0].summary == 'Your meeting notes are ready.'
 
 
+def test_meeting_recommendations_keep_bounded_open_user_commitments():
+    structured = {
+        'action_items': [
+            {'description': ' Send the deck ', 'capture_owner': 'user', 'target_task_id': 'task-1'},
+            {'description': 'Someone else reviews it', 'capture_owner': 'other'},
+            {'description': 'Already sent', 'capture_owner': 'user', 'completed': True},
+            {'description': 'Book the follow-up', 'capture_owner': 'user'},
+        ]
+    }
+
+    recommendations = engine.recommended_meeting_action_items(structured)
+
+    assert [item.model_dump() for item in recommendations] == [
+        {'description': 'Send the deck', 'task_id': 'task-1'},
+        {'description': 'Book the follow-up', 'task_id': None},
+    ]
+
+
 def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotation(monkeypatch):
     persist = MagicMock()
     monkeypatch.setattr(engine, 'persist_capture_arrival_intent', persist)
@@ -223,6 +248,9 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'source': 'desktop',
         'status': 'completed',
         'discarded': False,
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
+        'transcript_segments': [{'text': 'A substantive exchange', 'start': 0, 'end': MIN_TRANSCRIBED_SPEECH_SECONDS}],
         'structured': {'title': 'Ambient capture'},
         'external_data': {'conversation_role': 'ambient'},
     }
@@ -238,7 +266,11 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
 
     engine.persist_desktop_meeting_arrival('user-1', meeting)
     persist.assert_called_once_with(
-        'user-1', conversation_id='meeting-1', summary='Design review', is_desktop_meeting=True
+        'user-1',
+        conversation_id='meeting-1',
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
     persist.reset_mock()
@@ -252,6 +284,35 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
     }
     engine.persist_desktop_meeting_arrival('user-1', rotation)
     persist.assert_not_called()
+
+
+def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():
+    eligible = {
+        'source': 'desktop',
+        'discarded': False,
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
+        'external_data': {'conversation_role': 'meeting'},
+        'transcript_segments': [
+            {'text': 'first exchange', 'start': 0, 'end': 35},
+            {'text': 'second exchange', 'start': 35, 'end': MIN_TRANSCRIBED_SPEECH_SECONDS},
+        ],
+    }
+    assert is_meeting_treatment_eligible(eligible) is True
+
+    short_call = {**eligible, 'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS - 1)}
+    assert is_meeting_treatment_eligible(short_call) is False
+
+    duplicate_streams = {
+        **eligible,
+        'finished_at': NOW + timedelta(minutes=20),
+        'transcript_segments': [
+            {'text': 'remote stream from mic', 'start': 0, 'end': 45},
+            {'text': 'same remote stream from system audio', 'start': 0, 'end': 45},
+        ],
+    }
+    assert deduplicated_transcribed_speech_seconds(duplicate_streams['transcript_segments']) == 45
+    assert is_meeting_treatment_eligible(duplicate_streams) is False
 
 
 def test_proactive_failure_logs_redact_authenticated_uid(monkeypatch, caplog):

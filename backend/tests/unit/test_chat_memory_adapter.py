@@ -33,6 +33,8 @@ _CHAT_QUOTE_TEXT = 'User likes safe chat memory reads.'
 def _empty_historical_store(monkeypatch):
     """Canonical chat fixtures declare no historical rows unless a test opts in."""
     monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):

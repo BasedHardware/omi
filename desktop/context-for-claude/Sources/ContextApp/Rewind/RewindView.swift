@@ -11,13 +11,13 @@ import SwiftUI
 /// label is correct precisely because the chip is not a semantic surface and does not invert.
 struct RewindView: View {
     @ObservedObject var model: RewindModel
-    /// **Which of the four optional controls the user actually wants.**
-    ///
-    /// Read here because it was read *nowhere*: the Appearance pane wrote
-    /// `SettingsStore.timelineControls`, persisted it, and drew a live preview of it, while this
-    /// window drew all four unconditionally. Four switches under the sentence "Choose which controls
-    /// appear over the timeline" that changed only the preview beside them.
-    @ObservedObject private var settings = SettingsStore.shared
+    // **The four controls below are not optional any more, and that is the second half of one
+    // story.** The Appearance pane offered switches to hide them; they were written, persisted and
+    // drawn as a live preview while this window drew all four unconditionally — four switches that
+    // changed only the picture beside them. They were wired up rather than deleted, and then the
+    // pane went (see `Settings/SettingsPreferences.swift`), so what is left is the timeline having
+    // all of its controls. Nothing is lost that a user was using: the switches only ever took
+    // buttons away.
     /// Opens Settings. Owned by the app shell, which is not this agent's file, so it arrives as a
     /// closure the shell supplies rather than a call into a type that may not exist yet.
     var onOpenSettings: () -> Void = {}
@@ -126,13 +126,9 @@ struct RewindView: View {
 
                 // Chevrons sit on the frame's own left and right edges, per the spec.
                 HStack {
-                    if settings.timelineControls.segmentNavigation {
-                        segmentChevron(forward: false)
-                    }
+                    segmentChevron(forward: false)
                     Spacer(minLength: 0)
-                    if settings.timelineControls.segmentNavigation {
-                        segmentChevron(forward: true)
-                    }
+                    segmentChevron(forward: true)
                 }
                 .padding(.horizontal, 10)
 
@@ -367,28 +363,26 @@ struct RewindView: View {
     /// In the spec's order: open externally, live text, zoom out, zoom in.
     private var controlCluster: some View {
         HStack(spacing: 8) {
-            if settings.timelineControls.openExternally { openExternallyButton }
-            if settings.timelineControls.liveText { liveTextButton }
+            openExternallyButton
+            liveTextButton
             // The tooltips name the pinch because the gesture is otherwise undiscoverable: nothing on
             // screen says the track answers to fingers, and these two buttons are where somebody
             // looking for the feature will hover first.
-            if settings.timelineControls.zoomControls {
-                circleButton(
-                    systemName: "minus.magnifyingglass",
-                    // The label names the *track* zoom rather than saying "zoom out", because the window
-                    // has two of them and a control that does not say which is the one thing this pair
-                    // must never be.
-                    label: "Zoom the timeline out",
-                    help: "Zoom the timeline out — or pinch in on the track",
-                    enabled: model.canZoomTrackOut
-                ) { model.zoomTrack(in: false) }
-                circleButton(
-                    systemName: "plus.magnifyingglass",
-                    label: "Zoom the timeline in",
-                    help: "Zoom the timeline in — or pinch out on the track",
-                    enabled: model.canZoomTrackIn
-                ) { model.zoomTrack(in: true) }
-            }
+            circleButton(
+                systemName: "minus.magnifyingglass",
+                // The label names the *track* zoom rather than saying "zoom out", because the window
+                // has two of them and a control that does not say which is the one thing this pair
+                // must never be.
+                label: "Zoom the timeline out",
+                help: "Zoom the timeline out — or pinch in on the track",
+                enabled: model.canZoomTrackOut
+            ) { model.zoomTrack(in: false) }
+            circleButton(
+                systemName: "plus.magnifyingglass",
+                label: "Zoom the timeline in",
+                help: "Zoom the timeline in — or pinch out on the track",
+                enabled: model.canZoomTrackIn
+            ) { model.zoomTrack(in: true) }
         }
     }
 

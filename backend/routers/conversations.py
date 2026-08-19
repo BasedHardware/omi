@@ -50,6 +50,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
+from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -59,7 +60,7 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
     search_conversations,
 )
-from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -833,7 +834,18 @@ def delete_conversation(
         # the fence is closed; anything real still raises rather than orphaning
         # live memories against a deleted conversation.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
-            memory_service.retract_conversation_memories(uid, conversation_id)
+            try:
+                memory_service.retract_conversation_memories(uid, conversation_id)
+            except ConversationReplacementConflictError as error:
+                logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
+                # Concurrent same-account memory writes kept winning the
+                # account-global control CAS. Nothing has been deleted yet, so
+                # fail closed with a retryable answer instead of an opaque 500;
+                # the retraction is idempotent, a retried delete is safe (#11726).
+                raise HTTPException(
+                    status_code=503,
+                    detail='Conversation memory retraction is busy, please retry',
+                ) from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
@@ -1511,7 +1523,18 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
-    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
+    try:
+        summary = generate_summary_with_prompt(
+            full_transcript, request.prompt, language_code=conversation.language or 'en'
+        )
+    except SummaryProviderError as exc:
+        # The provider failed on its own account, so this is an upstream failure and not a fault
+        # of the request: report it as one instead of as a 500 the client cannot act on.
+        logger.warning("test-prompt summary failed upstream: conversation_id=%s", conversation_id)
+        raise HTTPException(
+            status_code=504 if exc.timed_out else 502,
+            detail='summary_provider_timeout' if exc.timed_out else 'summary_provider_unavailable',
+        ) from exc
 
     return {"summary": summary}
 

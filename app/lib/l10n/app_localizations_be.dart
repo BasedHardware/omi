@@ -321,7 +321,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get searchApps => 'Поіск дадатаў...';
 
   @override
-  String get myApps => 'Мае дадатыі';
+  String get myApps => 'Створана мной';
 
   @override
   String get installedApps => 'Усталяваныя дадатыі';
@@ -9879,4 +9879,10 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Выключыце, каб не адпраўляць у Omi неапрацаванае аўдыя. Расшыфроўкі і даныя, патрэбныя воблачным функцыям, усё яшчэ могуць адпраўляцца ў Omi.';
+
+  @override
+  String get findDevice => 'Знайсці';
+
+  @override
+  String get diagnosticsShareFailed => 'Не ўдалося падзяліцца дыягностыкай. Паспрабуйце яшчэ раз.';
 }

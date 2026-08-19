@@ -731,6 +731,7 @@ def _mark_finalization_fanout_completed_txn(
     dispatch_generation: int,
     lease_epoch: int,
     now: datetime,
+    meeting_treatment_eligible: bool,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -745,6 +746,7 @@ def _mark_finalization_fanout_completed_txn(
         {
             'fanout_status': 'completed',
             'fanout_completed_at': now,
+            'meeting_treatment_eligible': meeting_treatment_eligible,
             'updated_at': now,
         },
     )
@@ -756,12 +758,20 @@ def mark_finalization_fanout_completed(
     dispatch_generation: int,
     lease_epoch: int,
     *,
+    meeting_treatment_eligible: bool,
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_fanout_completed_txn)
-    return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
+    return transactional(
+        transaction,
+        _job_ref(client, job_id),
+        dispatch_generation,
+        lease_epoch,
+        _now(),
+        meeting_treatment_eligible,
+    )
 
 
 def _mark_finalization_retryable_txn(

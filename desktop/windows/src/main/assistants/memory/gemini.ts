@@ -13,7 +13,10 @@ import {
   type MemoryExtractionResult
 } from './models'
 
-const MODEL = 'gemini-2.5-flash'
+// Flash-Lite, deliberately: vision-capable, `shared`/on-demand on Vertex (never burns
+// the saturated Flash PT reservation), and measurably more prompt-compliant than Flash
+// on this lane (2026-08-17 overflow bakeoff). Mirrors Mac's ModelQoS.Gemini.lightweight.
+export const MODEL = 'gemini-2.5-flash-lite'
 const REQUEST_TIMEOUT_MS = 30_000
 /** 3 attempts total. Mac's backoff, exactly: 2s then 8s. */
 const RETRY_DELAYS_MS = [2_000, 8_000]

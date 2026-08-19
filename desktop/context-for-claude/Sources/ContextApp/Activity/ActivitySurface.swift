@@ -47,16 +47,48 @@ struct ActivitySurface: View {
     /// file — this is the whole of the push.
     @State private var detail: ActivityDetailRequest?
 
+    /// The surface over a store somebody else owns — which in the app is always `ActivitySpine`.
+    ///
+    /// **The store is handed in rather than built here, and that is the whole of the change that
+    /// made re-opening the panel instant.** A `@StateObject` built in this initialiser lived exactly
+    /// as long as this view did, and this view is rebuilt on every summoning of the search window
+    /// and unmounted every time the panel switches to search results — so a hydrated corpus was
+    /// discarded and re-paged from offset zero three different ordinary ways. See `ActivitySpine`.
+    ///
+    /// It stays a `@StateObject` for SwiftUI's benefit: the wrapped value is the shared instance, so
+    /// the autoclosure returns the same object however many times the view is rebuilt, and the host
+    /// rather than the view is what keeps it alive.
     init(
-        store: @escaping () -> ContextStore?,
-        account: ActivityAccountReading = ActivityAccountAbsent(),
+        spine: ActivityStore,
         conversations: ActivityConversationReading = ActivityConversationSource(),
         query: String = "",
         since: Double? = nil,
         until: Double? = nil,
         onOpenMoment: @escaping (ActivityMoment) -> Void = { _ in }
     ) {
-        _store = StateObject(wrappedValue: ActivityStore(store: store, account: account))
+        _store = StateObject(wrappedValue: spine)
+        _detailModel = StateObject(wrappedValue: ActivityDetailModel(source: conversations))
+        self.query = query
+        self.since = since
+        self.until = until
+        self.onOpenMoment = onOpenMoment
+    }
+
+    /// The surface over a store of its own. Tests and previews that want a fresh spine per case;
+    /// the app never takes this path, because a store per surface is what `ActivitySpine` exists to
+    /// stop being true.
+    init(
+        store: @escaping () -> ContextStore?,
+        account: ActivityAccountReading = ActivityAccountAbsent(),
+        cache: ActivityAccountCache? = nil,
+        conversations: ActivityConversationReading = ActivityConversationSource(),
+        query: String = "",
+        since: Double? = nil,
+        until: Double? = nil,
+        onOpenMoment: @escaping (ActivityMoment) -> Void = { _ in }
+    ) {
+        _store = StateObject(
+            wrappedValue: ActivityStore(store: store, account: account, cache: cache))
         _detailModel = StateObject(wrappedValue: ActivityDetailModel(source: conversations))
         self.query = query
         self.since = since

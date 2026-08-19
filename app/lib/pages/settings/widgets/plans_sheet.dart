@@ -1169,18 +1169,24 @@ class _PlansSheetState extends State<PlansSheet> {
                         _buildPromoCodeField(),
                         const SizedBox(height: 16),
 
-                        // Continue/Keep Unlimited button - only show for non-annual unlimited users
+                        // Continue/Upgrade — hidden for same-tier annual (nothing to
+                        // change) and for desktop-plan → mobile-tier switches.
                         Builder(
                           builder: (context) {
                             final currentPlan = _getCurrentPlanDetails();
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
-                                !hasScheduledUpgrade &&
-                                !isCancelled &&
-                                !usageProvider.isLoadingPlans &&
-                                usageProvider.availablePlans != null;
+                            final currentSub = usageProvider.subscription?.subscription;
+                            final shouldShowContinueButton = shouldShowPlanContinueButton(
+                              isOnAnnualPlan: isOnAnnualPlan,
+                              hasScheduledUpgrade: hasScheduledUpgrade,
+                              isCancelled: isCancelled,
+                              plansLoaded: !usageProvider.isLoadingPlans && usageProvider.availablePlans != null,
+                              selectedTierId: selectedTierId,
+                              currentTierId: currentSub?.plan.wireName,
+                              currentGrantsDesktop: currentSub?.plan.grantsDesktop ?? false,
+                            );
 
                             if (!shouldShowContinueButton) {
                               return const SizedBox.shrink();

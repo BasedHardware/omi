@@ -1,5 +1,6 @@
 import getSharedTasks from '@/src/actions/tasks/get-shared-tasks';
 import envConfig from '@/src/constants/envConfig';
+import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
 import Image from 'next/image';
@@ -61,19 +62,8 @@ export async function generateMetadata(
 }
 
 function getPlatformLink(userAgent: string, token: string) {
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-
-  // iOS: Use custom URL scheme because Universal Links don't trigger for same-domain navigation
-  // (user is already on h.omi.me, so tapping https://h.omi.me/... just reloads the page)
-  // Android: Use intent:// with fallback to Google Play if app not installed
-  return isAndroid
-    ? `intent://h.omi.me/tasks/${token}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=${encodeURIComponent(
-        'https://play.google.com/store/apps/details?id=com.friend.ios',
-      )};end`
-    : isIOS
-    ? `omi://h.omi.me/tasks/${token}`
-    : 'https://omi.me';
+  // iOS: custom scheme — Universal Links don't fire for same-domain navigation.
+  return getOmiPlatformDeepLink(userAgent, `tasks/${token}`);
 }
 
 function formatDueDate(dateStr: string): string {

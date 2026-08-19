@@ -1,3 +1,4 @@
+import ContextCore
 import Foundation
 import LocalAuthentication
 import Security
@@ -36,8 +37,16 @@ struct OmiSession: Codable, Equatable, Sendable {
 ///   list by putting the login-keychain password sheet on screen. That is the failure everything
 ///   below the `Refusal` mark exists for.
 enum SessionStore {
-    static let service = "com.omi.context-for-claude.session"
+    /// Keyed to the *running* bundle for the same reason it is not the desktop app's item: the ACL
+    /// documented above is bound to the creating signature, and a dev build and the release are not
+    /// the same signature. Sharing one service name between them is that password sheet again, from
+    /// the one direction the fix above did not cover.
+    static let service = service(for: ContextPaths.bundleIdentifier)
     static let account = "omi-session"
+
+    static func service(for bundleIdentifier: String) -> String {
+        "\(bundleIdentifier).session"
+    }
 
     // MARK: - Refusals no retry can satisfy
 

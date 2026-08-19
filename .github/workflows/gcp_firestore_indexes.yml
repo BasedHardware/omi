@@ -1,6 +1,16 @@
 name: Reconcile Firestore Indexes
 
 on:
+  # A merged manifest change is a schema migration that nothing else applies:
+  # both backend deploy lanes only gate on the serving schema. Without this
+  # trigger the fix for issue #11684 sat merged and unapplied (PR #11731), so
+  # /v3/memories 503'd for ~5h on a required index that existed only on paper.
+  # This queues the migration automatically; the prod GitHub Environment's
+  # required reviewer is still what approves it (see the confirmation step).
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'firestore.indexes.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -16,35 +26,62 @@ on:
         required: true
         type: string
 
-# Schema writes and backend deploy readiness inspect the same persistent
-# Firestore target, so serialize them in the backend stack's environment lock.
+# Deliberately NOT the backend-stack lock. This reconciliation is create-only,
+# so an index state only ever moves MISSING -> CREATING -> READY: it can never
+# invalidate a readiness answer a deploy already got. The deploy ordering
+# guarantee ("code must not land before its index is READY") is enforced by the
+# fail-closed firestore_readiness job, not by this group. Sharing the deploy
+# lock bought no ordering property and did real harm: on 2026-08-18 a
+# gcp_backend.yml run parked in `waiting` for an unactioned prod approval held
+# deploy-backend-stack-prod, so the dispatched schema repair queued behind the
+# outage it was repairing. An automatic writer on the shared group would also
+# be able to evict the single pending gcp_backend_auto_dev.yml run holding an
+# admitted Release Eligibility SHA.
 concurrency:
-  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  group: firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
   cancel-in-progress: false
 
 jobs:
   reconcile:
     # This is the explicit, human-approved writer. Backend deploy workflows
     # remain read-only and can only gate on the serving schema.
+    #
+    # `github.event.inputs.environment` is empty on push, which would bind no
+    # GitHub Environment at all and silently bypass the prod approval. Resolve
+    # it explicitly instead: automatic runs always target prod, where the
+    # required reviewer is the approval gate for the migration.
     if: github.ref == 'refs/heads/main'
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
     permissions:
       contents: 'read'
     runs-on: ubuntu-latest
     steps:
       - name: Validate Firestore migration input
         env:
-          INPUT_ENVIRONMENT: ${{ github.event.inputs.environment }}
+          EVENT_NAME: ${{ github.event_name }}
+          RESOLVED_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
           CONFIRMATION: ${{ github.event.inputs.confirmation }}
         run: |
-          if [[ "$INPUT_ENVIRONMENT" != "development" && "$INPUT_ENVIRONMENT" != "prod" ]]; then
-            echo "Invalid environment: $INPUT_ENVIRONMENT. Must be 'development' or 'prod'."
+          set -euo pipefail
+          if [[ "$RESOLVED_ENVIRONMENT" != "development" && "$RESOLVED_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $RESOLVED_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1
           fi
-          if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
-            echo "Refusing Firestore schema mutation without APPLY_FIRESTORE_INDEXES confirmation."
+          # A push cannot carry a typed confirmation. Its authorization is the
+          # prod GitHub Environment's required reviewer, which has already been
+          # granted before this step runs and is strictly stronger than a string
+          # typed by whoever dispatched the run. Keep the typed confirmation
+          # mandatory on the manual path so its safety is unchanged.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$CONFIRMATION" != "APPLY_FIRESTORE_INDEXES" ]]; then
+              echo "Refusing Firestore schema mutation without APPLY_FIRESTORE_INDEXES confirmation."
+              exit 1
+            fi
+          elif [[ "$EVENT_NAME" != "push" ]]; then
+            echo "Unsupported trigger for a Firestore schema migration: $EVENT_NAME."
             exit 1
           fi
+          echo "Reconciling Firestore indexes in $RESOLVED_ENVIRONMENT via $EVENT_NAME."
 
       - name: Checkout dispatched Firestore control plane
         uses: actions/checkout@v7

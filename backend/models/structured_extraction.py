@@ -4,7 +4,7 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from models.conversation_enums import CategoryEnum
-from models.structured import ActionItem, Event, Structured
+from models.structured import ActionItem, Event, Section, Structured
 
 
 class ExtractedActionItem(BaseModel):
@@ -16,6 +16,9 @@ class ExtractedActionItem(BaseModel):
     capture_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     ownership_confidence: Optional[float] = Field(default=None, ge=0, le=1)
     capture_owner: Optional[Literal['user', 'other', 'unknown']] = None
+    owner_name: Optional[str] = None
+    context: Optional[str] = None
+    due_certainty: Optional[Literal['confirmed', 'tentative']] = None
     concrete_deliverable: Optional[bool] = Field(
         default=None,
         description='True only when the commitment names a concrete deliverable or outcome',
@@ -35,6 +38,9 @@ class ExtractedActionItem(BaseModel):
             capture_confidence=self.capture_confidence,
             ownership_confidence=self.ownership_confidence,
             capture_owner=self.capture_owner,
+            owner_name=self.owner_name,
+            context=self.context,
+            due_certainty=self.due_certainty,
             concrete_deliverable=self.concrete_deliverable,
             candidate_action=self.candidate_action,
             target_task_id=self.target_task_id,
@@ -95,6 +101,22 @@ class ExtractedEvent(BaseModel):
         )
 
 
+class ExtractedSection(BaseModel):
+    heading: str = Field(description='A descriptive heading chosen for this conversation')
+    body_markdown: str = Field(description='Free-form markdown containing the section details')
+    source_segment_ids: List[str] = Field(
+        default_factory=list,
+        description='Transcript segment IDs that directly support this section',
+    )
+
+    def to_section(self) -> Section:
+        return Section(
+            heading=self.heading,
+            body_markdown=self.body_markdown,
+            source_segment_ids=self.source_segment_ids,
+        )
+
+
 class StructuredExtraction(BaseModel):
     title: str = Field(description="A title/name for this conversation", default='')
     overview: str = Field(
@@ -103,6 +125,9 @@ class StructuredExtraction(BaseModel):
     )
     emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
+    sections: List[ExtractedSection] = Field(
+        description='Detailed, free-form note sections in the model-chosen structure', default_factory=list
+    )
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
         default_factory=list,
@@ -128,6 +153,7 @@ class StructuredExtraction(BaseModel):
             overview=self.overview,
             emoji=self.emoji,
             category=self.category,
+            sections=[section.to_section() for section in self.sections],
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )

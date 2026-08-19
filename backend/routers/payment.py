@@ -28,6 +28,7 @@ from utils.subscription import (
     get_plan_limits,
     is_paid_plan,
     filter_plans_for_user,
+    desktop_to_consumer_plan_change_error,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
@@ -450,11 +451,8 @@ def get_available_plans_endpoint(
                 scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
 
         current_plan = current_subscription.plan if current_subscription else PlanType.basic
-        ever_purchased = subscription_utils.has_ever_purchased(uid, current_subscription)
         pricing_options: List[PricingOption] = []
-        for definition in filter_plans_for_user(
-            all_definitions, current_plan, platform=x_app_platform, ever_purchased=ever_purchased
-        ):
+        for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
@@ -693,12 +691,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
 
-        # Block downgrades from Architect to Unlimited
-        if current_plan == PlanType.architect and target_plan == PlanType.unlimited:
-            raise HTTPException(
-                status_code=400,
-                detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
-            )
+        desktop_change_error = desktop_to_consumer_plan_change_error(current_plan, target_plan)
+        if desktop_change_error:
+            raise HTTPException(status_code=400, detail=desktop_change_error)
 
         # Validate and resolve promotion code if provided
         resolved_promo_id = None

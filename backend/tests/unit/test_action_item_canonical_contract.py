@@ -258,6 +258,9 @@ def test_action_item_lists_hide_soft_retired_rows_before_pagination(monkeypatch)
     }
     query = MagicMock()
     query.order_by.return_value = query
+    query.select.return_value = query
+    query.limit.return_value = query
+    query.offset.return_value = query
     query.stream.return_value = [retired, active]
     collection = MagicMock()
     collection.where.return_value = query

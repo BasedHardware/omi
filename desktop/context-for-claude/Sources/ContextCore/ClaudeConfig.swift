@@ -15,7 +15,19 @@ public enum ClaudeConfig {
     /// The key both Claude surfaces register this under. Named for what it provides rather than
     /// for the app, because this string is what a model reads first when deciding whether a
     /// connector is worth calling.
-    public static let serverName = "context-for-claude"
+    public static let serverName = serverName(forBundle: ContextPaths.bundleIdentifier)
+
+    /// **A development build registers under its own key.**
+    ///
+    /// The key *is* the registration: whoever writes `context-for-claude` owns where Claude spawns
+    /// the binary from. A dev build installed beside the release would otherwise repoint the user's
+    /// production connector at a locally signed binary in a build directory — silently, on launch,
+    /// with no failure anywhere. Every operation below keys off this one name, so the two builds
+    /// touch disjoint entries: a dev build never rewrites or removes the release's, and vice versa.
+    public static func serverName(forBundle bundleIdentifier: String) -> String {
+        ContextPaths.isDevelopmentBuild(bundleIdentifier)
+            ? "context-for-claude-dev" : "context-for-claude"
+    }
 
     /// Names this connector has shipped under. Registering removes them so a rename leaves one
     /// entry rather than two servers racing to answer the same question.
@@ -59,7 +71,14 @@ public enum ClaudeConfig {
     /// there. Failing to register is recoverable: `isRegistered` reports false, the caller says so
     /// out loud, and the user can repair the file by hand. Destroying their data is not recoverable,
     /// so the tie always breaks toward doing nothing.
-    public static func merged(into existing: [String: Any], mcpBinaryPath: String) -> [String: Any] {
+    ///
+    /// `as` is the key to write, defaulting to this build's. Stated rather than fixed for the same
+    /// reason `ContextPaths.omiDatabaseURL(inApplicationSupport:)` takes a root: the property that
+    /// matters is that a build touches *only* its own entry, and that cannot be asserted while the
+    /// name is a constant the test shares with the code.
+    public static func merged(
+        into existing: [String: Any], mcpBinaryPath: String, as serverName: String = serverName
+    ) -> [String: Any] {
         var document = deepCopy(existing)
 
         if let present = document[serversKey], !(present is [String: Any]) {
@@ -79,7 +98,9 @@ public enum ClaudeConfig {
     /// install has our name but a `command` that no longer resolves to a binary; reporting that as
     /// registered would leave Claude with a server that fails to spawn forever. Reporting it as
     /// unregistered makes the caller rewrite it, which is the repair.
-    public static func isRegistered(in existing: [String: Any], mcpBinaryPath: String) -> Bool {
+    public static func isRegistered(
+        in existing: [String: Any], mcpBinaryPath: String, as serverName: String = serverName
+    ) -> Bool {
         guard let servers = existing[serversKey] as? [String: Any],
               // A leftover entry under an old name means there is still work to do here, even when
               // the current one is already correct — otherwise two servers answer the same
@@ -94,7 +115,9 @@ public enum ClaudeConfig {
     /// Removes only the `context-for-claude` entry. Every other server, and every other key, is untouched.
     /// An `mcpServers` that is missing or not a dictionary is left exactly as found, for the same
     /// reason `merged` leaves it alone.
-    public static func removed(from existing: [String: Any]) -> [String: Any] {
+    public static func removed(
+        from existing: [String: Any], as serverName: String = serverName
+    ) -> [String: Any] {
         var document = deepCopy(existing)
         guard var servers = document[serversKey] as? [String: Any] else { return document }
         servers.removeValue(forKey: serverName)

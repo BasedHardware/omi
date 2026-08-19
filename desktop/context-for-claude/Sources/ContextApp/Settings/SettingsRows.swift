@@ -5,9 +5,17 @@ import SwiftUI
 /// The metrics every pane shares, so six panes cannot drift into six layouts.
 enum SettingsMetrics {
     static let sidebarWidth: CGFloat = 196
-    static let paneWidth: CGFloat = 560
-    static let windowSize = NSSize(width: sidebarWidth + paneWidth, height: 640)
-    static let minimumSize = NSSize(width: sidebarWidth + 460, height: 520)
+
+    /// **The same rectangle the timeline opens at, and that is the point.**
+    ///
+    /// Settings opened at 756 × 640 while the timeline opened at 1180 × 760, so the two windows this
+    /// app puts on screen were visibly different objects — reported as *"for setting, have the window
+    /// size same as timeline and all, this looks off"*. They already share their chrome
+    /// (`WindowGlass.wear(_:as: .titled)`), their ground and their corner radius; the size was the
+    /// one thing left saying otherwise. Read from `RewindWindow` rather than restated, so the two
+    /// cannot drift apart again — which is exactly how they drifted the first time.
+    static var windowSize: NSSize { RewindWindow.defaultSize }
+    static var minimumSize: NSSize { RewindWindow.minimumSize }
 
     static let paneHorizontalPadding: CGFloat = 22
     static let paneTopPadding: CGFloat = 18

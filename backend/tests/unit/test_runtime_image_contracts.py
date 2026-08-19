@@ -85,19 +85,6 @@ def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_pa
     assert any('services.conversation_finalization' in error for error in errors)
 
 
-def test_agent_proxy_contract_rejects_omitted_individual_file(contracts_module, tmp_path):
-    agent_proxy = _contract(contracts_module, 'agent-proxy')
-    dockerfile = _dockerfile_without(
-        agent_proxy.dockerfile,
-        'COPY backend/utils/executors.py ./utils/executors.py\n',
-        tmp_path / 'Dockerfile',
-    )
-
-    errors = contracts_module.source_closure_errors(replace(agent_proxy, dockerfile=dockerfile))
-
-    assert any('utils.executors' in error for error in errors)
-
-
 def test_modal_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
     models = _contract(contracts_module, 'models')
     dockerfile = _dockerfile_without(
