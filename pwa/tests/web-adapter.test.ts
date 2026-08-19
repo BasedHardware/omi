@@ -86,7 +86,7 @@ test("web scan delegates to the browser capability adapter", async () => {
     bluetooth: {
       requestDevice: async () => {
         requests += 1;
-        return { name: "Browser device" };
+        return {};
       },
     },
   });

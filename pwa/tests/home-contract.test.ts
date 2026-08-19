@@ -18,9 +18,7 @@ test("browser capability adapter never invents a pendant or permission", async (
 
   expect(adapter.snapshot()).toEqual({
     bluetooth: "unsupported",
-    bluetoothDeviceName: null,
     microphone: "unsupported",
-    omiCapture: "unsupported",
   });
   expect(await adapter.chooseBluetoothDevice()).toEqual({
     ok: false,

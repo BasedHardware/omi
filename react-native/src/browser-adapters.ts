@@ -1,11 +1,5 @@
-export type BluetoothDeviceLike = {
-  name?: string | null;
-};
-
 export type BluetoothLike = {
-  requestDevice(options: {
-    acceptAllDevices: boolean;
-  }): Promise<BluetoothDeviceLike>;
+  requestDevice(options: {acceptAllDevices: boolean}): Promise<unknown>;
 };
 
 export type MediaStreamTrackLike = {
@@ -34,13 +28,11 @@ export type BrowserEnvironment = {
 
 export type BrowserCapabilitySnapshot = {
   bluetooth: 'unsupported' | 'available' | 'selected' | 'denied' | 'error';
-  bluetoothDeviceName: string | null;
   microphone: 'unsupported' | 'not-requested' | 'granted' | 'denied' | 'error';
-  omiCapture: 'unsupported' | 'not-wired';
 };
 
 export type BrowserCapabilityResult =
-  | {ok: true; deviceName: string | null}
+  | {ok: true}
   | {ok: false; reason: 'unsupported' | 'cancelled' | 'denied' | 'error'};
 
 function defaultEnvironment(): BrowserEnvironment {
@@ -69,15 +61,10 @@ export function createBrowserCapabilityAdapter(
   const state: BrowserCapabilitySnapshot = {
     bluetooth:
       environment.bluetooth === undefined ? 'unsupported' : 'available',
-    bluetoothDeviceName: null,
     microphone:
       environment.mediaDevices?.getUserMedia === undefined
         ? 'unsupported'
         : 'not-requested',
-    omiCapture:
-      environment.mediaDevices?.getUserMedia === undefined
-        ? 'unsupported'
-        : 'not-wired',
   };
 
   return {
@@ -106,13 +93,11 @@ export function createBrowserCapabilityAdapter(
         return {ok: false, reason: 'unsupported'};
       }
       try {
-        const device = await environment.bluetooth.requestDevice({
+        await environment.bluetooth.requestDevice({
           acceptAllDevices: true,
         });
-        const deviceName = device.name?.trim() || null;
         state.bluetooth = 'selected';
-        state.bluetoothDeviceName = deviceName;
-        return {ok: true, deviceName};
+        return {ok: true};
       } catch (error) {
         const name = errorName(error);
         const reason =
@@ -140,7 +125,7 @@ export function createBrowserCapabilityAdapter(
         });
         stream.getTracks().forEach(track => track.stop());
         state.microphone = 'granted';
-        return {ok: true, deviceName: null};
+        return {ok: true};
       } catch (error) {
         const reason =
           errorName(error) === 'NotAllowedError' ? 'denied' : 'error';

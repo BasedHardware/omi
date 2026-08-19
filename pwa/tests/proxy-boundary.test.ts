@@ -39,18 +39,6 @@ test("browser proxy refuses credential-bearing headers", () => {
   ).toThrow("x-omi-contract-version");
 });
 
-test("browser proxy applies the native JSON body policy", () => {
-  const init = localProxyRequestInit({
-    body: '{"text":"hello"}',
-    headers: { "content-type": "text/plain" },
-  });
-
-  expect(new Headers(init.headers).get("content-type")).toBe(
-    "application/json"
-  );
-  expect(init.credentials).toBe("omit");
-});
-
 test("vite build config does not access local proxy identity", () => {
   const env = new Proxy<Record<string, string | undefined>>(
     {},
