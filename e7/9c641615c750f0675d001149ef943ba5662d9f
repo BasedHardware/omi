@@ -1,0 +1,28 @@
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/AnalyticsEvent.swift
+  s_227233afb3b7ff::t_77281b7807383e 80-93,164-180,264,301-303
+desktop/context-for-claude/docs/analytics.md
+  s_227233afb3b7ff::t_4c85eb71e82cf0 47,51-67
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsTests.swift
+  s_227233afb3b7ff::t_be50aebbebbd5c 118,174,480-484,532,551
+  s_227233afb3b7ff::t_f1d9fbfcc3736a 413-479
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/ContextAnalytics.swift
+  s_227233afb3b7ff::t_1b788b8246339c 206-246,331-333
+desktop/context-for-claude/Sources/ContextApp/Engine.swift
+  s_227233afb3b7ff::t_7104a40c36a374 1542-1550,1562
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e79c641615c750f0675d001149ef943ba5662d9f",
+  "prompts": {},
+  "sessions": {
+    "s_227233afb3b7ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d72fbee-85a2-445b-a86d-7f95bf574311",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
