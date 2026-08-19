@@ -584,13 +584,29 @@ Mongo owns the network namespace; the emulator and the test container share it (
 container:`) so both services are on `localhost` and the hermetic loopback-only guard in
 `tests/conftest.py` accepts them.
 
+Both services need a readiness wait, and **both waits must be bounded**: an unbounded `until` does not
+fail when something is wrong, it hangs — and a hung suite is indistinguishable from a slow one until
+somebody looks. (Improvised waits have burned us twice: one unbounded loop stayed up for 28 hours, and
+one probed with `curl` from the mongo container, which has no `curl`.)
+
 ```bash
-# 1. Mongo (single-node replica set)
+# 1. Mongo (single-node replica set) — wait for the primary, give up loudly
 docker run -d --name wp2-mongo mongo:latest --replSet rs0 --bind_ip_all
 docker exec wp2-mongo mongosh --quiet --eval \
-  "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"   # wait for isWritablePrimary
-# 2. Firestore emulator in the same netns
+  "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+for i in $(seq 30); do
+  docker exec wp2-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' 2>/dev/null | grep -q true && break
+  [ "$i" = 30 ] && { echo "mongo never became primary"; docker logs --tail 20 wp2-mongo; exit 1; }
+  sleep 2
+done
+# 2. Firestore emulator in the same netns — wait on ITS OWN readiness line, not on a network probe
+#    (no dependency on a tool the container may not ship)
 docker run -d --name wp2-emu --network container:wp2-mongo omi-oss-firestore-emulator:latest
+for i in $(seq 30); do
+  docker logs wp2-emu 2>&1 | grep -q "Firestore Emulator was started" && break
+  [ "$i" = 30 ] && { echo "emulator never started"; docker logs --tail 20 wp2-emu; exit 1; }
+  sleep 2
+done
 # 3. Contract suite (same netns)
 docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 -e MONGO_URI="mongodb://127.0.0.1:27017/?replicaSet=rs0" \
