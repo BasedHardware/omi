@@ -315,14 +315,16 @@ class TestBrowserHostedConferencingDetection:
                 {
                     'appName': 'Google Chrome',
                     'windowTitle': 'Meet - amc-iajq-asx',
-                    'ocrText': 'meet.google.com/amc-iajq-asx\nAsh\nDavid Zhang\nMute',
+                    'ocrText': (
+                        'meet.google.com/amc-iajq-asx\n' 'Ash Kalb and Boardy Boardman are in this call\n' 'Mute'
+                    ),
                 }
             ],
             started_at=CONVERSATION_START,
             finished_at=CONVERSATION_END,
         )
         assert context is not None
-        assert [p.name for p in context.participants] == ['Ash', 'David Zhang']
+        assert [p.name for p in context.participants] == ['Ash Kalb', 'Boardy Boardman']
 
     def test_an_ordinary_browser_tab_is_not_treated_as_a_meeting(self):
         assert (

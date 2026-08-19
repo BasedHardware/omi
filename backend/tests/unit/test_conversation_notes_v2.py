@@ -162,13 +162,16 @@ def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
 def test_screen_activity_context_is_bounded_to_conferencing_rows_and_names():
     from utils.conversations.meeting_context import context_from_screen_activity
 
+    # Names come only from a source that asserts participation (here the Meet
+    # roster sentence). A bare capitalised line is NOT enough — see
+    # tests/unit/test_screen_activity_identity.py for why.
     context = context_from_screen_activity(
         [
             {'appName': 'Cursor', 'windowTitle': 'notes.py', 'ocrText': 'Not A Participant'},
             {
                 'appName': 'zoom.us',
                 'windowTitle': 'Fulcrum Dynamics',
-                'ocrText': 'Ash\nDavid\nMute\nStop Video',
+                'ocrText': 'Ash Kalb and David Zhang are in this call\nMute\nStop Video',
             },
         ],
         started_at=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
@@ -177,7 +180,7 @@ def test_screen_activity_context_is_bounded_to_conferencing_rows_and_names():
 
     assert context is not None
     assert context.title == 'Fulcrum Dynamics'
-    assert [participant.name for participant in context.participants] == ['Ash', 'David']
+    assert [participant.name for participant in context.participants] == ['Ash Kalb', 'David Zhang']
     assert context.calendar_source == 'screen_activity'
 
 
