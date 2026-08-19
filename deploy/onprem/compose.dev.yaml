@@ -11,9 +11,11 @@ include:
   # Long form: the pins must reach the INCLUDED files, where the `image:` keys live (ADR-0055).
   - path: compose.base.yaml
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
   - path: compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); dev default is Mongo too
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
 services:
   backend:

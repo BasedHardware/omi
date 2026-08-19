@@ -12,9 +12,11 @@ include:
   # THIS file would NOT see them.
   - path: compose.base.yaml
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
   - path: compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); the cloud posture omits this
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
 
 services:

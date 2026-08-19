@@ -134,10 +134,13 @@ services:
   # Point the backend at it in backend.env: OMI_LLM_GATEWAY_FEATURE_MODE=gateway +
   # OMI_LLM_GATEWAY_URL=http://llm_gateway:9080 + a matching OMI_LLM_GATEWAY_SERVICE_TOKEN.
   llm_gateway:
-    image: omi-oss-backend:latest
+    # Same image as the backend (the gateway ships inside it), so the same release tag.
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     build:
       context: ../../
       dockerfile: backend/Dockerfile
+      tags:
+        - omi-oss-backend:latest
       args:
         PYTHON_BASE_IMAGE: python:3.11-slim
     profiles: ["chat"]
@@ -217,7 +220,10 @@ services:
   # (The image still ships the ~76GB NeMo base even as a gateway — a thin-gateway image is a tracked
   # follow-up, like the diarizer slimming in D17.)
   parakeet:
+    image: omi-oss-parakeet:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     build:
+      tags:
+        - omi-oss-parakeet:latest
       context: ../../
       # On-prem SLIM build: NIM gateway (forwards to whisper), no NeMo, no GPU -> ~2.9GB instead of 76GB
       # (backend/parakeet/Dockerfile.oss). The NeMo `Dockerfile` stays for the datacenter direct-NeMo
@@ -246,7 +252,10 @@ services:
     restart: unless-stopped
 
   diarizer:
+    image: omi-oss-diarizer:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     build:
+      tags:
+        - omi-oss-diarizer:latest
       context: ../../
       dockerfile: backend/diarizer/Dockerfile
       args:
@@ -270,7 +279,10 @@ services:
     restart: unless-stopped
 
   nllb:
+    image: omi-oss-nllb:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     build:
+      tags:
+        - omi-oss-nllb:latest
       # This Dockerfile COPYs main.py/requirements.txt from the context root, so the context is the
       # service dir (unlike diarizer/parakeet, whose Dockerfiles COPY backend/<svc>/ from repo root).
       context: ../../backend/nllb_translation
@@ -297,7 +309,10 @@ services:
   # NeMo is loaded in NIM mode — main.py only starts the GPU worker when mode != nim). The
   # Parakeet-NeMo path stays available for datacenter GPUs; pick one per ADR-0037's matrix.
   whisper:
+    image: omi-oss-whisper:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     build:
+      tags:
+        - omi-oss-whisper:latest
       context: ../../backend/whisper
       dockerfile: Dockerfile
     profiles: ["inference"]

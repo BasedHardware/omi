@@ -30,9 +30,15 @@ services:
     restart: unless-stopped
 
   backend:
+    # Tagged with the release (ADR-0054): the name used to be implicit (compose's <project>-<service>,
+    # i.e. omi-oss-backend:latest), which made every build overwrite the same mutable tag.
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     build:
       context: ../../
       dockerfile: backend/Dockerfile
+      # :latest stays as a DEV alias (Kind loads it with `kind load`); prod/k0s must use the release.
+      tags:
+        - omi-oss-backend:latest
       args:
         # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
         PYTHON_BASE_IMAGE: python:3.11-slim

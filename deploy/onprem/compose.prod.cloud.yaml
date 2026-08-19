@@ -13,6 +13,7 @@ include:
   # Long form: the pins must reach the INCLUDED file, where the `image:` keys live (ADR-0055).
   - path: compose.base.yaml
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
 services:
   backend:

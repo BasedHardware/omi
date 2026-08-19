@@ -18,9 +18,11 @@ include:
   # Long form: the pins must reach the INCLUDED files, where the `image:` keys live (ADR-0055).
   - path: compose.base.yaml
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
   - path: compose.selfhost.yaml   # seed drives real users against the on-prem Mongo store (ADR-0046)
     env_file:
+      - omi.oss.release.env
       - omi.oss.release.pins
 services:
   backend:

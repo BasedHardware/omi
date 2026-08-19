@@ -403,6 +403,16 @@ checks:
     triggers: ["backend/**/*.py", ".github/scripts/check_oss_auth_boundary.py", ".github/scripts/auth_boundary_baseline.json", "backend/tests/unit/test_check_oss_auth_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "WP3 seal (ADR-0034/0004): utils/auth/ is the only door to Firebase Auth — no firebase_admin.auth import or attribute access outside it (initialize_app/messaging/firestore stay allowed), so the backend stays swappable (Firebase | OIDC/Keycloak). Analogue of firestore/object-store/vector boundary guards; catches a raw Firebase-auth call reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: oss-release
+    command: ["python3", ".github/scripts/check_oss_release.py"]
+    triggers: ["deploy/onprem/omi.oss.release.env", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/.gitignore", ".github/scripts/check_oss_release.py", "backend/tests/unit/test_check_oss_release.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0054: the images we build carry the release from one source (deploy/onprem/omi.oss.release.env), so a rebuild yields a NEW reference instead of overwriting a mutable :latest that `helm upgrade`/`up` then serve stale from cache. Also asserts the release file stays TRACKED — the repo-wide *.env ignore rule would otherwise make the release silently local to one machine"
+  - id: oss-image-pins
+    command: ["python3", ".github/scripts/check_oss_image_parity.py"]
+    triggers: ["deploy/onprem/omi.oss.release.pins", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/helm/omi-oss/values.yaml", ".github/scripts/check_oss_image_parity.py", "backend/tests/unit/test_check_oss_image_parity.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0055 (supersedes ADR-0050): every third-party image pin comes from deploy/onprem/omi.oss.release.pins — compose references it (so drift is impossible, not merely detected) and the Helm values mirror it, covering the 9 components including the mono-target ones the old parity check excluded by design"
   - id: lifecycle-header-checker-tests
     command: ["python3", ".github/scripts/test_check_lifecycle_headers.py"]
     triggers: [".github/scripts/check_lifecycle_headers.py", ".github/scripts/test_check_lifecycle_headers.py", ".github/checks-manifest.yaml"]

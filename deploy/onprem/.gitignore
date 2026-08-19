@@ -13,5 +13,10 @@ llm_gateway.env.*
 # needs one, like backend.env.base.example) does not re-include it. Without this it stays ignored (cubic 10887).
 !llm_gateway.env.example
 
+# The release (ADR-0054) is SOURCE, not operator config: the repo-wide `*.env` rule would swallow it, so
+# re-include it here (a deeper .gitignore wins). A guard asserts the file is tracked — an untracked
+# omi.oss.release.env would make the release silently local to one machine.
+!omi.oss.release.env
+
 # GCP service-account key for the cloud posture (compose.prod.cloud mounts ./secrets/gcp-sa.json).
 secrets/
