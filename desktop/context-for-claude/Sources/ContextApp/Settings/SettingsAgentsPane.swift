@@ -29,7 +29,7 @@ struct SettingsAgentsPane: View {
     /// Claude Desktop's config **synchronously in `View.init`** — and SwiftUI re-inits a view body's
     /// struct freely, so two file reads rode along with every unrelated state change on this pane.
     /// It is a disk probe like the other two here, so it belongs where they are.
-    @State private var registration: (claudeCode: Bool, claudeDesktop: Bool)?
+    @State private var registration: ClaudeConnection?
     @State private var registrationMessage: String?
     /// Bumped by each attempt so the expiry below restarts rather than clearing a newer message.
     @State private var registrationMessageAttempt = 0
@@ -96,6 +96,12 @@ struct SettingsAgentsPane: View {
                             title: "Claude Connection",
                             isOn: Binding(
                                 get: {
+                                    // Registration, not reachability: the switch's job is whether
+                                    // this app has written itself into Claude's config, and a
+                                    // Claude Desktop that has not restarted yet has not undone
+                                    // that. Flipping the switch off under the user because their
+                                    // Claude is stale would offer disconnecting as the cure for
+                                    // needing a restart.
                                     registration?.claudeCode == true || registration?.claudeDesktop == true
                                 },
                                 set: { setRegistered($0) }))
@@ -131,7 +137,7 @@ struct SettingsAgentsPane: View {
             // because they are the only ones that open and decode a file.
             targetDetail = ClaudeRouter.targetSubtitle(surface: ClaudeHandoff.surface)
             registration = await Task.detached(priority: .userInitiated) {
-                ClaudeRegistrar.status()
+                ClaudeConnection.current()
             }.value
         }
         // The result of the last connect/disconnect, expired rather than pinned. `.task(id:)`
@@ -160,15 +166,29 @@ struct SettingsAgentsPane: View {
     }
 
     private var connectionSubtitle: String {
-        guard let registration else { return "Checking whether Claude is connected…" }
-        // Explicit `return`: the guard above makes this a multi-statement body, and a switch
-        // expression only returns implicitly when it is the single expression in the getter.
-        return switch (registration.claudeCode, registration.claudeDesktop) {
+        Self.connectionSubtitle(registration)
+    }
+
+    /// The row's subtitle, as a function of the probe's answer.
+    ///
+    /// `static` and not a computed property on the view, for the reason `ClaudeConnectorLine` is a
+    /// value: this sentence is the one place the pane makes a claim about somebody else's process,
+    /// and it shipped making a false one — `Connected to Claude Code and Claude Desktop.` over a
+    /// Claude Desktop whose server had failed to spawn at every launch for three days. A claim that
+    /// wrong has to be reachable from a test, and a `private var` on a `View` is not.
+    static func connectionSubtitle(_ connection: ClaudeConnection?) -> String {
+        guard let connection else { return "Checking whether Claude is connected…" }
+        // `desktopIsReachable`, so a registration Claude Desktop has not picked up is never
+        // reported as a working connection. The remedy is appended rather than replacing the
+        // sentence: what is connected and what is pending are both facts the user needs.
+        let connected = switch (connection.claudeCode, connection.desktopIsReachable) {
         case (true, true): "Connected to Claude Code and Claude Desktop."
         case (true, false): "Connected to Claude Code."
         case (false, true): "Connected to Claude Desktop."
         case (false, false): "Not connected. Claude cannot read anything captured here yet."
         }
+        guard let notice = connection.restartNotice else { return connected }
+        return "\(connected) \(notice)"
     }
 
     /// Connect or disconnect, off the main actor, in the same shape as the probe in `.task` above.
@@ -204,7 +224,7 @@ struct SettingsAgentsPane: View {
             // Re-read rather than trusting `result`: the registrar reports what it *did*, and the row
             // states what is *on disk*. A write that half-succeeded must show the disk's answer.
             registration = await Task.detached(priority: .userInitiated) {
-                ClaudeRegistrar.status()
+                ClaudeConnection.current()
             }.value
             isRegistering = false
         }
