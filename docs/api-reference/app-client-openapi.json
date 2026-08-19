@@ -25763,7 +25763,7 @@
     },
     "/v1/action-items/ids": {
       "get": {
-        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket,\nwhich requires a three-field projection (``completed``, ``status``,\n``deleted``) streamed across the collection.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
+        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket. The\n``completed`` bucket is filtered server-side; only documents in that bucket are\nstreamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``\nexclusion is still applied in Python since Firestore equality filters would drop\nundeleted rows that have no ``deleted`` field.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
         "operationId": "list_action_item_ids_v1_action_items_ids_get",
         "parameters": [
           {
