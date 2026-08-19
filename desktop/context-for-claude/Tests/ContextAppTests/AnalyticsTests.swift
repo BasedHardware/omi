@@ -115,6 +115,7 @@ final class AnalyticsEventTests: XCTestCase {
         allowed += AnalyticsEvent.PermissionState.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.CaptureSource.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.Surface.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.ArtifactKind.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.UpdateOutcome.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.FallbackReason.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.CountBucket.allCases.map(\.rawValue)
@@ -170,7 +171,7 @@ final class AnalyticsEventTests: XCTestCase {
             .onboardingStep(index: 0, of: 1), .onboardingFinished(secondsElapsed: 0),
             .accountStateChanged(signedIn: false), .captureStateChanged(source: .screen, live: true),
             .gestureFired, .surfaceOpened(.settings), .searchRan(resultCountBucket: .zero),
-            .updateOutcome(.upToDate),
+            .firstArtifact(.conversation), .updateOutcome(.upToDate),
             .fallback(area: .capture, outcome: .degraded, reason: .offline),
         ]
         let names = representatives.map(\.name)
@@ -409,6 +410,78 @@ final class OnboardingCompletionReportTests: XCTestCase {
     }
 }
 
+/// **Activation: did this install ever store anything at all.**
+///
+/// Nothing in the schema answered that before `cfc_first_artifact`. `cfc_capture_state` reports a
+/// microphone being switched on, which is not a row landing; `cfc_daily_active` reports capture
+/// minutes, which look the same on an install's hundredth day as on its first. An install that
+/// captured all day and one that captured nothing were indistinguishable, and the product's
+/// activation metric cannot be computed from anything else here.
+///
+/// The flag is read and spent by `firstArtifactEvent`, which is what `recordFirstArtifact` reports
+/// through — so "did it report?" is asked below as "is the flag spent?". The suite is refused by
+/// `isEnabled`, as it must be, which is exactly why the decision is the seam rather than the sink.
+final class FirstArtifactTests: XCTestCase {
+
+    private struct WriteFailed: Error {}
+
+    /// The suite *name* comes back too: a relaunch, for this event, is nothing more than a second
+    /// `UserDefaults` object opened over the same persistent domain.
+    private func scratch() throws -> (String, UserDefaults, () -> Void) {
+        let suite = "com.omi.context-for-claude.FirstArtifactTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        return (suite, defaults, { UserDefaults.standard.removePersistentDomain(forName: suite) })
+    }
+
+    func testTheFirstStoredArtifactIsReportedWithWhatItWas() throws {
+        let (_, defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let event = ContextAnalytics.firstArtifactEvent(.screen, in: defaults)
+        XCTAssertEqual(event?.name, "cfc_first_artifact")
+        XCTAssertEqual(event?.properties["kind"], .string("screen"))
+    }
+
+    /// Once per install, over the write path itself — and across the relaunch, which is a second
+    /// `UserDefaults` object over the same domain because that is all a relaunch is here.
+    func testAnInstallReportsItsFirstArtifactExactlyOnce() throws {
+        let (suite, defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        var writes = 0
+        ContextAnalytics.recordFirstArtifact(.conversation, in: defaults) { writes += 1 }
+        ContextAnalytics.recordFirstArtifact(.screen, in: defaults) { writes += 1 }
+        XCTAssertEqual(writes, 2, "the write itself always happens; only the report is once")
+
+        XCTAssertNil(
+            ContextAnalytics.firstArtifactEvent(.conversation, in: defaults),
+            "the first stored artifact spent the flag, so nothing after it may report")
+
+        // A day of capture later, in a process that has been restarted since.
+        let afterRelaunch = try XCTUnwrap(UserDefaults(suiteName: suite))
+        ContextAnalytics.recordFirstArtifact(.screen, in: afterRelaunch) { writes += 1 }
+        XCTAssertEqual(writes, 3)
+        XCTAssertNil(
+            ContextAnalytics.firstArtifactEvent(.screen, in: afterRelaunch),
+            "the flag is on disk, so the install stays activated exactly once across a relaunch")
+    }
+
+    /// **An attempt is not an artifact.** `EngineStore` catches and logs a failed insert, so an
+    /// install whose writes all fail would otherwise be counted as activated on the strength of
+    /// having tried — and the flag it spent could never be recovered.
+    func testAWriteThatFailedIsNotAnArtifact() throws {
+        let (_, defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        XCTAssertThrowsError(
+            try ContextAnalytics.recordFirstArtifact(.screen, in: defaults) { throw WriteFailed() })
+
+        XCTAssertNotNil(
+            ContextAnalytics.firstArtifactEvent(.screen, in: defaults),
+            "nothing was stored, so the install's first artifact is still ahead of it")
+    }
+}
+
 /// The day boundary the whole DAU series rests on.
 final class ContextAnalyticsDayTests: XCTestCase {
 
@@ -456,6 +529,7 @@ extension AnalyticsEvent {
              AnalyticsEvent.captureStateChanged(source: source, live: false)]
         }
         events += Surface.allCases.map { AnalyticsEvent.surfaceOpened($0) }
+        events += ArtifactKind.allCases.map { AnalyticsEvent.firstArtifact($0) }
         events += UpdateOutcome.allCases.map { AnalyticsEvent.updateOutcome($0) }
         events += FallbackReason.allCases.map {
             AnalyticsEvent.fallback(area: .capture, outcome: .degraded, reason: $0)
@@ -474,7 +548,7 @@ final class AnalyticsEventShapeTests: XCTestCase {
             "cfc_first_launch", "cfc_app_launched", "cfc_daily_active", "cfc_permission",
             "cfc_onboarding_step", "cfc_onboarding_finished", "cfc_account_state",
             "cfc_capture_state", "cfc_gesture_fired", "cfc_surface_opened", "cfc_search_ran",
-            "cfc_update_outcome", "cfc_fallback",
+            "cfc_first_artifact", "cfc_update_outcome", "cfc_fallback",
         ]
         XCTAssertEqual(
             covered, expected,

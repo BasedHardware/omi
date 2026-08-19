@@ -44,8 +44,26 @@ enum; `AnalyticsEventTests.testNoEventCarriesFreeFormText` fails if a free strin
 | `cfc_gesture_fired` | ⌘ + ⌘ actually firing — inert without Accessibility |
 | `cfc_surface_opened` | which surfaces people open by hand |
 | `cfc_search_ran` | local search use, bucketed result counts only |
+| `cfc_first_artifact` | **activation** — the first time this install ever stored anything |
 | `cfc_update_outcome` | update health — a fleet that stops updating looks like a fleet nobody uses |
 | `cfc_fallback` | fail-open paths, mirroring `ContextTelemetry.recordFallback` |
+
+### `cfc_first_artifact` is the activation moment
+
+Once per install, the first time a write actually lands, carrying `kind` — `conversation` (a
+transcript segment) or `screen` (a frame). Emitted from `EngineStore`'s two write paths, threaded
+*through* the write so a failed insert cannot report one: an attempt is not an artifact, and
+`EngineStore` catches and logs every failed insert.
+
+Nothing else answers "did this install ever do the thing": `cfc_capture_state` reports a microphone
+being switched on, and `cfc_daily_active`'s capture minutes look the same on the hundredth day as on
+the first. An install that captured all day and one that captured nothing were indistinguishable.
+
+**There is no `memory` kind, and that is a fact about the product.** This app never stores a memory:
+`create_memory` writes to the Omi account from `context-for-claude-mcp`, a separate short-lived
+process that cannot report anything (see below), and the local `account_rows` table is a copy of what
+the account already holds — first-storing a *downloaded* memory would fire this for an install that
+has captured nothing at all.
 
 ### `cfc_onboarding_finished` is once per install, across a relaunch
 

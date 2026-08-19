@@ -203,6 +203,47 @@ enum ContextAnalytics {
         return .onboardingFinished(secondsElapsed: Int(max(0, now.timeIntervalSince1970 - started)))
     }
 
+    // MARK: - Activation
+
+    /// Performs one durable write and reports this install's first artifact **only if it landed**.
+    ///
+    /// The write is threaded through the report rather than sitting above a call to it, because
+    /// "after the write" is an ordering a call site can get wrong in silence: an emit a line too
+    /// early, or one that drifted into the `catch` a later refactor added, claims an install as
+    /// activated on the strength of an attempt. `EngineStore` catches and logs every failed insert,
+    /// so an install whose writes all fail is exactly the install this must not count — and here
+    /// there is nowhere to put the emit that a throw does not skip.
+    ///
+    /// Both call sites are on `EngineStore`'s serial writer queue, so the check-then-set inside
+    /// `firstArtifactEvent` cannot interleave with itself: a frame and a transcript line landing in
+    /// the same instant are still two turns of one queue. That is the only reason a plain
+    /// `UserDefaults` flag is enough here, where the defaults it sits beside are main-actor writes.
+    @discardableResult
+    static func recordFirstArtifact<Stored>(
+        _ kind: AnalyticsEvent.ArtifactKind,
+        in defaults: UserDefaults = .standard,
+        stored write: () throws -> Stored
+    ) rethrows -> Stored {
+        let stored = try write()
+        if let event = firstArtifactEvent(kind, in: defaults) { record(event) }
+        return stored
+    }
+
+    /// The decision, and it *spends* the flag: the second call answers nil however it arrives, in
+    /// this process or in any later one.
+    ///
+    /// Spent whether or not the event ends up leaving the Mac — `record` applies the three refusals
+    /// after this returns. That ordering is deliberate: it is what lets the rule be proved from a
+    /// suite that is itself refused, and the only cost is that a build which reports nothing burns
+    /// the flag in its own defaults domain, which is a domain no shipping install reads.
+    static func firstArtifactEvent(
+        _ kind: AnalyticsEvent.ArtifactKind, in defaults: UserDefaults = .standard
+    ) -> AnalyticsEvent? {
+        guard !defaults.bool(forKey: firstArtifactKey) else { return nil }
+        defaults.set(true, forKey: firstArtifactKey)
+        return .firstArtifact(kind)
+    }
+
     // MARK: - Fallbacks
 
     /// Mirrors a local `ContextTelemetry.recordFallback` into the remote series.
@@ -287,6 +328,9 @@ enum ContextAnalytics {
     static let onboardingStartedKey = "context.analytics.onboardingStartedAt"
     /// Whether the completion has already been reported. Once per install, never once per run.
     static let onboardingReportedKey = "context.analytics.onboardingFinishedReported"
+    /// Whether this install has already reported storing something. Never cleared — an install only
+    /// activates once, and a second `cfc_first_artifact` would be a second install in the numerator.
+    static let firstArtifactKey = "context.analytics.firstArtifact"
 
     @MainActor private static var rollupTimer: Timer?
 }
