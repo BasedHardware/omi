@@ -2,6 +2,7 @@
 import Foundation
 
 enum GeneratedSwiftTool: String, CaseIterable {
+  case getWorkContext = "get_work_context"
   case executeSql = "execute_sql"
   case semanticSearch = "semantic_search"
   case getDailyRecap = "get_daily_recap"
@@ -32,7 +33,6 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case screenshot = "screenshot"
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
-  case getWorkContext = "get_work_context"
   case createCanonicalGoal = "create_canonical_goal"
   case getCanonicalGoals = "get_canonical_goals"
   case renderChatBlocks = "render_chat_blocks"
@@ -46,8 +46,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:4852c37ae5ede827ae6cdf2590a6e4f8e3a5ce28c2df455f608ce7f059e402bc"
-  static let chatFirstManifestDigest = "sha256:c854e491f18686fb46c1857dd8408b907a5c84c897dc7bad2cd7a99fa2cfab2e"
+  static let manifestDigest = "sha256:e1c4d719413a86efbde1d4b69290dfabb997ca365ae337bce95d97fe62e7187b"
+  static let chatFirstManifestDigest = "sha256:fa437d4671e1c2ca6aa220abe55e92ec65d5c1971a8a792bee07ee64e870fe70"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -56,6 +56,7 @@ enum GeneratedToolExecutors {
   ]
 
   static let executorByTool: [GeneratedSwiftTool: GeneratedSwiftToolExecutor] = [
+    .getWorkContext: .chatToolExecutor,
     .executeSql: .chatToolExecutor,
     .semanticSearch: .chatToolExecutor,
     .getDailyRecap: .chatToolExecutor,
@@ -86,7 +87,6 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
-    .getWorkContext: .chatToolExecutor,
     .createCanonicalGoal: .chatToolExecutor,
     .getCanonicalGoals: .chatToolExecutor,
     .renderChatBlocks: .chatToolExecutor,
@@ -122,6 +122,7 @@ enum GeneratedToolExecutors {
 
   /// Dispatch surface for ChatToolExecutor — chatToolExecutor-bound tools only.
   enum ChatDispatch {
+    case getWorkContext
     case executeSql
     case semanticSearch
     case getDailyRecap
@@ -147,7 +148,6 @@ enum GeneratedToolExecutors {
     case completeOnboarding
     case getEmailInsights
     case createCalendarEvent
-    case getWorkContext
     case createCanonicalGoal
     case getCanonicalGoals
     case renderChatBlocks
@@ -160,6 +160,7 @@ enum GeneratedToolExecutors {
       return .unhandled
     }
     switch tool {
+    case .getWorkContext: return .getWorkContext
     case .executeSql: return .executeSql
     case .semanticSearch: return .semanticSearch
     case .getDailyRecap: return .getDailyRecap
@@ -185,7 +186,6 @@ enum GeneratedToolExecutors {
     case .completeOnboarding: return .completeOnboarding
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
-    case .getWorkContext: return .getWorkContext
     case .createCanonicalGoal: return .createCanonicalGoal
     case .getCanonicalGoals: return .getCanonicalGoals
     case .renderChatBlocks: return .renderChatBlocks
