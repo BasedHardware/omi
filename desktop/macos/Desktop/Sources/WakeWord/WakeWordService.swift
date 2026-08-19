@@ -12,7 +12,11 @@ final class WakeWordService {
   var now: @MainActor () -> Date = { Date() }
   var onTrigger: @MainActor (String) -> Void = { command in
     log("WakeWord: submitting '\(command)' to the assistant")
-    FloatingControlBarManager.shared.openAIInputWithQuery(command, fromVoice: false)
+    // `fromVoice` is what makes the assistant speak its answer instead of only
+    // rendering text. A wake word is a hands-free entry point by definition — the
+    // user's hands and eyes are elsewhere — so a silent reply strands the whole
+    // interaction. Push-to-talk already passes true for the same reason.
+    FloatingControlBarManager.shared.openAIInputWithQuery(command, fromVoice: true)
   }
   private(set) var lastTriggeredCommand: String?
 
