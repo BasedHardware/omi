@@ -20,7 +20,7 @@ from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
-from utils.other.storage import list_audio_chunks
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 
 logger = logging.getLogger(__name__)
 
@@ -671,10 +671,18 @@ def get_conversations_without_photos(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    budget: Optional[ListReadBudget] = None,
 ):
     """
     Same as get_conversations but without loading photos.
     Much faster for list endpoints and bulk operations where full photo base64 isn't needed.
+
+    With a request ``budget`` (#11831) the server-side ``offset()`` is charged
+    before the query — Firestore bills and streams every skipped row, so a
+    large offset consumes real read work — and the page's stream runs under
+    the budget's per-RPC timeout with each fetched row charged. An offset
+    that exhausts the allowance returns an empty, explicitly truncated page
+    instead of pretending to be complete.
     """
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -710,10 +718,26 @@ def get_conversations_without_photos(
     # Sort
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
+    if budget is not None and offset > 0:
+        # Charge the skipped prefix before querying: Firestore streams (and
+        # bills) every offset row even though none is yielded here.
+        try:
+            budget.charge(offset)
+        except ListReadBudgetExhausted:
+            return []
+
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [_document_data_with_revision(doc) for doc in conversations_ref.stream()]
+    conversations = []
+    try:
+        for doc in budgeted_stream_iter(conversations_ref, budget):
+            conversations.append(_document_data_with_revision(doc))
+    except ListReadBudgetExhausted:
+        # Deadline or allowance ended mid-page: rows already fetched stay in
+        # the list as an honest created_at-DESC prefix; the budget remains
+        # flagged truncated so the route marks the response (#11831).
+        pass
     conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
