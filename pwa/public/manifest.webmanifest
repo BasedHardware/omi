@@ -1,12 +1,12 @@
 {
-  "name": "Omi v5 Browser Validation",
+  "name": "Omi v5",
   "short_name": "Omi v5",
-  "description": "A low-friction browser validation surface for the Omi v5 Home contract.",
+  "description": "Omi v5",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f4eee2",
-  "theme_color": "#f4eee2",
+  "background_color": "#141414",
+  "theme_color": "#141414",
   "icons": [
     {
       "src": "/omi-mark.svg",
