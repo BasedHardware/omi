@@ -477,9 +477,10 @@ enum ClaudeServerLiveness {
     /// fails outright on a buffer below it.
     private static let executablePathCapacity = 4 * 1_024
 
-    /// How far up a process tree to look for Claude. The real chain is two hops
-    /// (`context-for-claude-mcp` → `Claude.app/Contents/Helpers/disclaimer` → `Claude`); the bound is
-    /// what stops a cyclic or corrupted parent chain from spinning this loop forever.
+    /// How far up a process tree to look for Claude. The chains are short — two hops to Claude
+    /// Desktop (`context-for-claude-mcp` → `Claude.app/Contents/Helpers/disclaimer` → `Claude`), one
+    /// to a Claude Code that is running inside it; the bound is what stops a cyclic or corrupted
+    /// parent chain from spinning this loop forever.
     private static let maximumAncestorHops = 8
 
     /// - Parameter claudeDesktopPIDs: the running Claude Desktop processes, passed in rather than
@@ -495,12 +496,92 @@ enum ClaudeServerLiveness {
         guard !servers.isEmpty else { return .notServingClaudeDesktop }
 
         // Attribution matters because Claude Code spawns this same binary, and one of *its* servers
-        // must never be read as proof that Claude Desktop has one. A chain that cannot be resolved
-        // counts as Claude's, because the cost of being wrong is asymmetric: the only thing this
-        // state gates is an offer to quit somebody's Claude, and guessing "not Claude's" would take
-        // an open conversation on the strength of a parent lookup that failed.
-        let servesClaude = servers.contains { descends($0, from: claudeDesktopPIDs) ?? true }
+        // must never be read as proof that Claude Desktop has one.
+        let servesClaude = servers.contains { server in
+            switch owner(
+                of: server,
+                claudeDesktopPIDs: claudeDesktopPIDs,
+                parent: parentPID(of:),
+                executablePath: executablePath(of:))
+            {
+            // A chain that cannot be resolved counts as Claude's, because the cost of being wrong is
+            // asymmetric in both directions this state is read: it gates an offer to quit somebody's
+            // Claude, and it gates a status line that would otherwise nag. Guessing "not Claude's"
+            // on a parent lookup that failed would do both on no evidence at all.
+            case .claudeDesktop, .unknown: return true
+            case .claudeCode, .none: return false
+            }
+        }
         return servesClaude ? .servingClaudeDesktop : .notServingClaudeDesktop
+    }
+
+    /// Who a server belongs to, decided by the **nearest** owner above it rather than by whether
+    /// Claude Desktop appears anywhere on the chain.
+    ///
+    /// **The distinction is the whole of it, because Claude Code now runs inside Claude Desktop.**
+    /// A Claude Code session opened in the desktop app has this ancestry, read off this Mac:
+    ///
+    /// ```
+    /// context-for-claude-mcp
+    ///   → …/Application Support/Claude/claude-code/2.1.229/claude.app/Contents/MacOS/claude
+    ///     → /Applications/Claude.app/Contents/Helpers/disclaimer
+    ///       → /Applications/Claude.app/Contents/MacOS/Claude     ← a Claude Desktop PID
+    /// ```
+    ///
+    /// A walk that only asks "is a Claude Desktop PID an ancestor" answers yes for every one of
+    /// those, so on any Mac where the user has a Claude Code session open in the desktop app, one of
+    /// *Claude Code's* servers is read as proof that Claude Desktop has one. Measured on the Mac
+    /// whose Claude Desktop connector had been failing to spawn for three days: every disk check
+    /// said connected, and this probe — the one thing that could have contradicted them — agreed,
+    /// because fifteen Claude Code servers were descendants of the same process.
+    ///
+    /// So the first owner met wins. A `claude-code` process between the server and Claude Desktop
+    /// means the server is Claude Code's, and Claude Desktop's own spawn is not on this chain at all.
+    ///
+    /// Pure, with the process table passed in as two lookups, because the tree it has to reason about
+    /// cannot be built inside a test — the real one needs a running Claude Desktop, a running Claude
+    /// Code inside it, and a server under each.
+    enum Owner: Equatable {
+        /// A Claude Code process sits between the server and anything else.
+        case claudeCode
+        /// A running Claude Desktop was reached first.
+        case claudeDesktop
+        /// The walk finished at launchd having met neither.
+        case none
+        /// The walk ran out of parents it could read. Not an answer, and never acted on.
+        case unknown
+    }
+
+    /// Claude Code's own install directory, which every copy of it the desktop app runs sits inside:
+    /// `~/Library/Application Support/Claude/claude-code/<version>/claude.app/…`.
+    ///
+    /// A path marker rather than an executable name because both binaries are called some case of
+    /// "claude", and a case-insensitive name test would classify Claude Desktop itself as Claude
+    /// Code. A Claude Code installed elsewhere — a CLI on `PATH`, say — is not matched and does not
+    /// need to be: it is not a descendant of Claude Desktop, so it was never a false positive here.
+    static let claudeCodePathMarker = "/claude-code/"
+
+    static func owner(
+        of pid: pid_t,
+        claudeDesktopPIDs: Set<pid_t>,
+        parent: (pid_t) -> pid_t?,
+        executablePath: (pid_t) -> String?
+    ) -> Owner {
+        var current = pid
+        for _ in 0..<maximumAncestorHops {
+            guard let ancestor = parent(current) else { return .unknown }
+            // **The line the old walk did not have.** Without it the loop below is the shipped
+            // behaviour — "is a Claude Desktop PID anywhere above this server" — and every Claude
+            // Code session inside the desktop app answers yes. Order between the two tests is
+            // immaterial (no process is both); presence of this one is the whole fix.
+            if executablePath(ancestor)?.contains(claudeCodePathMarker) == true { return .claudeCode }
+            if claudeDesktopPIDs.contains(ancestor) { return .claudeDesktop }
+            // launchd (1) and the kernel (0) top every tree: the walk finished, and neither owner
+            // was anywhere on it.
+            if ancestor <= 1 { return .none }
+            current = ancestor
+        }
+        return .unknown
     }
 
     /// Every live process whose executable is exactly `binary`, or nil when the process list could
@@ -528,21 +609,6 @@ enum ClaudeServerLiveness {
         // answers nothing — which is not the path we are looking for either way.
         guard proc_pidpath(pid, &buffer, UInt32(executablePathCapacity)) > 0 else { return nil }
         return String(cString: buffer)
-    }
-
-    /// Walks up from `pid` looking for one of `ancestors`. Nil means the walk ran out of parents it
-    /// could read before reaching an answer — "I could not tell", which is not "no".
-    private static func descends(_ pid: pid_t, from ancestors: Set<pid_t>) -> Bool? {
-        var current = pid
-        for _ in 0..<maximumAncestorHops {
-            guard let parent = parentPID(of: current) else { return nil }
-            if ancestors.contains(parent) { return true }
-            // launchd (1) and the kernel (0) top every tree: the walk finished, and Claude was not
-            // anywhere on it.
-            if parent <= 1 { return false }
-            current = parent
-        }
-        return nil
     }
 
     private static func parentPID(of pid: pid_t) -> pid_t? {
