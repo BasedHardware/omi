@@ -252,6 +252,7 @@ def finish(dash, uid: str, title: str) -> dict:
     dash["title"] = title
     dash["links"] = LINKS
     dash["timezone"] = "America/New_York"
+    dash["refresh"] = "1h"  # Nik: auto-refresh at most hourly
     dash.pop("id", None)
     dash.pop("version", None)
     return dash

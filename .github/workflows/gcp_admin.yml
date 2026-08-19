@@ -83,7 +83,20 @@ jobs:
           runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
           require_gateway_url: true
 
+      # The live boards are edited in the Grafana UI (drag/resize persists in
+      # its DB). Only overwrite them when this push actually changes the
+      # checked-in dashboard JSONs — an unconditional apply stomps UI edits on
+      # every unrelated admin deploy.
+      - name: Detect dashboard JSON changes
+        id: dashboards_diff
+        run: |
+          if git diff --name-only "${{ github.event.before || 'HEAD~1' }}" "${{ github.sha }}" -- 'web/admin/grafana/dashboards/*.json' | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Apply checked-in omi-tv dashboard
+        if: github.event_name == 'workflow_dispatch' || steps.dashboards_diff.outputs.changed == 'true'
         env:
           GRAFANA_URL: ${{ vars.GRAFANA_URL }}
           GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}

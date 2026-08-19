@@ -80,6 +80,12 @@ class NycTimeContractTests(unittest.TestCase):
         for uid in BOARDS:
             self.assertEqual(load(uid)["timezone"], "America/New_York", uid)
 
+    def test_auto_refresh_is_hourly(self) -> None:
+        """Layout edits live in Grafana's DB; aggressive auto-refresh churns
+        panels and the boards must not refresh more than once an hour."""
+        for uid in BOARDS:
+            self.assertEqual(load(uid)["refresh"], "1h", uid)
+
     def test_no_bare_date_columns_survive(self) -> None:
         for uid in BOARDS:
             for panel, target, col in timestamp_columns(load(uid)):
