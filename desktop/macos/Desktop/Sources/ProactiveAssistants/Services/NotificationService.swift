@@ -384,6 +384,44 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     defaults.object(forKey: notificationsSnoozedUntilDefaultsKey) as? Date
   }
 
+  /// The hour "until tomorrow" resolves to. A workday start rather than midnight:
+  /// silencing at 11pm and resuming an hour later at 00:00 is not what the phrase means
+  /// to anyone.
+  nonisolated static let snoozeUntilTomorrowHour = 9
+
+  /// Next `snoozeUntilTomorrowHour` strictly after `now`.
+  ///
+  /// Pure and calendar-supplied so the boundaries are testable: silencing at 11pm resumes
+  /// at 9am the next calendar day, and silencing at 2am — already "tomorrow" by the clock
+  /// — resumes at 9am the same morning rather than waiting 31 hours.
+  nonisolated static func snoozeUntilTomorrowExpiry(
+    now: Date,
+    calendar: Calendar = .current
+  ) -> Date {
+    if let todayAtHour = calendar.date(
+      bySettingHour: snoozeUntilTomorrowHour, minute: 0, second: 0, of: now),
+      todayAtHour > now
+    {
+      return todayAtHour
+    }
+    let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) ?? now.addingTimeInterval(86_400)
+    return calendar.date(
+      bySettingHour: snoozeUntilTomorrowHour, minute: 0, second: 0, of: tomorrow)
+      ?? now.addingTimeInterval(86_400)
+  }
+
+  /// Silence until the next workday start. Separate from `snoozeNotifications(for:)`
+  /// because the expiry is a wall-clock boundary, not an offset.
+  nonisolated static func snoozeNotificationsUntilTomorrow(
+    now: Date = Date(),
+    calendar: Calendar = .current,
+    defaults: UserDefaults = .standard
+  ) {
+    let until = snoozeUntilTomorrowExpiry(now: now, calendar: calendar)
+    defaults.set(until, forKey: notificationsSnoozedUntilDefaultsKey)
+    log("NotificationService: proactive notifications silenced until \(until)")
+  }
+
   /// Whether a delivery must be withheld because the user silenced notifications.
   ///
   /// Pure so the policy is testable without waiting out a real snooze. `respectFrequency`
@@ -787,6 +825,34 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return .rejectedOwnerChange
     }
     guard contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()) else {
+      onDropped?()
+      return .suppressed
+    }
+
+    // The director presents straight through `FloatingControlBarManager`, bypassing
+    // `sendNotification` and therefore both gates below it. Without this the two controls
+    // silently covered only part of the product: a user who silenced notifications for
+    // four hours, or who was mid-call, still received director cards. `isProactive: true`
+    // is set on this path a few lines down, so it is exactly the class both gates exist
+    // to withhold.
+    //
+    // Hard-codes `respectFrequency: true`: every caller of this entry point is proactive.
+    // A functional notice goes through `sendNotification` with `respectFrequency: false`.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: withholding context director card — user silenced notifications")
+      onDropped?()
+      return .suppressed
+    }
+
+    if Self.shouldSuppressForPresence(
+      respectFrequency: true,
+      presenceDetected: Self.currentPresenceDetected())
+    {
+      log("NotificationService: withholding context director card — other people are present")
       onDropped?()
       return .suppressed
     }

@@ -47,6 +47,10 @@ extension SettingsContentView {
                 Button("For 1 hour") { applyNotificationSnooze(60 * 60) }
                 Button("For 4 hours") { applyNotificationSnooze(4 * 60 * 60) }
                 Button("For 8 hours") { applyNotificationSnooze(8 * 60 * 60) }
+                Button("Until tomorrow") {
+                  NotificationService.snoozeNotificationsUntilTomorrow()
+                  notificationsSnoozedUntil = NotificationService.currentSnoozeExpiry()
+                }
                 if notificationsSnoozedUntil != nil {
                   Divider()
                   Button("Resume now") {
@@ -355,7 +359,13 @@ extension SettingsContentView {
     let formatter = DateFormatter()
     formatter.timeStyle = .short
     formatter.dateStyle = .none
-    return "Silenced until \(formatter.string(from: until))"
+    let time = formatter.string(from: until)
+    // "Until tomorrow" lands on another calendar day, where a bare time is ambiguous —
+    // 9:00 AM tomorrow and 9:00 AM today read identically.
+    guard Calendar.current.isDateInToday(until) else {
+      return "Silenced until \(time) tomorrow"
+    }
+    return "Silenced until \(time)"
   }
 
   func applyNotificationSnooze(_ duration: TimeInterval) {
