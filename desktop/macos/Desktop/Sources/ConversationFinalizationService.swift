@@ -611,11 +611,14 @@ actor ConversationFinalizationService {
         completed.status == .completed, completed.backendSynced, completed.backendId?.isEmpty == false
       else { return }
       guard let conversationID = completed.backendId else { return }
-      if let meetingTreatmentEligible {
-        guard meetingTreatmentEligible else { return }
-        scheduleMeetingCompletionNotification(conversationID: conversationID)
-        return
-      }
+      // `meetingTreatmentEligible` is deliberately NOT consulted here. It can originate
+      // from the from-segments response, which returns before the backend has finalized
+      // the conversation and therefore reports the default `false` rather than a decided
+      // verdict. `waitForFinalizationProjectionIfNeeded` reads the authoritative
+      // finalization projection, applies the same eligibility rule via
+      // `shouldWakeMeetingCompletion`, and fails closed on 404, so it is the only correct
+      // gate for the wake decision. The parameter is retained for the callers' plumbing;
+      // removing it is follow-up cleanup, not a behavior change.
       guard
         await waitForFinalizationProjectionIfNeeded(
           conversationID: conversationID,
