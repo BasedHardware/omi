@@ -112,6 +112,9 @@ export function createBrowserCapabilityAdapter(
         if (reason === 'error') {
           state.bluetooth = 'error';
         }
+        if (reason === 'cancelled') {
+          state.bluetooth = 'available';
+        }
         return {ok: false, reason};
       }
     },
