@@ -27,6 +27,10 @@ export function isBluetoothScanAvailable(
   return state === 'poweredOn';
 }
 
+export function browserScanErrorMessage(_error: unknown): string | null {
+  return null;
+}
+
 export function resolveOmiNative(nativeModule: OmiNative | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};
 }

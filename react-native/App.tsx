@@ -57,6 +57,7 @@ import {
   type ChatMessage,
 } from './src/chatClient';
 import {
+  browserScanErrorMessage,
   isBluetoothScanAvailable,
   omiBackend,
   omiNative,
@@ -1317,6 +1318,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [nativeSnapshot, setNativeSnapshot] =
     useState<PlatformNativeSnapshot | null>(null);
   const [deviceBusy, setDeviceBusy] = useState(false);
+  const [deviceScanMessage, setDeviceScanMessage] = useState<string | null>(
+    null,
+  );
   const searchRef = useRef<TextInput>(null);
   const activeNavigationIndex = navigation.findIndex(
     item => route === item.label,
@@ -1378,12 +1382,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       return;
     }
     setDeviceBusy(true);
+    setDeviceScanMessage(null);
     try {
       const devices = await omiNative.startScan(8);
       const snapshot = await omiNative.getSnapshot();
       setNativeSnapshot({...snapshot, devices});
-    } catch {
-      // The native module owns the actual adapter error; preserve its last snapshot.
+    } catch (error) {
+      const message = browserScanErrorMessage(error);
+      if (message !== null) {
+        setDeviceScanMessage(message);
+      } else {
+        // The native module owns the actual adapter error; preserve its last snapshot.
+      }
     } finally {
       setDeviceBusy(false);
     }
@@ -2172,12 +2182,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   )}
                 </FocusPressable>
               ))}
-              {nativeSnapshot !== null &&
-                nativeSnapshot.devices.length === 0 && (
-                  <Text style={styles.deviceHint}>
-                    {nativeSnapshot.lastEvent}
-                  </Text>
-                )}
+              {(deviceScanMessage !== null ||
+                (nativeSnapshot !== null &&
+                  nativeSnapshot.devices.length === 0)) && (
+                <Text style={styles.deviceHint}>
+                  {deviceScanMessage ??
+                    nativeSnapshot?.lastEvent ??
+                    'No Omi device was discovered.'}
+                </Text>
+              )}
             </View>
           </View>
         </>
@@ -2376,12 +2389,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     )}
                                   </FocusPressable>
                                 ))}
-                                {nativeSnapshot !== null &&
-                                  nativeSnapshot.devices.length === 0 && (
-                                    <Text style={styles.deviceHint}>
-                                      {nativeSnapshot.lastEvent}
-                                    </Text>
-                                  )}
+                                {(deviceScanMessage !== null ||
+                                  (nativeSnapshot !== null &&
+                                    nativeSnapshot.devices.length === 0)) && (
+                                  <Text style={styles.deviceHint}>
+                                    {deviceScanMessage ??
+                                      nativeSnapshot?.lastEvent ??
+                                      'No Omi device was discovered.'}
+                                  </Text>
+                                )}
                                 <Text style={styles.sectionLabel}>
                                   Currents
                                 </Text>

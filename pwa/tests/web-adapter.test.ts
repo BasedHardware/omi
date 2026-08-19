@@ -7,6 +7,30 @@ import {
   omiNative,
 } from "../../react-native/src/omiNative.web";
 
+function streamResponse(chunks: string[], failure?: Error): Response {
+  const encoder = new TextEncoder();
+  let index = 0;
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[index];
+        if (chunk !== undefined) {
+          controller.enqueue(encoder.encode(chunk));
+          index += 1;
+        } else if (failure === undefined) {
+          controller.close();
+        } else {
+          controller.error(failure);
+        }
+      },
+    }),
+    {
+      headers: { "content-type": "text/event-stream" },
+      status: 200,
+    }
+  );
+}
+
 async function expectScanFailure(
   scan: Promise<unknown>,
   reason: BrowserScanFailureReason
@@ -174,4 +198,73 @@ test("web native boundary never invents a connected Omi device", async () => {
 
   expect(snapshot.devices).toEqual([]);
   expect(snapshot.capture).toBe("idle");
+});
+
+test("web generation streaming reconnects with the last event id", async () => {
+  const calls: Array<{ headers: Headers; input: RequestInfo | URL }> = [];
+  const previousFetch = globalThis.fetch;
+  let connections = 0;
+  const snapshot =
+    'id: first\nevent: snapshot\ndata: {"kind":"snapshot","text":""}\n\n';
+  const done =
+    'id: terminal\nevent: done\ndata: {"kind":"done","message":{"id":"assistant-1"}}\n\n';
+  globalThis.fetch = (async (input, init) => {
+    calls.push({
+      headers: new Headers(init?.headers),
+      input,
+    });
+    connections += 1;
+    return connections === 1
+      ? streamResponse(
+          [snapshot.slice(0, 21), snapshot.slice(21)],
+          new Error("stream disconnected")
+        )
+      : streamResponse([done.slice(0, 16), done.slice(16)]);
+  }) as typeof globalThis.fetch;
+
+  try {
+    await expect(
+      omiBackend.generationEvents("generation-1", null)
+    ).resolves.toMatchObject({
+      body: `${snapshot}${done}`,
+      id: "generation-1",
+      status: 200,
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  expect(calls).toHaveLength(2);
+  expect(calls[0]?.headers.get("last-event-id")).toBeNull();
+  expect(calls[1]?.headers.get("last-event-id")).toBe("first");
+  expect(calls[1]?.input).toBe(
+    "/__omi/api/v1/chat-generations/generation-1/events"
+  );
+});
+
+test("web generation streaming reports exhausted recovery without a fake terminal", async () => {
+  const calls: Array<{ headers: Headers }> = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input, init) => {
+    calls.push({ headers: new Headers(init?.headers) });
+    return streamResponse([
+      'id: partial\nevent: snapshot\ndata: {"kind":"snapshot","text":"partial"}\n\n',
+    ]);
+  }) as typeof globalThis.fetch;
+
+  try {
+    await expect(
+      omiBackend.generationEvents("generation-2", null)
+    ).rejects.toMatchObject({
+      attempts: 4,
+      code: "OMI_HTTP_STREAM_RECOVERY_EXHAUSTED",
+      message: "Browser generation stream recovery exhausted after 4 attempts",
+      name: "BrowserGenerationRecoveryError",
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  expect(calls).toHaveLength(4);
+  expect(calls.at(-1)?.headers.get("last-event-id")).toBe("partial");
 });
