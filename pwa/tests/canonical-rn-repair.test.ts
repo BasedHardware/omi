@@ -17,6 +17,7 @@ async function webSource(): Promise<string> {
 
 test("Vite aliases React Native directly to React Native Web", () => {
   const config = viteConfig({
+    command: "serve",
     env: {
       OMI_LOCAL_API_CLIENT_ID: "test-client",
       OMI_LOCAL_API_TOKEN: "test-token",

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { ProxyOptions } from "vite";
 import viteConfig from "../vite.config";
 import {
   assertLocalProxyPath,
@@ -50,18 +51,66 @@ test("browser proxy applies the native JSON body policy", () => {
   expect(init.credentials).toBe("omit");
 });
 
-test("vite proxy refuses to start without an operator client id", () => {
-  expect(() =>
-    viteConfig({
-      env: {
-        OMI_LOCAL_API_TOKEN: "operator-token",
+test("vite build config does not access local proxy identity", () => {
+  const env = new Proxy<Record<string, string | undefined>>(
+    {},
+    {
+      get(_target, property) {
+        if (String(property).startsWith("OMI_LOCAL_API_")) {
+          throw new Error("static build accessed local proxy identity");
+        }
+        return undefined;
       },
-    })
-  ).toThrow("OMI_LOCAL_API_CLIENT_ID");
+    }
+  );
+  const config = viteConfig({ command: "build", env });
+
+  expect(config.server?.proxy).toBeUndefined();
+  expect(config.preview?.proxy).toBeUndefined();
+});
+
+test("unconfigured vite proxy serves an unavailable backend without credentials", () => {
+  const config = viteConfig({
+    command: "serve",
+    env: {
+      OMI_LOCAL_API_TOKEN: "operator-token",
+    },
+  });
+  const proxy = config.server?.proxy as Record<string, ProxyOptions>;
+  const responseState = {
+    end: (body: string) => {
+      responseState.body = body;
+      responseState.writableEnded = true;
+    },
+    headers: undefined as Record<string, string> | undefined,
+    body: undefined as string | undefined,
+    statusCode: undefined as number | undefined,
+    writeHead: (statusCode: number, headers: Record<string, string>) => {
+      responseState.statusCode = statusCode;
+      responseState.headers = headers;
+    },
+    writableEnded: false,
+  };
+
+  const result = proxy[LOCAL_PROXY_PREFIX]?.bypass?.(
+    {} as Parameters<NonNullable<ProxyOptions["bypass"]>>[0],
+    responseState as unknown as Parameters<
+      NonNullable<ProxyOptions["bypass"]>
+    >[1],
+    proxy[LOCAL_PROXY_PREFIX]
+  );
+
+  expect(result).toBe("/__omi/api-unavailable");
+  expect(responseState.statusCode).toBe(503);
+  expect(responseState.headers).toEqual({ "content-type": "application/json" });
+  expect(responseState.body).toBe('{"error":"local_api_unavailable"}');
+  expect(proxy[LOCAL_PROXY_PREFIX]?.target).toBeUndefined();
+  expect(proxy[LOCAL_PROXY_PREFIX]?.headers).toBeUndefined();
 });
 
 test("configured vite proxy injects native headers outside browser code", async () => {
   const config = viteConfig({
+    command: "serve",
     env: {
       OMI_LOCAL_API_CLIENT_ID: "operator-client",
       OMI_LOCAL_API_TOKEN: "operator-token",
