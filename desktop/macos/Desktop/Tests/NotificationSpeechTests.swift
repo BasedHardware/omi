@@ -60,4 +60,22 @@ final class NotificationSpeechTests: XCTestCase {
     speaker.notificationWasPresented()
     XCTAssertTrue(spoken.isEmpty)
   }
+
+  /// Every system voice reads "Omi" as "oh-my" — the app mispronouncing its own name on the one
+  /// surface where the name is spoken. The standalone word is respelled; words that merely
+  /// contain the letters are not.
+  func testTheProductNameIsRespelledForTheSynthesizer() {
+    let spoken = NotificationSpeech.utterance(
+      message: "Latest download link is omi.me/desktop", isEnabled: true, isProactive: true)
+    XCTAssertEqual(spoken, "Latest download link is Ohmee.me/desktop")
+
+    XCTAssertEqual(NotificationSpeech.spokenSpelling(of: "OMI is ready"), "Ohmee is ready")
+    XCTAssertEqual(NotificationSpeech.spokenSpelling(of: "Ask Omi about it"), "Ask Ohmee about it")
+    XCTAssertEqual(
+      NotificationSpeech.spokenSpelling(of: "Naomi sent omigod a note"),
+      "Naomi sent omigod a note",
+      "only the standalone word is respelled")
+    XCTAssertEqual(
+      NotificationSpeech.spokenSpelling(of: "no product name here"), "no product name here")
+  }
 }

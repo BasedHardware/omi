@@ -27,7 +27,21 @@ enum NotificationSpeech {
     guard isEnabled, isProactive else { return nil }
     let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
-    return trimmed
+    return spokenSpelling(of: trimmed)
+  }
+
+  /// Respell the product's own name for the synthesizer.
+  ///
+  /// "Omi" is read as "oh-my" by every system voice — it is the app introducing itself by the
+  /// wrong name, on the one surface where the name is spoken rather than seen. Only the
+  /// standalone word is respelled, so "omi.me" still reads as the domain and words that merely
+  /// contain the letters (a name like "Naomi") are untouched.
+  static func spokenSpelling(of text: String) -> String {
+    guard let pattern = try? NSRegularExpression(pattern: "\\bomi\\b", options: [.caseInsensitive])
+    else { return text }
+    let range = NSRange(text.startIndex..., in: text)
+    return pattern.stringByReplacingMatches(
+      in: text, options: [], range: range, withTemplate: "Ohmee")
   }
 }
 
