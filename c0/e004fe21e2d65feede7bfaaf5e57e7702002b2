@@ -1,0 +1,21 @@
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeServerLivenessTests.swift
+  s_227233afb3b7ff::t_e2d7f3369244ac 1-115
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeRegistrar.swift
+  s_227233afb3b7ff::t_90f331b60f0bc7 480-483,499-514,518-586
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c0e004fe21e2d65feede7bfaaf5e57e7702002b2",
+  "prompts": {},
+  "sessions": {
+    "s_227233afb3b7ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d72fbee-85a2-445b-a86d-7f95bf574311",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
