@@ -118,6 +118,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         provider.refreshMessages();
       }
       // Fetch enabled chat apps
+      provider.fetchChatApps();
       if (widget.initialChatContext != null) {
         setState(() => _chatScope = widget.initialChatContext);
       }
