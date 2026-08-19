@@ -1001,6 +1001,7 @@ async def _run_openai_agent_stream(
         return f'provider_{type(error).__name__}'
 
     producer_started_at = asyncio.get_running_loop().time()
+    screen_deadline = producer_started_at + AGENT_STREAM_MAX_DURATION_SECONDS
     loop_iteration = 0
 
     while True:
@@ -1097,10 +1098,17 @@ async def _run_openai_agent_stream(
             tool_obj = tool_registry.get(tool_name)
             await callback.put_thought(get_tool_display_name(tool_name, tool_obj), app_id=_extract_app_id(tool_name))
             try:
-                result = await _execute_tool(tool_name, tool_call['input'], tool_registry, configurable)
+                result = await _execute_tool(
+                    tool_name,
+                    tool_call['input'],
+                    tool_registry,
+                    configurable,
+                    screen_deadline=screen_deadline,
+                )
             except Exception as error:
                 logger.error('Tool execution error (%s): %s', tool_name, error)
                 result = f'Error executing tool: {str(error)}'
+                result = await screen_tool_result(tool_name, result, deadline=screen_deadline)
 
             logger.info('Tool ended: %s', tool_name)
             await _emit_calendar_status(callback, tool_name, result)

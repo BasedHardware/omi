@@ -177,9 +177,16 @@ def test_dangerous_is_never_an_accepted_verdict():
     assert verdict.reason == 'invalid security screen verdict'
 
 
-@pytest.mark.parametrize('output', [None, '', '   ', 'no json here', '{"decision":', '{"decision":"auto"'])
+@pytest.mark.parametrize('output', [None, '', '   '])
 def test_unparseable_output_is_not_a_verdict_at_all(output):
     assert parse_security_screen_verdict(output) is None
+
+
+@pytest.mark.parametrize('output', ['no json here', '{"decision":', '{"decision":"auto"'])
+def test_nonempty_unparseable_output_fails_closed_to_strict(output):
+    verdict = parse_security_screen_verdict(output)
+    assert verdict is not None and verdict.decision is SecurityPosture.STRICT
+    assert verdict.reason == 'invalid security screen verdict'
 
 
 def test_a_strict_reason_is_sanitized_and_bounded():
@@ -240,7 +247,7 @@ async def test_the_strictest_chunk_wins():
 
 
 async def test_a_transient_failure_is_retried_then_succeeds():
-    screener, calls = _screener([None, 'garbage', '{"decision":"auto"}'])
+    screener, calls = _screener([None, None, '{"decision":"auto"}'])
     outcome = await screener.screen(_tool_result('hello'))
     assert outcome.kind is ScreenOutcomeKind.SCREENED
     assert outcome.verdict is not None and outcome.verdict.decision is SecurityPosture.AUTO

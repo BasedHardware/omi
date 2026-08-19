@@ -365,7 +365,7 @@ def parse_security_screen_verdict(output: Optional[str]) -> Optional[SecurityScr
     if len(parsed_objects) > 1:
         return SecurityScreenVerdict.strict('ambiguous security screen verdict')
     if not parsed_objects:
-        return None
+        return SecurityScreenVerdict.strict('invalid security screen verdict')
     parsed = parsed_objects[0]
     decision = parsed.get('decision')
     if decision == 'auto':

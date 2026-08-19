@@ -13,7 +13,7 @@ def test_chat_memory_tool_caller_wires_boundary_guard_before_returning_tool_outp
     assert 'CHAT_MEMORY_TOOL_NAMES' in contents
     assert 'chat_memory_content_for_classification' in contents
     assert 'result = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))' in contents
-    assert contents.index('result = await tool_obj.ainvoke(tool_input, config=config)') < contents.index(
+    assert contents.index('raw_result = await tool_obj.ainvoke(tool_input, config=config)') < contents.index(
         'result = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))'
     )
     assert contents.index(
