@@ -302,7 +302,12 @@ def _materialize_prompts(
     *,
     exclude_block_types: set[str] | frozenset[str] | None = None,
 ) -> MaterializePromptsResponse:
-    """Fetch ready intents and accept kernel receipts; never writes a Chat row."""
+    """Fetch ready intents and accept kernel receipts; never writes a Chat row.
+
+    Materialization acknowledgements retire an intent account-wide after one
+    client consumes it. Canonical server-side Chat-row creation is separate
+    follow-up work; until then the consuming client's kernel sync is the writer.
+    """
 
     _require_materialization_capability(
         uid,

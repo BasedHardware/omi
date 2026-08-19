@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { structuredTurnFallbackText } from "./content-block-fallback.js";
 import { conversationTurnFromRow } from "./conversation-turns.js";
 import { generateAgentId } from "./sqlite-store.js";
 import type {
@@ -284,6 +285,7 @@ export interface BackendTurnPayload {
   sender: "human" | "ai";
   appId: string | null;
   sessionId: string | null;
+  contentBlocks: ConversationContentBlock[];
   metadata: string | null;
   messageSource: "desktop_chat" | "realtime_voice";
 }
@@ -4120,8 +4122,7 @@ function journalTurnPayloadHash(value: Record<string, unknown>): string {
 
 function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  const isChatFirstMaterialization = typeof metadata.chatFirstIntentId === "string"
-    && metadata.chatFirstIntentId.length > 0;
+  const { content_blocks: _legacyContentBlocks, ...messageMetadata } = metadata;
   // Rewind evidence is a device-local journal resource. The backend receives
   // enough metadata to preserve the card, but never the user's absolute local
   // filesystem path. Same-device reconciliation keeps the authoritative local
@@ -4134,18 +4135,15 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     return pathless;
   });
   const backendMetadata = {
-    ...metadata,
-    ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
+    ...messageMetadata,
     ...(backendResources.length > 0 ? { resources: backendResources } : {}),
   };
   const projectedText = turn.content.trim()
     ? turn.content
-    : isChatFirstMaterialization
-      ? ""
     : turn.role === "assistant"
       && turn.status === "completed"
       && (turn.contentBlocks.length > 0 || turn.resources.length > 0)
-      ? "Done."
+      ? structuredTurnFallbackText(turn.contentBlocks, backendResources)
       : "";
   return {
     turnId: turn.turnId,
@@ -4155,6 +4153,7 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     sender: turn.role === "user" ? "human" : "ai",
     appId: typeof metadata.appId === "string" ? metadata.appId : null,
     sessionId: typeof metadata.sessionId === "string" ? metadata.sessionId : null,
+    contentBlocks: turn.contentBlocks,
     metadata: Object.keys(backendMetadata).length === 0 ? null : stableJson(backendMetadata),
     messageSource: turn.origin === "realtime_voice" ? "realtime_voice" : "desktop_chat",
   };
@@ -4170,18 +4169,6 @@ function boundedJournalRevision(revision: number): number {
 function backendTombstoneCode(turn: ConversationTurn): string | null {
   const payload = backendTurnPayload(turn);
   if (payload.text.trim()) return null;
-  const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
-  if (
-    turn.role === "assistant"
-    && turn.status === "completed"
-    && typeof metadata.chatFirstIntentId === "string"
-    && metadata.chatFirstIntentId.length > 0
-    && turn.contentBlocks.length > 0
-  ) {
-    // The canonical structured blocks are the content. This must still use
-    // the normal reconciliation outbox, just without fabricating "Done.".
-    return null;
-  }
   if (turn.status === "failed") return "empty_failed_turn_cancelled";
   if (turn.status === "completed") return "empty_completed_turn_cancelled";
   return null;

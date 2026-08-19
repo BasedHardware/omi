@@ -899,7 +899,9 @@ extension ChatMessage {
   /// Convert a backend message to a local ChatMessage
   init(from db: ChatMessageDB) {
     let resources = ChatResource.decodeResourcesFromMessageMetadata(db.metadata)
-    let contentBlocks = ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
+    let contentBlocks =
+      db.contentBlocksJSON.flatMap(ChatContentBlockCodec.decode)
+      ?? ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
     self.init(
       id: db.id,
       text: db.text,
@@ -3200,7 +3202,9 @@ class ChatProvider: ObservableObject {
       )
       for entry in importPlan {
         let row = entry.row
-        let blocks = ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
+        let blocks =
+          row.contentBlocksJSON.flatMap(ChatContentBlockCodec.decode)
+          ?? ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
         let resources = ChatResource.decodeResourcesFromMessageMetadata(row.metadata)
         let accepted = await kernelTurnProjection.importRemoteTurn(
           surface: surface,
