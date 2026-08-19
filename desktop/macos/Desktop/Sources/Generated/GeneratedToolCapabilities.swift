@@ -662,12 +662,16 @@ enum GeneratedToolCapabilities {
       title: "Get Work Context",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Get the user's current screen plus a compressed timeline of recent on-screen activity.",
+      summary: "Identify the documents, URLs, and files the user was recently working in.",
       bullets: [
-      "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-      "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
-      "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
+      "Call this for \"where was that doc\", \"what was I working on\", and other recent-work questions.",
+      "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
+      "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
+      "For the live screen use capture_screen; this tool is history, not current visual evidence.",
       "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
+      "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
+      "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
       "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
       "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ]

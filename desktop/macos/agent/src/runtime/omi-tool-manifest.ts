@@ -593,11 +593,12 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Get Work Context",
-      "Get the user's current screen plus a compressed timeline of recent on-screen activity.",
+      "Identify the documents, URLs, and files the user was recently working in.",
       [
-        "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-        "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
-        "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
+        "Call this for \"where was that doc\", \"what was I working on\", and other recent-work questions.",
+        "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
+        "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
+        "For the live screen use capture_screen; this tool is history, not current visual evidence.",
       ],
     ),
   },
@@ -1442,15 +1443,25 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "get_work_context",
     label: "Get Work Context",
     description:
-      "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
-    promptSnippet: "get_work_context - Get recent work context",
+      "Identify the documents, URLs, and files the user was recently working in, as durable handles. It is historical context, not current visual evidence.",
+    promptSnippet: "get_work_context - Identify recent work by document/URL/file",
     promptGuidelines: [
       "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
+      "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
+      "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
       "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
       "For current visual detail, use capture_screen when approval is available rather than answering from this tool.",
     ],
     latency: "fast local",
-    inputSchema: schema({ minutes: { type: "number", description: "Minutes of recent activity to summarize (default 10, max 120)" } }),
+    inputSchema: schema({
+      minutes: { type: "number", description: "Minutes of recent activity to summarize (default 10, max 120)" },
+      include_screen: {
+        type: "boolean",
+        description:
+          "Also return the recent screenshot timeline and a screenshot_id (default false). Only set this when visits/briefs handles cannot answer the question, or the question is visual.",
+      },
+    }),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },

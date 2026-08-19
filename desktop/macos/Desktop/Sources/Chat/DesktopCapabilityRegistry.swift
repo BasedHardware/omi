@@ -147,7 +147,7 @@ enum DesktopCapabilityRegistry {
       when: !available(screenshotTools).isEmpty
     )
     append(
-      "Recent work/activity history -> get_work_context. Treat its screen_now and timeline fields as historical unless this turn has a separately attached live image.",
+      "Recent work/activity history, and \"where was that doc/page/file\" -> get_work_context. Answer from visits[].handles and briefs[].handles, which name the document, URL, or file itself; open or read that source. Its screen_now and timeline are empty unless you pass include_screen=true, and are historical evidence even then.",
       when: has("get_work_context")
     )
     append(

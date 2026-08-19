@@ -179,11 +179,15 @@ enum OmiToolManifest {
     ),
     LocalAgentTool(
       name: "get_work_context",
-      description: "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
+      description: "Identify the documents, URLs, and files the user was recently working in, as durable handles. It is historical context, not current visual evidence.",
       properties: [
         "minutes": [
           "type": "number",
           "description": "Minutes of recent activity to summarize (default 10, max 120)",
+        ],
+        "include_screen": [
+          "type": "boolean",
+          "description": "Also return the recent screenshot timeline and a screenshot_id (default false). Only set this when visits/briefs handles cannot answer the question, or the question is visual.",
         ]
       ],
       required: [],
