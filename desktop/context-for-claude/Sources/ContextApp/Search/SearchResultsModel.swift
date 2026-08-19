@@ -435,6 +435,11 @@ final class SearchResultsModel: ObservableObject {
             // something is: "109 results" over a grid of four is a lie either way round. Unnarrowed,
             // it is both halves added up — the page is one answer, so its count has to be too.
             totalCount = narrowedBySource ? visibleScreens.count : seen.total + spoken.total
+            // Bucketed, and never the query itself. Recorded after the answer settles so a
+            // zero-result search — the one worth knowing about — is counted as a search rather
+            // than as nothing having happened.
+            ContextAnalytics.record(
+                .searchRan(resultCountBucket: AnalyticsEvent.CountBucket(totalCount)))
             // A selection the new answer no longer contains is a keyboard target that is not on
             // screen — Return would open a card the user cannot see. Kept when the moment survived
             // the re-read, because a chip that merely reorders the page should not cost somebody

@@ -142,6 +142,10 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # cache floor the preflight assertions below depend on.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
 
+prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
+prompt_prefix_stub.ConversationPromptPrefix = MagicMock
+prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

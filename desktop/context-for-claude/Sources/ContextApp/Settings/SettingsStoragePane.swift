@@ -92,7 +92,7 @@ struct SettingsStoragePane: View {
                 SettingsRow(
                     icon: "folder",
                     title: "Data folder",
-                    subtitle: AgentDetector.abbreviate(ContextPaths.supportDirectory.path)
+                    subtitle: AgentPaths.abbreviate(ContextPaths.supportDirectory.path)
                 ) {
                     Button("Reveal") {
                         Sound.effect(.click)

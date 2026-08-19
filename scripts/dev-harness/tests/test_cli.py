@@ -127,6 +127,89 @@ def test_firebase_command_writes_the_configured_emulator_ports(monkeypatch: pyte
     assert payload["emulators"]["auth"]["port"] == 9420
 
 
+def test_dev_bind_host_defaults_to_loopback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("OMI_DEV_BIND_HOST", raising=False)
+    monkeypatch.delenv("OMI_DEV_HOST", raising=False)
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+
+    cfg = config.load_config(REPO_ROOT)
+
+    assert cfg.dev_bind_host == "127.0.0.1"
+
+
+def test_dev_bind_host_falls_back_to_app_dev_host(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # #11774: a contributor who follows the documented physical-device setup sets
+    # only OMI_DEV_HOST (the build-side var, app/setup.sh:53). The harness must
+    # pick that up too, or the app is built to expect a reachable harness that
+    # never actually listens anywhere but loopback.
+    monkeypatch.delenv("OMI_DEV_BIND_HOST", raising=False)
+    monkeypatch.setenv("OMI_DEV_HOST", "192.168.1.50")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+
+    cfg = config.load_config(REPO_ROOT)
+
+    # Binds all interfaces rather than the literal LAN address, so loopback
+    # callers (health checks, a booted simulator) keep working alongside it.
+    assert cfg.dev_bind_host == "0.0.0.0"
+
+
+def test_dev_bind_host_prefers_explicit_bind_host_over_app_dev_host(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("OMI_DEV_BIND_HOST", "100.64.1.2")
+    monkeypatch.setenv("OMI_DEV_HOST", "192.168.1.50")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+
+    cfg = config.load_config(REPO_ROOT)
+
+    assert cfg.dev_bind_host == "0.0.0.0"
+
+
+def test_dev_bind_host_rejects_a_public_address(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OMI_DEV_HOST", "203.0.113.5")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+
+    with pytest.raises(safety.SafetyError, match="private"):
+        config.load_config(REPO_ROOT)
+
+
+def test_firebase_command_binds_emulators_to_the_resolved_dev_bind_host(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # The Auth emulator is what a physical device's Firebase SDK connects to
+    # directly, so it must follow the same bind host as the backend (#11774).
+    monkeypatch.setenv("OMI_DEV_HOST", "192.168.1.50")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+
+    command = cli._firebase_command(cfg)
+
+    config_path = Path(command[command.index("--config") + 1])
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    assert payload["emulators"]["firestore"]["host"] == "0.0.0.0"
+    assert payload["emulators"]["auth"]["host"] == "0.0.0.0"
+
+
+def test_app_services_bind_to_the_resolved_dev_bind_host(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("OMI_DEV_HOST", "192.168.1.50")
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    cfg = config.load_config(REPO_ROOT, create_layout=True)
+
+    started: list[tuple[str, list[str]]] = []
+    monkeypatch.setattr(
+        cli,
+        "_start_process",
+        lambda cfg, service, command, **kwargs: started.append((service, command)),
+    )
+
+    cli._start_app_services(cfg)
+
+    assert {service for service, _ in started} == {"llm-gateway", "backend", "desktop-backend"}
+    for service, command in started:
+        host_index = command.index("--host") + 1
+        assert command[host_index] == "0.0.0.0", f"{service} did not bind to the resolved dev_bind_host"
+
+
 def test_wait_health_returns_services_that_exhaust_their_deadlines(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

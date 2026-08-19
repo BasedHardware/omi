@@ -96,7 +96,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey,
       model: model,
-      fallbackModel: "gemini-2.5-flash"
+      fallbackModel: "gemini-2.5-flash",
+      workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
   }

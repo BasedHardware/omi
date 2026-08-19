@@ -320,7 +320,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchApps => '搜索应用...';
 
   @override
-  String get myApps => '我的应用';
+  String get myApps => '我创建的';
 
   @override
   String get installedApps => '已安装应用';
@@ -9662,4 +9662,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sendRawAudioToOmiDescription => '关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。';
+
+  @override
+  String get findDevice => '查找';
+
+  @override
+  String get diagnosticsShareFailed => '无法分享诊断信息，请重试。';
 }

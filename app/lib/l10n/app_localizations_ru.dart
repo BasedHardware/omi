@@ -323,7 +323,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get searchApps => 'Поиск приложений...';
 
   @override
-  String get myApps => 'Мои приложения';
+  String get myApps => 'Создано мной';
 
   @override
   String get installedApps => 'Установленные приложения';
@@ -9884,4 +9884,10 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Отключите, чтобы необработанный звук не отправлялся в Omi. Расшифровки и данные, необходимые облачным функциям, всё ещё могут отправляться в Omi.';
+
+  @override
+  String get findDevice => 'Найти';
+
+  @override
+  String get diagnosticsShareFailed => 'Не удалось поделиться диагностикой. Попробуйте ещё раз.';
 }

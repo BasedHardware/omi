@@ -31,11 +31,27 @@ ALLOWLIST_FILES: set[str] = {
     "desktop/macos/Desktop/Sources/Theme/OmiColors.swift",
 }
 
+# The purple hues, named once. Both the `#RRGGBB` and the Dart `0xAARRGGBB` pattern below
+# interpolate this, so adding or retiring a hue is a single edit and the two cannot drift.
+PURPLE_HEX_HUES = "7C3AED|8B5CF6|A855F7|9333EA|6D28D9|AF52DE|D946EF|A78BFA|C4B5FD"
+
 PURPLE_PATTERNS = [
     re.compile(r"Color\.purple\b"),
     re.compile(r"\.purple\b"),  # SwiftUI shorthand: .foregroundStyle(.purple)
     re.compile(r"Colors\.purple\b"),  # Flutter
-    re.compile(r"#(?:7C3AED|8B5CF6|A855F7|9333EA|6D28D9|AF52DE|D946EF|A78BFA|C4B5FD)\b", re.I),
+    # Flutter's most common purple, and previously invisible here: `\bpurple\b`
+    # cannot match inside `deepPurple` because camelCase puts no word boundary
+    # before it, and none of the other patterns spell it either.
+    re.compile(r"\bdeepPurple(?:Accent)?\b"),
+    re.compile(rf"#(?:{PURPLE_HEX_HUES})\b", re.I),
+    # The same hues as written in Dart. Flutter spells colours `Color(0xFF8B5CF6)`,
+    # so the `#RRGGBB` pattern above never matched a Flutter literal — the alpha
+    # channel is optional because both forms appear in the app.
+    #
+    # The lookbehind requires `0x` to start a token. Without it the pattern matches inside a
+    # longer literal or identifier, so an unrelated constant that merely ends in a purple hue
+    # would be counted and could fail the ratchet on a file that contains no purple at all.
+    re.compile(rf"(?<![0-9A-Za-z_])0x(?:[0-9A-F]{{2}})?(?:{PURPLE_HEX_HUES})\b", re.I),
     re.compile(r"purple(?:Primary|Secondary|Accent|Light|Gradient|LightGradient)\b"),
     re.compile(r"purple-(?:primary|secondary|accent|\d{2,4})\b"),  # Tailwind: bg-purple-500 etc.
     re.compile(r"--purple-"),

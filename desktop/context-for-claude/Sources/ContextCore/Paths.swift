@@ -7,7 +7,58 @@ import Foundation
 /// Omi's `memories` table through `omiDatabaseURL`, so Claude can answer "what does Omi know about me"
 /// without a round trip to the backend.
 public enum ContextPaths {
-    public static let bundleIdentifier = "com.omi.context-for-claude"
+    /// The identifier a notarized Developer ID release is signed as, and the only one that ever
+    /// reaches a user. Also the fallback for any process that is not running from a bundle of ours.
+    public static let shippingBundleIdentifier = "com.omi.context-for-claude"
+
+    /// **The identifier this process actually runs under.**
+    ///
+    /// Not a constant, because a locally signed developer build carrying the *release's* identifier
+    /// is a permission failure with no repair. macOS stores a code requirement beside every TCC
+    /// grant, keyed by bundle id, and the two builds' requirements are mutually unsatisfiable —
+    /// measured on this Mac, the dev build's is `identifier "com.omi.context-for-claude" and
+    /// certificate leaf = H"bb9251…"` while the release's is `identifier "com.omi.context-for-claude"
+    /// and anchor apple generic … certificate leaf[subject.OU] = "9536L8KLMP"`. Whichever build is
+    /// granted first writes the record, and the other can never satisfy it — permanently, while
+    /// System Settings still shows the toggle on. A build not signed by Developer ID therefore gets
+    /// its own identity (`com.omi.context-for-claude.dev`, from `scripts/build.sh`) so the two own
+    /// disjoint platform records and cannot collide.
+    ///
+    /// Everything keyed by the OS or shown to the user follows this: the `tccutil` line the app
+    /// tells the user to run, the Keychain service, the log subsystem, and the Claude registration.
+    /// The Application Support directory deliberately does **not** — it is shared, and repointing it
+    /// would move the production database out from under the production app.
+    public static let bundleIdentifier = ownIdentifier(reportedBy: Bundle.main.bundleIdentifier)
+
+    /// The rule, over a stated report, so it can be proved rather than trusted.
+    ///
+    /// **Only our own family of identifiers is adopted.** `Bundle.main` is not ours in two of the
+    /// three ways this code runs, and measured here rather than assumed: under `swift test` it is
+    /// `com.apple.dt.xctest.tool` (the XCTest runner's own bundle, *not* nil — a comment elsewhere in
+    /// this package claims nil and is wrong), and a bare `swift run` binary has no bundle at all and
+    /// reports nil. Adopting either would put a foreign string on the log subsystem and the Keychain
+    /// service. Only inside an `.app` — including for `context-for-claude-mcp`, the helper in
+    /// `Contents/MacOS/`, which resolves `Bundle.main` to the enclosing bundle despite not being its
+    /// `CFBundleExecutable` — is the reported id one we wrote into `Info.plist`.
+    public static func ownIdentifier(reportedBy reported: String?) -> String {
+        guard let reported,
+            reported == shippingBundleIdentifier
+                || reported.hasPrefix(shippingBundleIdentifier + ".")
+        else { return shippingBundleIdentifier }
+        return reported
+    }
+
+    /// Whether this build owns an identity of its own rather than the shipping one — true for the
+    /// `.dev` bundle `scripts/build.sh` produces when it cannot sign with Developer ID.
+    public static var isDevelopmentBuild: Bool {
+        isDevelopmentBuild(bundleIdentifier)
+    }
+
+    /// The same question over a stated identifier, so every value derived from it can be checked for
+    /// both builds without a bundle to run inside.
+    public static func isDevelopmentBuild(_ identifier: String) -> Bool {
+        identifier != shippingBundleIdentifier
+    }
 
     /// `~/Library/Application Support/ContextForClaude`
     public static var supportDirectory: URL {
@@ -134,6 +185,29 @@ public enum ContextPaths {
     }
 
     static let queryStampFilename = "last-query.json"
+
+    /// The MCP server's running tally of tool calls, drained by the app when it reports. See
+    /// `ToolCallLedger` — and note this is a *different* file from the query stamp on purpose: the
+    /// stamp answers "did Claude call us just now", this answers "how much", and one file cannot be
+    /// both monotonic-latest and cumulative.
+    public static var toolCallLedgerURL: URL {
+        supportDirectory.appendingPathComponent(toolCallLedgerFilename)
+    }
+
+    /// Beside the database the calls were served from, for the reason `queryStampURL(besideDatabaseAt:)`
+    /// gives: two processes have to be talking about the same install.
+    public static func toolCallLedgerURL(besideDatabaseAt databaseURL: URL) -> URL {
+        databaseURL.deletingLastPathComponent().appendingPathComponent(toolCallLedgerFilename)
+    }
+
+    /// The lock guarding a ledger read-modify-write. Never renamed or replaced, so concurrent MCP
+    /// servers always contend over the same inode — see `ToolCallLedger.bump`.
+    public static func toolCallLedgerLockURL(for ledgerURL: URL) -> URL {
+        ledgerURL.deletingLastPathComponent()
+            .appendingPathComponent(ledgerURL.lastPathComponent + ".lock")
+    }
+
+    static let toolCallLedgerFilename = "tool-calls.json"
 
     @discardableResult
     public static func ensureSupportDirectory(at url: URL? = nil) throws -> URL {

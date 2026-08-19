@@ -23,8 +23,13 @@ enum RewindWindow {
 
     /// Large enough that a 1600 px frame is not the limiting factor, and small enough to open
     /// comfortably on a 13" display.
-    static let defaultSize = NSSize(width: 1180, height: 760)
-    static let minimumSize = NSSize(width: 820, height: 560)
+    ///
+    /// `nonisolated` because `SettingsMetrics` reads both from a `View`'s body: the Settings window
+    /// opens at exactly this rectangle rather than at one of its own, so that the two windows this
+    /// app puts on screen are the same object at different contents. A main-actor constant would be
+    /// an error in the Swift 6 language mode there.
+    nonisolated static let defaultSize = NSSize(width: 1180, height: 760)
+    nonisolated static let minimumSize = NSSize(width: 820, height: 560)
 
     /// How often an open timeline looks for captures made since it read its day.
     ///

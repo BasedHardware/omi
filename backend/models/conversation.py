@@ -348,6 +348,7 @@ class ConversationFinalizationStatusResponse(BaseModel):
     retryable: bool
     attempt_count: int
     task_retry_count: int
+    meeting_treatment_eligible: bool = False
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app

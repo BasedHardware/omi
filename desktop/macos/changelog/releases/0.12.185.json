@@ -1,0 +1,10 @@
+{
+  "version": "0.12.185",
+  "date": "2026-08-17",
+  "changes": [
+    "Made Brain Map replay skip quiet stretches, finish in about four seconds, zoom to a selected entity and its connections, and keep Escape from leaving the map while something is selected",
+    "Fixed Rewind capture ownership checks dropping frames right after sign-in",
+    "While downloading an update, the loading spinner now sits right next to the version instead of leaving a blank gap",
+    "Fixed a memory leak where each window kept its mouse-tracking helper alive for as long as the app was running."
+  ]
+}

@@ -7,7 +7,6 @@ on:
       - 'backend/Dockerfile.desktop_backend'
       - 'backend/**/*.py'
       - 'backend/pylock.runtime.toml'
-      - 'backend/agent_vm/**'
       - 'backend/runtime_images.json'
       - '.github/workflows/desktop_backend_auto_dev.yml'
       - '.github/scripts/desktop_backend_candidate_probe.py'
@@ -33,8 +32,6 @@ env:
   DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
   CANDIDATE_TAG: desktop-dev-candidate
   CHAT_CONTRACT_VERSION: '1'
-  AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
-  AGENT_VM_RECONCILER_JOB: agent-vm-reconciler
 
 concurrency:
   group: desktop-backend-auto-dev
@@ -182,72 +179,11 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
-      - name: Build and publish Agent VM image
-        id: agent-vm-release
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}
-          AGENT_VM_GEMINI_SECRET_NAME: GEMINI_API_KEY
-          AGENT_VM_BACKEND_URL: ${{ steps.desktop-base-api-url.outputs.base_api_url }}
-          AGENT_VM_STOP_AUDIENCE: ${{ steps.desktop-base-api-url.outputs.base_api_url }}
+      - name: Smoke desktop-backend runtime image
         run: |
-          set -euo pipefail
-          boot_image_name="$(gcloud compute images describe-from-family omi-agent --project="$PROJECT_ID" --format='value(name)')"
-          test -n "$boot_image_name"
-          AGENT_VM_BOOT_IMAGE="projects/$PROJECT_ID/global/images/$boot_image_name"
-          echo "boot_image=$AGENT_VM_BOOT_IMAGE" >> "$GITHUB_OUTPUT"
-          if [[ -z "$AGENT_GCS_BUCKET" ]]; then
-            echo "::warning::AGENT_GCS_BUCKET is not set — skipping Agent VM image build"
-            exit 0
-          fi
-          agent_image="gcr.io/$PROJECT_ID/agent-vm:${{ steps.candidate-identity.outputs.image_tag }}"
-          docker build --tag "$agent_image" --file backend/agent_vm/Dockerfile .
           python3 backend/scripts/runtime_image_contracts.py smoke \
-            --dockerfile backend/agent_vm/Dockerfile --image "$agent_image"
-          docker push "$agent_image"
-          agent_digest="$(gcloud container images describe "$agent_image" --format='value(image_summary.digest)')"
-          [[ "$agent_digest" == sha256:* ]]
-          agent_image_digest="$agent_image@$agent_digest"
-          source_sha="${{ steps.candidate-identity.outputs.source_sha }}"
-          startup_uri_gs="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
-          startup_uri_https="https://storage.googleapis.com/$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/startup.sh"
-          # Legacy VMs may still reference gs://$AGENT_GCS_BUCKET/startup.sh; do not update it before acceptance.
-          rendered_startup="$RUNNER_TEMP/agent-vm-startup.sh"
-          AGENT_VM_IMAGE="$agent_image_digest" AGENT_VM_GEMINI_SECRET_NAME="$AGENT_VM_GEMINI_SECRET_NAME" \
-            AGENT_VM_RELEASE_ID="$source_sha" AGENT_VM_IMAGE_DIGEST="$agent_image_digest" \
-            AGENT_VM_BACKEND_URL="$AGENT_VM_BACKEND_URL" AGENT_VM_STOP_AUDIENCE="$AGENT_VM_STOP_AUDIENCE" \
-            envsubst "\$AGENT_VM_IMAGE \$AGENT_VM_GEMINI_SECRET_NAME \$AGENT_VM_RELEASE_ID \$AGENT_VM_IMAGE_DIGEST \$AGENT_VM_BACKEND_URL \$AGENT_VM_STOP_AUDIENCE" \
-            < backend/agent_vm/startup.sh > "$rendered_startup"
-          startup_sha256="$(sha256sum "$rendered_startup" | cut -d' ' -f1)"
-          gcloud storage cp --no-clobber "$rendered_startup" "$startup_uri_gs"
-          startup_readback="$RUNNER_TEMP/agent-vm-startup-readback.sh"
-          gcloud storage cp "$startup_uri_gs" "$startup_readback"
-          cmp -s "$rendered_startup" "$startup_readback"
-          manifest="$RUNNER_TEMP/agent-vm-release.json"
-          python3 backend/scripts/agent_vm_release.py \
-            --output "$manifest" \
-            --environment development \
-            --source-sha "$source_sha" \
-            --image-digest "$agent_image_digest" \
-            --startup-uri "$startup_uri_gs" \
-            --startup-sha256 "$startup_sha256" \
-            --boot-image "$AGENT_VM_BOOT_IMAGE" \
-            --service-account "omi-agent-vm-bootstrap@$PROJECT_ID.iam.gserviceaccount.com"
-          manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/$source_sha/manifest.json"
-          active_manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/active.json"
-          previous_manifest_uri="gs://$AGENT_GCS_BUCKET/agent-vm/releases/previous.json"
-          gcloud storage cp --no-clobber "$manifest" "$manifest_uri"
-          manifest_readback="$RUNNER_TEMP/agent-vm-release-readback.json"
-          gcloud storage cp "$manifest_uri" "$manifest_readback"
-          cmp -s "$manifest" "$manifest_readback"
-          {
-            echo "startup_uri=$startup_uri_https"
-            echo "startup_sha256=$startup_sha256"
-            echo "image_digest=$agent_image_digest"
-            echo "manifest_uri=$manifest_uri"
-            echo "active_manifest_uri=$active_manifest_uri"
-            echo "previous_manifest_uri=$previous_manifest_uri"
-          } >> "$GITHUB_OUTPUT"
+            --dockerfile backend/Dockerfile.desktop_backend \
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate-identity.outputs.image_tag }}
 
       - name: Deploy desktop-backend to Cloud Run
         id: deploy-candidate
@@ -265,26 +201,17 @@ jobs:
             --network=default
             --subnet=default
             --vpc-egress=private-ranges-only
-            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE,AGENT_VM_PROVISIONING_ENABLED
           env_vars: |
             FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
+            USE_VERTEX_AI=true
+            GCP_LOCATION=us-central1
             FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
-            AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
-            AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}
-            GCE_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
-            GCE_RUNTIME_SERVICE_ACCOUNT=omi-agent-vm-bootstrap@based-hardware-dev.iam.gserviceaccount.com
-            GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
-            AGENT_VM_BOOT_IMAGE=${{ steps.agent-vm-release.outputs.boot_image }}
-            AGENT_VM_STARTUP_URI=${{ steps.agent-vm-release.outputs.startup_uri }}
-            AGENT_VM_RELEASE_ID=${{ steps.candidate-identity.outputs.source_sha }}
-            AGENT_VM_IMAGE_DIGEST=${{ steps.agent-vm-release.outputs.image_digest }}
-            AGENT_VM_STARTUP_SHA256=${{ steps.agent-vm-release.outputs.startup_sha256 }}
-            AGENT_VM_STOP_AUDIENCE=${{ steps.desktop-base-api-url.outputs.base_api_url }}
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
@@ -424,12 +351,30 @@ jobs:
           REVISION: ${{ steps.candidate-identity.outputs.revision }}
         run: |
           set -euo pipefail
+          # Refuse only promotions that would move the service backwards in history.
+          # Requiring origin/main to be unchanged fails whenever any commit lands
+          # during the build, which discards an accepted candidate without saving a
+          # single Cloud Build. Run ordering is already guaranteed by the
+          # desktop-backend-auto-dev concurrency group (cancel-in-progress: false).
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          current_main="$(git rev-parse 'origin/main^{commit}')"
-          if [[ "$current_main" != "${{ steps.candidate-identity.outputs.source_sha }}" ]]; then
-            echo "ERROR: candidate is stale because origin/main advanced to $current_main; traffic remains unchanged." >&2
-            exit 1
+          git fetch --no-tags --deepen=200 origin main 2>/dev/null || true
+          serving_revision="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json 2>/dev/null \
+            | python3 .github/scripts/extract_single_cloud_run_traffic_revision.py 2>/dev/null || true)"
+          serving_release_sha=""
+          if [[ -n "$serving_revision" ]]; then
+            serving_release_sha="$(gcloud run revisions describe "$serving_revision" \
+              --project="$PROJECT_ID" \
+              --region="$REGION" \
+              --format=json 2>/dev/null \
+              | jq -r '[.spec.containers[]?.env[]? | select(.name == "OMI_DESKTOP_BACKEND_RELEASE_SHA") | .value] | first // ""' \
+              || true)"
           fi
+          python3 .github/scripts/check_desktop_backend_traffic_regression.py \
+            --candidate-sha="${{ steps.candidate-identity.outputs.source_sha }}" \
+            --serving-release-sha="$serving_release_sha"
           python3 backend/scripts/resolve_cloud_run_tagged_url.py \
             --project="$PROJECT_ID" \
             --region="$REGION" \
@@ -487,99 +432,6 @@ jobs:
             --evidence-path=artifacts/desktop-backend-dev-serving.json
           echo "Verified development desktop-backend identity at $service_url/health" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Deploy Agent VM reconciler Cloud Run Job
-        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
-        uses: google-github-actions/deploy-cloudrun@v3
-        with:
-          job: ${{ env.AGENT_VM_RECONCILER_JOB }}
-          region: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}@${{ steps.build-image.outputs.digest }}
-          flags: >-
-            --command=python
-            '--args=-m,jobs.agent_vm_reconciler'
-            --max-retries=0
-            --task-timeout=3600s
-            --service-account=agent-vm-reconciler@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
-            --network=default
-            --subnet=default
-            --vpc-egress=private-ranges-only
-          env_vars: |
-            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
-            FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
-            GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
-            GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}
-            AGENT_VM_ENVIRONMENT=development
-            AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc
-            AGENT_VM_ACTIVE_RELEASE_URI=${{ steps.agent-vm-release.outputs.active_manifest_uri }}
-            AGENT_VM_RECONCILER_MAX_CONCURRENCY=5
-            AGENT_VM_MISSING_CLEANUP_GRACE_SECONDS=300
-
-      - name: Save previous Agent VM release pointer
-        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
-        run: |
-          set -euo pipefail
-          pointer_error="$RUNNER_TEMP/agent-vm-active-pointer-error.txt"
-          if active_generation="$(gcloud storage objects describe \
-            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
-            --format='value(generation)' 2>"$pointer_error")"; then
-            gcloud storage cp \
-              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}#${active_generation}" \
-              "$RUNNER_TEMP/agent-vm-active-previous.json"
-            if previous_generation="$(gcloud storage objects describe \
-              "${{ steps.agent-vm-release.outputs.previous_manifest_uri }}" \
-              --format='value(generation)' 2>"$pointer_error")"; then
-              gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
-                "${{ steps.agent-vm-release.outputs.previous_manifest_uri }}" \
-                --if-generation-match="$previous_generation"
-            elif grep -Eq '(^|[^0-9])404([^0-9]|$)|NOT_FOUND' "$pointer_error"; then
-              gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
-                "${{ steps.agent-vm-release.outputs.previous_manifest_uri }}" \
-                --if-generation-match=0
-            else
-              cat "$pointer_error" >&2
-              echo "ERROR: previous Agent VM release pointer could not be read." >&2
-              exit 1
-            fi
-            gcloud storage cp \
-              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}#${active_generation}" \
-              "$RUNNER_TEMP/agent-vm-active-previous-readback.json"
-            cmp -s "$RUNNER_TEMP/agent-vm-active-previous.json" "$RUNNER_TEMP/agent-vm-active-previous-readback.json"
-            echo present > "$RUNNER_TEMP/agent-vm-active-previous.state"
-            echo "$active_generation" > "$RUNNER_TEMP/agent-vm-active-previous.generation"
-          elif grep -Eq '(^|[^0-9])404([^0-9]|$)|NOT_FOUND' "$pointer_error"; then
-            # Do not delete a possibly concurrent rollback target. This run
-            # records that it has no predecessor and can only remove its own
-            # newly-created active pointer during compensation.
-            echo absent > "$RUNNER_TEMP/agent-vm-active-previous.state"
-            echo 0 > "$RUNNER_TEMP/agent-vm-active-previous.generation"
-          else
-            cat "$pointer_error" >&2
-            echo "ERROR: active Agent VM release pointer could not be read; refusing to change rollback state." >&2
-            exit 1
-          fi
-          echo "AGENT_VM_ACTIVE_POINTER_PREVIOUS_SAVED=true" >> "$GITHUB_ENV"
-
-      - name: Activate accepted Agent VM release
-        if: success() && steps.route-traffic.outcome == 'success' && steps.agent-vm-release.outputs.manifest_uri != ''
-        run: |
-          set -euo pipefail
-          gcloud storage cp \
-            "${{ steps.agent-vm-release.outputs.manifest_uri }}" \
-            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
-            --cache-control='no-store,max-age=0' \
-            --if-generation-match="$(cat "$RUNNER_TEMP/agent-vm-active-previous.generation")"
-          echo "AGENT_VM_ACTIVE_POINTER_MUTATED=true" >> "$GITHUB_ENV"
-          activated_generation="$(gcloud storage objects describe \
-            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --format='value(generation)')"
-          gcloud storage cp \
-            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}#${activated_generation}" \
-            "$RUNNER_TEMP/agent-vm-active-activated.json"
-          cmp -s "$RUNNER_TEMP/agent-vm-active-activated.json" "$RUNNER_TEMP/agent-vm-release.json"
-          echo "$activated_generation" > "$RUNNER_TEMP/agent-vm-active-activated.generation"
-          echo "DESKTOP_BACKEND_PROMOTION_COMPLETED=true" >> "$GITHUB_ENV"
-          echo "Activated Agent VM release ${{ steps.candidate-identity.outputs.source_sha }} after the reconciler job was deployed." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Restore prior traffic after a failed promotion
         if: failure() && env.DESKTOP_BACKEND_TRAFFIC_MUTATION_ATTEMPTED == 'true'
         env:
@@ -613,26 +465,6 @@ jobs:
             --region="$REGION" \
             --remove-tags="$CANDIDATE_TAG" \
             --quiet
-
-      - name: Restore prior Agent VM release pointer after failed promotion
-        if: failure() && env.AGENT_VM_ACTIVE_POINTER_MUTATED == 'true' && env.AGENT_VM_ACTIVE_POINTER_PREVIOUS_SAVED == 'true' && env.DESKTOP_BACKEND_PROMOTION_COMPLETED != 'true'
-        run: |
-          set -euo pipefail
-          expected_generation="$(cat "$RUNNER_TEMP/agent-vm-active-activated.generation")"
-          current_generation="$(gcloud storage objects describe \
-            "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" --format='value(generation)')"
-          if [[ "$current_generation" != "$expected_generation" ]]; then
-            echo "REFUSED: active Agent VM release pointer changed after this promotion; not overwriting generation $current_generation." >&2
-            exit 1
-          fi
-          if [[ "$(cat "$RUNNER_TEMP/agent-vm-active-previous.state")" == "present" ]]; then
-            gcloud storage cp "$RUNNER_TEMP/agent-vm-active-previous.json" \
-              "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
-              --cache-control='no-store,max-age=0' --if-generation-match="$expected_generation"
-          else
-            gcloud storage rm "${{ steps.agent-vm-release.outputs.active_manifest_uri }}" \
-              --if-generation-match="$expected_generation" --quiet
-          fi
 
       - name: Upload desktop backend acceptance evidence
         if: always()

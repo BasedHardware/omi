@@ -630,6 +630,43 @@ actor ContextBucketStore {
       }) ?? false
   }
 
+  /// The grounding facts behind an armed candidate, rendered for the delivery
+  /// gate's evidence section. Empty on any failure: the gate prompt then shows
+  /// "(none)", which is strictly no worse than the pre-evidence prompt.
+  func groundingFactStatements(
+    _ factIDs: [String], bucketID: String
+  ) async -> [String] {
+    guard !factIDs.isEmpty else { return [] }
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextProactiveCandidateLookup.groundingFactLines(
+          factIDs: factIDs, bucketID: bucketID, in: db)
+      }) ?? []
+  }
+
+  /// Candidate-sourced deliveries that actually reached the user in the last
+  /// 24-hour window, for the candidate show ceiling. Fails closed to the
+  /// ceiling (treats an unreadable database as "ceiling reached") so a storage
+  /// error can never turn into extra interruptions.
+  func candidateDeliveriesInWindow(now: Date = Date()) async -> Int {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return Int.max }
+    let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
+    return
+      (try? await pool.read { db in
+        try Int.fetchOne(
+          db,
+          sql: """
+            SELECT COUNT(*) FROM proactive_deliveries
+            WHERE deliveredAt >= ? AND lifecycleState = 'delivered'
+              AND provenanceJson LIKE '%"source":"candidate"%'
+            """,
+          arguments: [windowStart]) ?? 0
+      }) ?? Int.max
+  }
+
   func recentContextPool(
     excludingBucketID: String, now: Date = Date()
   ) async -> [ContextWorkstreamPoolItem] {

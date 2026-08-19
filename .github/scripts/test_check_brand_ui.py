@@ -11,8 +11,41 @@ from check_brand_ui import count_purple, is_ui_source
 class BrandUiTests(unittest.TestCase):
     def test_counts_color_purple_and_hex(self) -> None:
         text = "Color.purple\nlet x = Color(hex: 0x8B5CF6)\n#8B5CF6\npurplePrimary\n"
-        # Color.purple + #8B5CF6 + purplePrimary = 3 (0x8B5CF6 not matched — hex with # only)
-        self.assertGreaterEqual(count_purple(text), 3)
+        # Color.purple + 0x8B5CF6 + #8B5CF6 + purplePrimary
+        self.assertGreaterEqual(count_purple(text), 4)
+
+    def test_counts_flutter_deep_purple(self) -> None:
+        """`deepPurple` is the spelling most of the Flutter app actually uses.
+
+        It went uncounted because camelCase leaves no word boundary before
+        `purple`, so `\\bpurple\\b` cannot see it and no other pattern spelt it.
+        """
+        self.assertGreaterEqual(count_purple("color: Colors.deepPurple"), 1)
+        self.assertGreaterEqual(count_purple("Colors.deepPurpleAccent"), 1)
+        self.assertGreaterEqual(count_purple("Colors.deepPurple.shade300"), 1)
+
+    def test_counts_dart_hex_literal(self) -> None:
+        """Flutter writes `Color(0xFF8B5CF6)`, never `#8B5CF6`."""
+        self.assertGreaterEqual(count_purple("const Color(0xFF8B5CF6)"), 1)
+        self.assertGreaterEqual(count_purple("const Color(0xff7c3aed)"), 1)
+
+    def test_ignores_colours_that_merely_contain_purple_hex_digits(self) -> None:
+        """A non-purple hue must not be counted just for sharing digits."""
+        self.assertEqual(count_purple("const Color(0xFF1A2B3C)"), 0)
+        self.assertEqual(count_purple("const Color(0xFF00FF00)"), 0)
+
+    def test_dart_hex_literal_must_start_a_token(self) -> None:
+        """`0x` has to begin a token, or the ratchet fails files containing no purple.
+
+        Without a leading boundary the pattern matches inside an identifier or a longer
+        literal, so an unrelated constant ending in a purple hue is reported as a purple
+        increase.
+        """
+        self.assertEqual(count_purple("foo0x8B5CF6"), 0)
+        self.assertEqual(count_purple("SOME_CONST0x8B5CF6"), 0)
+        # ...while a real literal in the shapes Flutter writes still counts.
+        self.assertGreaterEqual(count_purple("Color(0xFF8B5CF6)"), 1)
+        self.assertGreaterEqual(count_purple("value = 0x8B5CF6;"), 1)
 
     def test_is_ui_source(self) -> None:
         self.assertTrue(is_ui_source("desktop/macos/Desktop/Sources/Foo.swift"))

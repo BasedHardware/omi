@@ -45,6 +45,7 @@ import {
   hardDeleteAbsentTasksOn,
   hardDeleteAbsentCompletedTasksOn,
   getUnsyncedActionItemsOn,
+  getSyncedActionItemIdsOn,
   getAllActionItemEmbeddingsOn,
   updateActionItemEmbeddingOn,
   getActionItemsMissingEmbeddingsOn,
@@ -2186,6 +2187,12 @@ export function getUnsyncedActionItems(opts?: {
     includeRecent: opts?.includeRecent,
     now: opts?.now ?? Date.now()
   })
+}
+
+/** Backend ids + completion buckets of every synced, non-deleted local row —
+ *  the local half of the sync engine's ID-census diff. */
+export function getSyncedActionItemIds(): { backendId: string; completed: boolean }[] {
+  return getSyncedActionItemIdsOn(taskStoreDb())
 }
 
 export function getAllActionItemEmbeddings(): { id: number; embedding: Float32Array }[] {

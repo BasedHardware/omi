@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# discovery-skip: needs an installed named bundle path — run it directly with the .app
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then

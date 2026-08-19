@@ -128,23 +128,25 @@ struct SettingsShortcutChord: Equatable, Hashable, Codable, Sendable {
 
 // MARK: - The slots
 
-/// The two shortcuts the General pane records.
+/// The shortcut the General pane records.
 ///
 /// The mirror of `GlobalShortcuts.Action`, and `openActivity` carries the same rename for the same
 /// reason: the chord opens the Activity window rather than the timeline, so a slot that still said
 /// timeline would be a recorder describing a window it does not summon. Nothing here is persisted —
 /// `rawValue` is only this pane's `Identifiable` id and half of a conflict row's — so unlike the
 /// shortcut layer's own case, this one had no stored name to leave behind.
+///
+/// **`openSearch` is gone, and the pane is why it had to go from here too.** It bound a second
+/// chord to the same window (`ContextApp.shortcutFired` answered both with one `window.press()`),
+/// so the pane drew two recorders for one behaviour — see `GlobalShortcuts.Action`.
 enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
     case openActivity
-    case openSearch
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .openActivity: "Open Activity Shortcut"
-        case .openSearch: "Open Search Shortcut"
         }
     }
 
@@ -155,14 +157,13 @@ enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
 
     /// What the app falls back to when the slot is cleared.
     ///
-    /// The same two chords `GlobalShortcuts.Action.defaultChord` names, in this pane's vocabulary —
-    /// Activity is the two Command keys pressed together, search is still a double tap of ⌘ with
-    /// Shift held. Both are asserted against each other in the tests, because a recorder showing a
-    /// gesture the shortcut layer does not listen for is worse than showing nothing.
+    /// The same chord `GlobalShortcuts.Action.defaultChord` names, in this pane's vocabulary — the
+    /// two Command keys pressed together. The two are asserted against each other in the tests,
+    /// because a recorder showing a gesture the shortcut layer does not listen for is worse than
+    /// showing nothing.
     var defaultChord: SettingsShortcutChord {
         switch self {
         case .openActivity: SettingsShortcutChord(modifierFlags: .command, gesture: .bothCommandKeys)
-        case .openSearch: SettingsShortcutChord(modifierFlags: [.command, .shift], gesture: .doubleTap)
         }
     }
 
@@ -171,7 +172,6 @@ enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
     var symbol: String {
         switch self {
         case .openActivity: "list.bullet.rectangle"
-        case .openSearch: "magnifyingglass"
         }
     }
 }

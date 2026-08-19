@@ -138,8 +138,6 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(registry.reapplies, 1)
         // And the recorder now shows a recorded chord, so the ✕ appears.
         XCTAssertEqual(bindings.binding(for: .openActivity), Self.optionCommandK)
-        // The other slot is untouched — one recorder must not move the other row.
-        XCTAssertNil(bindings.binding(for: .openSearch))
     }
 
     /// Caps Lock is in `deviceIndependentFlagsMask`, so the recorder can hand us a chord carrying it.
@@ -199,10 +197,14 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
 
         registry.isAXTrusted = false
-        XCTAssertEqual(bindings.readiness(for: .openActivity), .armed)
         XCTAssertEqual(
-            bindings.readiness(for: .openSearch), .needsAccessibility,
-            "the slot still on its gesture default is the one that stops working")
+            bindings.readiness(for: .openActivity), .armed,
+            "a recorded key equivalent is a Carbon hot key and needs no grant at all")
+
+        // …and the same slot back on its gesture default is the one that stops working, because a
+        // gesture can only be watched for and macOS gates the watching behind Accessibility.
+        bindings.clear(.openActivity)
+        XCTAssertEqual(bindings.readiness(for: .openActivity), .needsAccessibility)
     }
 
     /// A refusal carries macOS's own reason all the way to the row. Flattening it into a generic
@@ -300,15 +302,6 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertNil(bindings.binding(for: .openActivity))
     }
 
-    func testTheTwoSlotsCannotShareOneChord() {
-        let bindings = provider()
-        XCTAssertEqual(bindings.record(Self.optionCommandK, for: .openActivity), .recorded)
-        guard case .rejected(let reason) = bindings.record(Self.optionCommandK, for: .openSearch) else {
-            return XCTFail("one chord cannot drive two actions")
-        }
-        XCTAssertTrue(reason.contains(ShortcutAction.openActivity.title), reason)
-    }
-
     // MARK: Observers
 
     func testObserversAreNotifiedOnRecordAndClearAndReleased() {
@@ -321,8 +314,8 @@ final class LiveShortcutBindingsTests: XCTestCase {
         XCTAssertEqual(notifications, 2)
 
         bindings.removeObserver(token)
-        bindings.clear(.openSearch)
-        XCTAssertEqual(notifications, 2)
+        bindings.clear(.openActivity)
+        XCTAssertEqual(notifications, 2, "a released observer must stop hearing about changes")
     }
 
     // MARK: Conflicts
@@ -362,7 +355,7 @@ final class LiveShortcutBindingsTests: XCTestCase {
         })
 
         let rows = bindings.conflicts()
-        XCTAssertEqual(rows.count, 2, "a bare ⌘ starts both of this app's gestures")
+        XCTAssertEqual(rows.count, 1, "a bare ⌘ starts this app's one gesture")
         let row = try XCTUnwrap(rows.first { $0.action == .openActivity })
         XCTAssertEqual(row.owner, "Codex")
         // Spelled by `SettingsShortcutChord` here and by `ShortcutChord` in the scan: one gesture,
@@ -517,8 +510,8 @@ final class ShortcutKeyLabelTests: XCTestCase {
     }
 
     /// The recorder and the menu bar describe the same keystroke, so they have to spell it the same
-    /// way. A recorded chord prints in macOS's order; the gesture defaults do not, because `⌘⌘⇧` and
-    /// `⌘ + ⌘` are gestures and not modifier lists.
+    /// way. A recorded chord prints in macOS's order; the gesture default does not, because
+    /// `⌘ + ⌘` is a gesture and not a modifier list.
     func testARecordedChordPrintsTheWayTheRestOfMacOSPrintsIt() {
         let controlCommandSpace = SettingsShortcutChord(keyCode: 49, modifierFlags: [.command, .control])
         XCTAssertEqual(controlCommandSpace.displayString, "⌃⌘Space")
@@ -526,7 +519,6 @@ final class ShortcutKeyLabelTests: XCTestCase {
             controlCommandSpace.displayString,
             ShortcutChord.key(label: "Space", modifiers: [.command, .control]).display,
             "Settings and the shortcut layer must not spell one shortcut two ways")
-        XCTAssertEqual(ShortcutAction.openSearch.defaultChord.displayString, "⌘⌘⇧")
         XCTAssertEqual(ShortcutAction.openActivity.defaultChord.displayString, "⌘ + ⌘")
     }
 }

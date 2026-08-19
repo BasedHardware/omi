@@ -322,7 +322,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchApps => 'Search apps...';
 
   @override
-  String get myApps => 'My Apps';
+  String get myApps => 'Created by me';
 
   @override
   String get installedApps => 'Installed Apps';
@@ -9839,4 +9839,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.';
+
+  @override
+  String get findDevice => 'Find';
+
+  @override
+  String get diagnosticsShareFailed => 'Couldn\'t share diagnostics. Please try again.';
 }

@@ -4,6 +4,7 @@
 #
 # Usage:
 #   scripts/uninstall.sh                remove /Applications/Context for Claude.app and the login item
+#   scripts/uninstall.sh --dev          remove the developer build instead (Context for Claude Dev.app)
 #   scripts/uninstall.sh --purge-data   also delete ~/Library/Application Support/ContextForClaude
 #
 # Captured transcripts and screen frames survive by default — deleting them is explicit, because
@@ -17,12 +18,12 @@ set -euo pipefail
 
 export PATH="/bin:/usr/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 
-APP_NAME="Context for Claude"
-BUNDLE_ID="com.omi.context-for-claude"
-MCP_SERVER_NAME="context-for-claude"
-INSTALL_PATH="/Applications/$APP_NAME.app"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The captured data lives under one directory for both kinds of install, so --dev does not move it.
 DATA_DIR="$HOME/Library/Application Support/ContextForClaude"
 PURGE_DATA=0
+IDENTITY_KIND="release"
 
 log()  { printf '\033[1m[context]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[context]\033[0m %s\n' "$*" >&2; }
@@ -46,6 +47,30 @@ assert_not_production() {
     fi
 }
 
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --purge-data) PURGE_DATA=1 ;;
+        --dev)        IDENTITY_KIND="development" ;;
+        -h|--help)
+            sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) die "unknown flag: $1 (see --help)" ;;
+    esac
+    shift
+done
+
+# Which install to remove. build-identity.sh is the single owner of both identity sets, so this
+# script cannot drift from what build.sh actually produced.
+IDENTITY_ASSIGNMENTS="$("$SCRIPT_DIR/build-identity.sh" --kind "$IDENTITY_KIND")" \
+    || die "could not resolve the $IDENTITY_KIND identity"
+eval "$IDENTITY_ASSIGNMENTS"
+
+APP_NAME="$CFC_APP_NAME"
+BUNDLE_ID="$CFC_BUNDLE_ID"
+MCP_SERVER_NAME="$CFC_MCP_SERVER_NAME"
+INSTALL_PATH="/Applications/$APP_NAME.app"
+
 assert_not_production "APP_NAME" "$APP_NAME"
 assert_not_production "APP_NAME bundle" "$APP_NAME.app"
 assert_not_production "BUNDLE_ID" "$BUNDLE_ID"
@@ -54,17 +79,7 @@ assert_not_production "data directory" "$DATA_DIR"
 [[ "$(basename "$INSTALL_PATH")" == "$APP_NAME.app" ]] \
     || die "install path basename must be $APP_NAME.app, got $(basename "$INSTALL_PATH")"
 
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --purge-data) PURGE_DATA=1 ;;
-        -h|--help)
-            sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
-            exit 0
-            ;;
-        *) die "unknown flag: $1 (see --help)" ;;
-    esac
-    shift
-done
+log "removing the $IDENTITY_KIND install: $APP_NAME ($BUNDLE_ID)"
 
 # Quit a running Context for Claude, matched on its exact executable path and re-checked per pid.
 RUNNING_EXEC="$INSTALL_PATH/Contents/MacOS/$APP_NAME"

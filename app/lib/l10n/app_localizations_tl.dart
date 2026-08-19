@@ -323,7 +323,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get searchApps => 'Maghanap ng mga app...';
 
   @override
-  String get myApps => 'Aking Mga App';
+  String get myApps => 'Likha ko';
 
   @override
   String get installedApps => 'Naka-install na Mga App';
@@ -9937,4 +9937,10 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'I-off para hindi maipadala ang raw na audio sa Omi. Maaari pa ring ipadala sa Omi ang mga transcript at data na kailangan ng mga cloud feature.';
+
+  @override
+  String get findDevice => 'Hanapin';
+
+  @override
+  String get diagnosticsShareFailed => 'Hindi maibahagi ang diagnostics. Pakisubukan ulit.';
 }

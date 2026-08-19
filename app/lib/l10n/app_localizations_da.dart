@@ -323,7 +323,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get searchApps => 'Søg apps...';
 
   @override
-  String get myApps => 'Mine apps';
+  String get myApps => 'Oprettet af mig';
 
   @override
   String get installedApps => 'Installerede apps';
@@ -9832,4 +9832,10 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Slå fra for at forhindre, at rå lyd sendes til Omi. Transskriptioner og data, som cloudfunktioner kræver, kan stadig blive sendt til Omi.';
+
+  @override
+  String get findDevice => 'Find';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostikken kunne ikke deles. Prøv igen.';
 }
