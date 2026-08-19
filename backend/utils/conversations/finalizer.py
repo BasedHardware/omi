@@ -16,12 +16,12 @@ from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.location import async_resolve_geolocation
-from utils.conversations.meeting_treatment import is_meeting_treatment_eligible
+from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.log_sanitizer import sanitize_pii
-from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent, recommended_meeting_action_items
+from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
 
 logger = logging.getLogger(__name__)
 
@@ -174,23 +174,20 @@ async def finalize_persisted_conversation(
         # durable fanout projection completed. Desktop waits on that projection
         # before waking Chat; ordering the marker first closes the small window
         # where a completed projection existed without a notes-ready intent.
+        await run_blocking(
+            db_executor,
+            record_and_persist_finalized_meeting_receipt,
+            uid,
+            conversation,
+            finalization_job_id=finalization_job_id,
+        )
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
-        meeting_treatment_eligible = is_meeting_treatment_eligible(conversation)
-        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or meeting_treatment_eligible:
+        if source_value == 'omi' and not getattr(conversation, 'discarded', False):
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                if meeting_treatment_eligible:
-                    persist_capture_arrival_intent(
-                        uid,
-                        conversation_id=conversation_id,
-                        summary=summary,
-                        is_desktop_meeting=True,
-                        recommended_action_items=recommended_meeting_action_items(structured),
-                    )
-                else:
-                    persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
+                persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed during finalization uid=%s error=%s',
@@ -203,7 +200,6 @@ async def finalize_persisted_conversation(
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
-            meeting_treatment_eligible=meeting_treatment_eligible,
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')

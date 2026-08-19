@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-18 (meeting-treatment eligibility and deduplicated speech duration)
+> Last updated: 2026-08-19 (durable meeting receipt and reconciliation)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -70,9 +70,11 @@ only when its durable `started_at` and `finished_at` span at least five minutes
 and its non-empty transcript covers at least 60 seconds of speech. Speech time
 is the union of valid segment intervals, so overlapping microphone and system-
 audio transcriptions of the same remote speech count once. The backend uses the
-result to gate the meeting Chat receipt and exposes it on the durable
-finalization status; desktop completion notifications require the same value.
-The synchronous desktop upload route applies and returns the same decision.
+result to gate the meeting Chat receipt and records the verdict, reason,
+duration, and deduplicated speech input on the durable finalization job. The
+conversation document carries only a read projection. Desktop completion
+notifications consume that projection. The synchronous desktop upload route
+writes the same deterministic completed-job receipt and returns its projection.
 Short or mostly silent calls still finalize as ordinary conversations, with
 their original role and provenance unchanged.
 
@@ -334,6 +336,14 @@ The job and task payload never contain transcript text, raw BYOK keys, headers,
 or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
+
+Eligible meeting receipts also carry the stable Chat intent ID and, after the
+desktop kernel acknowledges its journal write, the materialization time. With
+`MEETING_RECEIPT_RECONCILER_ENABLED=true`, the existing five-minute
+finalization sweep re-drives receipts that are at least ten minutes old and
+still lack an intent ID. The same sweep pages through historical completed
+desktop meetings to seed missing receipts. The flag defaults off and is
+declared on both backend-listen and Cloud Run backend.
 
 See [Listen finalization jobs](./listen_finalization_jobs) for configuration,
 replay, metrics, and the operational runbook.

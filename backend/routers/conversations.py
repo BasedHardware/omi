@@ -47,6 +47,7 @@ from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -153,8 +154,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
-            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
-
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
@@ -166,7 +165,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                persist_desktop_meeting_arrival_best_effort(uid, enriched)
+                record_and_persist_finalized_meeting_receipt(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")

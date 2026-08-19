@@ -213,6 +213,12 @@ class Conversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
+    # Read projection of the authoritative finalization-job meeting receipt.
+    meeting_treatment_eligible: bool = False
+    meeting_treatment_reason: Optional[str] = None
+    meeting_duration_s: Optional[float] = None
+    meeting_dedup_speech_s: Optional[float] = None
+
     def __init__(self, **data):
         raw_segments = data.get('transcript_segments')
         conversation_id = data.get('id')

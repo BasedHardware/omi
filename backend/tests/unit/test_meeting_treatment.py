@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
     MIN_TRANSCRIBED_SPEECH_SECONDS,
     deduplicated_transcribed_speech_seconds,
     is_meeting_treatment_eligible,
+    meeting_treatment_verdict,
 )
 
 NOW = datetime(2026, 8, 18, 12, tzinfo=timezone.utc)
@@ -66,3 +69,38 @@ def test_overlapping_duplicate_stream_segments_are_counted_once():
 
     assert deduplicated_transcribed_speech_seconds(segments) == 60
     assert is_meeting_treatment_eligible(_meeting(duration_seconds=10 * 60, segments=segments)) is True
+
+
+@pytest.mark.parametrize(
+    ('updates', 'reason', 'eligible'),
+    [
+        ({}, 'eligible', True),
+        ({'finished_at': NOW + timedelta(seconds=299)}, 'too_short', False),
+        ({'transcript_segments': [{'text': 'brief', 'start': 0, 'end': 59}]}, 'insufficient_speech', False),
+        (
+            {
+                'external_data': {
+                    'conversation_role': 'meeting',
+                    'conversation_finalization_reason': 'max_duration_rotation',
+                }
+            },
+            'rotation',
+            False,
+        ),
+        ({'discarded': True}, 'discarded', False),
+        ({'source': 'omi'}, 'not_desktop_meeting', False),
+    ],
+)
+def test_verdict_records_reason_and_measured_inputs_for_every_policy_branch(updates, reason, eligible):
+    conversation = _meeting(
+        duration_seconds=1720,
+        segments=[{'text': 'measured discussion', 'start': 0, 'end': 1719.8}],
+    )
+    conversation.update(updates)
+
+    verdict = meeting_treatment_verdict(conversation)
+
+    assert verdict.eligible is eligible
+    assert verdict.reason == reason
+    assert verdict.duration_s == (299 if reason == 'too_short' else 1720)
+    assert verdict.dedup_speech_s == (59 if reason == 'insufficient_speech' else 1719.8)

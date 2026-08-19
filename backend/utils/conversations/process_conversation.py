@@ -119,7 +119,11 @@ from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
 )
-from utils.conversations.meeting_treatment import is_meeting_treatment_eligible
+from utils.conversations.meeting_treatment import (
+    MIN_MEETING_DURATION_SECONDS,
+    MIN_TRANSCRIBED_SPEECH_SECONDS,
+    deduplicated_transcribed_speech_seconds,
+)
 from utils.conversations.meeting_context import (
     MAX_SCREEN_CONTEXT_ROWS,
     MEETING_SEARCH_TOLERANCE_MINUTES,
@@ -1680,21 +1684,6 @@ def _meeting_context_from_time_overlap(
         return None
 
 
-def _is_desktop_meeting_role(conversation: Any) -> bool:
-    """Whether the finalization-time meeting policy is the authority for this conversation.
-
-    Only desktop conversations opened in the meeting role are covered by
-    `is_meeting_treatment_eligible`; every other source keeps its prior enrichment behaviour.
-    """
-    source = getattr(conversation, 'source', None)
-    if getattr(source, 'value', source) != 'desktop':
-        return False
-    external_data = getattr(conversation, 'external_data', None) or {}
-    if not isinstance(external_data, Mapping):
-        return False
-    return external_data.get('conversation_role') == 'meeting'
-
-
 def _enrich_meeting_context(uid: str, conversation: Any) -> None:
     """Read identity context before summarization without mutating calendar providers.
 
@@ -1711,17 +1700,24 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
     finished_at = getattr(conversation, 'finished_at', None)
     has_window = bool(started_at and finished_at)
 
-    # conversation_role is open-time identity, not the treatment decision (#11832). A short or
-    # mostly-silent call still opens as a meeting, so gating enrichment on the role alone would
-    # spend a Google Calendar read and a screen-activity query on conversations that the
-    # authoritative finalization policy has already ruled out. Defer to that policy where it
-    # applies — desktop meeting-role conversations — and leave every other source untouched.
-    if _is_desktop_meeting_role(conversation) and not is_meeting_treatment_eligible(conversation):
-        logger.info(
-            'Skipping meeting-context enrichment for conversation %s: not meeting-treatment eligible',
-            getattr(conversation, 'id', None),
-        )
-        return
+    # This is a pre-finalization cost gate, not a treatment verdict: discard is
+    # not known until summarization completes. Keep expensive provider reads off
+    # short/silent desktop meeting-role captures without writing or consuming the
+    # durable final verdict owned by the finalization-job receipt.
+    source = getattr(conversation, 'source', None)
+    external_data = getattr(conversation, 'external_data', None) or {}
+    if (
+        getattr(source, 'value', source) == 'desktop'
+        and isinstance(external_data, Mapping)
+        and external_data.get('conversation_role') == 'meeting'
+    ):
+        try:
+            duration_s = (finished_at - started_at).total_seconds() if has_window else 0.0
+        except TypeError:
+            duration_s = 0.0
+        speech_s = deduplicated_transcribed_speech_seconds(getattr(conversation, 'transcript_segments', None) or [])
+        if duration_s < MIN_MEETING_DURATION_SECONDS or speech_s < MIN_TRANSCRIBED_SPEECH_SECONDS:
+            return
 
     def _stored() -> Optional[CalendarMeetingContext]:
         mapped = _meeting_context_from_redis_mapping(uid, conversation)

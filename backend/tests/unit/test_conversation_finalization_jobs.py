@@ -493,13 +493,81 @@ def test_finalization_completion_requires_durable_fanout_completion():
     ref.data = ref.data | fanout.updates[0][1]
 
     completed_fanout = _Transaction()
-    assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now, True) is True
-    assert completed_fanout.updates[0][1]['meeting_treatment_eligible'] is True
+    assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    assert 'meeting_treatment_eligible' not in completed_fanout.updates[0][1]
     ref.data = ref.data | completed_fanout.updates[0][1]
 
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
     assert completed.updates[0][1]['terminal_outcome'] == 'success'
+
+
+def test_meeting_receipt_is_created_once_on_existing_job_and_projected_to_conversation():
+    now = _now()
+    conversation_ref = _completed_finalization_conversation()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+        },
+    )
+    jobs_collection = _Collection({'job-1': job_ref})
+
+    first = _Transaction()
+    receipt = jobs._record_meeting_receipt_txn(
+        first,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        True,
+        'eligible',
+        1720.0,
+        1719.8,
+        now,
+    )
+
+    assert receipt['job_id'] == 'job-1'
+    assert first.updates[0][0] is job_ref
+    assert first.updates[0][1]['meeting_treatment_reason'] == 'eligible'
+    assert first.updates[1][0] is conversation_ref
+    assert first.updates[1][1]['meeting_treatment_eligible'] is True
+
+    job_ref.data = job_ref.data | first.updates[0][1]
+    replay = _Transaction()
+    replayed = jobs._record_meeting_receipt_txn(
+        replay,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        False,
+        'too_short',
+        1.0,
+        1.0,
+        now + timedelta(minutes=1),
+    )
+
+    assert replayed['meeting_treatment_eligible'] is True
+    assert replayed['meeting_treatment_reason'] == 'eligible'
+    assert replay.updates == [
+        (
+            conversation_ref,
+            {
+                'finalization_job_id': 'job-1',
+                'meeting_treatment_eligible': True,
+                'meeting_treatment_reason': 'eligible',
+                'meeting_duration_s': 1720.0,
+                'meeting_dedup_speech_s': 1719.8,
+            },
+        )
+    ]
 
 
 def test_admitted_terminal_replay_updates_its_shard_once():
