@@ -400,6 +400,8 @@ env:
         key: MCP_OAUTH_CLIENTS_JSON
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
+  - name: CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE
+    value: "standby"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

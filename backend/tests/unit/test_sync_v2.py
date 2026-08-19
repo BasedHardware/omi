@@ -24,6 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.routing import APIRoute
 from models.users import PlanType
+from utils.conversations import finalizer as persisted_finalizer
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -1339,6 +1340,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
             'utils.other',
+            'utils.other.conversation_playback_storage',
             'utils.other.endpoints',
             'utils.other.storage',
             'utils.encryption',
@@ -1359,6 +1361,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.sync.playback',
             'utils.sync.backfill',
             'utils.sync.content_id',
+            'utils.sync.conversation_artifact_worker',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -1373,6 +1376,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
         )
+        sys.modules['utils.other'].__path__ = []
         # Keep the outcome contract real; the coordinator tests exercise its
         # enum values while every heavyweight provider dependency stays stubbed.
         saved_modules['utils'] = prior_utils
@@ -3049,6 +3053,7 @@ class TestV2EndpointExecution:
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
             'utils.other',
+            'utils.other.conversation_playback_storage',
             'utils.other.endpoints',
             'utils.other.storage',
             'utils.encryption',
@@ -3069,6 +3074,7 @@ class TestV2EndpointExecution:
             'utils.sync.playback',
             'utils.sync.backfill',
             'utils.sync.content_id',
+            'utils.sync.conversation_artifact_worker',
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
@@ -3083,6 +3089,7 @@ class TestV2EndpointExecution:
         sys.modules['utils.account_cutover.access'].should_skip_background_account_mutation = MagicMock(
             return_value=False
         )
+        sys.modules['utils.other'].__path__ = []
         saved_modules['utils'] = prior_utils
         saved_modules['utils.sync'] = prior_utils_sync
         saved_modules['utils.stt'] = prior_utils_stt
@@ -3480,16 +3487,28 @@ class TestV2EndpointExecution:
 class TestConversationFinalizerExecutor:
     """The durable finalizer must use the post-processing bulkhead."""
 
-    @staticmethod
-    def _read_finalizer_source():
-        finalizer_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'finalizer.py')
-        with open(finalizer_path, encoding='utf-8') as f:
-            return f.read()
+    @pytest.mark.asyncio
+    async def test_postprocess_mutation_runs_on_bulkhead(self, monkeypatch):
+        work = MagicMock(return_value='processed')
+        calls = []
 
-    def test_process_conversation_uses_postprocess_bulkhead(self):
-        source = self._read_finalizer_source()
-        assert 'postprocess_executor' in source
-        assert re.search(r'run_blocking\(\s+postprocess_executor,\s+process_conversation', source)
+        async def inline_run_blocking(executor, function, *args, **kwargs):
+            calls.append((executor, function, args, kwargs))
+            return function(*args, **kwargs)
+
+        monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+
+        result = await persisted_finalizer._run_postprocess_mutation(work, 'uid-1', force_process=True)
+
+        assert result == 'processed'
+        assert calls == [
+            (
+                persisted_finalizer.postprocess_executor,
+                work,
+                ('uid-1',),
+                {'force_process': True},
+            )
+        ]
 
 
 # ---------------------------------------------------------------------------

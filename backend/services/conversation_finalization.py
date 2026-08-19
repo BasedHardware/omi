@@ -14,6 +14,8 @@ from typing import Any
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
+from database import conversation_finalization_terminal_store as terminal_store
+from database import vector_db
 from database._client import is_document_size_limit_error
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -227,6 +229,36 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
 def final_attempt_failed(
     job_id: str, dispatch_generation: int, lease_epoch: int, retry_count: int, *, firestore_client: Any = None
 ) -> bool:
+    cleanup = terminal_store.claim_finalization_dead_letter_cleanup(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        firestore_client=firestore_client,
+    )
+    if cleanup['status'] in {'stale', 'draining'}:
+        return False
+    if cleanup['status'] == 'invalid':
+        raise RuntimeError('incomplete_v2_enrichment_cleanup_coordinates_missing')
+    if cleanup['status'] == 'claimed':
+        try:
+            vector_db.delete_finalization_enrichment_vectors(
+                cleanup['uid'],
+                cleanup['conversation_id'],
+                cleanup['finalization_vector_generation_id'],
+                cleanup['transcript_vector_count'],
+                request_timeout_seconds=terminal_store.PROVIDER_REQUEST_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            try:
+                terminal_store.abort_finalization_dead_letter_cleanup(
+                    job_id,
+                    dispatch_generation,
+                    lease_epoch,
+                    firestore_client=firestore_client,
+                )
+            except Exception:
+                logger.error('finalization dead-letter cleanup ownership release failed job=%s', job_id)
+            raise
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
@@ -237,8 +269,7 @@ def final_attempt_failed(
     if marked:
         LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
         try:
-            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
-            accepted_at = job.get('created_at') if job else None
+            accepted_at = cleanup.get('created_at')
             record_capture_finalization_terminal('failure', accepted_at)
         except Exception:
             # Dead-lettering is authoritative; a best-effort metric lookup must

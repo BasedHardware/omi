@@ -44,6 +44,16 @@ def merge():
     conversations_stub = ModuleType("database.conversations")
     conversations_stub.get_conversation = MagicMock(return_value=None)
 
+    cleanup_stub = ModuleType("database.conversation_vector_cleanup")
+
+    class _ConversationVectorCleanupConflict(RuntimeError):
+        pass
+
+    cleanup_stub.ConversationVectorCleanupConflict = _ConversationVectorCleanupConflict
+    cleanup_stub.claim_conversation_vector_cleanup_descriptor = MagicMock()
+    cleanup_stub.delete_claimed_conversation_source = MagicMock()
+    cleanup_stub.release_conversation_vector_cleanup_descriptor = MagicMock()
+
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
 
@@ -66,6 +76,11 @@ def merge():
 
     cloud_tasks_stub = ModuleType("utils.cloud_tasks")
     cloud_tasks_stub.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    artifact_protocol_stub = ModuleType("utils.sync.conversation_artifact_protocol")
+    artifact_protocol_stub.conversation_finalization_identity = MagicMock(return_value=None)
+    artifact_protocol_stub.enqueue_conversation_artifact_build = MagicMock()
+    conversation_playback_storage_stub = ModuleType("utils.other.conversation_playback_storage")
+    conversation_playback_storage_stub.delete_conversation_playback_artifacts = MagicMock()
 
     # The lifecycle service owns writes used only by perform_merge_async. The
     # pure validation surface under test must not import its database graph.
@@ -113,13 +128,16 @@ def merge():
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
         "database._client": client_stub,
+        "database.conversation_vector_cleanup": cleanup_stub,
         "database.conversations": conversations_stub,
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.conversations.lifecycle": lifecycle_stub,
+        "utils.other.conversation_playback_storage": conversation_playback_storage_stub,
         "utils.other.storage": storage_stub,
+        "utils.sync.conversation_artifact_protocol": artifact_protocol_stub,
         "models": models_pkg,
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,

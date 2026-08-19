@@ -9,6 +9,7 @@ from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
+from database import conversation_audio as conversation_audio_db
 from database import users as users_db
 from utils.pusher_finalization import process_conversation_task
 from utils.pusher_protocol import (
@@ -236,16 +237,16 @@ async def _websocket_util_trigger(
                         # Rebuild the conversation playback artifact if a stamped one
                         # went stale. No stamp (the live-conversation common case) → no-op.
                         if is_audio_merge_dispatch_enabled():
-                            stamp = await run_blocking(
-                                storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
+                            source = await run_blocking(
+                                db_executor, conversation_audio_db.get_conversation_audio_source, uid, conv_id
                             )
-                            if stamp:
+                            if source:
                                 await run_blocking(
                                     storage_executor,
                                     maybe_invalidate_conversation_playback,
                                     uid,
                                     conv_id,
-                                    {'conversation_audio': stamp},
+                                    source,
                                     files_payload,
                                     'pusher_flush',
                                 )

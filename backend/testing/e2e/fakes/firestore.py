@@ -13,12 +13,14 @@ from typing import Optional
 from fake_firestore import MockFirestore
 from fake_firestore import _transformations as fake_firestore_transformations
 from fake_firestore.document import FakeDocumentReference, NotFound, apply_transformations, get_by_path
+from fake_firestore.transaction import FakeTransaction
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
 _original_document_set = None
 _original_document_delete = None
 _delete_field_noop_patched = False
+_transaction_create_patched = False
 
 
 def _patch_document_merge_preserves_subcollections():
@@ -97,6 +99,25 @@ def _patch_document_delete_missing_doc_noop():
     FakeDocumentReference.delete = _delete
 
 
+def _patch_transaction_create():
+    """Queue transaction.create writes instead of silently discarding them.
+
+    fake-firestore 0.13.0 implements ``FakeTransaction.create`` as a no-op.
+    Real Firestore commits the create and enforces create-only semantics, which
+    conversation lifecycle creation relies on.
+    """
+    global _transaction_create_patched
+    if _transaction_create_patched:
+        return
+
+    def _create(self, reference: FakeDocumentReference, document_data: dict) -> None:
+        payload = deepcopy(document_data)
+        self._add_write_op(lambda: reference.create(payload))
+
+    FakeTransaction.create = _create
+    _transaction_create_patched = True
+
+
 def get_mock_firestore() -> MockFirestore:
     """Return the shared MockFirestore instance. Raises if not initialized."""
     if _mock_store is None:
@@ -110,6 +131,7 @@ def setup_fake_firestore() -> MockFirestore:
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
     _patch_document_delete_missing_doc_noop()
+    _patch_transaction_create()
     _mock_store = MockFirestore()
     return _mock_store
 

@@ -59,6 +59,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
     full_run_cases = {
         "backend/database/memory_vector_repair_outbox_worker.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/database/projection_repair.py": "tests/unit/test_memory_ledger.py",
+        "backend/database/conversation_audio.py": "tests/unit/test_conversation_playback_artifact.py",
         "backend/main.py": "tests/unit/test_vector_repair_outbox_worker.py",
         "backend/utils/executors.py": "tests/unit/test_vector_repair_outbox_worker.py",
     }
@@ -66,6 +67,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
         "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
+        "backend/utils/other/conversation_playback_storage.py": "tests/unit/test_conversation_playback_artifact.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
         "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
@@ -228,6 +230,61 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     }
 
     assert missing == set()
+
+
+def test_conversation_lifecycle_contract_covers_durable_enrichment_boundaries():
+    contracts = json.loads((BACKEND_DIR / "testing/workflow_contracts.json").read_text(encoding="utf-8"))
+    lifecycle = next(workflow for workflow in contracts["workflows"] if workflow["id"] == "conversation_lifecycle")
+
+    assert {
+        "backend/database/conversation_finalization_effects.py",
+        "backend/database/conversation_finalization_effect_store.py",
+        "backend/database/conversation_finalization_jobs.py",
+        "backend/database/conversation_finalization_terminal_store.py",
+        "backend/database/conversation_audio.py",
+        "backend/database/conversation_vector_cleanup.py",
+        "backend/database/vector_db.py",
+        "backend/deploy/runtime_env.yaml",
+        "backend/scripts/runtime_env_finalization_effect_plan_contract.py",
+        "backend/utils/conversations/developer_cleanup.py",
+        "backend/utils/conversations/enrichment_plan.py",
+        "backend/utils/conversations/finalizer.py",
+        "backend/utils/other/conversation_playback_storage.py",
+        "backend/utils/other/storage.py",
+        "backend/utils/sync/conversation_artifact_protocol.py",
+        "backend/utils/sync/conversation_artifact_worker.py",
+    } <= set(lifecycle["sources"])
+    assert {
+        "tests/unit/test_conversation_enrichment_plan.py",
+        "tests/unit/test_conversation_finalization_effect_ledger.py",
+        "tests/unit/test_conversation_finalization_effect_plan.py",
+        "tests/unit/test_conversation_revision_contract.py",
+        "tests/unit/test_conversation_audio_fingerprint.py",
+        "tests/unit/test_conversation_playback_artifact.py",
+        "tests/unit/test_conversation_vector_delete_wiring.py",
+        "tests/unit/test_conversation_vector_generation.py",
+        "tests/unit/test_developer_from_segments_idempotency.py",
+        "tests/unit/test_process_conversation_usage_context.py",
+        "tests/unit/test_sync_playback_service.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+    } <= set(lifecycle["tests"])
+
+
+def test_sync_audio_artifact_contract_covers_generation_fenced_playback():
+    contracts = json.loads((BACKEND_DIR / "testing/workflow_contracts.json").read_text(encoding="utf-8"))
+    workflow = next(workflow for workflow in contracts["workflows"] if workflow["id"] == "sync_cloud_tasks")
+
+    assert {
+        "backend/database/conversation_audio.py",
+        "backend/utils/other/conversation_playback_storage.py",
+        "backend/utils/sync/*.py",
+    } <= set(workflow["sources"])
+    assert {
+        "tests/unit/test_audio_merge_tasks.py",
+        "tests/unit/test_conversation_audio_fingerprint.py",
+        "tests/unit/test_conversation_playback_artifact.py",
+        "tests/unit/test_sync_playback_service.py",
+    } <= set(workflow["tests"])
 
 
 def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():

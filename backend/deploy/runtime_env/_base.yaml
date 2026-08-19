@@ -18,6 +18,9 @@ environment_shared:
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     backend-listen:
       env:
+        CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+          value: standby
+          category: rollout
         OMI_LLM_GATEWAY_URL:
           value: http://{env}-omi-llm-gateway.{env}-omi-backend.svc.cluster.local:8080
           category: service_discovery
@@ -180,6 +183,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: 'false'
             category: rollout
@@ -244,6 +250,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -326,6 +335,9 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9
@@ -422,6 +434,9 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             env_var: OMI_LLM_GATEWAY_URL
             default: http://127.0.0.1:9

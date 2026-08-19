@@ -187,11 +187,14 @@ class TestExtractionSeamFanOut:
     def test_process_conversation_keeps_memory_fail_closed_and_task_goal_postprocess_separate(self):
         source = PROCESS_CONVERSATION_PATH.read_text(encoding="utf-8")
         # Memory source replacement is synchronous/fail-closed; task and goal
-        # projections remain independent postprocess destinations.
+        # projections remain independent destinations behind the run_or_submit
+        # seam, which backgrounds legacy callers on the postprocess executor
+        # and runs the durable deferred bundle to completion in place.
         assert "_extract_memories(uid, conversation)" in source
         assert "submit_with_context(postprocess_executor, _extract_memories" not in source
-        assert "submit_with_context(postprocess_executor, _save_action_items" in source
-        assert "submit_with_context(postprocess_executor, _update_goal_progress" in source
+        assert "run_or_submit(_save_action_items, uid, conversation, defer_derived_effects)" in source
+        assert "run_or_submit(_update_goal_progress, uid, conversation)" in source
+        assert "submit_with_context(postprocess_executor, function, *args)" in source
 
     def test_fan_out_invokes_memory_action_item_and_goal_paths_separately(self):
         """Functional: mocked postprocess submits must hit three different callables."""

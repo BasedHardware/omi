@@ -47,7 +47,9 @@ def test_maybe_invalidate_enqueues_only_on_fingerprint_change(monkeypatch):
     monkeypatch.setattr(
         storage_mod,
         'enqueue_conversation_artifact_build',
-        lambda uid, cid, fingerprint, caller: enqueues.append((uid, cid, fingerprint, caller)),
+        lambda uid, cid, fingerprint, caller, **kwargs: enqueues.append(
+            (uid, cid, fingerprint, caller, kwargs.get('expected_finalization_identity'))
+        ),
     )
     files = [{'id': 'A', 'chunk_timestamps': [1.0]}]
     current_fp = storage_mod.compute_audio_files_fingerprint(files)
@@ -56,6 +58,12 @@ def test_maybe_invalidate_enqueues_only_on_fingerprint_change(monkeypatch):
     storage_mod.maybe_invalidate_conversation_playback('u', 'c', stamped, files, 'test')
     assert enqueues == []
 
-    stale = {'conversation_audio': {'audio_files_fingerprint': 'fp-old'}}
+    identity = ('incarnation-1', 'job-1', 1)
+    stale = {
+        'conversation_audio': {'audio_files_fingerprint': 'fp-old'},
+        'finalization_incarnation_id': identity[0],
+        'finalization_job_id': identity[1],
+        'finalization_revision': identity[2],
+    }
     storage_mod.maybe_invalidate_conversation_playback('u', 'c', stale, files, 'test')
-    assert enqueues == [('u', 'c', current_fp, 'test')]
+    assert enqueues == [('u', 'c', current_fp, 'test', identity)]

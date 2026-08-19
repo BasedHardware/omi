@@ -44,6 +44,7 @@ from models.conversation import (
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_ownership import persist_generation, require_artifact_identity
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.memory_service import MemoryService
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
@@ -109,11 +110,8 @@ from utils.conversations.calendar_linking import (
     write_conversation_link_to_calendar_event,
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
-from utils.other.storage import (
-    compute_audio_files_fingerprint,
-    enqueue_conversation_artifact_build,
-    precache_conversation_audio,
-)
+from utils.other.storage import compute_audio_files_fingerprint, precache_conversation_audio
+from utils.sync.conversation_artifact_protocol import enqueue_conversation_artifact_build
 
 logger = logging.getLogger(__name__)
 
@@ -1182,11 +1180,8 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation):
-    """
-    Save action items from a conversation to the dedicated action_items collection.
-    This runs in addition to storing them in the conversation for backward compatibility.
-    """
+def _save_action_items(uid: str, conversation: Conversation, wait_for_task_sync: bool = False):
+    """Save action items to their dedicated collection and legacy projections."""
     if not conversation.structured or not conversation.structured.action_items:
         return
 
@@ -1212,7 +1207,6 @@ def _save_action_items(uid: str, conversation: Conversation):
         action_items_data.append(action_item_data)
 
     if action_items_data:
-        # Delete existing action items and their vectors first (in case of reprocessing)
         old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
         old_ids = [item['id'] for item in old_items]
         if old_ids:
@@ -1235,7 +1229,6 @@ def _save_action_items(uid: str, conversation: Conversation):
                     document_ids,
                 ),
             )
-        # Save new action items
         action_item_ids = action_items_db.create_action_items_batch(
             uid,
             action_items_data,
@@ -1250,7 +1243,6 @@ def _save_action_items(uid: str, conversation: Conversation):
             action_item_ids,
         )
 
-        # Send FCM data messages for action items with due dates
         for idx, action_item in enumerate(conversation.structured.action_items):
             if action_item.due_at and idx < len(action_item_ids):
                 action_item_id = action_item_ids[idx]
@@ -1264,10 +1256,15 @@ def _save_action_items(uid: str, conversation: Conversation):
         # Auto-sync to task integration — submit before vector ops so it always runs
         created_items = [{"id": aid, **data} for aid, data in zip(action_item_ids, action_items_data)]
 
-        def _run_auto_sync():
-            asyncio.run(auto_sync_action_items_batch(uid, created_items))
+        def _run_auto_sync() -> None:
+            results = asyncio.run(auto_sync_action_items_batch(uid, created_items))
+            if wait_for_task_sync and any(isinstance(result, dict) and result.get('error') for result in results):
+                raise RuntimeError('action_item_task_sync_failed')
 
-        submit_with_context(postprocess_executor, _run_auto_sync)
+        if wait_for_task_sync:
+            _run_auto_sync()
+        else:
+            submit_with_context(postprocess_executor, _run_auto_sync)
 
         upsert_action_item_vectors_batch(
             uid,
@@ -1283,16 +1280,21 @@ def _save_action_items(uid: str, conversation: Conversation):
 TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
 
 
-def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
+def save_transcript_chunk_vectors(uid: str, conversation: Conversation, vector_generation_id: str | None = None):
     segments: List[Any] = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
     chunks = build_transcript_chunks(
         cast(List[Dict[str, Any]], segments), conversation.started_at or conversation.created_at
     )
     if chunks:
-        upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
+        upsert_transcript_chunk_vectors(uid, conversation.id, chunks, vector_generation_id)
 
 
-def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
+def save_structured_vector(
+    uid: str,
+    conversation: Conversation,
+    update_only: bool = False,
+    vector_generation_id: str | None = None,
+) -> None:
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid) or ''
 
@@ -1322,7 +1324,7 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
 
     if not update_only:
         logger.info('save_structured_vector creating vector')
-        upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata)
+        upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata, vector_generation_id)
     else:
         logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
@@ -1366,10 +1368,8 @@ def _build_deferred_structured(
 def _store_deferred_conversation(
     uid: str, conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation]
 ) -> Conversation:
-    """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
-    all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
-    `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
-    later via the lazy trigger in `get_conversation_by_id`."""
+    """Persist a desktop conversation with a cheap title and defer enrichment.
+    The lazy trigger in `get_conversation_by_id` runs the skipped work later."""
     is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
@@ -1401,22 +1401,20 @@ def process_conversation(
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
+    defer_required_enrichment: bool = False,
+    expected_finalization_identity: tuple[str | None, str | None, int | None] | None = None,
+    replay_derived_effects: bool = False,
 ) -> Conversation:
     def report_persistence(current: bool) -> None:
         if persistence_observer is not None:
             persistence_observer(current)
 
     is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
-    # Trial paywall: skip ALL post-processing (summaries, memories, action
-    # items, embeddings, app integrations) for paywalled desktop users.
-    # Without this, any segments that did get through before the trial gate
-    # (e.g. buffered transcripts, retroactive `/v1/conversations` create) still
-    # trigger expensive LLM + Pinecone work.
-    #
-    # `conversation.source` carries the originating client (desktop / omi / etc).
-    # Non-desktop sources flow through untouched — paywall is desktop-only.
+    # Skip all post-processing for paywalled desktop users, including buffered
+    # segments that arrived before the trial gate. Other sources are unaffected.
     if (
-        hasattr(conversation, 'source')
+        not replay_derived_effects
+        and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
         and is_trial_paywalled(uid, 'macos')
     ):
@@ -1444,7 +1442,8 @@ def process_conversation(
     # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
     # trigger and manual reprocess — bypass this so the enrichment actually runs.
     if (
-        not force_process
+        not replay_derived_effects
+        and not force_process
         and not is_reprocess
         and hasattr(conversation, 'source')
         and conversation.source == ConversationSource.desktop
@@ -1477,18 +1476,19 @@ def process_conversation(
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
-    conversation = _get_conversation_obj(uid, structured, conversation)
-
-    # Persist the completed generation before it can trigger any derived work.
-    # A discard or replacement that wins this transaction must not create
-    # integrations, vectors, memories, action items, audio artifacts, folders,
-    # calendar links, usage, or webhooks from a stale in-memory snapshot.
-    conversation.status = ConversationStatus.completed
-    if is_initial_creation:
-        persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
-    else:
-        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    conversation, discarded, effect_identity, persisted = persist_generation(
+        uid,
+        language_code,
+        conversation,
+        force_process=force_process,
+        people=people,
+        defer_derived_effects=defer_derived_effects,
+        replay_derived_effects=replay_derived_effects,
+        expected_identity=expected_finalization_identity,
+        get_structured=_get_structured,
+        get_conversation_obj=_get_conversation_obj,
+        authorities=(conversations_db, lifecycle_service),
+    )
     report_persistence(persisted)
     if not persisted:
         logger.info(
@@ -1496,12 +1496,20 @@ def process_conversation(
         )
         return conversation
 
-    # Wrap every post-persistence derived effect so the durable finalizer can
-    # defer the bundle until it transactionally claims ownership (#10468 r5).
     def _emit_derived_effects() -> None:
-        # Calendar auto-linking calls and mutates a user's Google Calendar during generic
-        # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
-        # fan out provider traffic for every connected user.
+        def run_or_submit(function: Callable[..., None], *args: Any) -> None:
+            # The durable finalizer invokes this bundle on the postprocess
+            # executor only after transactionally claiming ownership, so each
+            # derived effect must run to completion here and surface its
+            # failure to the finalizer for retry instead of hiding it in an
+            # unobserved future. Legacy inline callers keep the background
+            # dispatch so no effect blocks or performs network calls on the
+            # calling thread.
+            if defer_derived_effects:
+                function(*args)
+            else:
+                submit_with_context(postprocess_executor, function, *args)
+
         if (
             _calendar_auto_link_enabled()
             and not discarded
@@ -1531,11 +1539,9 @@ def process_conversation(
                 logger.error(f"Error during calendar event linking: {e}")
                 pass
 
-        # AI-based folder assignment
         assigned_folder_id = None
         if not discarded and not is_reprocess and not conversation.folder_id:
             try:
-                # Get user's folders
                 user_folders = folders_db.get_folders(uid)
                 if not user_folders:
                     user_folders = folders_db.initialize_system_folders(uid)
@@ -1561,10 +1567,8 @@ def process_conversation(
                 logger.error(f"Error during folder assignment for conversation {conversation.id}: {e}")
 
         if not discarded:
-            # Analytics tracking
             insights_gained = 0
             if conversation.structured:
-                # Count sentences with more than 5 words from title and overview
                 for text in [conversation.structured.title, conversation.structured.overview]:
                     if text:
                         sentences = re.split(r'[.!?]+', text)
@@ -1572,11 +1576,9 @@ def process_conversation(
                             if len(sentence.split()) > 5:
                                 insights_gained += 1
 
-                # Count number of action items and events
                 insights_gained += len(conversation.structured.action_items)
                 insights_gained += len(conversation.structured.events)
 
-            # Count sentences with more than 5 words from app results
             for app_result in conversation.apps_results:
                 if app_result.content:
                     sentences = re.split(r'[.!?]+', app_result.content)
@@ -1590,28 +1592,26 @@ def process_conversation(
             _trigger_apps(
                 uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
             )
-            # _trigger_apps only mutates the in-memory conversation and the durable write above already
-            # happened, so persist its output the same way the calendar_event/folder_id/audio_files
-            # write-backs do. Otherwise the app summary the LLM just produced is discarded.
             if conversation.apps_results or conversation.suggested_summarization_apps:
                 app_updates = {
                     'apps_results': [result.dict() for result in conversation.apps_results],
                     'suggested_summarization_apps': conversation.suggested_summarization_apps,
                 }
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
-            if not is_reprocess:
-                submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
+            if not is_reprocess and not defer_required_enrichment:
+                run_or_submit(save_structured_vector, uid, conversation)
                 if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
-                    submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
+                    run_or_submit(save_transcript_chunk_vectors, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
-            submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
+            # The durable bundle waits on the action-item task sync so a
+            # provider failure stays retryable instead of vanishing.
+            run_or_submit(_save_action_items, uid, conversation, defer_derived_effects)
+            run_or_submit(_update_goal_progress, uid, conversation)
 
-        # Create audio files from chunks if private cloud sync was enabled
         if not is_reprocess and conversation.private_cloud_sync_enabled:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
@@ -1619,20 +1619,29 @@ def process_conversation(
                     conversation.audio_files = audio_files
                     files_payload = [af.dict() for af in audio_files]
                     conversations_db.update_conversation(uid, conversation.id, {'audio_files': files_payload})
-                    # Pre-cache audio files in background
-                    precache_conversation_audio(uid, conversation.id, files_payload)
-                    # Build the conversation-level playback artifact (dense MP3 + spans)
+                    precache_conversation_audio(
+                        uid,
+                        conversation.id,
+                        files_payload,
+                        wait_for_completion=True,
+                    )
                     if is_audio_merge_dispatch_enabled():
+                        artifact_identity = require_artifact_identity(
+                            uid, conversation.id, effect_identity, conversations_db
+                        )
                         enqueue_conversation_artifact_build(
                             uid,
                             conversation.id,
                             compute_audio_files_fingerprint(files_payload),
                             caller='process_conversation',
+                            expected_finalization_identity=artifact_identity,
+                            require_delivery=defer_derived_effects,
                         )
             except Exception as e:
                 logger.error(f"Error creating audio files: {e}")
+                if defer_derived_effects:
+                    raise
 
-        # Update folder conversation count after conversation is saved
         if assigned_folder_id:
             folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
@@ -1641,13 +1650,16 @@ def process_conversation(
             def _run_webhook():
                 asyncio.run(conversation_created_webhook(uid, conversation))
 
-            submit_with_context(postprocess_executor, _run_webhook)
+            run_or_submit(_run_webhook)
 
     if defer_derived_effects:
         if derived_effects_observer is not None:
             derived_effects_observer(_emit_derived_effects)
         return conversation
     _emit_derived_effects()
+    if not lifecycle_service.complete(uid, conversation.id):
+        raise RuntimeError('processing_completion_fenced')
+    conversation.status = ConversationStatus.completed
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 

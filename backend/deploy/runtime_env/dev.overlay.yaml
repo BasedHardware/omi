@@ -35,6 +35,9 @@ overlay:
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
+        CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+          value: standby
+          category: rollout
         OMI_LLM_GATEWAY_URL:
           value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
           category: service_discovery

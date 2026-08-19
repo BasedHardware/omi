@@ -75,6 +75,14 @@ def test_exhausted_replacement_conflict_maps_to_retryable_503_before_any_delete(
         body,
     )
     assert mapped, "the retract call must map ConversationReplacementConflictError to a 503"
-    assert (
-        "conversations_db.delete_conversation" in body.split("except ConversationReplacementConflictError")[1]
+    after_handler = body.split("except ConversationReplacementConflictError")[1]
+    # The document delete must still sit after the retraction, on the success
+    # path. Either spelling satisfies that: the direct `conversations_db` call,
+    # or `delete_claimed_conversation_source`, which ends in
+    # `_delete_claimed_conversation_document` (database/conversation_vector_cleanup.py)
+    # and additionally refuses to delete unless the vector purge succeeded and
+    # the cleanup claim is still valid.
+    assert any(
+        marker in after_handler
+        for marker in ("conversations_db.delete_conversation", "delete_claimed_conversation_source")
     ), "the conversation document delete must stay in the post-retract success path"

@@ -6,7 +6,7 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, TypedDict, cast
 
 from pinecone import Pinecone
 
@@ -58,6 +58,7 @@ class VectorMetadataDoc(TypedDict, total=False):
     screenshot_id: str
     chunk_index: int
     created_at: int
+    finalization_vector_generation_id: str
     timestamp: int
     category: str
     subject_entity_id: str
@@ -102,14 +103,34 @@ if _pinecone_api_key and _pinecone_index_name:
     index = pc.Index(_pinecone_index_name)
 
 
-def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorRecordDoc:
+def conversation_vector_id(uid: str, conversation_id: str, finalization_vector_generation_id: str | None = None) -> str:
+    base = f'{uid}-{conversation_id}'
+    return f'{base}-g{finalization_vector_generation_id}' if finalization_vector_generation_id else base
+
+
+def transcript_chunk_vector_id(
+    uid: str,
+    conversation_id: str,
+    chunk_index: int,
+    finalization_vector_generation_id: str | None = None,
+) -> str:
+    generation = f'-g{finalization_vector_generation_id}' if finalization_vector_generation_id else ''
+    return f'{uid}-{conversation_id}{generation}-c{chunk_index}'
+
+
+def _get_data(
+    uid: str,
+    conversation_id: str,
+    vector: List[float],
+    finalization_vector_generation_id: str | None = None,
+) -> VectorRecordDoc:
     metadata: VectorMetadataDoc = {
         'uid': uid,
         'memory_id': conversation_id,
         'created_at': int(datetime.now(timezone.utc).timestamp()),
     }
     return {
-        "id": f'{uid}-{conversation_id}',
+        "id": conversation_vector_id(uid, conversation_id, finalization_vector_generation_id),
         "values": vector,
         'metadata': dict(metadata),
     }
@@ -120,12 +141,20 @@ def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
     logger.info(f'upsert_vector {res}')
 
 
-def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+def upsert_vector2(
+    uid: str,
+    conversation_id: str,
+    vector: List[float],
+    metadata: Dict[str, Any],
+    finalization_vector_generation_id: str | None = None,
+) -> None:
     if index is None:
         return
-    data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
+    data: VectorRecordDoc = _get_data(uid, conversation_id, vector, finalization_vector_generation_id)
     typed_metadata: Dict[str, Any] = data['metadata']
     typed_metadata.update(metadata)
+    if finalization_vector_generation_id:
+        typed_metadata['finalization_vector_generation_id'] = finalization_vector_generation_id
     res = index.upsert(vectors=[data], namespace="ns1")
     logger.info(f'upsert_vector {res}')
 
@@ -159,6 +188,17 @@ def _created_at_filter(starts_at: Optional[int] = None, ends_at: Optional[int] =
     return created_at
 
 
+def _logical_conversation_id(item: Any, uid: str) -> str | None:
+    metadata = item.get('metadata') if isinstance(item, dict) else getattr(item, 'metadata', None)
+    conversation_id = metadata.get('memory_id') if isinstance(metadata, Mapping) else None
+    if isinstance(conversation_id, str):
+        return conversation_id
+    physical_id = item.get('id') if isinstance(item, dict) else getattr(item, 'id', None)
+    if not isinstance(physical_id, str):
+        return None
+    return physical_id.removeprefix(f'{uid}-')
+
+
 def query_vectors(
     query: str,
     uid: str,
@@ -167,7 +207,7 @@ def query_vectors(
     k: int = 5,
     query_vector: Optional[List[float]] = None,
 ) -> List[str]:
-    if index is None:
+    if index is None or k <= 0:
         return []
 
     filter_data: Dict[str, Any] = {'uid': uid}
@@ -179,9 +219,17 @@ def query_vectors(
         filter_data['created_at'] = created_at
 
     xq = query_vector if query_vector is not None else embeddings.embed_query(query)
-    xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
+    # During the rollout a logical conversation can have one legacy and one
+    # generation-scoped record. Oversample so those physical duplicates do
+    # not consume the caller's logical result budget.
+    xc = index.query(vector=xq, top_k=k * 2, include_metadata=True, filter=filter_data, namespace="ns1")
     matches: List[Any] = xc['matches']
-    return [item['id'].replace(f'{uid}-', '') for item in matches]
+    conversation_ids: List[str] = []
+    for item in matches:
+        conversation_id = _logical_conversation_id(item, uid)
+        if conversation_id is not None and conversation_id not in conversation_ids:
+            conversation_ids.append(conversation_id)
+    return conversation_ids[:k]
 
 
 def query_vectors_by_metadata(
@@ -238,11 +286,22 @@ def query_vectors_by_metadata(
         else:
             return []
 
-    conversation_id_to_matches: defaultdict[str, int] = defaultdict(int)
     matches: List[Any] = xc['matches']
+    conversations_id: List[str] = []
+    conversation_metadata: dict[str, Dict[str, Any]] = {}
     for item in matches:
-        metadata: Dict[str, Any] = item['metadata']
-        conversation_id: str = metadata['memory_id']
+        logical_id = _logical_conversation_id(item, uid)
+        if logical_id is None or logical_id in conversation_metadata:
+            continue
+        raw_metadata = item.get('metadata') if isinstance(item, dict) else getattr(item, 'metadata', None)
+        metadata = cast(Dict[str, Any], raw_metadata) if isinstance(raw_metadata, dict) else {}
+        conversations_id.append(logical_id)
+        conversation_metadata[logical_id] = metadata
+
+    # Score each logical conversation once. Counting every physical generation
+    # would make rollout state influence ranking.
+    conversation_id_to_matches: defaultdict[str, int] = defaultdict(int)
+    for conversation_id, metadata in conversation_metadata.items():
         for topic in topics:
             if topic in metadata_list(metadata, ConversationMetadataKeys.TOPICS):
                 conversation_id_to_matches[conversation_id] += 1
@@ -253,23 +312,36 @@ def query_vectors_by_metadata(
             if person in metadata_list(metadata, ConversationMetadataKeys.PEOPLE):
                 conversation_id_to_matches[conversation_id] += 1
 
-    conversations_id: List[str] = [item['id'].replace(f'{uid}-', '') for item in matches]
     conversations_id.sort(key=lambda x: conversation_id_to_matches[x], reverse=True)
     return conversations_id[:limit] if len(conversations_id) > limit else conversations_id
 
 
-def delete_vector(uid: str, conversation_id: str) -> None:
+def delete_vector(
+    uid: str,
+    conversation_id: str,
+    finalization_vector_generation_id: str | None = None,
+    *,
+    include_legacy: bool = True,
+    require_index: bool = False,
+) -> None:
     """
-    Delete a conversation vector from Pinecone.
+    Delete the legacy vector and/or one known finalization-generation vector.
 
-    Note: Vectors are stored with ID format '{uid}-{conversation_id}'
+    Deletion paths use ``include_legacy=False`` after removing the Firestore
+    source so a same-ID recreation cannot lose its shared version 1 vector.
     """
     if index is None:
+        if require_index:
+            raise RuntimeError('Pinecone index not initialized for conversation vector delete')
         logger.warning('Pinecone index not initialized, skipping conversation vector delete')
         return
-    vector_id = f'{uid}-{conversation_id}'
-    result = index.delete(ids=[vector_id], namespace="ns1")
-    logger.info(f'delete_vector {vector_id} {result}')
+    vector_ids = [conversation_vector_id(uid, conversation_id)] if include_legacy else []
+    if finalization_vector_generation_id:
+        vector_ids.append(conversation_vector_id(uid, conversation_id, finalization_vector_generation_id))
+    if not vector_ids:
+        return
+    result = index.delete(ids=vector_ids, namespace="ns1")
+    logger.info(f'delete_vector {vector_ids} {result}')
 
 
 # ==========================================
@@ -1045,18 +1117,28 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
-def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]) -> None:
+def delete_conversation_vectors_batch(
+    uid: str,
+    conversation_ids: List[str],
+    *,
+    finalization_vector_generation_ids: Mapping[str, str | None] | None = None,
+) -> None:
     """Delete a user's conversation vectors (ns1) in one batched, chunked call.
 
     Chunked so a single failure can't abandon the rest (and to stay under Pinecone's per-delete id
-    limit). Used by account deletion to purge all of a user's conversation vectors.
+    limit). Account deletion supplies persisted vector generations so both legacy and current IDs are purged.
     """
     if index is None:
         logger.warning('Pinecone index not initialized, skipping conversation vector batch delete')
         return
     if not conversation_ids:
         return
-    vector_ids = [f'{uid}-{cid}' for cid in conversation_ids]
+    vector_ids: List[str] = []
+    for conversation_id in conversation_ids:
+        vector_ids.append(conversation_vector_id(uid, conversation_id))
+        generation_id = (finalization_vector_generation_ids or {}).get(conversation_id)
+        if generation_id:
+            vector_ids.append(conversation_vector_id(uid, conversation_id, generation_id))
     for i in range(0, len(vector_ids), 1000):
         index.delete(ids=vector_ids[i : i + 1000], namespace="ns1")
     logger.info(f'delete_conversation_vectors_batch count={len(vector_ids)}')
@@ -1123,7 +1205,12 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
 TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
 
 
-def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[Dict[str, Any]]) -> int:
+def upsert_transcript_chunk_vectors(
+    uid: str,
+    conversation_id: str,
+    chunks: List[Dict[str, Any]],
+    finalization_vector_generation_id: str | None = None,
+) -> int:
     """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping transcript chunk upsert')
@@ -1141,9 +1228,16 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
             'chunk_index': c['chunk_index'],
             'created_at': int(c['created_at']),
         }
+        if finalization_vector_generation_id:
+            metadata['finalization_vector_generation_id'] = finalization_vector_generation_id
         payload.append(
             {
-                'id': f"{uid}-{conversation_id}-c{c['chunk_index']}",
+                'id': transcript_chunk_vector_id(
+                    uid,
+                    conversation_id,
+                    c['chunk_index'],
+                    finalization_vector_generation_id,
+                ),
                 'values': v,
                 'metadata': dict(metadata),
             }
@@ -1155,6 +1249,35 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
         upserted += len(payload[i : i + 100])
     logger.info(f'upsert_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={upserted}')
     return upserted
+
+
+def delete_finalization_enrichment_vectors(
+    uid: str,
+    conversation_id: str,
+    finalization_vector_generation_id: str,
+    transcript_vector_count: int,
+    *,
+    request_timeout_seconds: int | None = None,
+) -> None:
+    """Delete exactly one durable finalization generation without a provider read."""
+    if index is None:
+        raise RuntimeError('Pinecone index not initialized for finalization vector cleanup')
+    request_options = {'_request_timeout': request_timeout_seconds} if request_timeout_seconds is not None else {}
+    index.delete(
+        ids=[conversation_vector_id(uid, conversation_id, finalization_vector_generation_id)],
+        namespace="ns1",
+        **request_options,
+    )
+    transcript_ids = [
+        transcript_chunk_vector_id(uid, conversation_id, chunk_index, finalization_vector_generation_id)
+        for chunk_index in range(transcript_vector_count)
+    ]
+    for start in range(0, len(transcript_ids), 1000):
+        index.delete(
+            ids=transcript_ids[start : start + 1000],
+            namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
+            **request_options,
+        )
 
 
 def search_transcript_chunks(
@@ -1181,46 +1304,131 @@ def search_transcript_chunks(
     vector = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = index.query(
         vector=vector,
-        top_k=limit,
+        top_k=limit * 2,
         include_metadata=True,
         filter=filter_data,
         namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
     )
     results: List[Dict[str, Any]] = []
+    seen_chunks: set[tuple[str, int]] = set()
     matches: List[Any] = xc.get('matches', [])
     for m in matches:
         raw_md: object = m.get('metadata')
         md: Dict[str, Any] = cast(Dict[str, Any], raw_md) if isinstance(raw_md, dict) else {}
+        conversation_id = md.get('conversation_id')
+        raw_chunk_index = md.get('chunk_index')
+        if not isinstance(conversation_id, str) or isinstance(raw_chunk_index, bool) or raw_chunk_index is None:
+            continue
+        try:
+            chunk_index = int(raw_chunk_index)
+        except (TypeError, ValueError):
+            continue
+        logical_chunk = (conversation_id, chunk_index)
+        if logical_chunk in seen_chunks:
+            continue
+        seen_chunks.add(logical_chunk)
         results.append(
             {
                 'created_at': int(md['created_at']) if md.get('created_at') is not None else None,
-                'conversation_id': md.get('conversation_id'),
-                'chunk_index': int(md['chunk_index']) if md.get('chunk_index') is not None else None,
+                'conversation_id': conversation_id,
+                'chunk_index': chunk_index,
                 'score': m.get('score', 0),
             }
         )
+        if len(results) == limit:
+            break
     return results
 
 
-def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
-    """Delete all chunk vectors for one conversation (id-prefix listing on serverless)."""
-    if index is None:
-        return
-    prefix = f'{uid}-{conversation_id}-c'
-    try:
-        ids: List[str] = []
+def _transcript_chunk_vector_prefixes(
+    uid: str,
+    conversation_id: str,
+    finalization_vector_generation_id: str | None,
+    *,
+    include_legacy: bool = True,
+) -> tuple[str, ...]:
+    prefixes = [f'{uid}-{conversation_id}-c'] if include_legacy else []
+    if finalization_vector_generation_id:
+        prefixes.append(f'{uid}-{conversation_id}-g{finalization_vector_generation_id}-c')
+    return tuple(prefixes)
+
+
+def _delete_transcript_chunk_vectors(
+    uid: str,
+    conversation_id: str,
+    finalization_vector_generation_id: str | None,
+    *,
+    include_legacy: bool = True,
+    transcript_vector_count: int | None = None,
+) -> int:
+    ids: List[str] = []
+    prefixes = _transcript_chunk_vector_prefixes(
+        uid,
+        conversation_id,
+        (
+            None
+            if finalization_vector_generation_id and transcript_vector_count is not None
+            else finalization_vector_generation_id
+        ),
+        include_legacy=include_legacy,
+    )
+    for prefix in prefixes:
         for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
             ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
-        for i in range(0, len(ids), 1000):
-            index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
-        if ids:
-            logger.info(f'delete_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={len(ids)}')
+    if finalization_vector_generation_id and transcript_vector_count is not None:
+        ids.extend(
+            transcript_chunk_vector_id(
+                uid,
+                conversation_id,
+                chunk_index,
+                finalization_vector_generation_id,
+            )
+            for chunk_index in range(transcript_vector_count)
+        )
+    unique_ids = list(dict.fromkeys(ids))
+    for i in range(0, len(unique_ids), 1000):
+        index.delete(ids=unique_ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+    return len(unique_ids)
+
+
+def delete_transcript_chunk_vectors(
+    uid: str,
+    conversation_id: str,
+    *,
+    finalization_vector_generation_id: str | None = None,
+    include_legacy: bool = True,
+    transcript_vector_count: int | None = None,
+    raise_on_failure: bool = False,
+    require_index: bool = False,
+) -> None:
+    """Delete legacy and/or one known finalization generation's transcript chunk vectors."""
+    if index is None:
+        if require_index:
+            raise RuntimeError('Pinecone index not initialized for transcript chunk vector delete')
+        return
+    try:
+        deleted = _delete_transcript_chunk_vectors(
+            uid,
+            conversation_id,
+            finalization_vector_generation_id,
+            include_legacy=include_legacy,
+            transcript_vector_count=transcript_vector_count,
+        )
+        if deleted:
+            logger.info(f'delete_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={deleted}')
     except Exception:
+        if raise_on_failure:
+            raise
         logger.warning(f'delete_transcript_chunk_vectors failed uid={uid} conversation={conversation_id}')
 
 
 def delete_transcript_chunk_vectors_batch(
-    uid: str, conversation_ids: List[str], *, raise_on_failure: bool = False
+    uid: str,
+    conversation_ids: List[str],
+    *,
+    finalization_vector_generation_ids: Mapping[str, str | None] | None = None,
+    transcript_vector_counts: Mapping[str, int | None] | None = None,
+    raise_on_failure: bool = False,
 ) -> int:
     """Account-deletion purge: drop all transcript-chunk vectors for the user's conversations."""
     if index is None:
@@ -1232,14 +1440,16 @@ def delete_transcript_chunk_vectors_batch(
     deleted = 0
     failures = 0
     for conversation_id in conversation_ids:
-        prefix = f'{uid}-{conversation_id}-c'
         try:
-            ids: List[str] = []
-            for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
-                ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
-            for i in range(0, len(ids), 1000):
-                index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
-            deleted += len(ids)
+            generation_id = (finalization_vector_generation_ids or {}).get(conversation_id)
+            transcript_vector_count = (transcript_vector_counts or {}).get(conversation_id)
+            deleted += _delete_transcript_chunk_vectors(
+                uid,
+                conversation_id,
+                generation_id,
+                include_legacy=True,
+                transcript_vector_count=transcript_vector_count,
+            )
         except Exception:
             failures += 1
             logger.warning(f'delete_transcript_chunk_vectors_batch failed uid={uid} conversation={conversation_id}')

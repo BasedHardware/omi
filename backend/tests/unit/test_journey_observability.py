@@ -61,17 +61,19 @@ def test_terminal_finalization_failure_records_once_after_dead_letter(monkeypatc
     dead_letter = MagicMock(return_value=True)
     accepted_at = datetime.now(timezone.utc) - timedelta(seconds=12)
     terminal = MagicMock()
-    monkeypatch.setattr(conversation_finalization.jobs_db, 'mark_finalization_dead_letter', dead_letter)
+    cleanup_claim = MagicMock(return_value={'status': 'not_required', 'created_at': accepted_at})
     monkeypatch.setattr(
-        conversation_finalization.jobs_db,
-        'get_finalization_job',
-        MagicMock(return_value={'created_at': accepted_at}),
+        conversation_finalization.terminal_store,
+        'claim_finalization_dead_letter_cleanup',
+        cleanup_claim,
     )
+    monkeypatch.setattr(conversation_finalization.jobs_db, 'mark_finalization_dead_letter', dead_letter)
     monkeypatch.setattr(conversation_finalization, 'LISTEN_FINALIZATION_DEAD_LETTER_TOTAL', MagicMock())
     monkeypatch.setattr(conversation_finalization, 'record_capture_finalization_terminal', terminal)
 
     assert conversation_finalization.final_attempt_failed('job-1', 2, 3, 4) is True
 
+    cleanup_claim.assert_called_once_with('job-1', 2, 3, firestore_client=None)
     dead_letter.assert_called_once_with('job-1', 2, 3, 4, firestore_client=None)
     terminal.assert_called_once_with('failure', accepted_at)
 

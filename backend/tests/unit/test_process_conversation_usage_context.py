@@ -15,6 +15,7 @@ inside the ``with`` block is evicted on teardown so no stub-fed module leaks to 
 
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -410,6 +411,7 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     create_audio_files = MagicMock()
     update_conversation = MagicMock()
     observed_persistence: list[bool] = []
+    expected_identity = ('incarnation-1', 'job-1', 1)
     monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
@@ -423,10 +425,15 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
         "en",
         input_conversation,
         persistence_observer=observed_persistence.append,
+        expected_finalization_identity=expected_identity,
     )
 
     assert result is completed_conversation
-    persistence.assert_called_once()
+    persistence.assert_called_once_with(
+        'uid',
+        completed_conversation.dict(),
+        expected_finalization_identity=expected_identity,
+    )
     submit.assert_not_called()
     trigger_apps.assert_not_called()
     create_audio_files.assert_not_called()
@@ -434,13 +441,16 @@ def test_fenced_completion_submits_no_derived_work(monkeypatch):
     assert observed_persistence == [False]
 
 
-def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch):
+@pytest.mark.parametrize('defer_required_enrichment', (False, True), ids=('legacy-vectors', 'finalizer-vectors'))
+def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch, defer_required_enrichment):
     """#10468 r5: with defer_derived_effects=True, process_conversation persists
     the result and hands back the entire derived-effect bundle as a deferred
     runner, emitting zero side effects inline.  Only invoking the runner (after
     the durable finalizer has transactionally claimed ownership) emits calendar,
-    usage/app, vector, action/goal, audio, webhook, and memory work.  A losing
-    claim that never invokes the runner is a no-side-effect outcome."""
+    usage/app, action/goal, audio, webhook, and memory work. Vector work stays
+    in the bundle for legacy callers and moves to the required plan for the
+    durable finalizer. A losing claim that never invokes the runner is a
+    no-side-effect outcome."""
     input_conversation = MagicMock()
     input_conversation.source = "omi"
     input_conversation.get_person_ids.return_value = []
@@ -460,7 +470,12 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     create_audio_files = MagicMock()
     update_conversation = MagicMock()
     extract_memories = MagicMock()
+    save_structured_vector = MagicMock()
     captured: list = []
+
+    async def webhook(*_args, **_kwargs):
+        return None
+
     monkeypatch.setattr(process_conversation, "_get_structured", lambda *args, **kwargs: (MagicMock(), False))
     monkeypatch.setattr(process_conversation, "_get_conversation_obj", lambda *args, **kwargs: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, "persist_processed_conversation", persistence)
@@ -469,12 +484,15 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     monkeypatch.setattr(process_conversation.conversations_db, "create_audio_files_from_chunks", create_audio_files)
     monkeypatch.setattr(process_conversation.conversations_db, "update_conversation", update_conversation)
     monkeypatch.setattr(process_conversation, "_extract_memories", extract_memories)
+    monkeypatch.setattr(process_conversation, 'save_structured_vector', save_structured_vector)
+    monkeypatch.setattr(process_conversation, 'conversation_created_webhook', webhook)
 
     result = process_conversation.process_conversation(
         "uid",
         "en",
         input_conversation,
         defer_derived_effects=True,
+        defer_required_enrichment=defer_required_enrichment,
         derived_effects_observer=captured.append,
     )
 
@@ -491,10 +509,85 @@ def test_deferred_derived_effects_emit_nothing_until_runner_invoked(monkeypatch)
     # Invoking the runner (ownership proven) emits every derived effect.
     captured[0]()
     trigger_apps.assert_called_once()
-    assert submit.call_count >= 4  # vectors, memory, action items, goals, webhook
+    assert save_structured_vector.called is not defer_required_enrichment
+    extract_memories.assert_called_once_with('uid', completed_conversation)
+    submit.assert_not_called()
 
 
-def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch):
+def test_durable_audio_bundle_waits_and_propagates_artifact_handoff_failure(monkeypatch):
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    completed_conversation = MagicMock()
+    completed_conversation.id = 'conversation-audio'
+    completed_conversation.dict.return_value = {'id': 'conversation-audio', 'status': 'completed'}
+    completed_conversation.structured = None
+    completed_conversation.apps_results = []
+    completed_conversation.suggested_summarization_apps = []
+    completed_conversation.private_cloud_sync_enabled = True
+    completed_conversation.folder_id = 'existing-folder'
+    audio_file = MagicMock()
+    audio_file.dict.return_value = {'id': 'audio-1', 'chunk_timestamps': [1.0]}
+    expected_identity = ('incarnation-1', 'job-1', 4)
+    precache = MagicMock()
+    enqueue = MagicMock(side_effect=RuntimeError('artifact handoff failed'))
+    captured = []
+
+    async def webhook(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(process_conversation, '_calendar_auto_link_enabled', lambda: False)
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *args, **kwargs: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: completed_conversation)
+    monkeypatch.setattr(
+        process_conversation.lifecycle_service,
+        'persist_processed_conversation',
+        MagicMock(return_value=True),
+    )
+    monkeypatch.setattr(process_conversation, '_trigger_apps', MagicMock())
+    monkeypatch.setattr(process_conversation, '_extract_memories', MagicMock())
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        'create_audio_files_from_chunks',
+        MagicMock(return_value=[audio_file]),
+    )
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(process_conversation, 'precache_conversation_audio', precache)
+    monkeypatch.setattr(process_conversation, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(process_conversation, 'enqueue_conversation_artifact_build', enqueue)
+    monkeypatch.setattr(process_conversation, 'conversation_created_webhook', webhook)
+
+    process_conversation.process_conversation(
+        'uid',
+        'en',
+        input_conversation,
+        defer_derived_effects=True,
+        defer_required_enrichment=True,
+        derived_effects_observer=captured.append,
+        expected_finalization_identity=expected_identity,
+    )
+
+    with pytest.raises(RuntimeError, match='artifact handoff failed'):
+        captured[0]()
+
+    precache.assert_called_once_with(
+        'uid',
+        'conversation-audio',
+        [{'id': 'audio-1', 'chunk_timestamps': [1.0]}],
+        wait_for_completion=True,
+    )
+    enqueue.assert_called_once_with(
+        'uid',
+        'conversation-audio',
+        process_conversation.compute_audio_files_fingerprint([{'id': 'audio-1', 'chunk_timestamps': [1.0]}]),
+        caller='process_conversation',
+        expected_finalization_identity=expected_identity,
+        require_delivery=True,
+    )
+
+
+def test_fresh_creation_keeps_processing_ownership_until_effects_finish(monkeypatch):
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
@@ -514,15 +607,22 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     )
     created = MagicMock(return_value=True)
     persisted = MagicMock()
+
+    async def webhook(*_args, **_kwargs):
+        return None
+
     monkeypatch.setattr(process_conversation, '_get_structured', lambda *args, **kwargs: (MagicMock(), True))
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: completed_conversation)
-    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', created)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'complete', MagicMock(return_value=True))
+    monkeypatch.setattr(process_conversation, 'conversation_created_webhook', webhook)
 
     result = process_conversation.process_conversation('uid', 'en', new_request)
 
     assert result is completed_conversation
-    created.assert_called_once_with('uid', completed_conversation.dict(), idempotent=True)
+    assert created.call_args.args[1]['status'] == ConversationStatus.processing
+    assert created.call_args.kwargs == {'idempotent': True}
     persisted.assert_not_called()
 
 
@@ -992,6 +1092,65 @@ def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
     )
 
 
+def test_durable_action_item_sync_blocks_and_propagates(monkeypatch):
+    action_item = MagicMock()
+    action_item.description = 'Send the forecast'
+    action_item.completed = False
+    action_item.created_at = None
+    action_item.updated_at = None
+    action_item.due_at = None
+    action_item.completed_at = None
+
+    conversation = MagicMock()
+    conversation.id = 'conversation-1'
+    conversation.is_locked = False
+    conversation.structured.action_items = [action_item]
+    sync_started = threading.Event()
+    release_sync = threading.Event()
+
+    async def blocked_sync(*_args, **_kwargs):
+        sync_started.set()
+        assert release_sync.wait(timeout=5), 'test did not release task sync'
+        return [{'synced': False, 'error': 'provider unavailable'}]
+
+    submit = MagicMock()
+    vectors = MagicMock()
+    monkeypatch.setattr(process_conversation.conversation_capture, 'process_before_legacy', lambda *args: False)
+    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_fields', lambda *args: {})
+    monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
+    monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'delete_action_items_for_conversation',
+        lambda *args: None,
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_items_batch',
+        lambda *args, **kwargs: ['task-1'],
+    )
+    monkeypatch.setattr(process_conversation, 'auto_sync_action_items_batch', blocked_sync)
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', vectors)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', submit)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        result = executor.submit(
+            process_conversation._save_action_items,
+            'user-1',
+            conversation,
+            True,
+        )
+        assert sync_started.wait(timeout=5), 'task sync did not start'
+        assert not result.done(), 'durable action-item save returned while task sync was blocked'
+        release_sync.set()
+        with pytest.raises(RuntimeError, match='action_item_task_sync_failed'):
+            result.result(timeout=5)
+
+    submit.assert_not_called()
+    vectors.assert_not_called()
+
+
 def test_llm_calls_use_omi_qos_tier_system():
     """Verify all LLM functions use get_llm() with correct feature keys and cache_key param."""
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
@@ -1325,6 +1484,9 @@ def test_app_summary_results_reach_the_database(monkeypatch):
         conversation.suggested_summarization_apps = ['app-1']
         conversation.apps_results = [_FakeAppResult('app-1', 'APP SUMMARY')]
 
+    async def webhook(*_args, **_kwargs):
+        return None
+
     input_conversation = MagicMock()
     input_conversation.source = 'omi'
     input_conversation.get_person_ids.return_value = []
@@ -1333,7 +1495,9 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', persisted)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'complete', MagicMock(return_value=True))
     monkeypatch.setattr(process_conversation, '_trigger_apps', fake_trigger_apps)
+    monkeypatch.setattr(process_conversation, 'conversation_created_webhook', webhook)
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
     monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', update_conversation)
     monkeypatch.setattr(

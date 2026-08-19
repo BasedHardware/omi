@@ -297,13 +297,16 @@ class TestDevApiConversationLockEnforcement:
         import database.conversations as conversations_db
 
         conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
-        conversations_db.delete_conversation = MagicMock()
 
-        from routers.developer import delete_conversation_endpoint
+        from routers import developer as developer_module
 
-        result = delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
+        developer_module.developer_cleanup.cleanup_conversation_for_endpoint = MagicMock(return_value=True)
+
+        result = developer_module.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
-        conversations_db.delete_conversation.assert_called_once_with('test-uid', 'conv-1')
+        developer_module.developer_cleanup.cleanup_conversation_for_endpoint.assert_called_once_with(
+            'test-uid', 'conv-1', None
+        )
 
 
 # =============================================================================

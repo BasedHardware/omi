@@ -11,6 +11,9 @@ environments:
     gke:
       backend-listen:
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -174,6 +177,9 @@ environments:
       pusher:
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -373,6 +379,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -506,6 +515,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -642,6 +654,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -779,6 +794,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout
@@ -999,6 +1017,9 @@ environments:
     gke:
       backend-listen:
         env:
+          CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+            value: standby
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -1290,6 +1311,9 @@ environments:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1440,6 +1464,9 @@ environments:
               secret: GOOGLE_MAPS_API_KEY
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1577,6 +1604,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               default: http://127.0.0.1:9
@@ -1715,6 +1745,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            CONVERSATION_FINALIZATION_EFFECT_PLAN_MODE:
+              value: standby
+              category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: 'false'
               category: rollout

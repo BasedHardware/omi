@@ -43,7 +43,7 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "upsert_action_item_vectors_batch", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "delete_action_item_vectors_batch", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_module, "auto_sync_action_items_batch", _async_noop)
+    monkeypatch.setattr(process_module, "auto_sync_action_items_batch", _async_empty)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
     monkeypatch.setattr(process_module, "write_conversation_link_to_calendar_event", _async_noop)
@@ -106,6 +106,10 @@ async def _async_noop(*args, **kwargs):
 
 async def _async_none(*args, **kwargs):
     return None
+
+
+async def _async_empty(*args, **kwargs):
+    return []
 
 
 def test_conversation_create_process_finalize_lifecycle(client, auth_headers, monkeypatch):

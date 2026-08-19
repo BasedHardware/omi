@@ -124,6 +124,8 @@ def router():
         # database (parent package faked; _client is the rich stub)
         "database": _pkg("database"),
         "database._client": client_mod,
+        "database.conversation_finalization_identity": _pkg("database.conversation_finalization_identity"),
+        "database.conversation_vector_cleanup": _pkg("database.conversation_vector_cleanup"),
         "database.conversations": _pkg("database.conversations"),
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
@@ -158,6 +160,7 @@ def router():
         "google.cloud.firestore_v1": _pkg("google.cloud.firestore_v1"),
         # utils.* -- intermediate packages faked; ``utils`` itself stays real.
         "utils.other": _pkg("utils.other"),
+        "utils.other.conversation_playback_storage": _pkg("utils.other.conversation_playback_storage"),
         "utils.other.endpoints": endpoints,
         "utils.other.storage": _pkg("utils.other.storage"),
         "utils.conversations": _pkg("utils.conversations"),
@@ -169,6 +172,8 @@ def router():
         "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
         "utils.conversations.location": _pkg("utils.conversations.location"),
         "utils.conversations.analytics": _pkg("utils.conversations.analytics"),
+        "utils.sync": _pkg("utils.sync"),
+        "utils.sync.conversation_artifact_protocol": _pkg("utils.sync.conversation_artifact_protocol"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
         "utils.speaker_identification": _pkg("utils.speaker_identification"),

@@ -12,6 +12,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
+from database import users as users_db
+from database.conversation_finalization_effects import stamp_finalization_incarnation as _stamp_finalization_incarnation
+from database.conversation_write_fence import account_deletion_blocks_writes, create_if_absent
 from models.audio_file import AudioFile
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -26,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
 
-
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
+_FINALIZATION_IDENTITY_FIELDS = ('finalization_incarnation_id', 'finalization_job_id', 'finalization_revision')
 _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
@@ -35,11 +38,7 @@ _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 
 
 def get_conversation_ids(uid: str) -> List[str]:
-    """Return all conversation document IDs for a user without decrypting any fields.
-
-    IDs-only projection (``select([])``) — used for bulk operations like account deletion where
-    only the IDs are needed (e.g. to purge derived Pinecone vectors).
-    """
+    """Return IDs without decrypting fields, for example during account deletion."""
     coll = db.collection('users').document(uid).collection(conversations_collection)
     return [doc.id for doc in coll.select([]).stream()]
 
@@ -371,9 +370,12 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     @firestore.transactional
     def _write_processing_result(transaction):
         write_data = copy.deepcopy(conversation_data)
+        if account_deletion_blocks_writes(uid, transaction, db):
+            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
+            _stamp_finalization_incarnation(write_data, existing)
 
             # Processing owns generated content, while these fields are explicitly
             # user-owned. The transaction retries if a concurrent mutation lands,
@@ -402,11 +404,13 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 structured['title'] = user_title
 
             transaction.set(conversation_ref, write_data, merge=True)
-            return
+            return True
 
+        _stamp_finalization_incarnation(write_data)
         transaction.set(conversation_ref, write_data)
+        return True
 
-    _write_processing_result(transaction)
+    return _write_processing_result(transaction)
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -418,16 +422,10 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
 def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
+    *,
+    expected_finalization_identity: tuple[str | None, str | None, int | None] | None = None,
 ) -> bool:
-    """Merge a processor result into its conversation.
-
-    Only deletion is refused.  Lifecycle state is not: a discard is the system's
-    own verdict that a conversation held nothing, and a status is bookkeeping
-    about which generation ran, and every processor re-derives what it writes
-    from the content in front of it.  Fencing on either stranded conversations a
-    later sync had filled with speech — transcribed, untitled, and invisible to
-    their owner — to prevent races that had never been observed.
-    """
+    """Merge output only while its row/job identity remains current; lifecycle status alone is not a fence."""
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
@@ -441,6 +439,8 @@ def persist_processing_result_with_lifecycle(
     @firestore.transactional
     def _persist(transaction) -> bool:
         write_data = copy.deepcopy(conversation_data)
+        if account_deletion_blocks_writes(uid, transaction, db):
+            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
@@ -450,6 +450,22 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if existing.get('vector_cleanup_pending'):
+            return False
+        if (
+            expected_finalization_identity is not None
+            and tuple(existing.get(field) for field in _FINALIZATION_IDENTITY_FIELDS) != expected_finalization_identity
+        ):
+            return False
+        if expected_finalization_identity is None or expected_finalization_identity[0] is not None:
+            # A persist fenced against an explicit identity must not mutate the
+            # identity it was fenced against. Rows that predate
+            # finalization_incarnation_id pass a None incarnation here; minting
+            # one mid-finalization would make the caller's later identity
+            # fences (derived-effect checkpoint, effect boundaries) fence a
+            # healthy run. Such legacy rows gain their incarnation on the next
+            # unfenced write instead.
+            _stamp_finalization_incarnation(write_data, existing)
 
         # Generated processing content never owns user-managed fields.
         # A null existing value means "never user-set" (stub docs dump None
@@ -494,14 +510,11 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
         del conversation_data['photos']
+    _stamp_finalization_incarnation(conversation_data)
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
-    try:
-        conversation_ref.create(conversation_data)
-        return True
-    except (AlreadyExists, Conflict):
-        return False
+    return create_if_absent(uid, conversation_ref, conversation_data, db)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -556,16 +569,6 @@ def get_public_shared_conversation_bounded(
     except ValueError:
         return None
     return public_conversation
-
-
-def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:
-    """Field-masked read of just the conversation_audio stamp — cheap enough for
-    the pusher's per-batch staleness check (the full doc carries transcripts)."""
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    snapshot = doc_ref.get(field_paths=['conversation_audio'])
-    if not snapshot.exists:
-        return None
-    return (snapshot.to_dict() or {}).get('conversation_audio')
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -947,6 +950,8 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
 
     @firestore.transactional
     def _update_segment_text(transaction) -> str:
+        if account_deletion_blocks_writes(uid, transaction, db):
+            return 'not_found'
         doc_snapshot = doc_ref.get(transaction=transaction)
         if not doc_snapshot.exists:
             return 'not_found'
@@ -1274,6 +1279,8 @@ def claim_conversation_status(
 
     @firestore.transactional
     def _claim(transaction):
+        if account_deletion_blocks_writes(uid, transaction, db):
+            return False
         snapshot = conversation_ref.get(transaction=transaction)
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
@@ -1451,6 +1458,8 @@ def update_conversation_segments(
 
     @firestore.transactional
     def _write_segments(transaction) -> bool:
+        if account_deletion_blocks_writes(uid, transaction, client):
+            return False
         doc_snapshot = doc_ref.get(transaction=transaction)
         if not getattr(doc_snapshot, 'exists', False):
             return False

@@ -1,9 +1,9 @@
 """Instrumented entrypoint for the real pusher ASGI application.
 
 It preserves the production WebSocket router, wire protocol, Firestore jobs,
-leases, fanout claims, and result frames.  The three provider-side finalizer
-leaves are replaced before importing ``pusher.main`` so a local test cannot
-call LLMs, vector stores, or user integrations.
+leases, fanout claims, and result frames. Provider-side finalizer surfaces are
+replaced before importing ``pusher.main`` so a local test cannot call LLMs,
+vector stores, or user integrations.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from fastapi.websockets import WebSocketDisconnect
 from models.conversation_enums import ConversationStatus
 from utils.conversations import finalizer
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.enrichment_plan import RequiredEnrichmentEffect
 
 
 def _record(event: dict[str, Any]) -> None:
@@ -31,10 +32,20 @@ def _record(event: dict[str, Any]) -> None:
         output.write(json.dumps(event, sort_keys=True) + '\n')
 
 
-def _offline_process_conversation(uid: str, _language: str, conversation: Any, **_kwargs: Any) -> Any:
+def _offline_process_conversation(uid: str, _language: str, conversation: Any, **kwargs: Any) -> Any:
     """Finish through the production lifecycle owner without external providers."""
     conversation.status = ConversationStatus.completed
-    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+    persisted = lifecycle_service.persist_processed_conversation(
+        uid,
+        conversation.model_dump(),
+        expected_finalization_identity=kwargs.get('expected_finalization_identity'),
+    )
+    persistence_observer = kwargs.get('persistence_observer')
+    if persistence_observer is not None:
+        persistence_observer(persisted)
+    derived_effects_observer = kwargs.get('derived_effects_observer')
+    if persisted and derived_effects_observer is not None:
+        derived_effects_observer(lambda: _offline_extract_memories(uid, conversation))
     _record(
         {
             'event': 'offline_process',
@@ -47,6 +58,49 @@ def _offline_process_conversation(uid: str, _language: str, conversation: Any, *
 
 def _offline_extract_memories(_uid: str, _conversation: Any) -> None:
     _record({'event': 'memory_extraction_skipped'})
+
+
+def _offline_required_enrichment_effects(
+    _uid: str,
+    conversation: Any,
+    *,
+    transcript_vector_count: int | None = None,
+    **_kwargs: Any,
+) -> tuple[RequiredEnrichmentEffect, ...]:
+    def skip_structured_vector() -> None:
+        _record(
+            {
+                'event': 'required_enrichment_skipped',
+                'stage': 'structured_vector',
+                'conversation_id': str(conversation.id),
+            }
+        )
+
+    def skip_transcript_vectors() -> None:
+        _record(
+            {
+                'event': 'required_enrichment_skipped',
+                'stage': 'transcript_vectors',
+                'conversation_id': str(conversation.id),
+            }
+        )
+
+    return (
+        RequiredEnrichmentEffect('structured_vector', skip_structured_vector, resource_count=1),
+        RequiredEnrichmentEffect(
+            'transcript_vectors',
+            skip_transcript_vectors,
+            resource_count=transcript_vector_count or 0,
+        ),
+    )
+
+
+def _offline_cleanup_required_enrichment(
+    _uid: str,
+    conversation_id: str,
+    **_kwargs: Any,
+) -> None:
+    _record({'event': 'required_enrichment_cleanup_skipped', 'conversation_id': conversation_id})
 
 
 async def _offline_trigger_integrations(_uid: str, conversation: Any, *, idempotency_key: str, **_kwargs: Any) -> None:
@@ -70,6 +124,8 @@ async def _offline_trigger_integrations(_uid: str, conversation: Any, *, idempot
 # persistence, fanout claim/completion and fenced disposition continue to run.
 finalizer.process_conversation = _offline_process_conversation
 finalizer.extract_memories = _offline_extract_memories
+finalizer.required_enrichment_effects = _offline_required_enrichment_effects
+finalizer.cleanup_required_enrichment = _offline_cleanup_required_enrichment
 finalizer.trigger_external_integrations = _offline_trigger_integrations
 
 from routers import pusher as pusher_router  # noqa: E402  (patch finalizer first)

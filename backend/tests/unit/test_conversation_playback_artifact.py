@@ -32,10 +32,7 @@ def _load_playback(request):
         "download_audio_chunks_and_merge",
         "download_legacy_merged_wav",
         "download_playback_artifact",
-        "enqueue_conversation_artifact_build",
         "enqueue_conversation_audio_merge",
-        "get_conversation_playback_signed_url",
-        "get_conversation_playback_unavailable_fingerprint",
         "get_merged_audio_signed_url",
         "get_or_create_merged_audio",
         "get_playback_artifact_signed_url",
@@ -43,7 +40,21 @@ def _load_playback(request):
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()
-    with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
+    artifact_storage_module = ModuleType("utils.other.conversation_playback_storage")
+    artifact_storage_module.get_conversation_playback_signed_url = MagicMock()
+    artifact_storage_module.get_conversation_playback_unavailable_fingerprint = MagicMock()
+    artifact_protocol_module = ModuleType("utils.sync.conversation_artifact_protocol")
+    artifact_protocol_module.conversation_finalization_identity = MagicMock()
+    artifact_protocol_module.conversation_playback_artifact_generation_id = MagicMock()
+    artifact_protocol_module.enqueue_conversation_artifact_build = MagicMock()
+    with stub_modules(
+        {
+            "utils.cloud_tasks": cloud_tasks_module,
+            "utils.other.storage": storage_module,
+            "utils.other.conversation_playback_storage": artifact_storage_module,
+            "utils.sync.conversation_artifact_protocol": artifact_protocol_module,
+        }
+    ):
         module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
         request.module.playback = module
         yield
@@ -146,13 +157,27 @@ def _urls_setup(monkeypatch, *, stamp=None, signed_url=None, unavailable_fp=None
     monkeypatch.setattr(playback, 'is_playback_unavailable', lambda uid, cid, fid: False)
     monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', lambda *a, **k: None)
     monkeypatch.setattr(playback, 'compute_audio_files_fingerprint', lambda audio_files: 'fp-current')
-    monkeypatch.setattr(playback, 'get_conversation_playback_signed_url', lambda uid, cid: signed_url)
-    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda uid, cid: unavailable_fp)
+    monkeypatch.setattr(playback, 'conversation_finalization_identity', lambda conversation: None)
+    monkeypatch.setattr(
+        playback,
+        'conversation_playback_artifact_generation_id',
+        lambda fingerprint, identity: 'a' * 32,
+    )
+    monkeypatch.setattr(
+        playback,
+        'get_conversation_playback_signed_url',
+        lambda uid, cid, generation=None: signed_url,
+    )
+    monkeypatch.setattr(
+        playback,
+        'get_conversation_playback_unavailable_fingerprint',
+        lambda uid, cid, generation=None: unavailable_fp,
+    )
     enqueues = []
     monkeypatch.setattr(
         playback,
         'enqueue_conversation_artifact_build',
-        lambda uid, cid, fingerprint, caller: enqueues.append((uid, cid, fingerprint, caller)),
+        lambda uid, cid, fingerprint, caller, **kwargs: enqueues.append((uid, cid, fingerprint, caller)),
     )
     conversation = {'conversation_audio': stamp} if stamp else {}
     return conversation, enqueues
@@ -164,6 +189,7 @@ _AUDIO_FILES = [{'id': 'A', 'duration': 1}]
 def test_urls_conversation_audio_cached(monkeypatch):
     stamp = {
         'audio_files_fingerprint': 'fp-current',
+        'artifact_generation_id': 'a' * 32,
         'duration': 215.0,
         'captured_duration': 15.0,
         'spans': [{'file_id': 'A', 'wall_offset': 10.0, 'artifact_offset': 0.0, 'len': 10.0}],
@@ -198,7 +224,13 @@ def test_urls_conversation_audio_stale_fingerprint_pending_and_reenqueued(monkey
 
 def test_urls_conversation_audio_expired_blob_pending(monkeypatch):
     # Fingerprint matches but the blob is gone (30-day lifecycle) -> pending + re-enqueue.
-    stamp = {'audio_files_fingerprint': 'fp-current', 'duration': 1.0, 'captured_duration': 1.0, 'spans': []}
+    stamp = {
+        'audio_files_fingerprint': 'fp-current',
+        'artifact_generation_id': 'a' * 32,
+        'duration': 1.0,
+        'captured_duration': 1.0,
+        'spans': [],
+    }
     conversation, enqueues = _urls_setup(monkeypatch, stamp=stamp, signed_url=None)
 
     result = playback.get_audio_signed_urls('u', 'c', _AUDIO_FILES, conversation=conversation)
@@ -254,18 +286,21 @@ def test_conversation_merge_handler_structure():
     invalid_payload_pos = source.index("'reason': 'invalid_payload'")
     assert invalid_payload_pos < dispatch_pos
 
+    worker = (BACKEND / 'utils' / 'sync' / 'conversation_artifact_worker.py').read_text()
+
     # Dedicated run-lock namespace for the conversation-level build.
-    assert "f'audio:{conversation_id}:conversation'" in source
+    assert "f'audio:{conversation_id}:conversation'" in worker
 
     # Freshness re-check from the doc: stale payload fingerprint -> superseded ack.
-    assert "'superseded'" in source
+    assert "'superseded'" in worker
 
-    # Upload precedes the doc stamp so a stamped fingerprint implies a servable blob.
-    body = source.split('async def _run_conversation_merge_job', 1)[1]
+    # Upload precedes the transactionally fenced doc stamp so a stamped
+    # generation implies a servable blob for the exact source row.
+    body = worker.split('async def run_conversation_merge_job', 1)[1]
     upload_pos = body.index('upload_conversation_playback_artifact')
-    stamp_pos = body.index("'conversation_audio': {")
-    assert upload_pos < stamp_pos
+    commit_pos = body.index('commit_conversation_audio_if_source_current')
+    assert upload_pos < commit_pos
 
     # Both durations are stamped.
-    assert "'captured_duration': captured_duration" in body
-    assert "'duration': wall_duration" in body
+    assert "'captured_duration': round(sum(" in body
+    assert "'duration': round(" in body

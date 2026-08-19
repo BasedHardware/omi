@@ -1151,7 +1151,7 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
     monkeypatch.setattr(
         account_deletion,
         'purge_derived_user_data',
-        lambda uid: calls.append(('purge', uid))
+        lambda uid, **_kwargs: calls.append(('purge', uid))
         or {
             'required_failures': [],
             'best_effort_failures': [],
@@ -1320,13 +1320,34 @@ def test_background_wipe_fails_closed_when_running_marker_persist_fails(monkeypa
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
 
 
-def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):
+def test_purge_derived_user_data_requires_empty_follow_up_descriptor_projection(monkeypatch):
     calls = []
-    conversation_calls = iter([['c1'], ['c2']])
+    monkeypatch.setattr(account_deletion.vector_db, 'index', object())
+    descriptors = [
+        types.SimpleNamespace(
+            conversation_id='c1',
+            finalization_incarnation_id='incarnation-c1',
+            finalization_vector_generation_id='generation-1',
+            transcript_vector_count=3,
+            cleanup_owner_token='cleanup-owner-c1',
+        ),
+        types.SimpleNamespace(
+            conversation_id='c2',
+            finalization_incarnation_id='incarnation-c2',
+            finalization_vector_generation_id=None,
+            transcript_vector_count=None,
+            cleanup_owner_token='cleanup-owner-c2',
+        ),
+    ]
+    descriptor_batches = iter((descriptors, []))
+
+    def claim_descriptors(uid, **kwargs):
+        calls.append(('get_conversations', uid, kwargs))
+        return next(descriptor_batches)
+
+    monkeypatch.setattr(account_deletion, 'claim_conversation_vector_cleanup_descriptors', claim_descriptors)
     monkeypatch.setattr(
-        account_deletion,
-        'get_conversation_ids',
-        lambda uid: calls.append(('get_conversations', uid)) or next(conversation_calls),
+        account_deletion, '_historical_memory_ids', lambda uid: calls.append(('get_memories', uid)) or ['m1']
     )
     monkeypatch.setattr(
         account_deletion, '_historical_memory_ids', lambda uid: calls.append(('get_memories', uid)) or ['m1']
@@ -1340,7 +1361,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
     monkeypatch.setattr(
         account_deletion,
         'delete_conversation_vectors_batch',
-        lambda uid, ids: calls.append(('delete_conversation_vectors', uid, ids)),
+        lambda uid, ids, **kwargs: calls.append(('delete_conversation_vectors', uid, ids, kwargs)),
     )
     monkeypatch.setattr(
         account_deletion,
@@ -1367,17 +1388,42 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
     )
     monkeypatch.setattr(
         account_deletion,
+        'delete_all_conversation_playback_artifacts',
+        lambda uid: calls.append(('playback', uid)),
+    )
+    monkeypatch.setattr(
+        account_deletion,
         'purge_canonical_derived_user_data',
-        MagicMock(return_value={'vector_ids': ['canonical-1', 'canonical-2']}),
+        lambda uid: calls.append(('canonical', uid)) or {'vector_ids': ['canonical-1', 'canonical-2']},
+    )
+    monkeypatch.setattr(
+        account_deletion,
+        'release_conversation_vector_cleanup_descriptor',
+        lambda uid, descriptor: calls.append(('release', uid, descriptor.cleanup_owner_token)),
     )
 
     result = account_deletion.purge_derived_user_data('uid1')
 
     assert calls == [
-        ('get_conversations', 'uid1'),
-        ('delete_conversation_vectors', 'uid1', ['c1']),
-        ('get_conversations', 'uid1'),
-        ('delete_transcript_vectors', 'uid1', ['c2'], {'raise_on_failure': True}),
+        ('get_conversations', 'uid1', {'exclude_conversation_ids': set()}),
+        ('get_conversations', 'uid1', {'exclude_conversation_ids': {'c1', 'c2'}}),
+        (
+            'delete_conversation_vectors',
+            'uid1',
+            ['c1', 'c2'],
+            {'finalization_vector_generation_ids': {'c1': 'generation-1', 'c2': None}},
+        ),
+        (
+            'delete_transcript_vectors',
+            'uid1',
+            ['c1', 'c2'],
+            {
+                'finalization_vector_generation_ids': {'c1': 'generation-1', 'c2': None},
+                'transcript_vector_counts': {'c1': 3, 'c2': None},
+                'raise_on_failure': True,
+            },
+        ),
+        ('playback', 'uid1'),
         ('get_memories', 'uid1'),
         ('delete_memory_vectors', 'uid1', ['m1']),
         ('get_actions', 'uid1'),
@@ -1385,17 +1431,120 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         ('get_screen', 'uid1'),
         ('delete_screen_vectors', 'uid1', ['s1']),
         ('recordings', 'uid1'),
+        ('canonical', 'uid1'),
+        ('release', 'uid1', 'cleanup-owner-c1'),
+        ('release', 'uid1', 'cleanup-owner-c2'),
     ]
     assert result == {
         'required_failures': [],
         'best_effort_failures': [],
-        'vectors_deleted': 8,
+        'vectors_deleted': 9,
         'recordings_deleted': 3,
     }
 
 
+def test_purge_claims_conversations_to_a_fixed_point_before_vector_cleanup(monkeypatch):
+    first = types.SimpleNamespace(
+        conversation_id='c1',
+        finalization_incarnation_id='incarnation-c1',
+        finalization_vector_generation_id='generation-1',
+        transcript_vector_count=1,
+        cleanup_owner_token='cleanup-owner-c1',
+    )
+    second = types.SimpleNamespace(
+        conversation_id='c2',
+        finalization_incarnation_id='incarnation-c2',
+        finalization_vector_generation_id='generation-2',
+        transcript_vector_count=2,
+        cleanup_owner_token='cleanup-owner-c2',
+    )
+    scans = []
+    batches = iter(([first], [second], []))
+
+    def claim(uid, **kwargs):
+        scans.append((uid, set(kwargs['exclude_conversation_ids'])))
+        return next(batches)
+
+    monkeypatch.setattr(account_deletion.vector_db, 'index', object())
+    monkeypatch.setattr(account_deletion, 'claim_conversation_vector_cleanup_descriptors', claim)
+    delete_vectors = MagicMock()
+    monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', delete_vectors)
+    monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_playback_artifacts', MagicMock())
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion, 'release_conversation_vector_cleanup_descriptor', MagicMock())
+
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    assert scans == [
+        ('uid1', set()),
+        ('uid1', {'c1'}),
+        ('uid1', {'c1', 'c2'}),
+    ]
+    delete_vectors.assert_called_once_with(
+        'uid1',
+        ['c1', 'c2'],
+        finalization_vector_generation_ids={'c1': 'generation-1', 'c2': 'generation-2'},
+    )
+    assert result['required_failures'] == []
+
+
+def test_purge_treats_nonconverging_conversation_claims_as_required_failure(monkeypatch):
+    descriptors = [
+        types.SimpleNamespace(
+            conversation_id=f'c{index}',
+            finalization_incarnation_id=f'incarnation-{index}',
+            finalization_vector_generation_id=f'generation-{index}',
+            transcript_vector_count=index,
+            cleanup_owner_token=f'cleanup-owner-{index}',
+        )
+        for index in (1, 2)
+    ]
+    monkeypatch.setattr(account_deletion, 'ACCOUNT_DELETION_CONVERSATION_CLAIM_MAX_SCANS', 2)
+    monkeypatch.setattr(
+        account_deletion,
+        'claim_conversation_vector_cleanup_descriptors',
+        MagicMock(side_effect=([descriptors[0]], [descriptors[1]])),
+    )
+    monkeypatch.setattr(account_deletion.vector_db, 'index', object())
+    monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_playback_artifacts', MagicMock())
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
+    release = MagicMock()
+    monkeypatch.setattr(account_deletion, 'release_conversation_vector_cleanup_descriptor', release)
+
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    assert [failure['operation'] for failure in result['required_failures']] == [
+        'conversation_vectors',
+        'transcript_chunk_vectors',
+        'conversation_playback_artifacts',
+    ]
+    account_deletion.delete_conversation_vectors_batch.assert_not_called()
+    account_deletion.delete_transcript_chunk_vectors_batch.assert_not_called()
+    account_deletion.delete_all_conversation_playback_artifacts.assert_not_called()
+    assert [call.args for call in release.call_args_list] == [
+        ('uid1', descriptors[0]),
+        ('uid1', descriptors[1]),
+    ]
+
+
 def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
-    monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(side_effect=Exception('read down')))
+    monkeypatch.setattr(account_deletion.vector_db, 'index', object())
+    monkeypatch.setattr(
+        account_deletion,
+        'claim_conversation_vector_cleanup_descriptors',
+        MagicMock(side_effect=Exception('read down')),
+    )
     monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
@@ -1409,13 +1558,18 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     monkeypatch.setattr(
         account_deletion, 'delete_all_conversation_recordings', MagicMock(side_effect=Exception('gcs down'))
     )
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_playback_artifacts', MagicMock())
     monkeypatch.setattr(
         account_deletion, 'purge_canonical_derived_user_data', MagicMock(side_effect=Exception('canonical down'))
     )
+    monkeypatch.setattr(account_deletion, 'release_conversation_vector_cleanup_descriptor', MagicMock())
 
     result = account_deletion.purge_derived_user_data('uid1')
 
-    assert account_deletion.get_conversation_ids.call_count == 2
+    account_deletion.claim_conversation_vector_cleanup_descriptors.assert_called_once_with(
+        'uid1',
+        exclude_conversation_ids=set(),
+    )
     account_deletion.delete_conversation_vectors_batch.assert_not_called()
     account_deletion.delete_transcript_chunk_vectors_batch.assert_not_called()
     account_deletion.delete_memory_vectors_batch.assert_called_once_with('uid1', ['m1'])
@@ -1423,9 +1577,11 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     account_deletion.delete_screen_activity_vectors.assert_called_once_with('uid1', ['s1'])
     account_deletion.delete_all_conversation_recordings.assert_called_once_with('uid1')
     account_deletion.purge_canonical_derived_user_data.assert_called_once_with('uid1')
+    account_deletion.release_conversation_vector_cleanup_descriptor.assert_not_called()
     assert [failure['operation'] for failure in result['required_failures']] == [
         'conversation_vectors',
         'transcript_chunk_vectors',
+        'conversation_playback_artifacts',
         'memory_vectors',
         'conversation_recordings',
         'canonical_derived_data',
@@ -1435,7 +1591,21 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 
 def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
     monkeypatch.setattr(account_deletion.vector_db, 'index', None)
-    monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
+    descriptor = types.SimpleNamespace(
+        conversation_id='c1',
+        finalization_incarnation_id='incarnation-c1',
+        finalization_vector_generation_id='generation-1',
+        transcript_vector_count=3,
+        cleanup_owner_token='cleanup-owner-c1',
+    )
+    monkeypatch.setattr(
+        account_deletion,
+        'claim_conversation_vector_cleanup_descriptors',
+        MagicMock(
+            side_effect=[[descriptor], []],
+        ),
+    )
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=['m1']))
     monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))
     monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=['s1']))
@@ -1445,7 +1615,9 @@ def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monke
     monkeypatch.setattr(account_deletion, 'delete_action_item_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_screen_activity_vectors', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_playback_artifacts', MagicMock())
     monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion, 'release_conversation_vector_cleanup_descriptor', MagicMock())
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -1461,10 +1633,46 @@ def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monke
     account_deletion.delete_memory_vectors_batch.assert_not_called()
     account_deletion.delete_action_item_vectors_batch.assert_not_called()
     account_deletion.delete_screen_activity_vectors.assert_not_called()
+    account_deletion.release_conversation_vector_cleanup_descriptor.assert_called_once_with('uid1', descriptor)
+
+
+def test_direct_purge_reports_cleanup_claim_release_failure(monkeypatch):
+    descriptor = types.SimpleNamespace(
+        conversation_id='c1',
+        finalization_incarnation_id='incarnation-c1',
+        finalization_vector_generation_id='generation-1',
+        transcript_vector_count=3,
+        cleanup_owner_token='cleanup-owner-c1',
+    )
+    monkeypatch.setattr(account_deletion.vector_db, 'index', object())
+    monkeypatch.setattr(
+        account_deletion,
+        'claim_conversation_vector_cleanup_descriptors',
+        MagicMock(side_effect=[[descriptor], []]),
+    )
+    monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, '_historical_memory_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=[]))
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_playback_artifacts', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'release_conversation_vector_cleanup_descriptor',
+        MagicMock(side_effect=RuntimeError('claim release down')),
+    )
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    assert [failure['operation'] for failure in result['required_failures']] == ['conversation_cleanup_claim_release']
+    account_deletion.release_conversation_vector_cleanup_descriptor.assert_called_once_with('uid1', descriptor)
 
 
 def test_background_wipe_user_data_does_not_complete_when_required_derived_purge_fails(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
     monkeypatch.setattr(
         account_deletion,
@@ -1477,6 +1685,10 @@ def test_background_wipe_user_data_does_not_complete_when_required_derived_purge
 
     account_deletion.background_wipe_user_data('uid1')
 
+    account_deletion.purge_derived_user_data.assert_called_once_with(
+        'uid1',
+        retain_conversation_cleanup_claims=True,
+    )
     account_deletion.users_db.delete_user_data.assert_not_called()
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
@@ -1484,25 +1696,78 @@ def test_background_wipe_user_data_does_not_complete_when_required_derived_purge
 
 def test_background_wipe_user_data_does_not_complete_when_firestore_wipe_returns_error(monkeypatch):
     """A normal structured wipe failure is terminally unsafe, not success."""
+    descriptor = types.SimpleNamespace(cleanup_owner_token='cleanup-owner-c1')
+    calls = []
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
     monkeypatch.setattr(
         account_deletion,
         'purge_derived_user_data',
-        MagicMock(return_value={'required_failures': [], 'best_effort_failures': []}),
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [],
+                '_conversation_cleanup_descriptors': [descriptor],
+            }
+        ),
     )
     monkeypatch.setattr(
         account_deletion.users_db,
         'delete_user_data',
-        MagicMock(return_value={'status': 'error', 'message': 'root user document missing'}),
+        MagicMock(
+            side_effect=lambda _uid: calls.append('source_wipe')
+            or {'status': 'error', 'message': 'root user document missing'}
+        ),
+    )
+    monkeypatch.setattr(
+        account_deletion,
+        'release_conversation_vector_cleanup_descriptor',
+        MagicMock(side_effect=lambda _uid, _descriptor: calls.append('release')),
     )
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
 
     assert account_deletion.background_wipe_user_data('uid1') is False
 
+    assert calls == ['source_wipe', 'release']
+    account_deletion.release_conversation_vector_cleanup_descriptor.assert_called_once_with('uid1', descriptor)
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+def test_background_wipe_keeps_cleanup_claims_through_successful_source_wipe(monkeypatch):
+    descriptor = types.SimpleNamespace(cleanup_owner_token='cleanup-owner-c1')
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(
+        account_deletion,
+        'purge_derived_user_data',
+        MagicMock(
+            return_value={
+                'required_failures': [],
+                'best_effort_failures': [],
+                '_conversation_cleanup_descriptors': [descriptor],
+            }
+        ),
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock(return_value={'status': 'ok'}))
+    monkeypatch.setattr(account_deletion, 'release_conversation_vector_cleanup_descriptor', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    assert account_deletion.background_wipe_user_data('uid1') is True
+
+    account_deletion.purge_derived_user_data.assert_called_once_with(
+        'uid1',
+        retain_conversation_cleanup_claims=True,
+    )
+    account_deletion.users_db.delete_user_data.assert_called_once_with('uid1')
+    account_deletion.release_conversation_vector_cleanup_descriptor.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_called_once_with('uid1')
 
 
 def test_background_wipe_emits_bounded_completion_telemetry(monkeypatch):
