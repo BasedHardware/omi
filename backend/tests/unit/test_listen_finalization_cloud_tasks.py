@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import runpy
 from types import SimpleNamespace
@@ -315,10 +316,12 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'retryable': True,
         'attempt_count': 2,
         'task_retry_count': 0,
+        'meeting_treatment_eligible': False,
     }
 
     job['status'] = 'dead_letter'
     job['task_retry_count'] = 3
+    job['meeting_treatment_eligible'] = True
     assert lifecycle_service.get_finalization_status('uid-1', 'conversation-1') == {
         'job_id': 'job-1',
         'status': 'dead_letter',
@@ -326,6 +329,7 @@ def test_finalization_status_exposes_retry_and_terminal_state(monkeypatch):
         'retryable': False,
         'attempt_count': 2,
         'task_retry_count': 3,
+        'meeting_treatment_eligible': True,
     }
 
 
@@ -1054,6 +1058,9 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
         source=SimpleNamespace(value=source),
         external_data=external_data,
         discarded=discarded,
+        started_at=datetime(2026, 8, 18, 12, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 8, 18, 12, tzinfo=timezone.utc) + timedelta(minutes=10),
+        transcript_segments=[SimpleNamespace(text='substantive exchange', start=0, end=60)],
         structured=SimpleNamespace(title='Captured title', overview='Captured overview'),
     )
     integrations = AsyncMock(return_value=[])
@@ -1097,7 +1104,12 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     else:
         extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
-    completed.assert_called_once_with('job-1', 2, 3)
+    completed.assert_called_once_with(
+        'job-1',
+        2,
+        3,
+        meeting_treatment_eligible=(source == 'desktop' and expected_intent_kwargs is not None),
+    )
     if expected_intent_kwargs is None:
         capture_arrival.assert_not_called()
     else:
@@ -1440,7 +1452,7 @@ async def test_finalizer_runs_derived_effects_only_after_winning_claim(monkeypat
     assert disposition == ConversationFinalizationDisposition.completed
     derived_runner.assert_called_once()
     integrations.assert_awaited_once()
-    complete.assert_called_once_with('job-1', 2, 3)
+    complete.assert_called_once_with('job-1', 2, 3, meeting_treatment_eligible=False)
 
 
 @pytest.mark.anyio
@@ -1520,7 +1532,7 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     )
 
     assert disposition == ConversationFinalizationDisposition.completed
-    complete.assert_called_once_with('job-1', 2, 3)
+    complete.assert_called_once_with('job-1', 2, 3, meeting_treatment_eligible=False)
     safe_target.assert_called_once_with('https://app.test/hook?uid=uid-1')
     webhook_client.post.assert_awaited_once_with(
         pinned_url,

@@ -16,6 +16,7 @@ from models.chat_first import (
     QuestionCardSpec,
     QuestionOption,
 )
+from utils.conversations.meeting_treatment import is_meeting_treatment_eligible
 from utils.log_sanitizer import sanitize_pii
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
 from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility, resolve_chat_first_eligibility
@@ -338,17 +339,9 @@ def persist_capture_arrival_intent(
 def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
     """Repair-safe adapter from a completed desktop conversation to its exact Chat receipt."""
 
-    source = conversation.get('source') if isinstance(conversation, dict) else conversation.source
     status = conversation.get('status') if isinstance(conversation, dict) else conversation.status
-    discarded = conversation.get('discarded', False) if isinstance(conversation, dict) else conversation.discarded
-    external_data = conversation.get('external_data') if isinstance(conversation, dict) else conversation.external_data
-    source = getattr(source, 'value', source)
     status = getattr(status, 'value', status)
-    if (external_data or {}).get('conversation_role') != 'meeting':
-        return
-    if (external_data or {}).get('conversation_finalization_reason') == 'max_duration_rotation':
-        return
-    if source != 'desktop' or discarded or status != 'completed':
+    if status != 'completed' or not is_meeting_treatment_eligible(conversation):
         return
     conversation_id = conversation['id'] if isinstance(conversation, dict) else conversation.id
     structured = (conversation.get('structured') if isinstance(conversation, dict) else conversation.structured) or {}

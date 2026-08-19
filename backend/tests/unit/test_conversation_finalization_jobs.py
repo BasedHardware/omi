@@ -493,7 +493,8 @@ def test_finalization_completion_requires_durable_fanout_completion():
     ref.data = ref.data | fanout.updates[0][1]
 
     completed_fanout = _Transaction()
-    assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now, True) is True
+    assert completed_fanout.updates[0][1]['meeting_treatment_eligible'] is True
     ref.data = ref.data | completed_fanout.updates[0][1]
 
     completed = _Transaction()

@@ -644,9 +644,20 @@ def claim_finalization_fanout(
     return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
 
 
-def complete_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+def complete_finalization_fanout(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    meeting_treatment_eligible: bool,
+) -> bool:
     """Persist completion only after the idempotency-keyed fanout succeeds."""
-    return jobs_db.mark_finalization_fanout_completed(job_id, dispatch_generation, lease_epoch)
+    return jobs_db.mark_finalization_fanout_completed(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+        meeting_treatment_eligible=meeting_treatment_eligible,
+    )
 
 
 def complete_fenced_finalization(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
@@ -748,4 +759,5 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'retryable': status == 'queued',
         'attempt_count': int(job.get('attempt_count') or 0),
         'task_retry_count': int(job.get('task_retry_count') or 0),
+        'meeting_treatment_eligible': bool(job.get('meeting_treatment_eligible', False)),
     }

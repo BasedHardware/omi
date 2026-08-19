@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Telegram calls being missed by meeting detection and prevented short or mostly silent calls from being announced as completed meetings"
+}
