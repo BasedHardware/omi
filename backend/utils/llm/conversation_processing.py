@@ -29,6 +29,7 @@ from utils.llm.prompt_cache import (
     EXPLICIT_CACHE_OPTIONS,
     has_cacheable_prefix,
 )
+from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
 
 try:
     from utils.llm.gateway_client import should_route_features_through_gateway
@@ -1071,6 +1072,144 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
     return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
 
 
+def render_sections_markdown(sections: List[Any]) -> str:
+    """Project the additive section model into the legacy overview field."""
+    rendered: List[str] = []
+    for section in sections:
+        heading = str(getattr(section, 'heading', '') or '').strip()
+        body = str(getattr(section, 'body_markdown', '') or '').strip()
+        if heading and body:
+            rendered.append(f'## {heading}\n\n{body}')
+        elif body:
+            rendered.append(body)
+    return '\n\n'.join(rendered)
+
+
+def get_conversation_notes(
+    prefix: ConversationPromptPrefix,
+    *,
+    started_at: datetime,
+    language_code: str,
+    output_language_code: Optional[str],
+    tz: str,
+    task_intelligence_capture: bool,
+    existing_action_items: Optional[List[Dict[str, Any]]] = None,
+) -> Structured:
+    """Generate sections, actions, and events in one coherent model call."""
+    if not prefix.context.strip():
+        return Structured()
+
+    response_language = output_language_code or language_code
+    current_time = datetime.now(timezone.utc)
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning('Invalid timezone %r for conversation notes; falling back to UTC', tz)
+        user_tz = timezone.utc
+    started_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(user_tz)
+    current_local = current_time.astimezone(user_tz)
+    transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
+    if transcript_word_count < 500:
+        density = 'Use 1-2 sections; target ~80 words.'
+    elif transcript_word_count < 2500:
+        density = 'Use 3-5 sections; target ~250 words.'
+    else:
+        density = 'Use 5-8 sections; target ~500 words.'
+
+    existing_lines: List[str] = []
+    for item in existing_action_items or []:
+        if item.get('completed'):
+            continue
+        task_id = item.get('id')
+        label = f'ID {task_id}: ' if task_id else ''
+        existing_lines.append(f'- {label}{item.get("description", "")}')
+    existing_context = '\n'.join(existing_lines) or 'None supplied.'
+
+    extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
+    task_instructions = f'''Create the canonical conversation note and return JSON matching the schema below.
+Respond entirely in {response_language}.
+
+NOTE BODY — WRITE FOR SKIMMING, NOT FOR READING
+- Bullets only. Never write narrative paragraphs. A section body is a list of '- ' bullets,
+  with indented '  - ' sub-bullets for supporting detail under a parent point.
+- Bullets are terse fragments, not sentences. Drop articles and connective filler.
+  Aim for under ~15 words per bullet; a sub-bullet may be shorter.
+- Lead each bullet with the specific: the name, number, product, or decision. Never open a
+  bullet with narration such as "They discussed", "The conversation turned to", or
+  "Speaker 1 said that". Attribute inline only when who-said-it is the point.
+- No preamble, no scene-setting, no wrap-up bullet restating the section.
+- Merge overlapping points instead of restating them across sections.
+- Headings are short noun phrases (2-5 words), specific to this conversation.
+- These are inspiration, not templates to fill:
+  * Founder/1:1: what they built → shared thesis/overlap → follow-ups.
+  * Standup: progress by workstream → blockers → next moves.
+  * Casual conversation: a couple of topic headings with the memorable specifics.
+- {density}
+- COVERAGE BEATS BREVITY. The word target is met by tightening wording, never by dropping a
+  topic, a name, or a number. If you are over budget, shorten bullets — do not delete them.
+- Every bullet must carry at least one concrete specific: a name, number, product, org, tool,
+  date, or technical term. A bullet with no specific is filler; delete it and reclaim the words.
+- Preserve proper nouns, numbers, product names, organization names, dates, and unusual spellings VERBATIM.
+- Never normalize or "correct" an uncertain name from general knowledge. Prefer the exact transcript spelling by default;
+  a short verbatim quote is allowed.
+- Narrow exception: when participant metadata corroborates a spelling, prefer that spelling over a conflicting transcript
+  spelling. A participant name corroborates that person's name; a recognizable participant email domain corroborates
+  its organization name (for example, fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra").
+- Every section should cite the smallest sufficient exact [segment:ID] values in source_segment_ids.
+
+OVERVIEW
+- Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
+
+ACTION ITEMS
+- Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
+- Set owner_name to the actual name when known and context to one line explaining why/detail.
+- LEAVE due_at EMPTY BY DEFAULT. Only set it when the speakers explicitly committed to a specific
+  calendar date for completing the item. A date that was merely discussed, proposed, or floated is
+  NOT a due date; put it in context instead.
+- Never invent or approximate an hour. If a committed date has no stated time, omit due_at.
+- Set due_certainty only when due_at is set: confirmed for a firm commitment, tentative otherwise.
+- For task-intelligence capture, {'capture clear commitments and direct requests' if task_intelligence_capture else 'apply the conservative legacy task filter'}.
+- candidate_action update/complete may only target an exact supplied task ID; otherwise use create.
+- Potentially related open tasks:\n{existing_context}
+
+EVENTS AND CONSISTENCY
+- Emit calendar events only for confirmed user commitments with concrete date and time.
+- A tentative plan may be an action item with due_certainty=tentative, but must not also be emitted as a confirmed event.
+- The same fact must never have conflicting certainty between events and action items.
+
+DATE CONTEXT
+- Conversation local time: {started_local.replace(tzinfo=None).isoformat()}
+- Current local time: {current_local.replace(tzinfo=None).isoformat()}
+- Timezone: {tz or 'UTC'}
+
+{extraction_parser.get_format_instructions()}'''
+
+    cache_enabled = shared_conversation_cache_supported() and prefix.cache_eligible
+    messages = [*prefix.messages(cache_enabled=cache_enabled), SystemMessage(content=task_instructions)]
+    cache_key = prefix.cache_key if cache_enabled else None
+    cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if cache_enabled else None
+    model = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+    response = extraction_parser.parse(_content_str(model.invoke(messages)))
+    structured = response.to_structured()
+
+    for action_item in structured.action_items:
+        if action_item.created_at is None:
+            action_item.created_at = current_time
+    _normalize_action_item_due_dates(
+        structured.action_items,
+        user_tz=user_tz,
+        now=current_time,
+        log_past_due_clears=True,
+    )
+    for event in structured.events:
+        event.duration = min(event.duration, 180)
+        event.created = False
+    projected_overview = render_sections_markdown(structured.sections)
+    if projected_overview:
+        structured.overview = projected_overview
+    return structured
+
+
 def get_transcript_structure(
     transcript: str,
     started_at: datetime,
@@ -1286,7 +1425,13 @@ def get_reprocess_transcript_structure(
     return response
 
 
-def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, language_code: str = 'en') -> str:
+def get_app_result(
+    transcript: str,
+    photos: List[ConversationPhoto],
+    app: App,
+    language_code: str = 'en',
+    prompt_prefix: Optional[ConversationPromptPrefix] = None,
+) -> str:
     context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
@@ -1312,6 +1457,23 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     Conversation:
     {full_context}
     '''
+
+    if prompt_prefix is not None:
+        cache_enabled = shared_conversation_cache_supported() and prompt_prefix.cache_eligible
+        instructions = f'''Apply this explicitly selected summarization app to the shared conversation above.
+Name: {app.name}
+Description: {app.description}
+Task: {app.memory_prompt}
+Respond in {language_code}.'''
+        model = get_llm(
+            'conv_app_result',
+            cache_key=prompt_prefix.cache_key if cache_enabled else None,
+            prompt_cache_options=GPT56_EXPLICIT_CACHE_OPTIONS if cache_enabled else None,
+        )
+        response = model.invoke(
+            [*prompt_prefix.messages(cache_enabled=cache_enabled), SystemMessage(content=instructions)]
+        )
+        return _content_str(response).replace('```json', '').replace('```', '')
 
     gateway_mode_enabled = should_route_features_through_gateway()
     explicit_cache_enabled = _gpt56_explicit_cache_enabled()
