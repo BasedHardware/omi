@@ -67,9 +67,6 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'false'
             category: rollout
-          CONVERSATION_APPS_OPT_IN_ONLY:
-            value: 'false'
-            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
             category: rollout
@@ -1065,9 +1062,6 @@ environments:
               name: prod-omi-backend-config
               key: CONVERSATION_SUMMARIZED_APP_IDS
           CONVERSATION_NOTES_V2_ENABLED:
-            value: 'false'
-            category: rollout
-          CONVERSATION_APPS_OPT_IN_ONLY:
             value: 'false'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:

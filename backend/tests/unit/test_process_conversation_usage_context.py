@@ -1254,8 +1254,11 @@ def test_trigger_apps_no_preferred_app_runs_suggestion():
 
 
 def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
-    """The rollout flag leaves the canonical note as the only default summary path."""
-    monkeypatch.setenv('CONVERSATION_APPS_OPT_IN_ONLY', 'true')
+    """Notes v2 leaves the canonical note as the only default summary path.
+
+    Apps-opt-in is derived from the pipeline mode, not separately configured, so this drives
+    the one rollout switch rather than a second boolean."""
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
     suggestion_app = _make_mock_app('suggested-app', 'SuggestedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
@@ -1267,6 +1270,28 @@ def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
     suggestion_mock.assert_not_called()
     app_result_mock.assert_not_called()
     assert conv.apps_results == []
+
+
+def test_summary_pipeline_mode_cannot_reach_the_regressing_combination(monkeypatch):
+    """Legacy notes must never be paired with opt-in apps.
+
+    That pair takes the app summary away and falls back to the short legacy overview — worse
+    than either whole configuration. Deriving both from one switch makes it unrepresentable.
+    """
+    monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
+    assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.LEGACY_APP_PRIMARY
+    assert process_conversation._conversation_apps_opt_in_only() is False
+    assert process_conversation._conversation_notes_v2_enabled() is False
+
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+    assert process_conversation.summary_pipeline_mode() is process_conversation.SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
+    assert process_conversation._conversation_apps_opt_in_only() is True
+    assert process_conversation._conversation_notes_v2_enabled() is True
+
+    # A stale standalone override must not resurrect the fourth state.
+    monkeypatch.delenv('CONVERSATION_NOTES_V2_ENABLED', raising=False)
+    monkeypatch.setenv('CONVERSATION_APPS_OPT_IN_ONLY', 'true')
+    assert process_conversation._conversation_apps_opt_in_only() is False
 
 
 def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():

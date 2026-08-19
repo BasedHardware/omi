@@ -6,6 +6,7 @@ import logging
 import asyncio
 from datetime import timezone, timedelta, datetime
 from collections.abc import Mapping
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
@@ -147,12 +148,38 @@ def _flag_enabled(name: str, *, default: bool = False) -> bool:
     return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
+class SummaryPipelineMode(str, Enum):
+    """The two configurations of the summary pipeline that are actually safe to run.
+
+    Independent booleans for "notes v2" and "apps are opt-in" describe four states, but only
+    two of them are coherent. The missing pair is what makes this an enum rather than two
+    flags: legacy notes + opt-in apps would take the app summary away and fall back to the
+    short first-party overview, which is worse than either whole configuration — a regression
+    reachable purely by flag misconfiguration.
+    """
+
+    LEGACY_APP_PRIMARY = 'legacy_app_primary'
+    NOTES_V2_APPS_OPT_IN = 'notes_v2_primary_apps_opt_in'
+
+
+def summary_pipeline_mode() -> SummaryPipelineMode:
+    """Resolve the pipeline mode once. `CONVERSATION_NOTES_V2_ENABLED` is the only switch.
+
+    Rollback is turning notes v2 off, which restores the previous behaviour wholesale rather
+    than leaving a half-migrated combination running.
+    """
+    if _flag_enabled('CONVERSATION_NOTES_V2_ENABLED'):
+        return SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
+    return SummaryPipelineMode.LEGACY_APP_PRIMARY
+
+
 def _conversation_notes_v2_enabled() -> bool:
-    return _flag_enabled('CONVERSATION_NOTES_V2_ENABLED')
+    return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
 
 
 def _conversation_apps_opt_in_only() -> bool:
-    return _flag_enabled('CONVERSATION_APPS_OPT_IN_ONLY')
+    # Derived, never independently configured — see SummaryPipelineMode.
+    return summary_pipeline_mode() is SummaryPipelineMode.NOTES_V2_APPS_OPT_IN
 
 
 def _calendar_context_read_enabled() -> bool:
