@@ -87,22 +87,26 @@ const TIME_PHRASES: Array<{ pattern: RegExp; range: (now: Date) => [Date, Date] 
   }
 ]
 
-const QUESTION_WORDS =
-  /\b(?:what(?:'s|’s)?|was|were|did|do|doing|happened|happens|happen|i|my|on|the|screen|show|me|find|for)\b/gi
 const TIME_WORDS =
   /\b(?:yesterday\s+(?:morning|afternoon|evening)|yesterday|today)(?:['’]s)?\b|\bthis\s+(?:morning|afternoon|evening)\b/gi
+const QUESTION_PREFIX =
+  /^\s*(?:what(?:'s|’s)?\s+on\s+my\s+screen|what\s+(?:was|were)\s+on\s+my\s+screen|what\s+(?:did|do)\s+i\s+do|what\s+(?:was|were)\s+i\s+(?:doing|working\s+on)|what\s+(?:happened|happens))\b\s*/i
+
+function normalizeRewindQuery(input: string): string {
+  return input
+    .replace(TIME_WORDS, ' ')
+    .replace(QUESTION_PREFIX, '')
+    .replace(/[?'’.,:;!]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 export function parseRewindNaturalSearch(input: string, now = new Date()): RewindSearchScope {
   let query = input.trim()
   for (const { pattern, range } of TIME_PHRASES) {
     if (!pattern.test(query)) continue
     const [from, to] = range(now)
-    query = query
-      .replace(TIME_WORDS, ' ')
-      .replace(QUESTION_WORDS, ' ')
-      .replace(/[?'’.,:;!]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
+    query = normalizeRewindQuery(query)
     return { query, from: from.getTime(), to: to.getTime() }
   }
   return { query, from: null, to: null }
