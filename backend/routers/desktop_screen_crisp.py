@@ -7,9 +7,9 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from database.screen_activity import upsert_screen_activity
+from database.screen_activity import normalize_screen_activity_timestamp, upsert_screen_activity
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, get_user
@@ -34,6 +34,11 @@ class ScreenActivityRow(BaseModel):
     device_name: str | None = Field(default=None, alias="deviceName")
     client_device_id: str | None = Field(default=None, alias="clientDeviceId")
     embedding: list[float] | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def canonicalize_timestamp(cls, value: str) -> str:
+        return normalize_screen_activity_timestamp(value)
 
     def storage_id(self) -> str:
         return f"{self.client_device_id}-{self.id}" if self.client_device_id else str(self.id)

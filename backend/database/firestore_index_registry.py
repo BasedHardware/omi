@@ -660,6 +660,21 @@ INDEX_REQUIREMENTS = (
 )
 
 
+# Firestore auto-indexes every field of every document in both directions unless a field is
+# explicitly exempted. For large text fields that no query ever filters or orders on, that index
+# is pure storage cost: measured on `screen_activity`, single-field index bytes were roughly three
+# times the document bytes, and the `ocrText` index alone was the majority of the collection.
+# `ocrText` is only ever read back and rendered; semantic search runs on Pinecone vectors, not on
+# Firestore. Exempting a field only removes single-field indexes — composite indexes declared
+# above are unaffected, so a field named in a composite index can still appear here.
+FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('screen_activity', 'ocrText'),
+    ('screen_activity', 'windowTitle'),
+    ('screen_activity', 'deviceName'),
+    ('screen_activity', 'clientDeviceId'),
+)
+
+
 def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
     """Return Firebase's canonical composite-index manifest deterministically."""
 
@@ -670,4 +685,13 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    return {'indexes': indexes, 'fieldOverrides': []}
+    field_overrides = [
+        {
+            'collectionGroup': collection_group,
+            'fieldPath': field_path,
+            'ttl': False,
+            'indexes': [],
+        }
+        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
+    ]
+    return {'indexes': indexes, 'fieldOverrides': field_overrides}

@@ -4,6 +4,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from database import vector_db
 from routers import desktop_screen_crisp
 from utils.other.endpoints import get_current_user_uid
 
@@ -30,7 +31,7 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
             "rows": [
                 {
                     "id": 4,
-                    "timestamp": "2026-07-26T00:00:00Z",
+                    "timestamp": "2026-07-26T00:00:00.123Z",
                     "appName": "Safari",
                     "clientDeviceId": "mac-a",
                     "embedding": [0.1],
@@ -48,7 +49,7 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
             [
                 {
                     "id": 4,
-                    "timestamp": "2026-07-26T00:00:00Z",
+                    "timestamp": "2026-07-26 00:00:00.123",
                     "appName": "Safari",
                     "windowTitle": "",
                     "ocrText": "",
@@ -59,7 +60,7 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
                 },
                 {
                     "id": 7,
-                    "timestamp": "2026-07-26T00:01:00Z",
+                    "timestamp": "2026-07-26 00:01:00.000",
                     "appName": "",
                     "windowTitle": "",
                     "ocrText": "hello",
@@ -76,7 +77,7 @@ def test_screen_activity_sync_writes_rows_and_embeddings(monkeypatch):
             [
                 {
                     "id": 4,
-                    "timestamp": "2026-07-26T00:00:00Z",
+                    "timestamp": "2026-07-26 00:00:00.123",
                     "appName": "Safari",
                     "windowTitle": "",
                     "ocrText": "",
@@ -100,12 +101,51 @@ def test_screen_activity_sync_rejects_batches_larger_than_rust_contract():
     assert response.json() == {"detail": "Maximum 100 rows per batch"}
 
 
+def test_screen_activity_sync_normalizes_iso_timestamp_before_firestore_write(monkeypatch):
+    writes = []
+    monkeypatch.setattr(
+        desktop_screen_crisp, "upsert_screen_activity", lambda uid, rows: writes.extend(rows) or len(rows)
+    )
+
+    response = make_client().post(
+        "/v1/screen-activity/sync",
+        json={"rows": [{"id": 9, "timestamp": "2026-07-26T02:03:04.567891+02:00", "ocrText": "text"}]},
+    )
+
+    assert response.status_code == 200
+    assert writes[0]["timestamp"] == "2026-07-26 00:03:04.567"
+
+
 def test_screen_activity_storage_ids_are_device_scoped():
     first = desktop_screen_crisp.ScreenActivityRow(id=1, timestamp="2026-07-26T00:00:00Z", clientDeviceId="mac-a")
     second = desktop_screen_crisp.ScreenActivityRow(id=1, timestamp="2026-07-26T00:00:00Z", clientDeviceId="mac-b")
 
     assert first.storage_id() == "mac-a-1"
     assert second.storage_id() == "mac-b-1"
+
+
+def test_screen_activity_vector_treats_canonical_naive_timestamp_as_utc(monkeypatch):
+    upserts = []
+    monkeypatch.setattr(
+        vector_db,
+        "index",
+        SimpleNamespace(upsert=lambda **kwargs: upserts.append(kwargs)),
+    )
+
+    written = vector_db.upsert_screen_activity_vectors(
+        "user-1",
+        [
+            {
+                "id": 11,
+                "timestamp": "2026-07-26 00:00:00.123",
+                "appName": "SyntheticApp",
+                "embedding": [0.1],
+            }
+        ],
+    )
+
+    assert written == 1
+    assert upserts[0]["vectors"][0]["metadata"]["timestamp"] == 1785024000
 
 
 def test_crisp_unread_preserves_operator_text_shape(monkeypatch):
