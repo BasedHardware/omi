@@ -11,7 +11,7 @@ from openai.types.chat import (
     ChatCompletionContentPartParam,
     ChatCompletionMessageParam,
 )
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 
 import database.chat as chat_db
@@ -24,6 +24,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 _FILE_SEARCH_ASSISTANT_MODEL = "gpt-4.1"
+
+
+class UnsupportedChatFileError(Exception):
+    """A chat attachment this pipeline cannot process.
+
+    The upload routes own the client contract: a file type we cannot handle is bad request
+    input, not a server fault. Without this, PIL (an iPhone .heic photo has no decoder) and
+    OpenAI Files (an .ogg voice note is not an accepted extension) escape as 500s.
+    """
+
+
+def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChatFileError:
+    suffix = Path(file_path).suffix.lstrip('.').lower()
+    label = f"'{suffix}' files are" if suffix else "this file type is"
+    return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
 def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
@@ -158,12 +173,20 @@ class FileChatTool:
         file.get_mime_type()
 
         if file.is_image():
-            file.generate_thumbnail()
+            try:
+                file.generate_thumbnail()
+            except UnidentifiedImageError as error:
+                # An image mime type Pillow has no decoder for (.heic from an iPhone camera roll).
+                raise _unsupported_chat_file_error(file_path) from error
             file.purpose = "vision"
 
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
-            response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+            try:
+                response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+            except openai.BadRequestError as error:
+                # The provider rejects the extension (audio/video, archives it does not index).
+                raise _unsupported_chat_file_error(file_path) from error
             if response:
                 file.file_id = response.id
                 file.file_name = response.filename
