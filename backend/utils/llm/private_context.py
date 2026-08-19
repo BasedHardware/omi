@@ -136,3 +136,14 @@ def anthropic_messages_carry_private_tool_output(
             if not isinstance(name, str) or name not in public_safe_tools:
                 return True
     return False
+
+
+def without_tool_named(tool_schemas: object, name: str) -> list:
+    """Drop every tool schema carrying *name* from a request's tool list.
+
+    Withholding a provider-executed tool means composing the request without it;
+    there is no per-request "disable" flag to set.
+    """
+    if not isinstance(tool_schemas, list):
+        return []
+    return [schema for schema in tool_schemas if not (isinstance(schema, Mapping) and schema.get('name') == name)]
