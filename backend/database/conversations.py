@@ -18,7 +18,7 @@ from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from .firestore_index_registry import STALE_IN_PROGRESS_CONVERSATIONS_QUERY
+from .firestore_index_registry import LIMITLESS_IMPORTED_CONVERSATIONS_QUERY, STALE_IN_PROGRESS_CONVERSATIONS_QUERY
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -1021,7 +1021,35 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
-def delete_conversation(uid, conversation_id):
+def delete_conversations_by_source(uid: str, source: str, *, firestore_client: Any = None) -> int:
+    """Delete conversations matching a specific source and that were explicitly imported.
+
+    Args:
+        uid: User ID
+        source: The source to match (e.g., 'limitless')
+
+    Returns:
+        Number of conversations deleted
+    """
+    client = firestore_client if firestore_client is not None else db
+    user_ref = client.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+
+    query = LIMITLESS_IMPORTED_CONVERSATIONS_QUERY.build(
+        conversations_ref,
+        {'source': source, 'imported': True},
+        field_filter_factory=FieldFilter,
+    )
+
+    deleted_count = 0
+    for doc in query.stream():
+        delete_conversation(uid, doc.id, firestore_client=client)
+        deleted_count += 1
+
+    return deleted_count
+
+
+def delete_conversation(uid, conversation_id, *, firestore_client: Any = None):
     """Delete a conversation and every subcollection underneath it.
 
     Firestore does not cascade, and a conversation owns more than ``photos``: the per-provider
@@ -1030,10 +1058,11 @@ def delete_conversation(uid, conversation_id):
     the account-deletion wipe, which walks *existing* documents and never sees a deleted parent.
     Children are enumerated live, so a subcollection added later is purged too.
     """
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else db
+    user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     for sub in conversation_ref.collections():
-        delete_collection_recursive(sub, client=db)
+        delete_collection_recursive(sub, client=client)
     conversation_ref.delete()
 
 

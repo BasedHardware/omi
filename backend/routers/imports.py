@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 import database.import_jobs as import_jobs_db
+import database.conversations as conversations_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
@@ -234,10 +235,6 @@ def delete_limitless_conversations(
     Returns:
         Number of deleted conversations
     """
-    # TODO: This deletes all the other conversations as well (which were created in omi using the pendant)
-    # TODO: Add a flag to the conversation to indicate that it was imported
-    # deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
+    deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
 
-    # return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}
-
-    return {'deleted_count': 0, 'message': 'Successfully deleted 0 Limitless conversations'}
+    return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}

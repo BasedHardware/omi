@@ -197,6 +197,7 @@ class Conversation(BaseModel):
     processing_conversation_id: Optional[str] = None
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
+    imported: bool = False
     is_locked: bool = False
     # Lazy processing (freemium cost cut): True when this desktop conversation was stored as a
     # raw transcript with no LLM enrichment yet — enrichment runs on first open
