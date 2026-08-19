@@ -546,7 +546,9 @@ actor SuggestionAssistant: ProactiveAssistant {
       return outcome
     case .filteredDuplicate:
       await emitDeliveryOutcome(.filteredDuplicate, identity: telemetryIdentity)
-      log("Suggestion: duplicate of a recent suggestion — \"\(suggestion.suggestion)\"")
+      log(
+        "Suggestion: duplicate of a recent suggestion [\(suggestion.category.rawValue)] — \"\(suggestion.suggestion)\""
+      )
       return outcome
     case .filteredUngroundedCommitment:
       await emitDeliveryOutcome(.filteredUngroundedCommitment, identity: telemetryIdentity)
@@ -608,7 +610,12 @@ actor SuggestionAssistant: ProactiveAssistant {
       detail: suggestion.suggestion
     )
 
-    log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
+    // The category is model-chosen and decides the dedup depth this suggestion gets
+    // (`SuggestionPacing.dedupMemory`), so a repeat that should have been suppressed is
+    // only explainable with the label in hand.
+    log(
+      "Suggestion: delivering [\(Int(suggestion.confidence * 100))%] [\(suggestion.category.rawValue)] \"\(suggestion.suggestion)\""
+    )
 
     await MainActor.run {
       NotificationService.shared.sendNotification(
