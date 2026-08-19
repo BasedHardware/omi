@@ -107,6 +107,7 @@ actor ConversationFinalizationService {
     )
 
     do {
+      await storeSystemCalendarContextIfEnabled(for: session)
       guard try await TranscriptionStorage.shared.markSessionUploading(id: sessionId) else {
         return
       }
@@ -127,6 +128,27 @@ actor ConversationFinalizationService {
       await postMeetingCompletionIfReady(session: session, reason: reason)
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)
+    }
+  }
+
+  private func storeSystemCalendarContextIfEnabled(for session: TranscriptionSessionRecord) async {
+    guard session.conversationRole == .meeting else { return }
+    let enabled = await MainActor.run { SystemCalendarMeetingContextFeature.isEnabled }
+    guard enabled else { return }
+    let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
+    let interval = DateInterval(start: session.startedAt, end: end)
+
+    // This precedes conversation creation/force-processing so the backend overlap resolver can
+    // see the row. The short ceiling preserves fail-open finalization on a slow calendar/backend.
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask {
+        await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
+      }
+      group.addTask {
+        try? await Task.sleep(for: .seconds(2))
+      }
+      _ = await group.next()
+      group.cancelAll()
     }
   }
 
