@@ -1,12 +1,12 @@
 ---
 title: "Listen + Pusher Pipeline"
 icon: "tower-broadcast"
-description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processing pipeline"
+description: "Sequence diagrams and finalization policy for the /v4/listen WebSocket and Pusher pipeline"
 ---
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
+> Last updated: 2026-08-18 (meeting-treatment eligibility and deduplicated speech duration)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -61,9 +61,20 @@ resource before it creates or resumes a conversation. A client-generated
 clients receive a server-generated UUID. The optional
 `conversation_role=meeting` marker is supplied by desktop after a
 machine-observed call-start boundary; omitted or invalid values remain
-`ambient`. That bounded marker is persisted with the conversation so the
-post-finalization Chat receipt can distinguish meeting notes from ordinary
-always-on ambient chunks without inspecting transcript text.
+`ambient`. That bounded marker is durable session provenance committed at
+OPEN; finalization does not rewrite it based on how long the session lasted.
+
+Meeting treatment is a separate finalization decision. A desktop meeting that
+was neither discarded nor created by a maximum-duration rotation is eligible
+only when its durable `started_at` and `finished_at` span at least five minutes
+and its non-empty transcript covers at least 60 seconds of speech. Speech time
+is the union of valid segment intervals, so overlapping microphone and system-
+audio transcriptions of the same remote speech count once. The backend uses the
+result to gate the meeting Chat receipt and exposes it on the durable
+finalization status; desktop completion notifications require the same value.
+The synchronous desktop upload route applies and returns the same decision.
+Short or mostly silent calls still finalize as ordinary conversations, with
+their original role and provenance unchanged.
 
 The resource atomically binds the recording to exactly one conversation, so
 reconnects return the original canonical mapping rather than falling back to a
@@ -139,7 +150,7 @@ sequenceDiagram
     Backend-->>Client: {type: "conversation_session", conversation_id, recording_session_id, lifecycle_version, lifecycle_phase, lifecycle_sequence}
     Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
-    Backend-->>Client: {type: "service_status", status: "ready"}
+    Backend-->>Client: {type: "service_status", status: "ready", provider, reason?}
 
     Note over Backend: Start background tasks:<br/>conversation_lifecycle_manager (5s poll)<br/>speaker_identification_task<br/>stream_transcript_process
 
@@ -478,7 +489,7 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Event | Fields | When |
 |-------|--------|------|
-| `service_status` | `{type, status: "ready"}` | After WS connect, services initialized |
+| `service_status` | `{type, status: "ready", provider?, reason?}` | After WS connect, services initialized. `provider` names the STT provider actually serving (absent for custom-STT sessions); `reason` is `fallback_from_<selected>` only when the fallback chain moved the session off the selected provider |
 | `conversation_session` | `{type, conversation_id, recording_session_id?, status}` | Exact recording-to-conversation binding; identified clients require IDs to match |
 | `memory_processing_started` | `{type, recording_session_id?, memory: {id, ...}}` | Conversation sent to pusher for LLM; only emitted for the listen session's current conversation |
 | `memory_created` | `{type, recording_session_id?, memory: {id, structured: {title, overview, ...}}}` | LLM processing complete; only emitted for the listen session's current conversation |

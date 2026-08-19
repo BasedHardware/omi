@@ -57,6 +57,7 @@ from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import developer_cleanup
 from utils.conversations.location import resolve_geolocation
+from utils.conversations.meeting_treatment import is_meeting_treatment_eligible
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -1082,6 +1083,7 @@ class ConversationResponse(BaseModel):
     id: str
     status: str
     discarded: bool
+    meeting_treatment_eligible: bool = False
 
 
 class UpdateConversationRequest(BaseModel):
@@ -1454,6 +1456,7 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
         id=conversation['id'],
         status=status,
         discarded=bool(conversation.get('discarded', False)),
+        meeting_treatment_eligible=is_meeting_treatment_eligible(conversation),
     )
 
 
@@ -1661,6 +1664,7 @@ def _create_conversation_from_segments(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        meeting_treatment_eligible=is_meeting_treatment_eligible(conversation),
     )
 
 

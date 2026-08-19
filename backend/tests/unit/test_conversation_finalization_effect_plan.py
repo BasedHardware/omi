@@ -201,7 +201,7 @@ async def test_finalization_waits_for_required_leaf_before_external_fanout(monke
         'structured_vector:end',
         'transcript_vectors',
     ]
-    completed.assert_called_once_with('job-1', 3, 7)
+    completed.assert_called_once_with('job-1', 3, 7, meeting_treatment_eligible=False)
 
 
 @pytest.mark.asyncio
@@ -725,7 +725,7 @@ async def test_processing_path_defers_vector_effects_without_deferring_memory(mo
     monkeypatch.setattr(finalizer, 'required_enrichment_effects', required_effects)
     monkeypatch.setattr(finalizer.lifecycle_service, 'prepare_finalization_effect', lambda *_: 'completed')
     monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_effect', lambda *_, **__: 'completed')
-    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *_: True)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *_, **__: True)
     monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
 
     assert await _finalize() == finalizer.ConversationFinalizationDisposition.completed

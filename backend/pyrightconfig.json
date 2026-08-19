@@ -1,6 +1,5 @@
 {
     "include": [
-        "agent-proxy",
         "config",
         "database",
         "diarizer",

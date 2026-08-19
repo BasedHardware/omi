@@ -32,7 +32,8 @@
 // steady state with no remote changes costs two census requests and ZERO
 // document transfers. Full paged listings are reserved for the one-time
 // per-account populate (versioned flag) and the explicit user reconcile
-// (`tasks:reconcile`), so the every-read `?limit=500` listing storm is gone.
+// the every-read `?limit=500` listing storm is gone. Remaining full listings
+// (populate / explicit reconcile) page at 100, not 500.
 //
 // FIX (ii) — embedding eviction via DEPENDENCY INJECTION (no hard import of the
 // embedding service): `setTaskDeletionListener` wires a callback that every
@@ -85,7 +86,7 @@ const REQUEST_TIMEOUT_MS = 15_000
 // many local reads / focus events ask for one. This single number is what kills
 // the every-read listing storm (billing RCA 2026-08: ~61-73 RPS of
 // `GET /v1/action-items?limit=500` from omi-windows). Mac's TasksStore uses the
-// same 5-minute reconcile bound.
+// same 5-minute reconcile bound. Populate/reconcile listings now page at 100.
 const SYNC_THROTTLE_MS = 5 * 60_000
 // A FAILED background sync retries at most this often (not the full 5-min window)
 // so an offline-then-online user isn't locked out of freshness, while a 429 storm
@@ -94,8 +95,10 @@ const SYNC_RETRY_MS = 30_000
 // Reconcile (hard-delete tasks absent from the backend) at most once per 5 min —
 // Mac's `lastReconcileAt` throttle. Prevents an every-keystroke reconcile sweep.
 const RECONCILE_THROTTLE_MS = 5 * 60_000
-// Page size for full listings (the backend caps `limit` at 500).
-const PAGE_LIMIT = 500
+// Page size for full listings. Match macOS TasksStore (pageSize = 100). The
+// backend accepts up to 500, but a 500-doc full-document page on a heavy
+// account exceeds the Windows 15s client timeout and the backend 30s GET timeout.
+const PAGE_LIMIT = 100
 // Hard ceiling on paging so a runaway `has_more` can never loop forever.
 const MAX_PAGES = 200
 // Per-id document lookups one background sync may issue (new / bucket-moved ids).
@@ -331,8 +334,11 @@ async function fetchPage(
 ): Promise<{ items: BackendActionItem[]; hasMore: boolean }> {
   const q = new URLSearchParams({ limit: String(PAGE_LIMIT), offset: String(offset) })
   if (completed !== undefined) q.set('completed', String(completed))
+  // Stamp BEFORE the round-trip: aborting at REQUEST_TIMEOUT_MS leaves the
+  // Cloud Run worker running until HTTP_GET_TIMEOUT (30s). Treating that as
+  // "already billed" prevents a 30s retry of the same dual-bucket populate.
+  roundServedBackendRead = true
   const res = await apiFetch('GET', `/v1/action-items?${q.toString()}`, undefined, external)
-  roundServedBackendRead = true // a response arrived — its reads are billed
   if (!res.ok) throw new HttpError(res.status)
   const json = (await res.json()) as { action_items?: BackendActionItem[]; has_more?: boolean }
   return {
@@ -359,7 +365,7 @@ async function fetchAll(
     const { items, hasMore } = await fetchPage(completed, offset, external)
     out.push(...items)
     if (!hasMore || items.length === 0) break
-    offset += PAGE_LIMIT
+    offset += items.length
   }
   return out
 }

@@ -323,7 +323,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get searchApps => 'Otsi rakendusi...';
 
   @override
-  String get myApps => 'Minu rakendused';
+  String get myApps => 'Minu loodud';
 
   @override
   String get installedApps => 'Paigaldatud rakendused';

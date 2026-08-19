@@ -62,7 +62,7 @@ def _install_heavy_import_stubs():
 
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
-from models.memories import MemoryCategory
+from models.memories import Memory, MemoryCategory, MemoryDB
 from models.memory_apply import MemoryControlState
 from models.memory_review import build_memory_review_conflict
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
@@ -81,8 +81,10 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_product_fields,
     update_canonical_memory_visibility,
     write_canonical_extraction_memory,
+    write_canonical_external_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.required_promotion import required_processing_payload
 
 
 def _refresh_canonical_memory_adapter_runtime() -> None:
@@ -101,6 +103,7 @@ def _refresh_canonical_memory_adapter_runtime() -> None:
             "update_canonical_memory_product_fields": canonical_adapter.update_canonical_memory_product_fields,
             "update_canonical_memory_visibility": canonical_adapter.update_canonical_memory_visibility,
             "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+            "write_canonical_external_memory": canonical_adapter.write_canonical_external_memory,
         }
     )
 
@@ -839,6 +842,79 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
     assert deleted_vectors == [(uid, memory_id)]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+
+
+def _external_memory_payload(uid: str, content: str) -> dict:
+    """The payload POST /v3/memories submits for a manually typed memory."""
+    memory_db = MemoryDB.from_memory(
+        Memory(content=content, category=MemoryCategory.manual),
+        uid,
+        None,
+        True,
+        source_type="manual",
+        source_signal="manual",
+        extractor_id="manual_memory_submission",
+    )
+    return required_processing_payload(memory_db.model_dump(mode="python"), source_surface="v3_manual")
+
+
+def _tombstoned_evidence_paths(db: "_FakeDb", uid: str) -> list[str]:
+    prefix = f"users/{uid}/memory_evidence/"
+    return [
+        path for path, data in db.docs.items() if path.startswith(prefix) and data.get("source_state") == "tombstoned"
+    ]
+
+
+def _stub_delete_side_effects(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        lambda *args, **kwargs: None,
+    )
+
+
+def test_readding_a_deleted_manual_memory_lands_on_a_fresh_evidence_identity(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    content = "I drink oat milk"
+    _stub_delete_side_effects(monkeypatch)
+
+    first_id = write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
+    delete_canonical_memory(uid, first_id, db_client=canonical_db)
+    retired_evidence = _tombstoned_evidence_paths(canonical_db, uid)
+    assert retired_evidence
+
+    write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
+
+    live = read_canonical_memories(uid, db_client=canonical_db, include_pending_processing=True)
+    assert content in [memory.content for memory in live]
+    # The deleted submission's evidence identity stays retired: the re-add is a
+    # new source artifact, not a resurrection of the deleted one.
+    assert all(canonical_db.docs[path]["source_state"] == "tombstoned" for path in retired_evidence)
+
+
+def test_conversation_sourced_evidence_is_never_reissued_after_delete(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-deleted-source"
+    content = "Deleted conversation fact"
+    _stub_delete_side_effects(monkeypatch)
+
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
+
+    resubmitted = required_processing_payload(
+        _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content),
+        source_surface="v3_api",
+    )
+    with pytest.raises(RuntimeError, match="source_not_active"):
+        write_canonical_external_memory(uid, resubmitted, db_client=canonical_db)
 
 
 def test_delete_canonical_survivor_tombstones_active_alias_lineage(monkeypatch, canonical_db):

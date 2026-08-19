@@ -721,6 +721,8 @@ describe('one-time full sync (versioned flag)', () => {
     const urls = listingCalls().map(urlOf)
     expect(urls.some((u) => u.includes('completed=true'))).toBe(true)
     expect(urls.some((u) => u.includes('completed=false'))).toBe(true)
+    expect(urls.every((u) => u.includes('limit=100'))).toBe(true)
+    expect(urls.some((u) => u.includes('limit=500'))).toBe(false)
     // …and the forced sweeps took their keep-set from the (uncapped) census.
     expect(censusCalls()).toHaveLength(2)
     expect(h.hardDeleteAbsentTasks).toHaveBeenCalledWith(['b1'])
@@ -1062,6 +1064,7 @@ describe('explicit reconcile (strong path, tasks:reconcile)', () => {
 
     // The strong path pages both full listings for content…
     expect(listingCalls().length).toBeGreaterThanOrEqual(2)
+    expect(listingCalls().map(urlOf).every((u) => u.includes('limit=100'))).toBe(true)
     // …censuses for the sweep keep-set (uncapped, unlike the 2000-doc listing
     // cap), and its reconciles are forced (run even at t0, where a throttled
     // call would have skipped).
@@ -1082,13 +1085,81 @@ describe('explicit reconcile (strong path, tasks:reconcile)', () => {
     await Promise.all([a, b])
     expect(listingCalls()).toHaveLength(2) // one run's worth (incomplete + completed)
   })
+
+  it('pages at 100 and advances offset by delivered items, not a stale 500 step', async () => {
+    h.appMeta.values = {}
+    h.netFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      const u = String(url)
+      if (method === 'GET' && u.includes('/v1/action-items/ids')) {
+        return h.jsonResponse({
+          ids: u.includes('completed=true') ? [] : ['i0', 'i1']
+        })
+      }
+      if (method === 'GET' && u.includes('/v1/action-items?')) {
+        if (u.includes('completed=false') && u.includes('offset=0')) {
+          expect(u).toContain('limit=100')
+          return h.jsonResponse({
+            action_items: [backendItem({ id: 'i0' })],
+            has_more: true
+          })
+        }
+        if (u.includes('completed=false') && u.includes('offset=1')) {
+          return h.jsonResponse({
+            action_items: [backendItem({ id: 'i1' })],
+            has_more: false
+          })
+        }
+        if (u.includes('completed=false') && u.includes('offset=100')) {
+          throw new Error('offset advanced by PAGE_LIMIT instead of delivered length')
+        }
+        return h.jsonResponse({ action_items: [], has_more: false })
+      }
+      if (method === 'POST') return h.jsonResponse(backendItem({ id: 'srv-new' }))
+      if (method === 'PATCH') return h.jsonResponse(backendItem({ completed: true }))
+      if (method === 'DELETE') return h.jsonResponse({}, true, 204)
+      return h.jsonResponse({})
+    })
+    const { engine } = await freshEngine()
+    await engine.scheduleBackgroundSync()
+    const incompleteOffsets = listingCalls()
+      .map(urlOf)
+      .filter((u) => u.includes('completed=false'))
+    expect(incompleteOffsets.some((u) => u.includes('offset=1'))).toBe(true)
+    expect(incompleteOffsets.some((u) => u.includes('offset=100'))).toBe(false)
+  })
+
+  it('a listing abort during populate does not retry the same dual-bucket fetch at 30s', async () => {
+    h.appMeta.values = {}
+    const t0 = 1_700_000_000_000
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(t0)
+    h.netFetch.mockImplementation(async (url: string, init?: { method?: string }) => {
+      const u = String(url)
+      if ((init?.method ?? 'GET') === 'GET' && u.includes('/v1/action-items?')) {
+        const err = new Error('aborted')
+        err.name = 'AbortError'
+        throw err
+      }
+      if ((init?.method ?? 'GET') === 'GET' && u.includes('/v1/action-items/ids')) {
+        return h.jsonResponse({ ids: [] })
+      }
+      return h.jsonResponse({ action_items: [], has_more: false })
+    })
+    const { engine } = await freshEngine()
+    await engine.scheduleBackgroundSync()
+    const listingsAfterFirst = listingCalls().length
+    expect(listingsAfterFirst).toBeGreaterThan(0)
+    nowSpy.mockReturnValue(t0 + 31_000)
+    await engine.scheduleBackgroundSync()
+    expect(listingCalls()).toHaveLength(listingsAfterFirst)
+  })
 })
 
 // The deterministic cost guard. The script mirrors what the renderer actually
 // does over 5 minutes of Tasks use (mount reads; every `tasks:changed` broadcast
 // re-reads from the Tasks page, the Hub stats hook, and the Quick Task widget;
 // then a toggle, a create, and a rename). Under origin/main EVERY one of these
-// reads kicked a paged `GET /v1/action-items?limit=500` hydrate — measured by
+// reads kicked a paged `GET /v1/action-items?limit=100` hydrate — measured by
 // running the identical flushed script against an origin/main worktree:
 // 22 listing requests / 500 listing documents / 25 requests total, vs 0 / 0 / 5
 // on this branch (see the PR body's before/after request log).

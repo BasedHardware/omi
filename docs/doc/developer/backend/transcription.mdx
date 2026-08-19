@@ -563,9 +563,17 @@ sequenceDiagram
     {
       "type": "service_status",
       "status": "ready",
-      "status_text": "Service Ready"
+      "provider": "deepgram",
+      "reason": "fallback_from_modulate"
     }
     ```
+
+    `provider` names the STT provider actually serving the session, resolved after the
+    fallback chain has settled — a session may be served by a provider other than the one
+    the serving policy selected. `reason` appears only in that case, as
+    `fallback_from_<selected>`, so a client can tell a fallback session from a healthy one.
+    Both fields are omitted when absent, and `provider` is omitted entirely for custom-STT
+    sessions, where the client produces its own transcripts.
   </Tab>
 
   <Tab title="Speaker Suggestion" icon="user-plus">

@@ -719,7 +719,7 @@
             {
               "selector": "week",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -738,7 +738,7 @@
           "root_selector": "growthAccounting",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -818,7 +818,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -837,7 +837,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all",
+          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1948,7 +1948,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -1967,7 +1967,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/crash-rate?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/crash-rate?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2194,7 +2194,7 @@
             {
               "selector": "monthKey",
               "text": "time",
-              "timestampFormat": "2006-01",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -2213,7 +2213,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/mrr-trends?months=12",
+          "url": "http://127.0.0.1:8899/api/omi/stats/mrr-trends?months=12&_tzdates=monthKey",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2308,7 +2308,7 @@
             {
               "selector": "monthKey",
               "text": "time",
-              "timestampFormat": "2006-01",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -2332,7 +2332,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/subscription-trends?months=12",
+          "url": "http://127.0.0.1:8899/api/omi/stats/subscription-trends?months=12&_tzdates=monthKey",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2412,7 +2412,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -2431,7 +2431,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all",
+          "url": "http://127.0.0.1:8899/api/omi/stats/daily-new-users?days=all&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2511,7 +2511,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -2530,7 +2530,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/dau-trends?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/dau-trends?days=60&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2656,7 +2656,7 @@
             {
               "selector": "week",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -2690,7 +2690,7 @@
           "root_selector": "growthAccounting",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2827,7 +2827,7 @@
             {
               "selector": "week",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -2856,7 +2856,7 @@
           "root_selector": "stickinessTrend",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2993,7 +2993,7 @@
             {
               "selector": "week",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3022,7 +3022,7 @@
           "root_selector": "weeks",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/activation?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/activation?days=60&_tzdates=week",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -3159,7 +3159,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3188,7 +3188,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/message-ratings?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/message-ratings?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -3387,7 +3387,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3411,7 +3411,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/floating-bar-usage?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/floating-bar-usage?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -3506,7 +3506,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3530,7 +3530,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/floating-bar-usage?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/floating-bar-usage?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -3667,7 +3667,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3696,7 +3696,7 @@
           "root_selector": "floatingBarCtr.dailyData",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -3791,7 +3791,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3815,7 +3815,7 @@
           "root_selector": "dailyData",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -3952,7 +3952,7 @@
             {
               "selector": "week",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -3981,7 +3981,7 @@
           "root_selector": "weeklyData",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/notifications?days=30&_tzdates=week",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4062,7 +4062,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -4081,7 +4081,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/crash-rate?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/crash-rate?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4419,7 +4419,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -4443,7 +4443,7 @@
           "root_selector": "users",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4538,7 +4538,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -4562,7 +4562,7 @@
           "root_selector": "revenue",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4657,7 +4657,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -4681,7 +4681,7 @@
           "root_selector": "cost",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4776,7 +4776,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -4800,7 +4800,7 @@
           "root_selector": "costPerUser",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4895,7 +4895,7 @@
             {
               "selector": "date",
               "text": "time",
-              "timestampFormat": "2006-01-02",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00",
               "type": "timestamp"
             },
             {
@@ -4919,7 +4919,7 @@
           "root_selector": "conversion",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -6106,7 +6106,45 @@
     "from": "now-30d",
     "to": "now"
   },
-  "timezone": "browser",
+  "timezone": "America/New_York",
   "title": "Omi TV",
-  "uid": "omi-tv"
+  "uid": "omi-tv",
+  "links": [
+    {
+      "title": "All platforms",
+      "type": "link",
+      "url": "/grafana/d/omi-tv/",
+      "icon": "dashboard",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "macOS",
+      "type": "link",
+      "url": "/grafana/d/omi-tv-macos/",
+      "icon": "dashboard",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    },
+    {
+      "title": "Mobile",
+      "type": "link",
+      "url": "/grafana/d/omi-tv-mobile/",
+      "icon": "dashboard",
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "targetBlank": false,
+      "tags": [],
+      "tooltip": ""
+    }
+  ]
 }

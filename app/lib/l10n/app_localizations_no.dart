@@ -323,7 +323,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get searchApps => 'Søk apper...';
 
   @override
-  String get myApps => 'Mine apper';
+  String get myApps => 'Laget av meg';
 
   @override
   String get installedApps => 'Installerte apper';

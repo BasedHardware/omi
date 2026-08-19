@@ -324,7 +324,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get searchApps => 'Пребарај апликации...';
 
   @override
-  String get myApps => 'Мои апликации';
+  String get myApps => 'Создадено од мене';
 
   @override
   String get installedApps => 'Инсталирани апликации';

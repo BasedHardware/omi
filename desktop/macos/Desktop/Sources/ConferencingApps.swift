@@ -10,6 +10,13 @@ import Foundation
 ///  - `ProactiveAssistantsPlugin`, which throttles screen capture while a call app is frontmost.
 enum ConferencingApps {
 
+  /// Shipping and legacy Telegram bundle IDs shared by meeting detection and proactive capture.
+  /// Keep both because existing installations may still report the legacy identifier.
+  static let telegramBundleIDs: Set<String> = [
+    "com.tdesktop.telegram",
+    "ru.keepcoder.telegram",
+  ]
+
   /// Apps whose primary purpose is video/audio calls. Matched by app/owner name, which is
   /// available from `NSRunningApplication` and `CGWindowList` **without** Screen Recording
   /// permission.
@@ -44,7 +51,7 @@ enum ConferencingApps {
   /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
   /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
   /// the microphone, so it won't be treated as a meeting.
-  static let nativeCallBundleIDs: Set<String> = [
+  static let nativeCallBundleIDs: Set<String> = Set([
     "us.zoom.xos",  // Zoom
     "com.microsoft.teams",  // Microsoft Teams (classic)
     "com.microsoft.teams2",  // Microsoft Teams (new)
@@ -54,7 +61,7 @@ enum ConferencingApps {
     "com.webex.meetingmanager",  // Webex (older)
     "com.logmein.gotomeeting",  // GoTo Meeting
     "com.logmein.goto",  // GoTo
-  ]
+  ]).union(telegramBundleIDs)
 
   /// Whether a bundle ID belongs to a known native conferencing app (case-insensitive).
   static func isNativeCallApp(bundleID: String) -> Bool {

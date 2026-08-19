@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "నా అనువర్తనాలు",
+    "myApps": "నా సృష్టి",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },

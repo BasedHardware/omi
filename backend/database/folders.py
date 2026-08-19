@@ -1,12 +1,16 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
 from database.document_ids import system_folder_doc_id
+
+logger = logging.getLogger(__name__)
 
 # System folders that are created for new users
 SYSTEM_FOLDERS: List[Dict[str, Any]] = [
@@ -199,25 +203,29 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
         if default_folder:
             target_folder_id = str(default_folder['id'])
 
-    # Move all conversations from this folder to the target folder
-    if target_folder_id:
-        conversations_ref = user_ref.collection('conversations')
-        conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).stream()
+    # Repoint every conversation off this folder. target_folder_id is None for
+    # users with no default folder (accounts created after the 'Other' system
+    # folder was removed) — they get unfiled, not left pointing at the document
+    # deleted below. A stale pointer used to survive here and 500 every later
+    # move of that conversation.
+    conversations_ref = user_ref.collection('conversations')
+    conversations = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id)).stream()
 
-        batch = db.batch()
-        count = 0
-        for conv_doc in conversations:
-            batch.update(conv_doc.reference, {'folder_id': target_folder_id})
-            count += 1
-            if count >= 450:
-                batch.commit()
-                batch = db.batch()
-                count = 0
-
-        if count > 0:
+    batch = db.batch()
+    count = 0
+    for conv_doc in conversations:
+        batch.update(conv_doc.reference, {'folder_id': target_folder_id})
+        count += 1
+        if count >= 450:
             batch.commit()
+            batch = db.batch()
+            count = 0
 
-        # Update target folder count
+    if count > 0:
+        batch.commit()
+
+    # Update target folder count
+    if target_folder_id:
         update_folder_conversation_count(uid, target_folder_id)
 
     # Delete the folder
@@ -396,7 +404,15 @@ def update_folder_conversation_count(uid: str, folder_id: str) -> int:
     count = int(result[0][0].value or 0)
 
     folder_ref = user_ref.collection('folders').document(folder_id)
-    folder_ref.update({'conversation_count': count})
+    try:
+        folder_ref.update({'conversation_count': count})
+    except NotFound:
+        # conversation_count is derived state on a document the folders
+        # collection owns. A refresh for a folder that no longer exists has
+        # nothing to write — it must not fail the move that triggered it.
+        # Callers reach here only via a conversation still pointing at a
+        # deleted folder, which delete_folder no longer leaves behind.
+        logger.warning(f"folder {folder_id} no longer exists; skipping conversation_count refresh")
 
     return count
 

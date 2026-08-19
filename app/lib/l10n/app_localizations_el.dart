@@ -325,7 +325,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchApps => 'Αναζήτηση εφαρμογών...';
 
   @override
-  String get myApps => 'Οι εφαρμογές μου';
+  String get myApps => 'Δημιουργήθηκε από εμένα';
 
   @override
   String get installedApps => 'Εγκατεστημένες εφαρμογές';

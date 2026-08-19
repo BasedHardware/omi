@@ -700,6 +700,7 @@ def test_finalization_status_endpoint_exposes_retryable_durable_state():
         'retryable': True,
         'attempt_count': 2,
         'task_retry_count': 1,
+        'meeting_treatment_eligible': False,
     }
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),

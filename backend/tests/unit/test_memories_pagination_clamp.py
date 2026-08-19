@@ -245,6 +245,28 @@ def test_first_page_falls_back_to_offset_read_when_historical_scan_unavailable()
     service.read.assert_called_once()
 
 
+def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted():
+    """Prod 2026-08-18: first pages 504'd at the 30s edge timeout (~100/h).
+
+    Once the ``memories`` composite indexes went READY the keyset scans actually
+    served, and an account whose historical set is fully suppressed by canonical
+    made ``read_page`` walk every historical row before it could emit anything.
+    The walk now stops at the scan row budget; the offset ``read`` path does not
+    walk suppressed rows, so the first page must fall back to it.
+    """
+    from fastapi import HTTPException
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail=mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL)
+    service.read.return_value = ['memory-from-offset-read']
+
+    result = _get_first_page(service)
+
+    assert result == ['memory-from-offset-read']
+    service.read_page.assert_called_once()
+    service.read.assert_called_once()
+
+
 def test_first_page_propagates_unrelated_503_detail():
     from fastapi import HTTPException
 

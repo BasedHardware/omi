@@ -324,7 +324,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get searchApps => 'ಅಪ್ಲಿಕೇಶನ ಹುಡುಕಿ...';
 
   @override
-  String get myApps => 'ನನ್ನ ಅಪ್ಲಿಕೇಶನ';
+  String get myApps => 'ನಾನು ರಚಿಸಿದವು';
 
   @override
   String get installedApps => 'ಅನುಸ್ಥಾಪಿತ ಅಪ್ಲಿಕೇಶನ';

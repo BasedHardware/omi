@@ -25,6 +25,7 @@ from utils.conversations.enrichment_plan import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.meeting_treatment import is_meeting_treatment_eligible
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -546,18 +547,12 @@ async def finalize_persisted_conversation(
         # where a completed projection existed without a notes-ready intent.
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
-        external_data = getattr(conversation, 'external_data', None) or {}
-        is_desktop_meeting = (
-            source_value == 'desktop'
-            and external_data.get('conversation_role') == 'meeting'
-            and external_data.get('conversation_finalization_reason') != 'max_duration_rotation'
-            and not getattr(conversation, 'discarded', False)
-        )
-        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or is_desktop_meeting:
+        meeting_treatment_eligible = is_meeting_treatment_eligible(conversation)
+        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or meeting_treatment_eligible:
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                if is_desktop_meeting:
+                if meeting_treatment_eligible:
                     persist_capture_arrival_intent(
                         uid,
                         conversation_id=conversation_id,
@@ -578,6 +573,7 @@ async def finalize_persisted_conversation(
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
+            meeting_treatment_eligible=meeting_treatment_eligible,
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')
