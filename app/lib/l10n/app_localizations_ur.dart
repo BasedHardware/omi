@@ -9862,4 +9862,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get findDevice => 'تلاش کریں';
+
+  @override
+  String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
 }

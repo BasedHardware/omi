@@ -9849,4 +9849,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get findDevice => 'Finn';
+
+  @override
+  String get diagnosticsShareFailed => 'Kunne ikke dele diagnostikken. Prøv igjen.';
 }

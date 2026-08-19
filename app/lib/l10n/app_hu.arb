@@ -3313,5 +3313,6 @@
     "accountCutoverOpenStore": "Áruház megnyitása",
     "sendRawAudioToOmi": "Nyers hang küldése az Ominak",
     "sendRawAudioToOmiDescription": "Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.",
-    "findDevice": "Keresés"
+    "findDevice": "Keresés",
+    "diagnosticsShareFailed": "A diagnosztika megosztása nem sikerült. Próbáld újra."
 }

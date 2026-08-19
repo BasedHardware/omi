@@ -6,13 +6,19 @@ then:
   1. In place: pins timezone to America/New_York, routes daily/weekly/monthly
      date columns through the proxy's `_tzdates` rewrite (so each bucket
      renders on its labeled calendar day instead of shifting 8 pm earlier),
-     and adds the All / macOS / Mobile switcher links.
-  2. Writes dashboards/omi-tv-macos.json — macOS-only view: platform-native
-     panels kept, cross-platform panels re-pointed at the desktop series of
-     /api/omi/stats/profitability, unplittable panels dropped.
-  3. Writes dashboards/omi-tv-mobile.json — the honestly-available mobile
-     view (signups, revenue, cost, conversion from profitability; mobile
-     DAU/retention are not instrumented and say so).
+     pins `platform=all` on the PostHog-backed routes, and adds the
+     All / macOS / Mobile switcher links.
+  2. Writes dashboards/omi-tv-macos.json and dashboards/omi-tv-mobile.json —
+     the SAME board scoped per platform (`platform=macos` / `platform=mobile`
+     on viral-metrics, dau-trends, retention and k-factor; per-platform series
+     of /api/omi/stats/profitability for signups/revenue/cost/conversion).
+     The mobile board mirrors the macOS board panel-for-panel except the
+     desktop-only product surfaces (floating bar, desktop notifications,
+     desktop crash rate, macOS version pies), which have no mobile analog.
+
+Mobile IS instrumented in PostHog (iOS since 2025-03, Android since 2026-05)
+but does not emit `Sign In Completed`, so its signup/activation cohorts anchor
+on first-seen-any-event (handled inside viral-metrics).
 
 Idempotent: run after editing omi-tv.json, commit all three outputs.
 apply_omi_tv_dashboard.py publishes every dashboards/*.json to Grafana.
@@ -30,9 +36,32 @@ DASH_DIR = HERE / "dashboards"
 BASE_PATH = DASH_DIR / "omi-tv.json"
 
 PROFIT_PATH = "/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3"
+VIRAL_PATH = "/api/omi/stats/viral-metrics?days=60"
 PROXY = "http://127.0.0.1:8899"
 RFC3339 = "2006-01-02T15:04:05Z07:00"
 DAY_FORMATS = {"2006-01-02", "2006-01"}
+
+# Routes that accept ?platform=all|macos|mobile.
+PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor/posthog")
+
+# Surfaces with NO mobile data at all — kept on the mobile board as explicit
+# "not available on mobile" placeholders so both platform boards stay
+# panel-for-panel identical without mislabeling desktop data as mobile.
+# (Floating bar is a macOS-only feature; mobile sends no crash telemetry.)
+DESKTOP_ONLY_TITLES = {
+    "Floating bar sessions per user", "Floating bar queries",
+    "Floating bar notification CTR", "Crash-free rate (today)",
+    "Crash-free rate",
+}
+
+# Account-level metrics: computed over every Firestore user (or every device a
+# user owns) with no platform dimension — they live on the All board only.
+# "Notifications enabled" counts all user docs and defaults missing fields to
+# enabled, so scoping it to a platform would silently lie.
+ACCOUNT_LEVEL_TITLES = {
+    "Daily notifications sent", "Notifications sent — last 168 hours",
+    "Weekly notification reach", "Notifications enabled",
+}
 
 LINKS = [
     {"title": title, "type": "link", "url": f"/grafana/d/{uid}/", "icon": "dashboard",
@@ -55,6 +84,41 @@ def add_query_param(url: str, key: str, value: str) -> str:
     return f"{url}{sep}{key}={value}"
 
 
+def set_url_param(url: str, key: str, value: str) -> str:
+    """Set/replace a query param, preserving the rest of the URL."""
+    parsed = urllib.parse.urlparse(url)
+    params = urllib.parse.parse_qsl(parsed.query)
+    params = [(k, v) for k, v in params if k != key] + [(key, value)]
+    return parsed._replace(query=urllib.parse.urlencode(params)).geturl()
+
+
+def set_platform(url: str, scope: str) -> str:
+    """Pin ?platform=<scope> on platform-aware routes, including routes
+    wrapped inside a /compare?path=… URL."""
+    if "/compare?" in url:
+        parsed = urllib.parse.urlparse(url)
+        params = dict(urllib.parse.parse_qsl(parsed.query))
+        inner = params.get("path", "")
+        if any(route in inner for route in PLATFORM_ROUTES):
+            params["path"] = set_url_param(inner, "platform", scope)
+            return f"{PROXY}{parsed.path}?" + urllib.parse.urlencode(params)
+        return url
+    if any(route in url for route in PLATFORM_ROUTES):
+        return set_url_param(url, "platform", scope)
+    return url
+
+
+def apply_platform(dash, scope: str) -> None:
+    for panel in dash.get("panels", []):
+        for target in panel.get("targets", []):
+            if "url" in target:
+                target["url"] = set_platform(target["url"], scope)
+    for var in dash.get("templating", {}).get("list", []):
+        q = var.get("query", {}).get("infinityQuery", {})
+        if "url" in q:
+            q["url"] = set_platform(q["url"], scope)
+
+
 def apply_tzdates(dash) -> None:
     for panel in dash.get("panels", []):
         for target in panel.get("targets", []):
@@ -65,13 +129,6 @@ def apply_tzdates(dash) -> None:
                     col["timestampFormat"] = RFC3339
             if fields:
                 target["url"] = add_query_param(target["url"], "_tzdates", ",".join(fields))
-
-
-def compare_url(path: str, root: str, fields: str, agg: str, window: int, label: str = "") -> str:
-    params = {"path": path, "root": root, "fields": fields, "agg": agg, "window": window}
-    if label:
-        params["label"] = label
-    return f"{PROXY}/compare?" + urllib.parse.urlencode(params)
 
 
 def set_compare(query_holder: dict, url_key: str, **overrides) -> None:
@@ -155,144 +212,208 @@ def drop_panels(dash, titles: set[str]) -> None:
     dash["panels"] = [p for p in dash["panels"] if base_title(p) not in titles]
 
 
+def placeholder_panels(dash, titles: set[str]) -> None:
+    """Replace panels in place with same-size 'not available' text panels."""
+    for i, panel in enumerate(dash["panels"]):
+        if base_title(panel) not in titles:
+            continue
+        dash["panels"][i] = {
+            "id": panel["id"],
+            "type": "text",
+            "title": base_title(panel),
+            "gridPos": panel["gridPos"],
+            "transparent": True,
+            "options": {
+                "mode": "markdown",
+                "content": "**Desktop-only surface — no mobile equivalent.**\n\n"
+                           "This feature exists only in the macOS app; see the "
+                           "[macOS board](/grafana/d/omi-tv-macos/).",
+            },
+            "targets": [],
+        }
+
+
+def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
+    """Point a chart at viral-metrics userGrowth — the same person-deduped
+    population as the all-time ticker, so counts agree across the board."""
+    viral = set_url_param(VIRAL_PATH, "platform", scope)
+    target = panel["targets"][0]
+    target["url"] = add_query_param(f"{PROXY}{viral}", "_tzdates", "date")
+    target["root_selector"] = "userGrowth"
+    target["columns"] = [
+        {"selector": "date", "text": "time", "type": "timestamp", "timestampFormat": RFC3339},
+        {"selector": field, "text": series_name, "type": "number"},
+    ]
+    panel["timeFrom"] = "30d"
+
+
+def set_share_tile_description(dash, platform_label: str) -> None:
+    """The share-rate proxy is platform-scoped per board; keep its description
+    honest about which population the denominator counts."""
+    for panel in dash.get("panels", []):
+        if base_title(panel).startswith("Share rate"):
+            panel["description"] = (
+                f"Sharers ÷ new users, last 30d ({platform_label}). True K-factor needs "
+                "referral attribution — not instrumented yet, so this proxies the "
+                "share loop. 0% = no viral loop shipped."
+            )
+
+
 def finish(dash, uid: str, title: str) -> dict:
     dash["uid"] = uid
     dash["title"] = title
     dash["links"] = LINKS
     dash["timezone"] = "America/New_York"
+    dash["refresh"] = "1h"  # Nik: auto-refresh at most hourly
     dash.pop("id", None)
     dash.pop("version", None)
     return dash
 
 
-def build_macos(base) -> dict:
+def build_platform_board(base, scope: str) -> dict:
+    """One pipeline for both platform boards, so they stay mirrors of each
+    other: same panels, same layout, per-platform data. `scope` is "macos"
+    or "mobile"."""
+    profit_field = "desktop" if scope == "macos" else "mobile"
+    label = "macOS" if scope == "macos" else "Mobile"
+
     dash = copy.deepcopy(base)
-    drop_panels(dash, {
+    apply_platform(dash, scope)
+
+    # Cross-platform business panels that have no per-platform breakdown.
+    # Mentor "Omi says" pushes are account-level Firestore messages delivered
+    # to every device a user has, so notification volume cannot be split by
+    # platform either — those panels live on the All-platforms board only.
+    drop_panels(dash, ACCOUNT_LEVEL_TITLES | {
         "Users → 1M goal", "ARR", "Active subscriptions", "Trialing",
         "Trials in pipeline", "Conversations", "MRR by product", "MRR over time",
         "New subscriptions / month", "Message ratings",
         "Infra cost by service — last 30 days",
     })
+    if scope == "mobile":
+        placeholder_panels(dash, DESKTOP_ONLY_TITLES)
 
     ticker = panel_by_title(dash, "Total users")
-    ticker["title"] = "macOS users"
+    ticker["title"] = f"{label} users (all-time)"
     ticker["gridPos"]["h"] = 6
-    set_stat_query(ticker, PROFIT_PATH, "summary", "totalUsersDesktop", "macOS users")
+    set_stat_query(
+        ticker, set_url_param(VIRAL_PATH, "platform", scope),
+        "summary", "allTimeUsers", f"{label} users",
+    )
 
     mrr = panel_by_title(dash, "MRR")
-    mrr["title"] = "MRR (macOS)"
-    set_stat_query(mrr, PROFIT_PATH, "summary", "mrrDesktop", "MRR")
+    mrr["title"] = f"MRR ({label})"
+    set_stat_query(mrr, PROFIT_PATH, "summary",
+                   "mrrDesktop" if scope == "macos" else "mrrMobile", "MRR")
 
+    # Signups / daily-new / cumulative all use viral-metrics userGrowth —
+    # the same person-deduped PostHog population as the all-time ticker, so
+    # the cumulative chart ends exactly at the ticker value.
+    viral_scoped = set_url_param(VIRAL_PATH, "platform", scope)
     signups = panel_by_title(dash, "Signups — last 7 days")
-    signups["title"] = "macOS signups — last 7 days"
-    set_compare(signups["targets"][0], "url", path=PROFIT_PATH, root="users", fields="desktop")
+    signups["title"] = f"{label} signups — last 7 days"
+    set_compare(signups["targets"][0], "url",
+                path=viral_scoped, root="userGrowth", fields="users")
 
     daily = panel_by_title(dash, "Daily new users")
-    platform_series(daily, PROFIT_PATH, "users", "desktop", "New users")
-    retarget_var(dash, "d_daily", path=PROFIT_PATH, root="users", fields="desktop")
+    user_growth_series(daily, scope, "users", "New users")
+    retarget_var(dash, "d_daily", path=viral_scoped, root="userGrowth", fields="users")
 
     cumulative = panel_by_title(dash, "Cumulative users")
-    cumulative["title"] = "Cumulative users (macOS)  ·  ${d_cum}"
-    platform_series(cumulative, PROFIT_PATH, "cumulativeUsers", "desktop", "Total users")
-    retarget_var(dash, "d_cum", path=PROFIT_PATH, root="users", fields="desktop")
+    cumulative["title"] = f"Cumulative users ({label})  ·  ${{d_cum}}"
+    user_growth_series(cumulative, scope, "cumulative", "Total users")
+    retarget_var(dash, "d_cum", path=viral_scoped, root="userGrowth", fields="users")
 
+    set_share_tile_description(dash, label)
+
+    series_label = "Desktop" if scope == "macos" else "Mobile"
     for title, new_title, series in [
-        ("New users / day by platform", "New users / day (desktop)  ·  ${d_pusers}", "Desktop"),
-        ("Revenue / day by platform (est.)", "Revenue / day (desktop, est.)  ·  ${d_prev}", "Desktop"),
-        ("Infra cost / day by platform", "Infra cost / day (desktop)  ·  ${d_cost}", "Desktop"),
-        ("Cost / user / day", "Cost / user / day (desktop)  ·  ${d_cpu}", "Desktop $/user"),
-        ("Free → paid conversion", "Free → paid conversion (desktop)  ·  ${d_conv}", "Desktop"),
+        ("New users / day by platform", f"New users / day ({profit_field})  ·  ${{d_pusers}}", series_label),
+        ("Revenue / day by platform (est.)", f"Revenue / day ({profit_field}, est.)  ·  ${{d_prev}}", series_label),
+        ("Infra cost / day by platform", f"Infra cost / day ({profit_field})  ·  ${{d_cost}}", series_label),
+        ("Cost / user / day", f"Cost / user / day ({profit_field})  ·  ${{d_cpu}}", f"{series_label} $/user"),
+        ("Free → paid conversion", f"Free → paid conversion ({profit_field})  ·  ${{d_conv}}", series_label),
     ]:
         panel = panel_by_title(dash, title)
         panel["title"] = new_title
         keep_series(panel, {series})
     for var in ["d_pusers", "d_prev", "d_cost", "d_cpu", "d_conv"]:
-        retarget_var(dash, var, fields="desktop")
+        retarget_var(dash, var, fields=profit_field)
+
+    # Revenue must be exact-attribution only: the plain desktop/mobile revenue
+    # series smears unknown-platform subscription MRR proportionally (fine for
+    # the All board's stack, wrong on a platform board).
+    exact_field = f"{profit_field}Exact"
+    revenue_panel = panel_by_title(dash, f"Revenue / day ({profit_field}, est.)")
+    for col in revenue_panel["targets"][0]["columns"]:
+        if col.get("type") != "timestamp":
+            col["selector"] = exact_field
+    retarget_var(dash, "d_prev", fields=exact_field)
+
+    if scope == "macos":
+        # Board context makes the (macOS) marker redundant.
+        panel_by_title(dash, "Activation rate (macOS)")["title"] = "Activation rate"
+        chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
+        chart["title"] = "Activation (signup → activated)" + (
+            "  ·  " + chart["title"].split("  ·  ")[1] if "  ·  " in chart["title"] else "")
+    if scope == "mobile":
+        # Real mobile equivalents of the macOS-titled panels.
+        versions_mobile = "/api/omi/stats/macos-versions?platform=mobile"
+        channel_pie = panel_by_title(dash, "macOS: beta vs production (today)")
+        channel_pie["title"] = "Mobile: iOS vs Android (today)"
+        channel_pie["targets"][0]["url"] = f"{PROXY}{versions_mobile}"
+        version_pie = panel_by_title(dash, "macOS: by version (today)")
+        version_pie["title"] = "Mobile: by app version (today)"
+        version_pie["targets"][0]["url"] = f"{PROXY}{versions_mobile}"
+        active_today = panel_by_title(dash, "macOS active today")
+        active_today["title"] = "Mobile active today"
+        active_today["targets"][0]["url"] = f"{PROXY}{versions_mobile}"
+
+        # The Firestore activation route is macOS-only (conversation within 7
+        # days of a macOS signup); mobile activation uses PostHog telemetry
+        # (first-seen → Memory Created within 7 days) via viral-metrics.
+        viral_mobile = set_url_param(VIRAL_PATH, "platform", "mobile")
+        rate = panel_by_title(dash, "Activation rate (macOS)")
+        rate["title"] = "Activation rate"
+        set_stat_query(rate, viral_mobile, "summary", "activationRate", "Activation")
+        chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
+        chart["title"] = "Activation (signup → activated)  ·  ${d_act}"
+        target = chart["targets"][0]
+        target["url"] = add_query_param(f"{PROXY}{viral_mobile}", "_tzdates", "date")
+        target["root_selector"] = "activation"
+        target["columns"] = [
+            {"selector": "date", "text": "time", "type": "timestamp", "timestampFormat": RFC3339},
+            {"selector": "signups", "text": "Signups", "type": "number"},
+            {"selector": "activated", "text": "Activated", "type": "number"},
+            {"selector": "rate", "text": "Rate", "type": "number"},
+        ]
+        chart["description"] = ("First-seen mobile users creating a Memory within 7 days "
+                                "(PostHog telemetry; mobile does not emit Sign In Completed).")
 
     prune_vars_and_titles(dash)
     reflow(dash)
-    return finish(dash, "omi-tv-macos", "Omi TV — macOS")
-
-
-def build_mobile(base) -> dict:
-    dash = copy.deepcopy(base)
-
-    ticker = panel_by_title(dash, "Total users")
-    ticker["title"] = "Mobile users"
-    set_stat_query(ticker, PROFIT_PATH, "summary", "totalUsersMobile", "Mobile users")
-
-    mrr = panel_by_title(dash, "MRR")
-    mrr["title"] = "MRR (mobile)"
-    set_stat_query(mrr, PROFIT_PATH, "summary", "mrrMobile", "MRR")
-
-    signups = panel_by_title(dash, "Signups — last 7 days")
-    signups["title"] = "Mobile signups — last 7 days"
-    set_compare(signups["targets"][0], "url", path=PROFIT_PATH, root="users", fields="mobile")
-
-    cumulative = panel_by_title(dash, "Cumulative users")
-    cumulative["title"] = "Cumulative users (mobile)  ·  ${d_cum}"
-    platform_series(cumulative, PROFIT_PATH, "cumulativeUsers", "mobile", "Total users")
-    retarget_var(dash, "d_cum", path=PROFIT_PATH, root="users", fields="mobile")
-
-    daily = panel_by_title(dash, "Daily new users")
-    daily["title"] = "Daily new users  ·  ${d_daily}"
-    platform_series(daily, PROFIT_PATH, "users", "mobile", "New users")
-    retarget_var(dash, "d_daily", path=PROFIT_PATH, root="users", fields="mobile")
-
-    charts = []
-    for title, new_title, series in [
-        ("New users / day by platform", "New users / day (mobile)  ·  ${d_pusers}", "Mobile"),
-        ("Revenue / day by platform (est.)", "Revenue / day (mobile, est.)  ·  ${d_prev}", "Mobile"),
-        ("Infra cost / day by platform", "Infra cost / day (mobile)  ·  ${d_cost}", "Mobile"),
-        ("Cost / user / day", "Cost / user / day (mobile)  ·  ${d_cpu}", "Mobile $/user"),
-        ("Free → paid conversion", "Free → paid conversion (mobile)  ·  ${d_conv}", "Mobile"),
-    ]:
-        panel = panel_by_title(dash, title)
-        panel["title"] = new_title
-        keep_series(panel, {series})
-        charts.append(panel)
-    for var in ["d_pusers", "d_prev", "d_cost", "d_cpu", "d_conv"]:
-        retarget_var(dash, var, fields="mobile")
-
-    note = {
-        "id": 999,
-        "type": "text",
-        "title": "",
-        "transparent": True,
-        "gridPos": {"x": 0, "y": 0, "w": 24, "h": 3},
-        "options": {
-            "mode": "markdown",
-            "content": "**Mobile engagement (DAU/WAU, retention, activation) is not instrumented yet** — "
-                       "PostHog only covers desktop and mobile Mixpanel is dead. These panels come from "
-                       "Firebase signups split by platform token, Stripe MRR attribution, and infra cost shares.",
-        },
-        "targets": [],
-    }
-
-    keep = [ticker, mrr, signups, daily, charts[1], charts[2], charts[3], charts[4],
-            cumulative, note]
-    for stat_panel in (ticker, mrr, signups):
-        stat_panel["gridPos"].update({"w": 8, "h": 5})
-    dash["panels"] = keep
-    prune_vars_and_titles(dash)
-    reflow(dash)
-    return finish(dash, "omi-tv-mobile", "Omi TV — Mobile")
+    return finish(dash, f"omi-tv-{scope}", f"Omi TV — {label}")
 
 
 def main() -> None:
     base = json.loads(BASE_PATH.read_text(encoding="utf-8"))
     apply_tzdates(base)
+    set_share_tile_description(base, "all platforms")
+    apply_platform(base, "all")
+    # The two Firestore-backed activation panels are macOS-scoped by
+    # definition; their delta var compares macOS activation to stay coherent.
+    retarget_var(base, "d_act", path=set_url_param(VIRAL_PATH, "platform", "macos"))
     finish(base, "omi-tv", "Omi TV")
 
-    macos = build_macos(base)
-    mobile = build_mobile(base)
+    macos = build_platform_board(base, "macos")
+    mobile = build_platform_board(base, "mobile")
 
     BASE_PATH.write_text(json.dumps(base, indent=2) + "\n", encoding="utf-8")
     for dash, name in [(macos, "omi-tv-macos.json"), (mobile, "omi-tv-mobile.json")]:
         (DASH_DIR / name).write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
         print(f"wrote {name}: {len(dash['panels'])} panels, "
               f"{len(dash['templating']['list'])} vars")
-    print(f"updated omi-tv.json: {len(base['panels'])} panels (NYC tz + _tzdates + links)")
+    print(f"updated omi-tv.json: {len(base['panels'])} panels (NYC tz + _tzdates + platform=all + links)")
 
 
 if __name__ == "__main__":

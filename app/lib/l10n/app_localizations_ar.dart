@@ -9792,4 +9792,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get findDevice => 'العثور';
+
+  @override
+  String get diagnosticsShareFailed => 'تعذّرت مشاركة التشخيص. يُرجى المحاولة مرة أخرى.';
 }

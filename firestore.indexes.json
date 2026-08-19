@@ -733,5 +733,30 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "screen_activity",
+      "fieldPath": "ocrText",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "screen_activity",
+      "fieldPath": "windowTitle",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "screen_activity",
+      "fieldPath": "deviceName",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "screen_activity",
+      "fieldPath": "clientDeviceId",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
 }

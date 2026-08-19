@@ -9887,4 +9887,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get findDevice => 'Намери';
+
+  @override
+  String get diagnosticsShareFailed => 'Диагностиката не можа да бъде споделена. Опитайте отново.';
 }

@@ -50,6 +50,10 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextFeature.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/DerivedDataEgressPolicy.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/OnDeviceMeetingIdentityService.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
   - desktop/macos/Desktop/Sources/Bluetooth/BtDevice.swift
   - desktop/macos/Desktop/Sources/Bluetooth/DeviceUUIDs.swift

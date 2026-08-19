@@ -3253,5 +3253,6 @@
     "accountCutoverOpenStore": "Abrir loja",
     "sendRawAudioToOmi": "Enviar áudio em bruto para o Omi",
     "sendRawAudioToOmiDescription": "Desative para impedir o envio de áudio em bruto para o Omi. As transcrições e os dados necessários às funcionalidades na nuvem ainda podem ser enviados para o Omi.",
-    "findDevice": "Encontrar"
+    "findDevice": "Encontrar",
+    "diagnosticsShareFailed": "Não foi possível partilhar o diagnóstico. Tente novamente."
 }

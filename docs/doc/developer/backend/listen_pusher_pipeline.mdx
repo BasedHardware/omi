@@ -1,12 +1,12 @@
 ---
 title: "Listen + Pusher Pipeline"
 icon: "tower-broadcast"
-description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processing pipeline"
+description: "Sequence diagrams and finalization policy for the /v4/listen WebSocket and Pusher pipeline"
 ---
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-07-26 (bounded Pusher delivery, validated frames, and durable finalization ownership)
+> Last updated: 2026-08-18 (meeting-treatment eligibility and deduplicated speech duration)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -61,9 +61,20 @@ resource before it creates or resumes a conversation. A client-generated
 clients receive a server-generated UUID. The optional
 `conversation_role=meeting` marker is supplied by desktop after a
 machine-observed call-start boundary; omitted or invalid values remain
-`ambient`. That bounded marker is persisted with the conversation so the
-post-finalization Chat receipt can distinguish meeting notes from ordinary
-always-on ambient chunks without inspecting transcript text.
+`ambient`. That bounded marker is durable session provenance committed at
+OPEN; finalization does not rewrite it based on how long the session lasted.
+
+Meeting treatment is a separate finalization decision. A desktop meeting that
+was neither discarded nor created by a maximum-duration rotation is eligible
+only when its durable `started_at` and `finished_at` span at least five minutes
+and its non-empty transcript covers at least 60 seconds of speech. Speech time
+is the union of valid segment intervals, so overlapping microphone and system-
+audio transcriptions of the same remote speech count once. The backend uses the
+result to gate the meeting Chat receipt and exposes it on the durable
+finalization status; desktop completion notifications require the same value.
+The synchronous desktop upload route applies and returns the same decision.
+Short or mostly silent calls still finalize as ordinary conversations, with
+their original role and provenance unchanged.
 
 The resource atomically binds the recording to exactly one conversation, so
 reconnects return the original canonical mapping rather than falling back to a
@@ -178,6 +189,14 @@ environment, outcome, and phase labels. They do not include transcript content,
 user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
+
+The same authoritative attempt emits fail-open PostHog product events:
+`Transcript Started` at first nontrivial audio and exactly one of `Transcript
+Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry
+the durable recording/conversation IDs, selected provider/model/language,
+bounded source/platform, terminal phase, and session duration. The user
+ID is used only as PostHog's `distinct_id`; transcript content and raw provider
+errors are never included.
 
 ### Dev-only parity-pack capture
 

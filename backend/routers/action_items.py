@@ -43,6 +43,7 @@ from models.action_item import (
     PendingSyncResponse,
 )
 from utils.task_intelligence import task_links
+from utils.product_telemetry import emit_product_event
 
 router = APIRouter()
 
@@ -417,9 +418,11 @@ def list_action_item_ids(
     Without ``completed``: returns every ID with no field reads — the cheapest
     way for a client to know which tasks it has without paging the full list.
 
-    With ``completed``: returns only non-deleted IDs in the requested bucket,
-    which requires a three-field projection (``completed``, ``status``,
-    ``deleted``) streamed across the collection.
+    With ``completed``: returns only non-deleted IDs in the requested bucket. The
+    ``completed`` bucket is filtered server-side; only documents in that bucket are
+    streamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``
+    exclusion is still applied in Python since Firestore equality filters would drop
+    undeleted rows that have no ``deleted`` field.
 
     Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.
@@ -484,6 +487,25 @@ def update_action_item(
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     if updated_item is None:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
+
+    if request.owner is not None:
+        previous_owner_value = existing_item.get('owner') or 'unknown'
+        previous_owner = getattr(previous_owner_value, 'value', str(previous_owner_value))
+        next_owner = request.owner.value
+        if previous_owner != next_owner:
+            emit_product_event(
+                uid=uid,
+                event='Task Assignee Corrected',
+                properties={
+                    'action_item_id': action_item_id,
+                    'conversation_id': updated_item.get('conversation_id'),
+                    'previous_assignee': (
+                        previous_owner if previous_owner in {'user', 'other', 'unknown'} else 'unknown'
+                    ),
+                    'new_assignee': next_owner,
+                    'field_changed': 'owner',
+                },
+            )
     _wake_task_changes(uid, [action_item_id], updated_item.get('updated_at'))
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final

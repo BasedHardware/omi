@@ -4050,9 +4050,18 @@ class FloatingControlBarManager {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
     dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
-    if case .openWhatMattersNow(let recommendationID) = notification.action {
+    switch notification.action {
+    case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
+    case .connectIntegration(let telemetryID, let triggerID):
+      IntegrationNudgeCoordinator.shared.acceptPresentedNudge(
+        telemetryID: telemetryID,
+        triggerID: triggerID
+      )
+      return
+    case nil:
+      break
     }
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
@@ -4195,6 +4204,12 @@ class FloatingControlBarManager {
     let ownerID = notification.ownerID
     guard !ownerID.isEmpty,
       RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      // A proactive card is journaled because it is something Omi observed and
+      // the user may want to follow up on in chat. An integration offer is
+      // neither — it is product copy about a connector, and writing "Omi can
+      // read your inbox…" into the user's conversation history as though it
+      // were an observation is noise they cannot act on there.
+      notification.assistantId != IntegrationNudgeCoordinator.assistantID,
       let provider = historyChatProvider
     else { return }
     let surface = provider.mainChatSurfaceReference()
@@ -4206,8 +4221,9 @@ class FloatingControlBarManager {
     // Notifications become chat-visible only after canonical journal
     // admission. The notification card itself remains an independent
     // presentation surface while this async write is pending.
-    let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-    let messageText = bodyText.isEmpty ? notification.title : bodyText
+    let messageText = Self.notificationJournalText(
+      title: notification.title,
+      body: notification.message)
     let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
       id: notification.id,
       kind: notification.kind)
@@ -4246,6 +4262,14 @@ class FloatingControlBarManager {
       )
       self.mostRecentNotificationKey = key
     }
+  }
+
+  nonisolated static func notificationJournalText(title: String, body: String) -> String {
+    let headline = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let detail = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    if headline.isEmpty { return detail }
+    if detail.isEmpty || detail == headline { return headline }
+    return "\(headline)\n\(detail)"
   }
 
   func mainChatSurfaceReference() -> AgentSurfaceReference {

@@ -9794,4 +9794,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get findDevice => 'ค้นหา';
+
+  @override
+  String get diagnosticsShareFailed => 'ไม่สามารถแชร์ข้อมูลวินิจฉัยได้ โปรดลองใหม่';
 }

@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "Buka toko",
     "sendRawAudioToOmi": "Hantar audio mentah ke Omi",
     "sendRawAudioToOmiDescription": "Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.",
-    "findDevice": "Cari"
+    "findDevice": "Cari",
+    "diagnosticsShareFailed": "Tidak dapat berkongsi diagnostik. Sila cuba lagi."
 }

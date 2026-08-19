@@ -67,7 +67,7 @@ from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils import share_links
 from utils.other import endpoints as auth, storage
-from utils.other.chat_file import FileChatTool
+from utils.other.chat_file import FileChatTool, UnsupportedChatFileError
 from utils.multipart import (
     CHAT_FILE_MAX_PART_SIZE,
     MultipartMaxPartSizeRoute,
@@ -1515,7 +1515,10 @@ def upload_file_chat(
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            result = FileChatTool.upload(temp_file)
+            try:
+                result = FileChatTool.upload(temp_file)
+            except UnsupportedChatFileError as error:
+                raise HTTPException(status_code=400, detail=str(error))
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":
@@ -1580,7 +1583,10 @@ def upload_file_chat_v1(
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
 
-            result = FileChatTool.upload(temp_file)
+            try:
+                result = FileChatTool.upload(temp_file)
+            except UnsupportedChatFileError as error:
+                raise HTTPException(status_code=400, detail=str(error))
 
             thumb_name = result.get("thumbnail_name", "")
             if thumb_name != "":

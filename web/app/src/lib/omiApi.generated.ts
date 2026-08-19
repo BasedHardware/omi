@@ -63,10 +63,13 @@ export interface ActionItem {
   completed?: boolean;
   completed_at?: string | null;
   concrete_deliverable?: boolean | null;
+  context?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
+  owner_name?: string | null;
   ownership_confidence?: number | null;
   source_segment_ids?: Array<string>;
   target_task_id?: string | null;
@@ -1158,20 +1161,28 @@ export interface ConversationAudioUrlInfo {
 export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
+  meeting_treatment_eligible?: boolean;
   status: string;
 }
 
 export interface ConversationFinalizationStatusResponse {
   attempt_count: number;
   job_id: string;
+  meeting_treatment_eligible?: boolean;
   retryable: boolean;
   status: string;
   task_retry_count: number;
   terminal: boolean;
 }
 
+export interface ConversationLinkActionItemSpec {
+  description: string;
+  task_id?: string | null;
+}
+
 export interface ConversationLinkSpec {
   conversation_id: string;
+  recommended_action_items?: Array<ConversationLinkActionItemSpec>;
   summary: string;
   type: "conversationLink";
 }
@@ -2495,6 +2506,7 @@ export interface Message {
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
   client_message_id?: string | null;
+  content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
@@ -2923,6 +2935,7 @@ export interface ResponseMessage {
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
   client_message_id?: string | null;
+  content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
@@ -3041,6 +3054,12 @@ export interface SearchedMemory {
   relevance_score: number;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
+}
+
+export interface Section {
+  body_markdown: string;
+  heading: string;
+  source_segment_ids?: Array<string>;
 }
 
 export interface SendMessageRequest {
@@ -3298,6 +3317,7 @@ export interface Structured {
   emoji?: string;
   events?: Array<Event>;
   overview?: string;
+  sections?: Array<Section>;
   title?: string;
 }
 
@@ -4249,6 +4269,7 @@ export interface OmiApiSchemas {
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
   "ConversationFinalizationStatusResponse": ConversationFinalizationStatusResponse;
+  "ConversationLinkActionItemSpec": ConversationLinkActionItemSpec;
   "ConversationLinkSpec": ConversationLinkSpec;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
@@ -4509,6 +4530,7 @@ export interface OmiApiSchemas {
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
+  "Section": Section;
   "SendMessageRequest": SendMessageRequest;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;

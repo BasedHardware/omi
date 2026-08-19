@@ -32,6 +32,15 @@ overlay:
           category: rollout
         MEMORY_ENABLED:
           value: 'on'
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'true'
+          category: rollout
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
@@ -230,6 +239,15 @@ overlay:
           HOSTED_PUSHER_API_URL:
             value: http://pusher.omiapi.com
             category: service_discovery
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout

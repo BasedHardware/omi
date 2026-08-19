@@ -3252,5 +3252,6 @@
     "accountCutoverOpenStore": "Ouvrir le store",
     "sendRawAudioToOmi": "Envoyer l'audio brut à Omi",
     "sendRawAudioToOmiDescription": "Désactivez cette option pour empêcher l'envoi de l'audio brut à Omi. Les transcriptions et les données nécessaires aux fonctions cloud peuvent toujours être envoyées à Omi.",
-    "findDevice": "Localiser"
+    "findDevice": "Localiser",
+    "diagnosticsShareFailed": "Impossible de partager le diagnostic. Veuillez réessayer."
 }

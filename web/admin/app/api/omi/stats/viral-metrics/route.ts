@@ -11,6 +11,7 @@ import {
   summarizeActivation,
   type DailyActivationPoint,
 } from "@/lib/growth-metrics";
+import { parsePlatformScope, scopeFilterAnd } from "@/lib/platform-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  */
 const MIN_ACTIVATION_TELEMETRY_VERSION = [0, 12, 167] as const;
 
-let cache: { data: any; days: number; timestamp: number } | null = null;
+let cache: { data: any; days: number; platform: string; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 async function hogql(apiKey: string, projectId: string, host: string, query: string) {
@@ -46,14 +47,25 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
+    // Default macos preserves the legacy meaning for existing callers.
+    const platform = parsePlatformScope(searchParams.get("platform") ?? "macos");
+    const os = scopeFilterAnd(platform);
+    // Mobile never emits `Sign In Completed`, so non-macOS activation cohorts
+    // anchor on the user's first-ever event instead. Acquisition series
+    // (weekly/daily new, cumulative, ticker) all use first-seen so every
+    // panel agrees on one "new user" definition per platform.
+    const activationAnchor = platform === "macos" ? `AND event = 'Sign In Completed' ${os}` : os;
+    // The Firestore activation overlay is macOS-scoped by construction
+    // (conversation-within-7-days of a macOS signup) — never smear it over
+    // mobile or all-platform telemetry.
+    const activationOverlay = async () =>
+      platform === "macos"
+        ? (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))?.data ?? null
+        : null;
 
-    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
+    if (cache && cache.days === days && cache.platform === platform && Date.now() - cache.timestamp < CACHE_TTL) {
       return NextResponse.json(
-        applyFirestoreActivationCompat(
-          cache.data,
-          (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
-            ?.data ?? null,
-        ),
+        applyFirestoreActivationCompat(cache.data, await activationOverlay()),
       );
     }
 
@@ -67,18 +79,21 @@ export async function GET(request: NextRequest) {
       activationResults,
       wauResult,
       mauResult,
+      allTimeResult,
+      userGrowthResult,
     ] = await Promise.all([
-      // 1. New users per week (first-ever Sign In Completed)
+      // 1. New users per week — first-seen on this platform, the same
+      // person-deduped population as the daily userGrowth series.
       hogql(apiKey, projectId, host, `
         SELECT
           toMonday(toDate(toString(min_ts))) as week,
           count(*) as new_users
         FROM (
-          SELECT distinct_id, min(timestamp) as min_ts
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
           FROM events
-          WHERE event = 'Sign In Completed'
-            AND properties.$os_name = 'macOS'
-          GROUP BY distinct_id
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
         )
         WHERE min_ts >= now() - interval ${days} day
         GROUP BY week
@@ -91,8 +106,8 @@ export async function GET(request: NextRequest) {
           toMonday(toDate(timestamp)) as week,
           count(DISTINCT distinct_id) as active_users
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval ${days} day
+        WHERE timestamp >= now() - interval ${days} day
+          ${os}
         GROUP BY week
         ORDER BY week
       `),
@@ -106,15 +121,15 @@ export async function GET(request: NextRequest) {
         FROM (
           SELECT distinct_id as did, toMonday(toDate(timestamp)) as week
           FROM events
-          WHERE properties.$os_name = 'macOS'
-            AND timestamp >= now() - interval ${days} day
+          WHERE timestamp >= now() - interval ${days} day
+            ${os}
           GROUP BY did, week
         ) curr
         INNER JOIN (
           SELECT distinct_id as did, toMonday(toDate(timestamp)) as week
           FROM events
-          WHERE properties.$os_name = 'macOS'
-            AND timestamp >= now() - interval ${days + 7} day
+          WHERE timestamp >= now() - interval ${days + 7} day
+            ${os}
           GROUP BY did, week
         ) prev ON curr.did = prev.did AND prev.week = curr.week - interval 7 day
         GROUP BY curr_week
@@ -127,8 +142,8 @@ export async function GET(request: NextRequest) {
           toDate(timestamp) as day,
           count(DISTINCT distinct_id) as dau
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval ${days} day
+        WHERE timestamp >= now() - interval ${days} day
+          ${os}
         GROUP BY day
         ORDER BY day
       `),
@@ -143,8 +158,8 @@ export async function GET(request: NextRequest) {
             distinct_id,
             count(DISTINCT toDate(timestamp)) as days_active
           FROM events
-          WHERE properties.$os_name = 'macOS'
-            AND timestamp >= now() - interval 30 day
+          WHERE timestamp >= now() - interval 30 day
+            ${os}
           GROUP BY distinct_id
         )
         GROUP BY days_active
@@ -192,15 +207,15 @@ export async function GET(request: NextRequest) {
                 splitByChar('.', coalesce(argMin(properties.$app_version, timestamp), '0'))
               ) >= [${MIN_ACTIVATION_TELEMETRY_VERSION.join(", ")}] as reports_activation
             FROM events
-            WHERE event = 'Sign In Completed'
-              AND properties.$os_name = 'macOS'
+            WHERE 1 = 1
+              ${activationAnchor}
             GROUP BY distinct_id
           ) signups
           LEFT JOIN (
             SELECT distinct_id as m_id, timestamp as m_ts
             FROM events
             WHERE event = 'Memory Created'
-              AND properties.$os_name = 'macOS'
+              ${os}
               AND timestamp >= now() - interval ${days + 7} day
           ) memories ON signups.s_id = memories.m_id
           WHERE signups.s_ts >= now() - interval ${days} day
@@ -214,16 +229,42 @@ export async function GET(request: NextRequest) {
       hogql(apiKey, projectId, host, `
         SELECT count(DISTINCT distinct_id)
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval 7 day
+        WHERE timestamp >= now() - interval 7 day
+          ${os}
       `),
 
       // 8. MAU (current month)
       hogql(apiKey, projectId, host, `
         SELECT count(DISTINCT distinct_id)
         FROM events
-        WHERE properties.$os_name = 'macOS'
-          AND timestamp >= now() - interval 30 day
+        WHERE timestamp >= now() - interval 30 day
+          ${os}
+      `),
+
+      // 9. All-time users on this platform (person-deduped, counted since
+      // each platform's PostHog instrumentation began)
+      hogql(apiKey, projectId, host, `
+        SELECT uniq(COALESCE(person_id, distinct_id))
+        FROM events
+        WHERE 1 = 1
+          ${os}
+      `),
+
+      // 10. Daily new users by first-seen date, same person-deduped
+      // population as query 9 — its running sum must end at allTimeUsers so
+      // the cumulative chart and the all-time ticker agree by construction.
+      hogql(apiKey, projectId, host, `
+        SELECT first_day, count(*) as new_users
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor,
+                 toDate(min(timestamp)) as first_day
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        GROUP BY first_day
+        ORDER BY first_day
       `),
     ]);
 
@@ -273,6 +314,15 @@ export async function GET(request: NextRequest) {
     // Weekly stickiness: avg DAU / WAU for each week
     const wau = (wauResult as any[])[0]?.[0] ?? 0;
     const mau = (mauResult as any[])[0]?.[0] ?? 0;
+    const allTimeUsers = (allTimeResult as any[])[0]?.[0] ?? 0;
+
+    // ── User growth (first-seen daily + cumulative) ──
+    const userGrowth: { date: string; users: number; cumulative: number }[] = [];
+    let cumulative = 0;
+    for (const [day, users] of userGrowthResult as any[]) {
+      cumulative += users;
+      userGrowth.push({ date: day, users, cumulative });
+    }
     const recentDau = dailyDau.slice(-7);
     const avgDau = recentDau.length > 0
       ? Math.round(recentDau.reduce((s, d) => s + d.dau, 0) / recentDau.length)
@@ -364,6 +414,7 @@ export async function GET(request: NextRequest) {
 
     const result = applyFirestoreActivationCompat(
       {
+        userGrowth,
         growthAccounting,
         stickinessTrend,
         dailyDau,
@@ -385,13 +436,13 @@ export async function GET(request: NextRequest) {
           mau,
           l5PlusPct,
           totalUsers: totalPowerUsers,
+          allTimeUsers,
         },
       },
-      (await getPayload<FirestoreActivationCompat>(activationCacheKey(days)))
-        ?.data ?? null,
+      await activationOverlay(),
     );
 
-    cache = { data: result, days, timestamp: Date.now() };
+    cache = { data: result, days, platform, timestamp: Date.now() };
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("Viral metrics error:", error);

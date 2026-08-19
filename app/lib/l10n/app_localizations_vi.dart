@@ -9846,4 +9846,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get findDevice => 'Tìm';
+
+  @override
+  String get diagnosticsShareFailed => 'Không thể chia sẻ chẩn đoán. Vui lòng thử lại.';
 }

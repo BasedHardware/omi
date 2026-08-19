@@ -3222,5 +3222,6 @@
     "accountCutoverOpenStore": "Mở cửa hàng",
     "sendRawAudioToOmi": "Gửi âm thanh thô đến Omi",
     "sendRawAudioToOmiDescription": "Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi.",
-    "findDevice": "Tìm"
+    "findDevice": "Tìm",
+    "diagnosticsShareFailed": "Không thể chia sẻ chẩn đoán. Vui lòng thử lại."
 }

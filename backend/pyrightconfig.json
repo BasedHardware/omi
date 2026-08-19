@@ -18,6 +18,7 @@
         "scripts/backfill_mcp_key_full_access.py",
         "scripts/backfill_user_signup_platform.py",
         "scripts/chat/stream_test.py",
+        "scripts/chat_first_materialization_drop_rate.py",
         "scripts/check_module_stub_pollution.py",
         "scripts/check_workflow_contracts.py",
         "scripts/cutover_evidence_readiness.py",

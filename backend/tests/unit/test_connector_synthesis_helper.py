@@ -5,6 +5,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from types import SimpleNamespace
 
+import httpx
+import openai
 import pytest
 
 from utils.llm import connector_synthesis
@@ -74,4 +76,44 @@ def test_calendar_synthesis_parses_and_dedupes(monkeypatch):
 
 def test_unparseable_response_returns_none(monkeypatch):
     _patch(monkeypatch, 'not json at all')
+    assert connector_synthesis.synthesize_connector_items('uid', 'gmail', ['From: a | Subject: b | c']) is None
+
+
+def byok_rate_limit_error() -> openai.RateLimitError:
+    """The gateway 429 envelope production raises when the user's own provider key throttles."""
+    return openai.RateLimitError(
+        'Error code: 429',
+        response=httpx.Response(429, request=httpx.Request('POST', 'http://gateway.test/v1/chat/completions')),
+        body={
+            'error': {
+                'message': 'provider request failed: byok_rate_limit',
+                'type': 'rate_limit_error',
+                'param': 'provider',
+                'code': 'credential_failure',
+                'failure_class': 'byok_rate_limit',
+            }
+        },
+    )
+
+
+def patch_llm_raising(monkeypatch, error: BaseException):
+    class FailingLLM:
+        def invoke(self, messages):
+            raise error
+
+    monkeypatch.setattr(connector_synthesis, 'get_llm', lambda feature: FailingLLM())
+    monkeypatch.setattr(connector_synthesis, 'track_usage', _fake_track_usage)
+    monkeypatch.setattr(connector_synthesis, 'current_date_for_uid', lambda uid: '2026-08-09')
+
+
+def test_byok_rate_limit_propagates_instead_of_collapsing_to_none(monkeypatch):
+    patch_llm_raising(monkeypatch, byok_rate_limit_error())
+
+    with pytest.raises(openai.RateLimitError):
+        connector_synthesis.synthesize_connector_items('uid', 'gmail', ['From: a | Subject: b | c'])
+
+
+def test_untyped_provider_failure_still_returns_none(monkeypatch):
+    patch_llm_raising(monkeypatch, RuntimeError('provider exploded'))
+
     assert connector_synthesis.synthesize_connector_items('uid', 'gmail', ['From: a | Subject: b | c']) is None

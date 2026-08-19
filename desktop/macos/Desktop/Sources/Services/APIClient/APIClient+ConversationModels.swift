@@ -51,6 +51,7 @@ struct ConversationFinalizationStatusResponse: Decodable, Equatable {
   let retryable: Bool
   let attemptCount: Int
   let taskRetryCount: Int
+  let meetingTreatmentEligible: Bool?
 
   enum CodingKeys: String, CodingKey {
     case jobID = "job_id"
@@ -59,6 +60,7 @@ struct ConversationFinalizationStatusResponse: Decodable, Equatable {
     case retryable
     case attemptCount = "attempt_count"
     case taskRetryCount = "task_retry_count"
+    case meetingTreatmentEligible = "meeting_treatment_eligible"
   }
 }
 

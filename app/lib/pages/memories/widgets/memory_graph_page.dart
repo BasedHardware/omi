@@ -12,6 +12,7 @@ import 'package:flutter/scheduler.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
@@ -248,6 +249,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   final Random _rnd = Random();
   final GlobalKey _graphKey = GlobalKey();
+  final GlobalKey _shareButtonKey = GlobalKey();
 
   double _rotationX = 0.0;
   double _rotationY = 0.0;
@@ -570,7 +572,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
       if (mounted) {
-        await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: context.l10n.checkOutMyMemoryGraph,
+          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+        );
       }
     } catch (e) {
       Logger.debug('Error sharing graph: $e');
@@ -594,7 +600,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [
+                      IconButton(
+                        key: _shareButtonKey,
+                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                        onPressed: _shareGraph,
+                      )
+                    ]
                   : null,
             )
           : null,

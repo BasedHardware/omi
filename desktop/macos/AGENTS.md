@@ -222,6 +222,12 @@ do not hand-edit those paths to match a specific machine.
 - **Redis**: Caching
 - **Typesense**: Search
 
+### Screen activity sync rollout
+
+- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles stay on the legacy path until that PostHog flag is true; non-production bundles dogfood it by default and `OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` disables it locally.
+- OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
+- Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
+
 ### User Subcollections (Firestore)
 - `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
 - `users/{uid}/action_items` - Tasks (no platform tracking)
@@ -512,7 +518,8 @@ Guidelines:
 - Write from the user's perspective: "Fixed X", "Added Y", "Improved Z"
 - One sentence, no period at the end
 - Use a unique kebab-case filename so parallel PRs do not conflict
-- Skip internal-only changes (refactors, CI config, code cleanup)
+- Tests, generated Swift, e2e harness files, and listed release-infra paths are already exempt
+- Internal-only **production** edits (dead-code deletion, refactors in `Sources/`) need an in-repo marker, not the `no-changelog-needed` PR label — that label is invisible after merge and reddens main. Add `{"kind": "none"}` under `desktop/macos/changelog/unreleased/` instead
 - HTML is allowed for links: `<a href='...'>text</a>`
 - Do not edit `CHANGELOG.json` by hand; release automation regenerates it
 - Commit the fragment with your other changes (same commit is fine)

@@ -9850,4 +9850,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get findDevice => 'پیدا کردن';
+
+  @override
+  String get diagnosticsShareFailed => 'اشتراک‌گذاری اطلاعات تشخیصی ممکن نشد. لطفاً دوباره تلاش کنید.';
 }

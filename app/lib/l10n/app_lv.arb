@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "Otwórz sklep",
     "sendRawAudioToOmi": "Sūtīt neapstrādātu audio uz Omi",
     "sendRawAudioToOmiDescription": "Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.",
-    "findDevice": "Atrast"
+    "findDevice": "Atrast",
+    "diagnosticsShareFailed": "Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz."
 }
