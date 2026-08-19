@@ -7,7 +7,7 @@ enum SystemCalendarAuthorizationState: Sendable {
   case unavailable
 }
 
-struct SystemCalendarParticipant: Equatable, Sendable {
+struct DesktopMeetingParticipant: Equatable, Sendable {
   let name: String?
   let email: String?
 }
@@ -19,39 +19,64 @@ struct SystemCalendarEventSnapshot: Equatable, Sendable {
   let endTime: Date
   let isAllDay: Bool
   let isCanceled: Bool
-  let participants: [SystemCalendarParticipant]
+  let participants: [DesktopMeetingParticipant]
   let urlCandidates: [String]
 }
 
-struct SystemCalendarMeetingPayload: Equatable, Sendable {
+enum DesktopMeetingSource: Equatable, Sendable {
+  case systemCalendar
+  case derived(calendarSource: String, egress: DerivedDataEgressRequest)
+
+  var calendarSource: String {
+    switch self {
+    case .systemCalendar: return "system_calendar"
+    case .derived(let calendarSource, _): return calendarSource
+    }
+  }
+
+  var egressRequest: DerivedDataEgressRequest? {
+    guard case .derived(_, let request) = self else { return nil }
+    return request
+  }
+}
+
+struct DesktopMeetingPayload: Equatable, Sendable {
   let calendarEventID: String
+  let source: DesktopMeetingSource
   let title: String
   let startTime: Date
   let endTime: Date
-  let participants: [SystemCalendarParticipant]
+  let participants: [DesktopMeetingParticipant]
   let platform: String?
   let meetingLink: String?
 
-  var wireBody: [String: Any] {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+  var calendarSource: String { source.calendarSource }
 
-    var body: [String: Any] = [
-      "calendar_event_id": calendarEventID,
-      "calendar_source": "system_calendar",
-      "title": title,
-      "start_time": formatter.string(from: startTime),
-      "end_time": formatter.string(from: endTime),
-      "participants": participants.map { participant in
-        var value: [String: Any] = [:]
-        if let name = participant.name { value["name"] = name }
-        if let email = participant.email { value["email"] = email }
-        return value
-      },
-    ]
-    if let platform { body["platform"] = platform }
-    if let meetingLink { body["meeting_link"] = meetingLink }
-    return body
+  var wireBody: [String: Any] {
+    get throws {
+      if let request = source.egressRequest {
+        try DerivedDataEgressPolicy.authorize(request)
+      }
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+      var body: [String: Any] = [
+        "calendar_event_id": calendarEventID,
+        "calendar_source": calendarSource,
+        "title": title,
+        "start_time": formatter.string(from: startTime),
+        "end_time": formatter.string(from: endTime),
+        "participants": participants.map { participant in
+          var value: [String: Any] = [:]
+          if let name = participant.name { value["name"] = name }
+          if let email = participant.email { value["email"] = email }
+          return value
+        },
+      ]
+      if let platform { body["platform"] = platform }
+      if let meetingLink { body["meeting_link"] = meetingLink }
+      return body
+    }
   }
 }
 
@@ -61,8 +86,8 @@ protocol SystemCalendarEventProviding: Sendable {
   func events(in interval: DateInterval) async -> [SystemCalendarEventSnapshot]
 }
 
-protocol SystemCalendarMeetingUploading: Sendable {
-  func upload(_ payload: SystemCalendarMeetingPayload) async throws
+protocol DesktopMeetingUploading: Sendable {
+  func upload(_ payload: DesktopMeetingPayload) async throws
 }
 
 actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
@@ -116,7 +141,7 @@ actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
 
   private static func snapshot(_ event: EKEvent) -> SystemCalendarEventSnapshot {
     var seenParticipants = Set<String>()
-    var participants: [SystemCalendarParticipant] = []
+    var participants: [DesktopMeetingParticipant] = []
     let invitees = ([event.organizer].compactMap { $0 } + (event.attendees ?? []))
       .filter { $0.participantStatus != .declined }
 
@@ -133,7 +158,7 @@ actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
         : nil
       guard let identity = email ?? name?.lowercased(), !identity.isEmpty else { continue }
       guard seenParticipants.insert(identity).inserted else { continue }
-      participants.append(SystemCalendarParticipant(name: name, email: email))
+      participants.append(DesktopMeetingParticipant(name: name, email: email))
       if participants.count == 50 { break }
     }
 
@@ -152,8 +177,8 @@ actor EventKitSystemCalendarProvider: SystemCalendarEventProviding {
   }
 }
 
-struct BackendSystemCalendarMeetingUploader: SystemCalendarMeetingUploading {
-  func upload(_ payload: SystemCalendarMeetingPayload) async throws {
+struct BackendDesktopMeetingUploader: DesktopMeetingUploading {
+  func upload(_ payload: DesktopMeetingPayload) async throws {
     let apiClient = APIClient.shared
     let headers = try await apiClient.buildHeaders(requireAuth: true, includeBYOK: false)
     let baseURL = await apiClient.baseURL
@@ -162,7 +187,7 @@ struct BackendSystemCalendarMeetingUploader: SystemCalendarMeetingUploading {
       client: generatedClient,
       xAppPlatform: "macos",
       xAppVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-      body: OmiAnyCodable(payload.wireBody)
+      body: OmiAnyCodable(try payload.wireBody)
     )
   }
 }
@@ -174,13 +199,13 @@ actor SystemCalendarMeetingContextService {
   static let maximumEventsPerSync = 20
 
   private let provider: any SystemCalendarEventProviding
-  private let uploader: any SystemCalendarMeetingUploading
+  private let uploader: any DesktopMeetingUploading
   private var requestedAccessThisLaunch = false
   private var uploadedEventIDs = Set<String>()
 
   init(
     provider: any SystemCalendarEventProviding = EventKitSystemCalendarProvider(),
-    uploader: any SystemCalendarMeetingUploading = BackendSystemCalendarMeetingUploader()
+    uploader: any DesktopMeetingUploading = BackendDesktopMeetingUploader()
   ) {
     self.provider = provider
     self.uploader = uploader
@@ -239,7 +264,7 @@ actor SystemCalendarMeetingContextService {
     from snapshots: [SystemCalendarEventSnapshot],
     within interval: DateInterval,
     maximumCount: Int = maximumEventsPerSync
-  ) -> [SystemCalendarMeetingPayload] {
+  ) -> [DesktopMeetingPayload] {
     guard maximumCount > 0 else { return [] }
     var seenIDs = Set<String>()
     return
@@ -257,11 +282,12 @@ actor SystemCalendarMeetingContextService {
         if $0.startTime == $1.startTime { return $0.calendarEventID < $1.calendarEventID }
         return $0.startTime < $1.startTime
       }
-      .compactMap { snapshot -> SystemCalendarMeetingPayload? in
+      .compactMap { snapshot -> DesktopMeetingPayload? in
         guard seenIDs.insert(snapshot.calendarEventID).inserted else { return nil }
         let conference = conferencingIdentity(in: snapshot.urlCandidates)
-        return SystemCalendarMeetingPayload(
+        return DesktopMeetingPayload(
           calendarEventID: snapshot.calendarEventID,
+          source: .systemCalendar,
           title: snapshot.title.trimmingCharacters(in: .whitespacesAndNewlines),
           startTime: snapshot.startTime,
           endTime: snapshot.endTime,

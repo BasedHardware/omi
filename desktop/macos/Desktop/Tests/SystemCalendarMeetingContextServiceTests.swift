@@ -38,14 +38,14 @@ private actor SystemCalendarProviderStub: SystemCalendarEventProviding {
   }
 }
 
-private actor SystemCalendarUploaderStub: SystemCalendarMeetingUploading {
-  private var payloads: [SystemCalendarMeetingPayload] = []
+private actor SystemCalendarUploaderStub: DesktopMeetingUploading {
+  private var payloads: [DesktopMeetingPayload] = []
 
-  func upload(_ payload: SystemCalendarMeetingPayload) {
+  func upload(_ payload: DesktopMeetingPayload) {
     payloads.append(payload)
   }
 
-  func uploadedPayloads() -> [SystemCalendarMeetingPayload] { payloads }
+  func uploadedPayloads() -> [DesktopMeetingPayload] { payloads }
 }
 
 final class SystemCalendarMeetingContextServiceTests: XCTestCase {
@@ -60,7 +60,7 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
       title: " Product review ",
       start: referenceDate.addingTimeInterval(-300),
       end: referenceDate.addingTimeInterval(900),
-      participants: [SystemCalendarParticipant(name: "Alex Kim", email: "alex@example.com")],
+      participants: [DesktopMeetingParticipant(name: "Alex Kim", email: "alex@example.com")],
       candidates: [
         "Room 4",
         "Agenda text that stays local https://meet.google.com/abc-defg-hij more text",
@@ -97,11 +97,11 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
     XCTAssertEqual(payloads.count, 1)
     XCTAssertEqual(payload.calendarEventID, "event-1")
     XCTAssertEqual(payload.title, "Product review")
-    XCTAssertEqual(payload.participants, [SystemCalendarParticipant(name: "Alex Kim", email: "alex@example.com")])
+    XCTAssertEqual(payload.participants, [DesktopMeetingParticipant(name: "Alex Kim", email: "alex@example.com")])
     XCTAssertEqual(payload.platform, "Google Meet")
     XCTAssertEqual(payload.meetingLink, "https://meet.google.com/abc-defg-hij")
 
-    let body = payload.wireBody
+    let body = try payload.wireBody
     XCTAssertEqual(body["calendar_source"] as? String, "system_calendar")
     XCTAssertNotNil(body["start_time"] as? String)
     XCTAssertNotNil(body["end_time"] as? String)
@@ -170,7 +170,7 @@ final class SystemCalendarMeetingContextServiceTests: XCTestCase {
     end: Date,
     isAllDay: Bool = false,
     isCanceled: Bool = false,
-    participants: [SystemCalendarParticipant] = [],
+    participants: [DesktopMeetingParticipant] = [],
     candidates: [String] = []
   ) -> SystemCalendarEventSnapshot {
     SystemCalendarEventSnapshot(

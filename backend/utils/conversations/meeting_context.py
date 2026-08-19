@@ -376,8 +376,9 @@ def select_overlapping_meeting(
     Mirrors the Google-Calendar auto-link thresholds: an overlap must be at least
     MIN_OVERLAP_SECONDS long *and* cover MIN_OVERLAP_PERCENTAGE of either the
     meeting or the conversation, so a short recording cannot latch onto an
-    all-day block. Ties break on the longest overlap. Returns None when nothing
-    qualifies — the caller degrades to the next source.
+    all-day block. Calendar-backed records outrank screen-derived records, then
+    ties break on longest overlap. Returns None when nothing qualifies — the
+    caller degrades to the next source.
     """
     conversation_start = _as_utc(started_at)
     conversation_end = _as_utc(finished_at)
@@ -386,7 +387,7 @@ def select_overlapping_meeting(
     conversation_duration = (conversation_end - conversation_start).total_seconds()
 
     best_record: Optional[dict[str, Any]] = None
-    best_overlap = 0.0
+    best_score: tuple[int, float] = (-1, 0.0)
     for record in records:
         window = stored_meeting_window(record)
         if window is None:
@@ -400,8 +401,13 @@ def select_overlapping_meeting(
         covers_conversation = conversation_duration > 0 and overlap / conversation_duration >= MIN_OVERLAP_PERCENTAGE
         if not (covers_meeting or covers_conversation):
             continue
-        if overlap > best_overlap:
-            best_overlap = overlap
+        # A calendar-backed event is authoritative for identity even when a
+        # screen-derived row overlaps a little longer. On-device identity is the
+        # fallback stored in the same collection, not a peer calendar source.
+        source_priority = 0 if record.get('calendar_source') == 'screen_activity' else 1
+        score = (source_priority, overlap)
+        if score > best_score:
+            best_score = score
             best_record = record
 
     if best_record is None:
@@ -440,6 +446,14 @@ def resolve_meeting_context(
                 on_error(name, exc)
             return None
 
-    context = merge_meeting_contexts(_call('stored', stored), direct)
+    stored_context = _call('stored', stored)
+    stored_screen = stored_context if stored_context and stored_context.calendar_source == 'screen_activity' else None
+    stored_calendar = None if stored_screen else stored_context
+    direct_screen = direct if direct and direct.calendar_source == 'screen_activity' else None
+    direct_calendar = None if direct_screen else direct
+
+    context = merge_meeting_contexts(stored_calendar, direct_calendar)
     context = merge_meeting_contexts(context, _call('calendar', calendar))
+    context = merge_meeting_contexts(context, stored_screen)
+    context = merge_meeting_contexts(context, direct_screen)
     return merge_meeting_contexts(context, _call('screen', screen))

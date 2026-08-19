@@ -123,6 +123,23 @@ class TestSelectOverlappingMeeting:
             == 'long'
         )
 
+    def test_calendar_event_outranks_longer_screen_derived_overlap(self):
+        screen = _record('screen', CONVERSATION_START, CONVERSATION_END)
+        screen['calendar_source'] = 'screen_activity'
+        calendar = _record(
+            'calendar',
+            CONVERSATION_START + timedelta(minutes=2),
+            CONVERSATION_END - timedelta(minutes=2),
+        )
+        calendar['calendar_source'] = 'system_calendar'
+
+        selected = select_overlapping_meeting(
+            [screen, calendar], started_at=CONVERSATION_START, finished_at=CONVERSATION_END
+        )
+        assert selected is not None
+        assert selected.calendar_event_id == 'calendar'
+        assert selected.calendar_source == 'system_calendar'
+
     def test_an_all_day_block_matches_only_via_the_conversation_coverage_arm(self):
         # An 8h block covers far less than MIN_OVERLAP_PERCENTAGE of itself, so it fails
         # the meeting-coverage arm. A conversation wholly inside it still scores 100%
@@ -227,6 +244,32 @@ class TestResolveMeetingContextOrdering:
         )
         assert context.calendar_event_id == 'google'
         assert [p.name for p in context.participants] == ['Google Person', 'OCR Person']
+
+    def test_on_device_stored_identity_is_below_calendar_and_above_server_ocr(self):
+        context = resolve_meeting_context(
+            direct=None,
+            stored=lambda: _context('device', names=['Device Person'], source='screen_activity'),
+            calendar=lambda: _context('google', names=['Calendar Person'], source='google'),
+            screen=lambda: _context('server-ocr', names=['Server OCR Person'], source='screen_activity'),
+        )
+
+        assert context.calendar_event_id == 'google'
+        assert [p.name for p in context.participants] == [
+            'Calendar Person',
+            'Device Person',
+            'Server OCR Person',
+        ]
+
+    def test_on_device_stored_identity_outranks_server_ocr_without_calendar(self):
+        context = resolve_meeting_context(
+            direct=None,
+            stored=lambda: _context('device', names=['Device Person'], source='screen_activity'),
+            calendar=lambda: None,
+            screen=lambda: _context('server-ocr', names=['Server OCR Person'], source='screen_activity'),
+        )
+
+        assert context.calendar_event_id == 'device'
+        assert [p.name for p in context.participants] == ['Device Person', 'Server OCR Person']
 
     def test_ocr_is_used_only_as_a_last_resort(self):
         context = resolve_meeting_context(

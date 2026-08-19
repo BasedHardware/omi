@@ -1636,10 +1636,11 @@ def _enrich_meeting_context(uid: str, conversation: Any) -> None:
     Sources, best first — each merges only the participants the better sources did
     not already supply, and any failure degrades to the next source rather than
     failing the conversation:
-      1. stored system-calendar meeting (exact Redis mapping, else time overlap)
+      1. stored calendar-backed meeting (exact Redis mapping, else time overlap)
       2. `calendar_meeting_context` sent directly on the create request
       3. Google Calendar event overlapping the conversation window (read-only)
-      4. conferencing-window OCR from screen activity
+      4. stored on-device screen-derived meeting identity
+      5. conferencing-window OCR already synced to the server (legacy fallback)
     """
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)

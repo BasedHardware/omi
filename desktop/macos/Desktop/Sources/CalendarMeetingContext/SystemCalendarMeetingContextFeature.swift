@@ -13,3 +13,16 @@ enum SystemCalendarMeetingContextFeature {
     return PostHogManager.shared.isFeatureEnabled(flagName)
   }
 }
+
+enum OnDeviceMeetingIdentityFeature {
+  static let flagName = "on_device_meeting_identity"
+  private static let localOverrideName = "OMI_FORCE_ON_DEVICE_MEETING_IDENTITY"
+
+  /// Independent dark launch: screen-derived identity does not require Calendar permission.
+  @MainActor static var isEnabled: Bool {
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localOverrideName] == "1"
+    }
+    return PostHogManager.shared.isFeatureEnabled(flagName)
+  }
+}

@@ -107,7 +107,7 @@ actor ConversationFinalizationService {
     )
 
     do {
-      await storeSystemCalendarContextIfEnabled(for: session)
+      await storeMeetingContextIfEnabled(for: session)
       guard try await TranscriptionStorage.shared.markSessionUploading(id: sessionId) else {
         return
       }
@@ -131,18 +131,36 @@ actor ConversationFinalizationService {
     }
   }
 
-  private func storeSystemCalendarContextIfEnabled(for session: TranscriptionSessionRecord) async {
+  private func storeMeetingContextIfEnabled(for session: TranscriptionSessionRecord) async {
     guard session.conversationRole == .meeting else { return }
-    let enabled = await MainActor.run { SystemCalendarMeetingContextFeature.isEnabled }
-    guard enabled else { return }
+    let enabled = await MainActor.run {
+      (
+        systemCalendar: SystemCalendarMeetingContextFeature.isEnabled,
+        onDeviceIdentity: OnDeviceMeetingIdentityFeature.isEnabled
+      )
+    }
+    guard enabled.systemCalendar || enabled.onDeviceIdentity else { return }
     let end = max(session.finishedAt ?? Date(), session.startedAt.addingTimeInterval(1))
     let interval = DateInterval(start: session.startedAt, end: end)
 
     // This precedes conversation creation/force-processing so the backend overlap resolver can
-    // see the row. The short ceiling preserves fail-open finalization on a slow calendar/backend.
+    // see the row. Both sources share one short ceiling, preserving fail-open finalization on
+    // slow local storage, Calendar, or backend I/O.
     await withTaskGroup(of: Void.self) { group in
       group.addTask {
-        await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
+        await withTaskGroup(of: Void.self) { syncGroup in
+          if enabled.systemCalendar {
+            syncGroup.addTask {
+              await SystemCalendarMeetingContextService.shared.syncAuthorizedEvents(overlapping: interval)
+            }
+          }
+          if enabled.onDeviceIdentity {
+            syncGroup.addTask {
+              await OnDeviceMeetingIdentityService.shared.syncIdentity(overlapping: interval)
+            }
+          }
+          await syncGroup.waitForAll()
+        }
       }
       group.addTask {
         try? await Task.sleep(for: .seconds(2))

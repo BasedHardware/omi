@@ -28,7 +28,10 @@ def _meeting_context() -> CalendarMeetingContext:
     return CalendarMeetingContext(
         calendar_event_id='screen-activity',
         title='Fulcrum Dynamics',
-        participants=[MeetingParticipant(name='David'), MeetingParticipant(name='Ash')],
+        participants=[
+            MeetingParticipant(name='David'),
+            MeetingParticipant(name='Ash Kalb', email='ash@fulcradynamics.com'),
+        ],
         platform='Zoom',
         start_time=datetime(2026, 8, 18, 14, 0, tzinfo=timezone.utc),
         duration_minutes=30,
@@ -109,6 +112,11 @@ def test_merged_note_call_projects_sections_and_preserves_action_detail(monkeypa
     assert result.action_items[0].due_certainty == 'tentative'
     assert captured['kwargs']['cache_key'] == 'omi-conv-conv-123'
     assert captured['messages'][1]['content'][0]['prompt_cache_breakpoint'] == {'mode': 'explicit'}
+    instructions = captured['messages'][-1].content
+    assert 'Never normalize or "correct" an uncertain name from general knowledge' in instructions
+    assert 'participant email domain corroborates' in instructions
+    assert 'fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra"' in instructions
+    assert 'Ash Kalb <ash@fulcradynamics.com>' in prefix.context
 
 
 def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
@@ -134,7 +142,7 @@ def test_note_and_memory_use_byte_identical_shared_prefix(monkeypatch):
     )
     assert rebuilt_for_memory.messages(cache_enabled=True) == expected
     assert 'Speaker 1:' not in prefix.context
-    assert 'Ash:' in prefix.context
+    assert 'Ash Kalb:' in prefix.context
 
     class MemoryModel:
         def __init__(self):

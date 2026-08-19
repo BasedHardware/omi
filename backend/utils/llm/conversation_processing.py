@@ -1150,7 +1150,11 @@ NOTE BODY — WRITE FOR SKIMMING, NOT FOR READING
 - Every bullet must carry at least one concrete specific: a name, number, product, org, tool,
   date, or technical term. A bullet with no specific is filler; delete it and reclaim the words.
 - Preserve proper nouns, numbers, product names, organization names, dates, and unusual spellings VERBATIM.
-- Never normalize or "correct" an uncertain name. Prefer the exact transcript spelling; a short verbatim quote is allowed.
+- Never normalize or "correct" an uncertain name from general knowledge. Prefer the exact transcript spelling by default;
+  a short verbatim quote is allowed.
+- Narrow exception: when participant metadata corroborates a spelling, prefer that spelling over a conflicting transcript
+  spelling. A participant name corroborates that person's name; a recognizable participant email domain corroborates
+  its organization name (for example, fulcradynamics.com corroborates "Fulcra Dynamics" over ASR "Vulcra").
 - Every section should cite the smallest sufficient exact [segment:ID] values in source_segment_ids.
 
 OVERVIEW
