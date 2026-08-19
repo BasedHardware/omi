@@ -9,8 +9,8 @@ import XCTest
 /// doc" must be answered from the durable handle index, without a Rewind frame decode and
 /// without Screen Recording. Tape stays reachable, but only when the caller asks for it.
 final class WorkContextCheapPathTests: XCTestCase {
-  private var testUserId: String!
-  private var userDir: URL!
+  private var testUserId = ""
+  private var userDir: URL?
 
   override func setUp() async throws {
     try await super.setUp()
@@ -20,8 +20,8 @@ final class WorkContextCheapPathTests: XCTestCase {
     await RewindDatabase.shared.configure(userId: testUserId)
     try await RewindDatabase.shared.initialize()
 
-    let appSupport = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let appSupport = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
     userDir =
       appSupport
       .appendingPathComponent("Omi", isDirectory: true)
