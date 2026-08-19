@@ -59,7 +59,7 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
     search_conversations,
 )
-from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -1456,7 +1456,18 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
-    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
+    try:
+        summary = generate_summary_with_prompt(
+            full_transcript, request.prompt, language_code=conversation.language or 'en'
+        )
+    except SummaryProviderError as exc:
+        # The provider failed on its own account, so this is an upstream failure and not a fault
+        # of the request: report it as one instead of as a 500 the client cannot act on.
+        logger.warning("test-prompt summary failed upstream: conversation_id=%s", conversation_id)
+        raise HTTPException(
+            status_code=504 if exc.timed_out else 502,
+            detail='summary_provider_timeout' if exc.timed_out else 'summary_provider_unavailable',
+        ) from exc
 
     return {"summary": summary}
 
