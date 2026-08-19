@@ -156,20 +156,28 @@ export function Tasks(): React.JSX.Element {
     }
   }, [])
 
-  // Cold load: local rows (instant) + the conversation title map. Both loaders do
-  // their setState after an await, so nest them in a callback rather than invoking
-  // them straight from the effect body (their state updates are deferred, not sync).
-  //
-  // The title map waits until this panel is actually on screen. MainViews mounts every
-  // panel 1.8s after launch and never unmounts them, so an unconditional call here
-  // fetched 200 conversations at every launch to label source links on a page the user
-  // may never open. `readTasks` stays unconditional — it is a local SQLite read.
+  // Cold load of the local rows. Both loaders do their setState after an await, so
+  // nest them in a callback rather than invoking them straight from the effect body
+  // (their state updates are deferred, not sync). Kept in its own effect, keyed only
+  // on `readTasks`, so it stays a once-per-mount read: folding the route into these
+  // deps would re-run it on every navigation in and out of the tab.
   useEffect(() => {
     void (async () => {
       await readTasks()
-      if (tasksPanelIsActive) await readConvs()
     })()
-  }, [readTasks, readConvs, tasksPanelIsActive])
+  }, [readTasks])
+
+  // The conversation title map waits until this panel is actually on screen. MainViews
+  // mounts every panel 1.8s after launch and never unmounts them, so an unconditional
+  // call fetched 200 conversations at every launch to label source links on a page the
+  // user may never open. `readConvs` short-circuits on the populated cache, so
+  // revisiting the tab costs nothing.
+  useEffect(() => {
+    if (!tasksPanelIsActive) return
+    void (async () => {
+      await readConvs()
+    })()
+  }, [readConvs, tasksPanelIsActive])
 
   // Local-first freshness: main fires `onTasksChanged` on every optimistic write
   // and whenever a background sync lands, so a single subscription replaces the old
