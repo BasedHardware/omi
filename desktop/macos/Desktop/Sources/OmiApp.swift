@@ -526,6 +526,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     scheduleAppLifecycleMaintenance()
 
+    // Offer an integration when the user opens an app Omi can connect to.
+    //
+    // Deliberately outside the signed-in branch below: at launch, auth is often
+    // still being restored, so that branch is skipped for exactly the users who
+    // are signed in — the observer would then never be installed for the life of
+    // the process. The policy checks sign-in at decision time instead, and the
+    // coordinator re-scopes its history on `runtimeOwnerDidChange`.
+    IntegrationNudgeCoordinator.shared.start()
+
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
       AnalyticsManager.shared.identify()

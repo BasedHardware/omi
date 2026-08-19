@@ -2406,6 +2406,31 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "integration_nudge_evaluate",
+      summary:
+        "Read-only: which integration a given frontmost app/window maps to, and whether a nudge would fire",
+      params: ["bundle_id", "window_title"],
+      category: "read",
+      safety: "read_only"
+    ) { params in
+      await IntegrationNudgeAutomation.evaluate(
+        bundleID: params["bundle_id"],
+        windowTitle: params["window_title"]
+      )
+    }
+
+    register(
+      name: "integration_nudge_present",
+      summary: "Present the integration-connect card for one catalog entry (QA of the real card path)",
+      params: ["telemetry_id"],
+      category: "write",
+      surfaces: ["floating_bar"],
+      safety: "presents_ui"
+    ) { params in
+      await MainActor.run { IntegrationNudgeAutomation.present(telemetryID: params["telemetry_id"] ?? "") }
+    }
+
+    register(
       name: "cloud_connector_guidance_probe",
       summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
     ) { _ in
