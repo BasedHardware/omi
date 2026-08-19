@@ -514,7 +514,6 @@ final class AppStatePermissionProbeTests: XCTestCase {
     XCTAssertEqual(AppState.axProbeResult(targets: targets), .indeterminate)
   }
 
-
   func testFirstUnaskedScanAwaitsItsCurrentOffMainProbeBeforeSkipping() async {
     let appState = AppState()
     let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)

@@ -779,7 +779,8 @@ final class ScreenCaptureService: Sendable {
     // Same-process accessibility reads re-enter our own view graph on the caller's thread, and
     // this runs on the capture tick — see `AccessibilityProcessBoundary`. The window-list
     // heuristic below still resolves our own window.
-    let skipAX = !AccessibilityProcessBoundary.isForeignProcess(activePID)
+    let skipAX =
+      !AccessibilityProcessBoundary.isForeignProcess(activePID)
       || axStateLock.withLock {
         axSystemwideDisabled
           || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
