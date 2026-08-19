@@ -3174,23 +3174,6 @@
       "timeFrom": "30d",
       "title": "Free \u2192 paid conversion (mobile)  \u00b7  ${d_conv}",
       "type": "timeseries"
-    },
-    {
-      "id": 50,
-      "type": "text",
-      "title": "Notifications enabled",
-      "gridPos": {
-        "x": 8,
-        "y": 66,
-        "w": 8,
-        "h": 8
-      },
-      "transparent": true,
-      "options": {
-        "mode": "markdown",
-        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
-      },
-      "targets": []
     }
   ],
   "refresh": "5m",

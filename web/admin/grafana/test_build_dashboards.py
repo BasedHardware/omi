@@ -228,6 +228,23 @@ class ApplyScopeTests(unittest.TestCase):
             apply_mod.load_dashboard(Path(handle.name))
 
 
+class AccountLevelLeakTests(unittest.TestCase):
+    def test_account_level_metrics_stay_off_platform_boards(self) -> None:
+        """Account-level metrics (all-Firestore-user populations, per-account
+        pushes) have no platform dimension; showing them on a platform board
+        silently mislabels cross-platform data. Regression: the desktop
+        notifications_enabled gauge leaked onto the macOS board."""
+        account_level = build_dashboards.ACCOUNT_LEVEL_TITLES
+        self.assertIn("Notifications enabled", account_level)
+        for uid in ["omi-tv-macos", "omi-tv-mobile"]:
+            titles = {build_dashboards.base_title(p) for p in load(uid)["panels"]}
+            leaked = titles & account_level
+            self.assertFalse(leaked, f"{uid} leaks account-level panels: {leaked}")
+        all_titles = {build_dashboards.base_title(p) for p in load("omi-tv")["panels"]}
+        self.assertTrue(account_level <= all_titles,
+                        "All board must keep the account-level panels")
+
+
 class BuilderIdempotencyTests(unittest.TestCase):
     def test_rebuild_is_idempotent(self) -> None:
         base = load("omi-tv")
