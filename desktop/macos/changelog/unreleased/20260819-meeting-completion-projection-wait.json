@@ -1,0 +1,3 @@
+{
+  "change": "Fixed meeting completion notifications arriving before the conversation finished processing"
+}
