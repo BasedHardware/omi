@@ -187,4 +187,34 @@ final class RewindCaptureExclusionGenerationTests: XCTestCase {
     XCTAssertTrue(resumed.isCurrent())
     await OCREmbeddingService.shared.reset()
   }
+
+  /// #11572: launch / CI window where `auth_userId` is set but RewindDatabase
+  /// has not resolved `currentUserId` yet. Capture preferred auth; isCurrent
+  /// used to compare only the DB id and permanently fail-closed.
+  func testOwnerSnapshotStaysCurrentWhenAuthLeadsUnresolvedRewindDatabase() {
+    let defaults = UserDefaults.standard
+    let previousAuth = defaults.object(forKey: .authUserId)
+    let previousDB = RewindDatabase.currentUserId
+    defer {
+      if let previousAuth {
+        defaults.set(previousAuth, forKey: .authUserId)
+      } else {
+        defaults.removeObject(forKey: .authUserId)
+      }
+      RewindDatabase.currentUserId = previousDB
+    }
+
+    let authOwner = "auth-leading-\(UUID().uuidString)"
+    defaults.set(authOwner, forKey: .authUserId)
+    RewindDatabase.currentUserId = nil
+
+    guard let snapshot = RewindCaptureOwnerSnapshot.capture() else {
+      XCTFail("expected capture with auth_userId set")
+      return
+    }
+    XCTAssertEqual(snapshot.ownerID, authOwner)
+    XCTAssertTrue(
+      snapshot.isCurrent(),
+      "auth-backed snapshot must stay current while RewindDatabase.currentUserId is still nil")
+  }
 }

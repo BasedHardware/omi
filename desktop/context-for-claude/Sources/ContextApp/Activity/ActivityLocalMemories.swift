@@ -115,7 +115,9 @@ struct ActivityLocalMemoriesAbsent: ActivityLocalMemoryReading {
 ///
 /// `ActivityAccountDiagnosing` is forwarded rather than reimplemented: *why* the account did not
 /// answer is still the network reader's to say, and this changes only what is drawn.
-struct ActivityLocalMemories: ActivityAccountReading, ActivityAccountDiagnosing {
+struct ActivityLocalMemories: ActivityAccountReading, ActivityAccountDiagnosing,
+    ActivityAccountCursor
+{
     private let upstream: ActivityAccountReading
     private let local: ActivityLocalMemoryReading
 
@@ -214,5 +216,19 @@ struct ActivityLocalMemories: ActivityAccountReading, ActivityAccountDiagnosing 
 
     func unreachableReason() async -> ActivityAccountUnreachableReason? {
         await (upstream as? ActivityAccountDiagnosing)?.unreachableReason()
+    }
+
+    /// Forwarded for the reason `unreachableReason` is: the cursor being rewound belongs to the
+    /// network reader, and this decorator has none of its own. The local half needs no rewinding —
+    /// `recent(limit:)` reads the newest rows out of SQLite on every call and has never been paged.
+    func refreshHead() async {
+        await (upstream as? ActivityAccountCursor)?.refreshHead()
+    }
+
+    /// Forwarded for the same reason. Nothing of the previous account is held here — the local rows
+    /// are re-read from SQLite on every call and belong to whoever is signed into the Omi app — so
+    /// there is nothing of this decorator's own to forget.
+    func forget() async {
+        await (upstream as? ActivityAccountCursor)?.forget()
     }
 }

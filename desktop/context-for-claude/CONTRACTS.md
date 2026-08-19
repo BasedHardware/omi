@@ -337,7 +337,9 @@ public enum ContextLog {
     static func error(_ message: String, _ category: String = "app")
 }
 ```
-`os.Logger` with subsystem `com.omi.context-for-claude`, plus a mirror to `/tmp/context-for-claude.log` when
+`os.Logger` with subsystem `ContextPaths.bundleIdentifier` — `com.omi.context-for-claude` for a
+release build, `com.omi.context-for-claude.dev` for a developer one, so the two do not interleave
+under one predicate — plus a mirror to `/tmp/context-for-claude.log` when
 `CONTEXT_DEBUG=1` — that file is how the build/verify loop sees what happened.
 
 ### `Sources/ContextApp/Capture/AudioSource.swift` — owner: **mic agent**
@@ -606,9 +608,25 @@ lists, no settings page. That is the entire non-onboarding UI.
 
 ### `scripts/build.sh` — owner: **build agent**
 
-`swift build -c release` both products, assemble `Context for Claude.app`, copy `context-for-claude-mcp` into
+`swift build -c release` both products, assemble the app bundle, copy `context-for-claude-mcp` into
 `Contents/MacOS/`, copy `Resources/Fonts`, generate `Info.plist` (`LSUIElement`, usage strings,
-`CFBundleIdentifier = com.omi.context-for-claude`), sign with `Omi Local Dev Signing` and the entitlements —
-**never ad-hoc, which resets Screen Recording for every Omi app on this machine** — then install to
-`/Applications/Context for Claude.app`. Idempotent, and it must not touch `/Applications/Omi.app` or
-`Omi Beta.app`.
+`CFBundleIdentifier`), sign with the resolved identity and the entitlements — **never ad-hoc, which
+resets Screen Recording for every Omi app on this machine** — then install to `/Applications`.
+Idempotent, and it must not touch `/Applications/Omi.app` or `Omi Beta.app`.
+
+**Which identifiers the build claims follows from which certificate signs it**, and
+`scripts/build-identity.sh` is the single owner of that mapping (`scripts/test-build-identity.sh`
+drives it; the `context-for-claude-build-identity` manifest check runs it in CI). A Developer ID
+Application certificate produces the release identity — `com.omi.context-for-claude`,
+`Context for Claude.app`, MCP server `context-for-claude`. Anything else produces the developer
+identity — `com.omi.context-for-claude.dev`, `Context for Claude Dev.app`, MCP server
+`context-for-claude-dev` — written into the *built* `Info.plist` only, alongside
+`CFBundleExecutable`, `CFBundleName` and `CFBundleDisplayName`, which must move with it. The
+template keeps the production identifier.
+
+This is not cosmetic. macOS pins the signing certificate inside every TCC grant, so a developer
+build answering to the release identifier writes permission records the notarized build can never
+satisfy — the System Settings switch reads on while the app is denied, repairable only by
+`tccutil reset`. Release-time defence in depth lives in `package-dmg.sh`, whose
+`assert_release_signing_authority()` reads the authority chain off the signed bundle, because every
+other gate in the pipeline only tests the certificate's *name*.

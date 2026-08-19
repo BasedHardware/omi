@@ -4206,8 +4206,9 @@ class FloatingControlBarManager {
     // Notifications become chat-visible only after canonical journal
     // admission. The notification card itself remains an independent
     // presentation surface while this async write is pending.
-    let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-    let messageText = bodyText.isEmpty ? notification.title : bodyText
+    let messageText = Self.notificationJournalText(
+      title: notification.title,
+      body: notification.message)
     let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
       id: notification.id,
       kind: notification.kind)
@@ -4246,6 +4247,14 @@ class FloatingControlBarManager {
       )
       self.mostRecentNotificationKey = key
     }
+  }
+
+  nonisolated static func notificationJournalText(title: String, body: String) -> String {
+    let headline = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let detail = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    if headline.isEmpty { return detail }
+    if detail.isEmpty || detail == headline { return headline }
+    return "\(headline)\n\(detail)"
   }
 
   func mainChatSurfaceReference() -> AgentSurfaceReference {

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
+import { parsePlatformScope, scopeFilterAnd } from "@/lib/platform-scope";
 
 export const dynamic = "force-dynamic";
 
 // Module-level cache (30 min TTL)
-let cache: { data: { date: string; dau: number }[]; days: number; timestamp: number } | null = null;
+let cache: { data: { date: string; dau: number }[]; days: number; platform: string; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
@@ -26,20 +27,23 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const days = Math.min(parseInt(searchParams.get("days") || "60", 10), 90);
+    const platform = parsePlatformScope(searchParams.get("platform") ?? "macos");
 
-    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
+    if (cache && cache.days === days && cache.platform === platform && Date.now() - cache.timestamp < CACHE_TTL) {
       return NextResponse.json({ data: cache.data, days });
     }
 
-    // Daily unique macOS users = distinct clients emitting ANY event (rename-proof;
-    // the old `App Became Active` lifecycle event was removed from the desktop app).
+    // Daily unique users = distinct clients emitting ANY event (rename-proof;
+    // the old `App Became Active` lifecycle event was removed from the desktop
+    // app). `platform` scopes to macos / mobile / all (default macos keeps the
+    // legacy meaning for existing callers).
     const hogql = `
       SELECT
         toDate(timestamp) as day,
         count(DISTINCT distinct_id) as users
       FROM events
-      WHERE properties.$os_name = 'macOS'
-        AND timestamp >= now() - interval ${days} day
+      WHERE timestamp >= now() - interval ${days} day
+        ${scopeFilterAnd(platform)}
       GROUP BY day
       ORDER BY day
     `;
@@ -74,7 +78,7 @@ export async function GET(request: NextRequest) {
       current.setDate(current.getDate() + 1);
     }
 
-    cache = { data, days, timestamp: Date.now() };
+    cache = { data, days, platform, timestamp: Date.now() };
     return NextResponse.json({ data, days });
   } catch (error: any) {
     console.error("DAU trends error:", error);

@@ -48,6 +48,10 @@ def main() -> int:
     rendered_outputs.append(('cloud_run_flags', _render_flags(_as_config_dict(network.get('flags')) or {})))
     services = _as_config_dict(cloud_run.get('services')) or {}
     if not args.job:
+        desktop_backend = _as_config_dict(env_config.get('desktop_backend')) or {}
+        desktop_env = _as_config_dict(desktop_backend.get('env')) or {}
+        if desktop_env:
+            rendered_outputs.append(('desktop_backend_env_vars', _render_env_vars(desktop_env)))
         for service, raw_service_config in services.items():
             service_config = _as_config_dict(raw_service_config)
             if service_config is None:

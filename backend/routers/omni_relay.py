@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 # Protocol is provider-native and opaque to the relay — the desktop speaks raw
 # OpenAI Realtime / Gemini Live JSON; we just forward bytes both ways.
 
+# Leftover AI Studio Live websocket. Vertex Live is not wired here; this is
+# not the $1k/day Flash text bill. See backend/docs/vertex-pt-flash.md.
 GEMINI_URL = (
     "wss://generativelanguage.googleapis.com/ws/"
     "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key={key}"

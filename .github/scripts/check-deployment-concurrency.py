@@ -10,6 +10,7 @@ group.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,9 +57,12 @@ LOCK_CONTRACTS = {
         "deploy-cloud-run-omi-web-app-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
     "gcp_backend.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
-    "gcp_firestore_indexes.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
-    "gcp_backend_agent_proxy.yml": LockContract("deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"),
-    "gcp_backend_agent_proxy_auto_deploy.yml": LockContract("deploy-gke-agent-proxy-development"),
+    # Create-only schema reconciliation owns its own domain. See
+    # validate_firestore_schema_lock_isolation for why it must not be in the
+    # backend-stack group.
+    "gcp_firestore_indexes.yml": LockContract(
+        "firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}"
+    ),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
@@ -553,8 +557,18 @@ def is_persistent_writer(text: str) -> bool:
     )
 
 
+# Workflows that must bind an environment on an automatic trigger cannot read
+# github.event.inputs, so they resolve it with a dispatch-or-default expression.
+# Render it here too, otherwise an interpolated group looks environment-agnostic
+# to every policy below.
+DISPATCH_OR_DEFAULT_ENVIRONMENT = re.compile(
+    r"\$\{\{ github\.event_name == 'workflow_dispatch' && github\.event\.inputs\.environment \|\| '[a-z-]+' \}\}"
+)
+
+
 def resolve_environment(group: str, environment: str) -> str:
-    return group.replace("${{ github.event.inputs.environment || 'development' }}", environment).replace(
+    rendered = DISPATCH_OR_DEFAULT_ENVIRONMENT.sub(environment, group)
+    return rendered.replace("${{ github.event.inputs.environment || 'development' }}", environment).replace(
         "${{ github.event.inputs.environment }}", environment
     )
 
@@ -563,30 +577,82 @@ def development_group(name: str, group: str) -> str:
     return DEVELOPMENT_GROUP_OVERRIDES.get(name, resolve_environment(group, "development"))
 
 
+def has_automatic_trigger(text: str) -> bool:
+    """Return whether a workflow starts without a human dispatching it."""
+
+    trigger = text.split("\njobs:", 1)[0]
+    return "workflow_run:" in trigger or "\n  push:" in trigger or "\n  schedule:" in trigger
+
+
+# Every workflow permitted to hold the shared development backend-stack lock
+# without a human dispatching it. gcp_backend_auto_dev.yml owns the deploy
+# lifecycle; gcp_backend_listen_helm.yml auto-applies chart changes on main and
+# has held this lock since before the policy existed. Anything else must get its
+# own domain -- see validate_firestore_schema_lock_isolation.
+AUTOMATIC_BACKEND_STACK_WRITERS = ["gcp_backend_auto_dev.yml", "gcp_backend_listen_helm.yml"]
+
+
 def validate_automatic_backend_stack_lifecycle(workflow_text: dict[str, str]) -> list[str]:
-    """Keep the shared dev backend lock owned by one automatic lifecycle.
+    """Keep the shared dev backend lock owned by known automatic lifecycles.
 
     GitHub Actions retains only one pending run per concurrency group. A second
     automatic writer can therefore evict the exact Release Eligibility SHA
     admitted by gcp_backend_auto_dev.yml before either workflow has a job.
+
+    Resolve the interpolated group rather than matching the literal string: a
+    workflow whose group reads deploy-backend-stack-${{ ... }} still lands in
+    deploy-backend-stack-development, and matching literally let exactly that
+    shape through unnoticed.
     """
 
     automatic_writers: list[str] = []
-    for name, text in workflow_text.items():
-        trigger = text.split("\njobs:", 1)[0]
-        if "group: deploy-backend-stack-development" not in trigger:
+    for name, text in sorted(workflow_text.items()):
+        concurrency = parse_top_level_concurrency(text)
+        group = (concurrency or {}).get("group")
+        if not group or development_group(name, group) != "deploy-backend-stack-development":
             continue
-        if "workflow_run:" in trigger or "\n  push:" in trigger:
+        if has_automatic_trigger(text):
             automatic_writers.append(name)
-    expected = ["gcp_backend_auto_dev.yml"]
     return (
         []
-        if sorted(automatic_writers) == expected
+        if automatic_writers == AUTOMATIC_BACKEND_STACK_WRITERS
         else [
             "automatic development backend-stack deployment must be owned only by "
-            f"gcp_backend_auto_dev.yml, found {sorted(automatic_writers)!r}"
+            f"{AUTOMATIC_BACKEND_STACK_WRITERS!r}, found {automatic_writers!r}"
         ]
     )
+
+
+def validate_firestore_schema_lock_isolation(groups: dict[str, str]) -> list[str]:
+    """Keep create-only schema repair out of the backend deploy lock domain.
+
+    Reconciliation only ever creates, so an index state moves MISSING ->
+    CREATING -> READY and never backwards: it cannot invalidate a readiness
+    answer a deploy already obtained, and the deploy ordering guarantee is owned
+    by the fail-closed firestore_readiness job rather than by a lock. Sharing the
+    group bought no ordering property and cost availability: on 2026-08-18 a
+    gcp_backend.yml run parked in `waiting` on an unactioned prod approval held
+    deploy-backend-stack-prod, so the dispatched index repair queued behind the
+    outage it was repairing.
+    """
+
+    errors: list[str] = []
+    for name in sorted(FIRESTORE_SCHEMA_WRITERS):
+        group = groups.get(name)
+        if group is None:
+            continue
+        for environment in ("development", "prod"):
+            resolved = resolve_environment(group, environment)
+            if resolved.startswith("deploy-backend-stack-"):
+                errors.append(
+                    f"{name}: Firestore schema reconciliation must not share the backend deploy lock "
+                    f"(resolves to {resolved!r} for {environment}); a waiting deploy would block schema repair"
+                )
+            if "${{" in resolved:
+                errors.append(
+                    f"{name}: concurrency group does not resolve to a concrete lock for {environment}: {resolved!r}"
+                )
+    return errors
 
 
 def validate_shared_families(groups: dict[str, str]) -> list[str]:
@@ -594,11 +660,9 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 
     family_pairs = (
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
-        ("gcp_firestore_indexes.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_memory_maintenance_job.yml", "gcp_memory_maintenance_job_auto_dev.yml"),
-        ("gcp_backend_agent_proxy.yml", "gcp_backend_agent_proxy_auto_deploy.yml"),
         ("gcp_backend_pusher.yml", "gcp_backend_pusher_auto_deploy.yml"),
     )
     for manual, automatic in family_pairs:
@@ -611,7 +675,6 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
     environment_scoped = (
         "gcp_backend.yml",
         "gcp_firestore_indexes.yml",
-        "gcp_backend_agent_proxy.yml",
         "gcp_backend_listen_helm.yml",
         "gcp_diarizer.yml",
         "gcp_llm_gateway.yml",
@@ -657,6 +720,7 @@ def check_repository() -> list[str]:
         if concurrency and concurrency.get("group"):
             groups[name] = concurrency["group"]
 
+    errors.extend(validate_firestore_schema_lock_isolation(groups))
     if set(groups) == set(LOCK_CONTRACTS):
         errors.extend(validate_shared_families(groups))
 
@@ -847,6 +911,79 @@ jobs:
     canceling = good.replace("cancel-in-progress: false", "cancel-in-progress: true")
     if not any("cancel-in-progress" in error for error in validate_lock("fixture.yml", canceling, contract)):
         raise PolicyError("cancel-in-progress: true satisfied the deploy contract")
+
+
+def _self_test_firestore_schema_lock_isolation() -> None:
+    """The draft plan for issue #11684 -- push trigger on the shared deploy lock."""
+
+    isolated = {
+        "gcp_firestore_indexes.yml": (
+            "firestore-schema-${{ github.event_name == 'workflow_dispatch' "
+            "&& github.event.inputs.environment || 'prod' }}"
+        )
+    }
+    if validate_firestore_schema_lock_isolation(isolated):
+        raise PolicyError("an isolated Firestore schema lock was rejected")
+
+    shared = {"gcp_firestore_indexes.yml": "deploy-backend-stack-${{ github.event.inputs.environment }}"}
+    errors = validate_firestore_schema_lock_isolation(shared)
+    if not any("must not share the backend deploy lock" in error for error in errors):
+        raise PolicyError("the shared backend deploy lock satisfied Firestore schema isolation")
+    if len([error for error in errors if "must not share" in error]) != 2:
+        raise PolicyError("Firestore schema isolation must be asserted for both environments")
+
+    # A push event renders github.event.inputs.environment as the empty string,
+    # so this group silently degrades to one unserialized bucket.
+    unresolved = {"gcp_firestore_indexes.yml": "firestore-schema-${{ github.event.inputs.does_not_resolve }}"}
+    if not any(
+        "does not resolve to a concrete lock" in error
+        for error in validate_firestore_schema_lock_isolation(unresolved)
+    ):
+        raise PolicyError("an unresolvable Firestore schema lock satisfied the contract")
+
+
+def _self_test_automatic_backend_stack_lifecycle() -> None:
+    def workflow(trigger: str, group: str) -> str:
+        return f"name: fixture\non:\n{trigger}\nconcurrency:\n  group: {group}\n  cancel-in-progress: false\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n"
+
+    dispatch = "  workflow_dispatch:\n"
+    push = "  push:\n    branches: [ \"main\" ]\n"
+    baseline = {
+        "gcp_backend_auto_dev.yml": workflow("  workflow_run:\n", "deploy-backend-stack-development"),
+        "gcp_backend_listen_helm.yml": workflow(
+            push + dispatch, "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
+        ),
+    }
+    if validate_automatic_backend_stack_lifecycle(baseline):
+        raise PolicyError("the audited automatic backend-stack writers were rejected")
+
+    # The literal-string match this replaced could not see an interpolated group.
+    interpolated_intruder = {
+        **baseline,
+        "gcp_firestore_indexes.yml": workflow(
+            push + dispatch, "deploy-backend-stack-${{ github.event.inputs.environment }}"
+        ),
+    }
+    if not validate_automatic_backend_stack_lifecycle(interpolated_intruder):
+        raise PolicyError("an interpolated automatic backend-stack writer bypassed the lifecycle policy")
+
+    manual_only = {
+        **baseline,
+        "gcp_backend.yml": workflow(dispatch, "deploy-backend-stack-${{ github.event.inputs.environment }}"),
+    }
+    if validate_automatic_backend_stack_lifecycle(manual_only):
+        raise PolicyError("a dispatch-only backend-stack writer was treated as automatic")
+
+
+def _self_test_environment_resolution() -> None:
+    group = (
+        "firestore-schema-${{ github.event_name == 'workflow_dispatch' "
+        "&& github.event.inputs.environment || 'prod' }}"
+    )
+    if resolve_environment(group, "development") != "firestore-schema-development":
+        raise PolicyError("dispatch-or-default environment did not resolve for development")
+    if resolve_environment(group, "prod") != "firestore-schema-prod":
+        raise PolicyError("dispatch-or-default environment did not resolve for prod")
 
 
 def _self_test_deploy_guards() -> None:
@@ -1051,6 +1188,9 @@ def run_self_test() -> None:
     """Exercise independent policy fixtures without creating a monolithic test body."""
 
     _self_test_firestore_schema_ownership()
+    _self_test_firestore_schema_lock_isolation()
+    _self_test_automatic_backend_stack_lifecycle()
+    _self_test_environment_resolution()
     _self_test_workflow_lock()
     _self_test_deploy_guards()
 

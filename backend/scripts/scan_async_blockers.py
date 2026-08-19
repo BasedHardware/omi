@@ -17,7 +17,7 @@ as arguments to these wrappers), while separately reporting asyncio.to_thread()
 itself as an unmanaged offload.
 
 Usage:
-  python3 scan_async_blockers.py [--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py] [--json]
+  python3 scan_async_blockers.py [--dirs backend/routers backend/utils backend/dependencies.py] [--json]
   python3 scan_async_blockers.py --diff-base origin/main --fail-on high_network_io,mixed_await_sync_db
 
 Exit codes:
@@ -36,8 +36,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union, cast
 
 DEFAULT_FAIL_ON = ("high_network_io",)
-DEFAULT_SCAN_DIRS = ("backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py")
-LOCAL_SCAN_DIRS = ("routers", "utils", "agent-proxy", "dependencies.py")
+DEFAULT_SCAN_DIRS = ("backend/routers", "backend/utils", "backend/dependencies.py")
+LOCAL_SCAN_DIRS = ("routers", "utils", "dependencies.py")
 FAIL_ON_CATEGORIES = (
     "high_network_io",
     "async_helpers_with_blocking",

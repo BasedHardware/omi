@@ -88,7 +88,7 @@ live, a dedicated transcription gap reason is published the same way.
 `~/Library/Application Support/ContextForClaude/`
 
 ```
-context.db              sessions, segments, frames + two FTS5 indexes
+context.db              sessions, segments, frames + two FTS5 indexes, and the account cache
 Frames/YYYY-MM-DD/      screen JPEGs, pruned after 30 days
 capture-state.json      heartbeat: capturing / paused reason / capabilities
 last-query.json         the MCP server's proof it served a tool call: tool name + time, nothing else
@@ -104,6 +104,13 @@ staged. Neither ever holds anything the user said, saw, or asked — see `QueryS
 A session is a contiguous run of speech; a gap over five minutes starts a new one
 (`SessionPolicy`). Transcripts are kept forever; frames are the expensive part and are the only
 thing pruned.
+
+`account_rows` is the one table in here that is **a copy and not an authority**: the last answer the
+user's Omi account gave, bounded to one page per source, so the Activity panel paints real titles on
+a cold launch instead of the untitled local sessions it used to show while three HTTP round trips
+were in flight. Every row came off the wire and is rewritten by the wire; nothing reads it once a
+real answer exists, and signing out empties it. See `AccountCacheQueries` and
+`ActivityAccountCache`.
 
 ## The MCP surface
 
@@ -142,6 +149,9 @@ Sources/ContextApp/      ContextApp  Engine  Permissions
                          Onboarding/ Ink  Backdrop  RandomizedText  OnboardingWindow  OnboardingView
                          Integration/ClaudeRegistrar  LoginItem
                          Shortcuts/  GlobalShortcuts  ShortcutConflicts
+                         Activity/   ActivitySpine (the one process-lived store)  ActivityStore
+                                     ActivityComposer  ActivityAccount  ActivityAccountCache
+                                     ActivityLocalMemories  ActivitySurface  ActivityStream
                          Search/     SearchBarWindow  SearchBarView  SearchSurface
                                      SearchResultsModel  SearchResultsView  SearchRanking
                                      ClaudeRouter (tutorial + settings only, not the bar)

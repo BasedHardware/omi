@@ -54,17 +54,42 @@ class _FakeQuery:
         self._docs = docs
         self._filters = list(filters or [])
         self._limit = None
+        self._offset = 0
+        self._select: Optional[List[str]] = None
+
+    last_select: Optional[List[str]] = None
 
     def where(self, *args, **kwargs):
         filt = kwargs.get('filter') or (args[0] if args else None)
-        return _FakeQuery(self._docs, self._filters + [filt])
+        q = _FakeQuery(self._docs, self._filters + [filt])
+        q._limit = self._limit
+        q._offset = self._offset
+        q._select = self._select
+        return q
 
     def order_by(self, *args, **kwargs):
         return self
 
+    def select(self, fields):
+        q = _FakeQuery(self._docs, self._filters)
+        q._limit = self._limit
+        q._offset = self._offset
+        q._select = list(fields)
+        _FakeQuery.last_select = list(fields)
+        return q
+
+    def offset(self, n: int):
+        q = _FakeQuery(self._docs, self._filters)
+        q._limit = self._limit
+        q._offset = n
+        q._select = self._select
+        return q
+
     def limit(self, n: int):
         q = _FakeQuery(self._docs, self._filters)
         q._limit = n
+        q._offset = self._offset
+        q._select = self._select
         return q
 
     def stream(self):
@@ -78,6 +103,8 @@ class _FakeQuery:
                 docs = [d for d in docs if bool(d._data.get('completed')) is bool(value)]
             elif field == 'conversation_id' and op == '==':
                 docs = [d for d in docs if d._data.get('conversation_id') == value]
+        if self._offset:
+            docs = docs[self._offset :]
         if self._limit is not None:
             docs = docs[: self._limit]
         # yield copies so callers can mutate safely
@@ -183,6 +210,51 @@ def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     ids = [x['id'] for x in page]
     assert 'del1' not in ids
     assert ids[0] == 'a1'
+
+
+def test_completed_filter_scans_page_plus_slack_not_double(ai_mod, monkeypatch):
+    """Windows sends completed= + limit=500; the old 2× overscan pulled ~1000 full docs."""
+    ai, recorded, metrics = ai_mod
+    docs = [_FakeDoc(_item(f'c{i}', completed=True)) for i in range(2000)]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    page = ai.get_action_items('uid', completed=True, limit=500, offset=0)
+    assert len(page) == 500
+    assert recorded[0][1] == metrics.FirestoreReadMode.BOUNDED
+    assert recorded[0][2] <= 500 + ai._ACTION_ITEMS_LIST_DELETED_SLACK
+    assert recorded[0][2] < 1000
+
+
+def test_completed_offset_is_a_live_item_slice_not_a_firestore_offset(ai_mod, monkeypatch):
+    """Client offset counts returned rows. Firestore offset would also skip deleted docs.
+
+    High offset still reads offset+limit+slack (capped at HARD_MAX), not 2×.
+    """
+    ai, recorded, metrics = ai_mod
+    docs = [_FakeDoc(_item(f'c{i}', completed=True)) for i in range(2000)]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    page = ai.get_action_items('uid', completed=True, limit=500, offset=1500)
+    assert [x['id'] for x in page[:2]] == ['c1500', 'c1501']
+    assert len(page) == 500
+    assert recorded[0][1] == metrics.FirestoreReadMode.BOUNDED
+    assert recorded[0][2] <= ai._ACTION_ITEMS_LIST_HARD_MAX
+    assert recorded[0][2] < 2 * (1500 + 500)
+
+
+def test_list_projects_lean_fields_and_omits_provenance(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    _FakeQuery.last_select = None
+    docs = [_FakeDoc(_item('a1', completed=False))]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    ai.get_action_items('uid', completed=False, limit=10, offset=0)
+    assert _FakeQuery.last_select is not None
+    assert 'description' in _FakeQuery.last_select
+    assert 'completed' in _FakeQuery.last_select
+    assert 'deleted' in _FakeQuery.last_select
+    assert 'provenance' not in _FakeQuery.last_select
+    assert recorded[0][2] <= 10 + ai._ACTION_ITEMS_LIST_DELETED_SLACK
 
 
 @pytest.mark.parametrize(

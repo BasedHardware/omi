@@ -395,6 +395,110 @@ def test_cursor_advances_through_suppressed_historical_prefix(service_mod):
     service_mod.read_canonical_memories.assert_not_called()
 
 
+def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mod, monkeypatch):
+    """Prod 2026-08-18: GET /v3/memories 504'd at the 30s edge timeout.
+
+    An account whose historical rows are all suppressed by canonical makes the
+    first page walk the whole historical collection — 50 rows per Firestore
+    round trip, unbounded — before it can emit anything, so even ``limit=8``
+    ran past the edge timeout. The walk must stop at a bounded row count and
+    surface the detail the route falls back on, instead of hanging.
+    """
+    from fastapi import HTTPException
+    from models.product_memory import MemoryItemStatus
+
+    # The shipped bound is what keeps the walk inside the edge timeout; the test
+    # shrinks it so the mechanism is asserted without scanning thousands of rows.
+    assert service_mod.MEMORY_LIST_SCAN_ROW_BUDGET >= 1000
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_ROW_BUDGET", 100)
+
+    service = service_mod.MemoryService(db_client=_Db())
+    total = 400
+    historical = [_dated_historical(service_mod, f"h-{index:05d}", day=9000 - index) for index in range(total)]
+    statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
+    _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.read_page("uid-test", limit=8, cursor=None)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+    # The walk stopped at the budget instead of scanning every historical row.
+    scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
+    assert scanned <= 150
+    assert scanned < total
+
+
+def test_scan_budget_stops_on_the_wall_clock_deadline_before_the_row_budget(service_mod, monkeypatch):
+    """Prod 2026-08-18T08:09Z+: first pages still 504'd after the row budget shipped.
+
+    4000 skipped rows is ~80 sequential Firestore round trips, so a slow account
+    burned the whole 30s edge budget inside the bound and left the offset-read
+    fallback no time to answer. The walk must stop on elapsed seconds too, well
+    before the row budget is spent.
+    """
+    from fastapi import HTTPException
+    from models.product_memory import MemoryItemStatus
+
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_DEADLINE_SECONDS", 0.0)
+    service = service_mod.MemoryService(db_client=_Db())
+    total = 400
+    historical = [_dated_historical(service_mod, f"h-{index:05d}", day=9000 - index) for index in range(total)]
+    statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
+    _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.read_page("uid-test", limit=8, cursor=None)
+
+    assert exc_info.value.status_code == 503
+    # Same detail the route's first-page fallback already keys on.
+    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+    # Time stopped the walk, not rows: far fewer rows were scanned than the row budget allows.
+    scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
+    assert scanned < service_mod.MEMORY_LIST_SCAN_ROW_BUDGET
+
+
+def test_scan_budget_charges_within_the_deadline_do_not_raise(service_mod):
+    """The deadline is elapsed-time, not per-charge: charges before it are free."""
+    from fastapi import HTTPException
+
+    ticks = iter([100.0, 101.0, 105.9, 106.0])
+    budget = service_mod._ScanRowBudget(deadline_seconds=6.0, clock=lambda: next(ticks))
+
+    budget.charge()
+    budget.charge()
+
+    with pytest.raises(HTTPException) as exc_info:
+        budget.charge()
+    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+
+
+def test_suppressed_prefix_under_the_budget_still_serves_the_page(service_mod, monkeypatch):
+    """The budget bounds pathological accounts only — ordinary skips still page."""
+    from models.product_memory import MemoryItemStatus
+
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_ROW_BUDGET", 300)
+    service = service_mod.MemoryService(db_client=_Db())
+    suppressed_count = 200
+    suppressed = [
+        _dated_historical(service_mod, f"s-{index:05d}", day=9000 - index) for index in range(suppressed_count)
+    ]
+    visible = [_dated_historical(service_mod, f"visible-{index}", day=50 - index) for index in range(3)]
+    statuses = {f"s-{index:05d}": MemoryItemStatus.tombstoned for index in range(suppressed_count)}
+    _install_streams(
+        service,
+        service_mod,
+        canonical=[],
+        historical=suppressed + visible,
+        statuses=statuses,
+    )
+
+    page = service.read_page("uid-test", limit=2, cursor=None)
+
+    assert [memory.id for memory in page.memories] == ["visible-0", "visible-1"]
+    assert page.next_cursor
+
+
 def test_historical_status_suppression_batched_once_per_chunk(service_mod):
     from models.product_memory import MemoryItemStatus
 
@@ -585,7 +689,7 @@ def test_read_canonical_scan_page_snapshot_id_mismatch_and_lineage(monkeypatch):
         canonical_memory_id=None,
         doc_id=None,
     ):
-        stamp = now - timedelta(days=day)
+        stamp = now - timedelta(hours=day)
         evidence = MemoryEvidence(
             evidence_id=f"evidence-{memory_id}",
             source_id=f"source-{memory_id}",
@@ -893,7 +997,7 @@ def _canonical_scan_memory_item(
         tier = MemoryLayer.short_term
     if status is None:
         status = MemoryItemStatus.active
-    stamp = now - timedelta(days=day)
+    stamp = now - timedelta(hours=day)
     evidence = MemoryEvidence(
         evidence_id=f"evidence-{memory_id}",
         source_id=f"source-{memory_id}",
@@ -1101,7 +1205,7 @@ def test_read_canonical_scan_page_uses_keyset_order_and_filters(monkeypatch):
     now = datetime(2026, 8, 12, 12, 0, tzinfo=timezone.utc)
 
     def _item(memory_id: str, *, day: int, processing_state=ProcessingState.processed, tier=MemoryLayer.short_term):
-        stamp = now - timedelta(days=day)
+        stamp = now - timedelta(hours=day)
         evidence = MemoryEvidence(
             evidence_id=f"evidence-{memory_id}",
             source_id=f"source-{memory_id}",
@@ -1276,3 +1380,32 @@ def test_canonical_scan_failure_logs_underlying_exception_and_503s(service_mod, 
     assert "canonical list scan page failed" in caplog.text
     assert "RuntimeError" in caplog.text
     assert "FAILED_PRECONDITION" in caplog.text
+
+
+def test_building_index_failure_is_the_historical_unavailable_detail(service_mod):
+    """Pin the detail the historical keyset scan raises while an index builds.
+
+    ``routers.memories`` matches this exact string to fall the first page back
+    to the legacy offset read (the 2026-08-18 5.5h GET /v3/memories outage), so
+    a rename here would silently reopen it. Drives the real adapter with the
+    Firestore error prod raised.
+    """
+    from fastapi import HTTPException
+    from google.api_core import exceptions as gcloud_exceptions
+
+    building_index = gcloud_exceptions.FailedPrecondition(
+        "400 The query requires an index. That index is currently building and cannot be used yet."
+    )
+    adapter = service_mod.HistoricalMemoryAdapter(db_client=_Db())
+    adapter_db = service_mod.memories_db
+    original = adapter_db.scan_memories_updated_at_page
+    adapter_db.scan_memories_updated_at_page = MagicMock(side_effect=building_index)
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            adapter.read_updated_scan_page("uid-test", limit=100)
+    finally:
+        adapter_db.scan_memories_updated_at_page = original
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Historical memory unavailable"
+    assert isinstance(exc_info.value.__cause__, gcloud_exceptions.FailedPrecondition)

@@ -5,7 +5,19 @@ import ImageIO
 import ScreenCaptureKit
 
 final class ScreenCaptureService: Sendable {
-  private static let maxSize: CGFloat = 3000
+  /// Long-edge cap for ScreenCaptureKit stream config and the screencapture fallback.
+  ///
+  /// `SCWindow.frame` is in points; `SCStreamConfiguration.width/height` are in
+  /// pixels. On a typical Mac the clamp never fires — the largest production
+  /// frame across 400 sampled chunks was 1710×1072. It *can* fire on an
+  /// external 5K/6K display at "More Space" scaling.
+  ///
+  /// 2304 = 3×768, the next Gemini tile-grid step below 3000. Measured token
+  /// cost on high-DPI sources drops 22–46% at 2304 vs 3000, with quality
+  /// indistinguishable from 3000. Do not lower this to 1536: that rung saves
+  /// nothing further on landscape sources and starts silently confabulating
+  /// on-screen text (measured on a retina terminal capture).
+  static let maxSize: CGFloat = 2304
   private let jpegQuality: CGFloat = 0.8
   private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
   private static let activeWindowCacheTTL: TimeInterval = 2

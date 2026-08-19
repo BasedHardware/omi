@@ -2,8 +2,15 @@ import AppKit
 import ContextCore
 import SwiftUI
 
-/// Capture: whether the screen is being recorded, whether idling pauses it, and the quality of the
-/// stored picture.
+/// Capture: whether the screen is being recorded, and whether idling pauses it.
+///
+/// **The Capture Quality tiles are gone**, on the report *"don't give capture quality option"*.
+/// They were a real setting by the end — `FrameImage` genuinely resized and re-compressed to the
+/// selected tile — but the choice they offered was between one good answer and three worse ones:
+/// three of the four tiles bought disk back by making the user's own screenshots harder to read,
+/// and since the `look` tool started handing frames to Claude as images, harder for a model to read
+/// too. What every install shipped on is now what every install gets; the numbers live in
+/// `FrameImage.Quality`.
 struct SettingsCapturePane: View {
     @ObservedObject var store: SettingsStore
 
@@ -44,54 +51,10 @@ struct SettingsCapturePane: View {
                         onChange: { _ in Sound.effect(.click) })
                 }
             }
-
-            SettingsSection(
-                title: "Capture Quality",
-                footnote: "Higher quality preserves more detail but uses more disk space. "
-                    + "Text search is unaffected — it reads a separate, larger image before this one is stored."
-            ) {
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(spacing: 8) {
-                        ForEach(CaptureQuality.allCases) { quality in
-                            SettingsTile(isSelected: store.captureQuality == quality) {
-                                Sound.effect(.click)
-                                store.captureQuality = quality
-                            } content: {
-                                VStack(spacing: 4) {
-                                    Image(systemName: symbol(for: quality))
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(Ink.primary)
-                                    Text(quality.title)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(Ink.primary)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.8)
-                                }
-                            }
-                        }
-                    }
-                    // The subtitle describes the *selected* tile, which is what the reference does.
-                    Text(store.captureQuality.subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-            }
         }
     }
 
     /// `CaptureActivity.idleThreshold` in whole minutes, for the row above. Whole minutes because the
     /// constant is 300s exactly and a fractional figure in a settings row would be noise.
     private static var idleMinutes: Int { Int(CaptureActivity.idleThreshold / 60) }
-
-    /// A four-step ladder rather than four unrelated glyphs, so the tiles read as one scale.
-    private func symbol(for quality: CaptureQuality) -> String {
-        switch quality {
-        case .best: "square.grid.3x3.fill"
-        case .standard: "square.grid.2x2.fill"
-        case .compact: "square.split.2x2"
-        case .smallest: "square"
-        }
-    }
 }

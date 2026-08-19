@@ -255,6 +255,8 @@ struct ProactiveNotificationBadge: Equatable {
       (label, systemImage) = ("Memory", "brain.head.profile")
     case .goal:
       (label, systemImage) = ("Goal", "target")
+    case .meetingNotes:
+      (label, systemImage) = ("Meeting notes", "text.document")
     case .resurface:
       (label, systemImage) = ("Resurfaced", "clock.arrow.circlepath")
     case .general:

@@ -890,6 +890,23 @@ export function getUnsyncedActionItemsOn(
   return rows.map(mapAction)
 }
 
+/** Backend ids of every SYNCED, non-deleted local row with its completion bucket —
+ *  the local half of the ID-census diff the sync engine runs (backend half:
+ *  GET /v1/action-items/ids). Deliberately minimal: no row mapping, no FTS, just
+ *  the two columns the diff needs, so it stays cheap at any store size. `completed`
+ *  is coerced to a real boolean — SQLite stores 0/1, and the engine's strict
+ *  bucket comparison (`!== false`) would misclassify a 0 as a bucket move. */
+export function getSyncedActionItemIdsOn(
+  d: TaskStoreDb
+): { backendId: string; completed: boolean }[] {
+  const rows = cachedStmt(
+    d,
+    `SELECT backend_id AS backendId, completed FROM action_items
+         WHERE deleted = 0 AND backend_id IS NOT NULL AND backend_synced = 1`
+  ).all() as { backendId: string; completed: number }[]
+  return rows.map((r) => ({ backendId: r.backendId, completed: r.completed === 1 }))
+}
+
 /** All action-item embeddings for loading the in-memory index. */
 export function getAllActionItemEmbeddingsOn(d: TaskStoreDb): TaskEmbeddingRow[] {
   const rows = cachedStmt(

@@ -115,6 +115,7 @@ class ListenSessionRuntime:
         self.is_multi_channel = request.channels >= 2
         self.language = request.language
         self.stt_service: Any = None
+        self.stt_service_selected: Any = None
         self.stt_language = ''
         self.stt_model = ''
         self.vocabulary: List[str] = []
@@ -275,6 +276,10 @@ class ListenSessionRuntime:
             multi_lang_enabled=not single_language_mode,
             preferred_service=request.stt_service,
         )
+        # The provider the serving policy chose, captured before `_create_stt_socket`
+        # can walk the fallback chain. Only the *selected* value is safe to hold onto:
+        # the serving one has to be read at use time (#11306).
+        self.stt_service_selected = self.stt_service
         self.parity_capture = ListenParityCapture.from_environ(
             principal_id=request.uid,
             session_id=getattr(self, 'session_id', ''),
@@ -574,6 +579,32 @@ class ListenSessionRuntime:
                 self.task_supervisor.create_lifetime_task(session.audio_bytes_consume(), name='pusher_audio')
             )
 
+    def _ready_event(self) -> MessageServiceStatusEvent:
+        """Name the provider actually serving this session on the `ready` event (#11306).
+
+        The client clears its terminal-failure state on `ready`, so a bare event leaves a
+        fallback socket that is about to die indistinguishable from a healthy session on
+        the provider the user selected. `_create_stt_socket` can walk the fallback chain
+        (#11695, #11752), so the serving provider is only knowable once the socket exists
+        — resolving it any earlier is the attribution bug #11359 fixed on the
+        terminal-failure path, which is why this reads `_serving_provider()` here rather
+        than reusing a value from bootstrap.
+
+        Both fields are optional and dropped by `exclude_none=True`, so a client that does
+        not read them sees exactly the payload it sees today.
+        """
+        if self.use_custom_stt:
+            # Custom-STT clients produce their own transcripts; no backend provider serves.
+            return MessageServiceStatusEvent(status='ready')
+        serving = self.receiver._serving_provider()
+        selected = getattr(self.stt_service_selected, 'value', self.stt_service_selected)
+        fell_back = bool(serving) and bool(selected) and serving != selected
+        return MessageServiceStatusEvent(
+            status='ready',
+            provider=serving,
+            reason=f'fallback_from_{selected}' if fell_back else None,
+        )
+
     async def run(self) -> None:
         if not await self._admit() or not await self._bootstrap():
             return
@@ -628,7 +659,7 @@ class ListenSessionRuntime:
                         self.task_supervisor.create_finite_task(self.speakers.load_and_run(), name='speaker_id'),
                     ]
                 )
-            self.send_event(MessageServiceStatusEvent(status='ready'))
+            self.send_event(self._ready_event())
             result = await self.task_supervisor.supervise(receive_task=receive_task)
             logger.info('Listen supervisor exited reason=%s', result.reason)
             if result.reason in {'crash', 'lifetime_done'}:

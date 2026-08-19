@@ -91,7 +91,7 @@ import Foundation
 /// only when *no* source answered, which is also the exact shape of every reason the account is
 /// genuinely unavailable: Airgap Mode, signed out, no route, an outage. Those fail all three
 /// together, so the distinction the field exists for survives.
-struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
+struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing, ActivityAccountCursor {
 
     // Everything that reaches off this file, as replaceable closures with the production wiring as
     // their defaults — the pattern `ScreenActivityUploader` established. It is what lets the airgap
@@ -136,6 +136,39 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
 
     func unreachableReason() async -> ActivityAccountUnreachableReason? {
         await diagnosis.reason()
+    }
+
+    /// Reopens the newest page of every source, so the next `read` asks the account for it again.
+    ///
+    /// **The corpus is a cursor that only ever moves forward, and that is right for hydration and
+    /// wrong for coming back to a panel an hour later.** Once every source has run out of pages the
+    /// reader answers `.settled` and makes no further request for the life of the window: correct,
+    /// because nothing behind the cursor changes, and useless, because everything *in front* of it
+    /// does. A conversation recorded since the last read lives at offset zero, which is the one
+    /// offset a forward-only walk will never ask for twice.
+    ///
+    /// So this clears the opening flag and nothing else. The next read races the three heads exactly
+    /// as a first read does, new rows are appended, rows already held are **updated in place** —
+    /// which is how a title the account has since written reaches a row that was cached untitled —
+    /// and each source's paging cursor is left where hydration left it, so revalidating costs three
+    /// requests rather than a second walk of the account.
+    ///
+    /// Deliberately not a `read` of its own. The store still calls `read`, so the local-memory
+    /// decorator still wraps the answer and there is one path into the feed rather than two.
+    func refreshHead() async {
+        await corpus.reopenHead()
+    }
+
+    /// Drops every row and every cursor. The signed-in account has changed.
+    ///
+    /// **This reader now outlives a sign-out and did not used to.** It was built per panel, so
+    /// forgetting was what happened when the window closed and nothing had to say so. One reader for
+    /// the life of the process is what makes coming back to the panel instant (`ActivitySpine`), and
+    /// the price of that is exactly this: the corpus is account-scoped state, and nobody else is
+    /// going to throw it away on the way out.
+    func forget() async {
+        await corpus.forgetEverything()
+        await diagnosis.record(nil)
     }
 
     /// One page per source. The spine shows a window of a day, not an account export, and every one
@@ -199,17 +232,26 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
         // `tried` is what keeps that from becoming a retry ladder: a source that has already been
         // asked in this read is not asked again, whatever it answered. One attempt per source per
         // read, here as everywhere else in this file — `OmiAPI` has already done the retrying.
+        // **Which account this read belongs to, captured before a single request leaves.** A read is
+        // a network round trip and `forget()` is a keystroke, so the two overlap: without this, a
+        // page fetched for the account the user has just signed out of commits into a corpus that
+        // was emptied while it was in flight, and the panel repopulates with the previous account's
+        // conversations. The commits below quote it and `AccountCorpus` drops the ones that no
+        // longer match.
+        let epoch = await corpus.epoch()
+
         var tried: Set<ActivityAccountSource> = []
         pages: for _ in ActivityAccountSource.allCases.indices {
             let before = await corpus.rowCount()
             switch await corpus.next(skipping: tried) {
             case .opening:
                 // The opening read has asked all three already; there is nothing left to try.
-                await readOpeningPage(limit: bounded)
+                await readOpeningPage(limit: bounded, epoch: epoch)
+                await corpus.headWasRead()
                 break pages
             case .page(let source, let offset):
                 tried.insert(source)
-                await readPage(source, offset: offset, limit: bounded)
+                await readPage(source, offset: offset, limit: bounded, epoch: epoch)
             case .settled:
                 // Every source has ended, failed out, spent its budget or been asked already.
                 // Nothing more is asked, and the answer is what is already held — which is what
@@ -251,7 +293,7 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
     /// blocked on, so serial reads would cost the sum of three round trips to show one screen; every
     /// page after this one lands behind a list the reader can already use, where a second request in
     /// flight buys nothing and spends someone's account.
-    private func readOpeningPage(limit: Int) async {
+    private func readOpeningPage(limit: Int, epoch: Int) async {
         async let conversationRows = attempt(
             "conversations", fetchConversations, Self.conversationQuery(limit: limit, offset: 0))
         async let memoryRows = attemptMemories(limit: limit, offset: 0)
@@ -261,24 +303,27 @@ struct OmiActivityFeed: ActivityAccountReading, ActivityAccountDiagnosing {
         // and windowing by either would drop the undated commitments that matter most.
         async let taskPage = attempt("action-items", fetchTasks, Self.taskQuery(limit: limit, offset: 0))
 
-        await corpus.commit(conversations: await conversationRows)
-        await corpus.commit(memories: await memoryRows)
-        await corpus.commit(tasks: await taskPage)
+        await corpus.commit(conversations: await conversationRows, epoch: epoch)
+        await corpus.commit(memories: await memoryRows, epoch: epoch)
+        await corpus.commit(tasks: await taskPage, epoch: epoch)
     }
 
     /// One page of one source, at the offset the cursor asked for.
-    private func readPage(_ source: ActivityAccountSource, offset: Int, limit: Int) async {
+    private func readPage(
+        _ source: ActivityAccountSource, offset: Int, limit: Int, epoch: Int
+    ) async {
         switch source {
         case .conversations:
             let outcome = await attempt(
                 "conversations", fetchConversations, Self.conversationQuery(limit: limit, offset: offset))
-            await corpus.commit(conversations: outcome)
+            await corpus.commit(conversations: outcome, epoch: epoch)
         case .memories:
-            await corpus.commit(memories: await attemptMemories(limit: limit, offset: offset))
+            await corpus.commit(
+                memories: await attemptMemories(limit: limit, offset: offset), epoch: epoch)
         case .tasks:
             let outcome = await attempt(
                 "action-items", fetchTasks, Self.taskQuery(limit: limit, offset: offset))
-            await corpus.commit(tasks: outcome)
+            await corpus.commit(tasks: outcome, epoch: epoch)
         }
     }
 
@@ -558,7 +603,12 @@ private actor AccountCorpus {
     private var conversations: [WireConversation] = []
     private var memories: [WireMemory] = []
     private var tasks: [WireActionItem] = []
-    private var seen: [ActivityAccountSource: Set<String>] = [:]
+    /// Where each id already sits in the array above, so a row seen twice is *replaced* rather than
+    /// dropped. A set of ids could only answer "have we had this one", which was enough while the
+    /// cursor only moved forward and is not enough now `reopenHead` re-asks for page zero: the whole
+    /// point of re-asking is that a row may have changed since, and the change we care about most is
+    /// a conversation the backend has titled in the meantime.
+    private var index: [ActivityAccountSource: [String: Int]] = [:]
     private var state: [ActivityAccountSource: SourceState] = [:]
     private var didOpen = false
     private var memoriesBeganPastHead = false
@@ -616,28 +666,145 @@ private actor AccountCorpus {
         return .settled
     }
 
-    func commit(conversations outcome: OmiActivityFeed.SourceOutcome<[WireConversation]>) {
+    /// Which account the rows in here belong to. Bumped by `forgetEverything`; quoted by every
+    /// commit, so a page fetched for an account the user has since signed out of is dropped instead
+    /// of repopulating an emptied corpus. See `epoch` in `OmiActivityFeed.read`.
+    private var generation = 0
+
+    func epoch() -> Int { generation }
+
+    /// The reopened head has been read; later pages are ordinary paging again and may not delete.
+    func headWasRead() { headIsAuthoritative = false }
+
+    /// Whether a page fetched at `epoch` may still be filed. False after a sign-out.
+    private func isCurrent(_ epoch: Int) -> Bool { epoch == generation }
+
+    func commit(
+        conversations outcome: OmiActivityFeed.SourceOutcome<[WireConversation]>, epoch: Int
+    ) {
+        guard isCurrent(epoch) else { return }
         record(.conversations, outcome, received: outcome.rows?.count)
-        for row in outcome.rows ?? [] where insert(.conversations, id: row.id) {
-            conversations.append(row)
+        if let rows = outcome.rows, isHeadReread(outcome) {
+            prune(
+                .conversations, keeping: rows.compactMap(\.id),
+                newerThan: rows.compactMap { $0.startedAt?.seconds ?? $0.createdAt?.seconds }.min(),
+                from: &conversations, at: { $0.startedAt?.seconds ?? $0.createdAt?.seconds })
+        }
+        for row in outcome.rows ?? [] {
+            absorb(.conversations, id: row.id, row: row, into: &conversations)
         }
     }
 
-    func commit(memories outcome: OmiActivityFeed.SourceOutcome<[WireMemory]>) {
+    func commit(memories outcome: OmiActivityFeed.SourceOutcome<[WireMemory]>, epoch: Int) {
+        guard isCurrent(epoch) else { return }
         if outcome.beganPastHead { memoriesBeganPastHead = true }
         record(.memories, outcome, received: outcome.rows?.count)
-        for row in outcome.rows ?? [] where insert(.memories, id: row.id) {
-            memories.append(row)
+        // **Never for memories that had to start past their own head.** That page is complete
+        // except at the top by construction, so the rows above it are absent because they were
+        // never asked for — deleting them would be reading "not fetched" as "deleted".
+        if let rows = outcome.rows, isHeadReread(outcome), !outcome.beganPastHead {
+            prune(
+                .memories, keeping: rows.compactMap(\.id),
+                newerThan: rows.compactMap { $0.capturedAt?.seconds ?? $0.createdAt?.seconds }.min(),
+                from: &memories, at: { $0.capturedAt?.seconds ?? $0.createdAt?.seconds })
+        }
+        for row in outcome.rows ?? [] {
+            absorb(.memories, id: row.id, row: row, into: &memories)
         }
     }
 
-    func commit(tasks outcome: OmiActivityFeed.SourceOutcome<WireActionItemPage>) {
+    func commit(tasks outcome: OmiActivityFeed.SourceOutcome<WireActionItemPage>, epoch: Int) {
+        guard isCurrent(epoch) else { return }
         record(.tasks, outcome, received: outcome.rows?.actionItems.count)
         // The one source that can say it has reached the end without an empty page to prove it.
         if let page = outcome.rows, !page.hasMore { state[.tasks]?.isExhausted = true }
-        for row in outcome.rows?.actionItems ?? [] where insert(.tasks, id: row.id) {
-            tasks.append(row)
+        if let page = outcome.rows, isHeadReread(outcome) {
+            prune(
+                .tasks, keeping: page.actionItems.compactMap(\.id),
+                newerThan: page.actionItems.compactMap { $0.createdAt?.seconds }.min(),
+                from: &tasks, at: { $0.createdAt?.seconds })
         }
+        for row in outcome.rows?.actionItems ?? [] {
+            absorb(.tasks, id: row.id, row: row, into: &tasks)
+        }
+    }
+
+    /// Whether this page is a re-read of a head we have already seen, and so may delete.
+    private func isHeadReread<Row>(_ outcome: OmiActivityFeed.SourceOutcome<Row>) -> Bool {
+        headIsAuthoritative && outcome.offset == 0
+    }
+
+    /// Drops rows the account has stopped listing, **within the window the new head page covers.**
+    ///
+    /// Without this a revalidation could only add and update: `reopenHead` re-reads offset zero and
+    /// `absorb` replaces the ids it sees, so a conversation deleted on the phone stayed on the spine
+    /// for the life of the process. That is a regression the process-lived store introduced — a
+    /// panel rebuilt per window used to lose the row simply by being rebuilt.
+    ///
+    /// **The bound is what makes it safe.** A head page is authoritative only for its own range: it
+    /// returned the newest `limit` rows, so anything held that is *newer than its oldest row* and
+    /// absent from it has genuinely gone. Everything older is behind the page and says nothing about
+    /// itself. An empty head page means the source now holds nothing at all, and every row goes.
+    private func prune<Row>(
+        _ source: ActivityAccountSource,
+        keeping ids: [String],
+        newerThan oldest: Double?,
+        from rows: inout [Row],
+        at instant: (Row) -> Double?
+    ) {
+        let returned = Set(ids)
+        func survives(_ row: Row, _ id: String) -> Bool {
+            if returned.contains(id) { return true }
+            // Older than the page's own reach, so the page is not evidence about it.
+            guard let oldest else { return false }
+            guard let at = instant(row) else { return true }
+            return at < oldest
+        }
+
+        var kept: [Row] = []
+        var rebuilt: [String: Int] = [:]
+        kept.reserveCapacity(rows.count)
+        let byIndex = Dictionary(uniqueKeysWithValues: (index[source] ?? [:]).map { ($1, $0) })
+        for (position, row) in rows.enumerated() {
+            guard let id = byIndex[position] else { continue }
+            guard survives(row, id) else { continue }
+            rebuilt[id] = kept.count
+            kept.append(row)
+        }
+        rows = kept
+        index[source] = rebuilt
+    }
+
+    /// Reopens the newest page of every source without disturbing where hydration has walked to.
+    ///
+    /// One flag, and the restraint is the design — see `OmiActivityFeed.refreshHead`. `nextOffset`,
+    /// `pages` and `isExhausted` are all left alone: a source that has reached its end has reached
+    /// it, and the rows arriving at offset zero are in front of the cursor rather than behind it.
+    func reopenHead() {
+        didOpen = false
+        headIsAuthoritative = true
+    }
+
+    /// Whether the next opening commit is a *re-read* of the head rather than a first sight of it.
+    ///
+    /// It is what lets a re-read delete. See `prune(_:keeping:newerThan:)`.
+    private var headIsAuthoritative = false
+
+    /// Back to the state this actor was constructed in. Every field, deliberately enumerated rather
+    /// than reassigned wholesale — an actor cannot replace `self`, and a field added later that this
+    /// forgot to clear would be one account's data surviving into another's session.
+    func forgetEverything() {
+        // First, so that a page already in flight for the previous account cannot file itself
+        // between this call and the next read.
+        generation &+= 1
+        conversations = []
+        memories = []
+        tasks = []
+        index = [:]
+        state = [:]
+        didOpen = false
+        memoriesBeganPastHead = false
+        rotation = 0
     }
 
     /// How many rows are held over every source — the reader's own version of the growth signal the
@@ -669,7 +836,11 @@ private actor AccountCorpus {
             current.failures = 0
             current.lastFailure = nil
             current.everAnswered = true
-            current.nextOffset = outcome.offset + max(received, 0)
+            // **Monotonic, because the head can be re-read.** `reopenHead` sends the next read back
+            // to offset zero without moving the cursor, so a plain assignment here would walk the
+            // whole account again from page one after every revalidation. A walk only ever moves
+            // forward, so taking the larger of the two is the same arithmetic everywhere else.
+            current.nextOffset = max(current.nextOffset, outcome.offset + max(received, 0))
             // `ServerPaging`: only an empty page is the end. A short one is the backend's own
             // post-filtering, and reading it as the end is how the rest of an account disappears.
             if received == 0 { current.isExhausted = true }
@@ -680,11 +851,27 @@ private actor AccountCorpus {
         state[source] = current
     }
 
-    /// Whether this row is one we have not already been handed. A row with no id cannot be
-    /// identified, so it cannot be diffed, deduplicated or rendered — the projection drops it too.
-    private func insert(_ source: ActivityAccountSource, id: String?) -> Bool {
-        guard let id, !id.isEmpty else { return false }
-        return seen[source, default: []].insert(id).inserted
+    /// Files one row under its identity: appended the first time, **replaced** every time after.
+    ///
+    /// Replacement rather than the first-sighting-wins rule this used to have. Both are correct for
+    /// a forward-only walk, where a row arriving twice is the offset drift `ServerPaging` documents
+    /// and the two copies are the same row. They are not both correct once `reopenHead` re-asks for
+    /// page zero: there the second copy is deliberately newer, and keeping the first is how a
+    /// conversation the backend titled ten minutes ago goes on reading `Untitled conversation` until
+    /// the panel is rebuilt. Position is held constant so nothing reorders under the reader.
+    ///
+    /// A row with no id cannot be identified, so it cannot be diffed, selected or scrolled to — the
+    /// projection drops it too, and it is dropped here rather than appended unkeyed.
+    private func absorb<Row>(
+        _ source: ActivityAccountSource, id: String?, row: Row, into rows: inout [Row]
+    ) {
+        guard let id, !id.isEmpty else { return }
+        if let existing = index[source]?[id] {
+            rows[existing] = row
+            return
+        }
+        index[source, default: [:]][id] = rows.count
+        rows.append(row)
     }
 }
 

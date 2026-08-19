@@ -10,8 +10,22 @@ cd "$SCRIPT_DIR"
 # Discovery, not a hardcoded list — a hardcoded list already orphaned one test
 # (test-prepare-desktop-bundle-native-deps.sh ran nowhere). Every tests/test-*.sh
 # runs, mirroring swift-test-suites.sh's auto-discovery of Swift suites.
+#
+# A few discovered scripts need something this loop cannot supply — a running
+# app's automation token, an installed named bundle path. Each declares that in
+# its own header with `# discovery-skip: <reason>`, so it opts out where it lives
+# and this runner derives the set. #11747: the CI step in
+# .github/workflows/desktop-swift-ci.yml hand-listed those two scripts and this
+# runner listed nothing, so `set -e` aborted here and the Python and Swift
+# sections below never ran. scripts/check-launcher-test-skips.py holds both loops
+# to the marked set.
 for t in tests/test-*.sh; do
   echo "== $t"
+  skip_reason="$(sed -n '1,10s/^# discovery-skip: *//p' "$t" | head -1)"
+  if [[ -n "$skip_reason" ]]; then
+    echo "  skip: $skip_reason"
+    continue
+  fi
   bash "$t"
 done
 python3 scripts/check-e2e-flow-coverage.py --strict
@@ -32,7 +46,6 @@ fi
   tests/unit/test_desktop_realtime.py \
   tests/unit/test_desktop_screen_crisp.py \
   tests/unit/test_desktop_tts_updates.py \
-  tests/unit/test_agent_vm_protocol.py
 echo ""
 
 echo "=== Swift App Tests (parallel per-suite process isolation) ==="

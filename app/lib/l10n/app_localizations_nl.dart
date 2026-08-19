@@ -323,7 +323,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get searchApps => 'Apps zoeken...';
 
   @override
-  String get myApps => 'Mijn apps';
+  String get myApps => 'Door mij gemaakt';
 
   @override
   String get installedApps => 'Geïnstalleerde apps';
@@ -9874,4 +9874,10 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.';
+
+  @override
+  String get findDevice => 'Zoeken';
+
+  @override
+  String get diagnosticsShareFailed => 'Kon de diagnostiek niet delen. Probeer het opnieuw.';
 }

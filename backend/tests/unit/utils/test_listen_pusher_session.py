@@ -5,6 +5,7 @@ import struct
 import pytest
 
 from utils.listen_pusher_session import (
+    FINALIZATION_IN_FLIGHT_ERROR,
     TARGET_SAMPLE_RATE,
     ListenPusherSession,
     ListenPusherSessionConfig,
@@ -54,6 +55,13 @@ def response_201(conversation_id: str, success=True):
 def error_response_201(conversation_id: str, terminal: bool = False):
     payload = json.dumps(
         {"conversation_id": conversation_id, "error": "processing_failed", "terminal": terminal}
+    ).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
+def in_flight_response_201(conversation_id: str):
+    payload = json.dumps(
+        {"conversation_id": conversation_id, "error": FINALIZATION_IN_FLIGHT_ERROR, "terminal": False}
     ).encode("utf-8")
     return struct.pack("<I", 201) + payload
 
@@ -373,6 +381,28 @@ async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
     finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
     assert len(finalization_frames) == 2
     assert session.pending_conversation_requests['conv-1']['retries'] == 1
+
+
+@pytest.mark.anyio
+async def test_in_flight_finalization_lease_does_not_consume_the_retry_burst():
+    # `job_leased` means a concurrent dispatch of the same job is finalizing
+    # normally. Treating it as a failure re-requested it immediately, and each
+    # rejection re-armed the next one, so the whole burst burned in under a
+    # second and left a genuine later failure with no attempts.
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[in_flight_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+    pending = session.pending_conversation_requests['conv-1']
+    assert pending['retries'] == 0
+    assert pending['sent_at'] == session.deps.now()
 
 
 @pytest.mark.anyio

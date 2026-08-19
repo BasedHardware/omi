@@ -926,6 +926,7 @@ def save_message(
     app_id: Optional[str] = None,
     session_id: Optional[str] = None,
     metadata: Optional[str] = None,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
     journal_revision: Optional[int] = None,
@@ -944,6 +945,7 @@ def save_message(
         app_id=app_id,
         session_id=requested_session_id,
         metadata=metadata,
+        content_blocks=content_blocks,
         message_source=message_source,
     )
 
@@ -958,6 +960,7 @@ def save_message(
                 app_id=app_id,
                 session_id=requested_session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
                 journal_revision=journal_revision,
@@ -986,6 +989,8 @@ def save_message(
         'metadata': metadata,
         'message_source': message_source,
     }
+    if content_blocks is not None:
+        doc['content_blocks'] = content_blocks
     if client_message_id:
         doc['client_message_id'] = client_message_id
         doc['client_message_payload_hash'] = idempotency_payload_hash
@@ -1003,6 +1008,7 @@ def save_message(
                 app_id=app_id,
                 session_id=requested_session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
                 journal_revision=journal_revision,
@@ -1044,6 +1050,7 @@ def _apply_existing_message_revision(
     app_id: Optional[str],
     session_id: Optional[str],
     metadata: Optional[str],
+    content_blocks: Optional[List[Dict[str, Any]]],
     message_source: str,
     payload_hash: str,
     journal_revision: Optional[int],
@@ -1073,6 +1080,7 @@ def _apply_existing_message_revision(
                 app_id=app_id,
                 session_id=session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=payload_hash,
             )
@@ -1090,17 +1098,20 @@ def _apply_existing_message_revision(
                 app_id=app_id,
                 session_id=session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=payload_hash,
             )
             existing['_revision_updated'] = False
             return existing
-        patch = {
+        patch: Dict[str, Any] = {
             'text': text,
             'metadata': metadata,
             'client_message_payload_hash': payload_hash,
             'journal_revision': journal_revision,
         }
+        if content_blocks is not None:
+            patch['content_blocks'] = content_blocks
         write_transaction.update(message_ref, patch)
         existing.update(patch)
         existing['_revision_updated'] = True
@@ -1156,6 +1167,7 @@ def _assert_idempotent_message_payload(
     metadata: Optional[str],
     message_source: str,
     payload_hash: str,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Reject an idempotency-key collision without exposing message content."""
     existing_payload_hash = existing.get('client_message_payload_hash')
@@ -1169,6 +1181,8 @@ def _assert_idempotent_message_payload(
     # reconstructed from the stored row. New writes always use the exact hash.
     mismatched = existing.get('text') != text or existing.get('sender') != sender
     mismatched = mismatched or existing.get('metadata') != metadata
+    if content_blocks is not None:
+        mismatched = mismatched or existing.get('content_blocks') != content_blocks
     mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
     existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
     mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
@@ -1191,9 +1205,10 @@ def _message_idempotency_payload_hash(
     session_id: Optional[str],
     metadata: Optional[str],
     message_source: str,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Return a stable digest of the caller-controlled immutable payload."""
-    payload = {
+    payload: Dict[str, Any] = {
         'app_id': app_id,
         'message_source': message_source,
         'metadata': metadata,
@@ -1201,6 +1216,8 @@ def _message_idempotency_payload_hash(
         'session_id': session_id,
         'text': text,
     }
+    if content_blocks is not None:
+        payload['content_blocks'] = content_blocks
     canonical = json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
     return f'sha256:{hashlib.sha256(canonical.encode("utf-8")).hexdigest()}'
 
