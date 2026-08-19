@@ -13,7 +13,7 @@ name: omi-oss
 services:
 
   valkey:
-    image: valkey/valkey:8-alpine
+    image: ${OMI_OSS_VALKEY_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     # Durable, NOT pure cache: the backend stores non-cache app state here (username ownership, webhook
     # config, data-protection level, subscription customer IDs) that is NOT mirrored to the document store,
     # so it must survive `docker compose down/up`. Enable AOF persistence + a named /data volume; without it
@@ -63,7 +63,7 @@ services:
   # the Bearer token to the API, so on-prem serves it over HTTPS (same posture as the OIDC issuer).
   # Set the app's API_BASE_URL to https://<host>:${API_HTTPS_PORT}. Generate certs: ./gen-dev-certs.sh
   api-proxy:
-    image: nginx:stable-alpine
+    image: ${OMI_OSS_NGINX_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["auth"]
     # Long-form like valkey/mongo: wait for the backend to be HEALTHY, not merely started, so the proxy
     # doesn't briefly 502 on boot (the app retries, but keep parity with the rest of the suite).

@@ -9,6 +9,7 @@ on:
       - "deploy/onprem/helm/**"
       - "deploy/onprem/compose.base.yaml"
       - "deploy/onprem/compose.selfhost.yaml"
+      - "deploy/onprem/omi.oss.release.pins"
       - ".github/scripts/check_image_parity.py"
       - ".github/workflows/onprem_helm.yml"
 

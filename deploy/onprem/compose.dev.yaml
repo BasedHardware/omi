@@ -8,8 +8,13 @@ name: omi-oss
 #   docker compose -f compose.dev.yaml --profile chat up -d
 #   # backend.env (dev): OMI_EMBEDDINGS_BASE_URL=http://host.docker.internal:11434/v1
 include:
-  - compose.base.yaml
-  - compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); dev default is Mongo too
+  # Long form: the pins must reach the INCLUDED files, where the `image:` keys live (ADR-0055).
+  - path: compose.base.yaml
+    env_file:
+      - omi.oss.release.pins
+  - path: compose.selfhost.yaml   # on-prem datastore (Mongo, ADR-0046); dev default is Mongo too
+    env_file:
+      - omi.oss.release.pins
 services:
   backend:
     env_file:

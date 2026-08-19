@@ -10,7 +10,10 @@ name: omi-oss
 # service-account JSON and set GOOGLE_APPLICATION_CREDENTIALS in backend.env.prod.cloud.
 #   docker compose -f compose.prod.cloud.yaml up -d
 include:
-  - compose.base.yaml
+  # Long form: the pins must reach the INCLUDED file, where the `image:` keys live (ADR-0055).
+  - path: compose.base.yaml
+    env_file:
+      - omi.oss.release.pins
 services:
   backend:
     env_file:

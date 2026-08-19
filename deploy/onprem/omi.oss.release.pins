@@ -1,0 +1,47 @@
+# omi.oss.release.pins — third-party image pins for this release (ADR-0055).
+#
+# Every third-party image the on-prem stack deploys is pinned HERE, once. The compose files reference
+# these variables; the Helm chart mirrors the same pins in its own values.yaml and a CI check verifies
+# the two agree (Helm cannot read a file outside the chart directory, so the chart is a projection —
+# same pattern as the release itself, ADR-0054).
+#
+# Compose reads this file through the long form of `include:` in each entry file:
+#
+#   include:
+#     - path: compose.base.yaml
+#       env_file:
+#         - omi.oss.release.pins
+#
+# Each variable holds the WHOLE image reference, not a version number, so a pin may be a tag, a
+# tag@digest, or a bare digest — the form is a per-line choice and changes nothing else. Tightening a
+# floating tag into a digest is one line here.
+#
+# Names are namespaced OMI_OSS_* on purpose: the shell environment takes PRECEDENCE over an env_file,
+# so a stray MONGO_IMAGE exported in the operator's shell would silently override a pin. Do not export
+# these names; edit this file.
+#
+# Images WE build (omi-oss-*) are NOT here — they carry the release, see omi.oss.release.env.
+# Registry prefix / mirroring is per-INSTALLATION, not per-release: it does not belong in this file.
+
+# --- shared by compose and Helm ---------------------------------------------------------------
+OMI_OSS_VALKEY_IMAGE=valkey/valkey:8-alpine
+# major-pin (currently v7.0.40; gets 7.x security patches, not :latest)
+OMI_OSS_MONGO_IMAGE=mongo:7
+OMI_OSS_KEYCLOAK_IMAGE=quay.io/keycloak/keycloak:26.0
+OMI_OSS_NTFY_IMAGE=binwiederhier/ntfy:v2.11.0
+# qdrant 1.19.0 (registry digest, verified)
+OMI_OSS_QDRANT_IMAGE=qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+# tag@digest (verified: tag resolves to this digest)
+OMI_OSS_RUSTFS_IMAGE=rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
+
+# --- compose only ------------------------------------------------------------------------------
+# TLS-terminating reverse proxies (api-proxy, kc-proxy, ntfy-proxy). The Helm target terminates TLS at
+# the Envoy Gateway instead, so it has no equivalent.
+OMI_OSS_NGINX_IMAGE=nginx:stable-alpine
+
+# --- Helm only ---------------------------------------------------------------------------------
+# Keycloak's database (compose runs Keycloak on its dev-mode embedded store) and the bucket-init job
+# for RustFS. Pinned here so the whole third-party surface of a release lives in one place, even where
+# only one deployment target uses it.
+OMI_OSS_POSTGRES_IMAGE=postgres:16-alpine
+OMI_OSS_MC_IMAGE=minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727

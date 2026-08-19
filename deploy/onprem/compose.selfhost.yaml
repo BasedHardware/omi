@@ -7,7 +7,7 @@ name: omi-oss
 # does not use (the mirror of keeping the Firestore emulator out of base/prod).
 services:
   mongo:
-    image: mongo:7  # major-pin (currently v7.0.40; gets 7.x security patches, not :latest)
+    image: ${OMI_OSS_MONGO_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     healthcheck:
       # Initiate the one-member replica set on first probe, then report healthy once primary.
@@ -53,7 +53,7 @@ services:
   #   then: docker compose --profile objstore up -d --build
   # Buckets are provisioning (ADR-0032 §5): create them out-of-band before first use.
   rustfs:
-    image: rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21  # tag@digest (verified: tag resolves to this digest)
+    image: ${OMI_OSS_RUSTFS_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["objstore"]
     environment:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
@@ -81,7 +81,7 @@ services:
   #   docker compose --profile push up -d
   # See SELFHOST_NOTES "Push notifications (UnifiedPush/ntfy)".
   ntfy:
-    image: binwiederhier/ntfy:v2.11.0
+    image: ${OMI_OSS_NTFY_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["push"]
     command: ["serve"]
     environment:
@@ -110,7 +110,7 @@ services:
   # cleartext server. Same posture as api-proxy/kc-proxy: ntfy stays internal (omi), only this proxy
   # is on `edge` with host ingress. Uses the same self-signed certs (gen-dev-certs.sh, SAN=HOST_IP).
   ntfy-proxy:
-    image: nginx:stable-alpine
+    image: ${OMI_OSS_NGINX_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["push"]
     depends_on: [ntfy]
     ports:
@@ -169,7 +169,7 @@ services:
   # on first upsert. Enable with the `chat` profile (RAG needs it) and set in backend.env:
   #   VECTOR_STORE_BACKEND=qdrant + QDRANT_URL=http://qdrant:6333 + QDRANT_VECTOR_DIM=<embedding dim>.
   qdrant:
-    image: qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc  # qdrant 1.19.0 (registry digest, verified)
+    image: ${OMI_OSS_QDRANT_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["chat"]
     volumes:
       - qdrant-storage:/qdrant/storage
@@ -339,7 +339,7 @@ services:
   # `--hostname-backchannel-dynamic=true` lets that internal http backchannel coexist with the
   # fixed public https hostname.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    image: ${OMI_OSS_KEYCLOAK_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["auth"]
     command:
       # Production mode with a PERSISTENT H2 dev-file DB on the keycloak-data volume, so realm state
@@ -391,7 +391,7 @@ services:
   # the public https issuer port; Keycloak stays http-only on the internal network. Point KC_HOSTNAME
   # and the app/backend OIDC_ISSUER at this proxy's https URL.
   kc-proxy:
-    image: nginx:stable-alpine
+    image: ${OMI_OSS_NGINX_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["auth"]
     depends_on: [keycloak]
     # 8443 is the conventional https port; override KC_HTTPS_PORT if it collides on the host
