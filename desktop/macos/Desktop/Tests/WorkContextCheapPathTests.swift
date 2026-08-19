@@ -75,6 +75,39 @@ final class WorkContextCheapPathTests: XCTestCase {
     XCTAssertEqual(handles.first?["value"] as? String, url.value)
   }
 
+  /// A visit whose only handle is the `app_window` fallback names nothing openable — it
+  /// carries the same app and title the timeline already shows. Suppressing the tape for it
+  /// would drop evidence and return no address in exchange, so the tool must fall through.
+  /// This is the observed state on a real profile with Accessibility ungranted.
+  func testAppWindowOnlyHandlesDoNotSuppressTheTimeline() async throws {
+    let started = Date().addingTimeInterval(-120)
+    let pool = await RewindDatabase.shared.getDatabaseQueue()
+    let queue = try XCTUnwrap(pool)
+    let fallback = try XCTUnwrap(
+      WorkHistoryHandle.appWindow(appName: "Google Chrome", title: "Q3 pricing model"))
+    XCTAssertFalse(fallback.isDurable, "app_window must not count as an address")
+    try await queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO context_visits
+            (contextGeneration, poolEpoch, appName, rawContextKey, normalizedContextKey,
+             referenceHash, startedAt, endedAt, outcome, handlesJson, createdAt, updatedAt)
+          VALUES (1, 1, 'Google Chrome', 'Google Chrome\nQ3 pricing model', 'chrome::q3',
+                  'hash-fallback', ?, ?, 'completed', ?, ?, ?)
+          """,
+        arguments: [
+          started, started.addingTimeInterval(60),
+          WorkHistoryHandle.encodeList([fallback]), started, started,
+        ])
+    }
+
+    let payload = await ScreenContextWorkContextBuilder.payload(arguments: [:])
+    let screenNow = payload["screen_now"] as? [String: Any]
+    XCTAssertNotEqual(
+      screenNow?["reason"] as? String, "not_requested",
+      "an app_window-only index must not take the cheap path")
+  }
+
   /// A profile with no visits must fall through to exactly today's behavior rather than
   /// returning an empty answer.
   func testEmptyIndexFallsThroughToExistingPath() async throws {

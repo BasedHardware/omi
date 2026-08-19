@@ -525,7 +525,7 @@ enum ScreenContextWorkContextBuilder {
     // Recording, a video-chunk decode, or an OCR dump. Tape is the fallback for a
     // question the handles cannot answer, and the caller asks for it by name.
     let index = await workHistoryIndex(start: start, now: now)
-    if !includeScreen, !index.visits.isEmpty {
+    if !includeScreen, index.hasDurableHandle {
       var cheap: [String: Any] = [
         "ok": true,
         "name": "get_work_context",
@@ -711,6 +711,20 @@ enum ScreenContextWorkContextBuilder {
   struct WorkHistorySnapshot: Sendable {
     var visits: [WorkHistoryVisitRecord] = []
     var briefs: [WorkstreamBrief] = []
+
+    /// Whether the index can actually name a source.
+    ///
+    /// Skipping the tape is only an improvement when a handle is an *address* — a URL or a
+    /// file path the model can open. `app_window` is the fallback kind: it carries the same
+    /// app and window title the timeline already showed, so returning it alone and
+    /// suppressing the timeline would trade evidence for nothing. Measured on this
+    /// machine's Beta profile, 483 of 483 handles across 523 visits were `app_window`
+    /// (Accessibility was never granted, so no URL or file could be read), which is exactly
+    /// the state this guard keeps on today's behavior.
+    var hasDurableHandle: Bool {
+      visits.contains { $0.handles.contains(where: \.isDurable) }
+        || briefs.contains { $0.handles.contains(where: \.isDurable) }
+    }
   }
 
   /// Read the durable work index. This is the only read on the default path, and it is
