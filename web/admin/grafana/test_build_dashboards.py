@@ -251,6 +251,24 @@ class AccountLevelLeakTests(unittest.TestCase):
                         "All board must keep the account-level panels")
 
 
+class ExactRevenueTests(unittest.TestCase):
+    def test_platform_revenue_never_includes_unknown_attribution(self) -> None:
+        """profitability's plain desktop/mobile revenue fields smear
+        unknown-platform subscription MRR proportionally; platform boards must
+        chart only the exact-attribution fields."""
+        for uid, field in [("omi-tv-macos", "desktopExact"), ("omi-tv-mobile", "mobileExact")]:
+            dash = load(uid)
+            panel = next(p for p in dash["panels"]
+                         if build_dashboards.base_title(p).startswith("Revenue / day"))
+            selectors = [c["selector"] for c in panel["targets"][0]["columns"]
+                         if c.get("type") != "timestamp"]
+            self.assertEqual(selectors, [field], uid)
+            var = next(v for v in dash["templating"]["list"] if v["name"] == "d_prev")
+            url = var["query"]["infinityQuery"]["url"]
+            params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+            self.assertEqual(params["fields"], [field], uid)
+
+
 class BuilderIdempotencyTests(unittest.TestCase):
     def test_rebuild_is_idempotent(self) -> None:
         base = load("omi-tv")

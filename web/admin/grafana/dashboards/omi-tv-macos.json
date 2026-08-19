@@ -3333,7 +3333,7 @@
               "type": "timestamp"
             },
             {
-              "selector": "desktop",
+              "selector": "desktopExact",
               "text": "Desktop",
               "type": "number"
             }
@@ -4178,7 +4178,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=revenue&fields=desktop&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=revenue&fields=desktopExact&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"

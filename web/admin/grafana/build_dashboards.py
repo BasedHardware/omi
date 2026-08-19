@@ -326,6 +326,16 @@ def build_platform_board(base, scope: str) -> dict:
     for var in ["d_pusers", "d_prev", "d_cost", "d_cpu", "d_conv"]:
         retarget_var(dash, var, fields=profit_field)
 
+    # Revenue must be exact-attribution only: the plain desktop/mobile revenue
+    # series smears unknown-platform subscription MRR proportionally (fine for
+    # the All board's stack, wrong on a platform board).
+    exact_field = f"{profit_field}Exact"
+    revenue_panel = panel_by_title(dash, f"Revenue / day ({profit_field}, est.)")
+    for col in revenue_panel["targets"][0]["columns"]:
+        if col.get("type") != "timestamp":
+            col["selector"] = exact_field
+    retarget_var(dash, "d_prev", fields=exact_field)
+
     if scope == "macos":
         # Board context makes the (macOS) marker redundant.
         panel_by_title(dash, "Activation rate (macOS)")["title"] = "Activation rate"
