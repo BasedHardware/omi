@@ -227,7 +227,11 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
     arrival.assert_called_once_with(
-        'uid1', conversation_id='random-process-id', summary='Design review', is_desktop_meeting=True
+        'uid1',
+        conversation_id='random-process-id',
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
 
@@ -306,7 +310,11 @@ def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypat
     assert response.id == expected_id
     assert response.meeting_treatment_eligible is True
     arrival.assert_called_once_with(
-        'uid1', conversation_id=expected_id, summary='Design review', is_desktop_meeting=True
+        'uid1',
+        conversation_id=expected_id,
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
 
@@ -383,7 +391,11 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
     assert response.meeting_treatment_eligible is True
     process.assert_not_called()
     arrival.assert_called_once_with(
-        'uid1', conversation_id=expected_id, summary='Design review', is_desktop_meeting=True
+        'uid1',
+        conversation_id=expected_id,
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
 
