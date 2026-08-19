@@ -85,8 +85,31 @@ final class PermissionsPagePresentationTests: XCTestCase {
       "Microphone", "Screen Recording", "System Audio", "Notifications", "Accessibility",
     ]
     XCTAssertEqual(
-      PermissionsPageChrome.actionableKinds, required,
+      PermissionsPageChrome.requiredKinds, required,
       "a permission the app can report missing must have a row that can fix it")
+    XCTAssertTrue(
+      required.isSubset(of: PermissionsPageChrome.actionableKinds),
+      "every required permission must be actionable on the page")
+  }
+
+  /// Bluetooth, Full Disk Access, and Automation are probed at every launch and were displayed
+  /// nowhere, so a grant revoked after onboarding was invisible until the feature quietly failed.
+  func testSupportingPermissionsAreShownButNotRequired() {
+    let supporting: Set<String> = ["Bluetooth", "Full Disk Access", "Automation"]
+    XCTAssertEqual(PermissionsPageChrome.supportingKinds, supporting)
+    XCTAssertTrue(supporting.isSubset(of: PermissionsPageChrome.actionableKinds))
+    XCTAssertTrue(
+      PermissionsPageChrome.requiredKinds.isDisjoint(with: supporting),
+      "a feature-scoped permission must not block the all-granted state or warn the sidebar")
+  }
+
+  func testSupportingPermissionsNeedActionOnlyWhenUngranted() {
+    XCTAssertTrue(PermissionsPageChrome.bluetoothNeedsAction(granted: false))
+    XCTAssertFalse(PermissionsPageChrome.bluetoothNeedsAction(granted: true))
+    XCTAssertTrue(PermissionsPageChrome.fullDiskAccessNeedsAction(granted: false))
+    XCTAssertFalse(PermissionsPageChrome.fullDiskAccessNeedsAction(granted: true))
+    XCTAssertTrue(PermissionsPageChrome.automationNeedsAction(granted: false))
+    XCTAssertFalse(PermissionsPageChrome.automationNeedsAction(granted: true))
   }
 
   func testAccessibilityNeedsActionWhenUngranted() {

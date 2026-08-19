@@ -2368,7 +2368,15 @@ class ChatToolExecutor {
 
     let screenRecordingGranted = ScreenCaptureService.checkPermission()
     let microphoneGranted = AudioCaptureService.checkPermission()
-    let accessibilityGranted = AXIsProcessTrusted()
+    // `AXIsProcessTrusted()` alone is only half the accessibility answer: it goes stale after a
+    // re-sign, and it cannot see the stuck grant where TCC reports yes while AX calls are
+    // refused. Take the same projection the Permissions page uses, so this tool and that page
+    // can never disagree — and so writing the flag here cannot leave `isAccessibilityBroken`
+    // describing a different machine than `hasAccessibilityPermission`.
+    let accessibilitySignals = AppState.probeAccessibilitySignals(
+      targets: AppState.accessibilityProbeTargets())
+    let accessibilityProjection = AppState.accessibilityProjection(accessibilitySignals)
+    let accessibilityGranted = accessibilityProjection.hasPermission
     let automationStatus = AppState.queryAutomationPermissionStatus()
     let fullDiskAccessGranted = checkFullDiskAccessDirectly()
     guard
@@ -2382,6 +2390,7 @@ class ChatToolExecutor {
     appState?.hasMicrophonePermission = microphoneGranted
     appState?.hasNotificationPermission = notificationsGranted
     appState?.hasAccessibilityPermission = accessibilityGranted
+    appState?.isAccessibilityBroken = accessibilityProjection.isBroken
     appState?.hasAutomationPermission = automationStatus == noErr
     appState?.automationPermissionError = automationPermissionError(for: automationStatus)
     appState?.hasFullDiskAccess = fullDiskAccessGranted

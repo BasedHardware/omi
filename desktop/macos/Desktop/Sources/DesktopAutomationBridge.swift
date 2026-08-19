@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import CryptoKit
 import Foundation
 import Network
@@ -3081,8 +3082,13 @@ final class DesktopAutomationActionRegistry {
           "notifications": appState.hasNotificationPermission ? "granted" : "not_granted",
           "accessibility": appState.hasAccessibilityPermission
             ? (appState.isAccessibilityBroken ? "broken" : "granted") : "not_granted",
+          "bluetooth": appState.hasBluetoothPermission ? "granted" : "not_granted",
+          "full_disk_access": appState.hasFullDiskAccess ? "granted" : "not_granted",
+          "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
           "missing": appState.missingPermissions.joined(separator: ","),
           "ax_suppressed": ScreenCaptureService.isAccessibilitySuppressedForTesting() ? "true" : "false",
+          "ax_tcc_trusted": AXIsProcessTrusted() ? "true" : "false",
+          "ax_probe": AppState.axProbeResult(targets: AppState.accessibilityProbeTargets()).rawValue,
         ]
       }
     }
