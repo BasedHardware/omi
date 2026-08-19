@@ -2,18 +2,23 @@
 """Behavioral coverage for build_dashboards.py — the platform boards and the
 NYC-time/latest-day display contract.
 
-The regression this guards: daily buckets arrive as bare date strings
-("2026-08-18"); parsed as UTC midnight they render at 8 pm the previous day
-in America/New_York, so the latest day silently disappears from every daily
-chart. The builder must (a) pin every board to America/New_York and (b) route
-every daily/weekly/monthly timestamp column through the proxy's `_tzdates`
-rewrite with an RFC3339 parse format.
+Regressions guarded here:
+  - Daily buckets arrive as bare date strings; parsed as UTC midnight they
+    render 8 pm the previous NYC day and the latest day disappears. Every
+    day-grain column must go through `_tzdates` + RFC3339.
+  - The platform boards must actually be platform-scoped: every PostHog-backed
+    query (including ones nested in /compare URLs) pins platform=macos /
+    platform=mobile / platform=all per board. Unscoped viral-metrics silently
+    reports macOS numbers as all-platform (the "same DAU on every board" bug).
+  - The mobile board mirrors the macOS board panel-for-panel except the
+    desktop-only product surfaces.
 """
 
 from __future__ import annotations
 
 import copy
 import json
+import re
 import sys
 import unittest
 import urllib.parse
@@ -25,6 +30,7 @@ sys.path.insert(0, str(HERE))
 import build_dashboards  # noqa: E402
 
 BOARDS = ["omi-tv", "omi-tv-macos", "omi-tv-mobile"]
+BOARD_SCOPE = {"omi-tv": "all", "omi-tv-macos": "macos", "omi-tv-mobile": "mobile"}
 RFC3339 = "2006-01-02T15:04:05Z07:00"
 BARE_DAY_FORMATS = {"2006-01-02", "2006-01"}
 
@@ -41,15 +47,40 @@ def timestamp_columns(dash):
                     yield panel, target, col
 
 
+def all_urls(dash):
+    for panel in dash.get("panels", []):
+        for target in panel.get("targets", []):
+            if "url" in target:
+                yield panel.get("title", "?"), target["url"]
+    for var in dash.get("templating", {}).get("list", []):
+        q = var.get("query", {}).get("infinityQuery", {})
+        if "url" in q:
+            yield f"var:{var['name']}", q["url"]
+
+
+def platform_of(url: str) -> str | None:
+    """The effective platform param of a URL (unwrapping /compare paths)."""
+    parsed = urllib.parse.urlparse(url)
+    params = dict(urllib.parse.parse_qsl(parsed.query))
+    if "/compare" in parsed.path and "path" in params:
+        inner = urllib.parse.urlparse(params["path"])
+        params = dict(urllib.parse.parse_qsl(inner.query))
+        url = params.get("path", "") or inner.path
+        return params.get("platform")
+    return params.get("platform")
+
+
+def touches_platform_route(url: str) -> bool:
+    haystack = urllib.parse.unquote(url)
+    return any(route in haystack for route in build_dashboards.PLATFORM_ROUTES)
+
+
 class NycTimeContractTests(unittest.TestCase):
     def test_every_board_is_pinned_to_new_york(self) -> None:
         for uid in BOARDS:
             self.assertEqual(load(uid)["timezone"], "America/New_York", uid)
 
     def test_no_bare_date_columns_survive(self) -> None:
-        """Bare date formats parse as UTC midnight and shift the latest day
-        off the chart in NYC time — every day-grain column must go through
-        _tzdates and parse as RFC3339."""
         for uid in BOARDS:
             for panel, target, col in timestamp_columns(load(uid)):
                 fmt = col.get("timestampFormat")
@@ -63,8 +94,6 @@ class NycTimeContractTests(unittest.TestCase):
                                   "not routed through _tzdates")
 
     def test_hourly_columns_stay_utc_parsed(self) -> None:
-        """Hourly buckets are genuine UTC instants; they must NOT be rewritten
-        (the dashboard timezone converts them to NYC wall-clock at render)."""
         hourly = [
             (panel, target, col)
             for panel, target, col in timestamp_columns(load("omi-tv"))
@@ -75,7 +104,20 @@ class NycTimeContractTests(unittest.TestCase):
             self.assertNotIn("_tzdates", target["url"])
 
 
-class PlatformBoardTests(unittest.TestCase):
+class PlatformScopeTests(unittest.TestCase):
+    def test_every_posthog_query_pins_its_board_platform(self) -> None:
+        """The 'same DAU on every board' bug: an unscoped viral-metrics /
+        dau-trends / retention / k-factor URL reports macOS-only numbers
+        wherever it appears."""
+        for uid, scope in BOARD_SCOPE.items():
+            exceptions = {"var:d_act"} if uid == "omi-tv" else set()
+            for where, url in all_urls(load(uid)):
+                if not touches_platform_route(url):
+                    continue
+                expected = "macos" if where in exceptions else scope
+                self.assertEqual(platform_of(url), expected,
+                                 f"{uid} / {where}: expected platform={expected} in {url}")
+
     def test_switcher_links_on_every_board(self) -> None:
         for uid in BOARDS:
             urls = [link["url"] for link in load(uid)["links"]]
@@ -85,40 +127,40 @@ class PlatformBoardTests(unittest.TestCase):
                 uid,
             )
 
-    def test_macos_board_has_no_mobile_series(self) -> None:
-        dash = load("omi-tv-macos")
-        for panel in dash["panels"]:
-            for target in panel.get("targets", []):
-                for col in target.get("columns", []):
-                    self.assertNotIn("mobile", col.get("selector", "").lower(),
-                                     f"macOS board leaks mobile series in {panel['title']}")
-        titles = " ".join(p["title"] for p in dash["panels"])
-        self.assertIn("macOS users", titles)
-        self.assertNotIn("by platform", titles)
 
-    def test_mobile_board_is_honest(self) -> None:
-        """Mobile engagement isn't instrumented — the board must only carry
-        profitability-derived series plus the instrumentation note."""
-        dash = load("omi-tv-mobile")
-        titles = [p["title"] for p in dash["panels"]]
-        joined = " ".join(titles)
-        for absent in ["Retention", "Floating bar", "WAU", "notification", "Crash"]:
-            self.assertNotIn(absent, joined, f"mobile board should not claim {absent}")
-        note = next(p for p in dash["panels"] if p["type"] == "text")
-        self.assertIn("not instrumented", note["options"]["content"])
-        for panel in dash["panels"]:
-            for target in panel.get("targets", []):
-                for col in target.get("columns", []):
-                    self.assertNotIn("desktop", col.get("selector", "").lower(),
-                                     f"mobile board leaks desktop series in {panel['title']}")
+class MirrorTests(unittest.TestCase):
+    @staticmethod
+    def normalized_titles(dash) -> set[str]:
+        return {
+            re.sub(r"desktop|mobile|macOS|Mobile", "×", build_dashboards.base_title(p))
+            for p in dash["panels"]
+        }
 
-    def test_platform_delta_variables_follow_their_board(self) -> None:
-        for uid, field in [("omi-tv-macos", "desktop"), ("omi-tv-mobile", "mobile")]:
-            for var in load(uid)["templating"]["list"]:
-                url = var["query"]["infinityQuery"]["url"]
-                params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
-                if "profitability" in params.get("path", [""])[0]:
-                    self.assertEqual(params["fields"], [field], f"{uid}: {var['name']}")
+    def test_mobile_mirrors_macos_except_desktop_features(self) -> None:
+        macos, mobile = load("omi-tv-macos"), load("omi-tv-mobile")
+        desktop_only = {
+            re.sub(r"desktop|mobile|macOS|Mobile", "×", t)
+            for t in build_dashboards.DESKTOP_ONLY_TITLES
+        }
+        self.assertEqual(self.normalized_titles(macos) - desktop_only,
+                         self.normalized_titles(mobile))
+        self.assertEqual(len(mobile["panels"]),
+                         len(macos["panels"]) - len(build_dashboards.DESKTOP_ONLY_TITLES))
+
+    def test_boards_do_not_leak_the_other_platforms_series(self) -> None:
+        for uid, foreign in [("omi-tv-macos", "mobile"), ("omi-tv-mobile", "desktop")]:
+            for panel in load(uid)["panels"]:
+                for target in panel.get("targets", []):
+                    for col in target.get("columns", []):
+                        self.assertNotIn(foreign, col.get("selector", "").lower(),
+                                         f"{uid} leaks {foreign} series in {panel['title']}")
+
+    def test_platform_tickers_use_alltime_users(self) -> None:
+        for uid, label in [("omi-tv-macos", "macOS"), ("omi-tv-mobile", "Mobile")]:
+            ticker = build_dashboards.panel_by_title(load(uid), f"{label} users (all-time)")
+            target = ticker["targets"][0]
+            self.assertIn("viral-metrics", target["url"])
+            self.assertEqual(target["columns"][0]["selector"], "allTimeUsers")
 
 
 class ApplyScopeTests(unittest.TestCase):
@@ -145,15 +187,20 @@ class ApplyScopeTests(unittest.TestCase):
 
 class BuilderIdempotencyTests(unittest.TestCase):
     def test_rebuild_is_idempotent(self) -> None:
-        """Running the builder against its own output changes nothing —
-        guards against _tzdates double-append and title suffix drift."""
         base = load("omi-tv")
         rebuilt = copy.deepcopy(base)
         build_dashboards.apply_tzdates(rebuilt)
+        build_dashboards.apply_platform(rebuilt, "all")
+        build_dashboards.retarget_var(
+            rebuilt, "d_act",
+            path=build_dashboards.set_url_param(build_dashboards.VIRAL_PATH, "platform", "macos"),
+        )
         build_dashboards.finish(rebuilt, "omi-tv", "Omi TV")
         self.assertEqual(base, rebuilt)
-        self.assertEqual(build_dashboards.build_macos(rebuilt), load("omi-tv-macos"))
-        self.assertEqual(build_dashboards.build_mobile(rebuilt), load("omi-tv-mobile"))
+        self.assertEqual(build_dashboards.build_platform_board(rebuilt, "macos"),
+                         load("omi-tv-macos"))
+        self.assertEqual(build_dashboards.build_platform_board(rebuilt, "mobile"),
+                         load("omi-tv-mobile"))
 
 
 if __name__ == "__main__":

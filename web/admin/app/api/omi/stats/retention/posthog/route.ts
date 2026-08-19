@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
     const eventFilter =
       platform === 'macos'
         ? `AND properties.$os = 'macOS' ${excludeOtherProducts}`
-        : excludeOtherProducts;
+        : platform === 'mobile'
+          ? `AND properties.$os IN ('iOS', 'Android', 'iPadOS') ${excludeOtherProducts}`
+          : excludeOtherProducts;
     const url = `${host}/api/projects/${projectId}/query/`;
 
     const cohortRows = await posthogQuery(

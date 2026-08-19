@@ -57,7 +57,7 @@
         {
           "columns": [
             {
-              "selector": "totalUsersDesktop",
+              "selector": "allTimeUsers",
               "text": "macOS users",
               "type": "number"
             }
@@ -72,14 +72,14 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
           }
         }
       ],
-      "title": "macOS users",
+      "title": "macOS users (all-time)",
       "type": "stat"
     },
     {
@@ -184,7 +184,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60&root=growthAccounting&fields=active&agg=last&window=1&drop=1",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&drop=1",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -480,7 +480,7 @@
           }
         }
       ],
-      "title": "W4 retention (macOS)",
+      "title": "W4 retention",
       "type": "stat"
     },
     {
@@ -556,7 +556,7 @@
           "root_selector": "proxy",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/k-factor/posthog?days=30",
+          "url": "http://127.0.0.1:8899/api/omi/stats/k-factor/posthog?days=30&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -655,7 +655,7 @@
           "root_selector": "growthAccounting",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -839,7 +839,7 @@
           }
         }
       ],
-      "title": "Retention curve \u2014 macOS, 30d cohorts",
+      "title": "Retention curve \u2014 30d cohorts",
       "type": "barchart"
     },
     {
@@ -981,7 +981,7 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1055,7 +1055,7 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1129,7 +1129,7 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1205,7 +1205,7 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1280,7 +1280,7 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1356,7 +1356,7 @@
           "root_selector": "summary",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1438,7 +1438,7 @@
           }
         }
       ],
-      "title": "Retention D1 (macOS)",
+      "title": "Retention D1",
       "type": "stat"
     },
     {
@@ -1513,7 +1513,7 @@
           }
         }
       ],
-      "title": "Retention D7 (macOS)",
+      "title": "Retention D7",
       "type": "stat"
     },
     {
@@ -1858,7 +1858,7 @@
           "root_selector": "data",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/dau-trends?days=60&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/dau-trends?days=60&_tzdates=date&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2018,7 +2018,7 @@
           "root_selector": "growthAccounting",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2184,7 +2184,7 @@
           "root_selector": "stickinessTrend",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&_tzdates=week&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -2428,7 +2428,7 @@
           "root_selector": "powerUserCurve",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4236,7 +4236,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60&root=growthAccounting&fields=active&agg=last&window=1&label=WoW&drop=1",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&label=WoW&drop=1",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -4347,7 +4347,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fdau-trends%3Fdays%3D60&root=data&fields=dau&agg=avg&window=30&label=avg+vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fdau-trends%3Fdays%3D60%26platform%3Dmacos&root=data&fields=dau&agg=avg&window=30&label=avg+vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -4384,7 +4384,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60&root=growthAccounting&fields=newUsers&agg=sum&window=4&label=new+vs+prev+4w",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=newUsers&agg=sum&window=4&label=new+vs+prev+4w",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -4421,7 +4421,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60&root=stickinessTrend&fields=dauWau&agg=avg&window=4&label=vs+prev+4w",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=stickinessTrend&fields=dauWau&agg=avg&window=4&label=vs+prev+4w",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -4458,7 +4458,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60&root=activation&fields=rate&agg=avg&window=30&label=vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=activation&fields=rate&agg=avg&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
