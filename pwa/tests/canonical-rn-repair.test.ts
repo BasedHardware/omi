@@ -67,7 +67,7 @@ test("unsupported web operations share the explicit rejection behavior", async (
 test("web Bluetooth capability remains distinct from native power and permission states", async () => {
   const available = createWebNativeAdapter({
     bluetooth: {
-      requestDevice: async () => ({ name: "Browser device" }),
+      requestDevice: async () => ({}),
     },
   });
   const unsupported = createWebNativeAdapter({});

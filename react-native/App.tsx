@@ -134,8 +134,6 @@ function bluetoothStatusLabel(state: string): string {
       return 'Bluetooth check failed';
     case 'poweredOff':
       return 'Bluetooth off';
-    case 'unknown':
-      return 'Bluetooth status unknown';
     default:
       return 'Bluetooth status unknown';
   }
