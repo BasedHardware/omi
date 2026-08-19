@@ -1,9 +1,10 @@
 # Agent VM minimum spend
 
 - Date: 2026-08-17
-- Status: Prescribed; code half implemented in this PR. Live-infrastructure
-  actions require explicit operator execution and are NOT performed by any code
-  in this repository.
+- Status: Superseded by the full Cloud Agent VM retirement in PR #11795. Do not
+  execute this minimum-spend prescription or its deleted reconciler workflow.
+  The remaining live-infrastructure teardown is documented in
+  `docs/runbooks/cloud-agent-vm-infrastructure-retirement.md`.
 - Decision owner: Agent runtime / cost policy
 - Operator instruction: "Have Fable prescribe the best cost savings approach
   that gets us down to minimum spend … Be aggressive in savings, ok with
