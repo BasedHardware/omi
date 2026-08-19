@@ -1,6 +1,6 @@
 import Foundation
 
-/// Rollout gating shared by the two meeting-identity sources.
+/// Rollout gating for features whose consumer is scoped by *deployment* rather than by user.
 ///
 /// The backend half of this feature is scoped by deployment: the `CONVERSATION_*` rollout flags
 /// are `true` only in the dev runtime environment, and the beta app bundle is the only
@@ -13,7 +13,7 @@ import Foundation
 /// consuming flags off, so they would pay for calendar permission prompts and uploads that nothing
 /// reads. The PostHog flag stays the lever for stable; beta keeps a kill switch so a bad build can
 /// be disarmed without shipping a new one.
-enum MeetingIdentityRollout {
+enum BetaDogfoodRollout {
   /// The decision, with every input passed in so it can be exercised without a bundle,
   /// a process environment, or a PostHog client.
   static func isEnabled(
@@ -58,7 +58,7 @@ enum SystemCalendarMeetingContextFeature {
   /// Named/dev bundles require an explicit environment override; beta is on unless killed;
   /// stable requires an explicit true PostHog flag evaluation.
   @MainActor static var isEnabled: Bool {
-    MeetingIdentityRollout.isEnabled(
+    BetaDogfoodRollout.isEnabled(
       flagName: flagName,
       killSwitchFlagName: killSwitchFlagName,
       localOverrideName: localOverrideName
@@ -73,7 +73,7 @@ enum OnDeviceMeetingIdentityFeature {
 
   /// Independent dark launch: screen-derived identity does not require Calendar permission.
   @MainActor static var isEnabled: Bool {
-    MeetingIdentityRollout.isEnabled(
+    BetaDogfoodRollout.isEnabled(
       flagName: flagName,
       killSwitchFlagName: killSwitchFlagName,
       localOverrideName: localOverrideName

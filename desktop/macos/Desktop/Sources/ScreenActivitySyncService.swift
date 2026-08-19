@@ -21,15 +21,22 @@ enum ScreenActivitySyncState: Int {
 
 enum ScreenActivityLosslessSyncFeature {
   static let flagName = "screen_activity_lossless_sync"
+  static let killSwitchFlagName = "screen_activity_lossless_sync_kill"
   private static let localOverrideName = "OMI_FORCE_LOSSLESS_SCREEN_SYNC"
 
-  /// Development bundles dogfood by default. Shipped bundles stay on the legacy path until the
-  /// PostHog flag is explicitly enabled, so the migration can ship dark without changing traffic.
+  /// Development bundles dogfood by default. Beta is on unless killed — it is the channel this
+  /// is meant to be exercised on, and its backend is the one carrying the rest of the rollout.
+  /// Stable stays on the legacy path until the PostHog flag is explicitly enabled, so the
+  /// migration ships dark without changing production traffic.
   @MainActor static var isEnabled: Bool {
     if AppBuild.isNonProduction {
       return ProcessInfo.processInfo.environment[localOverrideName] != "0"
     }
-    return PostHogManager.shared.isFeatureEnabled(flagName)
+    return BetaDogfoodRollout.isEnabled(
+      flagName: flagName,
+      killSwitchFlagName: killSwitchFlagName,
+      localOverrideName: localOverrideName
+    )
   }
 }
 
