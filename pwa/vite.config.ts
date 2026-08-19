@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import type { ConfigEnv, ProxyOptions } from "vite";
 import {
   assertLoopbackBackendUrl,
   LOCAL_PROXY_PREFIX,
@@ -11,7 +12,13 @@ const reactNativeWebPath = fileURLToPath(
 
 type LocalProxyEnvironment = Record<string, string | undefined>;
 
-export function localProxy(environment: LocalProxyEnvironment = process.env) {
+const unavailableBackendResponse = JSON.stringify({
+  error: "local_api_unavailable",
+});
+
+export function localProxy(
+  environment: LocalProxyEnvironment = process.env
+): ProxyOptions {
   const target = assertLoopbackBackendUrl(
     environment.OMI_LOCAL_BACKEND_URL ?? "http://127.0.0.1:8787"
   ).origin;
@@ -37,10 +44,41 @@ export function localProxy(environment: LocalProxyEnvironment = process.env) {
   };
 }
 
+function unavailableLocalProxy(): ProxyOptions {
+  return {
+    bypass(_request, response) {
+      if (response === undefined) {
+        return false;
+      }
+      response.writeHead(503, { "content-type": "application/json" });
+      response.end(unavailableBackendResponse);
+      return "/__omi/api-unavailable";
+    },
+  };
+}
+
+function serverProxy(environment: LocalProxyEnvironment): ProxyOptions {
+  const clientId = environment.OMI_LOCAL_API_CLIENT_ID?.trim();
+  const token = environment.OMI_LOCAL_API_TOKEN?.trim();
+  if (
+    clientId === undefined ||
+    clientId === "" ||
+    token === undefined ||
+    token === ""
+  ) {
+    return unavailableLocalProxy();
+  }
+  return localProxy(environment);
+}
+
 export default ({
-  env = process.env,
-}: { env?: LocalProxyEnvironment } = {}) => {
-  const proxy = { [LOCAL_PROXY_PREFIX]: localProxy(env) };
+  command,
+  env,
+}: Pick<ConfigEnv, "command"> & { env?: LocalProxyEnvironment }) => {
+  const proxy =
+    command === "serve"
+      ? { [LOCAL_PROXY_PREFIX]: serverProxy(env ?? process.env) }
+      : undefined;
   return {
     build: {
       emptyOutDir: true,
@@ -49,7 +87,7 @@ export default ({
     },
     preview: {
       host: "127.0.0.1",
-      proxy,
+      ...(proxy === undefined ? {} : { proxy }),
     },
     resolve: {
       alias: { "react-native": reactNativeWebPath },
@@ -75,7 +113,7 @@ export default ({
     },
     server: {
       host: "127.0.0.1",
-      proxy,
+      ...(proxy === undefined ? {} : { proxy }),
     },
   };
 };
