@@ -44,17 +44,17 @@ DAY_FORMATS = {"2006-01-02", "2006-01"}
 # Routes that accept ?platform=all|macos|mobile.
 PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor/posthog")
 
-# Desktop-only product surfaces — kept on the mobile board as explicit
+# Surfaces with NO mobile data at all — kept on the mobile board as explicit
 # "not available on mobile" placeholders so both platform boards stay
 # panel-for-panel identical without mislabeling desktop data as mobile.
+# (Floating bar is a macOS-only feature; mobile sends no crash telemetry.)
 DESKTOP_ONLY_TITLES = {
     "Floating bar sessions per user", "Floating bar queries",
-    "Floating bar notification CTR", "Daily notifications sent",
-    "Notifications sent — last 168 hours", "Weekly notification reach",
-    "Notifications enabled", "Crash-free rate (today)", "Crash-free rate",
-    "macOS: beta vs production (today)", "macOS: by version (today)",
-    "macOS active today",
+    "Floating bar notification CTR", "Crash-free rate (today)",
+    "Crash-free rate",
 }
+# Notification panels stay real on both platform boards: mentor pushes are
+# account-level (delivered to whatever devices a user has), not per-platform.
 
 LINKS = [
     {"title": title, "type": "link", "url": f"/grafana/d/{uid}/", "icon": "dashboard",
@@ -322,6 +322,18 @@ def build_platform_board(base, scope: str) -> dict:
         chart["title"] = "Activation (signup → activated)" + (
             "  ·  " + chart["title"].split("  ·  ")[1] if "  ·  " in chart["title"] else "")
     if scope == "mobile":
+        # Real mobile equivalents of the macOS-titled panels.
+        versions_mobile = "/api/omi/stats/macos-versions?platform=mobile"
+        channel_pie = panel_by_title(dash, "macOS: beta vs production (today)")
+        channel_pie["title"] = "Mobile: iOS vs Android (today)"
+        channel_pie["targets"][0]["url"] = f"{PROXY}{versions_mobile}"
+        version_pie = panel_by_title(dash, "macOS: by version (today)")
+        version_pie["title"] = "Mobile: by app version (today)"
+        version_pie["targets"][0]["url"] = f"{PROXY}{versions_mobile}"
+        active_today = panel_by_title(dash, "macOS active today")
+        active_today["title"] = "Mobile active today"
+        active_today["targets"][0]["url"] = f"{PROXY}{versions_mobile}"
+
         # The Firestore activation route is macOS-only (conversation within 7
         # days of a macOS signup); mobile activation uses PostHog telemetry
         # (first-seen → Memory Created within 7 days) via viral-metrics.

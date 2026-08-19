@@ -136,13 +136,31 @@ class MirrorTests(unittest.TestCase):
             for p in dash["panels"]
         }
 
+    @staticmethod
+    def normalize(title: str) -> str:
+        title = title.split("  ·  ")[0]
+        title = re.sub(r"macOS: beta vs production", "×: split", title)
+        title = re.sub(r"Mobile: iOS vs Android", "×: split", title)
+        title = re.sub(r"macOS: by version", "×: by version", title)
+        title = re.sub(r"Mobile: by app version", "×: by version", title)
+        return re.sub(r"desktop|mobile|macOS|Mobile", "×", title)
+
     def test_mobile_mirrors_macos_panel_for_panel(self) -> None:
+        """Position-by-position: same normalized title, same gridPos, and the
+        same panel type — except the five no-mobile-data placeholders, which
+        must be text panels in the same slots."""
         macos, mobile = load("omi-tv-macos"), load("omi-tv-mobile")
         self.assertEqual(len(mobile["panels"]), len(macos["panels"]))
-        self.assertEqual(self.normalized_titles(macos), self.normalized_titles(mobile))
+        placeholder_norms = {self.normalize(t) for t in build_dashboards.DESKTOP_ONLY_TITLES}
         for m_panel, mob_panel in zip(macos["panels"], mobile["panels"]):
+            m_norm = self.normalize(m_panel["title"])
+            self.assertEqual(m_norm, self.normalize(mob_panel["title"]))
             self.assertEqual(m_panel["gridPos"], mob_panel["gridPos"],
                              f"layout diverges at {m_panel['title']}")
+            if m_norm in placeholder_norms:
+                self.assertEqual(mob_panel["type"], "text", m_panel["title"])
+            else:
+                self.assertEqual(mob_panel["type"], m_panel["type"], m_panel["title"])
 
     def test_desktop_only_surfaces_are_explicit_placeholders_on_mobile(self) -> None:
         mobile = load("omi-tv-mobile")
@@ -151,6 +169,13 @@ class MirrorTests(unittest.TestCase):
             self.assertEqual(panel["type"], "text", title)
             self.assertIn("Desktop-only", panel["options"]["content"], title)
             self.assertIn("/grafana/d/omi-tv-macos/", panel["options"]["content"], title)
+
+    def test_mobile_equivalents_query_the_mobile_scope(self) -> None:
+        mobile = load("omi-tv-mobile")
+        for title in ["Mobile: iOS vs Android (today)", "Mobile: by app version (today)",
+                      "Mobile active today"]:
+            panel = build_dashboards.panel_by_title(mobile, title)
+            self.assertIn("macos-versions?platform=mobile", panel["targets"][0]["url"], title)
 
     def test_platform_growth_charts_share_the_ticker_population(self) -> None:
         """The cumulative chart must end at the all-time ticker value: both
