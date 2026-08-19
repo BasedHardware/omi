@@ -363,6 +363,41 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// (the screen-recording repair prompt is delivered once per broken-capture episode).
   /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
   /// bounded delivery outcomes and never carries notification text or window context.
+  /// Whether a delivery must be withheld because other people are present.
+  ///
+  /// Two distinct harms, one rule. Sharing a screen makes a private nudge **visible** to
+  /// everyone on the call; being in a call at all makes it **interrupt a conversation**.
+  /// Scoping this to sharing alone was tested against a live Google Meet call and let
+  /// "Meet is fine — but you said you'd submit the SBI Hackathon prototype" through while
+  /// the user was mid-meeting, which is the disruption the guard exists to prevent.
+  ///
+  /// Pure so the policy is testable without a real call; the detection it is fed is
+  /// impure and lives in `currentPresenceDetected()`.
+  nonisolated static func shouldSuppressForPresence(
+    respectFrequency: Bool,
+    presenceDetected: Bool
+  ) -> Bool {
+    respectFrequency && presenceDetected
+  }
+
+  /// Live presence detection, kept out of the policy so the policy stays testable.
+  ///
+  /// Three complementary signals, all pre-existing and already trusted in production:
+  /// `activeScreenSharePresent()` (used to pause capture during shares, #10143),
+  /// `callAppIsUsingMicrophone()` for an active call, and `browserCallWindowPresent()`
+  /// which is the documented fallback for a *muted* browser call where mic input has
+  /// dropped. Omi's own ambient capture cannot trip the mic signal: it matches only
+  /// native call apps and browsers by bundle id.
+  nonisolated static func currentPresenceDetected() -> Bool {
+    if ConferencingApps.activeScreenSharePresent() { return true }
+    // The audio-process API this reads is macOS 14.4+. On 14.0–14.3 the browser
+    // window-title fallback below still catches browser calls; a native-app call on those
+    // versions goes undetected, which fails open — a missed suppression, never a missed
+    // notification.
+    if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
+    return ConferencingApps.browserCallWindowPresent()
+  }
+
   func sendNotification(
     ownerID: String,
     title: String,
@@ -448,6 +483,32 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         insightDeliveryID,
         outcome: .suppressed,
         reason: Self.currentFrequencyLevel() == 0 ? .frequencyOff : .frequencyThrottled
+      )
+      return
+    }
+
+    // A proactive notification is addressed to one person. While the user is presenting,
+    // every surface Omi draws on is broadcast to everyone on the call, so the audience for
+    // a private nudge is no longer the audience it was written for — "Submit prototype for
+    // SBI Hackathon before the deadline" is useful alone and a disclosure on a shared
+    // screen. Suppress rather than reveal.
+    //
+    // `respectFrequency` is the existing proactive/functional split: functional notices
+    // (screen-recording repair prompts, Crisp replies, onboarding test) pass false and must
+    // still reach the user, because suppressing a permission prompt during a share is how a
+    // broken capture stays broken.
+    //
+    // Placed after the cheap boolean gates deliberately: `activeScreenSharePresent()` scans
+    // the window list, so it must not run for notifications an earlier gate already refused.
+    if Self.shouldSuppressForPresence(
+      respectFrequency: respectFrequency,
+      presenceDetected: Self.currentPresenceDetected())
+    {
+      log("NotificationService: suppressing \(assistantId) notification while other people are present")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .presenceActive
       )
       return
     }

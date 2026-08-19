@@ -557,6 +557,10 @@ actor SuggestionAssistant: ProactiveAssistant {
           + "no open commitment matches \"\(suggestion.suggestion)\""
       )
       return outcome
+    case .suppressedPresenting:
+      // The pure decision never yields this. Presenting is evaluated further down, after
+      // the owner re-check, so the audience is read as late as possible before the card.
+      return outcome
     case .delivered:
       break
     }
@@ -566,6 +570,24 @@ actor SuggestionAssistant: ProactiveAssistant {
     guard let ownerID, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
       await emitDeliveryOutcome(.rejectedOwner, identity: telemetryIdentity)
       return .rejectedOwner
+    }
+
+    // Presenting is checked here, before the suggestion is remembered — not only at
+    // delivery. `recentSuggestions` gates every later evaluation, so recording a
+    // suggestion that the screen-share guard in NotificationService is about to withhold
+    // would retire it permanently: the user never sees it, and every regeneration after
+    // the call is filtered as a duplicate of a card that was never shown. Returning before
+    // the write leaves it eligible once the share ends.
+    if NotificationService.shouldSuppressForPresence(
+      respectFrequency: true,
+      presenceDetected: NotificationService.currentPresenceDetected())
+    {
+      log(
+        "Suggestion: withheld while others are present [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedPresenting, identity: telemetryIdentity)
+      return .suppressedPresenting
     }
 
     recentSuggestions = SuggestionDeduplication.remembering(
