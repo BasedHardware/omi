@@ -91,6 +91,25 @@ def test_empty_tag_in_a_production_overlay_is_fine():
     assert _MODULE.check(RELEASE, COMPOSE, GITIGNORE, CHART, {'values-prod.yaml': '  image:\n    tag: ""\n'}) == []
 
 
+def test_older_release_committed_in_a_production_overlay_is_flagged():
+    # Rolling back is `--set image.tag=<older>` at install time; committing it freezes the environment.
+    problems = _MODULE.check(RELEASE, COMPOSE, GITIGNORE, CHART, {'values-prod.yaml': '    tag: 0.1.9\n'})
+    assert any('freezes the environment' in p for p in problems), problems
+
+
+def test_image_declared_in_an_entry_file_is_flagged():
+    # Entry files are outside the reach of `include: env_file:` — an image there renders untagged.
+    problems = _MODULE.check(
+        RELEASE, COMPOSE, GITIGNORE, CHART, {}, {'compose.prod.yaml': '    image: omi-oss-backend:${OMI_OSS_RELEASE}\n'}
+    )
+    assert any('entry files do not see' in p for p in problems), problems
+
+
+def test_entry_file_without_images_passes():
+    entry = {'compose.prod.yaml': 'include:\n  - path: compose.base.yaml\n    env_file:\n      - omi.oss.release.env\n'}
+    assert _MODULE.check(RELEASE, COMPOSE, GITIGNORE, CHART, {}, entry) == []
+
+
 def test_the_real_repo_is_aligned():
     """The check as CI runs it — the tree in this commit must pass."""
     assert _MODULE.main() == 0

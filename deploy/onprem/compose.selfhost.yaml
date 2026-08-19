@@ -141,6 +141,13 @@ services:
       dockerfile: backend/Dockerfile
       tags:
         - omi-oss-backend:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       args:
         PYTHON_BASE_IMAGE: python:3.11-slim
     profiles: ["chat"]
@@ -224,6 +231,13 @@ services:
     build:
       tags:
         - omi-oss-parakeet:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       context: ../../
       # On-prem SLIM build: NIM gateway (forwards to whisper), no NeMo, no GPU -> ~2.9GB instead of 76GB
       # (backend/parakeet/Dockerfile.oss). The NeMo `Dockerfile` stays for the datacenter direct-NeMo
@@ -256,6 +270,13 @@ services:
     build:
       tags:
         - omi-oss-diarizer:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       context: ../../
       dockerfile: backend/diarizer/Dockerfile
       args:
@@ -283,6 +304,13 @@ services:
     build:
       tags:
         - omi-oss-nllb:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       # This Dockerfile COPYs main.py/requirements.txt from the context root, so the context is the
       # service dir (unlike diarizer/parakeet, whose Dockerfiles COPY backend/<svc>/ from repo root).
       context: ../../backend/nllb_translation
@@ -313,6 +341,13 @@ services:
     build:
       tags:
         - omi-oss-whisper:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       context: ../../backend/whisper
       dockerfile: Dockerfile
     profiles: ["inference"]

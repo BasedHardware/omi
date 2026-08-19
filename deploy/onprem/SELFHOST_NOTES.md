@@ -25,6 +25,35 @@ This section is the single source of truth for how the environments differ; ever
 A proxy lives where its upstream lives: `api-proxy` fronts the backend → **base**; `kc-proxy`/`ntfy-proxy`
 front keycloak/ntfy → **selfhost**.
 
+### Where the image references come from
+
+No `image:` in the fragments is written inline. Every posture passes two committed files to its
+`include:` (long form, `env_file:`), and the fragments interpolate from them:
+
+| File | Holds | Decision |
+|---|---|---|
+| `omi.oss.release.env` | `OMI_OSS_RELEASE` — the release of this stack; tags the five images **we** build | ADR-0054 |
+| `omi.oss.release.pins` | one `OMI_OSS_*_IMAGE` per third-party image (mongo, valkey, nginx, keycloak, ntfy, qdrant, rustfs, postgres, minio/mc) | ADR-0055 |
+
+Consequences worth knowing before editing:
+
+- **Both are source, not operator config.** Bumping a pin or the release is a commit, not a local tweak.
+  Per-installation choices (registry prefix, ports, host IP) stay in the gitignored `.env`.
+- Each variable holds the **whole reference**, so a pin may be a tag, `tag@digest` or a bare digest —
+  tightening one is a one-line change with nothing else to touch.
+- The variables reach the **included** fragments only. A service declared in an entry file
+  (`compose.prod.yaml` and friends) would not see them; a guard enforces that.
+- The **shell environment wins** over these files, so the names are namespaced `OMI_OSS_*`. Do not export
+  them to override a pin — edit the file.
+- A build tags each of our images with the release **and** with `:latest`. `:latest` is a **dev alias**
+  (Kind loads it by name); never push or deploy it — a mutable tag makes a later upgrade leave the pod
+  spec unchanged, so the node keeps serving the cached image.
+- Optional but recommended when building: `OMI_OSS_REVISION=$(git rev-parse HEAD)` — it stamps the commit
+  into each image next to `omi.oss.release`, so `docker inspect` identifies exactly what is running.
+
+Both files are covered by `check_oss_release.py` and `check_oss_image_parity.py` (manifest ids
+`oss-release`, `oss-image-pins`), which also keep the Helm chart's values and `appVersion` in step.
+
 ### The four postures (runnable)
 
 | Posture | Entrypoint | Includes | `omi` network | Backends |

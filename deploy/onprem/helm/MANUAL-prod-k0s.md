@@ -170,7 +170,9 @@ public images the cluster pulls on its own; you do **not** build those.
 
 **a.** Build the five images from the compose files (needs internet for the base images; can take a while):
 ```bash
-docker compose -f ../compose.prod.yaml --profile inference build
+# OMI_OSS_REVISION is optional but recommended: it stamps the commit into each image, so
+# `docker inspect <image>` later tells you exactly what is running.
+OMI_OSS_REVISION=$(git rev-parse HEAD) docker compose -f ../compose.prod.yaml --profile inference build
 ```
 ```bash
 docker images | grep omi-oss              # you should see the 5 omi-oss-* images

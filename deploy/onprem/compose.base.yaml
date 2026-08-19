@@ -39,6 +39,13 @@ services:
       # :latest stays as a DEV alias (Kind loads it with `kind load`); prod/k0s must use the release.
       tags:
         - omi-oss-backend:latest
+      labels:
+        # Provenance without touching the Dockerfiles (three of the five are upstream):
+        # `docker inspect` on any image says which release it belongs to. Pass
+        # OMI_OSS_REVISION=$(git rev-parse HEAD) at build time to record the commit too.
+        omi.oss.release: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.version: ${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+        org.opencontainers.image.revision: ${OMI_OSS_REVISION:-}
       args:
         # override the repo's PRIVATE base image with a public one (see SELFHOST_NOTES, Risks)
         PYTHON_BASE_IMAGE: python:3.11-slim

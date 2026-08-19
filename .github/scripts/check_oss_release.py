@@ -14,9 +14,13 @@ Invariants:
   3. every `omi-oss-*` image in the compose files is tagged with the release, never a literal tag;
   4. the chart's appVersion equals the release — it is the default tag of every image we build, so a
      drift there ships a chart that deploys a different build than the compose stack of the same commit;
-  5. no prod/k0s overlay pins `tag: latest`. `:latest` is the dev alias the build produces next to the
-     release (Kind loads it by that name); in production it reintroduces exactly the stale-pull bug this
-     design removes.
+  5. no prod/k0s overlay COMMITS a tag other than the release. `:latest` is the dev alias the build
+     produces next to the release (Kind loads it by that name); in production it reintroduces exactly the
+     stale-pull bug this design removes, and a committed older version silently freezes an environment.
+     (Rolling back is `--set backend.image.tag=<older release>` at install time, not a committed value.)
+  6. no compose ENTRY file declares an `image:`. The release and the pins reach the INCLUDED files
+     through `include: env_file:`; a service declared in the including file would not see those
+     variables and would render an empty or literal tag (verified behaviour).
 
 Stdlib only, like the other guards.
 
@@ -33,6 +37,8 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE_ENV = ROOT / "deploy/onprem/omi.oss.release.env"
 GITIGNORE = ROOT / "deploy/onprem/.gitignore"
 COMPOSE = [ROOT / "deploy/onprem/compose.base.yaml", ROOT / "deploy/onprem/compose.selfhost.yaml"]
+# Entry files: they only include + override env/volumes, and never declare an image (see invariant 6).
+ENTRY = [ROOT / f"deploy/onprem/compose.{env}.yaml" for env in ("prod", "dev", "prod.cloud", "seed")]
 CHART = ROOT / "deploy/onprem/helm/omi-oss/Chart.yaml"
 # Overlays that deploy for real: :latest is a dev-only alias and must not appear here.
 PROD_VALUES = [
@@ -61,7 +67,7 @@ def _images(text: str) -> list[str]:
 
 
 _APPVERSION_RE = re.compile(r'^appVersion:\s*["\']?([^"\'\s]+)["\']?\s*$', re.MULTILINE)
-_LATEST_TAG_RE = re.compile(r'^\s*tag:\s*["\']?latest["\']?\s*$', re.MULTILINE)
+_TAG_RE = re.compile(r'^\s*tag:\s*["\']?([^"\'\s#]*)["\']?\s*(?:#.*)?$', re.MULTILINE)
 
 
 def check(
@@ -70,6 +76,7 @@ def check(
     gitignore_text: str,
     chart_text: str = "",
     prod_values: dict[str, str] | None = None,
+    entry_texts: dict[str, str] | None = None,
 ) -> list[str]:
     """The whole rule over source strings, so it is testable without a repo on disk."""
     problems: list[str] = []
@@ -108,10 +115,28 @@ def check(
             )
 
     for fname, text in (prod_values or {}).items():
-        if _LATEST_TAG_RE.search(text):
+        for tag in _TAG_RE.findall(text):
+            if tag == "":
+                continue  # empty = inherit the release from appVersion: the intended production shape
+            if tag == "latest":
+                problems.append(
+                    f"{fname}: pins `tag: latest` — that alias is dev-only (Kind loads it by name); in "
+                    f"production it reintroduces the stale-pull bug (a rebuild leaves the pod spec unchanged)"
+                )
+            elif release is not None and tag != release:
+                problems.append(
+                    f"{fname}: commits `tag: {tag}` != release {release} — that freezes the environment on an "
+                    f"old build; roll back with `--set <component>.image.tag={tag}` at install time instead"
+                )
+
+    # Variables passed via `include: env_file:` reach the INCLUDED files only: an `image:` declared in an
+    # entry file would render with no release and no pin.
+    for fname, text in (entry_texts or {}).items():
+        if _IMAGE_RE.search(text):
             problems.append(
-                f"{fname}: pins `tag: latest` — that alias is dev-only (Kind loads it by name); in "
-                f"production it reintroduces the stale-pull bug (a rebuild leaves the pod spec unchanged)"
+                f"{fname}: declares an `image:` — entry files do not see the release/pin variables "
+                f"(include: env_file: reaches the INCLUDED files only). Declare it in compose.base.yaml "
+                f"or compose.selfhost.yaml instead"
             )
 
     return problems
@@ -147,6 +172,7 @@ def main() -> int:
         GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.exists() else "",
         CHART.read_text(encoding="utf-8") if CHART.exists() else "",
         {f.name: f.read_text(encoding="utf-8") for f in PROD_VALUES if f.exists()},
+        {f.name: f.read_text(encoding="utf-8") for f in ENTRY if f.exists()},
     )
     untracked = _tracked_by_git()
     if untracked:
