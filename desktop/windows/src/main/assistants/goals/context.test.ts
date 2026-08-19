@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   assembleGoalContext,
+  fetchActiveGoalCountWith,
   hasSufficientContext,
   type GoalContextFetchers,
   type GoalContextData,
@@ -56,6 +57,56 @@ describe('assembleGoalContext', () => {
       fetchers({ fetchGoals: async () => [{ title: 'X', targetValue: 10, currentValue: 2.5 }] })
     )
     expect(data.activeGoals).toEqual(['- X (2.5/10)'])
+  })
+})
+
+describe('fetchActiveGoalCountWith', () => {
+  // The auto-generation cap is now decided on this one read instead of the full
+  // five-read bundle. Two derivations of "how many goals are active" therefore exist,
+  // and if they drift the cap starts meaning different things depending on which path
+  // evaluated it. These cases hold them together.
+  const goals: RawGoal[] = [
+    { title: 'Read books', targetValue: 12, currentValue: 3 }, // active
+    { title: 'Ship v1', targetValue: 1, currentValue: 1 }, // complete (>=target)
+    { title: 'Run miles', targetValue: 100, currentValue: 100 }, // complete
+    { title: 'No target', targetValue: 0, currentValue: 0 } // target 0 → active
+  ]
+
+  it('agrees with assembleGoalContext on the same goals', async () => {
+    const f = fetchers({ fetchGoals: async () => goals })
+    const bundle = await assembleGoalContext(f)
+    await expect(fetchActiveGoalCountWith(f)).resolves.toBe(bundle.activeGoalCount)
+    await expect(fetchActiveGoalCountWith(f)).resolves.toBe(2)
+  })
+
+  it('reads goals and nothing else', async () => {
+    // The whole point is the four reads it does NOT make. `/v3/memories?limit=500` and
+    // `/v1/conversations?limit=100` are the expensive two.
+    const calls: string[] = []
+    const spying: GoalContextFetchers = {
+      fetchMemories: async () => {
+        calls.push('memories')
+        return []
+      },
+      fetchConversations: async () => {
+        calls.push('conversations')
+        return []
+      },
+      fetchTasks: async () => {
+        calls.push('tasks')
+        return []
+      },
+      fetchPersona: async () => {
+        calls.push('persona')
+        return null
+      },
+      fetchGoals: async () => {
+        calls.push('goals')
+        return goals
+      }
+    }
+    await fetchActiveGoalCountWith(spying)
+    expect(calls).toEqual(['goals'])
   })
 })
 

@@ -219,6 +219,28 @@ export async function assembleGoalContext(f: GoalContextFetchers): Promise<GoalC
   }
 }
 
+/** The active-goal count on its own: ONE `GET /v1/goals/all` and none of the other
+ *  four reads. Derived exactly as `assembleGoalContext` derives `activeGoalCount`, so
+ *  the cap gate means the same thing whichever path evaluates it.
+ *
+ *  This exists so the auto-generation cap can be checked BEFORE the expensive context
+ *  build. A user sitting at the cap is the steady state, not the exception, and that
+ *  user used to re-pay all five reads — including 500 memories and 100 conversations —
+ *  on every 4-hourly tick, forever, because the bail does not stamp the day. */
+export async function fetchActiveGoalCountWith(
+  f: Pick<GoalContextFetchers, 'fetchGoals'>
+): Promise<number> {
+  const goals = await f.fetchGoals()
+  return goals.filter((g) => !isProgressComplete(g)).length
+}
+
+/** Production `fetchActiveGoalCountWith`. `null` = no session (nothing to decide on). */
+export async function fetchActiveGoalCount(): Promise<number | null> {
+  const session = getBackendSession()
+  if (!session) return null
+  return fetchActiveGoalCountWith(realFetchers(session))
+}
+
 /** Mac's insufficient-context guard (throws `insufficientContext` there): skip
  *  generation entirely unless there is at least one memory OR conversation OR
  *  task. Goal history alone is not enough to reason from. */

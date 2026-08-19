@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   },
   session: null as unknown,
   fetchGoalContext: vi.fn(),
+  fetchActiveGoalCount: vi.fn(),
   removeStaleGoals: vi.fn(async () => ({ deleted: [] })),
   buildCandidateWith: vi.fn(),
   createCandidateWith: vi.fn(),
@@ -28,7 +29,10 @@ vi.mock('../../appSettings', () => ({
   setAppSettings: (patch: Record<string, unknown>) => Object.assign(h.settings, patch)
 }))
 vi.mock('../core/session', () => ({ getBackendSession: () => h.session }))
-vi.mock('./context', () => ({ fetchGoalContext: h.fetchGoalContext }))
+vi.mock('./context', () => ({
+  fetchGoalContext: h.fetchGoalContext,
+  fetchActiveGoalCount: h.fetchActiveGoalCount
+}))
 vi.mock('./generate', () => ({
   buildCandidateWith: h.buildCandidateWith,
   createCandidateWith: h.createCandidateWith,
@@ -116,15 +120,20 @@ describe('runGoalGenerationIfDue gates (auto path)', () => {
   it('cleans up but does not generate when 3+ goals are already active', async () => {
     h.settings.goalAutoGenerationEnabled = true
     h.session = { token: 't' }
-    h.fetchGoalContext.mockResolvedValue(ctx({ activeGoalCount: 3 }))
+    h.fetchActiveGoalCount.mockResolvedValue(3)
     await runGoalGenerationIfDue()
     expect(h.removeStaleGoals).toHaveBeenCalled()
     expect(h.buildCandidateWith).not.toHaveBeenCalled()
+    // The cap is the resting state for an engaged user and this bail never stamps the
+    // day, so it repeats every 4h forever. It must not pay for the full context build
+    // (5 reads, including 500 memories and 100 conversations) to learn nothing.
+    expect(h.fetchGoalContext).not.toHaveBeenCalled()
   })
 
   it('generates + creates when due and stamps the day on success', async () => {
     h.settings.goalAutoGenerationEnabled = true
     h.session = { token: 't' }
+    h.fetchActiveGoalCount.mockResolvedValue(1)
     h.fetchGoalContext.mockResolvedValue(ctx({ activeGoalCount: 1 }))
     h.buildCandidateWith.mockResolvedValue({ status: 'candidate', candidate })
     h.createCandidateWith.mockResolvedValue({ status: 'created', goalId: 'g1', title: 'G' })
@@ -137,6 +146,7 @@ describe('runGoalGenerationIfDue gates (auto path)', () => {
   it('does not create (nor stamp the day) when generation skips', async () => {
     h.settings.goalAutoGenerationEnabled = true
     h.session = { token: 't' }
+    h.fetchActiveGoalCount.mockResolvedValue(1)
     h.fetchGoalContext.mockResolvedValue(ctx({ activeGoalCount: 1 }))
     h.buildCandidateWith.mockResolvedValue({ status: 'skipped', reason: 'insufficient_context' })
     await runGoalGenerationIfDue()
