@@ -527,6 +527,30 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.pipeline.prerecorded')
     @patch('utils.sync.pipeline.delete_syncing_temporal_file')
     @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_detected_language_is_stored_on_new_conversation(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        """Detected non-English language must be persisted, not replaced by the 'en' default (#11349)."""
+        from utils.sync.pipeline import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'fr')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment('test/path.bin', 'uid123', response, lock, errors, transcription_prefs=None)
+
+        created_conversation = mock_process.call_args.args[2]
+        assert created_conversation.language == 'fr'
+
+    @patch('utils.sync.pipeline.process_conversation')
+    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.pipeline.prerecorded')
+    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
+    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_vocabulary_capped_at_100(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
         """Vocabulary should be capped at 100 items."""
         from utils.sync.pipeline import process_segment
