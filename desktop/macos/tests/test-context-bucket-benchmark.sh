@@ -91,6 +91,46 @@ assert detailed["decision_matched"] is True
 assert detailed["forbidden_output_matched"] is False
 assert detailed["forbidden_terms_matched"] == []
 assert detailed["failure_reasons"] == []
+assert detailed["referent_named"] is None
+assert detailed["referent_hits"] == []
+
+# A case that declares referentTokens fails when the user-visible text names none
+# of them, and `reasoning` -- which the user never sees -- cannot rescue it.
+named_case = {**case, "referentTokens": ["Synthetic title"]}
+unnamed_case = {**case, "referentTokens": ["#4821", "nimbus-labs/ingest-suite"]}
+reasoning_only_case = {**case, "referentTokens": ["Synthetic reasoning"]}
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    named = benchmark.invoke_case(named_case, 47910)
+    unnamed = benchmark.invoke_case(unnamed_case, 47910)
+    reasoning_only = benchmark.invoke_case(reasoning_only_case, 47910)
+assert named["referent_named"] is True
+assert named["referent_hits"] == ["Synthetic title"]
+assert named["failure_reasons"] == []
+assert named["matched"] is True
+assert unnamed["referent_named"] is False
+assert unnamed["failure_reasons"] == ["unnamed_referent"]
+assert unnamed["matched"] is False
+assert reasoning_only["referent_named"] is False
+assert reasoning_only["failure_reasons"] == ["unnamed_referent"]
+
+# Silence carries no user-visible text, so the criterion does not apply to it.
+envelope["result"]["detail"]["decision"] = "silence"
+silent_case = {**unnamed_case, "expectedAction": "silence", "allowedDecisions": ["silence"]}
+with patch.object(benchmark.request, "urlopen", return_value=Response()):
+    silent = benchmark.invoke_case(silent_case, 47910)
+assert silent["failure_reasons"] == []
+assert silent["matched"] is True
+envelope["result"]["detail"]["decision"] = "suggest"
+
+referent_ids = {c["id"] for c in fixture["cases"] if c["id"].startswith("referent-")}
+assert referent_ids <= benchmark.DIRECTOR_CASES
+assert benchmark.REFERENT_CASES == referent_ids
+for referent_case in (c for c in fixture["cases"] if c["id"] in referent_ids):
+    # The one deliberate exception is the control whose context supplies no handle.
+    if referent_case["id"] == "referent-no-identifier":
+        assert referent_case["referentTokens"] == []
+        continue
+    assert referent_case["referentTokens"], referent_case["id"]
 
 leaking_case = {**case, "forbiddenOutputTerms": ["synthetic MESSAGE"]}
 with patch.object(benchmark.request, "urlopen", return_value=Response()):
