@@ -21,7 +21,5 @@ the agent loop that calls them.
   client sends a conversation id and/or timezone-aware dates, conversation and
   search tools must not escape that window. Unsupported tools under
   conversation scope should refuse rather than search all memory.
-- Claude Agent VM (`claudeAgentEnabled`) is intentionally out of scope for
-  `chat_scope` until that path is wired.
 - Callers own auth, rate limits, and response shaping; this package must not log
   raw user text or BYOK secrets.
