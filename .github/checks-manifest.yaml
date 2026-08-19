@@ -273,6 +273,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
+  - id: ios-ble-energy-policy
+    command: ["ruby", "app/ios/test/omi_ble_energy_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBleEnergyPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/BleHostApiImpl.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_ble_energy_policy_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]

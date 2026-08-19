@@ -31,11 +31,12 @@ final class OmiBleManager: NSObject {
     /// Whether the user explicitly disconnected (suppress auto-reconnect).
     private var manuallyDisconnected: Set<String> = []
 
-    /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
+    /// RSSI timer used only while the diagnostics screen is visible.
     private var rssiTimer: Timer?
+    private var rssiTimerPeripheralUuid: String?
 
-    /// When true, RSSI reads are forwarded to Flutter for the diagnostics graph.
-    var isRssiStreamingEnabled = false
+    /// Peripheral whose live RSSI graph is currently subscribed by Flutter.
+    private var diagnosticsRssiPeripheralUuid: String?
 
     /// Connection start time per peripheral UUID.
     private var connectionStartTimes: [String: Int64] = [:]
@@ -63,6 +64,17 @@ final class OmiBleManager: NSObject {
     /// Queued scan request if Bluetooth wasn't ready when startScan was called.
     private var pendingScan: (timeout: Int, serviceUuids: [String])?
 
+    /// Last battery point written during this process, used to avoid rewriting
+    /// the complete UserDefaults history for every notification.
+    private var lastPersistedBatteryLevel: [String: Int] = [:]
+    private var lastPersistedBatteryTimestampMs: [String: Int64] = [:]
+
+    /// Native batch/flash-drain traffic during the current background window.
+    /// These packets do not cross Pigeon, so Dart counters cannot observe them.
+    private var nativeBackgroundBytesConsumed: [String: Int64] = [:]
+    private var nativeBackgroundPacketsConsumed: [String: Int64] = [:]
+    private var isBackgroundTelemetryWindowActive = false
+
     // MARK: - Initialization
 
     private override init() {
@@ -77,6 +89,22 @@ final class OmiBleManager: NSObject {
             ]
         )
         NSLog("[OmiBle] CBCentralManager created")
+    }
+
+    func markBackgroundTelemetryStart() {
+        nativeBackgroundBytesConsumed.removeAll()
+        nativeBackgroundPacketsConsumed.removeAll()
+        isBackgroundTelemetryWindowActive = true
+    }
+
+    func markBackgroundTelemetryEnd() {
+        isBackgroundTelemetryWindowActive = false
+    }
+
+    private func recordNativeBackgroundPacket(uuid: String, bytes: Int) {
+        guard isBackgroundTelemetryWindowActive else { return }
+        nativeBackgroundBytesConsumed[uuid, default: 0] += Int64(bytes)
+        nativeBackgroundPacketsConsumed[uuid, default: 0] += 1
     }
 
     func setFlutterApi(_ api: BleFlutterApi) {
@@ -253,22 +281,51 @@ final class OmiBleManager: NSObject {
         }
     }
 
-    // MARK: - RSSI Keep-Alive
+    // MARK: - RSSI Diagnostics
 
-    private func startRssiKeepAlive(for peripheral: CBPeripheral) {
-        stopRssiKeepAlive()
+    func setRssiStreaming(enabled: Bool, uuid: String) {
+        if enabled {
+            diagnosticsRssiPeripheralUuid = uuid
+            guard let peripheral = peripherals[uuid],
+                  OmiBleEnergyPolicy.shouldPollRssi(
+                    diagnosticsEnabled: true,
+                    peripheralConnected: peripheral.state == .connected
+                  ) else {
+                stopRssiDiagnosticsPolling()
+                return
+            }
+            peripheral.readRSSI()
+            startRssiDiagnosticsPolling(for: peripheral)
+            return
+        }
+
+        if diagnosticsRssiPeripheralUuid == uuid {
+            diagnosticsRssiPeripheralUuid = nil
+            stopRssiDiagnosticsPolling()
+        }
+    }
+
+    private func startRssiDiagnosticsPolling(for peripheral: CBPeripheral) {
+        stopRssiDiagnosticsPolling()
+        rssiTimerPeripheralUuid = peripheralUuidString(peripheral)
         rssiTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self, weak peripheral] _ in
-            guard let peripheral = peripheral, peripheral.state == .connected else {
-                self?.stopRssiKeepAlive()
+            guard let self, let peripheral else { return }
+            let uuid = self.peripheralUuidString(peripheral)
+            guard OmiBleEnergyPolicy.shouldPollRssi(
+                diagnosticsEnabled: self.diagnosticsRssiPeripheralUuid == uuid,
+                peripheralConnected: peripheral.state == .connected
+            ) else {
+                self.stopRssiDiagnosticsPolling()
                 return
             }
             peripheral.readRSSI()
         }
     }
 
-    private func stopRssiKeepAlive() {
+    private func stopRssiDiagnosticsPolling() {
         rssiTimer?.invalidate()
         rssiTimer = nil
+        rssiTimerPeripheralUuid = nil
     }
 
     // MARK: - Private Helpers
@@ -477,7 +534,9 @@ final class OmiBleManager: NSObject {
             disconnectHistory: events,
             reconnectionCount: Int64(reconnectCount),
             connectedAt: connectedAt,
-            failToConnectCount: Int64(failToConnectCount)
+            failToConnectCount: Int64(failToConnectCount),
+            nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed[uuid] ?? 0,
+            nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed[uuid] ?? 0
         )
     }
 
@@ -491,6 +550,13 @@ final class OmiBleManager: NSObject {
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
         let now = Int64(Date().timeIntervalSince1970 * 1000)
+        guard OmiBleEnergyPolicy.shouldPersistBatteryReading(
+            previousLevel: lastPersistedBatteryLevel[uuid],
+            previousTimestampMs: lastPersistedBatteryTimestampMs[uuid],
+            level: level,
+            nowMs: now
+        ) else { return }
+
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
@@ -501,6 +567,8 @@ final class OmiBleManager: NSObject {
         }
 
         defaults.set(history, forKey: key)
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryTimestampMs[uuid] = now
     }
 
     func getBatteryHistory(uuid: String) -> [BleBatteryPoint] {
@@ -520,7 +588,9 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
-        stopRssiKeepAlive()
+        if rssiTimerPeripheralUuid == peripheralUuid {
+            stopRssiDiagnosticsPolling()
+        }
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -713,7 +783,12 @@ extension OmiBleManager: CBPeripheralDelegate {
             
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            startRssiKeepAlive(for: peripheral)
+            // Retain one connection-time sample for disconnect diagnostics, but
+            // do not keep the radio polling unless the diagnostics UI asks.
+            peripheral.readRSSI()
+            if diagnosticsRssiPeripheralUuid == uuid {
+                startRssiDiagnosticsPolling(for: peripheral)
+            }
         }
     }
 
@@ -735,7 +810,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         rssiHistory[uuid] = samples
 
         // Forward to Flutter only while the diagnostics screen has subscribed.
-        if isRssiStreamingEnabled {
+        if diagnosticsRssiPeripheralUuid == uuid {
             flutterApi?.onRssiUpdate(peripheralUuid: uuid, rssi: value) { _ in }
         }
     }
@@ -775,6 +850,7 @@ extension OmiBleManager: CBPeripheralDelegate {
             characteristicUuid: charUuid,
             value: data
         ) {
+            recordNativeBackgroundPacket(uuid: uuid, bytes: data.count)
             return
         }
 
@@ -787,6 +863,7 @@ extension OmiBleManager: CBPeripheralDelegate {
             characteristicUuid: charUuid,
             value: data
         ) {
+            recordNativeBackgroundPacket(uuid: uuid, bytes: data.count)
             return
         }
 

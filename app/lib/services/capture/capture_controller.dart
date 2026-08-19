@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -70,7 +69,9 @@ class CaptureController extends ChangeNotifier
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
 
-  final ConversationLocationCapture _conversationLocationCapture = ConversationLocationCapture();
+  final ConversationLocationCapture _conversationLocationCapture;
+  final Future<void> Function()? _inProgressConversationLoader;
+  final Future<BleAudioCodec> Function(String deviceId)? _audioCodecLoader;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -134,6 +135,8 @@ class CaptureController extends ChangeNotifier
 
   double get bleReceiveRateKbps => _metrics.bleReceiveRateKbps;
   double get wsSendRateKbps => _metrics.wsSendRateKbps;
+  int get lifetimeBleBytesReceived => _metrics.lifetimeBleBytesReceived;
+  int get lifetimeWsSocketBytesSent => _metrics.lifetimeWsSocketBytesSent;
 
   /// Call this in initState of a widget that needs BLE/WS metrics
   void addMetricsListener() {
@@ -145,6 +148,10 @@ class CaptureController extends ChangeNotifier
     _metrics.removeMetricsListener();
   }
 
+  void setMetricsAppActive(bool active) {
+    _metrics.setAppActive(active);
+  }
+
   /// Check if any segment has a personId not in local cache.
   /// Uses Set difference for O(N+M) complexity instead of O(N*M).
   bool _hasMissingPerson(List<TranscriptSegment> segments) {
@@ -153,8 +160,16 @@ class CaptureController extends ChangeNotifier
     return segmentPersonIds.difference(cachedIds).isNotEmpty;
   }
 
-  CaptureController({CaptureExternalActions? externalActions})
-      : externalActions = externalActions ?? const NoopCaptureExternalActions() {
+  CaptureController({
+    CaptureExternalActions? externalActions,
+    ConversationLocationCapture? conversationLocationCapture,
+    Future<void> Function()? inProgressConversationLoader,
+    Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
+  })
+      : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+        _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
+        _inProgressConversationLoader = inProgressConversationLoader,
+        _audioCodecLoader = audioCodecLoader {
     // Restore a persisted device mute so it survives an app kill/restart. When
     // the device reconnects, streamDeviceRecording() reads _isPaused as
     // `wasPaused` and re-applies the mute instead of silently resuming.
@@ -1052,6 +1067,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<BleAudioCodec> _getAudioCodec(String deviceId) async {
+    if (_audioCodecLoader != null) return _audioCodecLoader!(deviceId);
     var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
     if (connection == null) {
       return BleAudioCodec.pcm8;
@@ -1657,6 +1673,8 @@ class CaptureController extends ChangeNotifier
       _updateRecordingDevice(null);
     }
     updateRecordingState(RecordingState.stop);
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     await _socket?.stop(reason: 'stop stream device recording');
   }
 
@@ -1694,10 +1712,30 @@ class CaptureController extends ChangeNotifier
     _startKeepAliveServices();
   }
 
+  bool get _shouldReconnectTranscriptionSocket {
+    final activeDeviceCapture =
+        _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
+    final activePhoneOrSystemCapture =
+        recordingState == RecordingState.record ||
+        recordingState == RecordingState.interrupted ||
+        recordingState == RecordingState.systemAudioRecord;
+    return activeDeviceCapture || activePhoneOrSystemCapture;
+  }
+
+  @visibleForTesting
+  bool get keepAliveScheduledForTesting => _keepAliveTimer?.isActive ?? false;
+
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    if (!_shouldReconnectTranscriptionSocket) return;
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
       Logger.debug("[Provider] keep alive");
+      if (!_shouldReconnectTranscriptionSocket) {
+        t.cancel();
+        _keepAliveTimer = null;
+        return;
+      }
       // rate 1/15s
       if (_keepAliveLastExecutedAt != null &&
           DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
@@ -1708,30 +1746,42 @@ class CaptureController extends ChangeNotifier
       _keepAliveLastExecutedAt = DateTime.now();
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
+        _keepAliveTimer = null;
         return;
       }
 
       if (!AuthService.instance.isSignedIn()) {
         Logger.debug("[Provider] keep alive - user not signed in, cancelling reconnect");
         t.cancel();
+        _keepAliveTimer = null;
         return;
       }
 
-      if (_recordingDevice != null) {
-        BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-        await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
-        return;
-      }
-      if (recordingState == RecordingState.record || recordingState == RecordingState.interrupted) {
-        await _initiateWebsocket(
-          audioCodec: BleAudioCodec.pcm16,
-          sampleRate: 16000,
-          source: ConversationSource.phone.name,
-        );
-        return;
-      }
+      await _reconnectActiveCapture();
     });
   }
+
+  Future<void> _reconnectActiveCapture() async {
+    final device = _recordingDevice;
+    if (device != null && recordingState == RecordingState.deviceRecord && !_isPaused) {
+      final codec = await _getAudioCodec(device.id);
+      if (!_shouldReconnectTranscriptionSocket || _recordingDevice?.id != device.id) return;
+      await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
+      return;
+    }
+    if (recordingState == RecordingState.record ||
+        recordingState == RecordingState.interrupted ||
+        recordingState == RecordingState.systemAudioRecord) {
+      await _initiateWebsocket(
+        audioCodec: BleAudioCodec.pcm16,
+        sampleRate: 16000,
+        source: ConversationSource.phone.name,
+      );
+    }
+  }
+
+  @visibleForTesting
+  Future<void> reconnectActiveCaptureForTesting() => _reconnectActiveCapture();
 
   @override
   void onError(Object err) {
@@ -1799,7 +1849,11 @@ class CaptureController extends ChangeNotifier
     try {
       await _drainNativeBleTranscriptMessages();
       if (segments.isEmpty && photos.isEmpty) {
-        await _loadInProgressConversation();
+        if (_inProgressConversationLoader != null) {
+          await _inProgressConversationLoader!();
+        } else {
+          await _loadInProgressConversation();
+        }
       }
     } finally {
       _isRefreshingInProgressConversation = false;
@@ -2235,9 +2289,16 @@ class CaptureController extends ChangeNotifier
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {
       _isLoadingInProgressConversation = true;
-      FlutterForegroundTask.sendDataToTask(jsonEncode({'location': true}));
+      // Refresh the location at the first transcript without relying on the
+      // long-lived foreground-task isolate. This is fail-open and does not
+      // delay segment processing.
+      unawaited(_conversationLocationCapture.captureAndUpload());
       try {
-        await _loadInProgressConversation();
+        if (_inProgressConversationLoader != null) {
+          await _inProgressConversationLoader!();
+        } else {
+          await _loadInProgressConversation();
+        }
       } finally {
         _isLoadingInProgressConversation = false;
       }
@@ -2314,6 +2375,8 @@ class CaptureController extends ChangeNotifier
     // Persist so the mute survives an app kill/restart, not just a reconnect.
     SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
     notifyListeners();
   }
 
