@@ -247,6 +247,18 @@ def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
     panel["timeFrom"] = "30d"
 
 
+def set_share_tile_description(dash, platform_label: str) -> None:
+    """The share-rate proxy is platform-scoped per board; keep its description
+    honest about which population the denominator counts."""
+    for panel in dash.get("panels", []):
+        if base_title(panel).startswith("Share rate"):
+            panel["description"] = (
+                f"Sharers ÷ new users, last 30d ({platform_label}). True K-factor needs "
+                "referral attribution — not instrumented yet, so this proxies the "
+                "share loop. 0% = no viral loop shipped."
+            )
+
+
 def finish(dash, uid: str, title: str) -> dict:
     dash["uid"] = uid
     dash["title"] = title
@@ -311,6 +323,8 @@ def build_platform_board(base, scope: str) -> dict:
     cumulative["title"] = f"Cumulative users ({label})  ·  ${{d_cum}}"
     user_growth_series(cumulative, scope, "cumulative", "Total users")
     retarget_var(dash, "d_cum", path=viral_scoped, root="userGrowth", fields="users")
+
+    set_share_tile_description(dash, label)
 
     series_label = "Desktop" if scope == "macos" else "Mobile"
     for title, new_title, series in [
@@ -384,6 +398,7 @@ def build_platform_board(base, scope: str) -> dict:
 def main() -> None:
     base = json.loads(BASE_PATH.read_text(encoding="utf-8"))
     apply_tzdates(base)
+    set_share_tile_description(base, "all platforms")
     apply_platform(base, "all")
     # The two Firestore-backed activation panels are macOS-scoped by
     # definition; their delta var compares macOS activation to stay coherent.
