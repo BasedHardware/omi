@@ -1,0 +1,19 @@
+desktop/context-for-claude/changelog/unreleased/20260819-claude-desktop-reachability.json
+  s_227233afb3b7ff::t_f30ba21adbd006 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5bddc2bf56d928078ff5d9b00d7b4e7cc8670460",
+  "prompts": {},
+  "sessions": {
+    "s_227233afb3b7ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d72fbee-85a2-445b-a86d-7f95bf574311",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
