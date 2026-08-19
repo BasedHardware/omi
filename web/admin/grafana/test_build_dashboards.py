@@ -136,16 +136,34 @@ class MirrorTests(unittest.TestCase):
             for p in dash["panels"]
         }
 
-    def test_mobile_mirrors_macos_except_desktop_features(self) -> None:
+    def test_mobile_mirrors_macos_panel_for_panel(self) -> None:
         macos, mobile = load("omi-tv-macos"), load("omi-tv-mobile")
-        desktop_only = {
-            re.sub(r"desktop|mobile|macOS|Mobile", "×", t)
-            for t in build_dashboards.DESKTOP_ONLY_TITLES
-        }
-        self.assertEqual(self.normalized_titles(macos) - desktop_only,
-                         self.normalized_titles(mobile))
-        self.assertEqual(len(mobile["panels"]),
-                         len(macos["panels"]) - len(build_dashboards.DESKTOP_ONLY_TITLES))
+        self.assertEqual(len(mobile["panels"]), len(macos["panels"]))
+        self.assertEqual(self.normalized_titles(macos), self.normalized_titles(mobile))
+        for m_panel, mob_panel in zip(macos["panels"], mobile["panels"]):
+            self.assertEqual(m_panel["gridPos"], mob_panel["gridPos"],
+                             f"layout diverges at {m_panel['title']}")
+
+    def test_desktop_only_surfaces_are_explicit_placeholders_on_mobile(self) -> None:
+        mobile = load("omi-tv-mobile")
+        for title in build_dashboards.DESKTOP_ONLY_TITLES:
+            panel = build_dashboards.panel_by_title(mobile, title)
+            self.assertEqual(panel["type"], "text", title)
+            self.assertIn("Desktop-only", panel["options"]["content"], title)
+            self.assertIn("/grafana/d/omi-tv-macos/", panel["options"]["content"], title)
+
+    def test_platform_growth_charts_share_the_ticker_population(self) -> None:
+        """The cumulative chart must end at the all-time ticker value: both
+        read viral-metrics (userGrowth / allTimeUsers), same person-dedup."""
+        for uid in ["omi-tv-macos", "omi-tv-mobile"]:
+            dash = load(uid)
+            for title in ["Daily new users", "Cumulative users"]:
+                panel = next(p for p in dash["panels"]
+                             if build_dashboards.base_title(p).startswith(title.split(" (")[0])
+                             and p["type"] == "timeseries")
+                target = panel["targets"][0]
+                self.assertIn("viral-metrics", target["url"], f"{uid}/{title}")
+                self.assertEqual(target["root_selector"], "userGrowth", f"{uid}/{title}")
 
     def test_boards_do_not_leak_the_other_platforms_series(self) -> None:
         for uid, foreign in [("omi-tv-macos", "mobile"), ("omi-tv-mobile", "desktop")]:

@@ -44,7 +44,9 @@ DAY_FORMATS = {"2006-01-02", "2006-01"}
 # Routes that accept ?platform=all|macos|mobile.
 PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor/posthog")
 
-# Desktop-only product surfaces — the only panels absent from the mobile board.
+# Desktop-only product surfaces — kept on the mobile board as explicit
+# "not available on mobile" placeholders so both platform boards stay
+# panel-for-panel identical without mislabeling desktop data as mobile.
 DESKTOP_ONLY_TITLES = {
     "Floating bar sessions per user", "Floating bar queries",
     "Floating bar notification CTR", "Daily notifications sent",
@@ -203,6 +205,41 @@ def drop_panels(dash, titles: set[str]) -> None:
     dash["panels"] = [p for p in dash["panels"] if base_title(p) not in titles]
 
 
+def placeholder_panels(dash, titles: set[str]) -> None:
+    """Replace panels in place with same-size 'not available' text panels."""
+    for i, panel in enumerate(dash["panels"]):
+        if base_title(panel) not in titles:
+            continue
+        dash["panels"][i] = {
+            "id": panel["id"],
+            "type": "text",
+            "title": base_title(panel),
+            "gridPos": panel["gridPos"],
+            "transparent": True,
+            "options": {
+                "mode": "markdown",
+                "content": "**Desktop-only surface — no mobile equivalent.**\n\n"
+                           "This feature exists only in the macOS app; see the "
+                           "[macOS board](/grafana/d/omi-tv-macos/).",
+            },
+            "targets": [],
+        }
+
+
+def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
+    """Point a chart at viral-metrics userGrowth — the same person-deduped
+    population as the all-time ticker, so counts agree across the board."""
+    viral = set_url_param(VIRAL_PATH, "platform", scope)
+    target = panel["targets"][0]
+    target["url"] = add_query_param(f"{PROXY}{viral}", "_tzdates", "date")
+    target["root_selector"] = "userGrowth"
+    target["columns"] = [
+        {"selector": "date", "text": "time", "type": "timestamp", "timestampFormat": RFC3339},
+        {"selector": field, "text": series_name, "type": "number"},
+    ]
+    panel["timeFrom"] = "30d"
+
+
 def finish(dash, uid: str, title: str) -> dict:
     dash["uid"] = uid
     dash["title"] = title
@@ -231,7 +268,7 @@ def build_platform_board(base, scope: str) -> dict:
         "Infra cost by service — last 30 days",
     })
     if scope == "mobile":
-        drop_panels(dash, DESKTOP_ONLY_TITLES)
+        placeholder_panels(dash, DESKTOP_ONLY_TITLES)
 
     ticker = panel_by_title(dash, "Total users")
     ticker["title"] = f"{label} users (all-time)"
@@ -246,19 +283,23 @@ def build_platform_board(base, scope: str) -> dict:
     set_stat_query(mrr, PROFIT_PATH, "summary",
                    "mrrDesktop" if scope == "macos" else "mrrMobile", "MRR")
 
+    # Signups / daily-new / cumulative all use viral-metrics userGrowth —
+    # the same person-deduped PostHog population as the all-time ticker, so
+    # the cumulative chart ends exactly at the ticker value.
+    viral_scoped = set_url_param(VIRAL_PATH, "platform", scope)
     signups = panel_by_title(dash, "Signups — last 7 days")
     signups["title"] = f"{label} signups — last 7 days"
     set_compare(signups["targets"][0], "url",
-                path=PROFIT_PATH, root="users", fields=profit_field)
+                path=viral_scoped, root="userGrowth", fields="users")
 
     daily = panel_by_title(dash, "Daily new users")
-    platform_series(daily, PROFIT_PATH, "users", profit_field, "New users")
-    retarget_var(dash, "d_daily", path=PROFIT_PATH, root="users", fields=profit_field)
+    user_growth_series(daily, scope, "users", "New users")
+    retarget_var(dash, "d_daily", path=viral_scoped, root="userGrowth", fields="users")
 
     cumulative = panel_by_title(dash, "Cumulative users")
     cumulative["title"] = f"Cumulative users ({label})  ·  ${{d_cum}}"
-    platform_series(cumulative, PROFIT_PATH, "cumulativeUsers", profit_field, "Total users")
-    retarget_var(dash, "d_cum", path=PROFIT_PATH, root="users", fields=profit_field)
+    user_growth_series(cumulative, scope, "cumulative", "Total users")
+    retarget_var(dash, "d_cum", path=viral_scoped, root="userGrowth", fields="users")
 
     series_label = "Desktop" if scope == "macos" else "Mobile"
     for title, new_title, series in [

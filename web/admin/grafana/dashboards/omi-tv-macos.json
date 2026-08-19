@@ -307,7 +307,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=7",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=userGrowth&fields=users&agg=sum&window=7",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -739,7 +739,7 @@
               "timestampFormat": "2006-01-02T15:04:05Z07:00"
             },
             {
-              "selector": "desktop",
+              "selector": "users",
               "text": "New users",
               "type": "number"
             }
@@ -751,10 +751,10 @@
           "format": "timeseries",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "users",
+          "root_selector": "userGrowth",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1744,7 +1744,7 @@
               "timestampFormat": "2006-01-02T15:04:05Z07:00"
             },
             {
-              "selector": "desktop",
+              "selector": "cumulative",
               "text": "Total users",
               "type": "number"
             }
@@ -1756,10 +1756,10 @@
           "format": "timeseries",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "cumulativeUsers",
+          "root_selector": "userGrowth",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=macos&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -4273,7 +4273,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=30&label=vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=userGrowth&fields=users&agg=sum&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -4310,7 +4310,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop&agg=sum&window=30&label=vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=userGrowth&fields=users&agg=sum&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"

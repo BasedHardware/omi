@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
       wauResult,
       mauResult,
       allTimeResult,
+      userGrowthResult,
     ] = await Promise.all([
       // 1. New users per week (first-ever Sign In Completed)
       hogql(apiKey, projectId, host, `
@@ -245,6 +246,23 @@ export async function GET(request: NextRequest) {
         WHERE 1 = 1
           ${os}
       `),
+
+      // 10. Daily new users by first-seen date, same person-deduped
+      // population as query 9 — its running sum must end at allTimeUsers so
+      // the cumulative chart and the all-time ticker agree by construction.
+      hogql(apiKey, projectId, host, `
+        SELECT first_day, count(*) as new_users
+        FROM (
+          SELECT COALESCE(person_id, distinct_id) as actor,
+                 toDate(min(timestamp)) as first_day
+          FROM events
+          WHERE 1 = 1
+            ${os}
+          GROUP BY actor
+        )
+        GROUP BY first_day
+        ORDER BY first_day
+      `),
     ]);
 
     // ── Process Growth Accounting ──
@@ -294,6 +312,14 @@ export async function GET(request: NextRequest) {
     const wau = (wauResult as any[])[0]?.[0] ?? 0;
     const mau = (mauResult as any[])[0]?.[0] ?? 0;
     const allTimeUsers = (allTimeResult as any[])[0]?.[0] ?? 0;
+
+    // ── User growth (first-seen daily + cumulative) ──
+    const userGrowth: { date: string; users: number; cumulative: number }[] = [];
+    let cumulative = 0;
+    for (const [day, users] of userGrowthResult as any[]) {
+      cumulative += users;
+      userGrowth.push({ date: day, users, cumulative });
+    }
     const recentDau = dailyDau.slice(-7);
     const avgDau = recentDau.length > 0
       ? Math.round(recentDau.reduce((s, d) => s + d.dau, 0) / recentDau.length)
@@ -385,6 +411,7 @@ export async function GET(request: NextRequest) {
 
     const result = applyFirestoreActivationCompat(
       {
+        userGrowth,
         growthAccounting,
         stickinessTrend,
         dailyDau,

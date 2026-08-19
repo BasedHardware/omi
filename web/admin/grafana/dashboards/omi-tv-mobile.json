@@ -307,7 +307,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=mobile&agg=sum&window=7",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmobile&root=userGrowth&fields=users&agg=sum&window=7",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -739,7 +739,7 @@
               "timestampFormat": "2006-01-02T15:04:05Z07:00"
             },
             {
-              "selector": "mobile",
+              "selector": "users",
               "text": "New users",
               "type": "number"
             }
@@ -751,10 +751,10 @@
           "format": "timeseries",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "users",
+          "root_selector": "userGrowth",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=mobile&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1517,6 +1517,40 @@
       "type": "stat"
     },
     {
+      "id": 24,
+      "type": "text",
+      "title": "Crash-free rate (today)",
+      "gridPos": {
+        "x": 3,
+        "y": 18,
+        "w": 3,
+        "h": 4
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 25,
+      "type": "text",
+      "title": "macOS active today",
+      "gridPos": {
+        "x": 6,
+        "y": 18,
+        "w": 3,
+        "h": 4
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -1562,7 +1596,7 @@
         ]
       },
       "gridPos": {
-        "x": 3,
+        "x": 9,
         "y": 18,
         "w": 8,
         "h": 8
@@ -1589,7 +1623,7 @@
               "timestampFormat": "2006-01-02T15:04:05Z07:00"
             },
             {
-              "selector": "mobile",
+              "selector": "cumulative",
               "text": "Total users",
               "type": "number"
             }
@@ -1601,10 +1635,10 @@
           "format": "timeseries",
           "parser": "backend",
           "refId": "A",
-          "root_selector": "cumulativeUsers",
+          "root_selector": "userGrowth",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/viral-metrics?days=60&platform=mobile&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -1661,8 +1695,8 @@
         ]
       },
       "gridPos": {
-        "x": 11,
-        "y": 18,
+        "x": 0,
+        "y": 26,
         "w": 8,
         "h": 8
       },
@@ -1806,7 +1840,7 @@
         ]
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 26,
         "w": 8,
         "h": 8
@@ -1977,7 +2011,7 @@
         ]
       },
       "gridPos": {
-        "x": 8,
+        "x": 16,
         "y": 26,
         "w": 8,
         "h": 8
@@ -2143,8 +2177,8 @@
         ]
       },
       "gridPos": {
-        "x": 16,
-        "y": 26,
+        "x": 0,
+        "y": 34,
         "w": 8,
         "h": 8
       },
@@ -2229,7 +2263,7 @@
         "overrides": []
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 34,
         "w": 8,
         "h": 8
@@ -2283,6 +2317,142 @@
       ],
       "title": "Power user curve",
       "type": "barchart"
+    },
+    {
+      "id": 36,
+      "type": "text",
+      "title": "Floating bar sessions per user",
+      "gridPos": {
+        "x": 16,
+        "y": 34,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 37,
+      "type": "text",
+      "title": "Floating bar queries",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 38,
+      "type": "text",
+      "title": "Floating bar notification CTR",
+      "gridPos": {
+        "x": 8,
+        "y": 42,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 39,
+      "type": "text",
+      "title": "Daily notifications sent",
+      "gridPos": {
+        "x": 16,
+        "y": 42,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 40,
+      "type": "text",
+      "title": "Weekly notification reach",
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 41,
+      "type": "text",
+      "title": "Crash-free rate",
+      "gridPos": {
+        "x": 8,
+        "y": 50,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 43,
+      "type": "text",
+      "title": "macOS: beta vs production (today)",
+      "gridPos": {
+        "x": 16,
+        "y": 50,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 44,
+      "type": "text",
+      "title": "macOS: by version (today)",
+      "gridPos": {
+        "x": 0,
+        "y": 58,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
     },
     {
       "datasource": {
@@ -2346,7 +2516,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 34,
+        "y": 58,
         "w": 8,
         "h": 8
       },
@@ -2460,7 +2630,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 34,
+        "y": 58,
         "w": 8,
         "h": 8
       },
@@ -2574,7 +2744,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 42,
+        "y": 66,
         "w": 8,
         "h": 8
       },
@@ -2688,7 +2858,7 @@
       },
       "gridPos": {
         "x": 8,
-        "y": 42,
+        "y": 66,
         "w": 8,
         "h": 8
       },
@@ -2802,7 +2972,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 42,
+        "y": 66,
         "w": 8,
         "h": 8
       },
@@ -2853,6 +3023,40 @@
       "timeFrom": "30d",
       "title": "Free \u2192 paid conversion (mobile)  \u00b7  ${d_conv}",
       "type": "timeseries"
+    },
+    {
+      "id": 50,
+      "type": "text",
+      "title": "Notifications enabled",
+      "gridPos": {
+        "x": 0,
+        "y": 74,
+        "w": 8,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
+    },
+    {
+      "id": 51,
+      "type": "text",
+      "title": "Notifications sent \u2014 last 168 hours",
+      "gridPos": {
+        "x": 0,
+        "y": 82,
+        "w": 24,
+        "h": 8
+      },
+      "transparent": true,
+      "options": {
+        "mode": "markdown",
+        "content": "**Desktop-only surface \u2014 no mobile equivalent.**\n\nThis feature exists only in the macOS app; see the [macOS board](/grafana/d/omi-tv-macos/)."
+      },
+      "targets": []
     }
   ],
   "refresh": "5m",
@@ -2924,7 +3128,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=mobile&agg=sum&window=30&label=vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmobile&root=userGrowth&fields=users&agg=sum&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -2961,7 +3165,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=mobile&agg=sum&window=30&label=vs+prev+30d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmobile&root=userGrowth&fields=users&agg=sum&window=30&label=vs+prev+30d",
             "url_options": {
               "data": "",
               "method": "GET"
