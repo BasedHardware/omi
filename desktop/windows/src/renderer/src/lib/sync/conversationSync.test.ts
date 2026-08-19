@@ -13,11 +13,21 @@ vi.mock('../apiClient', () => ({
   }
 }))
 vi.mock('../preferences', () => ({ getPreferences: () => ({ language: 'en' }) }))
+const trackMemoryCreated = vi.hoisted(() => vi.fn())
+vi.mock('../analytics', () => ({ trackMemoryCreated }))
 
 import { resyncConversation, syncLocalConversation } from './conversationSync'
 
 const SEGS: SyncSegment[] = [
-  { text: 'hi', speaker: 'SPEAKER_0', speaker_id: 0, is_user: true, person_id: null, start: 0, end: 1 }
+  {
+    text: 'hi',
+    speaker: 'SPEAKER_0',
+    speaker_id: 0,
+    is_user: true,
+    person_id: null,
+    start: 0,
+    end: 1
+  }
 ]
 
 function row(over: Partial<LocalConversation>): LocalConversation {
@@ -37,14 +47,20 @@ let store: Map<string, LocalConversation>
 let claim: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
+  vi.clearAllMocks()
   post.mockReset().mockResolvedValue({ data: { id: 'cloud-new' } })
   listRecent.mockReset().mockResolvedValue({ data: [] })
   store = new Map()
   // Default claim: real CAS semantics against the in-memory store.
   claim = vi.fn(async (id: string, reset?: boolean) => {
     const r = store.get(id)
-    if (!r || !['pending', 'failed', 'unconfirmed'].includes(r.syncState ?? 'local_only')) return false
-    store.set(id, { ...r, syncState: 'posting', syncAttempts: reset ? 1 : (r.syncAttempts ?? 0) + 1 })
+    if (!r || !['pending', 'failed', 'unconfirmed'].includes(r.syncState ?? 'local_only'))
+      return false
+    store.set(id, {
+      ...r,
+      syncState: 'posting',
+      syncAttempts: reset ? 1 : (r.syncAttempts ?? 0) + 1
+    })
     return true
   })
   vi.stubGlobal('window', {
@@ -70,6 +86,7 @@ describe('syncLocalConversation — stale-snapshot safety (C1)', () => {
     expect(post).not.toHaveBeenCalled() // no duplicate POST
     expect(claim).not.toHaveBeenCalled() // never even claimed
     expect(store.get('local-1')!.syncState).toBe('done') // not clobbered
+    expect(trackMemoryCreated).not.toHaveBeenCalled()
   })
 
   it('losing the CAS claim (another driver owns it) yields skipped, no POST', async () => {
@@ -86,16 +103,24 @@ describe('syncLocalConversation — stale-snapshot safety (C1)', () => {
     expect(out).toMatchObject({ status: 'done', cloudId: 'cloud-new' })
     expect(claim).toHaveBeenCalledWith('local-1')
     expect(post).toHaveBeenCalledOnce()
+    expect(trackMemoryCreated).toHaveBeenCalledExactlyOnceWith(300)
   })
 
   it('a crash-orphaned posting row is recovered to unconfirmed (dedupe runs before any re-post)', async () => {
     store.set('local-1', row({ syncState: 'posting' }))
     listRecent.mockResolvedValueOnce({
-      data: [{ id: 'cloud-twin', started_at: '2026-07-10T12:00:00.000Z', finished_at: '2026-07-10T12:05:00.000Z' }]
+      data: [
+        {
+          id: 'cloud-twin',
+          started_at: '2026-07-10T12:00:00.000Z',
+          finished_at: '2026-07-10T12:05:00.000Z'
+        }
+      ]
     })
     const out = await syncLocalConversation(row({ syncState: 'posting' }))
     expect(out).toMatchObject({ status: 'done', cloudId: 'cloud-twin', deduped: true })
     expect(post).not.toHaveBeenCalled() // adopted the twin, did not duplicate
+    expect(trackMemoryCreated).toHaveBeenCalledExactlyOnceWith(300)
   })
 })
 
@@ -106,6 +131,7 @@ describe('resyncConversation — manual recovery of a wedged row (M2)', () => {
     expect(out).toMatchObject({ status: 'done', cloudId: 'cloud-new' })
     expect(claim).toHaveBeenCalledWith('local-1', true) // attempts reset
     expect(post).toHaveBeenCalledOnce()
+    expect(trackMemoryCreated).toHaveBeenCalledExactlyOnceWith(300)
   })
 
   it('refuses a segmentless or missing row', async () => {

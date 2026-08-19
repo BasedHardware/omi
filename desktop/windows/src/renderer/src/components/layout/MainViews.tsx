@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { panelRoutes, resolveRoute } from '../../routes/manifest'
+import { trackPageViewed } from '../../lib/analytics'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { PanelErrorFallback } from '../ui/PanelErrorFallback'
 
@@ -39,6 +40,10 @@ export function MainViews(): React.JSX.Element {
   }, [])
 
   const resolved = resolveRoute(pathname)
+  const pageId = resolved && 'entry' in resolved ? resolved.entry.id : null
+  useEffect(() => {
+    if (pageId) trackPageViewed(pageId)
+  }, [pageId])
 
   // Redirect (e.g. '/', '/live', '/chat' -> '/home').
   if (resolved && 'redirectTo' in resolved) {

@@ -1,4 +1,4 @@
-import { ipcMain, WebContents, webContents } from 'electron'
+import { app, ipcMain, WebContents, webContents } from 'electron'
 import WebSocket from 'ws'
 import {
   PCM_PENDING_MAX_BYTES,
@@ -178,11 +178,16 @@ const ownersWithDestroyHook = new Set<number>()
 // Base headers every v4/listen WS carries: auth plus the platform/device
 // identity the backend's platform normalization reads (X-App-Platform,
 // X-Device-Id-Hash). BYOK STT headers are layered on top at the call site.
-export function buildListenHeaders(token: string, deviceIdHash: string): Record<string, string> {
+export function buildListenHeaders(
+  token: string,
+  deviceIdHash: string,
+  appVersion?: string
+): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
     'X-App-Platform': 'windows',
-    'X-Device-Id-Hash': deviceIdHash
+    'X-Device-Id-Hash': deviceIdHash,
+    ...(appVersion ? { 'X-App-Version': appVersion } : {})
   }
 }
 
@@ -327,7 +332,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   // there's no per-uid conversation to key.
 
   const ws = new WebSocket(url, {
-    headers: byokSttHeaders(buildListenHeaders(args.token, args.deviceIdHash))
+    headers: byokSttHeaders(buildListenHeaders(args.token, args.deviceIdHash, app.getVersion()))
   })
   ws.binaryType = 'arraybuffer'
   const session: Session = {

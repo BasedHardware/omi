@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Apple } from 'lucide-react'
 import type { SignInProvider } from '../../../shared/types'
 import { signInWithProvider } from '../lib/firebase'
+import { trackSignInCompleted, trackSignInFailed, trackSignInStarted } from '../lib/analytics'
 import omiLogo from '../assets/omilogo.png'
 import { BrandImage } from '../components/ui/BrandImage'
 
@@ -25,11 +26,14 @@ export function Login(): React.JSX.Element {
     const attempt = ++attemptRef.current
     setError(null)
     setActiveProvider(provider)
+    trackSignInStarted(provider)
     try {
       await signInWithProvider(provider)
+      trackSignInCompleted(provider)
       // Signed in — onAuthStateChanged takes over; nothing else to do here.
     } catch (e) {
       if (attempt !== attemptRef.current) return // a newer attempt owns the UI
+      trackSignInFailed(provider, e)
       console.error('Sign-in failed:', e)
       setError((e as Error).message)
       setActiveProvider(null)

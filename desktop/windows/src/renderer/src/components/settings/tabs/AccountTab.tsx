@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { User, LogOut } from 'lucide-react'
-import { auth, signOutUser } from '../../../lib/firebase'
+import { auth } from '../../../lib/firebase'
+import { signOutAndTrack } from '../../../lib/signOutTelemetry'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { setDisplayName } from '../../../lib/userProfile'
 import { toast } from '../../../lib/toast'
@@ -44,7 +45,7 @@ export function AccountTab(): React.JSX.Element {
         subtitle={auth.currentUser?.email ?? '(not signed in)'}
         keywords="account email sign out logout"
         control={
-          <button onClick={signOutUser} className="btn-ghost">
+          <button onClick={() => void signOutAndTrack()} className="btn-ghost">
             Sign out
           </button>
         }

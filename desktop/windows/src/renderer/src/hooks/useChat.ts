@@ -38,7 +38,7 @@ import {
   chatRateLimitFallbackProps,
   isRetryableChatRateLimit
 } from '../lib/chat/chatRetry'
-import { trackEvent } from '../lib/analytics'
+import { trackChatMessageSent, trackEvent } from '../lib/analytics'
 import { mergeAgentCards } from '../lib/chat/agentThreadCards'
 import type { ChatContentBlock } from '../../../shared/chatContent'
 
@@ -983,6 +983,7 @@ export function useChat(): UseChat {
     // are drained from the pending list below.
     if ((!text.trim() && getPendingAttachments().length === 0) || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
+    const hasSelectedAppContext = selectedAppIdRef.current !== null
     setBusy(true)
     // Open a new generation. reset()/dismiss bumps genRef, so `isCurrent()` goes
     // false for this send and every write it attempts thereafter is dropped —
@@ -1020,6 +1021,11 @@ export function useChat(): UseChat {
       // The message now owns these files; clear the composer's pending list.
       clearAttachments()
     }
+    trackChatMessageSent({
+      messageLength: text.length,
+      hasSelectedAppContext,
+      source: fromVoice ? 'desktop_voice' : 'desktop_chat'
+    })
     const userMsg: ChatMsg = {
       id: crypto.randomUUID(),
       role: 'user',

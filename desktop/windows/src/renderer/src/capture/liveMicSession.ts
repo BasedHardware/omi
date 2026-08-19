@@ -1,4 +1,5 @@
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
+import { trackEvent } from '../lib/analytics'
 import { isConversationBoundary, onFinalizeRequest } from '../lib/liveConversation'
 import { transcriptWordCount } from '../lib/retentionRules'
 import { isInjectedLineId } from '../lib/voice/injectedTranscript'
@@ -21,6 +22,69 @@ const SILENCE_MS = 30000
 // Below this word count a transcript is a trivial blip not worth its own
 // conversation — used both by finalize and by the reconnect-exhausted rescue.
 const MIN_WORDS = 5
+const TRANSCRIPTION_SOURCE = 'desktop_mic'
+const TRANSCRIPTION_PROVIDER = 'omi'
+
+type TranscriptionOutcome = 'completed' | 'failed' | 'cancelled'
+type TranscriptionErrorClass =
+  | 'authentication'
+  | 'quota'
+  | 'rate_limited'
+  | 'timeout'
+  | 'network'
+  | 'unknown'
+
+type TranscriptionTelemetry = {
+  startedAt: number
+  retryCount: number
+  ended: boolean
+}
+
+function classifyTranscriptionError(message: string): TranscriptionErrorClass {
+  if (/not signed in|requires sign-in/i.test(message)) return 'authentication'
+  if (/quota|1008|trial_expired|freemium/i.test(message)) return 'quota'
+  if (/\b429\b|rate.?limit/i.test(message)) return 'rate_limited'
+  if (/timeout|timed out/i.test(message)) return 'timeout'
+  if (/network|socket|closed|connect|outage|offline/i.test(message)) return 'network'
+  return 'unknown'
+}
+
+function beginTranscriptionTelemetry(): TranscriptionTelemetry {
+  const state: TranscriptionTelemetry = { startedAt: Date.now(), retryCount: 0, ended: false }
+  trackEvent('Transcription Started', {
+    source: TRANSCRIPTION_SOURCE,
+    provider: TRANSCRIPTION_PROVIDER
+  })
+  return state
+}
+
+function endTranscriptionTelemetry(
+  state: TranscriptionTelemetry,
+  outcome: TranscriptionOutcome,
+  error?: Error
+): void {
+  if (state.ended) return
+  state.ended = true
+  const retryCount = Math.min(state.retryCount, MAX_RECONNECT_ATTEMPTS)
+  const durationSeconds = Math.max(0, Math.round((Date.now() - state.startedAt) / 1000))
+
+  if (error) {
+    trackEvent('Transcription Error', {
+      source: TRANSCRIPTION_SOURCE,
+      provider: TRANSCRIPTION_PROVIDER,
+      outcome,
+      error_class: classifyTranscriptionError(error.message),
+      retry_count: retryCount
+    })
+  }
+  trackEvent('Transcription Ended', {
+    source: TRANSCRIPTION_SOURCE,
+    provider: TRANSCRIPTION_PROVIDER,
+    outcome,
+    duration_seconds: durationSeconds,
+    retry_count: retryCount
+  })
+}
 
 export type LiveMicController = {
   /** Stop the session and tear everything down (call from effect cleanup). */
@@ -146,6 +210,7 @@ export function startLiveMicSession(): LiveMicController {
   let conversationStartedAt = Date.now()
   let reconnectAttempt = 0
   let retainer = createSegmentRetainer()
+  let telemetry: TranscriptionTelemetry | null = null
 
   const clearSilence = (): void => {
     if (silenceTimer) clearTimeout(silenceTimer)
@@ -225,6 +290,7 @@ export function startLiveMicSession(): LiveMicController {
       /* ignore */
     }
     handle = null
+    if (telemetry) endTranscriptionTelemetry(telemetry, 'completed')
     saveCurrent()
     startConversation() // fresh conversation: new resumable id, cleared retainer
   }
@@ -265,6 +331,8 @@ export function startLiveMicSession(): LiveMicController {
             clearSilence()
             hasSpeech = false
             if (liveWordCount() >= MIN_WORDS) saveCurrent()
+            if (telemetry) endTranscriptionTelemetry(telemetry, 'completed')
+            telemetry = beginTranscriptionTelemetry()
             retainer = createSegmentRetainer()
             conversationStartedAt = Date.now()
           }
@@ -287,6 +355,7 @@ export function startLiveMicSession(): LiveMicController {
             // signal never reaches the popup host.
             setControllerHealth(controllerId, 'failed')
             captureLiveStore.setStatus('error', (e as Error).message)
+            if (telemetry) endTranscriptionTelemetry(telemetry, 'failed', e as Error)
             return
           }
           if (reconnectAttempt < MAX_RECONNECT_ATTEMPTS) {
@@ -295,6 +364,7 @@ export function startLiveMicSession(): LiveMicController {
             // 429 handshake rejection backs off from a longer floor (don't hammer a
             // server that just rate-limited us); jitter decorrelates lanes in a storm.
             reconnectAttempt++
+            if (telemetry) telemetry.retryCount++
             setControllerHealth(controllerId, 'connecting')
             const rateLimited = isRateLimitedDropError((e as Error).message)
             captureLiveStore.setStatus('connecting')
@@ -311,6 +381,7 @@ export function startLiveMicSession(): LiveMicController {
             rescue()
             setControllerHealth(controllerId, 'failed')
             captureLiveStore.setStatus('error', (e as Error).message)
+            if (telemetry) endTranscriptionTelemetry(telemetry, 'failed', e as Error)
           }
         }
       },
@@ -339,6 +410,7 @@ export function startLiveMicSession(): LiveMicController {
     conversationStartedAt = Date.now()
     reconnectAttempt = 0
     retainer = createSegmentRetainer()
+    telemetry = beginTranscriptionTelemetry()
     connect()
   }
 
@@ -357,6 +429,7 @@ export function startLiveMicSession(): LiveMicController {
       clearSilence()
       timers.forEach(clearTimeout)
       unsubFinalize()
+      if (telemetry) endTranscriptionTelemetry(telemetry, 'cancelled')
       try {
         handle?.stop()
       } catch {

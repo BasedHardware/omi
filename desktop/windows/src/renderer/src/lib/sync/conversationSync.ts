@@ -5,6 +5,7 @@
  */
 import axios from 'axios'
 import { omiApi } from '../apiClient'
+import { trackMemoryCreated } from '../analytics'
 import { getPreferences } from '../preferences'
 import {
   FROM_SEGMENTS_PATH,
@@ -51,7 +52,11 @@ async function postFromSegments(req: FromSegmentsRequest): Promise<{ id: string 
     throw classifyPostError(e)
   }
   // A 2xx without an id: the server most likely created something → ambiguous.
-  if (!id) throw { ambiguous: true, message: 'from-segments returned no conversation id' } satisfies SyncFailure
+  if (!id)
+    throw {
+      ambiguous: true,
+      message: 'from-segments returned no conversation id'
+    } satisfies SyncFailure
   return { id }
 }
 
@@ -65,6 +70,15 @@ async function listRecentCloud(): Promise<CloudConversationLite[]> {
 /** True when this local row belongs to (or could enter) the sync pipeline. */
 export function isAwaitingSync(c: LocalConversation): boolean {
   return RETRYABLE.includes(c.syncState ?? 'local_only') && (c.segments?.length ?? 0) > 0
+}
+
+function recordCreatedTransition(
+  c: LocalConversation,
+  previousState: ConversationSyncState,
+  outcome: SyncOutcome
+): void {
+  if (previousState === 'done' || outcome.status !== 'done') return
+  trackMemoryCreated(Math.max(0, c.endedAt - c.startedAt) / 1000)
 }
 
 /**
@@ -93,7 +107,7 @@ export async function syncLocalConversation(c: LocalConversation): Promise<SyncO
       })
       state = 'unconfirmed'
     }
-    return await syncConversation(
+    const outcome = await syncConversation(
       {
         id: fresh.id,
         startedAt: fresh.startedAt,
@@ -110,6 +124,8 @@ export async function syncLocalConversation(c: LocalConversation): Promise<SyncO
       },
       getPreferences().language
     )
+    recordCreatedTransition(fresh, state, outcome)
+    return outcome
   } finally {
     inFlight.delete(c.id)
   }
@@ -132,13 +148,14 @@ export async function resyncConversation(id: string): Promise<SyncOutcome | null
   })
   inFlight.add(id)
   try {
-    return await syncConversation(
+    const state = row.syncState === 'posting' ? 'unconfirmed' : (row.syncState ?? 'pending')
+    const outcome = await syncConversation(
       {
         id: row.id,
         startedAt: row.startedAt,
         endedAt: row.endedAt,
         segments: row.segments ?? [],
-        syncState: row.syncState === 'posting' ? 'unconfirmed' : (row.syncState ?? 'pending'),
+        syncState: state,
         cloudId: row.cloudId
       },
       {
@@ -149,6 +166,8 @@ export async function resyncConversation(id: string): Promise<SyncOutcome | null
       },
       getPreferences().language
     )
+    recordCreatedTransition(row, state, outcome)
+    return outcome
   } finally {
     inFlight.delete(id)
   }
@@ -164,7 +183,10 @@ let lastRetryPassAt = 0
  * must see the previous row's outcome in the cloud list). Returns true when at
  * least one row reached 'done' so the caller can refresh the cloud list.
  */
-export async function retryUnsyncedConversations(locals: LocalConversation[], now = Date.now()): Promise<boolean> {
+export async function retryUnsyncedConversations(
+  locals: LocalConversation[],
+  now = Date.now()
+): Promise<boolean> {
   if (now - lastRetryPassAt < RETRY_PASS_MIN_INTERVAL_MS) return false
   lastRetryPassAt = now
   let anyDone = false

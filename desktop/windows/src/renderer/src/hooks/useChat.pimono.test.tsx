@@ -53,7 +53,8 @@ vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speak
 // signal fires (recovered/exhausted) without a real PostHog fetch (hermetic).
 const trackEventSpy = vi.fn((_e: string, _p?: Record<string, unknown>) => {})
 vi.mock('../lib/analytics', () => ({
-  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p)
+  trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p),
+  trackChatMessageSent: vi.fn()
 }))
 // The INV-CHAT-1 shared-thread persistence — spied so we can assert the two turns.
 const saveSpy = vi.fn(async (_req: Record<string, unknown>) => ({

@@ -45,6 +45,7 @@ export function AutomationPermissionStep({
       subtitle="Automation lets Omi take actions for you"
       icon={<Zap className="h-5 w-5 text-white/60" />}
       cardLabel="Automation"
+      analyticsPermission="automation_consent"
       statusText={{
         idle: 'Not enabled yet',
         waiting: 'Enabling',

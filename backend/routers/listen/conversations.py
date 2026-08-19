@@ -16,6 +16,7 @@ from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
+from utils.integration_telemetry import emit_posthog_event
 from utils.transcribe_decisions import (
     ConversationLifecycleAction,
     RecordingSessionReconnectAction,
@@ -38,6 +39,17 @@ STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # Per-session recovery bound: spreads a large backlog across sessions instead of
 # fanning dozens of LLM finalizations out of one reconnect.
 STALE_IN_PROGRESS_RECOVERY_BATCH = 10
+
+
+def _windows_memory_created_properties(data: dict[str, Any], app_version: Optional[str]) -> dict[str, Any]:
+    properties: dict[str, Any] = {'source': 'desktop', 'platform': 'windows'}
+    started_at = data.get('started_at')
+    finished_at = data.get('finished_at')
+    if isinstance(started_at, datetime) and isinstance(finished_at, datetime):
+        properties['duration_seconds'] = max(0, int((finished_at - started_at).total_seconds()))
+    if app_version:
+        properties['app_version'] = app_version[:80]
+    return properties
 
 
 class LiveConversationController:
@@ -93,6 +105,13 @@ class LiveConversationController:
         envelope = await self._recording_session_event(recording_session_id, conversation_id, phase)
         if envelope is None:
             return
+        context = self.host.client_device_context
+        if phase == 'completed' and envelope.get('accepted') is True and context.platform == 'windows':
+            emit_posthog_event(
+                self.host.request.uid,
+                'Memory Created',
+                _windows_memory_created_properties(data, context.app_version),
+            )
         self.host.send_event(
             ConversationEvent(
                 event_type='memory_created' if phase == 'completed' else 'memory_processing_started',

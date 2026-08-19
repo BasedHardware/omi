@@ -4,6 +4,9 @@ import { render, cleanup, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { MainViews } from './MainViews'
 
+const trackPageViewed = vi.hoisted(() => vi.fn())
+vi.mock('../../lib/analytics', () => ({ trackPageViewed }))
+
 // Stub the pages: this suite is about MOUNT SEMANTICS, not page content, and the
 // real pages drag in heavy subtrees (the Memories brain map is an R3F scene).
 // Each stub tags its DOM node so we can identify it and — crucially — compare
@@ -34,7 +37,10 @@ vi.mock('../../pages/ConversationDetail', () => ({
   )
 }))
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  trackPageViewed.mockClear()
+})
 
 // A real in-app navigation (the thing that must NOT remount panels), driven the
 // same way the nav rail drives it — through the router, not by re-rendering.
@@ -73,6 +79,15 @@ const hydrate = (): void => {
 }
 
 describe('MainViews mount semantics', () => {
+  it('records canonical route IDs, never raw detail IDs', () => {
+    const { getByText } = renderAt('/conversations/private-conversation-id', '/tasks')
+
+    expect(trackPageViewed).toHaveBeenCalledExactlyOnceWith('conversation-detail')
+    fireEvent.click(getByText('navigate'))
+    expect(trackPageViewed).toHaveBeenLastCalledWith('tasks')
+    expect(JSON.stringify(trackPageViewed.mock.calls)).not.toContain('private-conversation-id')
+  })
+
   it('keeps a visited panel MOUNTED (same DOM node) when navigating away, once hydrated', () => {
     // This is the entire reason panels render hidden instead of being swapped: if
     // a panel unmounted on navigation, its page state (scroll position, an
