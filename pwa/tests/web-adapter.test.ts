@@ -1,9 +1,24 @@
 import { expect, test } from "bun:test";
 import {
+  BrowserScanError,
+  type BrowserScanFailureReason,
   createWebNativeAdapter,
   omiBackend,
   omiNative,
 } from "../../react-native/src/omiNative.web";
+
+async function expectScanFailure(
+  scan: Promise<unknown>,
+  reason: BrowserScanFailureReason
+): Promise<void> {
+  const error = await scan.then(
+    () => null,
+    (failure) => failure
+  );
+
+  expect(error).toBeInstanceOf(BrowserScanError);
+  expect((error as BrowserScanError).reason).toBe(reason);
+}
 
 test("web backend uses the origin-relative proxy without browser credentials", async () => {
   const calls: Array<{
@@ -80,7 +95,7 @@ test("web backend uses the native JSON body policy without browser credentials",
   expect(calls[0]?.credentials).toBe("omit");
 });
 
-test("web scan delegates to the browser capability adapter", async () => {
+test("web scan preserves successful browser chooser behavior", async () => {
   let requests = 0;
   const adapter = createWebNativeAdapter({
     bluetooth: {
@@ -93,6 +108,65 @@ test("web scan delegates to the browser capability adapter", async () => {
 
   await expect(adapter.startScan()).resolves.toEqual([]);
   expect(requests).toBe(1);
+  await expect(adapter.getSnapshot()).resolves.toMatchObject({
+    bluetooth: "selected",
+    devices: [],
+  });
+});
+
+test("web scan rejects cancellation and clears a stale browser selection", async () => {
+  let requests = 0;
+  const adapter = createWebNativeAdapter({
+    bluetooth: {
+      requestDevice: async () => {
+        requests += 1;
+        if (requests === 1) {
+          return {};
+        }
+        throw new DOMException("The chooser was dismissed", "NotFoundError");
+      },
+    },
+  });
+
+  await expect(adapter.startScan()).resolves.toEqual([]);
+  await expectScanFailure(adapter.startScan(), "cancelled");
+  await expect(adapter.getSnapshot()).resolves.toMatchObject({
+    bluetooth: "available",
+    devices: [],
+  });
+});
+
+test("web scan rejects browser permission denial with its typed reason", async () => {
+  const adapter = createWebNativeAdapter({
+    bluetooth: {
+      requestDevice: async () => {
+        throw new DOMException("Permission denied", "NotAllowedError");
+      },
+    },
+  });
+
+  await expectScanFailure(adapter.startScan(), "denied");
+  await expect(adapter.getBluetoothState()).resolves.toBe("denied");
+});
+
+test("web scan rejects browser chooser errors with its typed reason", async () => {
+  const adapter = createWebNativeAdapter({
+    bluetooth: {
+      requestDevice: async () => {
+        throw new Error("chooser failed");
+      },
+    },
+  });
+
+  await expectScanFailure(adapter.startScan(), "error");
+  await expect(adapter.getBluetoothState()).resolves.toBe("error");
+});
+
+test("web scan rejects when browser Bluetooth is unsupported", async () => {
+  const adapter = createWebNativeAdapter({});
+
+  await expectScanFailure(adapter.startScan(), "unsupported");
+  await expect(adapter.getBluetoothState()).resolves.toBe("unsupported");
 });
 
 test("web native boundary never invents a connected Omi device", async () => {

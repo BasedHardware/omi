@@ -57,6 +57,18 @@ export type PlatformNativeSnapshot = Omit<WebNativeSnapshot, 'bluetooth'> & {
   bluetooth: NativeBluetoothState | WebBluetoothState;
 };
 
+export type BrowserScanFailureReason = Extract<
+  BrowserCapabilityResult,
+  {ok: false}
+>['reason'];
+
+export class BrowserScanError extends Error {
+  constructor(readonly reason: BrowserScanFailureReason) {
+    super(`Browser Bluetooth scan failed: ${reason}`);
+    this.name = 'BrowserScanError';
+  }
+}
+
 export function isBluetoothScanAvailable(
   state: NativeBluetoothState | WebBluetoothState | undefined,
 ): boolean {
@@ -152,7 +164,10 @@ export function createWebNativeAdapter(
     startPhoneCall: unsupportedOperationAsync('Phone calls'),
     startRssiStreaming: unsupportedOperationAsync('Omi device capture'),
     startScan: async () => {
-      await browserCapabilities.chooseBluetoothDevice();
+      const result = await browserCapabilities.chooseBluetoothDevice();
+      if (!result.ok) {
+        throw new BrowserScanError(result.reason);
+      }
       return [];
     },
     stopCapture: unsupportedOperationAsync('Omi capture'),
