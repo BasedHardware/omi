@@ -8,7 +8,7 @@
     "backend/tests/unit/test_extracted_action_item_vocabulary.py"
   ],
   "evidence_prs": [
-    11870
+    11871
   ],
   "scope_hints": [
     "backend/models/**",
