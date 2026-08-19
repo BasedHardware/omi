@@ -1496,6 +1496,26 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
         return None
 
 
+# POST /v1/conversations/{id}/test-prompt runs this inline while the user waits, so it must not
+# inherit the shared gateway transport deadline (15s to first response byte), which is sized for
+# background feature calls. A whole-transcript summary regularly needs longer than that: in prod on
+# 2026-08-19 the same conversation failed three times at 15.2s / 15.3s / 15.4s. The route's own
+# budget is the 120s default of TimeoutMiddleware, so a foreground attempt fits with headroom.
+SUMMARY_WITH_PROMPT_TIMEOUT_SECONDS = 60.0
+
+
+class SummaryProviderError(Exception):
+    """The summary provider failed on its own account, so no summary exists to return.
+
+    Classified here, at the call that owns the provider, so the caller only has to decide how to
+    report it. ``timed_out`` separates a deadline from an upstream 5xx.
+    """
+
+    def __init__(self, message: str, *, timed_out: bool) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+
+
 def generate_summary_with_prompt(conversation_text: str, prompt: str, language_code: str = 'en') -> str:
     # Build prompt matching the app processing format (without forced "be concise" constraint)
     full_prompt = f"""
@@ -1506,5 +1526,19 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     The conversation is:
     {conversation_text}
     """
-    response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(full_prompt)
+    llm = get_llm('daily_summary', cache_key='omi-daily-summary', request_timeout=SUMMARY_WITH_PROMPT_TIMEOUT_SECONDS)
+    try:
+        response = llm.invoke(full_prompt)
+    except Exception as exc:
+        # The shared provider-error classifier lives in the chat-retrieval package; this module is
+        # on the import path of most of the backend, so keep that package off it and pay for the
+        # import only on the failure branch.
+        from utils.retrieval.safety import is_transient_provider_error, provider_fallback_reason
+
+        if not is_transient_provider_error(exc):
+            raise
+        raise SummaryProviderError(
+            f'summary provider failed: {type(exc).__name__}',
+            timed_out=provider_fallback_reason(exc) == 'timeout',
+        ) from exc
     return _content_str(response)
