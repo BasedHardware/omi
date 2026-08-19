@@ -100,22 +100,28 @@ config OMI_VAD_HOLD_MS
          endings. Default 3000 = 3 seconds."
 
 config OMI_ENABLE_T5838_AAD
-    bool "Enable T5838 hardware AAD (ultra-low-power mic sleep)"
+    bool "Enable T5838 rail and AAD support"
     depends on OMI_ENABLE_VAD_GATE
     default n
     help
-        "When the software VAD gate enters SLEEP, pause the PDM clock so
-         the T5838 MEMS microphone enters its built-in Acoustic Activity
-         Detection mode (~15 µA). The mic hardware monitors sound and
-         asserts the WAKE pin when it detects acoustic activity, at which
-         point the driver resumes PDM and the software VAD takes over.
-         Requires THSEL (P1.5) and WAKE (P1.2) to be wired to the T5838."
+        "Compile the T5838 control driver and retain ownership of the PDM_EN
+         microphone rail. This does not by itself enable clock-off AAD sleep."
+
+config OMI_ENABLE_T5838_HW_AAD_SLEEP
+    bool "Enable T5838 clock-off hardware AAD sleep"
+    depends on OMI_ENABLE_T5838_AAD
+    default n
+    help
+        "Permit the software VAD to stop PDM and depend on the translated WAKE
+         input. Keep this disabled on CV1 v0.5: that PCB has no qualified
+         end-to-end WAKE contract. This option is laboratory-only until a
+         corrected receiver or board revision passes physical qualification."
 
 config OMI_AAD_SETTLE_MS
     int "T5838 AAD settle time before arming WAKE (ms)"
     range 100 3000
     default 800
-    depends on OMI_ENABLE_T5838_AAD
+    depends on OMI_ENABLE_T5838_HW_AAD_SLEEP
     help
         "Time to wait after clocking the T5838 into hardware AAD sleep before
          arming the WAKE interrupt. Lets the mic settle its noise floor and

@@ -7,6 +7,8 @@ project(omi)
 file(GLOB app_sources
     src/main.c
     src/mic.c
+    src/audio_frontend.c
+    src/software_vad.c
     src/battery.c
     src/led.c
     src/haptic.c
