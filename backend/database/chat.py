@@ -1104,7 +1104,7 @@ def _apply_existing_message_revision(
             )
             existing['_revision_updated'] = False
             return existing
-        patch = {
+        patch: Dict[str, Any] = {
             'text': text,
             'metadata': metadata,
             'client_message_payload_hash': payload_hash,
@@ -1208,7 +1208,7 @@ def _message_idempotency_payload_hash(
     content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Return a stable digest of the caller-controlled immutable payload."""
-    payload = {
+    payload: Dict[str, Any] = {
         'app_id': app_id,
         'message_source': message_source,
         'metadata': metadata,
