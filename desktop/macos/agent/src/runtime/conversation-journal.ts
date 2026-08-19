@@ -3725,13 +3725,30 @@ function chatFirstIntentBlocks(
           summary: nonEmptyString(block.summary, "chat-first capture summary"),
         };
       }
-      case "conversationLink":
+      case "conversationLink": {
+        const recommendedActionItems = block.recommended_action_items === undefined
+          ? []
+          : arrayValue(block.recommended_action_items, "chat-first recommended action items").map((rawItem) => {
+            const item = recordValue(rawItem, "chat-first recommended action item");
+            const taskId = item.task_id === undefined || item.task_id === null
+              ? undefined
+              : nonEmptyString(item.task_id, "chat-first recommended action item task ID");
+            return {
+              description: nonEmptyString(
+                item.description,
+                "chat-first recommended action item description",
+              ),
+              ...(taskId === undefined ? {} : { taskId }),
+            };
+          });
         return {
           type,
           id,
           conversationId: nonEmptyString(block.conversation_id, "chat-first conversation ID"),
           summary: nonEmptyString(block.summary, "chat-first conversation summary"),
+          recommendedActionItems,
         };
+      }
       default:
         throw new Error("Chat-first intent block type is invalid");
     }
@@ -3887,7 +3904,18 @@ function boundedOutboxError(errorCode?: string): string {
 
 function validateContentBlocks(blocks: readonly ConversationContentBlock[]): ConversationContentBlock[] {
   const ids = new Set<string>();
-  return blocks.map((block) => {
+  return blocks.map((rawBlock) => {
+    // Persisted cards from before action-item recommendations omit this key.
+    // Normalize that legacy shape here while keeping it required for every new
+    // TypeScript producer through ConversationContentBlock.
+    const block: ConversationContentBlock = rawBlock.type === "conversationLink"
+      ? {
+          ...rawBlock,
+          recommendedActionItems: Array.isArray(rawBlock.recommendedActionItems)
+            ? rawBlock.recommendedActionItems
+            : [],
+        }
+      : rawBlock;
     const id = nonEmpty(block.id, "content block id");
     nonEmpty(block.type, "content block type");
     if (ids.has(id)) throw new Error(`Duplicate content block ID ${id}`);
@@ -3943,6 +3971,15 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
       nonEmpty(block.conversationId, "conversation ID");
       if (block.summary.length === 0 || block.summary.length > 200) {
         throw new Error("Conversation summary is out of bounds");
+      }
+      if (block.recommendedActionItems.length > 8) {
+        throw new Error("Conversation recommended action item count is out of bounds");
+      }
+      for (const item of block.recommendedActionItems) {
+        if (item.description.length === 0 || item.description.length > 300) {
+          throw new Error("Conversation recommended action item description is out of bounds");
+        }
+        if (item.taskId !== undefined) nonEmpty(item.taskId, "recommended action item task ID");
       }
     }
     return structuredClone(block);

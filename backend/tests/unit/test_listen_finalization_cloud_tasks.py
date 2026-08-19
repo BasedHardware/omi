@@ -1033,7 +1033,12 @@ async def test_finalizer_never_logs_a_provider_exception_body(monkeypatch, caplo
             'desktop',
             {'conversation_role': 'meeting'},
             False,
-            {'conversation_id': 'conversation-1', 'summary': 'Captured title', 'is_desktop_meeting': True},
+            {
+                'conversation_id': 'conversation-1',
+                'summary': 'Captured title',
+                'is_desktop_meeting': True,
+                'recommended_action_items': [],
+            },
         ),
         ('desktop', {'conversation_role': 'ambient'}, False, None),
         (

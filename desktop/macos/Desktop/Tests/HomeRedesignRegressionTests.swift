@@ -340,6 +340,19 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "task"), .task)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "memory-extraction"), .memory)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "goals"), .goal)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "meeting-notes"), .meetingNotes)
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Meeting notes")
+  }
+
+  func testNotificationJournalTextPreservesTheHeadlineAndBody() {
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Insight",
+        body: "PR blocked, needs review"),
+      "Insight\nPR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(title: "Meeting notes ready", body: ""),
+      "Meeting notes ready")
   }
 
   func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {

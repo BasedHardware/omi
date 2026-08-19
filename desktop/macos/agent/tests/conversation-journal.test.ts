@@ -130,6 +130,10 @@ describe("kernel conversation journal", () => {
         type: "conversationLink",
         conversation_id: "conversation-1",
         summary: "Weekly planning",
+        recommended_action_items: [
+          { description: "Send the deck", task_id: "task-1" },
+          { description: "Book the follow-up" },
+        ],
       }],
       nowMs: 100,
     });
@@ -139,6 +143,10 @@ describe("kernel conversation journal", () => {
       id: expect.any(String),
       conversationId: "conversation-1",
       summary: "Weekly planning",
+      recommendedActionItems: [
+        { description: "Send the deck", taskId: "task-1" },
+        { description: "Book the follow-up" },
+      ],
     }]);
     expect(result.turn?.conversationId).toBe(fixture.conversationId);
     expect(result).toMatchObject({
@@ -157,6 +165,10 @@ describe("kernel conversation journal", () => {
         type: "conversationLink",
         conversation_id: "conversation-1",
         summary: "Weekly planning",
+        recommended_action_items: [
+          { description: "Send the deck", task_id: "task-1" },
+          { description: "Book the follow-up" },
+        ],
       }],
       nowMs: 101,
     });
