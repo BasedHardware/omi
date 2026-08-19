@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import Features, track_usage
 from .clients import get_llm
+from .gateway_error_contract import is_byok_rate_limit_gateway_error
 import logging
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,8 @@ def synthesize_connector_items(
 
     Returns an empty synthesis when there is nothing to work with, and ``None`` when the
     model call or parse fails so callers can surface a real error instead of silence.
+    The gateway's typed BYOK rate-limit failure propagates instead, so the HTTP boundary
+    can return the shared 429 contract rather than a generic failure.
     """
     guidance = _SOURCE_GUIDANCE.get(source)
     if guidance is None:
@@ -133,7 +136,11 @@ def synthesize_connector_items(
         except Exception as e:
             logger.error("Error parsing connector synthesis: source=%s error=%s", source, type(e).__name__)
             return None
-    except Exception:
+    except Exception as e:
+        if is_byok_rate_limit_gateway_error(e):
+            # The caller is the HTTP boundary and owns the shared 429 contract for this
+            # class; collapsing it into ``None`` here would surface it as a generic 502.
+            raise
         logger.exception("Error synthesizing connector items for uid=%s source=%s", uid, source)
         return None
 
