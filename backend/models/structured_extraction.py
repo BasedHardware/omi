@@ -1,10 +1,25 @@
 from datetime import datetime
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.conversation_enums import CategoryEnum
 from models.structured import ActionItem, Event, Section, Structured
+
+CAPTURE_OWNERS: Tuple[str, ...] = ('user', 'other', 'unknown')
+
+# The extractor is asked for a fixed vocabulary on these fields, but it answers outside of it often
+# enough to matter: on 2026-08-19 it returned a speaker's name for capture_owner on three items of
+# one conversation, pydantic raised literal_error, and the whole StructuredExtraction failed to
+# parse — so conversation processing returned HTTP 500 and the user got no summary at all. One
+# out-of-vocabulary token must never cost the conversation; an unusable value is worth exactly as
+# much as the field being absent, which is what these Optionals already model.
+_OPTIONAL_LITERAL_VOCABULARIES: Dict[str, Tuple[str, ...]] = {
+    'capture_kind': ('explicit_command', 'clear_commitment', 'direct_request', 'inferred_next_step'),
+    'capture_owner': CAPTURE_OWNERS,
+    'due_certainty': ('confirmed', 'tentative'),
+    'candidate_action': ('create', 'update', 'complete'),
+}
 
 
 class ExtractedActionItem(BaseModel):
@@ -29,6 +44,31 @@ class ExtractedActionItem(BaseModel):
         default_factory=list,
         description='Transcript segment IDs that directly support this action item',
     )
+
+    @model_validator(mode='before')
+    @classmethod
+    def drop_out_of_vocabulary_literals(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        coerced = dict(data)
+        for field, vocabulary in _OPTIONAL_LITERAL_VOCABULARIES.items():
+            value = coerced.get(field)
+            if value is None or value in vocabulary:
+                continue
+            normalized = value.strip().lower() if isinstance(value, str) else None
+            if normalized in vocabulary:
+                coerced[field] = normalized
+                continue
+            # A name where an owner class belongs still says the owner is somebody other than the
+            # user, and owner_name is where that name is meant to live.
+            if field == 'capture_owner' and normalized:
+                coerced[field] = 'other'
+                if not coerced.get('owner_name'):
+                    coerced['owner_name'] = value.strip()
+                continue
+            coerced[field] = None
+        return coerced
 
     def to_action_item(self) -> ActionItem:
         return ActionItem(
