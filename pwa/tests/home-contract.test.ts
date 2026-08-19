@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import {
   createBrowserCapabilityAdapter,
   type BrowserEnvironment,
-} from "../src/browser-adapters";
+} from "../../react-native/src/browser-adapters";
 
 const root = resolve(import.meta.dir, "..");
 

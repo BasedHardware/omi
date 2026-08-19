@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { omiBackend, omiNative } from "../../react-native/src/omiNative.web";
+import {
+  createWebNativeAdapter,
+  omiBackend,
+  omiNative,
+} from "../../react-native/src/omiNative.web";
 
 test("web backend uses the origin-relative proxy without browser credentials", async () => {
   const calls: Array<{
@@ -47,6 +51,48 @@ test("web backend uses the origin-relative proxy without browser credentials", a
     })
   );
   expect(calls[0]?.headers.get("authorization")).toBeNull();
+});
+
+test("web backend uses the native JSON body policy without browser credentials", async () => {
+  const calls: RequestInit[] = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async (_input, init) => {
+    calls.push(init ?? {});
+    return new Response('{"ok":true}', { status: 200 });
+  }) as typeof globalThis.fetch;
+
+  try {
+    await omiBackend.request({
+      body: '{"text":"hello"}',
+      headers: { "content-type": "text/plain" },
+      id: "body",
+      method: "POST",
+      path: "/v1/chat-messages",
+    });
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+
+  const headers = new Headers(calls[0]?.headers);
+  expect(headers.get("content-type")).toBe("application/json");
+  expect(headers.get("authorization")).toBeNull();
+  expect(headers.get("x-omi-client-id")).toBeNull();
+  expect(calls[0]?.credentials).toBe("omit");
+});
+
+test("web scan delegates to the browser capability adapter", async () => {
+  let requests = 0;
+  const adapter = createWebNativeAdapter({
+    bluetooth: {
+      requestDevice: async () => {
+        requests += 1;
+        return { name: "Browser device" };
+      },
+    },
+  });
+
+  await expect(adapter.startScan()).resolves.toEqual([]);
+  expect(requests).toBe(1);
 });
 
 test("web native boundary never invents a connected Omi device", async () => {

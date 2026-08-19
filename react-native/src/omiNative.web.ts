@@ -3,12 +3,12 @@ import {
   type BrowserCapabilityResult,
   type BrowserCapabilitySnapshot,
   type BrowserEnvironment,
-} from '../../pwa/src/browser-adapters';
+} from './browser-adapters';
 import {
   assertLocalProxyPath,
   LOCAL_PROXY_PREFIX,
   localProxyRequestInit,
-} from '../../pwa/src/local-proxy';
+} from './local-proxy';
 import type {
   BluetoothState as NativeBluetoothState,
   NativeHttpRequest,
@@ -56,8 +56,12 @@ export type OmiNative = WebOmiNative;
 export type PlatformNativeSnapshot = Omit<WebNativeSnapshot, 'bluetooth'> & {
   bluetooth: NativeBluetoothState | WebBluetoothState;
 };
-export type PlatformBluetoothState = PlatformNativeSnapshot['bluetooth'];
-export type PlatformOmiNative = WebOmiNative;
+
+export function isBluetoothScanAvailable(
+  state: NativeBluetoothState | WebBluetoothState | undefined,
+): boolean {
+  return state === 'poweredOn' || state === 'available' || state === 'selected';
+}
 
 export function unsupportedOperation(operation: string): never {
   throw new Error(`${operation} is unavailable in the browser`);
@@ -69,9 +73,15 @@ function unsupportedOperationAsync<Args extends unknown[]>(operation: string) {
 }
 
 function permissionState(result: BrowserCapabilityResult): WebPermissionState {
-  if (result.ok) return 'granted';
-  if (result.reason === 'denied') return 'denied';
-  if (result.reason === 'unsupported') return 'unsupported';
+  if (result.ok) {
+    return 'granted';
+  }
+  if (result.reason === 'denied') {
+    return 'denied';
+  }
+  if (result.reason === 'unsupported') {
+    return 'unsupported';
+  }
   return 'unknown';
 }
 
@@ -207,7 +217,9 @@ const browserBackend: OmiBackend = {
     return browserRequest(
       {
         headers:
-          lastEventId === null ? undefined : {'last-event-id': lastEventId},
+          lastEventId === null
+            ? {'cache-control': 'no-cache'}
+            : {'cache-control': 'no-cache', 'last-event-id': lastEventId},
         id: generationId,
         method: 'GET',
         path: `/v1/chat-generations/${encodeURIComponent(generationId)}/events`,
