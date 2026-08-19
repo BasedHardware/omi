@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import httpx
 import pytest
 
+import database.webhook_health as webhook_health_db
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.apps import validate_app_endpoints_for_reenable
 
@@ -318,7 +319,7 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
-            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
+            patch("utils.webhooks._REALTIME_DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_fail.assert_called_once()
@@ -367,7 +368,7 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
-            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
+            patch("utils.webhooks._REALTIME_DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_fail.assert_called_once()
@@ -406,7 +407,7 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
             patch("utils.webhooks.record_dev_webhook_failure") as mock_fail,
-            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", (0.01,)),
+            patch("utils.webhooks._REALTIME_DEV_WEBHOOK_RETRY_DELAYS", (0.01,)),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
@@ -1379,18 +1380,17 @@ class TestLoadAppToolsSkipsDisabled:
 class TestDevWebhookManualReEnable:
     """Test that manual dev webhook re-enable clears health state."""
 
-    def test_success_on_enable_clears_state(self):
-        """record_dev_webhook_success called on manual enable should reset all fields."""
-        from database.webhook_health import record_dev_webhook_success
-
+    def test_reset_on_enable_clears_state_without_faking_success(self):
         mock_r = MagicMock()
-        with patch("database.webhook_health.r", mock_r):
-            record_dev_webhook_success("uid-1", "realtime_transcript")
+        with patch.object(webhook_health_db, 'r', mock_r):
+            webhook_health_db.reset_dev_webhook_health("uid-1", "realtime_transcript")
 
         mapping = mock_r.hset.call_args.kwargs.get('mapping') or mock_r.hset.call_args[1].get('mapping')
         assert mapping['failure_count'] == '0'
         assert mapping['disabled'] == '0'
         assert mapping['last_error'] == ''
+        assert mapping['last_success_at'] == ''
+        assert mapping['last_status'] == ''
         mock_r.expire.assert_called_once()
 
 

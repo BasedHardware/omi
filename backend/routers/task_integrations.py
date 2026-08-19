@@ -343,6 +343,9 @@ class CreateTaskResponse(BaseModel):
     success: bool
     external_task_id: Optional[str] = None
     error: Optional[str] = None
+    error_code: Optional[str] = None
+    retryable: Optional[bool] = None
+    ambiguous: Optional[bool] = None
 
 
 @router.post("/v1/task-integrations/{app_key}/tasks", response_model=CreateTaskResponse, tags=['task-integrations'])
@@ -391,6 +394,9 @@ async def create_task_via_integration(
         success=result.get("success", False),
         external_task_id=result.get("external_task_id"),
         error=result.get("error"),
+        error_code=result.get("error_code"),
+        retryable=result.get("retryable"),
+        ambiguous=result.get("ambiguous"),
     )
 
 

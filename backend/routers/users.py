@@ -26,7 +26,6 @@ from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export
 from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
-from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -124,7 +123,7 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
-from utils.webhooks import webhook_first_time_setup
+from utils.webhooks import reset_user_webhook_delivery_health, webhook_first_time_setup
 from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
@@ -488,8 +487,7 @@ def set_user_webhook_endpoint(
     if not webhook_url_from_setting(wtype, url):
         disable_user_webhook_db(uid, wtype)
     else:
-        enable_user_webhook_db(uid, wtype)
-        record_dev_webhook_success(uid, wtype)
+        enable_user_webhook_endpoint(wtype, uid)
     return {'status': 'ok'}
 
 
@@ -507,7 +505,7 @@ def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.ge
 @router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'], response_model=UserStatusResponse)
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
-    record_dev_webhook_success(uid, wtype.value)
+    reset_user_webhook_delivery_health(uid, wtype, get_user_webhook_db(uid, wtype))
     return {'status': 'ok'}
 
 

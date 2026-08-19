@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import httpx
+
 from database.redis_db import (
     get_user_webhook_db,
     user_webhook_status_db,
@@ -13,20 +15,32 @@ from database.redis_db import (
     enable_user_webhook_db,
     set_user_webhook_db,
 )
-from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
+from database.webhook_health import (
+    record_dev_webhook_failure,
+    record_dev_webhook_success,
+    reset_dev_webhook_health,
+    _DEV_FAILURE_THRESHOLD,
+)
 from models.conversation import Conversation
 from models.users import WebhookType, webhook_url_from_setting
 import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking
-from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
+from utils.http_client import (
+    get_webhook_client,
+    get_webhook_circuit_breaker,
+    get_webhook_semaphore,
+    reset_webhook_circuit_breaker,
+)
 from utils.notifications import send_notification
 import logging
 
 logger = logging.getLogger(__name__)
 
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
+_DEV_WEBHOOK_RETRYABLE_STATUS_CODES = frozenset({408, 425, 429})
+_REALTIME_DEV_WEBHOOK_RETRY_DELAYS = (0.5, 2.0)
 
 
 def _get_dev_webhook_retry_delays() -> tuple[float, ...]:
@@ -48,6 +62,20 @@ def _append_query_params(url: str, params: dict) -> str:
     ]
     query_items.extend((key, str(value)) for key, value in params.items() if value is not None)
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
+
+
+def _is_retryable_dev_webhook_status(status_code: int) -> bool:
+    return status_code in _DEV_WEBHOOK_RETRYABLE_STATUS_CODES or 500 <= status_code < 600
+
+
+def reset_user_webhook_delivery_health(uid: str, wtype: WebhookType, webhook_url: Optional[str]) -> None:
+    """Reset persisted and process-local failure gates after an explicit enable."""
+    reset_dev_webhook_health(uid, wtype)
+    target_url = webhook_url or ''
+    if wtype == WebhookType.audio_bytes:
+        target_url = target_url.split(',', 1)[0]
+    if target_url:
+        reset_webhook_circuit_breaker(target_url)
 
 
 async def _post_dev_webhook(
@@ -85,7 +113,13 @@ async def _post_dev_webhook(
                 )
                 return response
             failure_reason = f'HTTP {response.status_code}'
-        except Exception as e:
+            if not _is_retryable_dev_webhook_status(response.status_code):
+                logger.error(
+                    f'{webhook_name}: delivery failed status={response.status_code} '
+                    f'attempt={attempt_number}/{attempts} retryable=false'
+                )
+                return response
+        except httpx.TransportError as e:
             last_response = None
             last_exception = e
             failure_reason = type(e).__name__
@@ -110,13 +144,13 @@ async def _post_dev_webhook(
     raise last_exception
 
 
-async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool):
+async def _handle_dev_webhook_disable(uid: str, wtype: WebhookType | str, should_disable: bool):
     if should_disable:
         logger.warning(
             f'Dev webhook auto-disabled: uid={uid} type={wtype} after {_DEV_FAILURE_THRESHOLD} consecutive failures'
         )
         await run_blocking(db_executor, disable_user_webhook_db, uid, wtype)
-        wtype_str = wtype.value if hasattr(wtype, 'value') else str(wtype)
+        wtype_str = wtype.value if isinstance(wtype, WebhookType) else str(wtype)
         await run_blocking(
             db_executor,
             send_notification,
@@ -134,7 +168,7 @@ def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> 
     return payload
 
 
-async def conversation_created_webhook(uid, memory: Conversation):
+async def conversation_created_webhook(uid: str, memory: Conversation):
     if memory.is_locked:
         return
 
@@ -237,7 +271,12 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
         return
 
 
-async def realtime_transcript_webhook(uid, segments: List[dict]):
+async def realtime_transcript_webhook(
+    uid,
+    segments: List[dict],
+    *,
+    idempotency_key: Optional[str] = None,
+):
     logger.info(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 
@@ -256,6 +295,8 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 webhook_url,
                 json={'segments': segments, 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
+                idempotency_key=idempotency_key,
+                retry_delays=_REALTIME_DEV_WEBHOOK_RETRY_DELAYS,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
@@ -331,6 +372,7 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                 webhook_url,
                 content=bytes(data),
                 headers={'Content-Type': 'application/octet-stream'},
+                retry_delays=_REALTIME_DEV_WEBHOOK_RETRY_DELAYS,
             )
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()

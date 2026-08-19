@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
+from testing.import_isolation import load_module_fresh
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -269,9 +271,10 @@ async def _run_blocking(_executor, func, *args, **kwargs):
 
 _executors_mod.run_blocking = _run_blocking
 
-import importlib
-
-app_integrations = importlib.import_module("utils.app_integrations")
+app_integrations = load_module_fresh(
+    "utils.app_integrations",
+    os.path.join(_BACKEND_DIR, "utils", "app_integrations.py"),
+)
 _restore_stub_modules()
 
 
@@ -565,6 +568,72 @@ class TestAsyncTriggerRealtimeIntegrations:
     """Test async realtime integration fan-out."""
 
     @pytest.mark.asyncio
+    async def test_retryable_status_reuses_one_receiver_visible_delivery_key(self):
+        unavailable = MagicMock(status_code=503)
+        accepted = MagicMock(status_code=204)
+        client = AsyncMock()
+        client.post = AsyncMock(side_effect=[unavailable, accepted])
+
+        with patch.object(app_integrations, "get_webhook_client", return_value=client):
+            result = await app_integrations._post_realtime_app_webhook(
+                "app-1",
+                "https://app.test/hook",
+                idempotency_key="delivery-1",
+                retry_delays=(0,),
+                json={"segments": [{"text": "hi"}]},
+            )
+
+        assert result is accepted
+        assert client.post.await_count == 2
+        assert [call.kwargs["headers"]["X-Omi-Idempotency-Key"] for call in client.post.await_args_list] == [
+            "delivery-1",
+            "delivery-1",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_transport_retry_generates_one_stable_key_for_legacy_caller(self):
+        accepted = MagicMock(status_code=200)
+        client = AsyncMock()
+        client.post = AsyncMock(
+            side_effect=[
+                app_integrations.httpx.ConnectError("connection unavailable"),
+                accepted,
+            ]
+        )
+
+        with patch.object(app_integrations, "get_webhook_client", return_value=client):
+            result = await app_integrations._post_realtime_app_webhook(
+                "app-1",
+                "https://app.test/hook",
+                retry_delays=(0,),
+                json={"segments": [{"text": "hi"}]},
+            )
+
+        assert result is accepted
+        keys = [call.kwargs["headers"]["X-Omi-Idempotency-Key"] for call in client.post.await_args_list]
+        assert len(keys) == 2
+        assert keys[0] == keys[1]
+        assert keys[0]
+
+    @pytest.mark.asyncio
+    async def test_permanent_client_error_is_not_retried(self):
+        rejected = MagicMock(status_code=400)
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=rejected)
+
+        with patch.object(app_integrations, "get_webhook_client", return_value=client):
+            result = await app_integrations._post_realtime_app_webhook(
+                "app-1",
+                "https://app.test/hook",
+                idempotency_key="delivery-1",
+                retry_delays=(0, 0),
+                json={"segments": [{"text": "hi"}]},
+            )
+
+        assert result is rejected
+        client.post.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_no_apps_returns_empty(self):
         """No apps and no mentor → empty result."""
         with patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
@@ -593,6 +662,26 @@ class TestAsyncTriggerRealtimeIntegrations:
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_stable_delivery_id_reaches_realtime_app_webhook(self):
+        app = _make_app("a1", "https://app1.test/hook", triggers_realtime=True)
+        response = MagicMock(status_code=200, text="")
+        response.json.return_value = {}
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+            app_integrations, "process_mentor_notification", return_value=None
+        ), patch.object(app_integrations, "get_webhook_client", return_value=client):
+            await app_integrations.trigger_realtime_integrations(
+                "uid-1",
+                [{"text": "hi"}],
+                "conv-1",
+                idempotency_key="delivery-1",
+            )
+
+        assert client.post.await_args.kwargs["headers"] == {"X-Omi-Idempotency-Key": "delivery-1"}
 
     @pytest.mark.asyncio
     async def test_app_response_message_triggers_notification(self):

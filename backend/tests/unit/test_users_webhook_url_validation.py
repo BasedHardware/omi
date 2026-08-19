@@ -126,7 +126,8 @@ def test_valid_url_sets():
         patch.object(users_mod, 'set_user_webhook_db') as setdb,
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
-        patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
+        patch.object(users_mod, 'get_user_webhook_db', return_value='http://x'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
     ):
         result = users_mod.set_user_webhook_endpoint(
             wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
@@ -134,7 +135,7 @@ def test_valid_url_sets():
     assert result['status'] == 'ok'
     setdb.assert_called_once()
     enable.assert_called_once_with('u1', 'audio_bytes')
-    reset_health.assert_called_once_with('u1', 'audio_bytes')
+    reset_health.assert_called_once_with('u1', 'audio_bytes', 'http://x')
     disable.assert_not_called()
 
 
@@ -143,7 +144,7 @@ def test_empty_url_disables_without_resetting_health():
         patch.object(users_mod, 'set_user_webhook_db') as setdb,
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
-        patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
+        patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
     ):
         result = users_mod.set_user_webhook_endpoint(
             wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=''), uid='u1'
@@ -165,7 +166,7 @@ def test_cleared_audio_bytes_url_keeping_delay_disables():
         patch.object(users_mod, 'set_user_webhook_db') as setdb,
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
-        patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
+        patch.object(users_mod, 'reset_user_webhook_delivery_health') as reset_health,
     ):
         result = users_mod.set_user_webhook_endpoint(
             wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=',5'), uid='u1'
@@ -182,7 +183,8 @@ def test_audio_bytes_url_with_delay_still_enables():
         patch.object(users_mod, 'set_user_webhook_db'),
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
-        patch.object(users_mod, 'record_dev_webhook_success'),
+        patch.object(users_mod, 'get_user_webhook_db', return_value='http://x,5'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health'),
     ):
         users_mod.set_user_webhook_endpoint(
             wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x,5'), uid='u1'
@@ -196,7 +198,7 @@ def test_blank_url_disables_for_non_audio_webhooks():
         patch.object(users_mod, 'set_user_webhook_db'),
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
-        patch.object(users_mod, 'record_dev_webhook_success'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health'),
     ):
         users_mod.set_user_webhook_endpoint(wtype='memory_created', data=SetUserWebhookUrlRequest(url='   '), uid='u1')
     disable.assert_called_once_with('u1', 'memory_created')
@@ -209,7 +211,8 @@ def test_comma_in_non_audio_url_is_not_a_delay_separator():
         patch.object(users_mod, 'set_user_webhook_db'),
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
-        patch.object(users_mod, 'record_dev_webhook_success'),
+        patch.object(users_mod, 'get_user_webhook_db', return_value='https://h/i?ids=1,2'),
+        patch.object(users_mod, 'reset_user_webhook_delivery_health'),
     ):
         users_mod.set_user_webhook_endpoint(
             wtype='realtime_transcript', data=SetUserWebhookUrlRequest(url='https://h/i?ids=1,2'), uid='u1'

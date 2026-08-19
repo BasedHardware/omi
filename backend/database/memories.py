@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
 users_collection = 'users'
+_DELETE_BATCH_SIZE = 499
 
 
 class MemoryDoc(TypedDict, total=False):
@@ -76,6 +78,15 @@ class MemoryDoc(TypedDict, total=False):
     redaction_status: str
     evidence: List[Dict[str, Any]]
     to_sha256: Optional[str]
+
+
+@dataclass(frozen=True)
+class LegacyMemoryDeleteResult:
+    memory_ids: List[str]
+
+    @property
+    def committed_count(self) -> int:
+        return len(self.memory_ids)
 
 
 # Signature expected by ``prepare_for_read`` for the post-read decrypt hook. The
@@ -660,24 +671,8 @@ def _merge_evidence(  # type: ignore[reportUnusedFunction]  # reserved: thin ali
     return merge_evidence_sets(existing, incoming)
 
 
-def delete_memories(uid: str, *, firestore_client: Any = None) -> None:
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    # Chunk deletes to stay under the Firestore 500-writes-per-batch limit. A user with more than
-    # 500 memories would otherwise make the single batch.commit() raise and delete nothing. Mirrors
-    # the chunking in unlock_all_memories.
-    batch = database.batch()
-    count = 0
-    for doc in memories_ref.stream():
-        batch.delete(doc.reference)
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = database.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
+def delete_memories(uid: str, *, firestore_client: Any = None) -> LegacyMemoryDeleteResult:
+    return delete_all_memories(uid, firestore_client=firestore_client)
 
 
 @prepare_for_read(decrypt_func=cast(_DecryptFunc, _prepare_memory_for_read))
@@ -980,15 +975,23 @@ def invalidate_memory(
     )
 
 
-def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> None:
+def delete_memory(uid: str, memory_id: str, *, firestore_client: Any = None) -> LegacyMemoryDeleteResult:
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
-    memory_ref.delete()
+    return _delete_memory_references(
+        [(memory_id, memory_ref)],
+        database=database,
+    )
 
 
-def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: Any = None) -> None:
+def delete_memories_batch(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    firestore_client: Any = None,
+) -> LegacyMemoryDeleteResult:
     """Delete multiple memories in a single batched Firestore write.
 
     The router caps a batch-delete request at MEMORIES_BATCH_MAX (100), well under
@@ -996,41 +999,55 @@ def delete_memories_batch(uid: str, memory_ids: List[str], *, firestore_client: 
     delete_all_memories so it stays correct if it is ever reused for larger sets.
     """
     if not memory_ids:
-        return
+        return LegacyMemoryDeleteResult(memory_ids=[])
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    batch = database.batch()
-    count = 0
-    for memory_id in memory_ids:
-        batch.delete(memories_ref.document(memory_id))
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = database.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
+    references = [(memory_id, memories_ref.document(memory_id)) for memory_id in dict.fromkeys(memory_ids)]
+    return _delete_memory_references(
+        references,
+        database=database,
+    )
 
 
-def delete_all_memories(uid: str, *, firestore_client: Any = None) -> None:
+def delete_all_memories(
+    uid: str,
+    *,
+    memory_ids: Optional[List[str]] = None,
+    firestore_client: Any = None,
+) -> LegacyMemoryDeleteResult:
+    """Delete one authoritative snapshot and return the exact committed IDs."""
     database = _get_db(firestore_client)
     user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    # Chunk deletes to stay under the Firestore 500-writes-per-batch limit. Account deletion and
-    # "delete all memories" hit this for any user with more than 500 memories: the single
-    # batch.commit() would raise and remove nothing. Mirrors the chunking in unlock_all_memories.
-    batch = database.batch()
-    count = 0
-    for doc in memories_ref.stream():
-        batch.delete(doc.reference)
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = database.batch()
-            count = 0
-    if count > 0:
+    references = (
+        [(memory_id, memories_ref.document(memory_id)) for memory_id in dict.fromkeys(memory_ids)]
+        if memory_ids is not None
+        else [(doc.id, doc.reference) for doc in memories_ref.stream()]
+    )
+    return _delete_memory_references(
+        references,
+        database=database,
+    )
+
+
+def _delete_memory_references(
+    references: List[tuple[str, Any]],
+    *,
+    database: Any,
+) -> LegacyMemoryDeleteResult:
+    if not references:
+        return LegacyMemoryDeleteResult(memory_ids=[])
+
+    committed_ids: List[str] = []
+    for offset in range(0, len(references), _DELETE_BATCH_SIZE):
+        chunk = references[offset : offset + _DELETE_BATCH_SIZE]
+        batch = database.batch()
+        for _memory_id, reference in chunk:
+            batch.delete(reference)
         batch.commit()
+        committed_ids.extend(memory_id for memory_id, _reference in chunk)
+    return LegacyMemoryDeleteResult(memory_ids=committed_ids)
 
 
 def ripple_source_deletion(uid: str, source_id: str, *, firestore_client: Any = None) -> Dict[str, Any]:
