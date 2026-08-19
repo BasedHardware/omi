@@ -499,6 +499,21 @@ test('renders the v4-style Home hierarchy: top pendant, live status, Currents, d
   expect(output).toContain('Home search dock');
   expect(output).not.toContain('HOME');
   expect(output).not.toContain('LATEST');
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home pendant status',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home currents',
+    ).props.style,
+  ).toEqual(expect.objectContaining({gap: 10}));
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home devices',
+    ),
+  ).toBeDefined();
 
   const pendant = renderer.root.find(
     node => node.props.accessibilityLabel === 'Home pendant',
@@ -507,14 +522,17 @@ test('renders the v4-style Home hierarchy: top pendant, live status, Currents, d
     pendant.find(node => String(node.type) === 'Image').props.style,
   ).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({height: 184, width: 160}),
+      expect.objectContaining({height: 210, width: 210}),
     ]),
   );
   const dock = renderer.root.find(
     node => node.props.accessibilityLabel === 'Home search dock',
   );
   expect(dock.props.style).toEqual(
-    expect.arrayContaining([expect.objectContaining({marginTop: 'auto'})]),
+    expect.arrayContaining([
+      expect.objectContaining({marginTop: 'auto'}),
+      expect.objectContaining({backgroundColor: '#222621', minHeight: 60}),
+    ]),
   );
 });
 test('keeps search results hidden until a search begins while retaining the v4 Currents feed', async () => {

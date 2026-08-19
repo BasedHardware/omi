@@ -321,21 +321,41 @@ function displaySummary(item: DesktopReadProjection): string {
 
 const ProjectionRow = memo(function ProjectionRow({
   item,
+  home = false,
 }: {
   item: DesktopReadProjection;
+  home?: boolean;
 }) {
   return (
-    <View style={styles.resultRow}>
+    <View style={[styles.resultRow, home && styles.homeCurrentRow]}>
       <View style={styles.resultKindRow}>
-        <Text style={styles.resultKind}>{item.kind}</Text>
+        {home ? (
+          <View style={styles.homeCurrentKindLead}>
+            <View
+              style={[
+                styles.homeCurrentKindDot,
+                item.kind === 'memory' && styles.homeCurrentKindDotMemory,
+              ]}
+            />
+            <Text style={[styles.resultKind, styles.homeCurrentKind]}>
+              {item.kind}
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.resultKind}>{item.kind}</Text>
+        )}
         {item.kind === 'conversation' && item.starred && (
           <Text style={styles.resultMeta}>Starred</Text>
         )}
       </View>
-      <Text numberOfLines={2} style={styles.resultTitle}>
+      <Text
+        numberOfLines={2}
+        style={[styles.resultTitle, home && styles.homeCurrentTitle]}>
         {displayTitle(item)}
       </Text>
-      <Text numberOfLines={2} style={styles.resultSummary}>
+      <Text
+        numberOfLines={2}
+        style={[styles.resultSummary, home && styles.homeCurrentSummary]}>
         {displaySummary(item)}
       </Text>
     </View>
@@ -1959,6 +1979,18 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : `Connected · ${
           nativeSnapshot?.capture === 'recording' ? 'Listening' : 'Ready'
         }`;
+  const homeStatusColor =
+    nativeSnapshot === null
+      ? '#b4ad9f'
+      : connectedDevice === null
+      ? '#d9826f'
+      : '#45b79b';
+  const bluetoothStatusColor =
+    nativeSnapshot === null
+      ? '#b4ad9f'
+      : nativeSnapshot.bluetooth === 'poweredOn'
+      ? '#45b79b'
+      : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
   const homeOverview = (
@@ -1966,29 +1998,66 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       accessibilityLabel="Home overview"
       contentContainerStyle={styles.homeOverviewContent}
       style={styles.homeOverview}>
-      <View style={styles.pendantHero}>
-        <OmiMark
-          accessibilityLabel="Home pendant"
-          height={184}
-          size={160}
-          source={omiPendant}
-        />
-        <Text style={styles.pendantName}>Omi</Text>
-        <Text style={styles.pendantStatus}>{homeStatus}</Text>
-        {connectedDevice?.battery !== undefined && (
-          <Text style={styles.pendantBattery}>
-            {connectedDevice.battery}% battery
+      <View style={[styles.pendantHero, compact && styles.pendantHeroCompact]}>
+        <View
+          pointerEvents="none"
+          style={[styles.pendantStage, compact && styles.pendantStageCompact]}>
+          <View
+            style={[
+              styles.pendantAura,
+              connectedDevice === null && styles.pendantAuraDisconnected,
+            ]}
+          />
+          <OmiMark
+            accessibilityLabel="Home pendant"
+            height={compact ? 210 : 184}
+            size={compact ? 210 : 160}
+            source={omiPendant}
+          />
+        </View>
+        <Text
+          style={[styles.pendantName, compact && styles.pendantNameCompact]}>
+          Omi
+        </Text>
+        <View
+          accessibilityLabel="Home pendant status"
+          style={styles.pendantStatusRow}>
+          <View
+            style={[
+              styles.pendantStatusDot,
+              {backgroundColor: homeStatusColor},
+            ]}
+          />
+          <Text
+            style={[
+              styles.pendantStatus,
+              compact && styles.pendantStatusCompact,
+            ]}>
+            {homeStatus}
           </Text>
+        </View>
+        {connectedDevice?.battery !== undefined && (
+          <View style={styles.pendantBatteryPill}>
+            <View style={styles.pendantBatteryDot} />
+            <Text style={styles.pendantBattery}>
+              {connectedDevice.battery}% battery
+            </Text>
+          </View>
         )}
       </View>
 
       {compact && (
         <>
-          <View style={styles.homeSection}>
-            <Text style={styles.sectionLabel}>Currents</Text>
+          <View accessibilityLabel="Home currents" style={styles.homeSection}>
+            <View style={styles.homeSectionHeader}>
+              <View style={styles.homeSectionAccent} />
+              <Text style={[styles.sectionLabel, styles.homeSectionLabel]}>
+                Currents
+              </Text>
+            </View>
             {currentItems.length > 0 ? (
               currentItems.map(item => (
-                <ProjectionRow item={item} key={item.id} />
+                <ProjectionRow home item={item} key={item.id} />
               ))
             ) : readsPhase === 'initial-loading' ? (
               <Text style={styles.homeHint}>Loading Currents…</Text>
@@ -1997,63 +2066,92 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             )}
           </View>
 
-          <View style={styles.homeSection}>
-            <View style={styles.deviceHeader}>
-              <View>
-                <Text style={styles.sectionLabel}>Devices</Text>
-                <Text style={styles.deviceState}>
-                  {nativeSnapshot === null
-                    ? 'Checking Bluetooth…'
-                    : nativeSnapshot.bluetooth === 'poweredOn'
-                    ? 'Bluetooth on'
-                    : nativeSnapshot.bluetooth === 'unauthorized'
-                    ? 'Bluetooth permission needed'
-                    : 'Bluetooth off'}
-                </Text>
-              </View>
-              <FocusPressable
-                accessibilityLabel="Scan for Omi devices"
-                accessibilityRole="button"
-                disabled={
-                  deviceBusy || nativeSnapshot?.bluetooth !== 'poweredOn'
-                }
-                onPress={scanForOmi}
-                style={({pressed}) => [
-                  styles.scanButton,
-                  pressed && styles.pressed,
-                ]}>
-                <Text style={styles.scanButtonText}>
-                  {deviceBusy ? 'Scanning…' : 'Scan'}
-                </Text>
-              </FocusPressable>
-            </View>
-            {nativeSnapshot?.devices.map(device => (
-              <FocusPressable
-                accessibilityLabel={`${
-                  device.connected ? 'Disconnect' : 'Connect'
-                } ${device.name}`}
-                accessibilityRole="button"
-                key={device.id}
-                disabled={deviceBusy}
-                onPress={() => toggleDevice(device.id, device.connected)}
-                style={({pressed}) => [
-                  styles.deviceRow,
-                  pressed && styles.pressed,
-                ]}>
-                <View>
-                  <Text style={styles.deviceName}>{device.name}</Text>
-                  <Text style={styles.deviceMeta}>
-                    {device.connected ? 'Connected' : `${device.rssi} dBm`}
-                  </Text>
+          <View
+            accessibilityLabel="Home devices"
+            style={[styles.homeSection, styles.homeDevicesSection]}>
+            <View style={styles.homeDeviceCard}>
+              <View style={styles.deviceHeader}>
+                <View style={styles.homeDeviceHeading}>
+                  <View
+                    style={[
+                      styles.pendantStatusDot,
+                      {backgroundColor: bluetoothStatusColor},
+                    ]}
+                  />
+                  <View>
+                    <Text
+                      style={[styles.sectionLabel, styles.homeSectionLabel]}>
+                      Devices
+                    </Text>
+                    <Text style={[styles.deviceState, styles.homeDeviceState]}>
+                      {nativeSnapshot === null
+                        ? 'Checking Bluetooth…'
+                        : nativeSnapshot.bluetooth === 'poweredOn'
+                        ? 'Bluetooth on'
+                        : nativeSnapshot.bluetooth === 'unauthorized'
+                        ? 'Bluetooth permission needed'
+                        : 'Bluetooth off'}
+                    </Text>
+                  </View>
                 </View>
-                {device.battery !== undefined && (
-                  <Text style={styles.deviceBattery}>{device.battery}%</Text>
+                <FocusPressable
+                  accessibilityLabel="Scan for Omi devices"
+                  accessibilityRole="button"
+                  disabled={
+                    deviceBusy || nativeSnapshot?.bluetooth !== 'poweredOn'
+                  }
+                  onPress={scanForOmi}
+                  style={({pressed}) => [
+                    styles.scanButton,
+                    styles.homeScanButton,
+                    pressed && styles.pressed,
+                  ]}>
+                  <Text
+                    style={[styles.scanButtonText, styles.homeScanButtonText]}>
+                    {deviceBusy ? 'Scanning…' : 'Scan'}
+                  </Text>
+                </FocusPressable>
+              </View>
+              {nativeSnapshot?.devices.map(device => (
+                <FocusPressable
+                  accessibilityLabel={`${
+                    device.connected ? 'Disconnect' : 'Connect'
+                  } ${device.name}`}
+                  accessibilityRole="button"
+                  key={device.id}
+                  disabled={deviceBusy}
+                  onPress={() => toggleDevice(device.id, device.connected)}
+                  style={({pressed}) => [
+                    styles.deviceRow,
+                    styles.homeDeviceRow,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.homeDeviceRowLead}>
+                    <View
+                      style={[
+                        styles.homeDeviceRowDot,
+                        device.connected && styles.homeDeviceRowDotConnected,
+                      ]}
+                    />
+                    <View>
+                      <Text style={styles.deviceName}>{device.name}</Text>
+                      <Text style={styles.deviceMeta}>
+                        {device.connected ? 'Connected' : `${device.rssi} dBm`}
+                      </Text>
+                    </View>
+                  </View>
+                  {device.battery !== undefined && (
+                    <Text style={styles.deviceBattery}>{device.battery}%</Text>
+                  )}
+                </FocusPressable>
+              ))}
+              {nativeSnapshot !== null &&
+                nativeSnapshot.devices.length === 0 && (
+                  <Text style={styles.deviceHint}>
+                    {nativeSnapshot.lastEvent}
+                  </Text>
                 )}
-              </FocusPressable>
-            ))}
-            {nativeSnapshot !== null && nativeSnapshot.devices.length === 0 && (
-              <Text style={styles.deviceHint}>{nativeSnapshot.lastEvent}</Text>
-            )}
+            </View>
           </View>
         </>
       )}
@@ -2065,6 +2163,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       <View
         style={[
           styles.shell,
+          compact && styles.shellCompact,
           !compact && !macDesktop && styles.shellWide,
           macDesktop && styles.macShell,
         ]}>
@@ -2096,6 +2195,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
               style={[
                 styles.pane,
                 !floatingPane && styles.paneCompact,
+                compact && styles.paneCompactSurface,
                 macDesktop && styles.macPane,
               ]}>
               {macDesktop && (
@@ -2272,6 +2372,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         accessibilityLabel="Home search dock"
                         style={[
                           styles.homeSearchDock,
+                          compact && styles.homeSearchDockCompact,
                           searchFocused && styles.focusRing,
                         ]}>
                         <Search
@@ -2483,6 +2584,7 @@ const styles = StyleSheet.create({
   outer: {backgroundColor: '#141414', flex: 1},
   macOuter: {backgroundColor: 'transparent'},
   shell: {backgroundColor: '#141414', flex: 1},
+  shellCompact: {backgroundColor: '#1c1c1a'},
   shellWide: {flexDirection: 'row'},
   macShell: {
     alignItems: 'center',
@@ -2623,6 +2725,7 @@ const styles = StyleSheet.create({
     top: 0,
   },
   paneCompact: {borderRadius: 0, borderWidth: 0},
+  paneCompactSurface: {backgroundColor: '#1c1c1a'},
   stageMotion: {flex: 1},
   stage: {flexGrow: 1, paddingBottom: 16, paddingHorizontal: 16},
   stageCompact: {paddingHorizontal: 12},
@@ -2633,8 +2736,26 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   homeOverview: {flex: 1, width: '100%'},
-  homeOverviewContent: {paddingBottom: 20, paddingTop: 4},
+  homeOverviewContent: {paddingBottom: 28, paddingTop: 10},
   pendantHero: {alignItems: 'center', paddingBottom: 18},
+  pendantHeroCompact: {paddingBottom: 24},
+  pendantStage: {
+    alignItems: 'center',
+    height: 184,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 160,
+  },
+  pendantStageCompact: {height: 232, width: '100%'},
+  pendantAura: {
+    backgroundColor: '#45b79b',
+    borderRadius: 120,
+    height: 220,
+    opacity: 0.09,
+    position: 'absolute',
+    width: 220,
+  },
+  pendantAuraDisconnected: {backgroundColor: '#d9826f', opacity: 0.07},
   pendantName: {
     color: '#ffffff',
     fontSize: 28,
@@ -2642,15 +2763,119 @@ const styles = StyleSheet.create({
     letterSpacing: -0.6,
     marginTop: -12,
   },
+  pendantNameCompact: {
+    fontSize: 38,
+    letterSpacing: -1.2,
+    marginTop: -4,
+  },
+  pendantStatusRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 5,
+  },
+  pendantStatusDot: {borderRadius: 4, height: 8, width: 8},
   pendantStatus: {color: '#b8b8b8', fontSize: 14, marginTop: 3},
+  pendantStatusCompact: {color: '#a6a49c', fontSize: 15, marginTop: 0},
+  pendantBatteryPill: {
+    alignItems: 'center',
+    backgroundColor: '#242a26',
+    borderColor: '#39443c',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  pendantBatteryDot: {
+    backgroundColor: '#45b79b',
+    borderRadius: 3,
+    height: 6,
+    width: 6,
+  },
   pendantBattery: {
     color: '#d8d8d8',
     fontSize: 13,
     fontWeight: '600',
-    marginTop: 7,
   },
-  homeSection: {gap: 8, marginTop: 18, width: '100%'},
+  homeSection: {gap: 10, marginTop: 24, width: '100%'},
+  homeSectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 9,
+    minHeight: 20,
+  },
+  homeSectionAccent: {
+    backgroundColor: '#45b79b',
+    borderRadius: 2,
+    height: 16,
+    width: 3,
+  },
+  homeSectionLabel: {color: '#a6a49c', marginBottom: 0},
   homeHint: {color: '#929292', fontSize: 13, paddingVertical: 4},
+  homeDeviceCard: {
+    backgroundColor: '#222522',
+    borderColor: '#343b36',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  homeDevicesSection: {marginTop: 24},
+  homeDeviceHeading: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 9,
+  },
+  homeDeviceState: {color: '#e4e8e1', fontSize: 15, marginTop: 3},
+  homeScanButton: {
+    backgroundColor: '#e4eee6',
+    borderColor: '#e4eee6',
+    borderRadius: 17,
+    minHeight: 34,
+    paddingHorizontal: 14,
+  },
+  homeScanButtonText: {color: '#1c1c1a'},
+  homeDeviceRow: {
+    backgroundColor: '#292d29',
+    borderColor: '#3b443d',
+    borderRadius: 16,
+    minHeight: 62,
+  },
+  homeDeviceRowLead: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  homeDeviceRowDot: {
+    backgroundColor: '#d9826f',
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
+  homeDeviceRowDotConnected: {backgroundColor: '#45b79b'},
+  homeCurrentRow: {
+    backgroundColor: '#252925',
+    borderColor: '#374039',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  homeCurrentKindLead: {alignItems: 'center', flexDirection: 'row', gap: 7},
+  homeCurrentKindDot: {
+    backgroundColor: '#45b79b',
+    borderRadius: 4,
+    height: 7,
+    width: 7,
+  },
+  homeCurrentKindDotMemory: {backgroundColor: '#d8a17b'},
+  homeCurrentKind: {color: '#9eb8aa'},
+  homeCurrentTitle: {fontSize: 16, lineHeight: 21, marginTop: 8},
+  homeCurrentSummary: {color: '#9a9e98', lineHeight: 18, marginTop: 6},
   homeResults: {flex: 1},
   deviceChip: {
     backgroundColor: '#242424',
@@ -2712,6 +2937,13 @@ const styles = StyleSheet.create({
     paddingLeft: 15,
     paddingRight: 6,
     width: '100%',
+  },
+  homeSearchDockCompact: {
+    backgroundColor: '#222621',
+    borderColor: '#515a53',
+    borderRadius: 28,
+    marginBottom: 12,
+    minHeight: 60,
   },
   askOmiButton: {
     alignItems: 'center',
