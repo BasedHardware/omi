@@ -1097,11 +1097,39 @@ actor ContextProactivityEngine {
 
   static var schema: [String: Any] { schema(allowLookup: false) }
 
+  /// `title` and `message` are the only two fields the user ever reads, and they
+  /// were the only two declared as bare strings. A delivered notification read
+  /// "Insight / PR blocked, needs review" — the decision type answered back as a
+  /// title, and a body naming no pull request — which nothing in the schema or
+  /// the prompt forbade.
+  ///
+  /// These descriptions were measured together with the prompt's naming rule
+  /// (see `ContextProactivityPromptBuilder.directorStablePrompt`). Alone they
+  /// took title naming from 34/58 to 60/61 spoken runs but cost body naming
+  /// (58/58 → 57/61): the model moved the identifier into the title instead of
+  /// carrying it in both. The prompt rule is what holds both at 67/67, so the two
+  /// halves ship together and neither should be removed on its own.
   static func schema(allowLookup: Bool) -> [String: Any] {
     var properties: [String: Any] = [
       "decision": ["type": "string", "enum": ["suggest", "insight", "task_candidate", "resurface", "silence"]],
-      "title": ["type": "string"],
-      "message": ["type": "string"],
+      "title": [
+        "type": "string",
+        "description":
+          "The specific thing this is about, as the supplied context names it: the pull request "
+          + "number and repository, the sender and subject of the thread, the title of the "
+          + "document, the file and branch, the name and time of the meeting. Never a category "
+          + "word such as \"Insight\", \"Suggestion\", or \"Task\". Empty only when the decision "
+          + "is silence.",
+      ],
+      "message": [
+        "type": "string",
+        "description":
+          "What the user should know or do, written so it still makes sense away from the screen "
+          + "that produced it. Name the same specific thing the title names, then say what "
+          + "changed or what to do about it. A message that identifies only a category -- \"PR "
+          + "blocked\", \"respond to the email\", \"document needs review\" -- is useless. Empty "
+          + "only when the decision is silence.",
+      ],
       "reasoning": ["type": "string"],
       "bucket_entry_refs": ["type": "array", "items": ["type": "string"]],
       "fact_ids": ["type": "array", "items": ["type": "string"]],

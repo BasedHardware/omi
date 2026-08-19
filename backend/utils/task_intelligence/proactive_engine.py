@@ -9,6 +9,7 @@ import database.chat_first_intents as intent_db
 from models.chat_first import (
     CaptureLinkSpec,
     ConversationLinkSpec,
+    ConversationLinkActionItemSpec,
     ChatFirstBlockSpec,
     ChatFirstSubject,
     ColdStartSequence,
@@ -278,6 +279,37 @@ def run_goal_changed_wake(uid: str, *, goal_id: str, mutation_key: object) -> Pr
     )
 
 
+def recommended_meeting_action_items(structured: object) -> list[ConversationLinkActionItemSpec]:
+    """Project the user's open meeting commitments into the durable Chat receipt."""
+
+    action_items = (
+        structured.get('action_items', []) if isinstance(structured, dict) else getattr(structured, 'action_items', [])
+    )
+    recommendations: list[ConversationLinkActionItemSpec] = []
+    for item in action_items or []:
+        if isinstance(item, dict):
+            value = item
+        elif hasattr(item, '__dict__'):
+            value = vars(item)
+        else:
+            continue
+        if value.get('capture_owner') != 'user' or value.get('completed', False) or value.get('deleted', False):
+            continue
+        description = str(value.get('description') or '').strip()
+        if not description:
+            continue
+        task_id = value.get('target_task_id')
+        recommendations.append(
+            ConversationLinkActionItemSpec(
+                description=description[:300],
+                task_id=task_id if isinstance(task_id, str) and task_id else None,
+            )
+        )
+        if len(recommendations) == 8:
+            break
+    return recommendations
+
+
 def persist_capture_arrival_intent(
     uid: str,
     *,
@@ -287,6 +319,7 @@ def persist_capture_arrival_intent(
     now: datetime | None = None,
     eligibility_resolver: Callable[[str], ChatFirstEligibility] = resolve_chat_first_eligibility,
     is_desktop_meeting: bool = False,
+    recommended_action_items: list[ConversationLinkActionItemSpec] | None = None,
 ) -> ProactiveIntent | None:
     """Persist the deterministic capture receipt without calling an LLM.
 
@@ -311,7 +344,10 @@ def persist_capture_arrival_intent(
         block: ChatFirstBlockSpec
         if is_desktop_meeting:
             block = ConversationLinkSpec(
-                type='conversationLink', conversation_id=conversation_id, summary=bounded_summary
+                type='conversationLink',
+                conversation_id=conversation_id,
+                summary=bounded_summary,
+                recommended_action_items=recommended_action_items or [],
             )
         else:
             block = CaptureLinkSpec(type='captureLink', conversation_id=conversation_id, summary=bounded_summary)
@@ -352,6 +388,7 @@ def persist_desktop_meeting_arrival(uid: str, conversation) -> None:
         conversation_id=conversation_id,
         summary=title or overview or '',
         is_desktop_meeting=True,
+        recommended_action_items=recommended_meeting_action_items(structured),
     )
 
 

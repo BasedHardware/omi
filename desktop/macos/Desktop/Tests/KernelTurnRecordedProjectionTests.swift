@@ -1251,11 +1251,15 @@ import XCTest
         "journalRevision": 11,
         "text": "hello",
         "sender": "human",
+        "contentBlocks": [["type": "taskCard", "id": "task-1", "taskId": "task-1"]],
         "messageSource": "desktop_chat",
       ]
       XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.turnId, "turn-1")
       XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.ownerId, "owner-1")
       XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.journalRevision, 11)
+      XCTAssertTrue(
+        KernelJournalBackendSyncDriver.Request(payload: valid)?.contentBlocksJSON?.contains(
+          "taskCard") == true)
 
       var invalid = valid
       invalid["clientMessageId"] = "another-id"
@@ -1271,6 +1275,10 @@ import XCTest
 
       invalid = valid
       invalid["journalRevision"] = 0
+      XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
+
+      invalid = valid
+      invalid["contentBlocks"] = "not-an-array"
       XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
 
     }

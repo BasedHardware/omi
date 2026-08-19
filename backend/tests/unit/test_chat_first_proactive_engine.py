@@ -207,6 +207,7 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
         'type': 'conversationLink',
         'conversation_id': 'conversation-1',
         'summary': 'Weekly planning',
+        'recommended_action_items': [],
     }
 
     engine.persist_capture_arrival_intent(
@@ -219,6 +220,24 @@ def test_desktop_meeting_arrival_persists_exact_conversation_link(monkeypatch):
     )
 
     assert created[1]['blocks'][0].summary == 'Your meeting notes are ready.'
+
+
+def test_meeting_recommendations_keep_bounded_open_user_commitments():
+    structured = {
+        'action_items': [
+            {'description': ' Send the deck ', 'capture_owner': 'user', 'target_task_id': 'task-1'},
+            {'description': 'Someone else reviews it', 'capture_owner': 'other'},
+            {'description': 'Already sent', 'capture_owner': 'user', 'completed': True},
+            {'description': 'Book the follow-up', 'capture_owner': 'user'},
+        ]
+    }
+
+    recommendations = engine.recommended_meeting_action_items(structured)
+
+    assert [item.model_dump() for item in recommendations] == [
+        {'description': 'Send the deck', 'task_id': 'task-1'},
+        {'description': 'Book the follow-up', 'task_id': None},
+    ]
 
 
 def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotation(monkeypatch):
@@ -247,7 +266,11 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
 
     engine.persist_desktop_meeting_arrival('user-1', meeting)
     persist.assert_called_once_with(
-        'user-1', conversation_id='meeting-1', summary='Design review', is_desktop_meeting=True
+        'user-1',
+        conversation_id='meeting-1',
+        summary='Design review',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
     )
 
     persist.reset_mock()

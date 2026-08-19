@@ -452,6 +452,7 @@ struct CaptureLinkView: View {
 struct ConversationLinkView: View {
   let conversationID: String
   let summary: String
+  let recommendedActionItems: [ConversationLinkActionItem]
   let navigation: ChatFirstShellNavigation
 
   @State private var isOpening = false
@@ -473,6 +474,11 @@ struct ConversationLinkView: View {
           isOpening: isOpening,
           accessibilityID: "chat-first-conversation-\(conversationID)-open",
           action: { openConversation() },
+          recommendedActionItems: recommendedActionItems,
+          recommendedActionItemAction: { item in
+            guard let taskID = item.taskID else { return }
+            navigation.open(focus: .task(id: taskID))
+          },
           secondaryActionTitle: "Copy share link",
           secondaryActionSystemImage: "link",
           isSecondaryBusy: isCopyingLink,
@@ -608,6 +614,8 @@ private struct ChatFirstLinkBlockView: View {
   let isOpening: Bool
   let accessibilityID: String
   let action: () -> Void
+  var recommendedActionItems: [ConversationLinkActionItem] = []
+  var recommendedActionItemAction: ((ConversationLinkActionItem) -> Void)? = nil
   // Optional secondary chip rendered beside the primary destination chip
   // (e.g. "Copy share link" beside "Open conversation"). The transient
   // status renders on its own caption line under the chips so a long
@@ -632,6 +640,18 @@ private struct ChatFirstLinkBlockView: View {
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
+
+      if !recommendedActionItems.isEmpty {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Recommended next steps")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(Ink.secondary)
+
+          ForEach(recommendedActionItems.indices, id: \.self) { index in
+            recommendedActionItemRow(recommendedActionItems[index])
+          }
+        }
+      }
 
       HStack(spacing: OmiSpacing.sm) {
         Button(action: action) {
@@ -694,6 +714,41 @@ private struct ChatFirstLinkBlockView: View {
       RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
+  }
+
+  @ViewBuilder
+  private func recommendedActionItemRow(_ item: ConversationLinkActionItem) -> some View {
+    if item.taskID != nil, let recommendedActionItemAction {
+      Button {
+        recommendedActionItemAction(item)
+      } label: {
+        recommendedActionItemLabel(item, showsOpenIndicator: true)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Open task: \(item.description)")
+    } else {
+      recommendedActionItemLabel(item, showsOpenIndicator: false)
+    }
+  }
+
+  private func recommendedActionItemLabel(
+    _ item: ConversationLinkActionItem,
+    showsOpenIndicator: Bool
+  ) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
+      Image(systemName: "circle")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundStyle(Ink.secondary)
+      Text(item.description)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundStyle(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+      if showsOpenIndicator {
+        Image(systemName: "chevron.right")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+      }
+    }
   }
 }
 

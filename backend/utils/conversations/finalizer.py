@@ -21,7 +21,7 @@ from utils.conversations.process_conversation import extract_memories, process_c
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.log_sanitizer import sanitize_pii
-from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
+from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent, recommended_meeting_action_items
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +181,7 @@ async def finalize_persisted_conversation(
                         conversation_id=conversation_id,
                         summary=summary,
                         is_desktop_meeting=True,
+                        recommended_action_items=recommended_meeting_action_items(structured),
                     )
                 else:
                     persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)

@@ -84,15 +84,16 @@ final class MeetingActionItemBannerService {
         // Same owner-provenance and delivery gates as the other proactive
         // banners: master Notifications toggle, frequency throttle, and the
         // floating-bar preview policy all remain authoritative inside
-        // `sendNotification`. `deliverSystemBanner: true` because this banner's
-        // whole purpose is to reach a user who is away from the app.
+        // `sendNotification`. This is intentionally system-banner-only: the
+        // durable Chat surface is the conversation-link card, so presenting
+        // this recommendation must not journal a second Chat row.
         guard let snapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
         NotificationService.shared.sendNotification(
           ownerID: snapshot.ownerID,
           title: title,
           message: body,
           assistantId: MeetingActionItemBannerPolicy.assistantID,
-          deliverSystemBanner: true,
+          deliveryMode: .systemBannerOnly,
           authorizationSnapshot: snapshot
         )
       }
