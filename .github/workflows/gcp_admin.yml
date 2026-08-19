@@ -90,7 +90,17 @@ jobs:
       - name: Detect dashboard JSON changes
         id: dashboards_diff
         run: |
-          if git diff --name-only "${{ github.event.before || 'HEAD~1' }}" "${{ github.sha }}" -- 'web/admin/grafana/dashboards/*.json' | grep -q .; then
+          # The deploy job checks out at depth 1, so the push's `before` commit
+          # must be fetched or the diff fails — and a failed diff must NOT
+          # count as "changed" (an unconditional apply stomps UI-edited board
+          # layouts). Round-7 regression: silent grep-on-error skipped a real
+          # dashboard apply.
+          BEFORE="${{ github.event.before || 'HEAD~1' }}"
+          git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "::warning::cannot resolve $BEFORE; dashboards not auto-applied — run workflow_dispatch if boards changed"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'web/admin/grafana/dashboards/*.json' | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
