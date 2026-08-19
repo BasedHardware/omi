@@ -1,0 +1,31 @@
+desktop/context-for-claude/Sources/ContextApp/Integration/ClaudeConnection.swift
+  s_227233afb3b7ff::t_8236fff6973efe 1-88
+desktop/context-for-claude/Tests/ContextAppTests/ClaudeConnectionTests.swift
+  s_227233afb3b7ff::t_5a8ba5d793a990 1-182
+desktop/context-for-claude/Sources/ContextApp/MenuBar/MenuBarPresentation.swift
+  s_227233afb3b7ff::t_c75acb76e5b26c 204-209,215-225
+desktop/context-for-claude/Sources/ContextApp/MenuBar/StatusView.swift
+  s_227233afb3b7ff::t_4dbd3d282c8158 45-48,518,530-539,662
+desktop/context-for-claude/Sources/ContextApp/Settings/SettingsAgentsPane.swift
+  s_227233afb3b7ff::t_e23ecc9b1c9f32 32,99-104,140,169-184,190-191,227
+desktop/context-for-claude/Sources/ContextApp/Tutorial/TutorialEnvironment.swift
+  s_227233afb3b7ff::t_64d7a3db28b79c 554,773-776
+desktop/context-for-claude/Tests/ContextAppTests/StatusPopoverLayoutTests.swift
+  s_227233afb3b7ff::t_baebd7d136f691 68,76-77,121-127,130,137,143-144,156,167-169,177-186
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "998de7335ee8e075a71f052cf72074baf6f38188",
+  "prompts": {},
+  "sessions": {
+    "s_227233afb3b7ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d72fbee-85a2-445b-a86d-7f95bf574311",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
