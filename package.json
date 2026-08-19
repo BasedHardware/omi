@@ -14,7 +14,7 @@
     "check": "bun run boundaries && bun run format:check && bun run lint && bun run typecheck && bun run test && bun run native:test",
     "boundaries": "bun scripts/check-boundaries.ts",
     "format": "bun x prettier --write 'apps/**/*.{json,ts}' 'pwa/**/*.{html,json,js,ts,css}' 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
-    "format:check": "bun x prettier --check 'apps/**/*.{json,ts}' 'pwa/**/*.{html,json,js,ts,css}' 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
+    "format:check": "bun x prettier --check 'apps/**/*.{json,ts}' 'pwa/**/*.{html,json,js,ts,css}' '!pwa/dist/**' 'react-native/*.{js,json,ts,tsx}' 'react-native/src/**/*.{ts,tsx}' 'react-native/__tests__/**/*.{ts,tsx}' 'scripts/**/*.ts'",
     "lint": "bun run --cwd react-native lint && bun run --cwd apps/backend-worker lint && bun run --cwd pwa lint",
     "platforms:test": "scripts/test-apple-platforms",
     "pwa:build": "bun run --cwd pwa build",
