@@ -406,11 +406,23 @@ enum ContextProactivityPromptBuilder {
   /// given. Across 69 spoken baseline runs the model named the referent whenever
   /// one was anywhere in the prompt — including when it appeared only in an old
   /// frozen-segment line among four distractor facts. The residual vague messages
-  /// all come from contexts carrying no identifier. `bucket_facts.identifiers` is
-  /// where extraction already stores the handles it was told to copy, and
-  /// `ContextBucketStore.snapshot` does not put that column into the fact lines
-  /// the director reads. That is the next lever, and it is a store change, not a
-  /// prompt change.
+  /// all come from contexts carrying no identifier.
+  ///
+  /// Surfacing `bucket_facts.identifiersJson` is not that lever, though it reads
+  /// like one, and an earlier version of this comment sent readers there.
+  /// `ContextBucketStore.snapshot` does omit the column from the fact lines the
+  /// director reads — but the same line carries `evidenceText` verbatim, and
+  /// `BucketFactValidator.acceptedIdentifiers` above keeps an identifier only when
+  /// that already-truncated `evidenceText` contains it. Every stored handle is
+  /// therefore a substring of a string the director is already reading, so the
+  /// column can add nothing the prompt does not already have. That holds by
+  /// construction rather than by sampling: `ContextBucketStore.writeExtraction` is
+  /// the only writer of the column, and it derives both values from one string.
+  ///
+  /// The lever is upstream, in extraction. The model leaves `identifiers` empty
+  /// while writing the same handle into the statement (0/39 on real work screens,
+  /// recorded above), and it cannot copy a handle the capture never contained.
+  /// Both are extraction-prompt and capture problems, not store problems.
   ///
   /// This text is the prompt-cache prefix: nothing volatile may be interpolated
   /// into it, and it must stay byte-identical across calls for one bucket. The
