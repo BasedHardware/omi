@@ -49,12 +49,14 @@ export function listDrafts(): BeeperDraft[] {
   return loadBeeperState().drafts
 }
 
-export function addDraft(draft: BeeperDraft): void {
+export function addDraft(draft: BeeperDraft): BeeperDraft {
   const state = loadBeeperState()
-  if (state.drafts.some((d) => d.inboundMessageId === draft.inboundMessageId)) return
+  const existing = state.drafts.find((d) => d.inboundMessageId === draft.inboundMessageId)
+  if (existing) return existing
   state.drafts.push(draft)
   state.handled[draft.chatId] = draft.inboundMessageId
   save(state)
+  return draft
 }
 
 export function removeDraft(id: string): BeeperDraft | null {

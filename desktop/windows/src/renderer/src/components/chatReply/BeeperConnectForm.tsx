@@ -33,7 +33,7 @@ export function BeeperConnectForm({
     <div className="flex flex-col gap-2">
       <p className="text-[12px] leading-relaxed text-white/45">
         {status.running
-          ? 'Beeper is running. In Beeper, open Settings → Integrations → Approved connections → +, then paste the token.'
+          ? 'Beeper is running. In Beeper Settings, open Integrations in the left sidebar. Turn on Allow connections, scroll past the Claude/Cursor buttons to Approved connections, click +, enable Allow sensitive actions, then paste the token here.'
           : 'Install Beeper, connect WhatsApp or Telegram, then paste an access token here.'}
       </p>
       {!status.running && (

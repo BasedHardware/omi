@@ -1,7 +1,7 @@
 // Omi product-tool manifest — Windows port of the macOS agent runtime's
 // omi-tool-manifest.ts (desktop/macos/agent/src/runtime/).
 //
-// Defines the 33 product ("swift") tool descriptors, merges in the 18 control
+// Defines the 36 product ("swift") tool descriptors, merges in the 18 control
 // tools from ./controlToolManifest via `controlEntry()`, and exposes the pure
 // projection functions (`toolsForAdapter`, `isToolAvailableForContext`,
 // `toolNamesForAdapter`, `mcpToolDefinitionsForAdapter`, `productManifestEntry`,
@@ -386,11 +386,62 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     capabilityDoc: doc(
       'Search Conversations',
       "Semantic search across the user's past conversations.",
-      ['Use for specific topics, decisions, or events discussed in conversations.']
+      [
+        'Use for specific topics, decisions, or events discussed in conversations.',
+        'Omi recordings only — not WhatsApp, Telegram, LinkedIn, or other Beeper chats.'
+      ]
     ),
     voice: {
       realtimeDescription:
-        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result."
+        "Search the user's past Omi recordings for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only. Do NOT use this for WhatsApp, Telegram, LinkedIn, or other chatting-app messages — those need search_beeper_chats. Fast synchronous read. Speak the result."
+    }
+  },
+  search_beeper_chats: {
+    surfaces: ['desktop_chat', 'realtime_voice'],
+    capabilityDoc: doc(
+      'Search Beeper Chats',
+      "Find WhatsApp, Telegram, LinkedIn, and other chats in the user's local Beeper Desktop.",
+      [
+        'Use for reading messages from chatting apps — not Omi recordings.',
+        'Pass network (linkedin, whatsapp, telegram, …) and/or a person name in query.',
+        'Then call get_beeper_messages with the returned chat_id, then draft_beeper_reply so a Send/Skip card appears.'
+      ]
+    ),
+    voice: {
+      realtimeDescription:
+        "Find WhatsApp, Telegram, LinkedIn, iMessage, or other chatting-app threads in Beeper. Use this — NOT search_conversations — for 'read my LinkedIn messages', 'what's on WhatsApp', 'what did X text me'. Pass network (linkedin/whatsapp/telegram) and/or the person's name. Then call get_beeper_messages with a returned chat_id, then draft_beeper_reply so the suggested reply card appears. Fast local read. Speak a short summary, never chat ids."
+    }
+  },
+  get_beeper_messages: {
+    surfaces: ['desktop_chat', 'realtime_voice'],
+    capabilityDoc: doc(
+      'Get Beeper Messages',
+      'Read recent messages from one Beeper chat.',
+      [
+        'Requires chat_id from search_beeper_chats.',
+        'Use after finding the LinkedIn / WhatsApp / Telegram thread.',
+        'Then call draft_beeper_reply so a Send/Skip card appears on screen.'
+      ]
+    ),
+    voice: {
+      realtimeDescription:
+        "Read recent messages from one Beeper chat. Requires chat_id from search_beeper_chats. Use after finding the LinkedIn/WhatsApp/Telegram thread. Then call draft_beeper_reply so the suggested-reply card appears. Fast local read. Speak a short summary of who said what — never read chat ids or JSON aloud."
+    }
+  },
+  draft_beeper_reply: {
+    surfaces: ['desktop_chat', 'realtime_voice'],
+    capabilityDoc: doc(
+      'Draft Beeper Reply',
+      'Draft a memory-grounded reply to a Beeper chat and show a Send/Skip card on screen.',
+      [
+        'Requires chat_id from search_beeper_chats.',
+        'Does not send — the user taps Send on the card.',
+        'Use after reading a WhatsApp / Telegram / LinkedIn thread, or when they ask what to reply.'
+      ]
+    ),
+    voice: {
+      realtimeDescription:
+        "Draft a reply as the user to a Beeper chat (WhatsApp, Telegram, LinkedIn) and show a Send/Skip card on screen — the same flow as the in-app chat-reply demo. Requires chat_id from search_beeper_chats. Never send the message. Speak one sentence that the draft is on the card; do not read the draft aloud unless asked."
     }
   },
   get_memories: {
@@ -977,8 +1028,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: 'search_conversations',
     label: 'Search Conversations',
-    description: 'Semantic search across conversations. Use for specific events or topics.',
+    description:
+      'Semantic search across Omi recordings. Do NOT use for WhatsApp, Telegram, LinkedIn, or other Beeper chats — use search_beeper_chats.',
     promptSnippet: 'search_conversations - Find conversations about a topic',
+    promptGuidelines: [
+      'Omi recordings only. For WhatsApp/Telegram/LinkedIn messages, use search_beeper_chats then get_beeper_messages then draft_beeper_reply.'
+    ],
     latency: 'fast network',
     inputSchema: schema(
       {
@@ -995,6 +1050,86 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: 'swiftTool' },
     intendedForAgents: true,
     runtimePreconditions: ['Requires authenticated backend access.'],
+    adapters: piAndStdio()
+  },
+  {
+    name: 'search_beeper_chats',
+    label: 'Search Beeper Chats',
+    description:
+      "Find chats in Beeper Desktop (WhatsApp, Telegram, LinkedIn, iMessage, etc.). Use this — NOT search_conversations — when the user asks to read, search, or summarize those messages. Pass network (e.g. 'linkedin') and/or query (person name). Then call get_beeper_messages with a returned chat_id, then draft_beeper_reply.",
+    promptSnippet: 'search_beeper_chats - Find WhatsApp/Telegram/LinkedIn chats in Beeper',
+    promptGuidelines: [
+      "Use for 'read my LinkedIn messages', 'what's on WhatsApp', 'what did X text me'.",
+      'search_conversations is Omi recordings only.'
+    ],
+    latency: 'fast local',
+    inputSchema: schema({
+      query: {
+        type: 'string',
+        description: 'Person name or keyword. Literal match, not semantic.'
+      },
+      network: {
+        type: 'string',
+        description: "Network filter: 'linkedin', 'whatsapp', 'telegram', 'imessage', …"
+      },
+      unread_only: { type: 'boolean', description: 'Only unread chats' },
+      limit: { type: 'number', description: 'Default 15, max 30' }
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: 'normal',
+    executor: { kind: 'swiftTool' },
+    intendedForAgents: true,
+    runtimePreconditions: ['Requires Beeper Desktop running and an Omi-stored access token.'],
+    adapters: piAndStdio()
+  },
+  {
+    name: 'get_beeper_messages',
+    label: 'Get Beeper Messages',
+    description:
+      'Read recent messages from one Beeper chat. Requires chat_id from search_beeper_chats. Use after finding the LinkedIn/WhatsApp/Telegram thread. Then call draft_beeper_reply.',
+    promptSnippet: 'get_beeper_messages - Read messages from a Beeper chat_id',
+    latency: 'fast local',
+    inputSchema: schema(
+      {
+        chat_id: { type: 'string', description: 'chat_id returned by search_beeper_chats' },
+        limit: { type: 'number', description: 'Default 20, max 40' }
+      },
+      ['chat_id']
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: 'normal',
+    executor: { kind: 'swiftTool' },
+    intendedForAgents: true,
+    runtimePreconditions: ['Requires Beeper Desktop running and an Omi-stored access token.'],
+    adapters: piAndStdio()
+  },
+  {
+    name: 'draft_beeper_reply',
+    label: 'Draft Beeper Reply',
+    description:
+      'Draft a memory-grounded reply to a Beeper chat and show a Send/Skip card on screen. Requires chat_id from search_beeper_chats. Never sends — the user taps Send.',
+    promptSnippet: 'draft_beeper_reply - Draft a reply and show the Send/Skip card',
+    promptGuidelines: [
+      'Call after reading a WhatsApp, Telegram, or LinkedIn thread, or when the user asks what to reply.',
+      'Never send the message yourself.'
+    ],
+    latency: 'fast network',
+    inputSchema: schema(
+      {
+        chat_id: { type: 'string', description: 'chat_id returned by search_beeper_chats' },
+        chat_title: { type: 'string', description: 'Display name from search_beeper_chats' },
+        network: {
+          type: 'string',
+          description: "Network label from search_beeper_chats, e.g. 'linkedin'"
+        }
+      },
+      ['chat_id']
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: 'normal',
+    executor: { kind: 'swiftTool' },
+    intendedForAgents: true,
+    runtimePreconditions: ['Requires Beeper Desktop running and an Omi-stored access token.'],
     adapters: piAndStdio()
   },
   {

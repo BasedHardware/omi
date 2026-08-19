@@ -223,6 +223,15 @@ const omi: OmiBridgeApi = {
   beeperDismissDraft: (id: string) => ipcRenderer.invoke('beeper:dismissDraft', id),
   beeperOpenDownload: () => ipcRenderer.invoke('beeper:openDownload'),
   beeperPollNow: () => ipcRenderer.invoke('beeper:pollNow'),
+  beeperGetDraftToast: () => ipcRenderer.invoke('beeper:getDraftToast'),
+  onBeeperDraftToast: (cb) => {
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      draft: import('../shared/types').BeeperDraft
+    ): void => cb(draft)
+    ipcRenderer.on('beeper:draft-toast', listener)
+    return () => ipcRenderer.removeListener('beeper:draft-toast', listener)
+  },
   onBeeperChanged: (cb) => {
     const listener = (
       _e: Electron.IpcRendererEvent,

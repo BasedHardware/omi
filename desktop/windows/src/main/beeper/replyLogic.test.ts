@@ -4,6 +4,7 @@ import {
   shouldReplyToChat,
   buildReplyPrompt,
   sanitizeReplyText,
+  latestInboundMessage,
   type BeeperChatPreview,
   type BeeperNetwork
 } from './replyLogic'
@@ -99,5 +100,26 @@ describe('sanitizeReplyText', () => {
   it('rejects empty replies', () => {
     expect(sanitizeReplyText('   ')).toBeNull()
     expect(sanitizeReplyText('""')).toBeNull()
+  })
+})
+
+describe('latestInboundMessage', () => {
+  it('picks the newest not-from-me text by timestamp', () => {
+    expect(
+      latestInboundMessage([
+        { id: 'old', text: 'hi', timestamp: '2026-08-18T10:00:00Z' },
+        { id: 'mine', text: 'hey', isSender: true, timestamp: '2026-08-18T11:00:00Z' },
+        { id: 'new', text: 'landed?', timestamp: '2026-08-18T12:00:00Z' }
+      ])
+    ).toEqual({ id: 'new', text: 'landed?' })
+  })
+
+  it('skips deleted rows and returns null when only the user spoke', () => {
+    expect(
+      latestInboundMessage([
+        { id: 'gone', text: 'hi', isDeleted: true },
+        { id: 'me', text: 'ok', isSender: true }
+      ])
+    ).toBeNull()
   })
 })

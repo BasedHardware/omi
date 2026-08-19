@@ -38,6 +38,9 @@ describe('buildDesktopChatSystemPrompt', () => {
     // regression guard that a system prompt does not turn every message into a spawn.
     expect(prompt).toContain('<response_style>')
     expect(prompt).toContain('Write like a smart friend texting')
+    expect(prompt).toContain('search_beeper_chats')
+    expect(prompt).toContain('get_beeper_messages')
+    expect(prompt).toContain('draft_beeper_reply')
   })
 
   it('carries the full ported persona: response_style, mentor, and critical-accuracy rules', () => {

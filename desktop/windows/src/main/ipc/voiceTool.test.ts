@@ -121,7 +121,10 @@ describe('buildVoiceHubToolCatalog — host-derived, role-gated (INV-AGENT)', ()
       'semantic_search',
       'get_daily_recap',
       'get_work_context',
-      'capture_screen'
+      'capture_screen',
+      'search_beeper_chats',
+      'get_beeper_messages',
+      'draft_beeper_reply'
     ]) {
       expect(n).toContain(name)
     }
@@ -138,6 +141,21 @@ describe('buildVoiceHubToolCatalog — host-derived, role-gated (INV-AGENT)', ()
     const { buildVoiceSystemInstruction } =
       await import('../../renderer/src/lib/voice/systemInstruction')
     expect(buildVoiceSystemInstruction()).toMatch(/\bget_goals\b/)
+  })
+
+  it('Beeper chat tools are voice-advertised and named so LinkedIn/WhatsApp reads do not spawn_agent', async () => {
+    expect(names('coordinator')).toContain('search_beeper_chats')
+    expect(names('coordinator')).toContain('get_beeper_messages')
+    expect(names('coordinator')).toContain('draft_beeper_reply')
+    expect(names('leaf')).toContain('search_beeper_chats')
+    const { buildVoiceSystemInstruction } =
+      await import('../../renderer/src/lib/voice/systemInstruction')
+    const instruction = buildVoiceSystemInstruction()
+    expect(instruction).toMatch(/\bsearch_beeper_chats\b/)
+    expect(instruction).toMatch(/\bget_beeper_messages\b/)
+    expect(instruction).toMatch(/\bdraft_beeper_reply\b/)
+    expect(instruction).toMatch(/LinkedIn/)
+    expect(instruction).not.toMatch(/OTHER apps \(notes, emails, messages/)
   })
 
   it('uses the voice realtimeDescription + schemaOverride when present', () => {

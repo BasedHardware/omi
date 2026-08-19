@@ -362,7 +362,7 @@ function ChatReplySettings(): React.JSX.Element {
 
   const subtitle = !status.connected
     ? status.running
-      ? 'Beeper is running. Paste an access token from Settings → Integrations → Approved connections.'
+      ? 'Beeper is running. Settings → Integrations: turn on Allow connections, scroll to Approved connections, click +.'
       : 'Install Beeper Desktop, connect WhatsApp or Telegram, then paste an access token.'
     : status.enabled
       ? status.sendMode === 'auto'

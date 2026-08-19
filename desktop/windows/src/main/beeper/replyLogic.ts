@@ -106,6 +106,36 @@ export function buildReplyPrompt(args: {
   ].join('\n')
 }
 
+/** Newest inbound (not-from-me) text message, or null if the thread has none. */
+export function latestInboundMessage(
+  messages: {
+    id?: string
+    text?: string
+    isSender?: boolean
+    isDeleted?: boolean
+    isHidden?: boolean
+    timestamp?: string
+  }[]
+): { id: string; text: string } | null {
+  const visible = messages.filter(
+    (m) => Boolean(m.id) && !m.isDeleted && !m.isHidden && typeof m.text === 'string' && m.text.trim()
+  )
+  const hasTime = visible.some((m) => Number.isFinite(Date.parse(m.timestamp ?? '')))
+  const ordered = hasTime
+    ? [...visible].sort((a, b) => {
+        const ta = Date.parse(a.timestamp ?? '')
+        const tb = Date.parse(b.timestamp ?? '')
+        return (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0)
+      })
+    : visible
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const m = ordered[i]
+    if (m.isSender) continue
+    return { id: m.id as string, text: (m.text as string).trim() }
+  }
+  return null
+}
+
 /** Strip wrapping quotes / leftover assistant chrome so we send a real chat line. */
 export function sanitizeReplyText(raw: string): string | null {
   let text = raw.trim()

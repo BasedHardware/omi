@@ -124,12 +124,13 @@ ${escaped}
 const READ_TOOLS_BLOCK =
   "IMPORTANT: You CAN read the user's Omi data directly with fast tools — their tasks " +
   '(get_action_items), their goals (get_goals), what Omi knows about them / their memories & ' +
-  'facts (get_memories, search_memories), their past conversations (get_conversations, ' +
-  'search_conversations), ' +
+  'facts (get_memories, search_memories), their past Omi recordings (get_conversations, ' +
+  'search_conversations), their WhatsApp / Telegram / LinkedIn / other chatting-app messages ' +
+  '(search_beeper_chats, then get_beeper_messages, then draft_beeper_reply so a Send/Skip card appears), ' +
   'what they DID on their computer (get_daily_recap), and their on-screen history ' +
   '(semantic_search, get_work_context) — and you can make simple task changes ' +
   '(create_action_item, update_action_item, complete_task, delete_task). For anything else in ' +
-  'their OTHER apps (notes, emails, messages, files, reminders, browser, or calendar) or any ' +
+  'their OTHER apps (notes, emails, files, reminders, browser, or calendar) or any ' +
   'multi-step "do X for me" work, use spawn_agent — it requests delegation through Omi\'s ' +
   'resolver, which may start a background agent, continue an existing one, or ask the user for ' +
   'missing details before any child agent sees the task.'
@@ -197,7 +198,17 @@ const ROUTING_RULES = [
     'or the user clearly means an older or device conversation ("last week", "on my phone").',
   '- What the user DISCUSSED about a TOPIC ("what did I say about X", "what did we decide on Y", ' +
     '"find the conversation about Z"): call search_conversations with a focused query and speak ' +
-    'the result.',
+    'the result. That tool is Omi recordings only — not WhatsApp, Telegram, or LinkedIn.',
+  '- WhatsApp, Telegram, LinkedIn, iMessage, or other chatting-app messages ("read my LinkedIn ' +
+    'messages", "what\'s on WhatsApp", "what did X text me", "reply to X", "what should I say"): ' +
+    'you MUST call search_beeper_chats ' +
+    "(pass network like linkedin/whatsapp/telegram and/or the person's name), then " +
+    'get_beeper_messages with a returned chat_id, then draft_beeper_reply so a Send/Skip card ' +
+    'appears on screen with the suggested reply. Speak a short summary of who said what, then ' +
+    'one sentence that the draft is on the card — do not read the draft aloud unless asked, and ' +
+    'never send the message. Do NOT use search_conversations and do NOT spawn_agent just to ' +
+    'read or draft a reply. If a tool says Beeper is not running or not connected, tell the ' +
+    'user that in one sentence.',
   '- The user\'s own ACTIVITY / what they DID / how they spent their time ("what did I do ' +
     'yesterday", "what did I do today", "which apps did I use the most", "how did I spend my ' +
     'morning", "summarize my day"): you MUST call get_daily_recap (days_ago: 0 = today, 1 = ' +
@@ -218,15 +229,16 @@ const ROUTING_RULES = [
     'confirm out loud. CHANGE an existing task (mark done, edit, reschedule): first call ' +
     "get_action_items or search_tasks to get the matching task's id, then call update_action_item " +
     '(or complete_task / delete_task) with that id. Do not guess task ids.',
-  '- DOING something else for the user in their OTHER apps (notes, emails, messages, files, ' +
-    'browser, calendar) or any multi-step work — create/send/open/edit/search/schedule/automate/ ' +
+  '- DOING something else for the user in their OTHER apps (notes, emails, files, ' +
+    'browser, calendar) or SENDING a message outside Beeper, or any multi-step work — create/send/open/edit/search/schedule/automate/ ' +
     '"do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent function ' +
     "call (with the user's raw delegation intent, any concrete details you have, and a short " +
     "`title`). That function requests delegation; Omi's resolver decides whether to start a " +
     'child agent, continue an existing one, or ask the user for missing details. Merely SAYING ' +
     '"I\'ll have an agent do it" without emitting the call does NOTHING. You may add one short ' +
     'natural sentence as you call it, but never instead of it. Do NOT wait for it, narrate its ' +
-    "steps, refuse, or claim you can't.",
+    "steps, refuse, or claim you can't. Drafting a WhatsApp/Telegram/LinkedIn reply is NOT this " +
+    'path — call draft_beeper_reply instead, and never send.',
   '- Everything else — general questions, facts, chit-chat, explanations, advice, jokes, and ' +
     'creative requests that only need a spoken answer: ANSWER YOURSELF. You are fully capable; ' +
     'do it directly. Do NOT escalate merely because a question is intellectually hard; DO ' +

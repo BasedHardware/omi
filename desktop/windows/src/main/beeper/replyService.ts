@@ -1,10 +1,11 @@
 // Poll Beeper for unread DMs and draft (or auto-send) an Omi-grounded reply.
 import { randomUUID } from 'crypto'
 import { BrowserWindow, shell } from 'electron'
-import type { BeeperAccount, BeeperStatus } from '../../shared/types'
+import type { BeeperAccount, BeeperDraft, BeeperStatus } from '../../shared/types'
 import { showBestEffortNotification } from '../notify'
 import { recordFallback } from '../observability/fallback'
 import { isAllowedExternalScheme } from '../externalUrl'
+import { hideBeeperDraftToastIf, showBeeperDraftToast } from '../insight/toastWindow'
 import {
   BeeperHttpError,
   BEEPER_DOWNLOAD_URL,
@@ -39,6 +40,20 @@ let warnedNotRunning = false
 
 function imessageSupported(): boolean {
   return process.platform === 'darwin'
+}
+
+export function presentBeeperDraft(draft: BeeperDraft): BeeperDraft {
+  const stored = addDraft(draft)
+  publish()
+  try {
+    showBeeperDraftToast(stored)
+  } catch (e) {
+    console.warn(
+      '[beeper] draft toast failed:',
+      e instanceof Error ? e.message : 'error'
+    )
+  }
+  return stored
 }
 
 function publish(): void {
@@ -174,6 +189,7 @@ export async function pollNow(): Promise<BeeperStatus> {
 }
 
 export async function sendDraft(id: string): Promise<BeeperStatus> {
+  hideBeeperDraftToastIf(id)
   const draft = removeDraft(id)
   if (!draft) return getStatus()
   const token = loadBeeperToken()
@@ -189,6 +205,7 @@ export async function sendDraft(id: string): Promise<BeeperStatus> {
 }
 
 export async function dismissDraft(id: string): Promise<BeeperStatus> {
+  hideBeeperDraftToastIf(id)
   removeDraft(id)
   publish()
   return getStatus()
@@ -268,7 +285,7 @@ async function tick(): Promise<void> {
           await markChatRead(token, chat.id).catch(() => {})
           markHandled(chat.id, decision.inboundMessageId)
         } catch {
-          addDraft({
+          presentBeeperDraft({
             id: randomUUID(),
             chatId: chat.id,
             chatTitle: chat.title || 'Chat',
@@ -292,7 +309,7 @@ async function tick(): Promise<void> {
           )
         }
       } else {
-        addDraft({
+        presentBeeperDraft({
           id: randomUUID(),
           chatId: chat.id,
           chatTitle: chat.title || 'Chat',

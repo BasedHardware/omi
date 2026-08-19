@@ -14,6 +14,7 @@ import {
 } from '../beeper/replyService'
 import { probeBeeper } from '../beeper/client'
 import { loadBeeperSettings } from '../beeper/settings'
+import { getCurrentBeeperDraftToast } from '../insight/toastWindow'
 
 export function registerBeeperHandlers(): void {
   ipcMain.handle('beeper:probe', async () => probeBeeper())
@@ -40,6 +41,7 @@ export function registerBeeperHandlers(): void {
     openDownload()
   })
   ipcMain.handle('beeper:pollNow', async () => pollNow())
+  ipcMain.handle('beeper:getDraftToast', async () => getCurrentBeeperDraftToast())
 
   // Resume a previously enabled connection after app launch.
   if (loadBeeperSettings().enabled) syncPoller()

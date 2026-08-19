@@ -988,6 +988,10 @@ export type OmiBridgeApi = {
   beeperDismissDraft: (id: string) => Promise<BeeperStatus>
   beeperOpenDownload: () => Promise<void>
   beeperPollNow: () => Promise<BeeperStatus>
+  /** Toast renderer → main: fetch the pending Beeper draft card on mount. */
+  beeperGetDraftToast: () => Promise<BeeperDraft | null>
+  /** Toast renderer subscribes to voice/chat-drafted Beeper reply cards. */
+  onBeeperDraftToast: (cb: (p: BeeperDraft) => void) => () => void
   onBeeperChanged: (cb: (status: BeeperStatus) => void) => () => void
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   /** A day's frames, evenly down-sampled to ~500 (macOS parity). The day-scoped

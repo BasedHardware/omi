@@ -98,13 +98,17 @@ describe('buildVoiceSystemInstruction', () => {
       'semantic_search',
       'get_work_context',
       'capture_screen',
-      'list_agent_sessions'
+      'list_agent_sessions',
+      'search_beeper_chats',
+      'get_beeper_messages',
+      'draft_beeper_reply'
     ]) {
       expect(text).toContain(tool)
     }
     // The delegation directive: the model must EMIT spawn_agent, not merely promise it.
     expect(text).toContain('delegate with spawn_agent')
     expect(text).toContain('EMIT the spawn_agent')
+    expect(text).toContain("read my LinkedIn")
     // Tools macOS voice-exposes but Windows does NOT advertise must never be named —
     // pointing the model at an uncallable tool makes it promise work it cannot do.
     for (const absent of [
