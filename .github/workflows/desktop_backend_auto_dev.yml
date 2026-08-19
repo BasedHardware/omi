@@ -185,6 +185,28 @@ jobs:
             --dockerfile backend/Dockerfile.desktop_backend \
             --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate-identity.outputs.image_tag }}
 
+      - name: Install Python deps for the gateway serving gate
+        run: python3 -m pip install -q pyyaml
+
+      - name: Get GKE credentials for the gateway serving gate
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      # Fail the deploy, not the request path. gateway_client raises when
+      # FEATURE_MODE=gateway is set without a reachable URL, which would turn
+      # every desktop chat turn into a 503.
+      - name: Verify LLM Gateway serving data plane
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Deploy desktop-backend to Cloud Run
         id: deploy-candidate
         uses: google-github-actions/deploy-cloudrun@v3
@@ -198,8 +220,8 @@ jobs:
             --allow-unauthenticated
             --revision-suffix=${{ steps.candidate-identity.outputs.revision_suffix }}
             --tag=${{ env.CANDIDATE_TAG }}
-            --network=default
-            --subnet=default
+            --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
+            --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
             --vpc-egress=private-ranges-only
             --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE,AGENT_VM_PROVISIONING_ENABLED
           env_vars: |
@@ -212,6 +234,10 @@ jobs:
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
+            OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}
+            OMI_LLM_GATEWAY_FEATURE_MODE=gateway
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true
+            OMI_LLM_CHAT_AGENT_ROUTE=gateway
           secrets: |
             /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
@@ -226,6 +252,7 @@ jobs:
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
 
       - name: Wait for no-traffic candidate readiness
         env:
