@@ -40,7 +40,7 @@ test("Vite aliases React Native directly to React Native Web", () => {
   expect(alias).toEqual(
     expect.objectContaining({
       "react-native": expect.stringContaining("node_modules/react-native-web"),
-    }),
+    })
   );
 });
 
@@ -51,17 +51,28 @@ test("web native exports do not retain redundant web aliases", async () => {
   expect(source).not.toContain("omiNativeWeb");
 });
 
+test("canonical native state types do not include browser capability states", async () => {
+  const source = await readFile(
+    resolve(root, "../react-native/src/omiNativeTypes.ts"),
+    "utf8"
+  );
+
+  expect(source).not.toContain("'unsupported'");
+  expect(source).not.toContain("'available'");
+  expect(source).not.toContain("'selected'");
+});
+
 test("unsupported web operations share the explicit rejection behavior", async () => {
   const adapter = await createWebNative({});
 
   await expect(adapter.connectDevice("device-1")).rejects.toThrow(
-    "Omi device capture is unavailable in the browser",
+    "Omi device capture is unavailable in the browser"
   );
   await expect(adapter.stopCapture()).rejects.toThrow(
-    "Omi capture is unavailable in the browser",
+    "Omi capture is unavailable in the browser"
   );
   await expect(adapter.stopScan()).rejects.toThrow(
-    "Omi device capture is unavailable in the browser",
+    "Omi device capture is unavailable in the browser"
   );
 });
 
@@ -114,7 +125,7 @@ test("web backend normalizes an empty response body to null", async () => {
         id: "empty-response",
         method: "DELETE",
         path: "/v1/chat-generations/generation-1",
-      }),
+      })
     ).resolves.toMatchObject({
       body: null,
       id: "empty-response",
@@ -128,7 +139,7 @@ test("web backend normalizes an empty response body to null", async () => {
 test("web assets are typed for both Metro numbers and browser URLs", async () => {
   const declaration = await readFile(
     resolve(root, "../react-native/assets.d.ts"),
-    "utf8",
+    "utf8"
   );
 
   expect(declaration).toContain("const source: string | number;");

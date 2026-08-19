@@ -2,11 +2,6 @@ import {NativeModules} from 'react-native';
 
 import type {
   BluetoothState,
-  CaptureMode,
-  Device,
-  NativeHttpMethod,
-  NativeHttpRequest,
-  NativeHttpResponse,
   NativeSnapshot,
   OmiBackend,
   OmiNative,
@@ -23,6 +18,10 @@ export type {
   OmiBackend,
   OmiNative,
 } from './omiNativeTypes';
+
+export type PlatformBluetoothState = BluetoothState;
+export type PlatformNativeSnapshot = NativeSnapshot;
+export type PlatformOmiNative = OmiNative;
 
 export function resolveOmiNative(nativeModule: OmiNative | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};

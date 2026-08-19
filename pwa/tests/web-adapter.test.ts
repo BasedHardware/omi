@@ -23,9 +23,9 @@ test("web backend uses the origin-relative proxy without browser credentials", a
         id: "settings",
         method: "GET",
         path: "/v1/settings",
-      }),
+      })
     ).resolves.toEqual(
-      expect.objectContaining({ id: "settings", status: 200 }),
+      expect.objectContaining({ id: "settings", status: 200 })
     );
     await expect(
       omiBackend.request({
@@ -33,7 +33,7 @@ test("web backend uses the origin-relative proxy without browser credentials", a
         id: "credentialed",
         method: "GET",
         path: "/v1/settings",
-      }),
+      })
     ).rejects.toThrow("authorization");
   } finally {
     globalThis.fetch = previousFetch;
@@ -44,7 +44,7 @@ test("web backend uses the origin-relative proxy without browser credentials", a
     expect.objectContaining({
       credentials: "omit",
       input: "/__omi/api/v1/settings",
-    }),
+    })
   );
   expect(calls[0]?.headers.get("authorization")).toBeNull();
 });

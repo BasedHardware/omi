@@ -2,12 +2,7 @@ export type BluetoothState =
   | 'unknown'
   | 'poweredOff'
   | 'poweredOn'
-  | 'unauthorized'
-  | 'unsupported'
-  | 'available'
-  | 'selected'
-  | 'denied'
-  | 'error';
+  | 'unauthorized';
 export type CaptureMode = 'stream' | 'batch';
 export type NativeHttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
@@ -48,8 +43,8 @@ export type NativeSnapshot = {
   devices: Device[];
   capture: 'idle' | 'recording' | 'stopping';
   captureMode: CaptureMode;
-  microphone: 'unknown' | 'granted' | 'denied' | 'unsupported';
-  notifications: 'unknown' | 'granted' | 'denied' | 'unsupported';
+  microphone: 'unknown' | 'granted' | 'denied';
+  notifications: 'unknown' | 'granted' | 'denied';
   background: 'inactive' | 'active';
   audioRoute: string;
   lastEvent: string;

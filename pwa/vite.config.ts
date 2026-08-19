@@ -6,12 +6,12 @@ import {
 } from "./src/local-proxy.ts";
 
 const reactNativeWebPath = fileURLToPath(
-  new URL("../node_modules/react-native-web", import.meta.url),
+  new URL("../node_modules/react-native-web", import.meta.url)
 );
 
 function localProxy() {
   const target = assertLoopbackBackendUrl(
-    process.env.OMI_LOCAL_BACKEND_URL ?? "http://127.0.0.1:8787",
+    process.env.OMI_LOCAL_BACKEND_URL ?? "http://127.0.0.1:8787"
   ).origin;
   const token = process.env.OMI_LOCAL_API_TOKEN?.trim();
   return {

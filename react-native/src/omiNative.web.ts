@@ -10,25 +10,54 @@ import {
   localProxyRequestInit,
 } from '../../pwa/src/local-proxy';
 import type {
-  BluetoothState,
+  BluetoothState as NativeBluetoothState,
   NativeHttpRequest,
   NativeHttpResponse,
-  NativeSnapshot,
+  NativeSnapshot as NativeSnapshotContract,
   OmiBackend,
-  OmiNative,
+  OmiNative as NativeOmiNative,
 } from './omiNativeTypes';
 
 export type {
-  BluetoothState,
   CaptureMode,
   Device,
   NativeHttpMethod,
   NativeHttpRequest,
   NativeHttpResponse,
-  NativeSnapshot,
   OmiBackend,
-  OmiNative,
 } from './omiNativeTypes';
+
+type WebBluetoothState = BrowserCapabilitySnapshot['bluetooth'];
+type WebPermissionState = 'unknown' | 'granted' | 'denied' | 'unsupported';
+
+export type WebNativeSnapshot = Omit<
+  NativeSnapshotContract,
+  'bluetooth' | 'microphone' | 'notifications'
+> & {
+  bluetooth: WebBluetoothState;
+  microphone: WebPermissionState;
+  notifications: WebPermissionState;
+};
+
+export type WebOmiNative = Omit<
+  NativeOmiNative,
+  'getBluetoothState' | 'getSnapshot' | 'requestPermissions'
+> & {
+  getBluetoothState(): Promise<WebBluetoothState>;
+  getSnapshot(): Promise<WebNativeSnapshot>;
+  requestPermissions(): Promise<
+    Pick<WebNativeSnapshot, 'microphone' | 'notifications'>
+  >;
+};
+
+export type BluetoothState = WebBluetoothState;
+export type NativeSnapshot = WebNativeSnapshot;
+export type OmiNative = WebOmiNative;
+export type PlatformNativeSnapshot = Omit<WebNativeSnapshot, 'bluetooth'> & {
+  bluetooth: NativeBluetoothState | WebBluetoothState;
+};
+export type PlatformBluetoothState = PlatformNativeSnapshot['bluetooth'];
+export type PlatformOmiNative = WebOmiNative;
 
 export function unsupportedOperation(operation: string): never {
   throw new Error(`${operation} is unavailable in the browser`);
@@ -39,16 +68,16 @@ function unsupportedOperationAsync<Args extends unknown[]>(operation: string) {
     unsupportedOperation(operation);
 }
 
-function permissionState(
-  result: BrowserCapabilityResult,
-): NativeSnapshot['microphone'] {
+function permissionState(result: BrowserCapabilityResult): WebPermissionState {
   if (result.ok) return 'granted';
   if (result.reason === 'denied') return 'denied';
   if (result.reason === 'unsupported') return 'unsupported';
   return 'unknown';
 }
 
-function browserSnapshot(snapshot: BrowserCapabilitySnapshot): NativeSnapshot {
+function browserSnapshot(
+  snapshot: BrowserCapabilitySnapshot,
+): WebNativeSnapshot {
   return {
     audioRoute: 'browser',
     background: 'inactive',
@@ -60,23 +89,23 @@ function browserSnapshot(snapshot: BrowserCapabilitySnapshot): NativeSnapshot {
       snapshot.bluetooth === 'unsupported'
         ? 'Web Bluetooth is unavailable in this browser.'
         : snapshot.bluetooth === 'selected'
-          ? 'Browser Bluetooth selection recorded. Omi capture is not wired.'
-          : 'Omi device capture is not wired in the browser.',
+        ? 'Browser Bluetooth selection recorded. Omi capture is not wired.'
+        : 'Omi device capture is not wired in the browser.',
     microphone:
       snapshot.microphone === 'granted'
         ? 'granted'
         : snapshot.microphone === 'denied'
-          ? 'denied'
-          : snapshot.microphone === 'unsupported'
-            ? 'unsupported'
-            : 'unknown',
+        ? 'denied'
+        : snapshot.microphone === 'unsupported'
+        ? 'unsupported'
+        : 'unknown',
     notifications: 'unknown',
   };
 }
 
 export function createWebNativeAdapter(
   environment?: BrowserEnvironment,
-): OmiNative {
+): WebOmiNative {
   const browserCapabilities = createBrowserCapabilityAdapter(environment);
 
   return {
