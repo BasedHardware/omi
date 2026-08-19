@@ -1,0 +1,29 @@
+desktop/context-for-claude/docs/analytics.md
+  s_227233afb3b7ff::t_665ac4880e3d43 100,104-111
+desktop/context-for-claude/Tests/ContextAppTests/AnalyticsTests.swift
+  s_227233afb3b7ff::t_7e57eb447b7627 292-318
+desktop/context-for-claude/Sources/ContextApp/Support/Analytics/ContextAnalytics.swift
+  s_227233afb3b7ff::t_4613fba7b7997b 64-73,83
+  s_227233afb3b7ff::t_6c827221d77d8a 24-29
+desktop/context-for-claude/Tests/ContextCoreTests/BuildIdentityTests.swift
+  s_227233afb3b7ff::t_dbb05be618e741 71-72
+  s_227233afb3b7ff::t_c616c7a9a2c915 50-53,57-70
+desktop/context-for-claude/Sources/ContextCore/Paths.swift
+  s_227233afb3b7ff::t_eb09ac5368e57d 63-90
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d1f0c779b6107c814c97a11e53dde37f7cd11ede",
+  "prompts": {},
+  "sessions": {
+    "s_227233afb3b7ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d72fbee-85a2-445b-a86d-7f95bf574311",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    }
+  }
+}
