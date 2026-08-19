@@ -7,7 +7,6 @@ rejecting an odd-length buffer. The error is deterministic, so every retry
 failed identically and the job then marked playback permanently unavailable.
 """
 
-import io
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -88,12 +87,25 @@ def test_truncated_chunk_does_not_byte_shift_later_chunks():
 
 @patch.object(storage_mod, 'NotFound', _FakeNotFound)
 def test_build_playback_artifact_survives_truncated_chunk():
-    """The real merge-job path builds an MP3 instead of raising the retried ValueError."""
+    """The real merge-job path completes instead of raising the retried ValueError.
+
+    Only the MP3 encode is stubbed — pydub shells out to ffmpeg, which the unit
+    runner does not carry. The call that actually raised in production, the
+    AudioSegment construction over the merged buffer, still runs for real.
+    """
     bucket = MagicMock()
     bucket.blob.side_effect = _blob_factory({'bin': b'\x00\x01' * 16000 + b'\x02'})
     storage_mod.storage_client.bucket.return_value = bucket
 
-    mp3_data = playback_mod.build_playback_artifact('uid', 'conv', [1000.0])
+    encoded_lengths = []
 
-    assert mp3_data
-    assert AudioSegment.from_file(io.BytesIO(mp3_data), format='mp3').frame_rate > 0
+    def fake_export(self, out_f, **kwargs):
+        encoded_lengths.append(len(self.raw_data))
+        out_f.write(b'mp3-stub')
+        return out_f
+
+    with patch.object(AudioSegment, 'export', fake_export):
+        mp3_data = playback_mod.build_playback_artifact('uid', 'conv', [1000.0])
+
+    assert mp3_data == b'mp3-stub'
+    assert encoded_lengths == [32000]
