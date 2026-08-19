@@ -49,4 +49,22 @@ enum PermissionsPageChrome {
     case .unknown, .denied: return true
     }
   }
+
+  /// Mirrors `AppState.missingPermissions`, which has counted Accessibility as required since
+  /// before this page existed. A *broken* grant is work too: TCC reports the toggle on while
+  /// the AX calls behind it fail, which is what a macOS update or an app re-sign leaves
+  /// behind, and no amount of looking at the switch tells the user that.
+  static func accessibilityNeedsAction(granted: Bool, broken: Bool) -> Bool {
+    !granted || broken
+  }
+
+  /// Every permission the page is willing to act on.
+  ///
+  /// This exists so the page's set and `AppState.missingPermissions` can be asserted equal.
+  /// They diverged once: Accessibility was required by the app and absent from the page, so
+  /// the sidebar wore a warning that the page offered no way to clear, and
+  /// "All permissions granted" was unreachable on a machine with nothing visibly wrong.
+  static let actionableKinds: Set<String> = [
+    "Microphone", "Screen Recording", "System Audio", "Notifications", "Accessibility",
+  ]
 }

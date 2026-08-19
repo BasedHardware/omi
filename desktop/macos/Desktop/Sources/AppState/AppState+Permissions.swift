@@ -544,6 +544,7 @@ extension AppState {
 
   private func applyAccessibilitySignals(_ signals: AccessibilityProbeSignals) {
     let previouslyGranted = hasAccessibilityPermission
+    let previouslyBroken = isAccessibilityBroken
     let projection = Self.accessibilityProjection(signals)
 
     if projection.hasPermission, !previouslyGranted {
@@ -568,6 +569,48 @@ extension AppState {
     }
     if isAccessibilityBroken != projection.isBroken {
       isAccessibilityBroken = projection.isBroken
+    }
+
+    // The capture service latches AX off after one `apiDisabled`, to keep a broken call from
+    // running once a second. That latch outlives the breakage, so clear it on the edge into a
+    // working grant — otherwise the user grants the permission, sees the row turn green, and
+    // still gets window titles instead of URLs until the next launch.
+    let nowWorking = projection.hasPermission && !projection.isBroken
+    let wasWorking = previouslyGranted && !previouslyBroken
+    if nowWorking, !wasWorking {
+      ScreenCaptureService.rearmAccessibilityAfterPermissionChange()
+    }
+  }
+
+  /// Probe the permissions the Settings page shows, regardless of `usesLazyDevPermissions`.
+  ///
+  /// `checkAllPermissions()` skips accessibility, automation, and full-disk access on named dev
+  /// bundles, which is the right trade at *startup* — those probes are slow and can prompt. It is
+  /// the wrong trade on the page whose entire job is to report those permissions: the row would
+  /// read "Not Granted" forever on a dev build, including right after the user granted it.
+  func refreshPermissionsForSettingsPage() {
+    checkAllPermissions()
+    guard AppBuild.usesLazyDevPermissions else { return }
+    checkAccessibilityPermission()
+  }
+
+  /// Watch the system's own accessibility-database signal.
+  ///
+  /// macOS posts `com.apple.accessibility.api` when the AX permission set changes. Without it the
+  /// state only refreshes when the app is activated, so a user who grants the permission and stays
+  /// in System Settings sees nothing move.
+  func startAccessibilityChangeObserver() {
+    guard accessibilityChangeObserver == nil else { return }
+    accessibilityChangeObserver = DistributedNotificationCenter.default().addObserver(
+      forName: NSNotification.Name("com.apple.accessibility.api"),
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        log("ACCESSIBILITY_CHECK: system reported an accessibility-permission change")
+        _ = await self.refreshAccessibilityPermission()
+      }
     }
   }
 

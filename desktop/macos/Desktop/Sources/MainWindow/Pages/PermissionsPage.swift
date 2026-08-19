@@ -28,6 +28,12 @@ struct PermissionsPage: View {
       status: appState.systemAudioPermissionStatus)
   }
 
+  private var accessibilityNeedsAction: Bool {
+    PermissionsPageChrome.accessibilityNeedsAction(
+      granted: appState.hasAccessibilityPermission,
+      broken: appState.isAccessibilityBroken)
+  }
+
   private var showsSystemAudio: Bool {
     if #available(macOS 14.4, *) { return true }
     return false
@@ -35,11 +41,12 @@ struct PermissionsPage: View {
 
   private var hasActionablePermissions: Bool {
     microphoneNeedsAction || screenRecordingNeedsAction || systemAudioNeedsAction || notificationsNeedAction
+      || accessibilityNeedsAction
   }
 
   private var hasGrantedPermissions: Bool {
     !microphoneNeedsAction || !screenRecordingNeedsAction || (showsSystemAudio && !systemAudioNeedsAction)
-      || !notificationsNeedAction
+      || !notificationsNeedAction || !accessibilityNeedsAction
   }
 
   var body: some View {
@@ -66,6 +73,9 @@ struct PermissionsPage: View {
             if notificationsNeedAction {
               NotificationPermissionSection(appState: appState)
             }
+            if accessibilityNeedsAction {
+              AccessibilityPermissionSection(appState: appState)
+            }
           }
         }
 
@@ -87,11 +97,15 @@ struct PermissionsPage: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     // No background: the window wears the glass, and the glass owns the ground.
     .onAppear {
-      appState.checkAllPermissions()
+      appState.refreshPermissionsForSettingsPage()
+      // The user is most likely to grant something while this page is open, and most likely to
+      // do it without leaving System Settings, so listen for the system's own signal rather
+      // than waiting for Omi to be activated again.
+      appState.startAccessibilityChangeObserver()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Auto-refresh when app becomes active (user may have granted permission in System Settings)
-      appState.checkAllPermissions()
+      appState.refreshPermissionsForSettingsPage()
     }
   }
 
@@ -151,6 +165,7 @@ struct PermissionsPage: View {
     if !screenRecordingNeedsAction { kinds.append(.screenRecording) }
     if showsSystemAudio, !systemAudioNeedsAction { kinds.append(.systemAudio) }
     if !notificationsNeedAction { kinds.append(.notifications) }
+    if !accessibilityNeedsAction { kinds.append(.accessibility) }
     return kinds
   }
 
@@ -164,6 +179,8 @@ struct PermissionsPage: View {
       SystemAudioPermissionSection(appState: appState)
     case .notifications:
       NotificationPermissionSection(appState: appState)
+    case .accessibility:
+      AccessibilityPermissionSection(appState: appState)
     }
   }
 }
@@ -173,6 +190,7 @@ private enum PermissionKind: String, Hashable {
   case screenRecording
   case systemAudio
   case notifications
+  case accessibility
 }
 
 // MARK: - Shared row chrome
@@ -1102,6 +1120,151 @@ struct NotificationPermissionSection: View {
         )
       }
       .buttonStyle(.plain)
+    }
+  }
+}
+
+// MARK: - Accessibility Permission Section
+
+/// Accessibility is what lets Omi read *what* the user is looking at — the URL of the tab, the
+/// path of the open document — rather than only that some window was frontmost. Without it the
+/// work index still records every visit, but every handle degrades to the window title it was
+/// meant to replace, and nothing anywhere says so.
+///
+/// Three states, because macOS has three. Ungranted is the ordinary ask. Granted-and-working is
+/// a compact row. Granted-but-broken is its own thing: TCC reports the toggle on while the AX
+/// calls behind it fail, which is what an app update or a re-sign leaves behind, and the switch
+/// in System Settings looks correct the whole time. That state needs remove-and-re-add, not
+/// another grant, so it says so.
+struct AccessibilityPermissionSection: View {
+  @ObservedObject var appState: AppState
+
+  var body: some View {
+    if appState.hasAccessibilityPermission && !appState.isAccessibilityBroken {
+      PermissionGrantedRow(
+        icon: "accessibility",
+        title: "Accessibility",
+        subtitle: "Lets Omi identify the document, page, or file you are working in")
+    } else {
+      PermissionActionCard(
+        symbol: appState.isAccessibilityBroken ? "exclamationmark.triangle.fill" : "accessibility",
+        iconColor: appState.isAccessibilityBroken ? Ink.errorRed : Ink.secondary,
+        iconBackground: appState.isAccessibilityBroken ? Ink.errorRed.opacity(0.15) : Ink.rowFill,
+        title: "Accessibility",
+        description: appState.isAccessibilityBroken
+          ? "Permission needs re-enabling after app update"
+          : "Lets Omi identify the document, page, or file you are working in",
+        descriptionColor: appState.isAccessibilityBroken ? Ink.errorRed : Ink.secondary,
+        borderColor: appState.isAccessibilityBroken ? Ink.errorRed.opacity(0.5) : Ink.hairline,
+        fillColor: appState.isAccessibilityBroken ? Ink.errorRed.opacity(0.05) : Ink.wash,
+        borderWidth: appState.isAccessibilityBroken ? 2 : 1,
+        badge: {
+          if appState.isAccessibilityBroken {
+            SettingsStatusChip(text: "Re-enable Required", tint: Ink.errorRed)
+          } else {
+            statusBadge(isGranted: false)
+          }
+        },
+        detail: {
+          if appState.isAccessibilityBroken {
+            brokenGrantContent
+          } else {
+            normalGrantContent
+          }
+        }
+      )
+    }
+  }
+
+  private var appName: String {
+    Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
+  }
+
+  private var normalGrantContent: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      Text("Without this, Omi can see that you were in an app, but not which page or file.")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      Text("How to grant accessibility access:")
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(Ink.primary)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        instructionStep(number: 1, text: "Click \"Grant Access\" below")
+        instructionStep(number: 2, text: "Find \"\(appName)\" in the Accessibility list")
+        instructionStep(number: 3, text: "Toggle the switch to enable accessibility")
+        instructionStep(number: 4, text: "Return to Omi - permission will update automatically")
+      }
+
+      Button(action: { appState.triggerAccessibilityPermission() }) {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "checkmark.shield")
+            .scaledFont(size: OmiType.body)
+          Text("Grant Access")
+            .scaledFont(size: OmiType.body, weight: .semibold)
+        }
+        .foregroundColor(Ink.surface)
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.md)
+        .background(
+          RoundedRectangle(cornerRadius: SettingsGlassMetrics.cardRadius, style: .continuous)
+            .fill(Ink.primary)
+        )
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("permissions.accessibility.grant")
+    }
+  }
+
+  /// The toggle already looks enabled, so "grant it again" is the one instruction that cannot
+  /// work. Removing the stale entry is what re-arms the grant against the new signature.
+  private var brokenGrantContent: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      Text("Accessibility looks enabled, but the permission stopped working after an app update.")
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        HStack(alignment: .top, spacing: OmiSpacing.md) {
+          Text("1")
+            .scaledFont(size: OmiType.caption, weight: .bold)
+            .foregroundColor(Ink.surface)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(Ink.primary))
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+            Text("Open Accessibility settings")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+
+            Button(action: { appState.openAccessibilityPreferences() }) {
+              HStack(spacing: OmiSpacing.xs) {
+                Image(systemName: "gear")
+                  .scaledFont(size: OmiType.caption)
+                Text("Open Settings")
+                  .scaledFont(size: OmiType.caption, weight: .semibold)
+              }
+              .foregroundColor(Ink.surface)
+              .padding(.horizontal, OmiSpacing.md)
+              .padding(.vertical, OmiSpacing.xs)
+              .background(
+                RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
+                  .fill(Ink.primary)
+              )
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("permissions.accessibility.open-settings")
+          }
+        }
+
+        instructionStep(number: 2, text: "Find \"\(appName)\" in the Accessibility list")
+        instructionStep(
+          number: 3, text: "Click on \"\(appName)\", then click the minus (\u{2212}) button to remove it")
+        instructionStep(number: 4, text: "Add \(appName) back with the plus (+) button and toggle it on")
+      }
     }
   }
 }

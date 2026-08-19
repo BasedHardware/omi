@@ -32,9 +32,49 @@ final class ScreenCaptureService: Sendable {
   nonisolated(unsafe) private static var axFailureCountByBundleID: [String: Int] = [:]
   private static let axSkipThreshold = 3
 
+  /// Re-arm every AX suppression after the permission may have changed.
+  ///
+  /// Both pieces of state are conclusions drawn while the permission was broken, so both are
+  /// stale once it is not. The per-bundle counts go too: a `cannotComplete` recorded under a
+  /// broken grant says nothing about whether that app implements AX.
+  ///
+  /// Returns whether anything was actually suppressed, so the caller can log a recovery
+  /// rather than a no-op on every routine permission poll.
+  /// Drive the suppression the way a real `apiDisabled` would, so the re-arm can be tested
+  /// without a machine whose Accessibility grant is actually broken.
+  nonisolated static func suppressAccessibilityForTesting() {
+    axStateLock.withLock {
+      axSystemwideDisabled = true
+      axFailureCountByBundleID["com.example.test"] = axSkipThreshold
+    }
+  }
+
+  nonisolated static func isAccessibilitySuppressedForTesting() -> Bool {
+    axStateLock.withLock { axSystemwideDisabled || !axFailureCountByBundleID.isEmpty }
+  }
+
+  @discardableResult
+  nonisolated static func rearmAccessibilityAfterPermissionChange() -> Bool {
+    let wasSuppressed = axStateLock.withLock {
+      let suppressed = axSystemwideDisabled || !axFailureCountByBundleID.isEmpty
+      axSystemwideDisabled = false
+      axFailureCountByBundleID.removeAll()
+      return suppressed
+    }
+    if wasSuppressed {
+      log("ACCESSIBILITY_AX: permission changed — re-armed AX attempts without requiring a relaunch")
+    }
+    return wasSuppressed
+  }
+
   /// When the AX API is disabled system-wide (apiDisabled error), skip all AX attempts
   /// to avoid spamming a failing call on every capture cycle (every ~1 second).
   /// Must be accessed only while holding axStateLock.
+  ///
+  /// Cleared by `rearmAccessibilityAfterPermissionChange()`. The latch is a rate limit on a
+  /// call that is known to be failing, not a verdict for the life of the process: a user who
+  /// grants Accessibility in System Settings expects Omi to start reading window contents
+  /// without being told to quit and reopen it.
   nonisolated(unsafe) private static var axSystemwideDisabled = false
 
   /// Cache the last successfully resolved active window (with a non-nil window ID).

@@ -73,4 +73,34 @@ final class PermissionsPagePresentationTests: XCTestCase {
     XCTAssertEqual(PermissionsPageChrome.statusChipText(granted: false), "Not Granted")
     XCTAssertEqual(PermissionsPageChrome.missingStatusText, "Not Granted")
   }
+
+  // MARK: - Accessibility
+
+  /// The page must offer a row for every permission the app counts as required. These two sets
+  /// diverged once: `AppState.missingPermissions` has counted Accessibility since before this
+  /// page existed, but the page had no section for it, so the sidebar wore a warning triangle
+  /// that no visible control could clear and "All permissions granted" was unreachable.
+  func testPageActsOnEveryPermissionTheAppRequires() {
+    let required: Set<String> = [
+      "Microphone", "Screen Recording", "System Audio", "Notifications", "Accessibility",
+    ]
+    XCTAssertEqual(
+      PermissionsPageChrome.actionableKinds, required,
+      "a permission the app can report missing must have a row that can fix it")
+  }
+
+  func testAccessibilityNeedsActionWhenUngranted() {
+    XCTAssertTrue(PermissionsPageChrome.accessibilityNeedsAction(granted: false, broken: false))
+  }
+
+  /// The state this machine was actually in: the toggle reads enabled, the AX calls fail. If a
+  /// working grant and a stuck one look the same, the page tells the user to do the one thing
+  /// that cannot help.
+  func testAccessibilityNeedsActionWhenGrantedButBroken() {
+    XCTAssertTrue(PermissionsPageChrome.accessibilityNeedsAction(granted: true, broken: true))
+  }
+
+  func testAccessibilitySettlesOnlyWhenGrantedAndWorking() {
+    XCTAssertFalse(PermissionsPageChrome.accessibilityNeedsAction(granted: true, broken: false))
+  }
 }
