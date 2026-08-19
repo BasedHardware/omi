@@ -1,0 +1,3 @@
+{
+  "change": "Fixed gaps in synced screen activity when OCR or search indexing finishes after capture"
+}

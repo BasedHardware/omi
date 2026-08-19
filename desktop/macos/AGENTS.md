@@ -222,6 +222,12 @@ do not hand-edit those paths to match a specific machine.
 - **Redis**: Caching
 - **Typesense**: Search
 
+### Screen activity sync rollout
+
+- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles stay on the legacy path until that PostHog flag is true; non-production bundles dogfood it by default and `OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` disables it locally.
+- OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
+- Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
+
 ### User Subcollections (Firestore)
 - `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
 - `users/{uid}/action_items` - Tasks (no platform tracking)
