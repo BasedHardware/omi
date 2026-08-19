@@ -6,11 +6,16 @@ enum WakeWordSegmentParser {
     guard !phrase.isEmpty else { return nil }
     let raw = dropLeadingPunctuationAndWhitespace(segmentText)
     let normalized = normalize(raw)
-    for candidate in candidatePhrases(for: phrase) where normalized.hasPrefix(candidate) {
-      guard hasWordBoundary(after: candidate, in: normalized) else { continue }
+    for candidate in candidates(for: phrase) where normalized.hasPrefix(candidate.text) {
+      guard
+        hasBoundary(
+          after: candidate.text,
+          in: normalized,
+          requiringPunctuation: candidate.requiresPunctuationBreak)
+      else { continue }
       guard
         let commandEnd = raw.index(
-          raw.startIndex, offsetBy: candidate.count, limitedBy: raw.endIndex)
+          raw.startIndex, offsetBy: candidate.text.count, limitedBy: raw.endIndex)
       else { continue }
       let remainder = String(raw[commandEnd...])
       let command = dropLeadingPunctuationAndWhitespace(remainder)
@@ -43,15 +48,36 @@ enum WakeWordSegmentParser {
     ]
   ]
 
-  static func candidatePhrases(for phrase: String) -> [String] {
-    var phrases: [String] = []
-    for base in [phrase] + (sttHomophones[phrase] ?? []) {
-      phrases.append(base)
+  /// A phrase that may open a wake-word utterance, and how much corroboration it needs.
+  struct Candidate: Equatable {
+    let text: String
+    /// Whether a punctuation break must follow the phrase for it to count.
+    let requiresPunctuationBreak: Bool
+  }
+
+  /// The literal spelling is a deliberate act: nobody says "Omi" mid-sentence by accident,
+  /// so `"Omi order food"` needs no further evidence. A homophone is the recognizer
+  /// guessing, and the guesses are ordinary English — `"oh me and my friend went hiking"`
+  /// would otherwise parse to the command "and my friend went hiking" and auto-send it.
+  ///
+  /// A bare homophone therefore has to be followed by a punctuation break, which is the
+  /// recognizer's own signal that the speaker addressed something and then paused. Every
+  /// homophone hit observed live carried one ("Oh me, how are you?"). A greeting prefix is
+  /// corroboration in its own right — "hey oh me" is not something a person says by
+  /// accident — so those forms keep the ordinary word boundary.
+  static func candidates(for phrase: String) -> [Candidate] {
+    var result: [Candidate] = [Candidate(text: phrase, requiresPunctuationBreak: false)]
+    for greeting in ["hey", "ok", "okay"] {
+      result.append(Candidate(text: "\(greeting) \(phrase)", requiresPunctuationBreak: false))
+    }
+    for homophone in sttHomophones[phrase] ?? [] {
+      result.append(Candidate(text: homophone, requiresPunctuationBreak: true))
       for greeting in ["hey", "ok", "okay"] {
-        phrases.append("\(greeting) \(base)")
+        result.append(
+          Candidate(text: "\(greeting) \(homophone)", requiresPunctuationBreak: false))
       }
     }
-    return phrases
+    return result
   }
 
   private static func normalize(_ value: String) -> String {
@@ -71,13 +97,21 @@ enum WakeWordSegmentParser {
     return String(value[index...])
   }
 
-  private static func hasWordBoundary(after prefix: String, in text: String) -> Bool {
+  private static func hasBoundary(
+    after prefix: String,
+    in text: String,
+    requiringPunctuation: Bool
+  ) -> Bool {
     guard
       let boundaryIndex = text.index(
         text.startIndex, offsetBy: prefix.count, limitedBy: text.endIndex)
     else { return false }
+    // A phrase at the very end carries no command, so the caller rejects it either way.
     guard boundaryIndex < text.endIndex else { return true }
     let next = text[boundaryIndex]
+    if requiringPunctuation {
+      return next.isPunctuation
+    }
     return !next.isLetter && !next.isNumber
   }
 }

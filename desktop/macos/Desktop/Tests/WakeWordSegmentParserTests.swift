@@ -60,6 +60,40 @@ final class WakeWordSegmentParserTests: XCTestCase {
     }
   }
 
+  /// Review feedback on #11801: with "oh me" accepted as the wake phrase, an ordinary
+  /// sentence like "oh me and my friend went hiking" parsed to the 2-word command
+  /// "and my friend went hiking" and auto-sent it. The homophones are the recognizer
+  /// guessing, and its guesses are ordinary English, so a bare homophone now needs a
+  /// punctuation break — the recognizer's own signal that the speaker addressed something
+  /// and paused. Every homophone hit observed live carried one.
+  func testBareHomophoneInOrdinarySpeechDoesNotFire() {
+    for sentence in [
+      "oh me and my friend went hiking",
+      "o me it has been a long day",
+      "oh me I forgot to reply",
+    ] {
+      XCTAssertNil(
+        WakeWordSegmentParser.command(after: sentence, wakePhrase: "Omi"),
+        "expected ordinary speech not to trigger: \(sentence)")
+    }
+  }
+
+  /// The literal spelling is deliberate — nobody says "Omi" mid-sentence by accident — so
+  /// it keeps working without a separator.
+  func testLiteralPhraseStillNeedsNoPunctuation() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "Omi order food", wakePhrase: "Omi"),
+      "order food")
+  }
+
+  /// A greeting is corroboration in its own right, so those forms keep the ordinary
+  /// word boundary.
+  func testGreetingBeforeHomophoneNeedsNoPunctuation() {
+    XCTAssertEqual(
+      WakeWordSegmentParser.command(after: "hey oh me order pizza", wakePhrase: "Omi"),
+      "order pizza")
+  }
+
   func testAcceptsGreetingBeforeHomophone() {
     XCTAssertEqual(
       WakeWordSegmentParser.command(after: "Hey oh me, order pizza", wakePhrase: "Omi"),
