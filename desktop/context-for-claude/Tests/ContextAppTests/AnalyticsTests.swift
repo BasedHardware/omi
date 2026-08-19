@@ -482,6 +482,47 @@ final class FirstArtifactTests: XCTestCase {
     }
 }
 
+/// **A static tripwire, and labelled as one: it reads the app's source text rather than running it.**
+///
+/// The rule it guards is the one `AnalyticsEvent.Surface` states in prose — a case nobody emits
+/// produces a permanently empty series, which reads as "nobody opens it" rather than "nobody measured
+/// it", and the first of those looks like a finding. `.search` was exactly that: the app's primary
+/// surface, in the enum since the schema was written, with no emitter anywhere.
+///
+/// It is a tripwire because the behavioural version is not available here. The emit is inside
+/// `SearchBarWindow.present()`, and a test process has no display to put a panel on and cannot make
+/// one key — the reason `HotkeyToggleTests` drives the chord through injected closures instead. So
+/// this checks that an emitter *exists*, which is the whole of what went wrong, and claims nothing
+/// about it firing.
+final class SurfaceEmitterTripwireTests: XCTestCase {
+
+    func testEverySurfaceCaseIsEmittedSomewhereInTheApp() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // ContextAppTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // the package
+            .appendingPathComponent("Sources/ContextApp")
+
+        let files = try XCTUnwrap(
+            FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil),
+            "the app's sources have to be readable from the checkout for this tripwire to mean anything")
+        var text = ""
+        for case let url as URL in files where url.pathExtension == "swift" {
+            text += (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        }
+        XCTAssertFalse(text.isEmpty, "read no app source at all, so nothing below was checked")
+
+        for surface in AnalyticsEvent.Surface.allCases {
+            XCTAssertTrue(
+                text.contains(".surfaceOpened(.\(surface.rawValue))"),
+                """
+                No call site records \(surface.rawValue). Either give it one or take the case out — \
+                an empty series is read as an answer about users, not as a gap in the instrumentation.
+                """)
+        }
+    }
+}
+
 /// The day boundary the whole DAU series rests on.
 final class ContextAnalyticsDayTests: XCTestCase {
 
