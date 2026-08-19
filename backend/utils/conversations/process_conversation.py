@@ -163,6 +163,14 @@ class SummaryPipelineMode(str, Enum):
     NOTES_V2_APPS_OPT_IN = 'notes_v2_primary_apps_opt_in'
 
 
+class AppUsageAttribution(str, Enum):
+    """Why an app execution is eligible (or ineligible) for usage history."""
+
+    AUTOMATIC_PROCESSING = 'automatic_processing'
+    EXPLICIT_SELECTION = 'explicit_selection'
+    NON_USER_REPROCESS = 'non_user_reprocess'
+
+
 def summary_pipeline_mode() -> SummaryPipelineMode:
     """Resolve the pipeline mode once. `CONVERSATION_NOTES_V2_ENABLED` is the only switch.
 
@@ -563,9 +571,16 @@ def _trigger_apps(
     conversation: Conversation,
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
+    explicit_app: Optional[App] = None,
+    usage_attribution: Optional[AppUsageAttribution] = None,
     language_code: str = 'en',
     people: Optional[List[Person]] = None,
 ) -> None:
+    if usage_attribution is None:
+        usage_attribution = (
+            AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
+        )
+
     # Get default apps for auto-selection
     opt_in_only = _conversation_apps_opt_in_only()
     default_apps = [] if opt_in_only else get_default_conversation_summarized_apps()
@@ -586,11 +601,9 @@ def _trigger_apps(
 
     # If a specific app_id is provided (for reprocessing), find and use it.
     if app_id:
-        app_to_run = all_apps_dict.get(app_id)
-        if app_to_run is None:
-            candidate = get_available_app_model_by_id(app_id, uid)
-            if candidate and candidate.works_with_memories():
-                app_to_run = candidate
+        if explicit_app is None or explicit_app.id != app_id:
+            raise ValueError('explicit app selection must be validated before conversation processing')
+        app_to_run = explicit_app
     else:
         # Check preferred app first — skip the suggestion LLM call if user has one
         preferred_app_id = redis_db.get_user_preferred_app(uid)
@@ -663,7 +676,10 @@ def _trigger_apps(
                 prompt_prefix=prompt_prefix,
             ).strip()
         conversation.apps_results.append(AppResult(app_id=app.id, content=result))
-        if not is_reprocess:
+        if usage_attribution in {
+            AppUsageAttribution.AUTOMATIC_PROCESSING,
+            AppUsageAttribution.EXPLICIT_SELECTION,
+        }:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
     futures = [submit_with_context(llm_executor, execute_app, app) for app in filtered_apps]
@@ -1762,11 +1778,18 @@ def process_conversation(
     force_process: bool = False,
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
+    explicit_app: Optional[App] = None,
+    app_usage_attribution: Optional[AppUsageAttribution] = None,
     persistence_observer: Callable[[bool], None] | None = None,
     defer_memory_extraction: bool = False,
     defer_derived_effects: bool = False,
     derived_effects_observer: Callable[[Callable[[], None]], None] | None = None,
 ) -> Conversation:
+    if app_usage_attribution is None:
+        app_usage_attribution = (
+            AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
+        )
+
     def report_persistence(current: bool) -> None:
         if persistence_observer is not None:
             persistence_observer(current)
@@ -1950,7 +1973,14 @@ def process_conversation(
                 record_usage(uid, insights_gained=insights_gained)
 
             _trigger_apps(
-                uid, conversation, is_reprocess=is_reprocess, app_id=app_id, language_code=language_code, people=people
+                uid,
+                conversation,
+                is_reprocess=is_reprocess,
+                app_id=app_id,
+                explicit_app=explicit_app,
+                usage_attribution=app_usage_attribution,
+                language_code=language_code,
+                people=people,
             )
             # _trigger_apps only mutates the in-memory conversation and the durable write above already
             # happened, so persist its output the same way the calendar_event/folder_id/audio_files
