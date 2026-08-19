@@ -274,6 +274,9 @@ struct SettingsContentView: View {
   @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
     forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = NotificationService.areNotificationsEnabled()
+  /// When proactive notifications are silenced until, or `nil`. Held here rather than read
+  /// per-render so choosing a duration updates the row immediately.
+  @State var notificationsSnoozedUntil: Date? = NotificationService.currentSnoozeExpiry()
   // Start from the synchronous persisted mirror so reopening Settings never flashes
   // Balanced while the authoritative backend value is still hydrating.
   @State var notificationFrequency: Int = NotificationService.currentFrequencyLevel()

@@ -831,6 +831,30 @@ struct FloatingControlBarView: View {
         for: FloatingControlBarManager.snoozeTwoHoursDuration
       )
     }
+
+    Divider()
+
+    // Hiding the bar deliberately does not silence notifications — a hidden bar still
+    // nudges. These are the separate statement: stop suggesting for a while.
+    //
+    // Deliberately flat buttons rather than a submenu: a nested `Menu` inside
+    // `.contextMenu` does not render reliably on macOS, and the adjacent
+    // "Hide for 2 hours" button is the shape already proven to work here.
+    if let snoozedUntil = NotificationService.currentSnoozeExpiry(), snoozedUntil > Date() {
+      Button("Resume suggestions") {
+        NotificationService.endNotificationSnooze()
+      }
+    } else {
+      Button("Silence suggestions for 1 hour") {
+        NotificationService.snoozeNotifications(for: 60 * 60)
+      }
+      Button("Silence suggestions for 4 hours") {
+        NotificationService.snoozeNotifications(for: 4 * 60 * 60)
+      }
+      Button("Silence suggestions for 8 hours") {
+        NotificationService.snoozeNotifications(for: 8 * 60 * 60)
+      }
+    }
   }
 
   private var conversationView: some View {

@@ -557,9 +557,10 @@ actor SuggestionAssistant: ProactiveAssistant {
           + "no open commitment matches \"\(suggestion.suggestion)\""
       )
       return outcome
-    case .suppressedPresenting:
-      // The pure decision never yields this. Presenting is evaluated further down, after
-      // the owner re-check, so the audience is read as late as possible before the card.
+    case .suppressedPresenting, .suppressedSnoozed:
+      // The pure decision never yields these. Presence and snooze are evaluated further
+      // down, after the owner re-check, so both are read as late as possible before the
+      // card and neither reaches the dedup window.
       return outcome
     case .delivered:
       break
@@ -578,6 +579,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     // would retire it permanently: the user never sees it, and every regeneration after
     // the call is filtered as a duplicate of a card that was never shown. Returning before
     // the write leaves it eligible once the share ends.
+    if NotificationService.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: NotificationService.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log(
+        "Suggestion: withheld while notifications are silenced [\(suggestion.category.rawValue)] — "
+          + "\"\(suggestion.suggestion)\""
+      )
+      await emitDeliveryOutcome(.suppressedSnoozed, identity: telemetryIdentity)
+      return .suppressedSnoozed
+    }
+
     if NotificationService.shouldSuppressForPresence(
       respectFrequency: true,
       presenceDetected: NotificationService.currentPresenceDetected())

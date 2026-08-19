@@ -363,6 +363,57 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// (the screen-recording repair prompt is delivered once per broken-capture episode).
   /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
   /// bounded delivery outcomes and never carries notification text or window context.
+  /// When proactive notifications are silenced until, or `nil` when they are not.
+  ///
+  /// Deliberately distinct from `floatingBar_snoozedUntil`. That key hides the *bar* and
+  /// documents that hiding the bar must still let notifications through ("an hour of a
+  /// movie with the bar hidden or off must still nudge"). This one is the statement that
+  /// key is documented not to make: silence the nudges themselves.
+  nonisolated static let notificationsSnoozedUntilDefaultsKey = "notifications_snoozedUntil"
+
+  /// Standard silence durations offered to the user.
+  nonisolated static let snoozeDurations: [(label: String, seconds: TimeInterval)] = [
+    ("For 1 hour", 60 * 60),
+    ("For 4 hours", 4 * 60 * 60),
+    ("For 8 hours", 8 * 60 * 60),
+  ]
+
+  nonisolated static func currentSnoozeExpiry(
+    defaults: UserDefaults = .standard
+  ) -> Date? {
+    defaults.object(forKey: notificationsSnoozedUntilDefaultsKey) as? Date
+  }
+
+  /// Whether a delivery must be withheld because the user silenced notifications.
+  ///
+  /// Pure so the policy is testable without waiting out a real snooze. `respectFrequency`
+  /// is the existing proactive/functional split: silencing suggestions must not silence a
+  /// screen-recording repair prompt, or a user who snoozed for eight hours could not be
+  /// told why capture stopped working.
+  nonisolated static func shouldSuppressForSnooze(
+    respectFrequency: Bool,
+    snoozedUntil: Date?,
+    now: Date
+  ) -> Bool {
+    guard respectFrequency, let snoozedUntil else { return false }
+    return snoozedUntil > now
+  }
+
+  /// Silence proactive notifications for `duration`, replacing any existing snooze.
+  nonisolated static func snoozeNotifications(
+    for duration: TimeInterval,
+    now: Date = Date(),
+    defaults: UserDefaults = .standard
+  ) {
+    defaults.set(now.addingTimeInterval(duration), forKey: notificationsSnoozedUntilDefaultsKey)
+    log("NotificationService: proactive notifications silenced for \(Int(duration / 60))m")
+  }
+
+  nonisolated static func endNotificationSnooze(defaults: UserDefaults = .standard) {
+    defaults.removeObject(forKey: notificationsSnoozedUntilDefaultsKey)
+    log("NotificationService: proactive notification snooze cleared")
+  }
+
   /// Whether a delivery must be withheld because other people are present.
   ///
   /// Two distinct harms, one rule. Sharing a screen makes a private nudge **visible** to
@@ -500,6 +551,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     //
     // Placed after the cheap boolean gates deliberately: `activeScreenSharePresent()` scans
     // the window list, so it must not run for notifications an earlier gate already refused.
+    // Checked before presence: a defaults read is far cheaper than the window scans and
+    // audio-process enumeration presence detection performs.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: respectFrequency,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: suppressing \(assistantId) notification — user silenced notifications")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .userSnoozed
+      )
+      return
+    }
+
     if Self.shouldSuppressForPresence(
       respectFrequency: respectFrequency,
       presenceDetected: Self.currentPresenceDetected())

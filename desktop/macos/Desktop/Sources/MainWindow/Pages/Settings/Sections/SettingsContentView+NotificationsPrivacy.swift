@@ -34,6 +34,34 @@ extension SettingsContentView {
 
             GlassSeparator()
 
+            // Sits with the frequency slider because it answers the same question — how
+            // often may Omi interrupt — but for a bounded window rather than forever. The
+            // floating bar's "Hide for 2 hours" is deliberately not this: that hides the
+            // bar and still lets notifications through.
+            settingRow(
+              title: "Silence Notifications",
+              subtitle: notificationSnoozeSubtitle,
+              settingId: "notifications.snooze"
+            ) {
+              Menu {
+                Button("For 1 hour") { applyNotificationSnooze(60 * 60) }
+                Button("For 4 hours") { applyNotificationSnooze(4 * 60 * 60) }
+                Button("For 8 hours") { applyNotificationSnooze(8 * 60 * 60) }
+                if notificationsSnoozedUntil != nil {
+                  Divider()
+                  Button("Resume now") {
+                    NotificationService.endNotificationSnooze()
+                    notificationsSnoozedUntil = nil
+                  }
+                }
+              } label: {
+                Text(notificationsSnoozedUntil == nil ? "Off" : "Silenced")
+              }
+              .frame(width: 110)
+            }
+
+            GlassSeparator()
+
             // Sits under the master toggle and the frequency slider because both gate it:
             // frequency caps how often any proactive card is delivered, and this decides
             // whether live suggestions are generated at all.
@@ -315,4 +343,23 @@ extension SettingsContentView {
 
   // MARK: - Account Section
 
+}
+
+extension SettingsContentView {
+  /// Reads the live expiry rather than the cached state so a snooze that lapsed while
+  /// Settings sat open is reported as off.
+  var notificationSnoozeSubtitle: String {
+    guard let until = NotificationService.currentSnoozeExpiry(), until > Date() else {
+      return "Pause suggestions and nudges for a while"
+    }
+    let formatter = DateFormatter()
+    formatter.timeStyle = .short
+    formatter.dateStyle = .none
+    return "Silenced until \(formatter.string(from: until))"
+  }
+
+  func applyNotificationSnooze(_ duration: TimeInterval) {
+    NotificationService.snoozeNotifications(for: duration)
+    notificationsSnoozedUntil = NotificationService.currentSnoozeExpiry()
+  }
 }
