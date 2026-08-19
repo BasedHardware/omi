@@ -41,14 +41,25 @@ def test_start_job_source_does_not_invoke_memory_maintenance():
     assert "run_canonical_short_term_maintenance_cron" not in source
 
 
-def test_notifications_job_budgets_x_flex_from_whole_job_start():
+def test_notifications_job_orders_primary_notifications_then_health_then_x_flex():
     jobs_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "jobs.py"
     source = jobs_path.read_text(encoding="utf-8")
 
     started_at = source.index("job_started_at = time.monotonic()")
     notifications = source.index("await start_cron_notification_job()")
+    materialization_health = source.index("await run_blocking(db_executor, run_scheduled_check)")
     x_sync = source.index("await run_x_sync_job(job_started_at=job_started_at)")
-    assert started_at < notifications < x_sync
+    assert started_at < notifications < materialization_health < x_sync
+
+
+def test_notifications_job_deploy_routes_materialization_decision_review():
+    workflow_path = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "gcp_notifications_job.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    assert 'chat_first_materialization_health review=true' in workflow
+    assert 'chat_first_materialization_review_due' in workflow
+    assert '--notification-channels="$ALERT_CHANNELS"' in workflow
+    assert '--set-notification-channels="$ALERT_CHANNELS"' in workflow
 
 
 def test_memory_maintenance_job_entrypoint_calls_cron_runner():

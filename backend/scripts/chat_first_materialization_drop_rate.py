@@ -52,146 +52,21 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import collections
-import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, cast
+from typing import List
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from database._client import db  # noqa: E402
-
-INTENTS_COLLECTION = 'chat_first_proactive_intents'
-DELIVERED = 'delivered'
-DEFAULT_STALE_AFTER_HOURS = 48
-
-
-def _documents(uid: str | None, limit: int | None) -> Iterator[Dict[str, Any]]:
-    """Stream intent documents.
-
-    A ``--uid`` run reads that user's subcollection directly. The account-wide
-    run uses an unfiltered ``collection_group`` scan: age and delivery state are
-    bucketed in Python precisely so this needs no composite index and no entry
-    in ``firestore_index_registry``. Bound it with ``--limit`` on large projects.
-    """
-
-    if uid:
-        query: Any = db.collection('users').document(uid).collection(INTENTS_COLLECTION)
-    else:
-        query = db.collection_group(INTENTS_COLLECTION)
-    if limit is not None:
-        query = query.limit(limit)
-    for snapshot in query.stream():
-        raw: object = snapshot.to_dict()
-        if isinstance(raw, dict):
-            yield cast(Dict[str, Any], raw)
-
-
-def _created_at(document: Dict[str, Any]) -> datetime | None:
-    value = document.get('created_at')
-    if not isinstance(value, datetime):
-        return None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
-def _block_types(document: Dict[str, Any]) -> List[str]:
-    blocks = document.get('blocks')
-    if not isinstance(blocks, list):
-        return []
-    types: List[str] = []
-    for block in cast(List[Any], blocks):
-        if isinstance(block, dict):
-            block_type = cast(Dict[str, Any], block).get('type')
-            if isinstance(block_type, str):
-                types.append(block_type)
-    return types
-
-
-def summarize(
-    documents: Iterable[Dict[str, Any]],
-    *,
-    scope: str,
-    stale_after_hours: int,
-    now: datetime,
-) -> Dict[str, Any]:
-    """Bucket intent documents into delivered / dropped / in-flight.
-
-    Kept free of Firestore so the classification is unit-testable on its own.
-    """
-
-    cutoff = now - timedelta(hours=stale_after_hours)
-    delivered = 0
-    in_flight = 0
-    undated = 0
-    dropped_by_source: collections.Counter[str] = collections.Counter()
-    dropped_by_block: collections.Counter[str] = collections.Counter()
-    delivered_by_source: collections.Counter[str] = collections.Counter()
-
-    for document in documents:
-        source = str(document.get('source') or 'unknown')
-        if document.get('delivery_state') == DELIVERED:
-            delivered += 1
-            delivered_by_source[source] += 1
-            continue
-        created_at = _created_at(document)
-        if created_at is None:
-            # Never silently fold a malformed record into either outcome.
-            undated += 1
-            continue
-        if created_at > cutoff:
-            in_flight += 1
-            continue
-        dropped_by_source[source] += 1
-        for block_type in set(_block_types(document)):
-            dropped_by_block[block_type] += 1
-
-    dropped = sum(dropped_by_source.values())
-    decided = dropped + delivered
-    return {
-        'scope': scope,
-        'stale_after_hours': stale_after_hours,
-        'delivered': delivered,
-        'dropped': dropped,
-        'in_flight': in_flight,
-        'undated': undated,
-        'decided': decided,
-        'drop_rate': (dropped / decided) if decided else None,
-        'dropped_by_source': dict(dropped_by_source.most_common()),
-        'delivered_by_source': dict(delivered_by_source.most_common()),
-        'dropped_by_block_type': dict(dropped_by_block.most_common()),
-    }
-
-
-def collect(uid: str | None, limit: int | None, stale_after_hours: int, now: datetime) -> Dict[str, Any]:
-    return summarize(
-        _documents(uid, limit),
-        scope=uid or 'all_accounts',
-        stale_after_hours=stale_after_hours,
-        now=now,
-    )
-
-
-def render(report: Dict[str, Any]) -> str:
-    rate = report['drop_rate']
-    lines = [
-        f"scope                {report['scope']}",
-        f"stale after          {report['stale_after_hours']}h",
-        f"delivered            {report['delivered']}",
-        f"dropped              {report['dropped']}",
-        f"still in flight      {report['in_flight']} (excluded from the rate)",
-        f"drop rate            {'n/a (no decided intents)' if rate is None else f'{rate:.2%}'}",
-    ]
-    if report['undated']:
-        lines.append(f"undated records      {report['undated']} (no created_at; not counted either way)")
-    for label, key in (('dropped by source', 'dropped_by_source'), ('dropped by block type', 'dropped_by_block_type')):
-        if report[key]:
-            lines.append(f"{label}:")
-            lines.extend(f"  {name:<24} {count}" for name, count in cast(Dict[str, int], report[key]).items())
-    return '\n'.join(lines)
+from utils.task_intelligence.chat_first_materialization_health import (  # noqa: E402
+    DEFAULT_STALE_AFTER_HOURS,
+    collect,
+    json_report,
+    render,
+)
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -213,7 +88,7 @@ def main(argv: List[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     report = collect(args.uid, args.limit, args.stale_after_hours, datetime.now(timezone.utc))
-    print(json.dumps(report, indent=2) if args.json else render(report))
+    print(json_report(report) if args.json else render(report))
 
     rate = report['drop_rate']
     if args.fail_over_rate is not None and rate is not None and rate > args.fail_over_rate:
