@@ -35,6 +35,10 @@ describe('parseRewindNaturalSearch', () => {
     expect(parseRewindNaturalSearch('What was I doing yesterday?', NOW).query).toBe('')
   })
 
+  it('treats working activity questions as time-only searches', () => {
+    expect(parseRewindNaturalSearch('What was I working on yesterday?', NOW).query).toBe('')
+  })
+
   it('treats happened questions as time-only searches', () => {
     expect(parseRewindNaturalSearch('What happened yesterday?', NOW).query).toBe('')
     expect(parseRewindNaturalSearch('what happens today', NOW).query).toBe('')
@@ -57,6 +61,10 @@ describe('parseRewindNaturalSearch', () => {
   it('removes temporal possessives from the normalized query', () => {
     expect(parseRewindNaturalSearch("today's meetings", NOW).query).toBe('meetings')
     expect(parseRewindNaturalSearch('yesterday’s invoice', NOW).query).toBe('invoice')
+  })
+
+  it('keeps meaningful words that resemble question boilerplate', () => {
+    expect(parseRewindNaturalSearch('The Daily Show yesterday', NOW).query).toBe('The Daily Show')
   })
 
   it('does not produce an inverted evening scope before evening starts', () => {
