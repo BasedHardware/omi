@@ -699,21 +699,25 @@ public enum OmiAPI {
   public struct ActionItemsResponse: Codable {
     public let actionItems: [ActionItemResponse]
     public let hasMore: Bool?
+    public let truncated: Bool?
 
     private enum CodingKeys: String, CodingKey {
       case actionItems = "action_items"
       case hasMore = "has_more"
+      case truncated
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       actionItems = try c.decode([ActionItemResponse].self, forKey: .actionItems)
       hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore)
+      truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated)
     }
 
-    public init(actionItems: [ActionItemResponse], hasMore: Bool? = nil) {
+    public init(actionItems: [ActionItemResponse], hasMore: Bool? = nil, truncated: Bool? = nil) {
       self.actionItems = actionItems
       self.hasMore = hasMore
+      self.truncated = truncated
     }
   }
 

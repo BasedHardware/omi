@@ -30,6 +30,10 @@ from google.api_core.exceptions import NotFound as FirestoreNotFound
 
 import pytest
 
+from routers import memories as mem_mod
+import routers.action_items as action_items_router
+import routers.conversations as conversations_router
+
 from utils.other.list_budget import (
     OMI_LIST_TRUNCATED_HEADER,
     OMI_LIST_TRUNCATED_VALUE,
@@ -442,7 +446,6 @@ def test_action_items_non_budget_errors_keep_raising(ai_mod):
 
 
 def test_action_items_route_truncation_surface():
-    import routers.action_items as action_items_router
 
     exhausted = _budget(FakeClock())
     exhausted.mark_exhausted('deadline')
@@ -475,7 +478,6 @@ def test_action_items_route_truncation_surface():
 
 
 def test_action_items_route_parity_on_small_accounts():
-    import routers.action_items as action_items_router
 
     rows = [_ai_item('one'), _ai_item('two')]
     budget = _budget(FakeClock())
@@ -600,22 +602,6 @@ def test_conversations_large_offsets_are_served_and_charged(conv_mod, total, off
     assert budget.docs_scanned == offset + limit
 
 
-def test_conversations_offset_beyond_allowance_truncates_without_querying(conv_mod):
-    docs = [_conv_doc(i) for i in range(40_000)]
-    recorder = {'streams': 0}
-    clock = FakeClock()
-    _install_conv_db(conv_mod, docs, recorder=recorder)
-    budget = _budget(clock, max_documents=25_000)
-
-    page = conv_mod.get_conversations_without_photos('uid', 100, 30_000, budget=budget)
-
-    assert page == []
-    assert budget.truncated
-    assert budget.exhaustion_reason == 'documents'
-    # No Firestore stream may start once the offset consumed the allowance.
-    assert recorder['streams'] == 0
-
-
 def test_conversations_deadline_cut_keeps_honest_prefix(conv_mod):
     docs = [_conv_doc(i) for i in range(1_000)]
     clock = FakeClock()
@@ -639,7 +625,6 @@ def test_conversations_parity_without_budget(conv_mod):
 
 
 def test_conversations_route_sets_header_only_when_truncated():
-    import routers.conversations as conversations_router
 
     truncated_budget = _budget(FakeClock())
     truncated_budget.mark_exhausted('deadline')
@@ -668,15 +653,30 @@ def test_conversations_route_sets_header_only_when_truncated():
                 starred=None,
                 uid='uid-1',
             )
-        if expect_header:
-            assert response_mock.headers.__setitem__.call_args is not None or True
-        # Header dict emulation: MagicMock headers record __setitem__ calls.
         header_calls = [
             call
             for call in response_mock.headers.__setitem__.call_args_list
             if call.args[:1] == (OMI_LIST_TRUNCATED_HEADER,)
         ]
         assert bool(header_calls) is expect_header
+
+
+def test_conversations_offset_beyond_allowance_truncates_without_querying(conv_mod):
+    # The offset charge happens before any stream, so a tiny collection is
+    # enough to prove the allowance gate.
+    docs = [_conv_doc(i) for i in range(10)]
+    recorder = {'streams': 0}
+    clock = FakeClock()
+    _install_conv_db(conv_mod, docs, recorder=recorder)
+    budget = _budget(clock, max_documents=25_000)
+
+    page = conv_mod.get_conversations_without_photos('uid', 100, 30_000, budget=budget)
+
+    assert page == []
+    assert budget.truncated
+    assert budget.exhaustion_reason == 'documents'
+    # No Firestore stream may start once the offset consumed the allowance.
+    assert recorder['streams'] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -998,7 +998,6 @@ def test_offset_read_parent_exhaustion_returns_partial_and_stops_scanning(servic
 
 
 def test_memories_route_marks_truncation_and_suppresses_next_cursor():
-    from routers import memories as mem_mod
 
     page = SimpleNamespace(
         memories=[],
@@ -1039,7 +1038,6 @@ def test_memories_route_marks_truncation_and_suppresses_next_cursor():
 
 
 def test_memories_route_complete_page_keeps_cursor_header():
-    from routers import memories as mem_mod
 
     page = SimpleNamespace(
         memories=[],
@@ -1077,7 +1075,6 @@ def test_memories_route_complete_page_keeps_cursor_header():
 def test_memories_route_scan_budget_fallback_shares_the_request_budget():
     """Scan-budget 503 still falls back to the offset read — on the same budget."""
     from fastapi import HTTPException
-    from routers import memories as mem_mod
 
     service = MagicMock()
     service.read_page.side_effect = HTTPException(status_code=503, detail=mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL)
