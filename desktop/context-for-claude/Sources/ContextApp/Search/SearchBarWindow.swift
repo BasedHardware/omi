@@ -251,6 +251,7 @@ final class SearchBarWindow {
     /// It dismisses for the same reason activating a result does: this panel floats, and a Spotlight
     /// that stays on top of the window it just opened is covering the thing it was asked for.
     private static func openTheTimeline() {
+        ContextAnalytics.record(.surfaceOpened(.activity))
         ContextAppDelegate.openTimeline()
         dismiss()
     }
@@ -268,6 +269,7 @@ final class SearchBarWindow {
     /// too and closing on those would break both. So the routes that really mean "leave" have to say
     /// so explicitly, here, rather than being inferred from focus moving.
     private static func openSettings() {
+        ContextAnalytics.record(.surfaceOpened(.settings))
         SettingsWindow.present()
         dismiss()
     }

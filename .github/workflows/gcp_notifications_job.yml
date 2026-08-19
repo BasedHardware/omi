@@ -11,7 +11,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
-        type: string
+        type: choice
+        options:
+          - development
+          - prod
       branch:
         description: 'Branch to deploy from'
         required: true
@@ -33,7 +36,7 @@ concurrency:
 
 jobs:
   deploy:
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'

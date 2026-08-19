@@ -609,7 +609,6 @@
       "sources": [
         "backend/charts/backend-listen/**",
         "backend/charts/pusher/**",
-        "backend/charts/agent-proxy/**",
         "backend/charts/llm-gateway/**",
         "backend/charts/diarizer/**",
         "backend/charts/parakeet/**",

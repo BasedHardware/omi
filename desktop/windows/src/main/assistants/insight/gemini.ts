@@ -30,8 +30,12 @@ import {
   type ToolCall
 } from './models'
 
-export const MODEL = 'gemini-2.5-flash'
-export const FALLBACK_MODEL = 'gemini-2.5-flash'
+// Flash-Lite, deliberately: Windows used to pin Insight straight onto
+// `gemini-2.5-flash`, which burns the saturated Vertex PT reservation that is kept
+// for task extraction (Mac pins Insight to Pro; the proxy demotes over-quota Pro to
+// Flash-Lite as well). Flash-Lite is `shared`/on-demand on Vertex.
+export const MODEL = 'gemini-2.5-flash-lite'
+export const FALLBACK_MODEL = 'gemini-2.5-flash-lite'
 export const THINKING_BUDGET = 1024
 const REQUEST_TIMEOUT_MS = 120_000
 /** 3 attempts total per model. Mac's backoff, exactly: 2s then 8s. */

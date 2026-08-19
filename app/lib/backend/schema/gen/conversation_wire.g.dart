@@ -94,10 +94,13 @@ class GeneratedActionItem {
   final bool completed;
   final DateTime? completedAt;
   final bool? concreteDeliverable;
+  final String? context;
   final String? conversationId;
   final DateTime? createdAt;
   final String description;
   final DateTime? dueAt;
+  final String? dueCertainty;
+  final String? ownerName;
   final double? ownershipConfidence;
   final List<String>? sourceSegmentIds;
   final String? targetTaskId;
@@ -111,10 +114,13 @@ class GeneratedActionItem {
     this.completed = false,
     this.completedAt,
     this.concreteDeliverable,
+    this.context,
     this.conversationId,
     this.createdAt,
     required this.description,
     this.dueAt,
+    this.dueCertainty,
+    this.ownerName,
     this.ownershipConfidence,
     this.sourceSegmentIds,
     this.targetTaskId,
@@ -130,10 +136,13 @@ class GeneratedActionItem {
       completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: false, defaultValue: false), "completed"),
       completedAt: _readFieldValue<DateTime>(_readField(json, const ["completed_at"]), "completed_at", _readDateTime, requiredField: false, nullable: true),
       concreteDeliverable: _readFieldValue<bool>(_readField(json, const ["concrete_deliverable"]), "concrete_deliverable", _readBool, requiredField: false, nullable: true),
+      context: _readFieldValue<String>(_readField(json, const ["context"]), "context", _readString, requiredField: false, nullable: true),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
+      dueCertainty: _readFieldValue<String>(_readField(json, const ["due_certainty"]), "due_certainty", _readString, requiredField: false, nullable: true),
+      ownerName: _readFieldValue<String>(_readField(json, const ["owner_name"]), "owner_name", _readString, requiredField: false, nullable: true),
       ownershipConfidence: _readFieldValue<double>(_readField(json, const ["ownership_confidence"]), "ownership_confidence", _readDouble, requiredField: false, nullable: true),
       sourceSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["source_segment_ids"]), "source_segment_ids", _readStringList, requiredField: false, nullable: true),
       targetTaskId: _readFieldValue<String>(_readField(json, const ["target_task_id"]), "target_task_id", _readString, requiredField: false, nullable: true),
@@ -150,10 +159,13 @@ class GeneratedActionItem {
       'completed': completed,
       'completed_at': completedAt?.toUtc().toIso8601String(),
       'concrete_deliverable': concreteDeliverable,
+      'context': context,
       'conversation_id': conversationId,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'description': description,
       'due_at': dueAt?.toUtc().toIso8601String(),
+      'due_certainty': dueCertainty,
+      'owner_name': ownerName,
       'ownership_confidence': ownershipConfidence,
       'source_segment_ids': sourceSegmentIds,
       'target_task_id': targetTaskId,
@@ -246,12 +258,41 @@ class GeneratedEvent {
   }
 }
 
+class GeneratedSection {
+  final String bodyMarkdown;
+  final String heading;
+  final List<String>? sourceSegmentIds;
+
+  const GeneratedSection({
+    required this.bodyMarkdown,
+    required this.heading,
+    this.sourceSegmentIds,
+  });
+
+  factory GeneratedSection.fromJson(Map<String, dynamic> json) {
+    return GeneratedSection(
+      bodyMarkdown: _required(_readFieldValue<String>(_readField(json, const ["body_markdown"]), "body_markdown", _readString, requiredField: true, nullable: false), "body_markdown"),
+      heading: _required(_readFieldValue<String>(_readField(json, const ["heading"]), "heading", _readString, requiredField: true, nullable: false), "heading"),
+      sourceSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["source_segment_ids"]), "source_segment_ids", _readStringList, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'body_markdown': bodyMarkdown,
+      'heading': heading,
+      'source_segment_ids': sourceSegmentIds,
+    };
+  }
+}
+
 class GeneratedStructured {
   final List<GeneratedActionItem>? actionItems;
   final String category;
   final String emoji;
   final List<GeneratedEvent>? events;
   final String overview;
+  final List<GeneratedSection>? sections;
   final String title;
 
   const GeneratedStructured({
@@ -260,6 +301,7 @@ class GeneratedStructured {
     this.emoji = "\ud83e\udde0",
     this.events,
     this.overview = "",
+    this.sections,
     this.title = "",
   });
 
@@ -270,6 +312,7 @@ class GeneratedStructured {
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83e\udde0"), "emoji"),
       events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
       overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
+      sections: _readFieldValue<List<GeneratedSection>>(_readField(json, const ["sections"]), "sections", (value) => _readObjectList(value, GeneratedSection.fromJson), requiredField: false, nullable: true),
       title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
   }
@@ -281,6 +324,7 @@ class GeneratedStructured {
       'emoji': emoji,
       'events': events?.map((value) => value.toJson()).toList(),
       'overview': overview,
+      'sections': sections?.map((value) => value.toJson()).toList(),
       'title': title,
     };
   }

@@ -10,7 +10,11 @@ import XCTest
 /// from the background screen-capture loop. Sizing is now a pure function that refuses
 /// degenerate frames; these tests pin that.
 final class ScreenCaptureDimensionsTests: XCTestCase {
-  private let maxSize: CGFloat = 3000
+  private let maxSize = ScreenCaptureService.maxSize
+
+  func testProductionMaxSizeIs2304() {
+    XCTAssertEqual(ScreenCaptureService.maxSize, 2304)
+  }
 
   func testPreservesAspectRatioForNormalWindow() {
     let size = ScreenCaptureService.captureDimensions(width: 1440, height: 900, maxSize: maxSize)
@@ -19,17 +23,28 @@ final class ScreenCaptureDimensionsTests: XCTestCase {
   }
 
   func testClampsOversizedWindowToMaxSize() {
-    // 6000x3000 → width clamps to 3000, height follows the 2:1 aspect ratio.
-    let size = ScreenCaptureService.captureDimensions(width: 6000, height: 3000, maxSize: maxSize)
-    XCTAssertEqual(size?.width, 3000)
-    XCTAssertEqual(size?.height, 1500)
+    // 4608x2304 → width clamps to 2304, height follows the 2:1 aspect ratio.
+    let size = ScreenCaptureService.captureDimensions(width: 4608, height: 2304, maxSize: maxSize)
+    XCTAssertEqual(size?.width, 2304)
+    XCTAssertEqual(size?.height, 1152)
   }
 
   func testClampsTallWindowByHeight() {
-    // 1000x9000 → height clamps to 3000, width follows the 1:9 aspect ratio.
+    // 1000x9000 → height clamps to 2304, width follows the 1:9 aspect ratio.
     let size = ScreenCaptureService.captureDimensions(width: 1000, height: 9000, maxSize: maxSize)
-    XCTAssertEqual(size?.height, 3000)
-    XCTAssertEqual(size?.width, 333)
+    XCTAssertEqual(size?.height, 2304)
+    XCTAssertEqual(size?.width, 256)
+  }
+
+  func testClampsMeasuredHighDPILandscapeAndPreservesAspect() {
+    // 2874×1710 is a measured high-DPI landscape source (aspect ≈ 1.68).
+    let size = ScreenCaptureService.captureDimensions(width: 2874, height: 1710, maxSize: maxSize)
+    XCTAssertEqual(size?.width, 2304)
+    XCTAssertEqual(size?.height, 1370)
+    guard let size else {
+      return
+    }
+    XCTAssertEqual(Double(size.width) / Double(size.height), 2874.0 / 1710.0, accuracy: 0.01)
   }
 
   /// The crash: width 0 produced NaN, and `Int(NaN)` traps.

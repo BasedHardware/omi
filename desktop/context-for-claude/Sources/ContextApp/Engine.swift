@@ -1030,7 +1030,19 @@ final class Engine: ObservableObject {
     /// how a real failure goes unread.
     private func setState(_ component: CaptureComponent, _ next: ComponentState) {
         guard componentStates[component] != next else { return }
+        let wasLive = componentStates[component]?.isLive ?? false
         componentStates[component] = next
+
+        // The single point every capture transition passes through, which is why the analytics hook
+        // is here and not in the four start/stop methods: those have early returns, failure paths and
+        // a teardown that runs on both a clean stop and a crash, so instrumenting them would have
+        // meant four chances to miss a transition. This one is already guarded by the
+        // did-it-actually-change check above, so it cannot double-count either.
+        if wasLive != next.isLive, let source = AnalyticsEvent.CaptureSource(component) {
+            UsageClock.shared.mark(source, live: next.isLive)
+            ContextAnalytics.record(.captureStateChanged(source: source, live: next.isLive))
+        }
+
         switch next {
         case .live:
             ContextLog.info("\(component.label) is capturing", "engine")

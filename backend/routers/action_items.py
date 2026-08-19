@@ -417,9 +417,11 @@ def list_action_item_ids(
     Without ``completed``: returns every ID with no field reads — the cheapest
     way for a client to know which tasks it has without paging the full list.
 
-    With ``completed``: returns only non-deleted IDs in the requested bucket,
-    which requires a three-field projection (``completed``, ``status``,
-    ``deleted``) streamed across the collection.
+    With ``completed``: returns only non-deleted IDs in the requested bucket. The
+    ``completed`` bucket is filtered server-side; only documents in that bucket are
+    streamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``
+    exclusion is still applied in Python since Firestore equality filters would drop
+    undeleted rows that have no ``deleted`` field.
 
     Declared before /v1/action-items/{action_item_id} so the static path is not
     captured as an action item id.

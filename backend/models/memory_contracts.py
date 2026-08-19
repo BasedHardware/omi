@@ -12,6 +12,30 @@ from models.product_memory import MemoryTier
 DURABLE_MEMORY_PATCH_FACT_SOURCE = "durable_memory_patch"
 
 
+class MemoryExtractionError(RuntimeError):
+    """A strict memory extraction failed before producing a valid batch.
+
+    This is the extraction boundary's own contract, not the provider stack's:
+    callers decide what an absent batch means for their write, and they must be
+    able to catch it without importing an LLM client.
+    """
+
+    def __init__(self, extractor: str, message: Optional[str] = None):
+        self.extractor = extractor
+        super().__init__(message or f"{extractor} failed before producing a valid extraction result")
+
+
+class WorkingObservationExtractionError(MemoryExtractionError):
+    """A strict L1 extraction failed before producing a valid batch."""
+
+    def __init__(self, stage: str):
+        self.stage = stage
+        super().__init__(
+            "working_observation_extractor",
+            f"working observation extraction failed during {stage}",
+        )
+
+
 class LifecycleState(str, Enum):
     working = "working"
     active = "active"

@@ -222,6 +222,51 @@ def test_first_page_falls_back_to_offset_read_when_canonical_scan_unavailable():
     service.read.assert_called_once()
 
 
+def test_first_page_falls_back_to_offset_read_when_historical_scan_unavailable():
+    """Prod 2026-08-18: first page 503d for 5.5h while a composite index built.
+
+    ``read_page``'s historical keyset scan orders by (updated_at DESC,
+    __name__) and so returned FAILED_PRECONDITION for every request while the
+    matching ``memories`` composite index was still building, surfacing as this
+    detail. The offset ``read`` path orders by ``updated_at`` alone, does not
+    match that index, and could serve the page — so this detail must fall back
+    like the other two scan failures instead of failing the list endpoint.
+    """
+    from fastapi import HTTPException
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail="Historical memory unavailable")
+    service.read.return_value = ['memory-from-offset-read']
+
+    result = _get_first_page(service)
+
+    assert result == ['memory-from-offset-read']
+    service.read_page.assert_called_once()
+    service.read.assert_called_once()
+
+
+def test_first_page_falls_back_to_offset_read_when_scan_row_budget_is_exhausted():
+    """Prod 2026-08-18: first pages 504'd at the 30s edge timeout (~100/h).
+
+    Once the ``memories`` composite indexes went READY the keyset scans actually
+    served, and an account whose historical set is fully suppressed by canonical
+    made ``read_page`` walk every historical row before it could emit anything.
+    The walk now stops at the scan row budget; the offset ``read`` path does not
+    walk suppressed rows, so the first page must fall back to it.
+    """
+    from fastapi import HTTPException
+
+    service = MagicMock()
+    service.read_page.side_effect = HTTPException(status_code=503, detail=mem_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL)
+    service.read.return_value = ['memory-from-offset-read']
+
+    result = _get_first_page(service)
+
+    assert result == ['memory-from-offset-read']
+    service.read_page.assert_called_once()
+    service.read.assert_called_once()
+
+
 def test_first_page_propagates_unrelated_503_detail():
     from fastapi import HTTPException
 
