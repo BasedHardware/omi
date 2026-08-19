@@ -73,6 +73,19 @@ final class WakeWordServiceTests: XCTestCase {
     XCTAssertTrue(triggered.isEmpty)
   }
 
+  /// Regression: a live ambient session transcribed "Omi, what's the weather?" as
+  /// speaker 0 with `is_user=false` (diarization only sets `is_user` once a speech
+  /// profile is enrolled) and the wake word never fired. Speaker 0 is the primary
+  /// user, matching `VoiceBargeInPolicy.shouldInterrupt`.
+  func testSpeakerZeroTriggersWithoutDiarizedUserFlag() {
+    configureService()
+    let segment = SpeakerSegment(
+      segmentId: "a", speaker: 0, text: "Omi, what's the weather?", start: 0, end: 1,
+      isUser: false)
+    service.observe(segment, isConversationActive: false)
+    XCTAssertEqual(triggered, ["what's the weather?"])
+  }
+
   func testBusyConversationSuppresses() {
     configureService()
     service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: true)
@@ -86,16 +99,41 @@ final class WakeWordServiceTests: XCTestCase {
     XCTAssertEqual(triggered.count, 1)
   }
 
-  func testCooldownSuppressesRapidRepeats() {
+  /// Regression: the backend re-delivers one growing segment under a single id
+  /// (observed live: [206.0s-217.1s] → [206.0s-228.9s]). Deduping on the id alone
+  /// dropped every later command that arrived inside an id that had already fired.
+  func testNewCommandInReusedSegmentIDStillFires() {
+    configureService()
+    service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: false)
+    XCTAssertEqual(triggered.count, 1)
+    clock = 31  // clear the cooldown so this asserts dedup, not pacing
+    service.observe(userSegment("Omi, open my tasks", id: "a"), isConversationActive: false)
+    XCTAssertEqual(triggered, ["let's order food", "open my tasks"])
+  }
+
+  /// The cooldown swallows a rapid repeat of the *same* utterance. It used to gate
+  /// on elapsed time alone, which discarded distinct instructions: the ambient
+  /// transcript lane runs ~35s behind live speech (measured over 11 segments,
+  /// 34.3–36.6s), so several different commands routinely land inside one 30s
+  /// window and were silently dropped as "repeats".
+  func testCooldownSuppressesRepeatsOfTheSameCommand() {
     configureService()
     service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: false)
     XCTAssertEqual(triggered.count, 1)
     clock = 10
-    service.observe(userSegment("Omi, let's order tea", id: "b"), isConversationActive: false)
-    XCTAssertEqual(triggered.count, 1)
+    service.observe(userSegment("Omi, let's order food", id: "b"), isConversationActive: false)
+    XCTAssertEqual(triggered.count, 1, "same command inside the cooldown must be suppressed")
     clock = 31
-    service.observe(userSegment("Omi, let's order tea", id: "c"), isConversationActive: false)
-    XCTAssertEqual(triggered.count, 2)
+    service.observe(userSegment("Omi, let's order food", id: "c"), isConversationActive: false)
+    XCTAssertEqual(triggered.count, 2, "same command after the cooldown runs again")
+  }
+
+  func testDistinctCommandInsideCooldownStillRuns() {
+    configureService()
+    service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: false)
+    clock = 10
+    service.observe(userSegment("Omi, what time is it", id: "b"), isConversationActive: false)
+    XCTAssertEqual(triggered, ["let's order food", "what time is it"])
   }
 
   func testLastTriggeredCommandRecorded() {
