@@ -18350,6 +18350,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Find'**
   String get findDevice;
+
+  /// Snackbar shown when exporting device diagnostics to the share sheet fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share diagnostics. Please try again.'**
+  String get diagnosticsShareFailed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

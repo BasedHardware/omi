@@ -9897,4 +9897,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get findDevice => 'Găsește';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnosticul nu a putut fi partajat. Încearcă din nou.';
 }

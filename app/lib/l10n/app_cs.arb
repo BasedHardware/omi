@@ -3195,5 +3195,6 @@
     "accountCutoverOpenStore": "Otevřít obchod",
     "sendRawAudioToOmi": "Odesílat nezpracovaný zvuk do Omi",
     "sendRawAudioToOmiDescription": "Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat.",
-    "findDevice": "Najít"
+    "findDevice": "Najít",
+    "diagnosticsShareFailed": "Diagnostiku se nepodařilo sdílet. Zkus to znovu."
 }

@@ -9865,4 +9865,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get findDevice => 'Пронађи';
+
+  @override
+  String get diagnosticsShareFailed => 'Dijagnostiku nije bilo moguće podeliti. Pokušaj ponovo.';
 }

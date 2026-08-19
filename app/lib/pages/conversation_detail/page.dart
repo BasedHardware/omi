@@ -11,6 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:tuple/tuple.dart';
 
@@ -475,16 +476,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.lightImpact();
   }
 
-  // iOS requires a non-zero sharePositionOrigin (popover anchor); Share.shareXFiles
-  // throws a PlatformException without it.
-  Rect _shareSheetOrigin() {
-    final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
-      return box.localToGlobal(Offset.zero) & box.size;
-    }
-    return const Rect.fromLTWH(0, 0, 100, 100);
-  }
-
   Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
     if (!mounted) return;
 
@@ -558,7 +549,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)], sharePositionOrigin: _shareSheetOrigin());
+        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)],
+            sharePositionOrigin: shareSheetOrigin(_shareButtonKey));
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -851,7 +843,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                       shareConversationLink(
                                         provider.conversation,
-                                        sharePositionOrigin: _shareSheetOrigin(),
+                                        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
                                       );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));

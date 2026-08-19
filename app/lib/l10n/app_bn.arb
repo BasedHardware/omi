@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "स्टोर खोलें",
     "sendRawAudioToOmi": "Omi-তে কাঁচা অডিও পাঠান",
     "sendRawAudioToOmiDescription": "Omi-তে কাঁচা অডিও পাঠানো বন্ধ করতে এটি বন্ধ করুন। ট্রান্সক্রিপ্ট ও ক্লাউড ফিচারের প্রয়োজনীয় ডেটা এখনও Omi-তে পাঠানো হতে পারে।",
-    "findDevice": "খুঁজুন"
+    "findDevice": "খুঁজুন",
+    "diagnosticsShareFailed": "ডায়াগনস্টিকস শেয়ার করা যায়নি। আবার চেষ্টা করুন।"
 }

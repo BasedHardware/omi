@@ -9665,4 +9665,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get findDevice => '查找';
+
+  @override
+  String get diagnosticsShareFailed => '无法分享诊断信息，请重试。';
 }

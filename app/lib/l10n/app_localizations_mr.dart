@@ -9859,4 +9859,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get findDevice => 'शोधा';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स शेअर करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
 }

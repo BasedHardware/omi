@@ -9861,4 +9861,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get findDevice => 'Bul';
+
+  @override
+  String get diagnosticsShareFailed => 'Tanılama paylaşılamadı. Lütfen tekrar deneyin.';
 }

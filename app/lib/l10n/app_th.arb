@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "เปิดสโตร์",
     "sendRawAudioToOmi": "ส่งเสียงดิบไปยัง Omi",
     "sendRawAudioToOmiDescription": "ปิดเพื่อไม่ให้ส่งเสียงดิบไปยัง Omi ข้อความถอดเสียงและข้อมูลที่ฟีเจอร์คลาวด์ต้องใช้อาจยังถูกส่งไปยัง Omi",
-    "findDevice": "ค้นหา"
+    "findDevice": "ค้นหา",
+    "diagnosticsShareFailed": "ไม่สามารถแชร์ข้อมูลวินิจฉัยได้ โปรดลองใหม่"
 }

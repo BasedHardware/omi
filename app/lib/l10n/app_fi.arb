@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "Avaa kauppa",
     "sendRawAudioToOmi": "Lähetä käsittelemätön ääni Omille",
     "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.",
-    "findDevice": "Etsi"
+    "findDevice": "Etsi",
+    "diagnosticsShareFailed": "Diagnostiikan jakaminen epäonnistui. Yritä uudelleen."
 }

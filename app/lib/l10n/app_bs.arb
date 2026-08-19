@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "Otevřít obchod",
     "sendRawAudioToOmi": "Šalji sirovi zvuk u Omi",
     "sendRawAudioToOmiDescription": "Isključite da spriječite slanje sirovog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.",
-    "findDevice": "Pronađi"
+    "findDevice": "Pronađi",
+    "diagnosticsShareFailed": "Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovo."
 }

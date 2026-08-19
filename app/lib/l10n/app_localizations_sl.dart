@@ -9880,4 +9880,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get findDevice => 'Poišči';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostike ni bilo mogoče deliti. Poskusi znova.';
 }

@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
@@ -34,6 +35,7 @@ class UsagePage extends StatefulWidget {
 class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
+  final GlobalKey _shareButtonKey = GlobalKey();
   final List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
   late AnimationController _waveController;
@@ -208,6 +210,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         files: [XFile(file.path)],
         subject: periodTitle.isEmpty ? null : periodTitle,
         text: shareText.isEmpty ? null : shareText,
+        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
       ),
     );
   }
@@ -302,7 +305,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         centerTitle: true,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
-        actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
+        actions: [
+          IconButton(
+            key: _shareButtonKey,
+            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
+            onPressed: _shareUsage,
+          )
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,

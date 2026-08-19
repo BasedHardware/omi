@@ -9919,4 +9919,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get findDevice => 'Εύρεση';
+
+  @override
+  String get diagnosticsShareFailed => 'Δεν ήταν δυνατή η κοινοποίηση των διαγνωστικών. Δοκιμάστε ξανά.';
 }

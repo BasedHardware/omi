@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "Öppna butik",
     "sendRawAudioToOmi": "Send rå lyd til Omi",
     "sendRawAudioToOmiDescription": "Slå av for å hindre at rå lyd sendes til Omi. Transkripsjoner og data som skyfunksjoner trenger, kan fortsatt bli sendt til Omi.",
-    "findDevice": "Finn"
+    "findDevice": "Finn",
+    "diagnosticsShareFailed": "Kunne ikke dele diagnostikken. Prøv igjen."
 }

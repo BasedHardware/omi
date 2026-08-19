@@ -9898,4 +9898,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get findDevice => 'కనుగొనండి';
+
+  @override
+  String get diagnosticsShareFailed => 'డయాగ్నొస్టిక్స్‌ను షేర్ చేయలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
 }

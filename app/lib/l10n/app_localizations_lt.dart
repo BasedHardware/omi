@@ -9869,4 +9869,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get findDevice => 'Rasti';
+
+  @override
+  String get diagnosticsShareFailed => 'Nepavyko bendrinti diagnostikos. Bandykite dar kartą.';
 }

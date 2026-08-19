@@ -9906,4 +9906,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get findDevice => 'Troba';
+
+  @override
+  String get diagnosticsShareFailed => 'No s\'ha pogut compartir el diagnòstic. Torna-ho a provar.';
 }
