@@ -4,6 +4,10 @@ import Foundation
 final class WakeWordService {
   static let shared = WakeWordService()
 
+  /// Separates a segment id from the command it fired, in `firedSegmentIDs`.
+  /// A control character so it cannot occur inside either half.
+  private static let dedupSeparator: Character = "\u{1}"
+
   private var lastTriggeredAt: Date?
   private var firedSegmentIDs: [String] = []
   private let maxRememberedSegmentIDs = 100
@@ -47,15 +51,23 @@ final class WakeWordService {
       return ignore("segment not attributed to the user (speaker \(segment.speaker))")
     }
     guard let command = parsed else { return }
-    // The backend re-delivers a growing segment under one id (observed live:
-    // [206.0s-217.1s] → [206.0s-228.9s]), so deduping on the id alone silently
-    // drops every later command that lands inside an id that already fired.
-    // Key on the extracted command so a re-sent segment is suppressed but a new
-    // instruction inside the same segment still runs.
-    let dedupKey = segment.segmentId.map { "\($0)|\(command)" }
-    if let key = dedupKey, firedSegmentIDs.contains(key) {
-      return ignore("segment \(segment.segmentId ?? "?") already fired for '\(command)'")
+    // A backend segment is re-delivered as it grows, in place and under one id
+    // (observed live: "what time it is?" → "what time it is? You speak English.
+    // Got it."). Deduping on the id alone drops a genuinely new instruction that
+    // lands in a reused id; deduping on the exact command re-fires on every growth
+    // with a longer, more polluted string. Treat a command that extends one already
+    // fired for this segment as the same instruction, and anything else as new.
+    if let id = segment.segmentId {
+      let priorCommands = firedSegmentIDs.compactMap { entry -> String? in
+        let parts = entry.split(separator: Self.dedupSeparator, maxSplits: 1)
+        guard parts.count == 2, parts[0] == id else { return nil }
+        return String(parts[1])
+      }
+      if let prior = priorCommands.first(where: { command.hasPrefix($0) || $0.hasPrefix(command) }) {
+        return ignore("segment \(id) already fired for '\(prior)'")
+      }
     }
+    let dedupKey = segment.segmentId.map { "\($0)\(Self.dedupSeparator)\(command)" }
     guard Self.wordCount(command) >= minimumCommandWords else {
       return ignore("command '\(command)' is shorter than \(minimumCommandWords) words")
     }

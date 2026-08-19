@@ -116,6 +116,21 @@ final class WakeWordServiceTests: XCTestCase {
   /// transcript lane runs ~35s behind live speech (measured over 11 segments,
   /// 34.3–36.6s), so several different commands routinely land inside one 30s
   /// window and were silently dropped as "repeats".
+  /// Regression: a segment grows in place under one id, and the assistant's own
+  /// spoken reply is captured by the mic and appended to it. Observed live:
+  /// "what time it is?" then "what time it is? You speak English. Got it." fired
+  /// twice, the second time submitting the polluted string as the command.
+  func testGrowingSegmentDoesNotRefire() {
+    configureService()
+    service.observe(userSegment("Omi, what time is it", id: "a"), isConversationActive: false)
+    XCTAssertEqual(triggered.count, 1)
+    clock = 31  // clear the cooldown so this asserts dedup, not pacing
+    service.observe(
+      userSegment("Omi, what time is it and an agent is getting started on that", id: "a"),
+      isConversationActive: false)
+    XCTAssertEqual(triggered, ["what time is it"], "growth of a fired command is not a new command")
+  }
+
   func testCooldownSuppressesRepeatsOfTheSameCommand() {
     configureService()
     service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: false)
