@@ -294,6 +294,8 @@ jest.mock('../src/omiNative', () => ({
       mockBackend.generationEvents(generationId, lastEventId),
     request: (request: MockRequest) => mockBackend.request(request),
   },
+  isBluetoothScanAvailable: (state: string | undefined) =>
+    state === 'poweredOn' || state === 'available' || state === 'selected',
   omiNative: mockNative,
 }));
 
@@ -535,6 +537,7 @@ test('renders the v4-style Home hierarchy: top pendant, live status, Currents, d
     ]),
   );
 });
+
 test('keeps search results hidden until a search begins while retaining the v4 Currents feed', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();

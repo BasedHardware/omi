@@ -19,9 +19,13 @@ export type {
   OmiNative,
 } from './omiNativeTypes';
 
-export type PlatformBluetoothState = BluetoothState;
 export type PlatformNativeSnapshot = NativeSnapshot;
-export type PlatformOmiNative = OmiNative;
+
+export function isBluetoothScanAvailable(
+  state: BluetoothState | undefined,
+): boolean {
+  return state === 'poweredOn';
+}
 
 export function resolveOmiNative(nativeModule: OmiNative | null | undefined) {
   return {adapter: nativeModule, installed: nativeModule != null};

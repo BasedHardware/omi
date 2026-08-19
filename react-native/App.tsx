@@ -57,6 +57,7 @@ import {
   type ChatMessage,
 } from './src/chatClient';
 import {
+  isBluetoothScanAvailable,
   omiBackend,
   omiNative,
   type PlatformNativeSnapshot,
@@ -2125,7 +2126,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   accessibilityLabel="Scan for Omi devices"
                   accessibilityRole="button"
                   disabled={
-                    deviceBusy || nativeSnapshot?.bluetooth !== 'poweredOn'
+                    deviceBusy ||
+                    !isBluetoothScanAvailable(nativeSnapshot?.bluetooth)
                   }
                   onPress={scanForOmi}
                   style={({pressed}) => [
@@ -2328,7 +2330,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                     accessibilityRole="button"
                                     disabled={
                                       deviceBusy ||
-                                      nativeSnapshot?.bluetooth !== 'poweredOn'
+                                      !isBluetoothScanAvailable(
+                                        nativeSnapshot?.bluetooth,
+                                      )
                                     }
                                     onPress={scanForOmi}
                                     style={({pressed}) => [
