@@ -148,10 +148,37 @@ def _desktop_conversation():
         started_at=CONVERSATION_START,
         finished_at=CONVERSATION_END,
         structured=Structured(),
-        transcript_segments=[],
+        # Meeting-treatment eligibility (#11832) is the authority for desktop meeting-role
+        # conversations, so a realistic fixture must clear it: 29 minutes of wall clock and
+        # more than 60s of transcribed speech. A silent fixture is correctly skipped now.
+        transcript_segments=_qualifying_segments(),
         source=ConversationSource.desktop,
         external_data={'conversation_role': 'meeting'},
     )
+
+
+def _qualifying_segments(seconds: float = 120.0):
+    from models.transcript_segment import TranscriptSegment
+
+    return [
+        TranscriptSegment(
+            id='seg-1',
+            text='Talking for long enough to earn meeting treatment.',
+            speaker='SPEAKER_00',
+            speaker_id=0,
+            is_user=True,
+            start=0.0,
+            end=seconds,
+        )
+    ]
+
+
+def _ineligible_conversation():
+    """A desktop meeting-role conversation the finalization policy rules out (too short)."""
+    conversation = _desktop_conversation()
+    conversation.finished_at = CONVERSATION_START
+    conversation.transcript_segments = []
+    return conversation
 
 
 def _meeting_record():
@@ -200,6 +227,20 @@ class TestTimeOverlapReachesTheConversation:
         assert context.title == 'Scaling Forever sync'
         assert [p.name for p in context.participants] == ['David Zhang', 'Ash']
         assert context.calendar_source == 'macos_calendar'
+
+    def test_an_ineligible_desktop_meeting_spends_no_provider_lookups(self):
+        """A short or silent call still opens as a meeting; enrichment must not pay for it.
+
+        conversation_role is open-time identity, not the treatment decision (#11832), so the
+        authoritative finalization policy gates enrichment for desktop meeting-role
+        conversations. Otherwise a 90-second call costs a Google Calendar read, a
+        screen-activity query, and a stored-meetings row for something that never becomes a
+        meeting."""
+        conversation = _ineligible_conversation()
+        calls = _enrich(conversation, meetings=[_meeting_record()])
+
+        assert calls == [], 'an ineligible conversation triggered a stored-meeting range query'
+        assert _stored_context(conversation) is None
 
     def test_the_time_range_query_brackets_the_conversation_window(self):
         conversation = _desktop_conversation()

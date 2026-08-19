@@ -36,7 +36,8 @@ enum OnDeviceMeetingIdentityExtractor {
   static let maximumParticipants = 12
 
   private static let emailPattern = regex("[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}")
-  private static let meetCodeTitle = regex("(?i)^meet\\s*[-–]\\s*[a-z]{3}-[a-z]{4}-[a-z]{3}\\b")
+  // Single source for the bare-meeting-code title lives in the shared conferencing catalog.
+  private static let meetCodeTitle = regex(ConferencingApps.browserCallTitlePattern)
   private static let rosterPatterns = [
     regex("(?i)^(?<people>.+?)\\s+(?:are|is)\\s+in\\s+this\\s+call\\b"),
     regex("(?i)^(?<people>.+?)\\s+(?:has|have)\\s+joined\\b"),

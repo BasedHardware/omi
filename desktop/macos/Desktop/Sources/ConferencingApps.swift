@@ -48,6 +48,20 @@ enum ConferencingApps {
     "Teams - Microsoft",  // Teams web app
   ]
 
+  /// A joined Google Meet tab is titled with the bare meeting code ("Meet - amc-iajq-asx"),
+  /// which contains none of `browserCallKeywords`. Kept here rather than in a caller so this
+  /// stays the single conferencing catalog — the divergence #11832 consolidated.
+  static let browserCallTitlePattern = "(?i)^meet\\s*[-\u{2013}]\\s*[a-z]{3}-[a-z]{4}-[a-z]{3}\\b"
+
+  /// Whether a window title names a browser-hosted call, by keyword or by bare meeting code.
+  static func isBrowserCallTitle(_ title: String) -> Bool {
+    let lower = title.lowercased()
+    for keyword in browserCallKeywords where lower.contains(keyword.lowercased()) {
+      return true
+    }
+    return title.range(of: browserCallTitlePattern, options: .regularExpression) != nil
+  }
+
   /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
   /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
   /// the microphone, so it won't be treated as a meeting.
