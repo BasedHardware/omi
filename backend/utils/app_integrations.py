@@ -87,6 +87,26 @@ def _delivery_failure_is_retryable(status_code: int) -> bool:
     return status_code >= 500 or status_code in _RETRYABLE_DELIVERY_STATUSES
 
 
+def _drop_exhausted_delivery(app_id: str, reason: str) -> None:
+    """Give up on a delivery whose finalization job has no attempt left.
+
+    On the terminal attempt the job dead-letters no matter what this delivery
+    does, so keeping it retryable buys the webhook nothing and costs the user
+    the whole conversation: fanout never completes and the capture journey ends
+    in `failure`. An app endpoint answering 5xx for days (Cloudflare 530) took
+    every conversation of every user who installed it down with it, because
+    webhook health only auto-disables after 72h.
+    """
+    logger.info('durable webhook delivery dropped on final attempt app=%s reason=%s', app_id, reason)
+    record_fallback(
+        component='webhook',
+        from_mode='durable_delivery',
+        to_mode='dropped',
+        reason=reason,
+        outcome='exhausted',
+    )
+
+
 def _notify_app_owner(app_id: str, title: str, body: str):
     """Send a push notification to the app owner about webhook health."""
     try:
@@ -185,6 +205,7 @@ async def trigger_external_integrations(
     *,
     idempotency_key: str | None = None,
     require_delivery: bool = False,
+    last_delivery_attempt: bool = False,
 ) -> list:
     """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1).
 
@@ -192,6 +213,10 @@ async def trigger_external_integrations(
     retry an interrupted external fanout without creating a second effect.
     They also require a delivery acknowledgement, preserving the existing
     best-effort behavior for non-finalization callers.
+
+    `last_delivery_attempt` marks the finalization job's terminal attempt: the
+    retry budget is spent, so a failed delivery is dropped with telemetry
+    instead of failing the conversation's fanout one final time.
     """
     if not conversation or conversation.discarded:
         return []
@@ -241,7 +266,10 @@ async def trigger_external_integrations(
         if not cb.allow_request():
             logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
             if require_delivery:
-                failed_deliveries.append(app.id)
+                if last_delivery_attempt:
+                    _drop_exhausted_delivery(app.id, 'circuit_open')
+                else:
+                    failed_deliveries.append(app.id)
             return
 
         try:
@@ -270,7 +298,13 @@ async def trigger_external_integrations(
                 )
                 if require_delivery:
                     if _delivery_failure_is_retryable(response.status_code):
-                        failed_deliveries.append(app.id)
+                        if last_delivery_attempt:
+                            _drop_exhausted_delivery(
+                                app.id,
+                                'provider_429' if response.status_code == 429 else 'provider_5xx',
+                            )
+                        else:
+                            failed_deliveries.append(app.id)
                     else:
                         # The destination rejected this payload permanently (expired
                         # OAuth token, deleted target, malformed for that app). Every
@@ -321,7 +355,10 @@ async def trigger_external_integrations(
             await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error('Plugin integration request failed app=%s error=%s', app.id, type(e).__name__)
             if require_delivery:
-                failed_deliveries.append(app.id)
+                if last_delivery_attempt:
+                    _drop_exhausted_delivery(app.id, 'timeout' if isinstance(e, TimeoutError) else 'other')
+                else:
+                    failed_deliveries.append(app.id)
             return
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
