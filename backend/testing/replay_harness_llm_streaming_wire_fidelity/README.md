@@ -4,7 +4,7 @@
 for the LLM gateway's OpenAI-compatible streaming path. Run it with:
 
 ```bash
-npm run test:replay-llm-streaming-wire-fidelity
+bun run test:replay-llm-streaming-wire-fidelity
 ```
 
 The oracle starts a loopback-only OpenAI-compatible fake upstream that sends

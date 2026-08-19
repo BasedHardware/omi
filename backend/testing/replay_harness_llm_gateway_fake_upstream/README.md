@@ -4,7 +4,7 @@
 LLM gateway's real route and provider terminal path. Run it with:
 
 ```bash
-npm run test:replay-llm-fake-upstream
+bun run test:replay-llm-fake-upstream
 ```
 
 The oracle starts a loopback-only OpenAI-compatible fake upstream and injects

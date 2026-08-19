@@ -80,7 +80,7 @@ gcloud storage cp -r \
   ./omi-parity-pack-dogfood/
 # Point OMI_PARITY_PACK_ROOT at the local tree (or compose a pack with
 # manifest.json as required by this README), then:
-npm run test:parity-pack-v0
+bun run test:parity-pack-v0
 ```
 
 Never promote cassettes to production storage or commit them to the repository.
@@ -116,7 +116,7 @@ inputs and must not be committed.
 `manifest.json` records the schema version, `pack_id`, artifact hashes, and one
 entry per case: input/cassette references, expected outcomes, invariant IDs, the
 anonymous cassette identity, and the redacted request fingerprint (digest only).
-Run the foundation checks with `npm run test:parity-pack-v0`.
+Run the foundation checks with `bun run test:parity-pack-v0`.
 
 ## Gold, drift, and rewrite slot
 
@@ -142,5 +142,5 @@ The synthetic v0 matrix names six overlays: `baseline`, `duplicate_delivery`,
    `OMI_PARITY_PACK_ALLOWED_PRINCIPALS` allowlist. Any other stage or a missing
    allowlist is deny-by-default and persists no cassette bytes.
 3. Run the application path with the opted-in synthetic/dev principal, then run
-   `npm run test:parity-pack-v0` to replay hermetically. The tests deny egress
+   `bun run test:parity-pack-v0` to replay hermetically. The tests deny egress
    and require fake-hit accounting; no provider or production service is used.

@@ -115,7 +115,7 @@ checks:
 
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
-    triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "package-lock.json", ".github/checks-manifest.yaml"]
+    triggers: ["backend/database/desktop_update_channels.py", "backend/testing/desktop_beta_admission/**", "package.json", "bun.lock", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "real Firestore transaction serialization must fence stale qualified Beta admissions after reservation, pause, and generation transitions"
