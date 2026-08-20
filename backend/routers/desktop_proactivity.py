@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -39,17 +39,13 @@ logger = logging.getLogger(__name__)
 
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
 _QUOTA_WINDOW_SECONDS = 24 * 60 * 60
-# Explicit per-tier ceilings. These are deliberately not a constant multiple of
-# a shared base row: measured desktop dogfooding runs ~37 extraction calls per
-# hour of active use, so the architect extraction ceiling is sized for a genuine
-# 24-hour day (~888 calls) plus burst headroom, while reasoning is sized for a
-# background reconciler that batches ~2 calls per pass on top of the per-visit
-# gate and director calls. Lower tiers are sized for a partial day and stay
-# governed by the device-side frequency gate.
-_TIER_DAILY_LIMITS: dict[str, dict[str, int]] = {
-    tier: dict(cast(Mapping[str, int], profile['proactivity_daily']))
-    for tier, profile in DESKTOP_PROFILE_DEFAULTS.items()
-}
+# The catalog owns these profile allocations. They are deliberately not a
+# constant multiple of a shared base row: measured desktop dogfooding runs
+# ~37 extraction calls per hour of active use, so the architect extraction
+# ceiling is sized for a genuine 24-hour day (~888 calls) plus burst headroom,
+# while reasoning is sized for a background reconciler that batches ~2 calls per
+# pass on top of the per-visit gate and director calls. Lower tiers are sized
+# for a partial day and stay governed by the device-side frequency gate.
 _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",
     "proactive_reasoning": "omi:auto:desktop-proactive-reasoning",
@@ -180,10 +176,13 @@ def _quota_limit_for_subscription(operation: ProactiveOperation, subscription: S
     """Return the server-authoritative proactive ceiling for a verified plan."""
     plan = subscription.plan if subscription is not None else PlanType.basic
     tier = effective_desktop_access_tier(plan, subscription)
-    # Keep the lookup total: an unrecognised tier resolves to the free row
-    # rather than raising, so a new tier string can never 500 the lane.
-    limits = _TIER_DAILY_LIMITS.get(tier, _TIER_DAILY_LIMITS[DESKTOP_ACCESS_TIER_FREE])
-    return limits[operation.value]
+    # Keep the lookup total: an unrecognised tier resolves to the catalog's
+    # free profile rather than raising, so a new tier string can never 500 the
+    # lane. The router owns the meter and reservation mechanics; the catalog
+    # owns the per-profile allocation.
+    profile = DESKTOP_PROFILE_DEFAULTS.get(tier, DESKTOP_PROFILE_DEFAULTS[DESKTOP_ACCESS_TIER_FREE])
+    limits = profile['proactivity_daily']
+    return int(limits[operation.value])
 
 
 class ProactiveOperation(str, Enum):
