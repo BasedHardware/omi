@@ -71,6 +71,10 @@ final class OmiBleManager: NSObject {
     /// the complete UserDefaults history for every notification.
     private var lastPersistedBatteryLevel: [String: Int] = [:]
     private var lastPersistedBatteryTimestampMs: [String: Int64] = [:]
+    /// UUIDs whose persisted battery history has already been consulted in
+    /// this process. This keeps relaunch rehydration to one read per device
+    /// without putting UserDefaults on the hot notification path.
+    private var batteryBaselineRehydrated: Set<String> = []
 
     /// Native batch/flash-drain traffic during the current background window.
     /// These packets do not cross Pigeon, so Dart counters cannot observe them.
@@ -95,6 +99,7 @@ final class OmiBleManager: NSObject {
     }
 
     func markBackgroundTelemetryStart() {
+        guard !isBackgroundTelemetryWindowActive else { return }
         nativeBackgroundBytesConsumed.removeAll()
         nativeBackgroundPacketsConsumed.removeAll()
         isBackgroundTelemetryWindowActive = true
@@ -549,18 +554,34 @@ final class OmiBleManager: NSObject {
 
     private static func batteryHistoryKey(_ uuid: String) -> String { "\(batteryHistoryKeyPrefix)\(uuid)" }
 
-    private func persistBatteryReading(uuid: String, level: Int) {
-        let defaults = UserDefaults.standard
-        let key = OmiBleManager.batteryHistoryKey(uuid)
-        var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
+    /// The in-memory throttle baseline is lost on process restart; restore it
+    /// from the newest persisted history entry before evaluating the first
+    /// notification. Without this, a relaunch can rewrite the entire history
+    /// ring even when the battery level has not meaningfully changed.
+    private func rehydrateBatteryBaselineIfNeeded(uuid: String) {
+        guard batteryBaselineRehydrated.insert(uuid).inserted else { return }
+        guard let history = UserDefaults.standard.array(forKey: OmiBleManager.batteryHistoryKey(uuid)) as? [[String: Any]],
+              let last = history.last,
+              let ts = last["ts"] as? Int64,
+              let level = last["level"] as? Int
+        else { return }
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryTimestampMs[uuid] = ts
+    }
 
+    private func persistBatteryReading(uuid: String, level: Int) {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
+        rehydrateBatteryBaselineIfNeeded(uuid: uuid)
         guard OmiBleEnergyPolicy.shouldPersistBatteryReading(
             previousLevel: lastPersistedBatteryLevel[uuid],
             previousTimestampMs: lastPersistedBatteryTimestampMs[uuid],
             level: level,
             nowMs: now
         ) else { return }
+
+        let defaults = UserDefaults.standard
+        let key = OmiBleManager.batteryHistoryKey(uuid)
+        var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
@@ -633,6 +654,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        // CoreBluetooth can relaunch the process directly into the background;
+        // applicationDidEnterBackground is not delivered for that lifecycle.
+        // Start the native accounting window here so restored notifications are
+        // represented in diagnostics instead of silently dropped.
+        if UIApplication.shared.applicationState != .active {
+            markBackgroundTelemetryStart()
+        }
+
         // Restore previously connected peripherals after app relaunch
         if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             var uuids: [String] = []
