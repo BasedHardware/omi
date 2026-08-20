@@ -49,6 +49,9 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     "- The title is not a category. Never answer \"Insight\", \"Suggestion\", or \"Task\".",
     "- A missing identifier is not a reason for silence. Speak with what the context supplies.",
     "Use only supplied bucket-entry refs.",
+    "- When the notification is about one of the open tasks above, put that task's bracketed",
+    "  handle in task_refs, copied exactly. Leave task_refs empty when it is about none of",
+    "  them. Never write a handle that is not listed above.",
     "Timestamps supplied below are already in the user's local time zone. When a message",
     "mentions a date or time, use that local form as written; never convert to or mention UTC.",
   ]
@@ -137,8 +140,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
     let prompt = ContextProactivityPromptBuilder.directorPrompt(
       snapshot: snapshot,
       tasks: [
-        ContextDirectorTaskContext(description: "Review PR-123", dueAt: dueAt),
-        ContextDirectorTaskContext(description: "Send release notes", dueAt: nil),
+        ContextDirectorTaskContext(id: "task-1", description: "Review PR-123", dueAt: dueAt),
+        ContextDirectorTaskContext(id: "task-2", description: "Send release notes", dueAt: nil),
       ],
       frame: frame,
       timeZone: timeZone)
@@ -151,7 +154,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
         bucket,
         "",
         "== OPEN OR OVERDUE TASKS ==",
-        "- Review PR-123\n  Due at: 2023-11-14 18:13 EST\n- Send release notes",
+        "- [task:task-1] Review PR-123\n  Due at: 2023-11-14 18:13 EST\n- [task:task-2] Send release notes",
         "",
         "== CURRENT FRAME METADATA ==",
         "App: Terminal",
@@ -323,7 +326,9 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       jpegData: Data(), appName: "Notes", frameNumber: 1,
       captureTime: dueAt.addingTimeInterval(-600))
     let prompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
-      tasks: [ContextDirectorTaskContext(description: "File the report", dueAt: dueAt)],
+      tasks: [
+        ContextDirectorTaskContext(id: "task-report", description: "File the report", dueAt: dueAt)
+      ],
       frame: frame,
       timeZone: timeZone)
     XCTAssertTrue(prompt.contains("Due at: 2026-08-10 23:59 EDT"), prompt)
@@ -394,6 +399,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
 
   func testDirectorTaskContextBoundsDescription() {
     let task = ContextDirectorTaskContext(
+      id: "task-long",
       description: String(repeating: "x", count: ContextDirectorTaskContext.maximumDescriptionLength + 10),
       dueAt: nil)
 
@@ -423,7 +429,7 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
       snapshot: snapshot,
       tasks: [
         ContextDirectorTaskContext(
-          description: "Far task", dueAt: now.addingTimeInterval(72 * 60 * 60))
+          id: "task-far", description: "Far task", dueAt: now.addingTimeInterval(72 * 60 * 60))
       ],
       frame: CapturedFrame(jpegData: Data(), appName: "Notes", frameNumber: 10, captureTime: now))
 
