@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 
-from database.apps import get_app_by_id_db
-
 
 class MessageSender(str, Enum):
     ai = 'ai'
@@ -153,6 +151,10 @@ class Message(BaseModel):
         if use_plugin_name_if_available and message.app_id and message.app_id.strip():
             app_id = message.app_id.strip()
             if app_id not in app_name_by_id:
+                # Imported lazily: this models module must stay importable without the
+                # database layer, which module-scope import of it would drag in.
+                from database.apps import get_app_by_id_db
+
                 app = get_app_by_id_db(app_id)
                 name = app.get('name') if app else None
                 app_name_by_id[app_id] = name.strip() if isinstance(name, str) and name.strip() else None
