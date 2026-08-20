@@ -1676,6 +1676,36 @@ final class DesktopAutomationActionRegistry {
       return ["shown": "true"]
     }
 
+    // The suggestion card is the most-seen proactive surface and the one whose geometry regressed
+    // (four call sites sized it differently). The real delivery path needs a live model verdict, so
+    // rendering it was unverifiable offline; this presents the same card through the same
+    // presenter. Non-prod bridge only.
+    register(
+      name: "debug_suggestion_card",
+      summary: "Show a sample 'Suggested by Omi' card through the real notification service",
+      params: ["message"]
+    ) { params in
+      let mgr = FloatingControlBarManager.shared
+      guard mgr.barState != nil else { return ["error": "no bar state"] }
+      if !mgr.isVisible { mgr.show() }
+      let message =
+        params["message"].flatMap { $0.isEmpty ? nil : $0 }
+        ?? "Film and post 'what did we ship' video with Chase From mark today"
+      guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(), !ownerID.isEmpty else {
+        return ["error": "no runtime owner"]
+      }
+      // Routed through NotificationService rather than the window presenter: presentation
+      // callbacks are where speech, delivery telemetry and the proactive-presented record hang,
+      // so a card raised straight on the window is silent and unrecorded.
+      NotificationService.shared.sendNotification(
+        ownerID: ownerID,
+        title: "Suggested by Omi",
+        message: message,
+        assistantId: "suggestion"
+      )
+      return ["shown": "true", "spoken_if_enabled": NotificationSpeech.isEnabled() ? "true" : "false"]
+    }
+
     // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
     // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
     // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.

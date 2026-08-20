@@ -26,6 +26,26 @@ enum FloatingControlBarGeometry {
     case preservingCurrentCenter
   }
 
+  /// Whether a resize request should be skipped because an animation is already carrying the
+  /// window to that exact frame.
+  ///
+  /// The pending target is cleared by the animation's completion handler, and Core Animation
+  /// does not always deliver one — a display asleep across the animation reproduces it. A
+  /// pending target left behind then swallows every later request for that size, which is how
+  /// a notification card ends up drawn inside the collapsed pill frame. So the pending target
+  /// is only trusted while a programmatic resize is genuinely in flight.
+  static func shouldSkipResize(
+    pendingAnimationTarget: NSRect?,
+    targetFrame: NSRect,
+    resizableUnchanged: Bool,
+    isResizingProgrammatically: Bool,
+    framesEquivalent: (NSRect, NSRect) -> Bool
+  ) -> Bool {
+    guard resizableUnchanged, isResizingProgrammatically, let pending = pendingAnimationTarget
+    else { return false }
+    return framesEquivalent(pending, targetFrame)
+  }
+
   /// Bottom-left origin that centers a window of `size` on `center`.
   static func restoreOrigin(center: NSPoint, size: NSSize) -> NSPoint {
     NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
