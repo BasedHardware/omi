@@ -28,25 +28,28 @@ class _FakeConversationStore:
 
     def __init__(self):
         self.docs = {}
+        self.owners = {}
         self.fail_ids = set()
 
     def reset(self):
         self.docs = {}
+        self.owners = {}
         self.fail_ids = set()
 
     def persist_imported_conversation(self, uid, data):
-        del uid
         cid = data["id"]
         if cid in self.fail_ids:
             raise RuntimeError("simulated firestore error")
         if cid in self.docs:
             return False
         self.docs[cid] = data
+        self.owners[cid] = uid
         return True
 
     def find_legacy_limitless_conversation_id(self, uid, started_at):
-        del uid
         for cid, data in self.docs.items():
+            if self.owners.get(cid) != uid:
+                continue
             if data.get("source") in ("limitless",) and data.get("started_at") == started_at:
                 return cid
         return None
@@ -269,6 +272,7 @@ def test_reimport_skips_legacy_uuid_row_with_same_started_at(tmp_path, store):
         "source": "limitless",
         "structured": {"title": "legacy import"},
     }
+    store.owners[legacy_id] = UID
 
     _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
 
@@ -279,11 +283,13 @@ def test_reimport_skips_legacy_uuid_row_with_same_started_at(tmp_path, store):
 
 
 def test_legacy_row_with_different_started_at_does_not_block_import(tmp_path, store):
-    store.docs[str(uuid_lib.uuid4())] = {
-        "id": "other-legacy",
+    other_id = str(uuid_lib.uuid4())
+    store.docs[other_id] = {
+        "id": other_id,
         "started_at": datetime(2000, 1, 1, tzinfo=timezone.utc),
         "source": "limitless",
     }
+    store.owners[other_id] = UID
 
     _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
 
