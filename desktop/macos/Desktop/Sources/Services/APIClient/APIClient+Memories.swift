@@ -848,6 +848,18 @@ extension APIClient {
     return try await patch("v3/memories/\(id)/read", body: body)
   }
 
+  /// Records the owner's verdict on a memory.
+  ///
+  /// `keep: false` is the reject signal: the backend hides the memory from default
+  /// reads and drops it from the keyword index and knowledge graph. `value` is a
+  /// query parameter, not a body field — the route declares it as a bare scalar.
+  func reviewMemory(id: String, keep: Bool) async throws {
+    let _: MemoryStatusResponse = try await post(
+      "v3/memories/\(id)/review?value=\(keep)",
+      body: EmptyBody()
+    )
+  }
+
   /// Marks all memories as read
   func markAllMemoriesRead() async throws {
     let _: MemoryStatusResponse = try await post("v3/memories/mark-all-read", body: EmptyBody())
