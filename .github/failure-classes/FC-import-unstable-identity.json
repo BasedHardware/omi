@@ -8,7 +8,7 @@
     "backend/utils/conversations/lifecycle.py",
     "backend/tests/unit/test_limitless_import_idempotency.py"
   ],
-  "evidence_prs": [8075],
+  "evidence_prs": [11928],
   "scope_hints": [
     "backend/utils/imports/**",
     "backend/utils/conversations/lifecycle.py"
