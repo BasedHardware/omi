@@ -173,6 +173,64 @@ jobs:
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
 
+      - name: Provision chat-first materialization decision review
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          test -n "$ALERT_CHANNELS"
+          metric='chat_first_materialization_review_due'
+          display_name='Chat-first materialization decision review due'
+          documentation='The weekly read-only materialization verdict is ready. Inspect the notifications-job chat_first_materialization_health log entry for the delivered, dropped, in-flight, undated, and drop-rate aggregates, then run backend/scripts/chat_first_materialization_drop_rate.py --json for the source and block-type breakdown. This signal intentionally routes zero-drop verdicts too so the canonical server-materialization decision cannot disappear into silence.'
+          log_filter='resource.type="cloud_run_job" resource.labels.job_name="notifications-job" "chat_first_materialization_health review=true"'
+
+          if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud logging metrics update "$metric" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" \
+              --log-filter="$log_filter"
+          else
+            gcloud logging metrics create "$metric" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" \
+              --log-filter="$log_filter"
+          fi
+
+          policy="$(
+            gcloud monitoring policies list \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --filter="displayName=\"${display_name}\"" \
+              --format='value(name)' \
+              --limit=1
+          )"
+          if [[ -z "$policy" ]]; then
+            policy="$(
+              gcloud monitoring policies create \
+                --project="${{ vars.GCP_PROJECT_ID }}" \
+                --display-name="$display_name" \
+                --condition-display-name="$display_name" \
+                --condition-filter="metric.type=\"logging.googleapis.com/user/${metric}\" AND resource.type=\"cloud_run_job\"" \
+                --duration=0s \
+                --if='> 0' \
+                --trigger-count=1 \
+                --combiner=OR \
+                --notification-channels="$ALERT_CHANNELS" \
+                --documentation="$documentation" \
+                --format='value(name)'
+            )"
+          else
+            gcloud monitoring policies update "$policy" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --enabled \
+              --set-notification-channels="$ALERT_CHANNELS" \
+              --documentation="$documentation"
+          fi
+          test -n "$policy"
+          gcloud monitoring policies describe "$policy" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(notificationChannels)' | grep -q .
+
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-summary

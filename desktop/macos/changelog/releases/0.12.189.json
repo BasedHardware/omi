@@ -2,8 +2,8 @@
   "version": "0.12.189",
   "date": "2026-08-19",
   "changes": [
-    "Proactive notifications now name what they are about — the pull request, the email thread and sender, the document, the file, the meeting — instead of arriving as an unidentifiable \"PR blocked, needs review\"",
-    "Fixed Telegram calls being missed by meeting detection and prevented short or mostly silent calls from being announced as completed meetings",
-    "Fixed meeting completion notifications arriving before the conversation finished processing"
+    "Improved meeting notes with participant identity derived privately from local meeting screens",
+    "Only Meetings mode now recognizes Discord, Slack huddle, and WhatsApp calls as meetings, so capture starts when you join those calls",
+    "Added system calendar meeting titles and participants to conversation notes without requiring Google Calendar"
   ]
 }

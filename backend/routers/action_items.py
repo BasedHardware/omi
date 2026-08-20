@@ -43,6 +43,7 @@ from models.action_item import (
     PendingSyncResponse,
 )
 from utils.task_intelligence import task_links
+from utils.product_telemetry import emit_product_event
 
 router = APIRouter()
 
@@ -486,6 +487,25 @@ def update_action_item(
     updated_item = action_items_db.get_action_item(uid, action_item_id)
     if updated_item is None:
         raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
+
+    if request.owner is not None:
+        previous_owner_value = existing_item.get('owner') or 'unknown'
+        previous_owner = getattr(previous_owner_value, 'value', str(previous_owner_value))
+        next_owner = request.owner.value
+        if previous_owner != next_owner:
+            emit_product_event(
+                uid=uid,
+                event='Task Assignee Corrected',
+                properties={
+                    'action_item_id': action_item_id,
+                    'conversation_id': updated_item.get('conversation_id'),
+                    'previous_assignee': (
+                        previous_owner if previous_owner in {'user', 'other', 'unknown'} else 'unknown'
+                    ),
+                    'new_assignee': next_owner,
+                    'field_changed': 'owner',
+                },
+            )
     _wake_task_changes(uid, [action_item_id], updated_item.get('updated_at'))
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final

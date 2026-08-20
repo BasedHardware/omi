@@ -47,7 +47,27 @@ final class BuildIdentityTests: XCTestCase {
             identifier — adopting a foreign one puts a stranger's string on the log subsystem and \
             on a Keychain service this app then owns forever.
             """)
+        // And the trap that follows from the line above: this process is *not* a development build
+        // by that rule, because the fallback made it look like the release. Anything that must run
+        // only in the shipping app therefore has to ask `isShippingBundle` instead — see
+        // `testOnlyTheShippingBundleItselfCountsAsShipping` below, and the analytics gate it fixed.
         XCTAssertFalse(ContextPaths.isDevelopmentBuild)
+    }
+
+    /// **The other question, and the one a foreign process answers differently.**
+    ///
+    /// `isDevelopmentBuild` is about the identity this process *owns*; this is about whether it is
+    /// the shipping app *itself*. They agree for both of our bundles and disagree for everything
+    /// else, which is the whole point: `ContextAnalytics.isEnabled` asked the first one and so
+    /// counted the XCTest runner as production for as long as the suite existed.
+    func testOnlyTheShippingBundleItselfCountsAsShipping() {
+        XCTAssertTrue(ContextPaths.isShippingBundle(reportedBy: shipping))
+
+        for reported in [nil, "", "com.apple.dt.xctest.tool", development] as [String?] {
+            XCTAssertFalse(
+                ContextPaths.isShippingBundle(reportedBy: reported),
+                "\(reported ?? "nil") is not the shipping app and must not be able to act as it")
+        }
     }
 
     func testOnlyOurOwnFamilyOfIdentifiersIsAdopted() {

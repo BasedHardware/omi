@@ -1,0 +1,3 @@
+{
+  "change": "Proactive notifications now wait for something that changed, like a new blocker or approaching deadline, instead of repeating a standing status"
+}

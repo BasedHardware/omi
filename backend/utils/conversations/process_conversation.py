@@ -56,6 +56,7 @@ from utils.memory.memory_service import MemoryService
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
+from utils.product_telemetry import emit_product_event
 from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
@@ -1387,6 +1388,16 @@ def _save_action_items(uid: str, conversation: Conversation):
 
     is_locked = conversation.is_locked
     if conversation_capture.process_conversation_before_legacy(uid, conversation):
+        emit_product_event(
+            uid=uid,
+            event='Task Extracted',
+            properties={
+                'task_count': len(conversation.structured.action_items),
+                'conversation_id': conversation.id,
+                'task_source': 'transcript',
+                'persistence_path': 'canonical_candidate',
+            },
+        )
         return
 
     action_items_data: List[Dict[str, Any]] = []
@@ -1443,6 +1454,16 @@ def _save_action_items(uid: str, conversation: Conversation):
             conversation.id,
             conversation.structured.action_items,
             action_item_ids,
+        )
+        emit_product_event(
+            uid=uid,
+            event='Task Extracted',
+            properties={
+                'task_count': len(action_item_ids),
+                'conversation_id': conversation.id,
+                'task_source': 'transcript',
+                'persistence_path': 'legacy_projection',
+            },
         )
 
         # Send FCM data messages for action items with due dates

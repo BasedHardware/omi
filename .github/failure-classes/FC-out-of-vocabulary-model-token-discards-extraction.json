@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-out-of-vocabulary-model-token-discards-extraction",
+  "violated_contract": "A closed vocabulary a language model was asked to answer in is a preference, not a guarantee, so one out-of-vocabulary token must never discard the whole payload it appeared in. A provider completion is parsed as a batch: when a strict enum on one field of one list element raises, the parser fails the entire response, and every well-formed field the model produced -- the title, the overview, the other list elements -- is lost with it. The user then sees a server error for content that was almost entirely usable.",
+  "canonical_prevention": "Normalize provider-supplied enum fields on the parsed model before validation, not at the call site, so every parser target that embeds the model inherits the guard. Accept a recognized value in any casing or padding; map an unusable value to the field's own declared default, which is what an absent field already means; and where a wrong-but-meaningful answer has an obvious home in the schema, route it there instead of dropping it. Keep the strictness where it is load-bearing -- required fields and fields whose absence changes behavior still fail. The regression test replays a real provider completion through the production parser seam.",
+  "canonical_prevention_artifact": [
+    "backend/models/structured_extraction.py",
+    "backend/tests/unit/test_extracted_action_item_vocabulary.py"
+  ],
+  "evidence_prs": [
+    11871
+  ],
+  "scope_hints": [
+    "backend/models/**",
+    "backend/utils/llm/**"
+  ],
+  "status": "open"
+}

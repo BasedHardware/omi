@@ -53,8 +53,15 @@ DESKTOP_ONLY_TITLES = {
     "Floating bar notification CTR", "Crash-free rate (today)",
     "Crash-free rate",
 }
-# Notification panels stay real on both platform boards: mentor pushes are
-# account-level (delivered to whatever devices a user has), not per-platform.
+
+# Account-level metrics: computed over every Firestore user (or every device a
+# user owns) with no platform dimension — they live on the All board only.
+# "Notifications enabled" counts all user docs and defaults missing fields to
+# enabled, so scoping it to a platform would silently lie.
+ACCOUNT_LEVEL_TITLES = {
+    "Daily notifications sent", "Notifications sent — last 168 hours",
+    "Weekly notification reach", "Notifications enabled",
+}
 
 LINKS = [
     {"title": title, "type": "link", "url": f"/grafana/d/{uid}/", "icon": "dashboard",
@@ -240,11 +247,24 @@ def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
     panel["timeFrom"] = "30d"
 
 
+def set_share_tile_description(dash, platform_label: str) -> None:
+    """The share-rate proxy is platform-scoped per board; keep its description
+    honest about which population the denominator counts."""
+    for panel in dash.get("panels", []):
+        if base_title(panel).startswith("Share rate"):
+            panel["description"] = (
+                f"Sharers ÷ new users, last 30d ({platform_label}). True K-factor needs "
+                "referral attribution — not instrumented yet, so this proxies the "
+                "share loop. 0% = no viral loop shipped."
+            )
+
+
 def finish(dash, uid: str, title: str) -> dict:
     dash["uid"] = uid
     dash["title"] = title
     dash["links"] = LINKS
     dash["timezone"] = "America/New_York"
+    dash["refresh"] = "1h"  # Nik: auto-refresh at most hourly
     dash.pop("id", None)
     dash.pop("version", None)
     return dash
@@ -261,7 +281,10 @@ def build_platform_board(base, scope: str) -> dict:
     apply_platform(dash, scope)
 
     # Cross-platform business panels that have no per-platform breakdown.
-    drop_panels(dash, {
+    # Mentor "Omi says" pushes are account-level Firestore messages delivered
+    # to every device a user has, so notification volume cannot be split by
+    # platform either — those panels live on the All-platforms board only.
+    drop_panels(dash, ACCOUNT_LEVEL_TITLES | {
         "Users → 1M goal", "ARR", "Active subscriptions", "Trialing",
         "Trials in pipeline", "Conversations", "MRR by product", "MRR over time",
         "New subscriptions / month", "Message ratings",
@@ -301,6 +324,8 @@ def build_platform_board(base, scope: str) -> dict:
     user_growth_series(cumulative, scope, "cumulative", "Total users")
     retarget_var(dash, "d_cum", path=viral_scoped, root="userGrowth", fields="users")
 
+    set_share_tile_description(dash, label)
+
     series_label = "Desktop" if scope == "macos" else "Mobile"
     for title, new_title, series in [
         ("New users / day by platform", f"New users / day ({profit_field})  ·  ${{d_pusers}}", series_label),
@@ -314,6 +339,16 @@ def build_platform_board(base, scope: str) -> dict:
         keep_series(panel, {series})
     for var in ["d_pusers", "d_prev", "d_cost", "d_cpu", "d_conv"]:
         retarget_var(dash, var, fields=profit_field)
+
+    # Revenue must be exact-attribution only: the plain desktop/mobile revenue
+    # series smears unknown-platform subscription MRR proportionally (fine for
+    # the All board's stack, wrong on a platform board).
+    exact_field = f"{profit_field}Exact"
+    revenue_panel = panel_by_title(dash, f"Revenue / day ({profit_field}, est.)")
+    for col in revenue_panel["targets"][0]["columns"]:
+        if col.get("type") != "timestamp":
+            col["selector"] = exact_field
+    retarget_var(dash, "d_prev", fields=exact_field)
 
     if scope == "macos":
         # Board context makes the (macOS) marker redundant.
@@ -363,6 +398,7 @@ def build_platform_board(base, scope: str) -> dict:
 def main() -> None:
     base = json.loads(BASE_PATH.read_text(encoding="utf-8"))
     apply_tzdates(base)
+    set_share_tile_description(base, "all platforms")
     apply_platform(base, "all")
     # The two Firestore-backed activation panels are macOS-scoped by
     # definition; their delta var compares macOS activation to stay coherent.
