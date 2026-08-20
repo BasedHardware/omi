@@ -389,15 +389,12 @@ def _newest_workflow_run(runs: list[dict[str, object]]) -> dict[str, object] | N
     return max(runs, key=sort_key)
 
 
-def _diagnose_missing_check(
-    repository: str, sha: str, check_name: str, workflow_file: str
-) -> SourceCheckGate:
+def _diagnose_missing_check(repository: str, sha: str, check_name: str, workflow_file: str) -> SourceCheckGate:
     runs, error = github_workflow_runs_for_sha(repository, workflow_file, sha)
     if error:
         return SourceCheckGate(
             "blocked",
-            f"could not read producing runs for {check_name} ({workflow_file}) "
-            f"on source SHA {sha}: {error}",
+            f"could not read producing runs for {check_name} ({workflow_file}) " f"on source SHA {sha}: {error}",
         )
     assert runs is not None
     run = _newest_workflow_run(runs)
@@ -677,7 +674,7 @@ def main() -> int:
         default=0,
         help=(
             "Defer tagging while the latest desktop tag is younger than this "
-            "(the hourly release train's throttle; 0 disables it for manual dispatch)"
+            "(the hourly release train's throttle; 0 disables it)"
         ),
     )
     parser.add_argument("--watch-source-sha")
