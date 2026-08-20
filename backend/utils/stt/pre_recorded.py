@@ -122,18 +122,18 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
 
 # Lazily initialized because constructing the SDK client at import makes every
 # backend consumer credential-dependent, including schema export and unit discovery.
-_deepgram_options: Optional[DeepgramClientOptions] = None
 _deepgram_client: Optional[DeepgramClient] = None
 _deepgram_client_lock = RLock()
 
 
-def _get_deepgram_options() -> DeepgramClientOptions:
-    global _deepgram_options
-    if _deepgram_options is None:
-        with _deepgram_client_lock:
-            if _deepgram_options is None:
-                _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-    return _deepgram_options
+def _deepgram_options() -> DeepgramClientOptions:
+    """Build fresh options per client.
+
+    DeepgramClient.__init__ calls config.set_apikey(), so a cached options
+    object shared with a BYOK client rewrites the credential the managed
+    client still holds — every later request would bill that user's key.
+    """
+    return DeepgramClientOptions(options={"keepalive": "true"})
 
 
 def _get_deepgram_client() -> DeepgramClient:
@@ -144,7 +144,7 @@ def _get_deepgram_client() -> DeepgramClient:
                 api_key = os.getenv('DEEPGRAM_API_KEY')
                 if not api_key:
                     raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
-                _deepgram_client = DeepgramClient(api_key, _get_deepgram_options())
+                _deepgram_client = DeepgramClient(api_key, _deepgram_options())
     return _deepgram_client
 
 
@@ -152,7 +152,7 @@ def _deepgram_client_for_request() -> DeepgramClient:
     """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, _get_deepgram_options())
+        return DeepgramClient(byok, _deepgram_options())
     return _get_deepgram_client()
 
 

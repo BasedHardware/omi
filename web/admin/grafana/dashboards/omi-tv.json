@@ -571,7 +571,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Sharers \u00f7 new users, last 30d (macOS). True K-factor needs referral attribution \u2014 not instrumented yet, so this proxies the share loop. 0% = no viral loop shipped.",
+      "description": "Sharers \u00f7 new users, last 30d (all platforms). True K-factor needs referral attribution \u2014 not instrumented yet, so this proxies the share loop. 0% = no viral loop shipped.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -5278,7 +5278,7 @@
       "type": "table"
     }
   ],
-  "refresh": "5m",
+  "refresh": "1h",
   "schemaVersion": 39,
   "tags": [
     "omi",

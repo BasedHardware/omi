@@ -65,6 +65,7 @@ _stubs = [
     'utils.conversations.calendar_utils',
     'utils.conversations.location',
     'utils.executors',
+    'utils.product_telemetry',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',

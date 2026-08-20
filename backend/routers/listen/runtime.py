@@ -47,6 +47,7 @@ from utils.notifications import send_credit_limit_notification, send_silent_user
 from utils.onboarding import OnboardingHandler
 from utils.observability.transcription import LiveSTTAttempt
 from utils.pusher import PusherCircuitBreakerOpen
+from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
@@ -183,6 +184,18 @@ class ListenSessionRuntime:
             self.spawn(self.asend_event(event), name='message_event')
 
     def emit_speaker_suggestion(self, speaker_id: int, person_id: str, person_name: str, segment_id: str) -> None:
+        emit_product_event(
+            uid=self.request.uid,
+            event='Speaker Identity Proposed',
+            properties={
+                'recording_id': self.recording_session_id,
+                'conversation_id': self.state.current_conversation_id,
+                'speaker_id': speaker_id,
+                'matched_existing_person': bool(person_id),
+                'auto_assign_enabled': self.request.speaker_auto_assign_enabled,
+                'proposal_source': 'live_speaker_identification',
+            },
+        )
         self.send_event(
             SpeakerLabelSuggestionEvent(
                 speaker_id=speaker_id,
@@ -204,6 +217,12 @@ class ListenSessionRuntime:
             self.state.live_transcription_attempt = LiveSTTAttempt(
                 provider=getattr(self.stt_service, 'value', self.stt_service),
                 platform=self.client_device_context.platform,
+                uid=self.request.uid,
+                recording_id=self.recording_session_id,
+                conversation_id=self.state.current_conversation_id,
+                source=self.request.source,
+                model=self.stt_model,
+                language=self.stt_language,
             )
 
     def capture_client_audio(self, audio: bytes) -> None:

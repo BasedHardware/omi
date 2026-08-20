@@ -1,3 +1,0 @@
-{
-  "change": "Live suggestions no longer disappear when a network hiccup drops the request — the attempt is retried instead of discarded"
-}

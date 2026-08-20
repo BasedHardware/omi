@@ -76,6 +76,23 @@ def with_backend_pusher_env(payload: str) -> str:
     )
 
 
+def with_conversation_notes_v2_env(payload: str) -> str:
+    """The summary rollout flags are declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flags on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -137,10 +154,12 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_conversation_notes_v2_env(
+            with_backend_pusher_env(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(
+                        with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                    )
                 )
             )
         )

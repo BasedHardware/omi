@@ -190,6 +190,14 @@ user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
 
+The same authoritative attempt emits fail-open PostHog product events:
+`Transcript Started` at first nontrivial audio and exactly one of `Transcript
+Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry
+the durable recording/conversation IDs, selected provider/model/language,
+bounded source/platform, terminal phase, and session duration. The user
+ID is used only as PostHog's `distinct_id`; transcript content and raw provider
+errors are never included.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted

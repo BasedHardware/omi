@@ -44,12 +44,17 @@ async def finalize_persisted_conversation(
     dispatch_generation: int,
     lease_epoch: int,
     force_process: bool = False,
+    final_attempt: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
 
     The pusher WebSocket request already installs request-scoped BYOK context
     before calling this helper.  Cloud Tasks never does, so it cannot silently
     substitute platform credentials for a BYOK job.
+
+    `final_attempt` says the job has no retry left, so a failed external
+    integration delivery is dropped rather than dead-lettering the whole
+    conversation for a third-party endpoint that is down.
     """
     conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
     if not conversation_data:
@@ -163,6 +168,7 @@ async def finalize_persisted_conversation(
             conversation,
             idempotency_key=fanout['fanout_key'],
             require_delivery=True,
+            last_delivery_attempt=final_attempt,
         )
         # Publish the content-free capture-arrival intent before marking the
         # durable fanout projection completed. Desktop waits on that projection

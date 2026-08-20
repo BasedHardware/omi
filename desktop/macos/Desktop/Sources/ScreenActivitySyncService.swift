@@ -5,13 +5,48 @@ private struct ScreenActivityRowsPayload: @unchecked Sendable {
   let rows: [[String: Any]]
 }
 
+struct ScreenActivitySyncCandidate: @unchecked Sendable {
+  let id: Int64
+  let priorState: ScreenActivitySyncState
+  let hasEmbedding: Bool
+  let payload: [String: Any]
+}
+
+enum ScreenActivitySyncState: Int {
+  case pending = 0
+  case textSynced = 1
+  case fullySynced = 2
+  case compacted = 3
+}
+
+enum ScreenActivityLosslessSyncFeature {
+  static let flagName = "screen_activity_lossless_sync"
+  static let killSwitchFlagName = "screen_activity_lossless_sync_kill"
+  private static let localOverrideName = "OMI_FORCE_LOSSLESS_SCREEN_SYNC"
+
+  /// Development bundles dogfood by default. Beta is on unless killed — it is the channel this
+  /// is meant to be exercised on, and its backend is the one carrying the rest of the rollout.
+  /// Stable stays on the legacy path until the PostHog flag is explicitly enabled, so the
+  /// migration ships dark without changing production traffic.
+  @MainActor static var isEnabled: Bool {
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localOverrideName] != "0"
+    }
+    return BetaDogfoodRollout.isEnabled(
+      flagName: flagName,
+      killSwitchFlagName: killSwitchFlagName,
+      localOverrideName: localOverrideName
+    )
+  }
+}
+
 /// Syncs screenshot metadata + embeddings from the local GRDB database
 /// to the backend API (`POST /v1/screen-activity/sync`), which stores them
 /// in Firestore + Pinecone so the normal Flutter chat can answer screen
 /// activity questions.
 ///
-/// Only syncs screenshots that have embeddings (OCR'd ones).
-/// Tracks cursor via UserDefaults to resume after restart.
+/// The lossless path uses durable per-row delivery state and treats embeddings as an optional,
+/// later projection. The legacy cursor remains only as the flag-off rollback path.
 actor ScreenActivitySyncService {
   static let shared = ScreenActivitySyncService()
 
@@ -21,12 +56,19 @@ actor ScreenActivitySyncService {
   private var isRunning = false
   private var syncTask: Task<Void, Never>?
   private var consecutiveFailures = 0
+  private var didStartEmbeddingRecovery = false
 
   private let batchSize = 100
   private let baseSyncInterval: UInt64 = 60_000_000_000  // 60s in nanoseconds
   private let maxSyncInterval: UInt64 = 300_000_000_000  // 300s max backoff
 
   private let cursorKey = "screenActivitySync_lastId"
+  private let compactionDelay: TimeInterval = 5 * 60
+  /// How long a closed bucket's winner waits for its embedding before shipping text-only.
+  /// Without it every row ships twice: once when compaction sweeps it, and again when the
+  /// vector lands — a second byte-identical Firestore document write plus a full rewrite of
+  /// its index entries, for no data change.
+  private let embeddingGrace: TimeInterval = 15 * 60
 
   // MARK: - Public API
 
@@ -48,6 +90,7 @@ actor ScreenActivitySyncService {
     isRunning = false
     syncTask?.cancel()
     syncTask = nil
+    didStartEmbeddingRecovery = false
     log("ScreenActivitySync: stopped")
   }
 
@@ -83,6 +126,50 @@ actor ScreenActivitySyncService {
   private func syncTick() async {
     guard let dbPool = await getDBPool() else { return }
 
+    let losslessEnabled = await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
+    if losslessEnabled {
+      await losslessSyncTick(dbPool: dbPool)
+    } else {
+      await legacySyncTick(dbPool: dbPool)
+    }
+  }
+
+  private func losslessSyncTick(dbPool: DatabasePool) async {
+    if !didStartEmbeddingRecovery {
+      didStartEmbeddingRecovery = true
+      Task(priority: .utility) {
+        await OCREmbeddingService.shared.backfillIfNeeded()
+      }
+    }
+    do {
+      let now = Date()
+      let candidates = try await dbPool.write { [batchSize, compactionDelay, embeddingGrace] db in
+        try Self.compactClosedBuckets(db: db, now: now, slack: compactionDelay)
+        return try Self.fetchSyncCandidates(
+          db: db, limit: batchSize, now: now, slack: compactionDelay, embeddingGrace: embeddingGrace)
+      }
+      guard !candidates.isEmpty else { return }
+
+      let success = await pushRows(candidates.map(\.payload))
+      if success {
+        try await dbPool.write { db in
+          try Self.markCandidatesSynced(db: db, candidates: candidates)
+        }
+        if consecutiveFailures > 0 {
+          log("ScreenActivitySync: lossless path reconnected after \(consecutiveFailures) failures")
+        }
+        consecutiveFailures = 0
+        log("ScreenActivitySync: lossless path synced \(candidates.count) rows")
+      } else {
+        recordPushFailure(path: "lossless")
+      }
+    } catch {
+      log("ScreenActivitySync: lossless read/write error — \(error.localizedDescription)")
+    }
+  }
+
+  private func legacySyncTick(dbPool: DatabasePool) async {
+
     do {
       // Query screenshots that have embeddings and are newer than our cursor
       let rowsPayload: ScreenActivityRowsPayload = try await dbPool.read { [lastSyncedId, batchSize] db in
@@ -107,13 +194,17 @@ actor ScreenActivitySyncService {
         consecutiveFailures = 0
         log("ScreenActivitySync: synced \(rows.count) rows (lastId=\(lastSyncedId))")
       } else {
-        consecutiveFailures += 1
-        if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
-          log("ScreenActivitySync: push failed (failures=\(consecutiveFailures))")
-        }
+        recordPushFailure(path: "legacy")
       }
     } catch {
       log("ScreenActivitySync: read error — \(error.localizedDescription)")
+    }
+  }
+
+  private func recordPushFailure(path: String) {
+    consecutiveFailures += 1
+    if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
+      log("ScreenActivitySync: \(path) push failed (failures=\(consecutiveFailures))")
     }
   }
 
@@ -125,14 +216,117 @@ actor ScreenActivitySyncService {
     LIMIT ?
     """
 
+  static let compactionBucketSeconds = 300
+
+  /// A row is eligible once the five-minute bucket *containing* it has closed, plus slack.
+  ///
+  /// Comparing each row's own timestamp against `now - slack` instead would make eligibility
+  /// slide: the early rows of a bucket become ready while its later rows do not, so a single
+  /// bucket is ranked more than once and emits more than one winner. Measured against 7,346
+  /// real OCR-bearing rows, the sliding form shipped 5,517 rows where bucket-aligned ranking
+  /// ships 3,842 — 44% more than the design intends, which is most of the saving.
+  static func bucketEligibilityCutoffEpoch(now: Date, slack: TimeInterval) -> Int64 {
+    Int64((now.timeIntervalSince1970 - slack).rounded(.down))
+  }
+
+  /// Close completed five-minute buckets before delivery. Rows remain intact; only the durable
+  /// delivery disposition changes. Ranking uses OCR length and then row id for deterministic ties.
+  static func compactClosedBuckets(db: Database, now: Date, slack: TimeInterval) throws {
+    try db.execute(
+      sql: """
+        WITH ranked AS (
+          SELECT id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY appName, COALESCE(windowTitle, ''),
+                                CAST(strftime('%s', timestamp) AS INTEGER) / 300
+                   ORDER BY LENGTH(ocrText) DESC, id DESC
+                 ) AS bucketRank
+          FROM screenshots
+          WHERE screenActivitySyncState = ?
+            AND ocrText IS NOT NULL
+            AND LENGTH(TRIM(ocrText)) > 0
+            AND (CAST(strftime('%s', timestamp) AS INTEGER) / ? + 1) * ? <= ?
+        )
+        UPDATE screenshots
+        SET screenActivitySyncState = ?
+        WHERE id IN (SELECT id FROM ranked WHERE bucketRank > 1)
+        """,
+      arguments: [
+        ScreenActivitySyncState.pending.rawValue,
+        Self.compactionBucketSeconds, Self.compactionBucketSeconds,
+        Self.bucketEligibilityCutoffEpoch(now: now, slack: slack),
+        ScreenActivitySyncState.compacted.rawValue,
+      ])
+  }
+
+  static func fetchSyncCandidates(
+    db: Database, limit: Int, now: Date, slack: TimeInterval, embeddingGrace: TimeInterval
+  ) throws -> [ScreenActivitySyncCandidate] {
+    let rows = try Row.fetchAll(
+      db,
+      sql: """
+        SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName, clientDeviceId,
+               screenActivitySyncState
+        FROM screenshots
+        WHERE (
+          screenActivitySyncState = ?
+          AND ocrText IS NOT NULL
+          AND LENGTH(TRIM(ocrText)) > 0
+          AND (CAST(strftime('%s', timestamp) AS INTEGER) / ? + 1) * ? <= ?
+          AND (
+            embedding IS NOT NULL
+            OR (CAST(strftime('%s', timestamp) AS INTEGER) / ? + 1) * ? <= ?
+          )
+        ) OR (
+          screenActivitySyncState = ?
+          AND embedding IS NOT NULL
+        )
+        ORDER BY CASE screenActivitySyncState WHEN 0 THEN 0 ELSE 1 END, id ASC
+        LIMIT ?
+        """,
+      arguments: [
+        ScreenActivitySyncState.pending.rawValue,
+        Self.compactionBucketSeconds, Self.compactionBucketSeconds,
+        Self.bucketEligibilityCutoffEpoch(now: now, slack: slack),
+        Self.compactionBucketSeconds, Self.compactionBucketSeconds,
+        Self.bucketEligibilityCutoffEpoch(now: now, slack: embeddingGrace),
+        ScreenActivitySyncState.textSynced.rawValue, limit,
+      ])
+
+    return rows.compactMap { row in
+      guard let id = row["id"] as? Int64,
+        let stateRaw = row["screenActivitySyncState"] as? Int64,
+        let state = ScreenActivitySyncState(rawValue: Int(stateRaw)),
+        let payload = payloadRow(from: row)
+      else { return nil }
+      let blobValue = row["embedding"] as DatabaseValue
+      let hasEmbedding: Bool
+      if case .blob = blobValue.storage { hasEmbedding = true } else { hasEmbedding = false }
+      return ScreenActivitySyncCandidate(id: id, priorState: state, hasEmbedding: hasEmbedding, payload: payload)
+    }
+  }
+
+  static func markCandidatesSynced(db: Database, candidates: [ScreenActivitySyncCandidate]) throws {
+    for candidate in candidates {
+      let nextState: ScreenActivitySyncState = candidate.hasEmbedding ? .fullySynced : .textSynced
+      try db.execute(
+        sql: """
+          UPDATE screenshots
+          SET screenActivitySyncState = ?
+          WHERE id = ? AND screenActivitySyncState = ?
+          """,
+        arguments: [nextState.rawValue, candidate.id, candidate.priorState.rawValue])
+    }
+  }
+
   static func payloadRow(from row: Row) -> [String: Any]? {
     guard let id = row["id"] as? Int64 else { return nil }
 
     var dict: [String: Any] = ["id": id]
     if let ts = row["timestamp"] as? String {
-      dict["timestamp"] = ts
+      dict["timestamp"] = canonicalTimestamp(ts) ?? ts
     } else if let ts = row["timestamp"] as? Double {
-      dict["timestamp"] = ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: ts))
+      dict["timestamp"] = canonicalTimestamp(Date(timeIntervalSince1970: ts))
     }
     dict["appName"] = (row["appName"] as? String) ?? ""
     dict["windowTitle"] = (row["windowTitle"] as? String) ?? ""
@@ -157,6 +351,31 @@ actor ScreenActivitySyncService {
       dict["embedding"] = floats.map { Double($0) }
     }
     return dict
+  }
+
+  static func canonicalTimestamp(_ value: String) -> String? {
+    if let date = makeCanonicalTimestampFormatter().date(from: value) {
+      return canonicalTimestamp(date)
+    }
+    let fractionalISOFormatter = ISO8601DateFormatter()
+    fractionalISOFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = fractionalISOFormatter.date(from: value) {
+      return canonicalTimestamp(date)
+    }
+    return ISO8601DateFormatter().date(from: value).map(canonicalTimestamp)
+  }
+
+  static func canonicalTimestamp(_ date: Date) -> String {
+    makeCanonicalTimestampFormatter().string(from: date)
+  }
+
+  private static func makeCanonicalTimestampFormatter() -> DateFormatter {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+    return formatter
   }
 
   // MARK: - HTTP push
