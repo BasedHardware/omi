@@ -4179,7 +4179,11 @@ class FloatingControlBarManager {
         self?.dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: .timeout)
       }
       notificationDismissWorkItem = dismissWorkItem
-      DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
+      Task { @MainActor in
+        try? await Task.sleep(nanoseconds: 6_000_000_000)
+        guard !dismissWorkItem.isCancelled else { return }
+        dismissWorkItem.perform()
+      }
     }
     return true
   }

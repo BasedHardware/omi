@@ -2919,7 +2919,8 @@ private struct MeetingSummaryShareCard: View {
   /// keep their single owner.
   private func finish(confirmation: String) {
     phase = .done(confirmation)
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+    Task { @MainActor in
+      try? await Task.sleep(nanoseconds: 1_400_000_000)
       FloatingControlBarManager.shared.dismissCurrentNotification()
     }
   }
