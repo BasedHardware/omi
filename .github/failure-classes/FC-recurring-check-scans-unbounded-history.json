@@ -7,7 +7,7 @@
     "backend/tests/unit/test_chat_first_materialization_drop_rate.py"
   ],
   "evidence_prs": [
-    11945
+    11949
   ],
   "scope_hints": [
     "backend/utils/task_intelligence/**",
