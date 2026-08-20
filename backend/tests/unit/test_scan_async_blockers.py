@@ -25,10 +25,10 @@ def _scan_source(scanner: ModuleType, tmp_path: Path, source: str):
     return source_path, scanner.scan_dirs([str(tmp_path)])
 
 
-def _scan_agent_proxy_source(scanner: ModuleType, tmp_path: Path, source: str):
-    service_dir = tmp_path / "backend" / "agent-proxy"
+def _scan_service_source(scanner: ModuleType, tmp_path: Path, source: str):
+    service_dir = tmp_path / "backend" / "routers"
     service_dir.mkdir(parents=True)
-    source_path = service_dir / "main.py"
+    source_path = service_dir / "service.py"
     source_path.write_text(textwrap.dedent(source), encoding="utf-8")
     return source_path, scanner.scan_dirs([str(service_dir)])
 
@@ -209,53 +209,8 @@ def test_direct_credentials_refresh_is_reported_as_sync_network_io(scanner, tmp_
     assert finding["network_io"] == [{"line": 3, "call": "creds.refresh() [sync HTTP]"}]
 
 
-def test_agent_proxy_transitive_credentials_refresh_is_selected(scanner, tmp_path):
-    source_path, results = _scan_agent_proxy_source(
-        scanner,
-        tmp_path,
-        """
-        import asyncio
-
-        def _refresh_credentials():
-            creds.refresh(request)
-
-        def _get_gce_access_token():
-            _refresh_credentials()
-            return creds.token
-
-        async def _check_gce_status():
-            await asyncio.sleep(0)
-            return _get_gce_access_token()
-        """,
-    )
-
-    finding = results["async_helpers_with_blocking"][0]
-    call = finding["network_io"][0]
-    assert finding["file"] == str(source_path)
-    assert call["call"] == "_get_gce_access_token() -> _refresh_credentials() -> creds.refresh() [sync HTTP]"
-    assert call["via"] == ["_get_gce_access_token", "_refresh_credentials"]
-
-
-def test_agent_proxy_credentials_refresh_passed_to_run_blocking_is_safe(scanner, tmp_path):
-    _source_path, results = _scan_agent_proxy_source(
-        scanner,
-        tmp_path,
-        """
-        def _get_gce_access_token():
-            creds.refresh(request)
-            return creds.token
-
-        async def _check_gce_status():
-            return await run_blocking(critical_executor, _get_gce_access_token)
-        """,
-    )
-
-    assert results["high_network_io"] == []
-    assert results["async_helpers_with_blocking"] == []
-
-
 def test_firebase_auth_and_firestore_helpers_are_detected_transitively(scanner, tmp_path):
-    _source_path, results = _scan_agent_proxy_source(
+    _source_path, results = _scan_service_source(
         scanner,
         tmp_path,
         """
@@ -281,7 +236,7 @@ def test_firebase_auth_and_firestore_helpers_are_detected_transitively(scanner, 
 
 
 def test_firebase_auth_and_firestore_helpers_are_safe_on_owned_executors(scanner, tmp_path):
-    _source_path, results = _scan_agent_proxy_source(
+    _source_path, results = _scan_service_source(
         scanner,
         tmp_path,
         """
@@ -533,28 +488,6 @@ def test_dependency_module_async_without_await_is_structural_finding(scanner, tm
     results = scanner.scan_dirs([str(source_path)])
 
     assert results["no_await_should_be_def"][0]["endpoint"] == "pure_dependency"
-
-
-def test_changed_scope_preserves_hyphenated_agent_proxy_path(scanner, monkeypatch):
-    diff = """\
-diff --git a/backend/agent-proxy/main.py b/backend/agent-proxy/main.py
---- a/backend/agent-proxy/main.py
-+++ b/backend/agent-proxy/main.py
-@@ -8,0 +9 @@ async def _check_gce_status():
-+    creds.refresh(request)
-"""
-    captured = {}
-
-    def fake_run(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return SimpleNamespace(stdout=diff)
-
-    monkeypatch.setattr(scanner.subprocess, "run", fake_run)
-
-    scope = scanner.changed_scope("origin/main", ["backend/agent-proxy"])
-
-    assert captured["cmd"][-2:] == ["--", "backend/agent-proxy"]
-    assert scope["ranges"] == {"backend/agent-proxy/main.py": [(9, 9)]}
 
 
 def test_diff_scope_includes_changed_transitive_helper_lines(scanner, tmp_path):

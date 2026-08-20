@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Any, Dict, List, Optional
@@ -44,11 +45,17 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
-from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations.process_conversation import (
+    AppUsageAttribution,
+    process_conversation,
+    retrieve_in_progress_conversation,
+)
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
+from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -58,12 +65,13 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
     search_conversations,
 )
-from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.product_telemetry import emit_product_event
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -90,6 +98,45 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
+def _speaker_assignment(segment: TranscriptSegment) -> str:
+    if segment.is_user:
+        return 'self'
+    if segment.person_id:
+        return f"person:{hashlib.sha256(str(segment.person_id).encode('utf-8')).hexdigest()[:16]}"
+    return 'unassigned'
+
+
+def _speaker_assignment_kind(assignment: str) -> str:
+    return 'person' if assignment.startswith('person:') else assignment
+
+
+def _emit_speaker_identity_confirmed(
+    *,
+    uid: str,
+    conversation_id: str,
+    scope: str,
+    before: List[str],
+    after: List[str],
+) -> None:
+    if not after:
+        return
+    assignment_kinds = [_speaker_assignment_kind(value) for value in after]
+    properties = {
+        'conversation_id': conversation_id,
+        'confirmation': 'accepted' if before == after else 'corrected',
+        'assignment': assignment_kinds[0] if len(set(assignment_kinds)) == 1 else 'mixed',
+        'scope': scope,
+        'affected_segment_count': len(after),
+    }
+    if len(set(after)) == 1 and assignment_kinds[0] == 'person':
+        properties['assignment_id'] = after[0]
+    emit_product_event(
+        uid=uid,
+        event='Speaker Identity Confirmed',
+        properties=properties,
+    )
+
+
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
@@ -111,20 +158,23 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
-            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
-
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
                 enriched = process_conversation(
-                    uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
+                    uid,
+                    conv_obj.language or 'en',
+                    conv_obj,
+                    force_process=True,
+                    is_reprocess=False,
+                    app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                persist_desktop_meeting_arrival_best_effort(uid, enriched)
+                record_and_persist_finalized_meeting_receipt(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
@@ -326,7 +376,17 @@ def get_conversation_finalization_status(
     return status
 
 
-@router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
+@router.post(
+    '/v1/conversations/{conversation_id}/reprocess',
+    response_model=Conversation,
+    responses={
+        400: {'description': 'The selected app cannot summarize conversations'},
+        403: {'description': 'The selected app is not available to this user'},
+        404: {'description': 'The conversation or selected app does not exist'},
+        409: {'description': 'The selected app is disabled or not enabled by this user'},
+    },
+    tags=['conversations'],
+)
 def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
@@ -353,11 +413,47 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
+    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
+
     processed_conversation = process_conversation(
-        uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id
+        uid,
+        language_code,
+        conversation,
+        force_process=True,
+        is_reprocess=True,
+        app_id=app_id,
+        explicit_app=explicit_app,
+        app_usage_attribution=(
+            AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
+        ),
     )
 
     return processed_conversation
+
+
+def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
+    """Resolve one explicit selection before reprocessing mutates the conversation."""
+
+    # Imported here, not at module scope, for the same reason line ~1510 already does: the
+    # apps chain pulls the memory/social graph at import time, and the sanctioned isolation
+    # seam (backend/docs/test_isolation.md) loads this router bare to test pure request
+    # validation. A module-level import would make those suites stub a graph they never call.
+    from database.apps import get_app_by_id_db
+    from utils.apps import get_available_app_model_by_id, is_user_app_enabled
+
+    if get_app_by_id_db(app_id) is None:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    app = get_available_app_model_by_id(app_id, uid)
+    if app is None:
+        raise HTTPException(status_code=403, detail='App is not available to this user')
+    if not app.works_with_memories():
+        raise HTTPException(status_code=400, detail='App does not support conversation summarization')
+    if app.disabled:
+        raise HTTPException(status_code=409, detail='App is currently unavailable')
+    if not is_user_app_enabled(uid, app_id):
+        raise HTTPException(status_code=409, detail='App must be enabled before it can summarize a conversation')
+    return app
 
 
 def _ensure_aware(value: datetime) -> datetime:
@@ -792,7 +888,18 @@ def delete_conversation(
         # the fence is closed; anything real still raises rather than orphaning
         # live memories against a deleted conversation.
         if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
-            memory_service.retract_conversation_memories(uid, conversation_id)
+            try:
+                memory_service.retract_conversation_memories(uid, conversation_id)
+            except ConversationReplacementConflictError as error:
+                logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
+                # Concurrent same-account memory writes kept winning the
+                # account-global control CAS. Nothing has been deleted yet, so
+                # fail closed with a retryable answer instead of an opaque 500;
+                # the retraction is idempotent, a retried delete is safe (#11726).
+                raise HTTPException(
+                    status_code=503,
+                    detail='Conversation memory retraction is busy, please retry',
+                ) from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
@@ -1009,6 +1116,7 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
         conversation.transcript_segments[segment_idx].person_id = None
@@ -1021,6 +1129,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='segment',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -1078,6 +1193,9 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
+    before = [_speaker_assignment(segment) for segment in targeted_segments]
+
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
@@ -1095,6 +1213,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='speaker',
+        before=before,
+        after=[_speaker_assignment(segment) for segment in targeted_segments],
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -1141,6 +1266,7 @@ def assign_segments_bulk(
 
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
+    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1153,6 +1279,13 @@ def assign_segments_bulk(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='bulk',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -1444,7 +1577,18 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
-    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
+    try:
+        summary = generate_summary_with_prompt(
+            full_transcript, request.prompt, language_code=conversation.language or 'en'
+        )
+    except SummaryProviderError as exc:
+        # The provider failed on its own account, so this is an upstream failure and not a fault
+        # of the request: report it as one instead of as a 500 the client cannot act on.
+        logger.warning("test-prompt summary failed upstream: conversation_id=%s", conversation_id)
+        raise HTTPException(
+            status_code=504 if exc.timed_out else 502,
+            detail='summary_provider_timeout' if exc.timed_out else 'summary_provider_unavailable',
+        ) from exc
 
     return {"summary": summary}
 

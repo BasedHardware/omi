@@ -69,6 +69,27 @@ def test_x_connector_sync_job_entrypoint_calls_runner_without_hour_modulo():
     assert "raise_if_x_sync_job_failed(summary)" in source
 
 
+def test_notifications_job_orders_primary_notifications_then_health():
+    """X connector sync moved to its own Cloud Run Job (#9298), so the shared
+    cron now runs notifications then the materialization-health verdict only."""
+    jobs_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "jobs.py"
+    source = jobs_path.read_text(encoding="utf-8")
+
+    notifications = source.index("await start_cron_notification_job()")
+    materialization_health = source.index("await run_blocking(db_executor, run_scheduled_check)")
+    assert notifications < materialization_health
+
+
+def test_notifications_job_deploy_routes_materialization_decision_review():
+    workflow_path = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "gcp_notifications_job.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    assert 'chat_first_materialization_health review=true' in workflow
+    assert 'chat_first_materialization_review_due' in workflow
+    assert '--notification-channels="$ALERT_CHANNELS"' in workflow
+    assert '--set-notification-channels="$ALERT_CHANNELS"' in workflow
+
+
 def test_memory_maintenance_job_entrypoint_calls_cron_runner():
     entry_path = Path(__file__).resolve().parents[2] / "modal" / "memory_maintenance_job.py"
     source = entry_path.read_text(encoding="utf-8")

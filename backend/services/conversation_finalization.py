@@ -9,6 +9,7 @@ presents its request-scoped keys.
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
@@ -29,12 +30,73 @@ from utils.metrics import (
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from utils.conversations.meeting_receipt import (
+    record_and_persist_finalized_meeting_receipt,
+    repair_meeting_receipt_intent,
+)
 from utils.observability.journeys import (
     record_capture_finalization_reconciliation,
     record_capture_finalization_terminal,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def is_meeting_receipt_reconciler_enabled() -> bool:
+    return os.getenv('MEETING_RECEIPT_RECONCILER_ENABLED', 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def reconcile_meeting_receipts(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
+    """Repair missing intent writes and seed receipts for historical completed meetings."""
+    result = {'repaired': 0, 'backfilled': 0, 'skipped': 0, 'error': 0}
+    if not is_meeting_receipt_reconciler_enabled():
+        return result
+
+    try:
+        candidates = jobs_db.get_meeting_receipt_reconcile_candidates(limit=limit, firestore_client=firestore_client)
+    except Exception:
+        logger.exception('meeting receipt reconciliation query failed')
+        result['error'] += 1
+        candidates = []
+    for candidate in candidates:
+        try:
+            if repair_meeting_receipt_intent(candidate):
+                result['repaired'] += 1
+            else:
+                result['skipped'] += 1
+        except Exception:
+            logger.exception('meeting receipt intent repair failed')
+            result['error'] += 1
+
+    try:
+        cursor = jobs_db.get_meeting_receipt_backfill_cursor(firestore_client=firestore_client)
+        sweep = jobs_db.get_meeting_receipt_backfill_candidates(
+            limit=limit,
+            resume_after_path=cursor.get('resume_after_path'),
+            firestore_client=firestore_client,
+        )
+        jobs_db.advance_meeting_receipt_backfill_cursor(
+            int(cursor.get('generation') or 0),
+            None if sweep['exhausted'] else sweep['resume_after_path'],
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        logger.exception('meeting receipt backfill query failed')
+        result['error'] += 1
+        return result
+    for candidate in sweep['candidates']:
+        try:
+            receipt = record_and_persist_finalized_meeting_receipt(
+                candidate['uid'], candidate['conversation'], firestore_client=firestore_client
+            )
+            if receipt is not None:
+                result['backfilled'] += 1
+            else:
+                result['skipped'] += 1
+        except Exception:
+            logger.exception('meeting receipt backfill failed')
+            result['error'] += 1
+    return result
 
 
 def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:

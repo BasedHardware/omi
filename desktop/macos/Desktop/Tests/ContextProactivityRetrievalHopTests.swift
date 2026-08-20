@@ -80,10 +80,10 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
     let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
     XCTAssertEqual(
       Set(properties.keys),
-      ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"])
+      ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids", "task_refs"])
     XCTAssertEqual(
       schema["required"] as? [String],
-      ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"])
+      ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids", "task_refs"])
     XCTAssertNil(properties["lookup_query"])
   }
 
@@ -94,7 +94,10 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
     // Strict structured output demands every declared property be required.
     XCTAssertEqual(
       schema["required"] as? [String],
-      ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids", "lookup_query"])
+      [
+        "decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids",
+        "task_refs", "lookup_query",
+      ])
   }
 
   func testStablePromptWithoutLookupIsByteIdenticalToToday() {

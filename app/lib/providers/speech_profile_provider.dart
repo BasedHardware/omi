@@ -179,12 +179,7 @@ class SpeechProfileProvider extends ChangeNotifier
         SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
-    _socket = await openSpeechProfileSocket(
-      codec: codec,
-      sampleRate: rate,
-      language: language,
-      force: force,
-    );
+    _socket = await openSpeechProfileSocket(codec: codec, sampleRate: rate, language: language, force: force);
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }

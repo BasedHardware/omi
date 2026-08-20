@@ -323,7 +323,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get searchApps => 'Шукати додатки...';
 
   @override
-  String get myApps => 'Мої додатки';
+  String get myApps => 'Створено мною';
 
   @override
   String get installedApps => 'Встановлені додатки';
@@ -9869,4 +9869,10 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.';
+
+  @override
+  String get findDevice => 'Знайти';
+
+  @override
+  String get diagnosticsShareFailed => 'Не вдалося поділитися діагностикою. Спробуйте ще раз.';
 }

@@ -24,11 +24,14 @@ export function DeleteConversationsDialog({
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   // Handle escape key
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !isLoading) {
-      onClose();
-    }
-  }, [onClose, isLoading]);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isLoading) {
+        onClose();
+      }
+    },
+    [onClose, isLoading],
+  );
 
   // Focus trap and escape key handler
   useEffect(() => {
@@ -43,7 +46,7 @@ export function DeleteConversationsDialog({
     // Trap focus within dialog
     const dialog = dialogRef.current;
     const focusableElements = dialog?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     );
     const firstElement = focusableElements?.[0];
     const lastElement = focusableElements?.[focusableElements.length - 1];
@@ -102,26 +105,34 @@ export function DeleteConversationsDialog({
               'relative z-10',
               'w-full max-w-sm p-6 rounded-2xl mx-4',
               'bg-bg-secondary border border-bg-tertiary',
-              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
+              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
             )}
           >
             {/* Icon */}
-            <div className={cn(
-              'w-12 h-12 rounded-xl mb-4',
-              'bg-error/20 flex items-center justify-center'
-            )}>
+            <div
+              className={cn(
+                'w-12 h-12 rounded-xl mb-4',
+                'bg-error/20 flex items-center justify-center',
+              )}
+            >
               <Trash2 className="w-6 h-6 text-error" />
             </div>
 
             {/* Title */}
-            <h2 id="delete-dialog-title" className="text-lg font-semibold text-text-primary mb-2">
+            <h2
+              id="delete-dialog-title"
+              className="text-lg font-semibold text-text-primary mb-2"
+            >
               Delete {count} conversation{count !== 1 ? 's' : ''}?
             </h2>
 
             {/* Description */}
-            <p id="delete-dialog-description" className="text-sm text-text-secondary mb-6">
-              This will permanently delete the selected conversation{count !== 1 ? 's' : ''}.
-              This action cannot be undone.
+            <p
+              id="delete-dialog-description"
+              className="text-sm text-text-secondary mb-6"
+            >
+              This will permanently delete the selected conversation
+              {count !== 1 ? 's' : ''}. This action cannot be undone.
             </p>
 
             {/* Actions */}
@@ -135,7 +146,7 @@ export function DeleteConversationsDialog({
                   'text-sm font-medium text-text-secondary',
                   'bg-bg-tertiary hover:bg-bg-quaternary',
                   'transition-colors duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 Cancel
@@ -149,12 +160,10 @@ export function DeleteConversationsDialog({
                   'text-sm font-medium text-white',
                   'bg-error hover:bg-error/90',
                   'transition-colors duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : null}
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 <span>{isLoading ? 'Deleting...' : 'Delete'}</span>
               </button>
             </div>

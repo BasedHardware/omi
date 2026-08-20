@@ -8,7 +8,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from models.chat_first import ChatFirstSubject, ProactiveIntent, QuestionCardSpec, QuestionOption
+from models.chat_first import (
+    ChatFirstSubject,
+    ConversationLinkSpec,
+    ProactiveIntent,
+    QuestionCardSpec,
+    QuestionOption,
+)
 from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
 
@@ -16,7 +22,16 @@ import routers.chat_first as chat_first_router
 def _client() -> TestClient:
     app = FastAPI()
     app.include_router(chat_first_router.router)
-    app.dependency_overrides[chat_first_router.auth.get_current_user_uid] = lambda: 'user-1'
+    current_auth = chat_first_router.auth.get_current_user_uid
+    app.dependency_overrides[current_auth] = lambda: 'user-1'
+    # Some older test modules replace ``utils.other.endpoints`` while pytest is
+    # collecting. Override the callable captured by each route as well as the
+    # current module attribute so these contracts do not depend on import order.
+    for route in app.routes:
+        dependant = getattr(route, 'dependant', None)
+        for dependency in getattr(dependant, 'dependencies', []):
+            if getattr(dependency.call, '__name__', None) == 'get_current_user_uid':
+                app.dependency_overrides[dependency.call] = lambda: 'user-1'
     return TestClient(app)
 
 
@@ -163,6 +178,60 @@ def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts
     assert terminal_acknowledgements[0]['now'].tzinfo is not None
     assert response.json()['intents'][0]['intent_id'] == 'intent-1'
     assert response.json()['intents'][0]['delivery_state'] == 'ready'
+
+
+def test_v1_leaves_conversation_link_pending_and_v2_later_acknowledges_it(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    intent = ProactiveIntent(
+        intent_id='intent-meeting-1',
+        continuity_key='capture:conversation-1',
+        account_generation=7,
+        source='capture_arrival',
+        subject=ChatFirstSubject(kind='capture', id='conversation-1'),
+        blocks=[
+            ConversationLinkSpec(
+                type='conversationLink',
+                conversation_id='conversation-1',
+                summary='Meeting notes ready',
+            )
+        ],
+        created_at=datetime(2026, 8, 19, tzinfo=timezone.utc),
+    )
+    acknowledgements = []
+    monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'fetch_ready_intents',
+        lambda *args, **kwargs: [] if kwargs.get('exclude_block_types') else [intent],
+    )
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'acknowledge_materialization',
+        lambda *args, **kwargs: acknowledgements.append(kwargs)
+        or intent.model_copy(update={'delivery_state': 'delivered'}),
+    )
+    projected = []
+    monkeypatch.setattr(
+        chat_first_router.finalization_jobs_db,
+        'mark_meeting_receipt_materialized',
+        lambda *args, **kwargs: projected.append((args, kwargs)) or True,
+    )
+    client = _client()
+
+    legacy = client.post('/v1/chat/materialize-prompts', json=_request())
+    modern = client.post('/v2/chat/materialize-prompts', json=_request())
+    acknowledged = client.post(
+        '/v2/chat/materialize-prompts',
+        json=_request(receipts=[{'intent_id': intent.intent_id, 'receipt_id': 'kernel-receipt-1'}]),
+    )
+
+    assert legacy.status_code == 200 and legacy.json()['intents'] == []
+    assert modern.status_code == 200 and modern.json()['intents'][0]['intent_id'] == intent.intent_id
+    assert acknowledged.status_code == 200
+    assert len(acknowledgements) == 1
+    assert projected[0][0] == ('user-1', 'conversation-1', intent.intent_id)
 
 
 def test_daily_opener_waits_for_an_active_sparse_cold_start_sequence(monkeypatch):

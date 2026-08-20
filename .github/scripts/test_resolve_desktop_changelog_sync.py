@@ -10,7 +10,6 @@ import time
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 MOD_PATH = ROOT / ".github/scripts/resolve-desktop-changelog-sync.py"
 
@@ -53,7 +52,7 @@ class ResolveDesktopChangelogSyncTests(unittest.TestCase):
         git(root, "commit", "-m", "base")
         return root
 
-    def test_already_on_main_with_tip_bump_planned_source(self) -> None:
+    def test_later_planned_source_does_not_reuse_older_consolidate(self) -> None:
         repo = self._repo()
         base = git(repo, "rev-parse", "HEAD")
         git(repo, "checkout", "-b", "changelog-side")
@@ -62,7 +61,14 @@ class ResolveDesktopChangelogSyncTests(unittest.TestCase):
         git(repo, "commit", "-m", "chore: consolidate changelog for v0.12.143")
         cons = git(repo, "rev-parse", "HEAD")
         git(repo, "checkout", "main")
-        git(repo, "merge", "--no-ff", "changelog-side", "-m", "Update desktop changelog for v0.12.143 [skip ci] (#10787)")
+        git(
+            repo,
+            "merge",
+            "--no-ff",
+            "changelog-side",
+            "-m",
+            "Update desktop changelog for v0.12.143 [skip ci] (#10787)",
+        )
         (repo / "t").write_text("t\n", encoding="utf-8")
         git(repo, "add", "t")
         git(repo, "commit", "-m", "tip bump")
@@ -77,10 +83,9 @@ class ResolveDesktopChangelogSyncTests(unittest.TestCase):
         )
         elapsed = time.monotonic() - started
         self.assertLess(elapsed, 5.0, "must not O(n) scan main history")
-        self.assertEqual(result["mode"], "already-on-main")
-        self.assertTrue(result["already_on_main"])
-        self.assertEqual(result["commit"], cons)
-        self.assertIn("10787", str(result["pr_url"]))
+        self.assertEqual(result["mode"], "missing")
+        self.assertFalse(result["already_on_main"])
+        self.assertEqual(result["commit"], "")
 
     def test_parent_mismatch_rejects_when_unreleased_fragments_advance(self) -> None:
         """Codex P2: do not reuse old consolidate when planned source gained fragments."""
@@ -127,6 +132,50 @@ class ResolveDesktopChangelogSyncTests(unittest.TestCase):
         )
         self.assertEqual(result["mode"], "missing")
         self.assertEqual(result["commit"], "")
+
+    def test_squash_consolidate_is_reusable_when_based_on_exact_planned_source(self) -> None:
+        repo = self._repo()
+        planned = git(repo, "rev-parse", "HEAD")
+        (repo / "desktop/macos/changelog/releases").mkdir(parents=True)
+        (repo / "desktop/macos/changelog/releases/0.12.143.json").write_text("{}\n", encoding="utf-8")
+        git(repo, "add", "desktop/macos/changelog/releases/0.12.143.json")
+        git(repo, "commit", "-m", "chore: consolidate changelog for v0.12.143 (#11930)")
+        squash = git(repo, "rev-parse", "HEAD")
+
+        result = resolve.resolve_changelog_sync(
+            repo,
+            planned_source_sha=planned,
+            version="0.12.143",
+            main_ref="main",
+            repository_slug="BasedHardware/omi",
+        )
+
+        self.assertEqual(result["mode"], "already-on-main")
+        self.assertEqual(result["commit"], squash)
+        self.assertEqual(result["pr_url"], "https://github.com/BasedHardware/omi/pull/11930")
+
+    def test_orphan_branch_is_rebuilt_instead_of_hard_failing(self) -> None:
+        repo = self._repo()
+        planned = git(repo, "rev-parse", "HEAD")
+        git(repo, "checkout", "-b", "orphan", planned)
+        (repo / "desktop/macos/changelog/releases").mkdir(parents=True)
+        (repo / "desktop/macos/changelog/releases/0.12.143.json").write_text("{}\n", encoding="utf-8")
+        git(repo, "add", "desktop/macos/changelog/releases/0.12.143.json")
+        git(repo, "commit", "-m", "chore: consolidate changelog for v0.12.143")
+        orphan = git(repo, "rev-parse", "HEAD")
+        git(repo, "checkout", "main")
+
+        result = resolve.resolve_changelog_sync(
+            repo,
+            planned_source_sha=planned,
+            version="0.12.143",
+            branch_tip=orphan,
+            main_ref="main",
+        )
+
+        self.assertEqual(result["mode"], "stale-orphan")
+        self.assertEqual(result["commit"], "")
+        self.assertFalse(result["already_on_main"])
 
 
 if __name__ == "__main__":

@@ -1539,10 +1539,15 @@ private final class EngineStore: @unchecked Sendable {
                 personId: line.personId,
                 backendConversationId: line.backendConversationId,
                 backendSegmentId: line.backendSegmentId)
-            if segment.backendConversationId != nil, segment.backendSegmentId != nil {
-                try store.upsertCloudSegment(segment)
-            } else {
-                try store.insertSegment(segment)
+            // Wrapped rather than followed by an emit, so the report cannot outlive a throw. A
+            // cloud segment counts the same as a local one: it is this Mac's audio, transcribed a
+            // hop away. Once per install; every later write reports nothing.
+            try ContextAnalytics.recordFirstArtifact(.conversation) {
+                if segment.backendConversationId != nil, segment.backendSegmentId != nil {
+                    try store.upsertCloudSegment(segment)
+                } else {
+                    try store.insertSegment(segment)
+                }
             }
             // `max`, because a 10 s window from the other transcriber can land out of order and
             // must not drag the session's end backwards.
@@ -1554,7 +1559,7 @@ private final class EngineStore: @unchecked Sendable {
 
     private func insert(_ frame: Frame, into store: ContextStore) {
         do {
-            try store.insertFrame(frame)
+            try ContextAnalytics.recordFirstArtifact(.screen) { try store.insertFrame(frame) }
         } catch {
             ContextLog.error("Dropped a screen frame: \(error.localizedDescription)", "store")
         }

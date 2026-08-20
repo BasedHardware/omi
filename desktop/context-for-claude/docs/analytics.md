@@ -44,8 +44,36 @@ enum; `AnalyticsEventTests.testNoEventCarriesFreeFormText` fails if a free strin
 | `cfc_gesture_fired` | ⌘ + ⌘ actually firing — inert without Accessibility |
 | `cfc_surface_opened` | which surfaces people open by hand |
 | `cfc_search_ran` | local search use, bucketed result counts only |
+| `cfc_first_artifact` | **activation** — the first time this install ever stored anything |
 | `cfc_update_outcome` | update health — a fleet that stops updating looks like a fleet nobody uses |
 | `cfc_fallback` | fail-open paths, mirroring `ContextTelemetry.recordFallback` |
+
+### `cfc_first_artifact` is the activation moment
+
+Once per install, the first time a write actually lands, carrying `kind` — `conversation` (a
+transcript segment) or `screen` (a frame). Emitted from `EngineStore`'s two write paths, threaded
+*through* the write so a failed insert cannot report one: an attempt is not an artifact, and
+`EngineStore` catches and logs every failed insert.
+
+Nothing else answers "did this install ever do the thing": `cfc_capture_state` reports a microphone
+being switched on, and `cfc_daily_active`'s capture minutes look the same on the hundredth day as on
+the first. An install that captured all day and one that captured nothing were indistinguishable.
+
+**There is no `memory` kind, and that is a fact about the product.** This app never stores a memory:
+`create_memory` writes to the Omi account from `context-for-claude-mcp`, a separate short-lived
+process that cannot report anything (see below), and the local `account_rows` table is a copy of what
+the account already holds — first-storing a *downloaded* memory would fire this for an install that
+has captured nothing at all.
+
+### `cfc_onboarding_finished` is once per install, across a relaunch
+
+Granting Screen Recording only takes effect in a new process, so onboarding restarts the app from its
+own middle and the run that reaches the last card often had no step transition of its own. The start
+instant is therefore persisted (`context.analytics.onboardingStartedAt`) rather than held in memory,
+and the completion is spent against a second default
+(`context.analytics.onboardingFinishedReported`) so that Settings' "Run setup again" cannot add a
+second install-shaped completion. Before that, four of the five reporting installs had permissions
+granted and exactly one had ever sent the event, which made the setup funnel unreadable.
 
 ### `cfc_daily_active` is the spine
 
@@ -97,10 +125,18 @@ Don't.
    config we cannot parse may carry exclusions we cannot express. The second case is the one that
    matters in practice: it means a machine with a corrupt config stops reporting rather than
    reporting from a state where it cannot honour the user's exclusions.
-2. **Development builds report nothing.** `ContextPaths.isDevelopmentBuild` gates the whole path. This
+2. **Only the shipping app reports.** `ContextPaths.isShippingBundle` gates the whole path. This
    is not tidiness: for this app's first three weeks the Cloud Run logs show a `Context for Claude/1`
    user agent from up to twenty machines a day — the team's own builds, indistinguishable in
    aggregate from users.
+
+   **The gate asks "is this the release?", not "is this not a dev build?"** — it used to ask the
+   second, via `ContextPaths.isDevelopmentBuild`, which is derived from an identifier that falls back
+   to the shipping one for any process that is not ours. `swift test` runs under
+   `com.apple.dt.xctest.tool` and so counted as production: the suite POSTed to this project from the
+   real spool for as long as it has existed, 92 events before it was noticed, which is all of
+   `cfc_gesture_fired` and two thirds of `cfc_search_ran`. Anything queried before 2026-08-19 carries
+   that noise.
 3. **Nothing user-authored, ever** — enforced by construction, not by review.
 
 ## MCP tool calls cross a process boundary

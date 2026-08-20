@@ -13,7 +13,8 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-DASHBOARD_PATH = ROOT / "web/admin/grafana/dashboards/omi-tv.json"
+DASHBOARD_DIR = ROOT / "web/admin/grafana/dashboards"
+ALLOWED_UIDS = {"omi-tv", "omi-tv-macos", "omi-tv-mobile"}
 DEFAULT_GRAFANA_URL = "https://admin.omi.me/grafana"
 
 
@@ -22,21 +23,22 @@ def grafana_base_url() -> str:
     return raw.rstrip("/")
 
 
-def load_dashboard() -> dict:
-    dashboard = json.loads(DASHBOARD_PATH.read_text(encoding="utf-8"))
-    if dashboard.get("uid") != "omi-tv":
-        raise SystemExit(f"{DASHBOARD_PATH}: dashboard uid must remain omi-tv")
+def load_dashboard(path: Path) -> dict:
+    dashboard = json.loads(path.read_text(encoding="utf-8"))
+    if dashboard.get("uid") not in ALLOWED_UIDS:
+        raise SystemExit(f"{path}: dashboard uid must be one of {sorted(ALLOWED_UIDS)}")
     dashboard.pop("id", None)
     dashboard.pop("version", None)
     return dashboard
 
 
-def apply(token: str) -> None:
+def apply(token: str, path: Path) -> None:
+    dashboard = load_dashboard(path)
     payload = json.dumps(
         {
-            "dashboard": load_dashboard(),
+            "dashboard": dashboard,
             "overwrite": True,
-            "message": "apply checked-in omi-tv dashboard",
+            "message": f"apply checked-in {dashboard['uid']} dashboard",
         }
     ).encode("utf-8")
     url = f"{grafana_base_url()}/api/dashboards/db"
@@ -53,7 +55,7 @@ def apply(token: str) -> None:
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             body = response.read().decode("utf-8")
-            print(f"applied omi-tv ({response.status}): {body}")
+            print(f"applied {dashboard['uid']} ({response.status}): {body}")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise SystemExit(f"Grafana apply failed ({exc.code}): {detail}") from exc
@@ -64,7 +66,8 @@ def main() -> int:
     if not token:
         print("skipping omi-tv apply: GRAFANA_TOKEN is unset")
         return 0
-    apply(token)
+    for path in sorted(DASHBOARD_DIR.glob("*.json")):
+        apply(token, path)
     return 0
 
 

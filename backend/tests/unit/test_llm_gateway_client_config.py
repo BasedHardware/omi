@@ -412,7 +412,13 @@ async def test_app_icon_generation_always_uses_gateway(monkeypatch):
     monkeypatch.setattr(app_generator, 'generate_image_via_gateway', gateway)
 
     assert await app_generator.generate_app_icon('Name', 'Description', 'other') == b'icon'
-    assert captured['model'] == 'dall-e-3'
+    # The images API rejects `response_format` (400 unknown_parameter) and no longer serves
+    # dall-e-3 (400 invalid_value), which made every app-icon generation a 500. Ask for a model
+    # and size/quality pair the gateway rate card prices, and let it return base64 by default.
+    assert captured['model'] == 'gpt-image-1'
+    assert captured['quality'] == 'medium'
+    assert captured['size'] == '1024x1024'
+    assert 'response_format' not in captured
 
 
 @pytest.mark.asyncio

@@ -345,7 +345,9 @@ class OmiTvDashboardContractTests(unittest.TestCase):
 
     def test_activation_panels_use_firestore_activation_selectors(self) -> None:
         panels = {panel["title"]: panel for panel in self.dashboard()["panels"]}
-        rate = panels["Activation rate"]["targets"][0]
+        # The base (all-platform) board labels the Firestore-backed activation
+        # panels "(macOS)" because that route only covers macOS signups.
+        rate = panels["Activation rate (macOS)"]["targets"][0]
         self.assertEqual(rate["url"], "http://127.0.0.1:8899/api/omi/stats/activation?days=60")
         self.assertEqual([column["selector"] for column in rate["columns"]], ["rate"])
         self.assertNotIn("viral-metrics", rate["url"])
@@ -355,7 +357,13 @@ class OmiTvDashboardContractTests(unittest.TestCase):
             for title, panel in panels.items()
             if title.startswith("Activation (signup")
         )
-        self.assertEqual(series["url"], "http://127.0.0.1:8899/api/omi/stats/activation?days=60")
+        # `_tzdates=week` is a proxy-side display rewrite (stripped before the
+        # upstream request); the Firestore activation route contract is the
+        # base URL.
+        self.assertEqual(
+            series["url"].split("&_tzdates=")[0],
+            "http://127.0.0.1:8899/api/omi/stats/activation?days=60",
+        )
         self.assertEqual(series["root_selector"], "weeks")
         self.assertEqual(
             [column["selector"] for column in series["columns"]],

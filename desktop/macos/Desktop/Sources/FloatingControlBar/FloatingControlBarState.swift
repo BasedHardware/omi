@@ -201,6 +201,13 @@ struct FloatingBarNotificationContext: Equatable {
 
 enum FloatingBarNotificationAction: Equatable {
   case openWhatMattersNow(recommendationID: String)
+  /// Offer to connect an integration the user has open but has not set up.
+  /// Carries the catalog's telemetry id (`import:email`, `export:notion`, …),
+  /// which is unique across both halves of the catalog — the bare connector id
+  /// is not, because ChatGPT and Claude exist on both sides. `triggerID` names
+  /// what was recognized, so a conversion can be attributed to the native-app
+  /// or browser-site trigger that produced the card rather than merged.
+  case connectIntegration(telemetryID: String, triggerID: String)
 }
 
 /// A custom in-app notification rendered directly below the floating bar.
@@ -849,7 +856,7 @@ extension ChatContentBlock {
     case .taskCard(let id, _): return "t:\(id)"
     case .goalLink(let id, _, _): return "g:\(id)"
     case .captureLink(let id, _, _, _): return "c:\(id)"
-    case .conversationLink(let id, _, _): return "v:\(id)"
+    case .conversationLink(let id, _, _, _): return "v:\(id)"
     case .memoryLink(let id, _, _): return "m:\(id)"
     case .citation(let id, let reference): return "r:\(id):\(reference.ordinal)"
     case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"

@@ -12,6 +12,7 @@ from pathlib import Path
 from check_product_invariants import (
     format_suggest_block,
     matched_invariants,
+    missing_invariant_hits,
     parse_invariant,
     path_matches,
     pr_body_cites_id,
@@ -252,6 +253,51 @@ class FailClosedTests(unittest.TestCase):
             result = load_locked_invariants(Path(tmp))
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0]["id"], "INV-CHAT-1")
+
+
+class SquashCommitBodyTests(unittest.TestCase):
+    """#11835: squash commit list is not a substitute for the PR body."""
+
+    def test_about_user_voice_paths_require_inv_chat_1(self) -> None:
+        root = Path(__file__).resolve().parents[1].parent
+        invariants = load_locked_invariants(root)
+        hits = matched_invariants(
+            [
+                "desktop/windows/src/renderer/src/lib/voice/aboutUser.ts",
+                "desktop/windows/src/renderer/src/lib/voice/aboutUser.test.ts",
+            ],
+            invariants,
+        )
+        ids = {hit["id"] for hit in hits}
+        self.assertIn("INV-CHAT-1", ids)
+
+    def test_squash_commit_list_without_citation_fails(self) -> None:
+        root = Path(__file__).resolve().parents[1].parent
+        invariants = load_locked_invariants(root)
+        hits = matched_invariants(
+            ["desktop/windows/src/renderer/src/lib/voice/aboutUser.ts"],
+            invariants,
+        )
+        squash_body = (
+            "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
+            "* Stop rebuilding the about-user card on every voice hub warm\n"
+        )
+        missing = missing_invariant_hits(hits, squash_body)
+        self.assertTrue(any(hit["id"] == "INV-CHAT-1" for hit in missing))
+
+    def test_appended_pr_body_citation_passes(self) -> None:
+        root = Path(__file__).resolve().parents[1].parent
+        invariants = load_locked_invariants(root)
+        hits = matched_invariants(
+            ["desktop/windows/src/renderer/src/lib/voice/aboutUser.ts"],
+            invariants,
+        )
+        combined = (
+            "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
+            "* Stop rebuilding the about-user card\n\n"
+            "## Product invariants affected\n\n- INV-CHAT-1\n"
+        )
+        self.assertEqual(missing_invariant_hits(hits, combined), [])
 
 
 if __name__ == "__main__":

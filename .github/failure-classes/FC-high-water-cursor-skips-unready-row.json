@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-high-water-cursor-skips-unready-row",
+  "violated_contract": "A monotonic high-water cursor may only advance past rows that are permanently ineligible, never past rows that are merely not ready yet. ScreenActivitySyncService selected `WHERE id > ? AND embedding IS NOT NULL` and advanced the cursor past everything it shipped, but embeddings are computed asynchronously after the row is inserted, so any row whose vector had not landed when the sweep passed was skipped forever — not retried, not queued, and not reported. The result reads as a working sync rather than a broken one: rows keep arriving, so no error, alert, or test fires, while 99.2% of captured rows never leave the device (measured: 705 of 26,822 rows over 30 days on a live store). Three further mechanisms independently denied a row its embedding, so repairing the cursor alone recovers little: cross-batch content-hash dedup returned early without queueing, gated or failed embedding batches were dropped rather than requeued, and the backfill that comments describe as the safety net had been stuck completed=1/processedCount=0 since 2026-04-16.",
+  "canonical_prevention": "Track delivery as durable per-row state rather than as a position, and make the expensive projection optional rather than a precondition. The row carries an indexed `screenActivitySyncState` (pending, textSynced, fullySynced, compacted) so a row that was not ready when a sweep passed is picked up by a later sweep; OCR-bearing rows ship without waiting for a vector, and the vector attaches later. Eligibility is evaluated per closed time bucket rather than per row, so a partially aged bucket is never ranked twice — the sliding form ships 44% more rows than the design intends. Gated and failed embedding batches requeue into a bounded buffer instead of being dropped, and the stuck backfill re-arms so stranded history is recoverable. Tests pin the core defect directly: a row unready at sweep time is still delivered later, an open bucket ships nothing, a closed bucket ships exactly one winner and never ships again, and migration is safe on a populated store.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ScreenActivityLosslessSyncTests.swift",
+    "desktop/macos/Desktop/Tests/OCREmbeddingLosslessTests.swift"
+  ],
+  "evidence_prs": [
+    5205
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Services/**"
+  ],
+  "status": "open"
+}
