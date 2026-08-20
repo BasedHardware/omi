@@ -187,6 +187,7 @@ Future<void> showConversationSearchDateRangePicker(BuildContext context) async {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     CupertinoButton(
+                      key: const Key('search_date_range_cancel'),
                       padding: EdgeInsets.zero,
                       onPressed: () async {
                         if (hasExistingFilter) {
@@ -207,6 +208,7 @@ Future<void> showConversationSearchDateRangePicker(BuildContext context) async {
                     ),
                     const Spacer(),
                     CupertinoButton(
+                      key: const Key('search_date_range_done'),
                       padding: EdgeInsets.zero,
                       onPressed: () async {
                         final start = range.isNotEmpty ? range[0] : startDate;
