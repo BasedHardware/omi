@@ -332,6 +332,9 @@ enum ContextProactivityPromptBuilder {
       Then write the facts list. A fact is an event or an obligation: a commitment someone
       made, a request, a deadline, a blocker, a failure, a decision, or a status that
       changed.
+      A question the user is writing — in an email draft, a chat message, a document — is
+      always a fact, with high notify_worthiness: record who it is addressed to and the
+      question itself verbatim, phrased as "The user is asking <recipient>: <question>".
       Never write a fact saying that an app, window, tab, page, sidebar, panel, or button
       is open, visible, active, or shows something. Put that in the summary instead.
       Most screens yield zero to three facts. An empty facts list is a correct answer.

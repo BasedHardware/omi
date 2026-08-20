@@ -206,6 +206,26 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
       ["task:abc-123"])
   }
 
+  func testUserAuthoredQuestionFloorsToArmingEligibility() {
+    // The live fact that kept the answer-delivery path dark: worthiness 0.0.
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The body of the email currently contains the question: What is the latest omi desktop app download link?"),
+      .floorHumanEvent)
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The user is asking david@scalingforever.com: where can I grab the newest Omi desktop build?"),
+      .floorHumanEvent)
+    // Displayed questions without an authoring frame never floor.
+    XCTAssertNotEqual(
+      ContextFactWritePolicy.verdict("The page shows a FAQ question about billing."),
+      .floorHumanEvent)
+    // Authoring frames without a question signal never floor via this class.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The user is composing an email addressed to david@scalingforever.com."))
+  }
+
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {
     XCTAssertEqual(
       ContextDirectorTaskRefs.resolvable(

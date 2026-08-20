@@ -202,9 +202,29 @@ enum ContextFactWritePolicy {
     if matchesAny(machineryPatterns, in: trimmed) || isPromptEcho(trimmed) {
       return .dropMachinery
     }
-    if isHumanEvent(trimmed) { return .floorHumanEvent }
+    if isHumanEvent(trimmed) || isUserAuthoredQuestion(trimmed) { return .floorHumanEvent }
     if matchesAny(sceneryPatterns, in: trimmed) { return .capScenery }
     return .pass
+  }
+
+  /// A question the user is writing, recorded as a fact. This class seeds the
+  /// answer-delivery path (dwell refresh -> departure evaluation -> retrieval
+  /// hop), and nano scores it like scenery: the live fact "The body of the
+  /// email currently contains the question: What is the latest omi desktop app
+  /// download link?" arrived at worthiness 0.0, which kept the bucket
+  /// ineligible and the departure trigger dark. Conjunctive on purpose: a
+  /// question signal (a literal "?" or the word "question") must co-occur with
+  /// an authoring/asking frame, so page content that merely displays a
+  /// question ("the page shows a FAQ") never floors.
+  static func isUserAuthoredQuestion(_ statement: String) -> Bool {
+    let questionSignal =
+      statement.contains("?")
+      || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil
+    guard questionSignal else { return false }
+    return statement.range(
+      of:
+        #"(?i)\b(?:is asking|asks|asked|is writing|is typing|is composing|is drafting|contains the question|wants to know|is requesting)\b"#,
+      options: .regularExpression) != nil
   }
 
   /// A capitalized name immediately before a speech verb, where the name is not
