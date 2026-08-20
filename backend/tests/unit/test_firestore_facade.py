@@ -6,7 +6,7 @@ transactional path (open Mongo session) is exercised by the live contract check,
 
 import pytest
 from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 
 from google.api_core.exceptions import Aborted, FailedPrecondition
 from google.cloud.firestore_v1 import LastUpdateOption
@@ -530,3 +530,96 @@ def test_group_query_order_by_field_missing_on_some_docs_does_not_crash():
     c.document("users/u3/items/c").set({"other": 9})  # no ``rank`` -> excluded from the order
     ordered = [s.id for s in c.collection_group("items").order_by("rank").stream()]
     assert ordered == ["b", "a"]  # c excluded, no TypeError
+
+
+# --- composite filters (ADR-0044) -------------------------------------------------------------
+# database/apps.py builds every multi-condition app query as
+# ``where(filter=BaseCompositeFilter('AND', [FieldFilter(...), ...]))`` — 19 call sites covering the
+# whole marketplace surface (counts, private/public/popular/unapproved listings, tester apps, and
+# the six persona lookups). A composite carries ``.operator``/``.filters`` and none of the
+# FieldFilter attributes, so reading field_path/op_string/value off it yields None on all three and
+# the operator map used to raise a misleading "unsupported query operator: None" — i.e. those
+# queries 500'd on Mongo while working on Firestore.
+
+
+def _seed_apps(c) -> None:
+    c.document("plugins_data/a").set({"private": False, "approved": True, "category": "health"})
+    c.document("plugins_data/b").set({"private": False, "approved": False, "category": "health"})
+    c.document("plugins_data/c").set({"private": True, "approved": True, "category": "work"})
+
+
+def test_composite_and_filter_applies_every_member():
+    c = _client()
+    _seed_apps(c)
+    q = c.collection("plugins_data").where(
+        filter=BaseCompositeFilter("AND", [FieldFilter("private", "==", False), FieldFilter("approved", "==", True)])
+    )
+    assert sorted(s.id for s in q.stream()) == ["a"]
+
+
+def test_composite_and_filter_nests():
+    c = _client()
+    _seed_apps(c)
+    inner = BaseCompositeFilter("AND", [FieldFilter("approved", "==", True), FieldFilter("category", "==", "health")])
+    q = c.collection("plugins_data").where(
+        filter=BaseCompositeFilter("AND", [FieldFilter("private", "==", False), inner])
+    )
+    assert sorted(s.id for s in q.stream()) == ["a"]
+
+
+def test_composite_member_null_equality_still_translates():
+    """A ``field == None`` member must get the same IS_NULL treatment as a standalone filter."""
+    c = _client()
+    c.document("plugins_data/x").set({"private": False, "owner": None})
+    c.document("plugins_data/y").set({"private": False, "owner": "u1"})
+    q = c.collection("plugins_data").where(
+        filter=BaseCompositeFilter("AND", [FieldFilter("private", "==", False), FieldFilter("owner", "==", None)])
+    )
+    assert sorted(s.id for s in q.stream()) == ["x"]
+
+
+def test_composite_and_filter_composes_with_count_and_limit():
+    c = _client()
+    _seed_apps(c)
+    comp = BaseCompositeFilter("AND", [FieldFilter("private", "==", False), FieldFilter("category", "==", "health")])
+    assert c.collection("plugins_data").where(filter=comp).count().get()[0][0].value == 2
+    assert len(list(c.collection("plugins_data").where(filter=comp).limit(1).stream())) == 1
+
+
+def test_composite_or_filter_is_rejected_explicitly():
+    """The port's filter list is an implicit AND: OR must fail loudly, not be silently dropped."""
+    c = _client()
+    comp = BaseCompositeFilter("OR", [FieldFilter("private", "==", False), FieldFilter("approved", "==", True)])
+    with pytest.raises(NotImplementedError, match="OR"):
+        c.collection("plugins_data").where(filter=comp)
+
+
+def test_composite_and_filter_on_collection_group():
+    c = _client()
+    c.document("users/u1/apps/a").set({"private": False, "approved": True})
+    c.document("users/u2/apps/b").set({"private": False, "approved": False})
+    q = c.collection_group("apps").where(
+        filter=BaseCompositeFilter("AND", [FieldFilter("private", "==", False), FieldFilter("approved", "==", True)])
+    )
+    assert [s.id for s in q.stream()] == ["a"]
+
+
+# --- add(data, document_id) --------------------------------------------------------------------
+# database/apps.py:228 creates an app with ``app_ref.add(app_data, app_data['id'])``. Firestore's
+# signature is add(document_data, document_id=None); the facade took only the data, so app creation
+# raised TypeError on Mongo — and had it been accepted, the doc would have landed under a random
+# auto-id instead of the app id.
+
+
+def test_add_with_explicit_document_id_uses_it():
+    c = _client()
+    _write_time, ref = c.collection("plugins_data").add({"name": "omi-app"}, "app-123")
+    assert ref.id == "app-123"
+    assert c.document("plugins_data/app-123").get().to_dict() == {"name": "omi-app"}
+
+
+def test_add_without_document_id_still_auto_ids():
+    c = _client()
+    _write_time, ref = c.collection("plugins_data").add({"name": "omi-app"})
+    assert ref.id and ref.id != "app-123"
+    assert c.document(f"plugins_data/{ref.id}").get().exists is True

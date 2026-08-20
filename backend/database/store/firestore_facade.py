@@ -19,7 +19,7 @@ import contextlib
 import secrets
 import string
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from google.api_core import exceptions as _gexc
 
@@ -121,6 +121,68 @@ def _group_name_filter_value(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [v.path if isinstance(v, _DocRef) else v for v in value]
     return value.path if isinstance(value, _DocRef) else value
+
+
+def _field_filter_triple(
+    field_path: Any, op_string: Any, value: Any, *, name_value: Callable[[Any], Any]
+) -> Tuple[Any, str, Any]:
+    """Translate one Firestore field filter into the store's neutral ``(field, op, value)``."""
+    op = _OP_MAP.get(op_string)
+    if op is None:
+        # A ``field == None`` / ``field != None`` filter: the Firestore SDK rewrites the equality
+        # into the unary IS_NULL / IS_NOT_NULL operator (``op_string`` becomes a
+        # ``StructuredQuery.UnaryFilter.Operator`` enum, not a string). The store adapters express
+        # null matching as the neutral ``('==' | '!=', None)`` filter, so map it back — this is what
+        # makes a null-equality query run on Mongo exactly as it does natively on Firestore
+        # (e.g. ``get_chat_session(app_id=None)`` queries ``plugin_id == None``).
+        unary = getattr(op_string, "name", None)
+        if unary == "IS_NULL":
+            op, value = "==", None
+        elif unary == "IS_NOT_NULL":
+            op, value = "!=", None
+        else:
+            raise NotImplementedError(f"unsupported query operator: {op_string!r}")
+    if field_path == "__name__":
+        value = name_value(value)
+    return (field_path, op, value)
+
+
+def _filter_triples(filter_obj: Any, *, name_value: Callable[[Any], Any]) -> List[Tuple[Any, str, Any]]:
+    """Translate a Firestore ``FieldFilter`` **or** an AND ``BaseCompositeFilter`` into neutral triples.
+
+    A composite carries ``.operator`` + ``.filters`` and none of the FieldFilter attributes, so reading
+    ``field_path``/``op_string``/``value`` off it yields None on all three — which is how a composite
+    used to reach the operator map as ``None`` and raise a misleading "unsupported query operator:
+    None". Every multi-condition app query is built this way (``database/apps.py``, 19 call sites), so
+    the whole marketplace surface answered 500 on Mongo while working on Firestore.
+
+    The port's ``filters`` argument is an implicit AND, so an AND composite flattens into it —
+    recursively, because Firestore allows nesting. OR has no equivalent on the port (it would need a
+    disjunctive query the adapters do not express), so it is rejected explicitly: a silently dropped
+    OR would widen a query instead of narrowing it, which on an ownership/visibility filter means
+    returning data the caller must not see.
+    """
+    members = getattr(filter_obj, "filters", None)
+    if members is None:
+        return [
+            _field_filter_triple(
+                getattr(filter_obj, "field_path", None),
+                getattr(filter_obj, "op_string", None),
+                getattr(filter_obj, "value", None),
+                name_value=name_value,
+            )
+        ]
+    operator = getattr(filter_obj, "operator", None)
+    op_name = str(getattr(operator, "name", None) or operator).upper()
+    if not op_name.endswith("AND"):
+        raise NotImplementedError(
+            f"composite {op_name} filters are not supported by the document-store port "
+            "(its filter list is an implicit AND); express the query as separate reads instead"
+        )
+    triples: List[Tuple[Any, str, Any]] = []
+    for member in members:
+        triples.extend(_filter_triples(member, name_value=name_value))
+    return triples
 
 
 def _to_neutral(value: Any) -> Any:
@@ -372,28 +434,11 @@ class _Query:
         return _Query(self._client, self._collection, **base)
 
     def where(self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None) -> "_Query":
-        if filter is not None:  # modern FieldFilter form
-            field_path = getattr(filter, "field_path", None)
-            op_string = getattr(filter, "op_string", None)
-            value = getattr(filter, "value", None)
-        op = _OP_MAP.get(op_string)
-        if op is None:
-            # A ``field == None`` / ``field != None`` filter: the Firestore SDK rewrites the equality
-            # into the unary IS_NULL / IS_NOT_NULL operator (``op_string`` becomes a
-            # ``StructuredQuery.UnaryFilter.Operator`` enum, not a string). The store adapters express
-            # null matching as the neutral ``('==' | '!=', None)`` filter, so map it back — this is what
-            # makes a null-equality query run on Mongo exactly as it does natively on Firestore
-            # (e.g. ``get_chat_session(app_id=None)`` queries ``plugin_id == None``).
-            unary = getattr(op_string, "name", None)
-            if unary == "IS_NULL":
-                op, value = "==", None
-            elif unary == "IS_NOT_NULL":
-                op, value = "!=", None
-            else:
-                raise NotImplementedError(f"unsupported query operator: {op_string!r}")
-        if field_path == "__name__":
-            value = _name_filter_value(value)
-        return self._clone(filters=self._filters + [(field_path, op, value)])
+        if filter is not None:  # modern FieldFilter / composite form
+            return self._clone(filters=self._filters + _filter_triples(filter, name_value=_name_filter_value))
+        return self._clone(
+            filters=self._filters + [_field_filter_triple(field_path, op_string, value, name_value=_name_filter_value)]
+        )
 
     def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_Query":
         d = "desc" if direction == _DESCENDING or str(direction).lower().startswith("desc") else "asc"
@@ -507,10 +552,13 @@ class _CollRef(_Query):
     def list_documents(self) -> List[_DocRef]:
         return [_DocRef(self._client, s.path) for s in self._run()]
 
-    def add(self, data: Dict[str, Any]) -> Tuple[datetime, _DocRef]:
-        # Firestore's add() returns ``(write_time, DocumentReference)``; callers index ``[1]`` for the
-        # ref (e.g. desktop release publishing), so preserve that shape.
-        ref = self.document()
+    def add(self, data: Dict[str, Any], document_id: Optional[str] = None) -> Tuple[datetime, _DocRef]:
+        # Firestore's signature is add(document_data, document_id=None): omitting the id here made
+        # ``app_ref.add(app_data, app_data['id'])`` (database/apps.py, app creation) a TypeError on
+        # Mongo — and had the argument been swallowed, the app would have landed under a random
+        # auto-id, which is worse than the crash. Returns ``(write_time, DocumentReference)``;
+        # callers index ``[1]`` for the ref (e.g. desktop release publishing), so keep that shape.
+        ref = self.document(document_id) if document_id else self.document()
         ref.create(data)
         return datetime.now(timezone.utc), ref
 
@@ -735,28 +783,13 @@ class _GroupQuery:
         return _GroupQuery(self._client, self._group, **base)
 
     def where(self, field_path: Any = None, op_string: Any = None, value: Any = None, *, filter: Any = None) -> "_GroupQuery":
+        # group: ``__name__`` compares against the full path, not the scoped bare id.
         if filter is not None:
-            field_path = getattr(filter, "field_path", None)
-            op_string = getattr(filter, "op_string", None)
-            value = getattr(filter, "value", None)
-        op = _OP_MAP.get(op_string)
-        if op is None:
-            # A ``field == None`` / ``field != None`` filter: the Firestore SDK rewrites the equality
-            # into the unary IS_NULL / IS_NOT_NULL operator (``op_string`` becomes a
-            # ``StructuredQuery.UnaryFilter.Operator`` enum, not a string). The store adapters express
-            # null matching as the neutral ``('==' | '!=', None)`` filter, so map it back — this is what
-            # makes a null-equality query run on Mongo exactly as it does natively on Firestore
-            # (e.g. ``get_chat_session(app_id=None)`` queries ``plugin_id == None``).
-            unary = getattr(op_string, "name", None)
-            if unary == "IS_NULL":
-                op, value = "==", None
-            elif unary == "IS_NOT_NULL":
-                op, value = "!=", None
-            else:
-                raise NotImplementedError(f"unsupported query operator: {op_string!r}")
-        if field_path == "__name__":
-            value = _group_name_filter_value(value)  # group: full path (not the scoped bare id)
-        return self._clone(filters=self._filters + [(field_path, op, value)])
+            return self._clone(filters=self._filters + _filter_triples(filter, name_value=_group_name_filter_value))
+        return self._clone(
+            filters=self._filters
+            + [_field_filter_triple(field_path, op_string, value, name_value=_group_name_filter_value)]
+        )
 
     def order_by(self, field_path: str, direction: Any = "ASCENDING") -> "_GroupQuery":
         if field_path == "__name__":
