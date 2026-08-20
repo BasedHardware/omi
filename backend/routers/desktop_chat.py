@@ -860,10 +860,24 @@ def _openai_usage_as_anthropic(usage: object) -> SimpleNamespace:
 
 async def _record_usage(uid: str, usage: object) -> None:
     if get_byok_key('anthropic'):
+
+        def _exclude(record_uid: str) -> None:
+            llm_usage_db.record_llm_cost_exclusion(
+                record_uid,
+                bucket='desktop_chat',
+                account='omi',
+                cost_exclusion='byok_provider_cost',
+                firestore_client=get_customer_firestore_client(),
+            )
+
+        await run_blocking(db_executor, _exclude, uid)
         return
     input_tokens, output_tokens, cache_read_tokens, cache_write_tokens = _usage_values(usage)
     total_tokens = input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
-    cost = _web_search_requests(usage) * _WEB_SEARCH_COST_PER_REQUEST
+    web_search_requests = _web_search_requests(usage)
+    cost = web_search_requests * _WEB_SEARCH_COST_PER_REQUEST
+    cost_status = 'partial' if web_search_requests else 'missing'
+    cost_exclusion = 'provider_token_cost_not_recorded'
 
     def _write(
         record_uid: str,
@@ -881,7 +895,9 @@ async def _record_usage(uid: str, usage: object) -> None:
             cache_read,
             cache_write,
             combined_tokens,
-            cost_usd,
+            cost_usd if cost_status != 'missing' else None,
+            cost_status=cost_status,
+            cost_exclusion=cost_exclusion,
             firestore_client=get_customer_firestore_client(),
         )
 

@@ -234,7 +234,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     cache_read_tokens: int = Field(0, ge=0)
     cache_write_tokens: int = Field(0, ge=0)
     total_tokens: int = Field(0, ge=0)
-    cost_usd: float = Field(0.0, ge=0.0)
+    cost_usd: float | None = Field(None, ge=0.0)
     account: str = Field('omi', max_length=100)
 
 
@@ -326,14 +326,14 @@ class TestRecordDesktopLlmUsageValidation:
         r = RecordLlmUsageBucketRequest()
         assert r.account == 'omi'
 
-    def test_all_defaults_zero(self):
-        """All token fields default to 0."""
+    def test_cost_defaults_to_unmeasured(self):
+        """Missing cost is distinct from a measured zero."""
         r = RecordLlmUsageBucketRequest()
         assert r.input_tokens == 0
         assert r.output_tokens == 0
         assert r.cache_read_tokens == 0
         assert r.total_tokens == 0
-        assert r.cost_usd == 0.0
+        assert r.cost_usd is None
 
 
 class TestCreateFocusSessionValidation:

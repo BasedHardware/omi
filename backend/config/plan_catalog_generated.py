@@ -25,7 +25,7 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'dd984e7226620eb337eb63c45c8e4a2543208f8af983a70fc176329a09bed054'
+CATALOG_SHA256: Final = '6db339a228c67adc7a66b31182a6ee454ecf707ed0c4b42f0bce2533d8075868'
 CATALOG_REVISION: Final = 2
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_intent': 'catalog',
@@ -33,30 +33,37 @@ CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'unknown_caller_policy': 'legacy_contract'}
 OPEN_PLAN_DECISIONS: Final = {}
 MEASUREMENT_CONTRACTS: Final = {'transcription': {'usage_status': 'complete',
-                   'usage_source': 'backend/database/user_usage.py:transcription_seconds',
+                   'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds',
                    'cost_status': 'missing',
                    'cost_source': None,
-                   'limitation': 'Per-user transcription provider cost is not recorded.'},
+                   'limitation': 'Per-user transcription provider cost is not recorded; provider and BYOK cost are '
+                                 'explicitly excluded.'},
  'words_transcribed': {'usage_status': 'complete',
-                       'usage_source': 'backend/database/user_usage.py:words_transcribed',
+                       'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.words_transcribed',
                        'cost_status': 'missing',
                        'cost_source': None,
-                       'limitation': 'Per-user word processing cost is not recorded.'},
+                       'limitation': 'Per-user word processing cost is not recorded; provider and BYOK cost are '
+                                     'explicitly excluded.'},
  'insights_gained': {'usage_status': 'complete',
-                     'usage_source': 'backend/database/user_usage.py:insights_gained',
+                     'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.insights_gained',
                      'cost_status': 'missing',
                      'cost_source': None,
-                     'limitation': 'Per-user insight generation cost is not recorded.'},
+                     'limitation': 'Per-user insight generation cost is not recorded; provider and BYOK cost are '
+                                   'explicitly excluded.'},
  'memories_created': {'usage_status': 'complete',
-                      'usage_source': 'backend/database/user_usage.py:memories_created',
+                      'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.memories_created',
                       'cost_status': 'missing',
                       'cost_source': None,
-                      'limitation': 'Per-user memory generation cost is not recorded.'},
+                      'limitation': 'Per-user memory generation cost is not recorded; provider and BYOK cost are '
+                                    'explicitly excluded.'},
  'chat': {'usage_status': 'complete',
-          'usage_source': 'backend/database/user_usage.py:questions,cost_usd',
+          'usage_source': 'backend/database/user_usage.py:get_usage_by_plan.questions,cost_usd',
           'cost_status': 'partial',
-          'cost_source': 'backend/database/llm_usage.py:cost_usd',
-          'limitation': 'The monthly reader documents that backend GPT and Gemini chat currently have no cost field.'}}
+          'cost_source': 'backend/database/llm_usage.py:plan_usage.<plan_id>.*.cost_usd; '
+                         'backend/database/llm_gateway_accounting.py:estimated_cost_micro_usd',
+          'limitation': 'Realtime provider cost is complete; direct chat records web-search cost only, managed gateway '
+                        'cost is estimated in its ledger, backend GPT/Gemini token cost is not recorded, and BYOK '
+                        'provider cost is explicitly excluded.'}}
 PLAN_CATALOG_DATA: Final[dict[str, dict[str, Any]]] = {'basic': {'id': 'basic',
            'display_name': 'Free',
            'wire_aliases': [],
