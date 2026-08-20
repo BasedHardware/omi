@@ -1,0 +1,3 @@
+{
+  "change": "Fixed high CPU use after navigating through the Chat-first macOS interface or closing its window"
+}

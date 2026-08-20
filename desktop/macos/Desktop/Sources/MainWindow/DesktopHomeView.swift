@@ -484,11 +484,20 @@ struct DesktopHomeView: View {
 
   private func enforceMainWindowMinimumSize() {
     DispatchQueue.main.async {
-      // Appearance belongs to `WindowGlass.wear(_:as:)`; stamping one here unpinned the glass.
-      for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
-        Self.pinShellWindowSizeLimits(window)
-        Self.disableMinSizeComputation(in: window)
-      }
+      Self.reassertMainWindowSizing(in: NSApp.windows)
+    }
+  }
+
+  /// Restores the AppKit-owned size contract after SwiftUI rebuilds a destination host.
+  ///
+  /// Chat-first navigation changes `ChatFirstShellNavigation.route`, not the legacy sidebar index.
+  /// Both paths must call this after a route change or the replacement hosting view resumes automatic
+  /// `minSize()` computation and every published state change traverses the full destination tree.
+  static func reassertMainWindowSizing(in windows: [NSWindow]) {
+    // Appearance belongs to `WindowGlass.wear(_:as:)`; stamping one here unpinned the glass.
+    for window in windows where window.title.lowercased().hasPrefix("omi") {
+      pinShellWindowSizeLimits(window)
+      disableMinSizeComputation(in: window)
     }
   }
 
@@ -1248,6 +1257,9 @@ struct DesktopHomeView: View {
         updateStoreActivity(for: newValue)
       }
       .onChange(of: chatFirstNavigation.route) { _, _ in
+        // Chat-first does not mutate `selectedIndex`, so the legacy navigation observer above cannot
+        // restore the NSHostingView sizing guard for this replacement destination.
+        enforceMainWindowMinimumSize()
         updateStoreActivityForCurrentShell()
         reportAutomationState()
       }
