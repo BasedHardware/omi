@@ -89,6 +89,21 @@ extension SettingsContentView {
             GlassSeparator()
 
             settingRow(
+              title: "Meeting Summary Notifications",
+              subtitle: "After a call, offer to copy the share link or email the summary to participants",
+              settingId: "notifications.meetingsummary"
+            ) {
+              Toggle("", isOn: $meetingSummaryNotificationsEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
+                .onChange(of: meetingSummaryNotificationsEnabled) { _, newValue in
+                  MeetingSummaryNotificationSettings.isEnabled = newValue
+                }
+            }
+
+            GlassSeparator()
+
+            settingRow(
               title: "Memory Notifications",
               subtitle: "Show notification when a memory is extracted",
               settingId: "notifications.memory"

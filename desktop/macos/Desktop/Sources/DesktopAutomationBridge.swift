@@ -1676,6 +1676,76 @@ final class DesktopAutomationActionRegistry {
       return ["shown": "true"]
     }
 
+    // Drives the real post-meeting completion signal so the entire production
+    // chain runs (banner service → conversation + recipients fetch → persistent
+    // share card). Same NotificationCenter signal the finalization service posts.
+    register(
+      name: "trigger_meeting_completion",
+      summary:
+        "Post the real meeting-completion signal for a conversation id (presents the meeting summary share card). Non-prod only.",
+      params: ["conversation_id"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "trigger_meeting_completion is disabled on production bundles"]
+      }
+      guard let conversationID = params["conversation_id"], !conversationID.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("conversation_id is required")
+      }
+      NotificationCenter.default.post(
+        name: .desktopMeetingConversationDidComplete,
+        object: MeetingCompletionNotification(conversationIDs: [conversationID]))
+      return ["posted": conversationID]
+    }
+
+    // Cursor-free driver for the meeting summary share card: `state` reads the
+    // presented card, `copy`/`send` run the same MeetingSummaryShareActions the
+    // card's buttons call, `close` is the user dismissal path.
+    register(
+      name: "meeting_summary_share",
+      summary:
+        "Inspect or drive the presented meeting summary share card (action=state|copy|send|close). Non-prod only.",
+      params: ["action"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "meeting_summary_share is disabled on production bundles"]
+      }
+      let mgr = FloatingControlBarManager.shared
+      guard let bar = mgr.barState else { return ["error": "no bar state"] }
+      guard let notification = bar.currentNotification,
+        case .meetingSummaryShare(let conversationID, let recipients)? = notification.action
+      else {
+        return ["present": "false"]
+      }
+      switch (params["action"] ?? "state").lowercased() {
+      case "state":
+        return [
+          "present": "true",
+          "assistant_id": notification.assistantId,
+          "title": notification.title,
+          "message": notification.message,
+          "persistent": notification.isPersistent ? "true" : "false",
+          "conversation_id": conversationID,
+          "recipients": recipients.map(\.email).joined(separator: ","),
+        ]
+      case "copy":
+        let feedback = await MeetingSummaryShareActions.copyLink(conversationID: conversationID)
+        return ["copied": feedback == .copied ? "true" : "false"]
+      case "send":
+        do {
+          let sent = try await MeetingSummaryShareActions.sendSummary(
+            conversationID: conversationID, recipients: recipients)
+          return ["sent_to": sent.joined(separator: ",")]
+        } catch {
+          return ["error": "send failed: \(error.localizedDescription)"]
+        }
+      case "close":
+        mgr.dismissCurrentNotification()
+        return ["closed": "true"]
+      default:
+        throw DesktopAutomationActionError.invalidParams("action must be state, copy, send, or close")
+      }
+    }
+
     // Cursor-free click diagnosis: report which window (any app's) is topmost at a screen point,
     // and — when it is one of ours — the exact view AppKit hit-tests there. Exists because "I
     // click X and nothing happens" is otherwise undiagnosable without synthesizing real clicks.

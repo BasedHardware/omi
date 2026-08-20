@@ -303,4 +303,34 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(result, .rejectedOwnerChange)
     XCTAssertEqual(droppedCount, 1)
   }
+
+  // MARK: - Persistent card queue policy
+
+  /// A persistent card (meeting summary share) has no timeout, so a newcomer
+  /// must displace it — with the persistent card requeued at the front — or a
+  /// single un-acted card would starve every later proactive notification.
+  func testPersistentCardIsDisplacedByNewcomerExceptDuringAIConversation() {
+    XCTAssertTrue(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: false))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: true, showingAIConversation: true))
+    XCTAssertFalse(
+      FloatingBarNotificationQueuePolicy.shouldDisplacePersistentCard(
+        currentIsPersistent: false, showingAIConversation: false))
+  }
+
+  @MainActor
+  func testNotificationsAreNotPersistentByDefault() {
+    let plain = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m", assistantId: "default")
+    XCTAssertFalse(plain.isPersistent)
+    let share = FloatingBarNotification(
+      ownerID: "owner", title: "t", message: "m",
+      assistantId: MeetingActionItemBannerPolicy.assistantID,
+      action: .meetingSummaryShare(conversationID: "c1", recipients: []),
+      isPersistent: true)
+    XCTAssertTrue(share.isPersistent)
+  }
 }

@@ -571,6 +571,11 @@ struct FloatingControlBarView: View {
       notchReceiptCard(notification)
     } else if notification.assistantId == NotchMoment.endAssistantId {
       notchEndCard(notification)
+    } else if notification.assistantId == MeetingActionItemBannerPolicy.assistantID,
+      case .meetingSummaryShare(let conversationID, let recipients)? = notification.action
+    {
+      MeetingSummaryShareCard(
+        notification: notification, conversationID: conversationID, recipients: recipients)
     } else if notification.assistantId == "suggestion" {
       suggestionCard(notification)
     } else if notification.assistantId == IntegrationNudgeCoordinator.assistantID,
@@ -2709,5 +2714,213 @@ private struct NotchAgentStatusOrb: View {
       )
       .frame(width: size, height: size)
       .frame(width: size + 6, height: size + 6)
+  }
+}
+
+/// Post-meeting summary share card. Persistent by contract: it is presented
+/// with `isPersistent: true`, so the only exits are the user's — Copy link,
+/// Send to <participant>, See summary, or the close button. Chrome matches the
+/// other proactive cards (suggestion/insight): icon tile + eyebrow + title,
+/// with the dismiss circle top-trailing.
+private struct MeetingSummaryShareCard: View {
+  let notification: FloatingBarNotification
+  let conversationID: String
+  let recipients: [ConversationShareRecipient]
+
+  private enum Phase: Equatable {
+    case idle
+    case copying
+    case sending
+    case done(String)
+    case failed(String)
+  }
+
+  @State private var phase: Phase = .idle
+
+  private var sendLabel: String {
+    guard let first = recipients.first else { return "" }
+    let extra = recipients.count - 1
+    return extra > 0 ? "Send to \(first.shortLabel) +\(extra)" : "Send to \(first.shortLabel)"
+  }
+
+  private var isBusy: Bool { phase == .copying || phase == .sending }
+
+  var body: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      ZStack {
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+          .fill(
+            LinearGradient(
+              colors: [Color.white.opacity(0.18), Color.white.opacity(0.08)],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+          )
+          .overlay(
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+              .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+          )
+          .frame(width: 44, height: 44)
+
+        Image(systemName: "text.document")
+          .font(.system(size: 17, weight: .semibold))
+          .foregroundColor(.white)
+      }
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(notification.title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(.white.opacity(0.5))
+          .lineLimit(1)
+
+        if !notification.message.isEmpty {
+          Text(notification.message)
+            .scaledFont(size: OmiType.subheading, weight: .medium)
+            .foregroundColor(.white)
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        switch phase {
+        case .done(let confirmation):
+          Label(confirmation, systemImage: "checkmark")
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(.white.opacity(0.85))
+            .padding(.top, 5)
+        case .failed(let message):
+          Text(message)
+            .scaledFont(size: 11)
+            .foregroundColor(.white.opacity(0.7))
+            .padding(.top, 2)
+          actionRow
+        default:
+          actionRow
+        }
+      }
+
+      Spacer(minLength: OmiSpacing.xs)
+
+      // Reserve room so copy never runs under the overlaid dismiss button.
+      Color.clear
+        .frame(width: 28, height: 20)
+    }
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.md + 2)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .overlay(alignment: .topTrailing) {
+      Button {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+      } label: {
+        Image(systemName: "xmark")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(.white.opacity(0.62))
+          .frame(width: 18, height: 18)
+          .background(Color.white.opacity(0.08))
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
+      .accessibilityLabel("Dismiss meeting summary notification")
+    }
+  }
+
+  private var actionRow: some View {
+    HStack(spacing: 9) {
+      Button {
+        copyLink()
+      } label: {
+        HStack(spacing: 4) {
+          if phase == .copying {
+            ProgressView().controlSize(.mini)
+          }
+          Text("Copy link")
+        }
+        .scaledFont(size: 12, weight: .semibold)
+        .foregroundColor(.black)
+        .padding(.horizontal, 11).padding(.vertical, 4)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+      }
+      .buttonStyle(.plain)
+      .disabled(isBusy)
+      .accessibilityIdentifier("meeting-summary-share-copy")
+
+      if let firstRecipient = recipients.first {
+        Button {
+          sendSummary()
+        } label: {
+          HStack(spacing: 4) {
+            if phase == .sending {
+              ProgressView().controlSize(.mini)
+            }
+            Text(sendLabel)
+          }
+          .scaledFont(size: 12, weight: .semibold)
+          .foregroundColor(.white)
+          .padding(.horizontal, 11).padding(.vertical, 4)
+          .background(Color.white.opacity(0.18))
+          .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isBusy)
+        .help("Email the summary to \(firstRecipient.email)")
+        .accessibilityIdentifier("meeting-summary-share-send")
+      }
+
+      // Text-style link, deliberately chrome-free beside the two pills.
+      Button {
+        FloatingControlBarManager.shared.dismissCurrentNotification()
+        AppDelegate.summonWindowTarget()?.openMainAppChat()
+      } label: {
+        Text("See summary")
+          .scaledFont(size: 12, weight: .medium)
+          .foregroundColor(.white.opacity(0.55))
+          .underline()
+      }
+      .buttonStyle(.plain)
+      .disabled(isBusy)
+      .accessibilityIdentifier("meeting-summary-share-open")
+    }
+    .padding(.top, 6)
+  }
+
+  private func copyLink() {
+    guard !isBusy else { return }
+    phase = .copying
+    Task { @MainActor in
+      let feedback = await MeetingSummaryShareActions.copyLink(conversationID: conversationID)
+      if feedback == .copied {
+        finish(confirmation: "Link copied")
+      } else {
+        phase = .failed("Couldn't copy the link — try again")
+      }
+    }
+  }
+
+  private func sendSummary() {
+    guard !isBusy, !recipients.isEmpty else { return }
+    phase = .sending
+    Task { @MainActor in
+      do {
+        let sent = try await MeetingSummaryShareActions.sendSummary(
+          conversationID: conversationID, recipients: recipients)
+        let label = recipients.first?.shortLabel ?? "them"
+        finish(confirmation: sent.count > 1 ? "Sent to \(label) +\(sent.count - 1)" : "Sent to \(label)")
+      } catch {
+        phase = .failed("Couldn't send — try again")
+      }
+    }
+  }
+
+  /// Success shows a short confirmation, then the card dismisses itself. The
+  /// dismissal goes through the manager so queue advancement and bar re-hide
+  /// keep their single owner.
+  private func finish(confirmation: String) {
+    phase = .done(confirmation)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+      FloatingControlBarManager.shared.dismissCurrentNotification()
+    }
   }
 }
