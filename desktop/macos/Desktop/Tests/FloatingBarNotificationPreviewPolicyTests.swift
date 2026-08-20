@@ -157,6 +157,67 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       "muted in-bar preview must keep a banner surface so director delivery is visible")
   }
 
+  /// Behavioral guard for the four-type taxonomy: the director's real entry point must
+  /// refuse a delivery whose category toggle is off. Every upstream gate is pinned open
+  /// (owner seeded, master on, frequency Maximum, not paywalled) and the surface is
+  /// pinned to the deterministic banner path (bar enabled, previews muted), so the
+  /// Focus toggle is the only closed gate: removing the category guard from
+  /// `presentContextDirectorNotification` makes this call return `.queued` from the
+  /// banner path instead of `.suppressed`, failing the test.
+  @MainActor
+  func testDirectorDeliveryWithDisabledCategoryToggleIsSuppressedAtTheEntryPoint() throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      DefaultsKey.authUserId.rawValue,
+      DefaultsKey.automationOwnerOverride.rawValue,
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      "desktop_isPaywalled",
+      "askOmiBarEnabled",
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    let savedFocusEnabled = SuggestionAssistantSettings.shared.isEnabled
+    let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    defer {
+      for (key, value) in savedValues {
+        if let value {
+          defaults.set(value, forKey: key)
+        } else {
+          defaults.removeObject(forKey: key)
+        }
+      }
+      SuggestionAssistantSettings.shared.isEnabled = savedFocusEnabled
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
+    }
+
+    let owner = "owner-category-gate-\(UUID().uuidString)"
+    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: "desktop_isPaywalled")
+    defaults.set(true, forKey: "askOmiBarEnabled")
+    ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
+    SuggestionAssistantSettings.shared.isEnabled = false
+    let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
+    XCTAssertEqual(liveOwner, owner)
+
+    var droppedCount = 0
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    let result = service.presentContextDirectorNotification(
+      ownerID: liveOwner,
+      title: "PR #11937 blocked",
+      message: "The merge is waiting on a re-run of the flaky suite.",
+      decisionType: "suggest",
+      context: FloatingBarNotificationContext(
+        sourceTitle: "Context director",
+        assistantId: "context-director"),
+      onDropped: { droppedCount += 1 })
+
+    XCTAssertEqual(result, .suppressed)
+    XCTAssertEqual(droppedCount, 1)
+  }
+
   @MainActor
   func testDirectorOwnerRefusalInvokesDroppedCallbackExactlyOnce() {
     var droppedCount = 0
