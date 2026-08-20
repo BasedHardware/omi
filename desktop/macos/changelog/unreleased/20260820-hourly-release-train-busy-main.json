@@ -1,3 +1,0 @@
-{
-  "change": "Fixed macOS updates getting stuck before release when new changes kept landing during the hourly release train"
-}
