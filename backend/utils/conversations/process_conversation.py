@@ -53,6 +53,12 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.memory_service import MemoryService
+from utils.memory.decision_path_telemetry import (
+    classify_model_about,
+    emit_memory_capture_decision,
+    model_about_disagrees_with_attribution,
+)
+from utils.memory.rejected_memory_feedback import get_recent_rejected_memory_examples
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.observability.fallback import record_fallback
@@ -1092,6 +1098,22 @@ def _canonical_extraction_unavailable(
     return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)
 
 
+def _rejected_memory_examples_for_l1(uid: str, *, db_client: Any) -> Tuple[str, ...]:
+    """Fetch volatile owner feedback at the conversation orchestration boundary."""
+    try:
+        return get_recent_rejected_memory_examples(uid, db_client=db_client)
+    except Exception as exc:
+        logger.warning("canonical L1 rejection feedback unavailable uid=%s reason=%s", uid, type(exc).__name__)
+        record_fallback(
+            component="other",
+            from_mode="canonical_l1_rejection_feedback",
+            to_mode="extraction_without_rejection_feedback",
+            reason="other",
+            outcome="degraded",
+        )
+        return ()
+
+
 def _extract_memories_canonical(
     uid: str, conversation: Conversation, *, db_client: Any, parity_capture: SurfaceParityCapture | None = None
 ) -> ConversationMemoryExtractionResult:
@@ -1101,6 +1123,7 @@ def _extract_memories_canonical(
 
     language = users_db.get_user_language_preference(uid)
     capture_candidates: List[Tuple[Memory, List[str], str, List[str], bool]] = []
+    capture_decisions_by_memory_object: Dict[int, Tuple[str, bool]] = {}
 
     # Relative dates in delayed external content must resolve against capture
     # time, not the worker's current wall clock.  Keep this date grounding on
@@ -1156,6 +1179,7 @@ def _extract_memories_canonical(
                 language=language,
                 strict=True,
                 prompt_prefix=prompt_prefix,
+                rejected_memory_examples=_rejected_memory_examples_for_l1(uid, db_client=db_client),
             )
         except MemoryExtractionError as exc:
             return _canonical_extraction_unavailable(conversation, source, exc)
@@ -1182,19 +1206,29 @@ def _extract_memories_canonical(
                 user_name=user_name,
                 segments=conversation.transcript_segments,
             )
+            memory = Memory(
+                content=candidate.content,
+                category=(
+                    MemoryCategory.system
+                    if subject_attribution == SubjectAttribution.user
+                    else MemoryCategory.interesting
+                ),
+                visibility="private",
+                subject_entity_id=subject_entity_id,
+                subject_attribution=subject_attribution,
+            )
+            model_about = classify_model_about(
+                candidate.about,
+                user_name=user_name,
+                speaker_label=candidate.speaker_label,
+            )
+            capture_decisions_by_memory_object[id(memory)] = (
+                model_about,
+                model_about_disagrees_with_attribution(model_about, subject_attribution),
+            )
             capture_candidates.append(
                 (
-                    Memory(
-                        content=candidate.content,
-                        category=(
-                            MemoryCategory.system
-                            if subject_attribution == SubjectAttribution.user
-                            else MemoryCategory.interesting
-                        ),
-                        visibility="private",
-                        subject_entity_id=subject_entity_id,
-                        subject_attribution=subject_attribution,
-                    ),
+                    memory,
                     evidence_quotes,
                     subject_kind,
                     _l1_candidate_sensitivity_labels(candidate),
@@ -1242,6 +1276,7 @@ def _extract_memories_canonical(
 
     is_locked = conversation.is_locked
     parsed_memories: List[Tuple[MemoryDB, List[str], str, List[str]]] = []
+    capture_decisions_by_memory_id: Dict[str, Tuple[str, bool]] = {}
     seen_norm: Set[Tuple[str, str]] = set()
     subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
     # Keep the service boundary bounded even when a provider or test double
@@ -1287,6 +1322,11 @@ def _extract_memories_canonical(
             subject_entity_id=candidate_subject_entity_id,
         )
         memory_db_obj.memory_tier = MemoryTier.short_term
+        if memory_db_obj.id:
+            capture_decisions_by_memory_id[memory_db_obj.id] = capture_decisions_by_memory_object.get(
+                id(memory),
+                ("not_applicable", False),
+            )
         parsed_memories.append((memory_db_obj, evidence_quotes, subject_kind, sensitivity_labels))
 
     replacement_payloads = [
@@ -1310,6 +1350,28 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
+    capture_regime = getattr(conversation.source, "value", conversation.source) or ConversationSource.unknown.value
+    distinct_speaker_ids = len(
+        {segment.speaker_id for segment in conversation.transcript_segments if segment.speaker_id is not None}
+    )
+    for memory_db_obj, _, _, _ in parsed_memories:
+        if not memory_db_obj.id:
+            continue
+        model_about, attribution_disagreed = capture_decisions_by_memory_id.get(
+            memory_db_obj.id,
+            ("not_applicable", False),
+        )
+        emit_memory_capture_decision(
+            logger,
+            uid=uid,
+            memory_id=memory_db_obj.id,
+            conversation_id=conversation.id,
+            capture_regime=str(capture_regime),
+            subject_attribution=memory_db_obj.subject_attribution,
+            model_about=model_about,
+            attribution_disagreed=attribution_disagreed,
+            distinct_speaker_ids=distinct_speaker_ids,
+        )
     if len(parsed_memories) == 0:
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
         return ConversationMemoryExtractionResult(count=0, source=source, path=PATH_CANONICAL)

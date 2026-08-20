@@ -284,6 +284,25 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+RECENT_REJECTED_MEMORY_FEEDBACK_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_recent_rejected_feedback',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('promotion.user_review', '==', 'user_review'),
+        FirestoreQueryFilter('updated_at', '>=', 'updated_at'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('promotion.user_review'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
+
 POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
     identifier='memory_items_policy_expired_short_term_by_capture',
     collection_group='memory_items',
@@ -672,6 +691,7 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    RECENT_REJECTED_MEMORY_FEEDBACK_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
     EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
     CANONICAL_GRAPH_READ_QUERY,

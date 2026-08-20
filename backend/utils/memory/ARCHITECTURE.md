@@ -149,6 +149,27 @@ can issue up to 25 such calls (500 items). Both owning
 jobs use verified private gateway endpoints, zero SDK retries, and a one-hour
 Cloud Run task budget.
 
+Owner rejection closes the feedback loop through
+`rejected_memory_feedback.py`. L1 extraction and each consolidation batch read
+at most eight newest active or terminally hidden owner rejections from active
+sources in the last 30 days. Only non-restricted content is retained,
+normalized to 180 characters per item and 1,600 characters total, then cached
+in-process for five minutes; every memory mutation invalidates the owner's
+entry. Conversation orchestration fetches the set through its injected
+Firestore client and passes it into L1, which places the examples at
+user-message priority after the conversation cache breakpoint. Consolidation
+serializes the set once in its volatile batch JSON because rejected items are
+deliberately absent from vector projection and therefore cannot be recovered
+reliably as vector neighbors.
+
+`decision_path_telemetry.py` emits the stable
+`canonical_memory_decision_path.v1` event for persisted capture and applied or
+blocked promotion routes. Capture events carry conversation source, resolved
+subject attribution, a non-PII classification of model-authored `about`,
+disagreement, and distinct speaker-ID count. Promotion events carry the route,
+stage status, and structured reason fields. Neither event accepts memory or
+transcript text.
+
 ## Search, graph, and derived providers
 
 Canonical item state is authoritative. Keyword/vector results are candidates

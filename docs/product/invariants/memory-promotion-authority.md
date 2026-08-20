@@ -48,7 +48,10 @@ PR may promote it to `locked`.
   `backend/tests/unit/test_working_observations_extractor.py` — conversation,
   observation, explicit, and external memory writes enter Short-term
 - `backend/tests/unit/test_canonical_consolidation.py` — pending work receives
-  an exact one-route partition with authoritative subject/evidence validation
+  an exact one-route partition with authoritative subject/evidence validation;
+  owner-rejected sources and near-duplicate negative examples cannot promote
+- `backend/tests/unit/test_rejected_memory_feedback.py` — negative examples are
+  recent, bounded, sensitivity-safe, source-active, cached, and invalidatable
 - `backend/tests/unit/test_canonical_maintenance_ordering.py` — maintenance has
   one L2 route owner and blocked consolidation cannot fall through to generic
   promotion

@@ -496,6 +496,32 @@
     },
     {
       "collectionGroup": "memory_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "source_state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "promotion.user_review",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updated_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "memory_items",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {

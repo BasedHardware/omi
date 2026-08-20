@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import importlib
+import json
+import logging
 import os
 import sys
 from datetime import datetime, timezone
@@ -498,6 +500,118 @@ def test_canonical_capture_known_non_user_speaker_overrides_model_about_user(mon
     payload = replacement_payloads[0]
     assert payload["subject_entity_id"] == "person:other-person"
     assert payload["subject_attribution"] == "third_party"
+
+
+def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkeypatch, caplog):
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    memory_text = "The other speaker works at a confidential company."
+    quote_text = "I work at a confidential company"
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    content=memory_text,
+                    evidence_quotes=[quote_text],
+                    speaker_label="SPEAKER_01",
+                    speaker_scope="session-local",
+                    about="the user",
+                    risk_flags=[],
+                    archive_class="general",
+                )
+            ]
+        ),
+    )
+    conversation = Conversation(
+        id="conv-desktop-decision-log",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.desktop,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="I own this account",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=2.0,
+            ),
+            TranscriptSegment(
+                text=f"{quote_text}.",
+                speaker="SPEAKER_01",
+                is_user=False,
+                person_id="other-person",
+                start=2.0,
+                end=4.0,
+            ),
+        ],
+    )
+
+    with caplog.at_level(logging.INFO, logger=pc.__name__):
+        result = pc._extract_memories_canonical(
+            "uid-decision-log",
+            conversation,
+            db_client=MagicMock(),
+        )
+
+    assert result.count == 1
+    messages = [
+        record.getMessage() for record in caplog.records if "canonical_memory_decision_path.v1" in record.getMessage()
+    ]
+    assert len(messages) == 1
+    event = json.loads(messages[0].split("canonical_memory_decision_path.v1 ", 1)[1])
+    assert event == {
+        "attribution_disagreed": True,
+        "capture_regime": "desktop",
+        "conversation_id": conversation.id,
+        "distinct_speaker_ids": 2,
+        "memory_id": mock_service.replace_conversation_memories.call_args.args[2][0]["id"],
+        "model_about": "primary_user",
+        "stage": "capture",
+        "subject_attribution": "third_party",
+        "uid": "uid-decision-log",
+    }
+    assert memory_text not in messages[0]
+    assert quote_text not in messages[0]
+
+
+def test_canonical_capture_rejection_feedback_fetch_is_bounded_to_the_orchestration_boundary(monkeypatch):
+    pc = _load_process_conversation()
+    fallback = MagicMock()
+    monkeypatch.setattr(pc, "record_fallback", fallback)
+    monkeypatch.setattr(
+        pc,
+        "get_recent_rejected_memory_examples",
+        lambda uid, *, db_client: (f"rejected-for-{uid}",),
+    )
+
+    assert pc._rejected_memory_examples_for_l1("uid-feedback", db_client=object()) == ("rejected-for-uid-feedback",)
+    fallback.assert_not_called()
+
+    monkeypatch.setattr(
+        pc,
+        "get_recent_rejected_memory_examples",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("query unavailable")),
+    )
+
+    assert pc._rejected_memory_examples_for_l1("uid-feedback", db_client=object()) == ()
+    fallback.assert_called_once_with(
+        component="other",
+        from_mode="canonical_l1_rejection_feedback",
+        to_mode="extraction_without_rejection_feedback",
+        reason="other",
+        outcome="degraded",
+    )
 
 
 def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypatch):
