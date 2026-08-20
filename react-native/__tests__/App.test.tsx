@@ -57,7 +57,13 @@ jest.mock('react-native', () => {
   const ReactRuntime = require('react');
   const component =
     (name: string) =>
-    ({children, ...props}: {children?: React.ReactNode}) =>
+    ({
+      children,
+      ...props
+    }: {
+      children?: React.ReactNode;
+      [key: string]: unknown;
+    }) =>
       ReactRuntime.createElement(name, props, children);
   const Text = component('Text');
   const View = component('View');
@@ -98,19 +104,23 @@ jest.mock('react-native', () => {
     stop: jest.fn(),
   }));
   const FlatList = ({
+    accessibilityLabel,
     data,
     ListEmptyComponent,
     ListFooterComponent,
     ListHeaderComponent,
     renderItem,
+    style,
   }: {
+    accessibilityLabel?: string;
     data: unknown[];
     ListEmptyComponent: React.ReactNode;
     ListFooterComponent: React.ReactNode;
     ListHeaderComponent: React.ReactNode;
     renderItem: (item: {item: unknown}) => React.ReactNode;
+    style?: unknown;
   }) => (
-    <View>
+    <View accessibilityLabel={accessibilityLabel} style={style}>
       {ListHeaderComponent}
       {data.map((item, index) => (
         <View key={index}>{renderItem({item})}</View>
@@ -631,7 +641,8 @@ test('keeps search results hidden until a search begins while retaining the v4 C
   );
 });
 
-test('keeps Home limited to chronological conversations and memories', async () => {
+test('shows the desktop chronological spine at rest and filters that same loaded list in place', async () => {
+  mockPlatformOS = 'macos';
   mockBackend.request.mockImplementation(async request => {
     if (request.path === '/v1/chat-messages?limit=50') {
       return {
@@ -701,6 +712,17 @@ test('keeps Home limited to chronological conversations and memories', async () 
   });
 
   const renderer = await renderApp();
+  const beforeSearch = JSON.stringify(renderer.toJSON());
+  expect(beforeSearch).toContain('Newer memory');
+  expect(beforeSearch).toContain('Older conversation');
+  expect(beforeSearch.indexOf('Newer memory')).toBeLessThan(
+    beforeSearch.indexOf('Older conversation'),
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home chronological spine',
+    ),
+  ).toBeDefined();
   await ReactTestRenderer.act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Search Home')
@@ -709,12 +731,11 @@ test('keeps Home limited to chronological conversations and memories', async () 
   await ReactTestRenderer.act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Search Home')
-      .props.onChangeText('e');
+      .props.onChangeText('newer');
   });
   const output = JSON.stringify(renderer.toJSON());
-  expect(output.indexOf('Newer memory')).toBeLessThan(
-    output.indexOf('Older conversation'),
-  );
+  expect(output).toContain('Newer memory');
+  expect(output).not.toContain('Older conversation');
   expect(output).not.toContain('Search conversations, memories, and tasks');
   expect(output).not.toContain('Search what you’ve seen and heard');
   expect(output).not.toContain('HOME');
@@ -737,6 +758,7 @@ test('keeps Home limited to chronological conversations and memories', async () 
   await ReactTestRenderer.act(async () => search.props.onChangeText('missing'));
   expect(JSON.stringify(renderer.toJSON())).toContain('No results');
   await ReactTestRenderer.act(async () => search.props.onChangeText(''));
+  expect(JSON.stringify(renderer.toJSON())).toContain('Older conversation');
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
       .props.value,
@@ -1476,7 +1498,7 @@ test('uses a full, navigation-free pane on mobile', async () => {
   ).toBeDefined();
 });
 
-test('uses transparent separated macOS desktop chrome', async () => {
+test('uses transparent separated macOS Home islands with a centered query lane', async () => {
   mockPlatformOS = 'macos';
   const renderer = await renderApp();
   const navigation = renderer.root.find(
@@ -1529,21 +1551,57 @@ test('uses transparent separated macOS desktop chrome', async () => {
   );
   expect(panelInset).toBeDefined();
   expect(
-    renderer.root.find(
+    renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Desktop material panel',
+    ),
+  ).toHaveLength(0);
+  const queryLane = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home query lane',
+  );
+  const queryIsland = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home query island',
+  );
+  const resultsPanel = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home results panel',
+  );
+  expect(queryLane.props.style).toEqual(
+    expect.objectContaining({
+      alignSelf: 'center',
+      maxWidth: 900,
+      width: '100%',
+    }),
+  );
+  expect(queryIsland.props.style).toEqual(
+    expect.objectContaining({minHeight: 64}),
+  );
+  expect(resultsPanel.props.style).toEqual(
+    expect.objectContaining({marginTop: 12}),
+  );
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home query material',
     ),
   ).toBeDefined();
   expect(
     renderer.root.find(
-      node => node.props.accessibilityLabel === 'Home search dock',
-    ).props.style,
-  ).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        backgroundColor: 'rgba(255, 255, 255, 0.62)',
-      }),
-    ]),
+      node => node.props.accessibilityLabel === 'Home results material',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home chronological spine',
+    ),
+  ).toBeDefined();
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.placeholder,
+  ).toBe('Filter saved…');
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output.indexOf('Filter saved…')).toBeLessThan(
+    output.indexOf('Home device affordance'),
   );
+  expect(output).not.toContain('Home pendant');
+  expect(output).not.toContain('Home devices');
   expect(
     renderer.root.find(
       node => node.props.accessibilityLabel === 'Desktop navigation material',
@@ -1568,6 +1626,46 @@ test('uses transparent separated macOS desktop chrome', async () => {
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Tasks stage'),
   ).toBeDefined();
+});
+
+test('keeps desktop hardware secondary while retaining native device actions', async () => {
+  mockPlatformOS = 'macos';
+  mockNative.getSnapshot.mockResolvedValue({
+    audioRoute: 'phone-mic',
+    background: 'inactive',
+    bluetooth: 'poweredOn',
+    capture: 'idle',
+    captureMode: 'stream',
+    devices: [
+      {battery: 82, connected: true, id: 'omi-1', name: 'Omi', rssi: -54},
+    ],
+    lastEvent: 'Connected to Omi',
+    microphone: 'granted',
+    notifications: 'granted',
+  });
+  const renderer = await renderApp();
+  const output = JSON.stringify(renderer.toJSON());
+  expect(output.indexOf('Home results panel')).toBeLessThan(
+    output.indexOf('Home device affordance'),
+  );
+  const affordance = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home device affordance',
+  );
+  expect(affordance.props.style).toEqual(
+    expect.objectContaining({minHeight: 36}),
+  );
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Disconnect Omi')
+      .props.onPress();
+  });
+  expect(mockNative.disconnectDevice).toHaveBeenCalledWith('omi-1');
+  await ReactTestRenderer.act(async () => {
+    await renderer.root
+      .find(node => node.props.accessibilityLabel === 'Scan for Omi devices')
+      .props.onPress();
+  });
+  expect(mockNative.startScan).toHaveBeenCalledWith(8);
 });
 
 test.each([800, 960, 1440])(
