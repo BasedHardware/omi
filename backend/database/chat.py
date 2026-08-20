@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
-from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -704,34 +704,51 @@ def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool =
     return None
 
 
+def _update_chat_session_if_exists(uid: str, chat_session_id: str, values: Dict[str, Any], what: str) -> bool:
+    """Apply a derived-state update to a chat session, tolerating a deleted session.
+
+    The message/file id lists and the OpenAI ids are derived state the session
+    document owns. Every writer below runs after a multi-second LLM call, and
+    DELETE /v2/messages (clear chat) deletes the session it read at the start of
+    that same window — so a concurrent clear, or a client retrying the slow
+    request, leaves these writes pointing at a tombstone. Firestore's update()
+    then raises NotFound and the user's chat call 500s even though the work it
+    was reporting already succeeded. A session that no longer exists has nothing
+    to record.
+
+    Returns True when the update was applied.
+    """
+    session_ref = db.collection('users').document(uid).collection('chat_sessions').document(chat_session_id)
+    try:
+        session_ref.update(values)
+        return True
+    except NotFound:
+        logger.warning(f"chat session {chat_session_id} no longer exists; skipping {what}")
+        return False
+
+
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str) -> None:
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+    _update_chat_session_if_exists(
+        uid, chat_session_id, {"message_ids": firestore.ArrayUnion([message_id])}, "message link"
+    )
 
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]) -> None:
     if not file_ids:
         return
 
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
+    _update_chat_session_if_exists(uid, chat_session_id, {"file_ids": firestore.ArrayUnion(file_ids)}, "file link")
 
 
 def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str) -> None:
     """Update OpenAI thread and assistant IDs for a chat session"""
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-
     update_data: Dict[str, str] = {}
     if thread_id:
         update_data['openai_thread_id'] = thread_id
     if assistant_id:
         update_data['openai_assistant_id'] = assistant_id
 
-    if update_data:
-        session_ref.update(update_data)
+    if update_data and _update_chat_session_if_exists(uid, chat_session_id, update_data, "openai id link"):
         logger.info(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
 
 
