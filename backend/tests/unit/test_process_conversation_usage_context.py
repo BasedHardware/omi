@@ -1010,7 +1010,7 @@ def test_llm_calls_use_omi_qos_tier_system():
 
     # get_transcript_structure should use the conv_structure QoS lane.
     struct_match = re.search(
-        r'def get_transcript_structure.*?get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
+        r'def get_transcript_structure.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
@@ -1021,7 +1021,7 @@ def test_llm_calls_use_omi_qos_tier_system():
 
     # get_app_result should use the conv_app_result QoS lane.
     app_match = re.search(
-        r'def get_app_result.*?get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
+        r'def get_app_result.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
@@ -1032,7 +1032,7 @@ def test_llm_calls_use_omi_qos_tier_system():
 
     # extract_action_items should use the conv_action_items QoS lane.
     action_match = re.search(
-        r'def extract_action_items.*?get_llm\([\'"](\w+)[\'"]\s*,\s*cache_key=',
+        r'def extract_action_items.*?get_llm\(\s*[\'"](\w+)[\'"]\s*,\s*cache_key=',
         conv_proc_source,
         re.DOTALL,
     )
@@ -1054,7 +1054,7 @@ def test_all_callsites_use_get_llm():
 
     # conversation_processing.py: 9 callsites
     conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
-    conv_proc_calls = re.findall(r"get_llm\('(\w+)'", conv_proc_source)
+    conv_proc_calls = re.findall(r"get_llm\(\s*'(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
     assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
     assert 'conv_app_select' in conv_proc_calls, "Missing get_llm('conv_app_select') in conversation_processing.py"
@@ -1068,7 +1068,7 @@ def test_all_callsites_use_get_llm():
 
     # knowledge_graph.py: 2 callsites
     kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text(encoding="utf-8")
-    kg_calls = re.findall(r"get_llm\('(\w+)'", kg_source)
+    kg_calls = re.findall(r"get_llm\(\s*'(\w+)'", kg_source)
     assert (
         kg_calls.count('knowledge_graph') == 2
     ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
@@ -1076,15 +1076,18 @@ def test_all_callsites_use_get_llm():
     # memories.py: 6 callsites (memories x3 incl. the memory-log extract SSOT, learnings x1,
     # memory_category x1, memory_conflict x1)
     mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text(encoding="utf-8")
-    mem_calls = re.findall(r"get_llm\('(\w+)'", mem_source)
+    mem_calls = re.findall(r"get_llm\(\s*'(\w+)'", mem_source)
     assert mem_calls.count('memories') == 3, f"Expected 3 get_llm('memories') calls, got {mem_calls.count('memories')}"
     assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
     assert 'memory_category' in mem_calls, "Missing get_llm('memory_category') in memories.py"
     assert 'memory_conflict' in mem_calls, "Missing get_llm('memory_conflict') in memories.py"
 
-    # Total: 10 + 2 + 6 = 18 callsites (notes v2 adds the merged note call).
+    # Total: 11 + 2 + 6 = 19 callsites (notes v2 adds the merged note call). This was 18 while the
+    # pattern above required the feature key on the same line as `get_llm(`: one already-wrapped
+    # conv_app_result callsite was invisible to it, so the count was calibrated against a scan that
+    # silently skipped wrapped calls.
     total = len(conv_proc_calls) + len(kg_calls) + len(mem_calls)
-    assert total == 18, f"Expected 18 total get_llm() callsites, got {total}"
+    assert total == 19, f"Expected 19 total get_llm() callsites, got {total}"
 
 
 def test_no_direct_llm_instance_usage_in_wired_files():
