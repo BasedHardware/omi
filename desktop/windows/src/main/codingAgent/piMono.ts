@@ -91,8 +91,10 @@ export interface HarnessConfig {
    * `authToken`/`byokEnv` at worker-build time; a hidden-window Firebase token
    * can go stale and Settings can rewrite `byok-keys.json` while that worker
    * is still pinned. When set, `start()` prefers this over the snapshot.
-   * A null/failed refresh keeps the snapshot (never spawn with an empty token
-   * just because the renderer pull timed out).
+   * A thrown refresh keeps the snapshot (never spawn with an empty token just
+   * because the renderer pull timed out). A null result means the session is
+   * gone (signed out); `start()` then fails closed rather than baking the
+   * construction-time token.
    */
   resolveSpawnCredentials?: () => Promise<{
     authToken?: string
@@ -500,12 +502,19 @@ export class PiMonoAdapter {
       options.extensionPath || process.env.PI_EXTENSION_PATH || resolveBundledExtension()
   }
 
-  /** Overlay a renderer pull / BYOK re-read onto the construction-time snapshot. */
+  /** Overlay a renderer pull / BYOK re-read onto the construction-time snapshot.
+   *  Null = signed out / no session: wipe the snapshot so `start()` refuses
+   *  instead of baking the departed user's construction-time token. Throw =
+   *  renderer pull failed; keep the snapshot. */
   private async applyResolvedSpawnCredentials(): Promise<void> {
     if (!this.config.resolveSpawnCredentials) return
     try {
       const next = await this.config.resolveSpawnCredentials()
-      if (!next) return
+      if (!next) {
+        this.config.authToken = undefined
+        this.config.byokEnv = {}
+        return
+      }
       if (next.authToken) this.config.authToken = next.authToken
       if (next.omiApiBaseUrl) this.config.omiApiBaseUrl = next.omiApiBaseUrl
       if (next.byokEnv !== undefined) this.config.byokEnv = next.byokEnv
@@ -648,6 +657,17 @@ export class PiMonoAdapter {
       this.activePromptGeneration = 0
       rmSync(this.contextFilePath, { force: true })
     })
+  }
+
+  /** Sign-out: drop baked credentials, cancel a deferred restart, and kill the
+   *  subprocess so a later BYOK/token restart cannot spawn as the departed user. */
+  async revokeAndStop(): Promise<void> {
+    this.pendingTokenRefresh = false
+    this.pendingByokRefresh = false
+    this.pendingSystemPromptRefresh = false
+    this.config.authToken = undefined
+    this.config.byokEnv = {}
+    await this.stop()
   }
 
   async stop(): Promise<void> {

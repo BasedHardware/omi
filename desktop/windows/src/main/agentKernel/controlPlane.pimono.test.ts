@@ -32,6 +32,7 @@ vi.mock('../codingAgent/piMono', () => ({
     this.config = config
     this.updateAuthToken = vi.fn(() => Promise.resolve(true))
     this.updateByokEnv = vi.fn(() => Promise.resolve(true))
+    this.revokeAndStop = vi.fn(() => Promise.resolve())
   }),
   PiMonoRuntimeAdapter: vi.fn(function (this: Record<string, unknown>, harness: unknown) {
     this.harness = harness

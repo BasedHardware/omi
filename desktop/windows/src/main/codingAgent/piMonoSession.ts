@@ -42,6 +42,9 @@ export interface PiMonoAuthTarget {
    *  The extension bakes `OMI_BYOK_*` at spawn, so a Settings save is a no-op
    *  until this restarts the worker. Empty `{}` means fall back to managed billing. */
   updateByokEnv(env: Record<string, string>): Promise<boolean>
+  /** Sign-out: wipe baked credentials and stop the subprocess. A later
+   *  `start()` must fail closed, not spawn with the departed user's token. */
+  revokeAndStop(): Promise<void>
 }
 
 let session: PiMonoSession | null = null
@@ -75,13 +78,21 @@ function coerce(next: unknown): PiMonoSession | null {
  * registered — i.e. a pi subprocess is live — hand the fresh token to the
  * adapter so it restarts (when idle) or defers the restart until the in-flight
  * prompt finishes. While dark (no adapter registered) this is a pure cache
- * update. Sign-out just clears the cache; tearing down a live subprocess is the
- * adapter lifecycle's job (PR-D), not this relay's.
+ * update. Sign-out clears the cache and revokes the live subprocess so a later
+ * BYOK restart cannot spawn with the departed user's construction-time token.
  */
 export function configurePiMonoSession(next: unknown): void {
   const valid = coerce(next)
   const prevToken = session?.token
   session = valid
+
+  if (!valid && adapter) {
+    const target = adapter
+    void target.revokeAndStop().catch((e) => {
+      console.warn('[pi-mono-session] sign-out stop failed', (e as Error).message)
+    })
+    return
+  }
 
   if (valid && adapter && valid.token !== prevToken) {
     const target = adapter
@@ -170,7 +181,7 @@ export async function ensureFreshPiMonoSession(): Promise<PiMonoSession | null> 
  * no adapter is registered. Never logs key material.
  */
 export function notifyPiMonoByokChanged(): void {
-  if (!adapter) return
+  if (!adapter || !session) return
   const target = adapter
   const env = getPiMonoByokEnv()
   void target.updateByokEnv(env).catch((e) => {

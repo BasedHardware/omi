@@ -46,10 +46,12 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 function fakeAdapter(): PiMonoAuthTarget & {
   updateAuthToken: ReturnType<typeof vi.fn>
   updateByokEnv: ReturnType<typeof vi.fn>
+  revokeAndStop: ReturnType<typeof vi.fn>
 } {
   return {
     updateAuthToken: vi.fn(async () => true),
-    updateByokEnv: vi.fn(async () => true)
+    updateByokEnv: vi.fn(async () => true),
+    revokeAndStop: vi.fn(async () => {})
   }
 }
 
@@ -74,6 +76,21 @@ describe('configurePiMonoSession / getPiMonoSession', () => {
     configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
     configurePiMonoSession(null)
     expect(getPiMonoSession()).toBeNull()
+  })
+
+  it('stops the live adapter on sign-out so a later spawn cannot reuse the departed token', async () => {
+    const adapter = fakeAdapter()
+    registerPiMonoAdapter(adapter)
+    configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
+    adapter.updateAuthToken.mockClear()
+    adapter.revokeAndStop.mockClear()
+
+    configurePiMonoSession(null)
+    await flush()
+
+    expect(getPiMonoSession()).toBeNull()
+    expect(adapter.revokeAndStop).toHaveBeenCalledTimes(1)
+    expect(adapter.updateAuthToken).not.toHaveBeenCalled()
   })
 
   it('rejects a malformed payload (missing/blank fields → null)', () => {
@@ -150,7 +167,8 @@ describe('token refresh → adapter restart', () => {
       updateAuthToken: vi.fn(async () => {
         throw new Error('spawn failed')
       }),
-      updateByokEnv: vi.fn(async () => true)
+      updateByokEnv: vi.fn(async () => true),
+      revokeAndStop: vi.fn(async () => {})
     }
     registerPiMonoAdapter(adapter)
 
@@ -339,6 +357,8 @@ describe('notifyPiMonoByokChanged', () => {
     __setByokKeyStoreForTests(store)
     const adapter = fakeAdapter()
     registerPiMonoAdapter(adapter)
+    configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
+    adapter.updateByokEnv.mockClear()
     notifyPiMonoByokChanged()
     await flush()
     expect(adapter.updateByokEnv).toHaveBeenCalledWith({
@@ -347,5 +367,25 @@ describe('notifyPiMonoByokChanged', () => {
       OMI_BYOK_GEMINI: 'gm-key',
       OMI_BYOK_DEEPGRAM: 'dg-key'
     })
+  })
+
+  it('does not restart the adapter from BYOK after sign-out', async () => {
+    const store = new ByokKeyStore(
+      join(dir, `byok-notify-signout-${Math.random().toString(36).slice(2)}.json`)
+    )
+    store.setKey('openai', 'sk-openai')
+    store.setKey('anthropic', 'sk-ant')
+    store.setKey('gemini', 'gm-key')
+    store.setKey('deepgram', 'dg-key')
+    __setByokKeyStoreForTests(store)
+    const adapter = fakeAdapter()
+    registerPiMonoAdapter(adapter)
+    configurePiMonoSession({ token: 'tok-1', desktopApiBase: 'https://api.example/v2' })
+    configurePiMonoSession(null)
+    adapter.updateByokEnv.mockClear()
+
+    notifyPiMonoByokChanged()
+    await flush()
+    expect(adapter.updateByokEnv).not.toHaveBeenCalled()
   })
 })

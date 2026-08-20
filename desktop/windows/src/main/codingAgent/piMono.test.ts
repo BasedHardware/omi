@@ -677,6 +677,62 @@ describe('PiMonoAdapter restart lifecycle', () => {
     await adapter.stop()
   })
 
+  it('fails closed when resolveSpawnCredentials returns null (signed out)', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'departed-user-token',
+        byokEnv: { OMI_BYOK_ANTHROPIC: 'sk-ant' },
+        resolveSpawnCredentials: async () => null
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+
+    await expect(adapter.start()).rejects.toThrow(/requires config\.authToken/)
+    expect(spawn).not.toHaveBeenCalled()
+
+    await adapter.stop()
+  })
+
+  it('revokeAndStop clears baked credentials so a later start cannot reuse them', async () => {
+    const adapter = new PiMonoAdapter(
+      { authToken: 'departed-user-token' },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    await adapter.revokeAndStop()
+    await expect(adapter.start()).rejects.toThrow(/requires config\.authToken/)
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('updateByokEnv fails closed instead of respawning the departed user token', async () => {
+    let signedOut = false
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'live-token',
+        resolveSpawnCredentials: async () =>
+          signedOut
+            ? null
+            : { authToken: 'live-token', omiApiBaseUrl: 'https://api.example/v2', byokEnv: {} }
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    signedOut = true
+    await expect(
+      adapter.updateByokEnv({
+        OMI_BYOK_OPENAI: 'sk-openai',
+        OMI_BYOK_ANTHROPIC: 'sk-ant',
+        OMI_BYOK_GEMINI: 'gm-key',
+        OMI_BYOK_DEEPGRAM: 'dg-key'
+      })
+    ).rejects.toThrow(/requires config\.authToken/)
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
   it('updateByokEnv restarts an idle subprocess with the new env', async () => {
     const adapter = new PiMonoAdapter(
       { authToken: 'firebase-id-token-xyz' },
