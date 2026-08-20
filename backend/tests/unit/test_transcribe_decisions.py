@@ -29,6 +29,7 @@ from utils.transcribe_decisions import (
     should_process_on_disconnect,
     should_queue_speaker_embedding,
     should_remove_in_progress_pointer,
+    should_skip_custom_stt_postprocessing,
     should_skip_speaker_detection,
     should_spawn_speaker_match,
     stt_buffer_flush_size,
@@ -149,7 +150,6 @@ def test_speech_profile_and_speaker_id_gates():
     assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=False, include_speech_profile=True) is True
     assert should_load_speech_profile(use_custom_stt=True, is_multi_channel=False, include_speech_profile=True) is False
     assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=True, include_speech_profile=True) is False
-
     assert (
         should_enable_speaker_identification(
             use_custom_stt=False,
@@ -174,6 +174,16 @@ def test_speech_profile_and_speaker_id_gates():
         )
         is False
     )
+
+
+def test_custom_stt_postprocessing_skip_gate():
+    # Custom-STT without an LLM BYOK key: skip Omi-paid post-processing.
+    assert should_skip_custom_stt_postprocessing(uses_custom_stt=True, has_llm_byok_key=False) is True
+    # Custom-STT with an LLM BYOK key: the user pays their own bill, allow it.
+    assert should_skip_custom_stt_postprocessing(uses_custom_stt=True, has_llm_byok_key=True) is False
+    # Omi-STT conversations are unaffected by this gate.
+    assert should_skip_custom_stt_postprocessing(uses_custom_stt=False, has_llm_byok_key=False) is False
+    assert should_skip_custom_stt_postprocessing(uses_custom_stt=False, has_llm_byok_key=True) is False
 
 
 def test_conversation_lifecycle_actions():

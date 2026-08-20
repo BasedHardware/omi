@@ -21,6 +21,8 @@ typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)>
   int? page,
   int? limit,
   required bool includeDiscarded,
+  DateTime? startDate,
+  DateTime? endDate,
   String? speakerId,
 });
 typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
@@ -53,6 +55,9 @@ class ConversationProvider extends ChangeNotifier {
   DateTime? selectedEndDate;
   String? selectedFolderId;
   String? selectedSpeakerId;
+
+  DateTime? searchStartDate;
+  DateTime? searchEndDate;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -181,6 +186,8 @@ class ConversationProvider extends ChangeNotifier {
     selectedEndDate = null;
     selectedFolderId = null;
     selectedSpeakerId = null;
+    searchStartDate = null;
+    searchEndDate = null;
     previousQuery = '';
     totalSearchPages = 1;
     currentSearchPage = 1;
@@ -229,6 +236,8 @@ class ConversationProvider extends ChangeNotifier {
     var (convos, current, total) = await _conversationSearchFetcher(
       query,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
@@ -263,6 +272,8 @@ class ConversationProvider extends ChangeNotifier {
       previousQuery,
       page: currentSearchPage + 1,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
@@ -806,6 +817,25 @@ class ConversationProvider extends ChangeNotifier {
 
       return true;
     }).toList();
+  }
+
+  /// Set search date range (start and end). Null = no limit on that side.
+  ///
+  /// Dates are normalized to day boundaries so the selected final calendar day
+  /// is included: [start] is set to the start of its day (00:00:00) and [end]
+  /// is set to the end of its day (23:59:59.999), matching how the server
+  /// interprets the ISO-8601 bounds.
+  void setSearchDateRange(DateTime? start, DateTime? end) {
+    searchStartDate = start != null ? DateTime(start.year, start.month, start.day) : null;
+    searchEndDate = end != null ? DateTime(end.year, end.month, end.day, 23, 59, 59, 999) : null;
+    notifyListeners();
+  }
+
+  /// Clear the search date range filter
+  void clearSearchDateRange() {
+    searchStartDate = null;
+    searchEndDate = null;
+    notifyListeners();
   }
 
   /// Filter conversations by a date range (inclusive of both start and end day)

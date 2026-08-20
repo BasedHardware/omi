@@ -7063,6 +7063,11 @@
             ],
             "title": "Updated At"
           },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
+          },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
             "default": "private"
@@ -13152,6 +13157,17 @@
               }
             ],
             "title": "Conversations Created"
+          },
+          "conversations_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversations Skipped"
           },
           "created_at": {
             "anyOf": [
@@ -19381,6 +19397,11 @@
               }
             ],
             "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",

@@ -292,7 +292,7 @@ def test_completed_conversation_creation_is_explicit_and_idempotent(lifecycle_st
 
 
 def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
-    lifecycle_service.persist_imported_conversation(
+    created = lifecycle_service.persist_imported_conversation(
         'uid',
         {
             'id': 'imported',
@@ -303,8 +303,23 @@ def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
         },
     )
 
+    assert created is True
     assert list(lifecycle_store.documents) == [('users', 'uid', 'conversations', 'imported')]
     assert lifecycle_store.conversation('uid', 'imported')['status'] == ConversationStatus.completed
+    assert (
+        lifecycle_service.persist_imported_conversation(
+            'uid',
+            {
+                'id': 'imported',
+                'status': ConversationStatus.completed,
+                'discarded': False,
+                'title': 'later export title',
+                'data_protection_level': 'standard',
+            },
+        )
+        is False
+    )
+    assert lifecycle_store.conversation('uid', 'imported')['title'] == 'imported title'
 
 
 def test_merge_rejects_processing_conversations():
