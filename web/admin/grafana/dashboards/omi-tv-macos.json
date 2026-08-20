@@ -631,7 +631,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "text": {
-          "valueSize": 20,
+          "valueSize": 16,
           "titleSize": 11
         }
       },

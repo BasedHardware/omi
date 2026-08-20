@@ -48,8 +48,9 @@ function buildRelease(version: string | null, date: string | null): PlatformRele
     return { version, date, daysSince: null, display: "no releases found" };
   }
   const daysSince = daysBetween(date, nycToday());
-  const ago = daysSince <= 0 ? "today" : daysSince === 1 ? "1d ago" : `${daysSince}d ago`;
-  return { version, date, daysSince, display: `${version} · ${shortDate(date)} (${ago})` };
+  // Age lives in the separate color-thresholded `daysSince` field; keeping it
+  // out of the display string stops the stat tile from wrapping.
+  return { version, date, daysSince, display: `${version} · ${shortDate(date)}` };
 }
 
 async function fetchMacosReleases(days: number): Promise<{ dates: string[]; latest: PlatformRelease }> {
