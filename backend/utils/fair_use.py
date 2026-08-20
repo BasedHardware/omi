@@ -287,20 +287,24 @@ def get_rolling_backfill_speech_ms(uid: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-# Paid unlimited-transcription tiers get the raised fair-use triggers. Hardcoded (like
-# _platform_hidden_plans in utils.subscription) rather than derived from get_plan_limits so
-# utils.fair_use does not depend on utils.subscription.get_plan_limits at import time (that
-# import broke module-stubbing tests), and so a mis-set BASIC_TIER cap can never flip Free
-# into this set. Plus and Free carry a bounded monthly cap and stay on the default tier.
-def _is_unlimited_tier(plan: Optional[PlanType]) -> bool:
+# Paid unlimited-transcription tiers get the raised fair-use triggers. The membership set is
+# generated from each plan's catalog ``fair_use_profile``; it is deliberately independent of
+# subscription quota overlays so a mis-set BASIC_TIER cap can never flip Free into this set.
+def _is_unlimited_tier(plan: Optional[PlanType | str]) -> bool:
     """True for paid unlimited-transcription tiers (Unlimited/unlimited_v2, legacy Neo,
     Operator, Architect) — the plans whose monthly transcription allowance is unbounded.
     Free and Plus (bounded monthly cap) stay on the default tier. Robust to ``None`` and to
     plans passed as raw strings (PlanType is a str enum)."""
-    return plan in UNLIMITED_TRANSCRIPTION_PLAN_TYPES
+    if plan is None:
+        return False
+    try:
+        normalized_plan = PlanType(plan)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'unknown catalog plan for fair-use classification: {plan!r}') from error
+    return normalized_plan in UNLIMITED_TRANSCRIPTION_PLAN_TYPES
 
 
-def fair_use_caps_for_plan(plan: Optional[PlanType] = None) -> tuple[int, int, int]:
+def fair_use_caps_for_plan(plan: Optional[PlanType | str] = None) -> tuple[int, int, int]:
     """Return the (daily_ms, three_day_ms, weekly_ms) soft-cap triggers for a plan.
 
     Unlimited-tier plans get the raised triggers; everyone else gets the default tier.

@@ -248,6 +248,28 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
     monthly_usage.assert_called_once_with('uid')
 
 
+def test_zero_transcription_allowance_is_exhausted_not_unlimited(monkeypatch, subscription_module):
+    _stub_remaining_deps(monkeypatch, subscription_module, PlanType.basic, used_seconds=0)
+    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=0))
+
+    assert subscription_module.has_transcription_credits('uid') is False
+    assert subscription_module.get_remaining_transcription_seconds('uid') == 0
+
+
+def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscription_module):
+    original_allocation_limit = subscription_module.allocation_limit
+
+    def malformed_allocation_limit(plan, allocation):
+        if allocation == 'transcription':
+            raise KeyError('basic.transcription limit is missing')
+        return original_allocation_limit(plan, allocation)
+
+    monkeypatch.setattr(subscription_module, 'allocation_limit', malformed_allocation_limit)
+
+    with pytest.raises(KeyError, match='limit is missing'):
+        subscription_module.get_plan_limits(PlanType.basic)
+
+
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
     monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
@@ -344,3 +366,17 @@ def test_plus_and_unlimited_v2_features_state_transcription_limits(subscription_
     assert any("Unlimited transcription" in f for f in unlim_mobile), unlim_mobile
     # Must not leak the Free-tier "Unlimited listening time" fallback.
     assert not any("listening" in f for f in plus_mobile), plus_mobile
+
+
+def test_basic_feature_defaults_project_from_plan_limits(monkeypatch, subscription_module):
+    monkeypatch.setattr(
+        subscription_module,
+        'get_plan_limits',
+        lambda plan: SimpleNamespace(transcription_seconds=600, words_transcribed=7, insights_gained=9),
+    )
+
+    features = subscription_module.get_plan_features(PlanType.basic)
+
+    assert '10 minutes of listening per month' in features
+    assert '7 words transcribed per month' in features
+    assert '9 insights per month' in features

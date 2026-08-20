@@ -1196,16 +1196,24 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
         ]
 
     if plan == PlanType.basic:
+        limits = get_plan_limits(plan)
+        transcription_limit = limits.transcription_seconds
+        words_limit = limits.words_transcribed
+        insights_limit = limits.insights_gained
         return [
-            f'{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month',
             (
-                f'{BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH:,} words transcribed per month'
-                if BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH is not None
+                f'{transcription_limit // 60:,} minutes of listening per month'
+                if transcription_limit is not None
+                else 'Unlimited listening'
+            ),
+            (
+                f'{words_limit:,} words transcribed per month'
+                if words_limit is not None
                 else 'Unlimited words transcribed'
             ),
             (
-                f'{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights per month'
-                if BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH is not None
+                f'{insights_limit:,} insights per month'
+                if insights_limit is not None
                 else 'Unlimited insights'
             ),
             'Unlimited memories',
