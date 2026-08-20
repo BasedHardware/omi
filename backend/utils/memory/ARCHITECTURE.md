@@ -97,9 +97,14 @@ backend/modal/memory_maintenance_job.py
     memory_outbox_worker.py
 ```
 
-The job inventories accounts from a content-free universal maintenance
-registry. First canonical apply-state provisioning idempotently registers the
-UID; each job run advances a persisted bounded cursor and wraps at the end.
+The job prioritizes accounts whose authoritative Short-term items enter the
+last 24 hours of their 48-hour policy window, using a bounded collection-group
+query projected to lifecycle metadata and ordered by effective expiry. It
+fills remaining capacity from the content-free universal maintenance registry.
+First canonical apply-state
+provisioning idempotently registers the UID; each job run advances a persisted
+bounded cursor and wraps at the end. The expiry queue is independent of that
+cursor, so a registry outage or 20-hour cooldown cannot strand deadline work.
 This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
 cadence; the job is the sole host of
 `MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
@@ -125,10 +130,11 @@ Flex, and increment `generation` with every control change. Setting it back to
 response from an older generation is discarded before durable apply. Flex
 resource deferrals release promotion leases for the next scheduled run and
 do not consume model-output quality retry budgets; X raw posts remain pending.
-Flex-mode memory maintenance scans a bounded registry page (up to 400 UIDs),
-skips accounts with no active Short-term row, and skips accounts dreamed in
-the last 20 hours unless they already have more than 10 active Short-term
-rows (hourly overflow drain). Remaining users run until the 15-minute Flex
+Flex-mode memory maintenance scans a bounded merged page (up to 400 UIDs),
+with expiry-ordered accounts first. It skips accounts with no active Short-term
+row, and skips non-urgent accounts dreamed in the last 20 hours unless they
+already have more than 10 active Short-term rows (hourly overflow drain).
+Remaining users run until the 15-minute Flex
 reservation no longer fits in the one-hour job budget. A Flex deferral leaves
 the durable cursor on the unfinished UID so later accounts are not skipped.
 The job does not run a separate required-processing LLM: explicit submissions

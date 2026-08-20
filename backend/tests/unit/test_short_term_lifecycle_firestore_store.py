@@ -6,6 +6,7 @@ from jobs.short_term_lifecycle_worker import (
     FirestoreShortTermLifecycleTransitionStore,
     ShortTermLifecycleTransitionRecord,
     fetch_expired_short_term_memory_items_firestore,
+    fetch_expiry_urgent_short_term_memory_items_firestore,
     run_short_term_lifecycle_firestore,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
@@ -32,12 +33,23 @@ class _DocumentRef:
 
 
 class _CollectionRef:
-    def __init__(self, db_client, path, filters=None, limit_count=None, order_fields=None):
+    def __init__(
+        self,
+        db_client,
+        path,
+        filters=None,
+        limit_count=None,
+        order_fields=None,
+        collection_group=False,
+        selected_fields=None,
+    ):
         self._db_client = db_client
         self.path = path
         self._filters = list(filters or [])
         self._limit_count = limit_count
         self._order_fields = list(order_fields or [])
+        self._collection_group = collection_group
+        self._selected_fields = tuple(selected_fields) if selected_fields is not None else None
 
     def where(self, field_path=None, op_string=None, value=None, *, filter=None):
         if filter is not None:
@@ -52,6 +64,19 @@ class _CollectionRef:
             [*self._filters, (field_path, op_string, value)],
             limit_count=self._limit_count,
             order_fields=self._order_fields,
+            collection_group=self._collection_group,
+            selected_fields=self._selected_fields,
+        )
+
+    def select(self, field_paths):
+        return _CollectionRef(
+            self._db_client,
+            self.path,
+            self._filters,
+            limit_count=self._limit_count,
+            order_fields=self._order_fields,
+            collection_group=self._collection_group,
+            selected_fields=field_paths,
         )
 
     def order_by(self, field_path):
@@ -61,6 +86,8 @@ class _CollectionRef:
             self._filters,
             limit_count=self._limit_count,
             order_fields=[*self._order_fields, field_path],
+            collection_group=self._collection_group,
+            selected_fields=self._selected_fields,
         )
 
     def limit(self, limit_count):
@@ -70,16 +97,28 @@ class _CollectionRef:
             self._filters,
             limit_count=limit_count,
             order_fields=self._order_fields,
+            collection_group=self._collection_group,
+            selected_fields=self._selected_fields,
         )
 
     def stream(self):
-        prefix = f'{self.path}/'
         snapshots = []
         for path, data in sorted(self._db_client.docs.items()):
-            if not path.startswith(prefix) or '/' in path[len(prefix) :]:
-                continue
+            if self._collection_group:
+                parts = path.split('/')
+                if len(parts) != 4 or parts[-2] != self.path:
+                    continue
+            else:
+                prefix = f'{self.path}/'
+                if not path.startswith(prefix) or '/' in path[len(prefix) :]:
+                    continue
             if all(self._matches(data, field_path, op_string, value) for field_path, op_string, value in self._filters):
-                snapshots.append(_Snapshot(data))
+                selected = (
+                    {field: data.get(field) for field in self._selected_fields}
+                    if self._selected_fields is not None
+                    else data
+                )
+                snapshots.append(_Snapshot(selected))
         for field_path in reversed(self._order_fields):
             snapshots.sort(key=lambda snapshot: self._nested_value(snapshot.to_dict(), field_path))
         if self._limit_count is not None:
@@ -88,6 +127,7 @@ class _CollectionRef:
         self._db_client.streamed_snapshot_counts.append(len(snapshots))
         self._db_client.stream_filters.append(self._filters)
         self._db_client.stream_order_fields.append(self._order_fields)
+        self._db_client.stream_selected_fields.append(self._selected_fields)
         return snapshots
 
     @staticmethod
@@ -103,6 +143,8 @@ class _CollectionRef:
         actual = self._nested_value(data, field_path)
         if op_string == '==':
             return actual == value
+        if op_string == 'in':
+            return actual in value
         if op_string == '<=':
             if isinstance(actual, str) and isinstance(value, datetime):
                 value = value.isoformat()
@@ -145,6 +187,7 @@ class _FirestoreFake:
         self.streamed_snapshot_counts = []
         self.stream_filters = []
         self.stream_order_fields = []
+        self.stream_selected_fields = []
 
     def transaction(self):
         return _Transaction(self)
@@ -154,6 +197,9 @@ class _FirestoreFake:
 
     def collection(self, path):
         return _CollectionRef(self, path)
+
+    def collection_group(self, collection_id):
+        return _CollectionRef(self, collection_id, collection_group=True)
 
 
 def _record(**overrides):
@@ -326,6 +372,55 @@ def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_b
     assert payload['memory_item_id'] == 'a-stale-short-term'
     assert payload['default_access_allowed'] is False
     assert payload['archive_default_visible'] is False
+
+
+def test_fetch_expiry_urgent_short_term_items_is_global_policy_ordered_and_bounded():
+    db_client = _FirestoreFake()
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    deadline = now + timedelta(hours=24)
+    earliest = _memory_item(
+        'earliest',
+        captured_at=now - timedelta(hours=36),
+        uid='u2',
+        expires_at=now + timedelta(hours=4),
+    )
+    legacy_policy_expiry = _memory_item(
+        'legacy-policy-expiry',
+        captured_at=now - timedelta(hours=25),
+        expires_at=now + timedelta(days=29),
+    )
+    not_urgent = _memory_item('not-urgent', captured_at=now - timedelta(hours=1))
+    blocked_with_terminal_review = _memory_item(
+        'blocked-with-terminal-review',
+        captured_at=now - timedelta(hours=40),
+        processing_state=ProcessingState.blocked,
+        promotion={'route': 'review'},
+    )
+    db_client.docs = {
+        f'users/{item.uid}/memory_items/{item.memory_id}': _stored_item(item)
+        for item in (not_urgent, blocked_with_terminal_review, legacy_policy_expiry, earliest)
+    }
+
+    items = fetch_expiry_urgent_short_term_memory_items_firestore(
+        db_client=db_client,
+        deadline=deadline,
+        limit=2,
+    )
+
+    assert [(item.uid, item.memory_id) for item in items] == [
+        ('u2', 'earliest'),
+        ('u1', 'legacy-policy-expiry'),
+    ]
+    assert db_client.stream_order_fields == [['expires_at', 'memory_id'], ['captured_at', 'memory_id']]
+    assert db_client.stream_selected_fields == [
+        ('uid', 'memory_id', 'tier', 'status', 'processing_state', 'captured_at', 'expires_at'),
+        ('uid', 'memory_id', 'tier', 'status', 'processing_state', 'captured_at', 'expires_at'),
+    ]
+    assert all(
+        ('processing_state', 'in', [ProcessingState.pending.value, ProcessingState.processed.value]) in filters
+        for filters in db_client.stream_filters
+    )
+    assert all(limit == 2 for limit in db_client.stream_limits)
 
 
 def test_ineligible_earlier_ids_cannot_starve_expired_short_term_work_at_the_query_cap():

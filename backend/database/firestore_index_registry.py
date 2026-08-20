@@ -306,6 +306,26 @@ POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
     ),
 )
 
+EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_expiry_urgent_short_term_by_capture',
+    collection_group='memory_items',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
+        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('captured_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
     identifier='memory_items_canonical_graph_read',
     collection_group='memory_items',
@@ -431,6 +451,26 @@ EXPIRED_SHORT_TERM_LIFECYCLE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('tier', '==', 'tier'),
         FirestoreQueryFilter('status', '==', 'status'),
         FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('expires_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
+EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_expiry_urgent_short_term_by_stored_expiry',
+    collection_group='memory_items',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', 'in', 'processing_states'),
         FirestoreQueryFilter('expires_at', '<=', 'expires_at'),
     ),
     index_fields=(
@@ -633,6 +673,7 @@ QUERY_SPECS = (
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
     POLICY_EXPIRED_SHORT_TERM_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_CAPTURE_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -642,6 +683,7 @@ QUERY_SPECS = (
     SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
     SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+    EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,

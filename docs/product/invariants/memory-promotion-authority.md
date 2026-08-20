@@ -19,6 +19,8 @@ PR may promote it to `locked`.
   migration policy.
 - Leave a pending Short-term item without exactly one consolidation route, or
   apply more than one of `promote`, `archive`, `review`, and `reject` to it.
+- Treat the Short-term TTL alone as a terminal route or hide an expired active
+  item before canonical apply records its disposition.
 - Add a generic, batch/daily, call-site, or user-asserted fast-track promotion
   pass alongside the consolidation route.
 - Commit a new active Short-term → Long-term transition without validating a
@@ -52,8 +54,9 @@ PR may promote it to `locked`.
   promotion
 - `backend/tests/unit/test_canonical_short_term_maintenance_cron.py` and
   `backend/tests/unit/test_validate_memory_maintenance_scheduler.py` — the
-  scheduled runtime invokes only the canonical maintenance owner and reports
-  projection delivery failures
+  scheduled runtime invokes only the canonical maintenance owner, prioritizes
+  expiry work independently of the registry/cooldown, and reports projection
+  delivery and unadjudicated-expiry failures
 - `backend/tests/unit/test_atomic_apply.py` and
   `backend/tests/unit/test_memory_apply_store.py` — promotion atomically writes
   the item, graph assertion, ledger state, operation result, and outbox;

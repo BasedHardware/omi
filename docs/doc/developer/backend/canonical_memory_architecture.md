@@ -95,17 +95,24 @@ first mutation.
 The dedicated `memory-maintenance-job` inventories bounded canonical pending
 work, not users from an allowlist and not an unbounded account scan. Each pass:
 
-1. drains previously committed outbox work;
-2. normalizes required submissions;
-3. settles TTL expiry;
-4. asks `canonical_consolidation.py` for an exact item-addressed partition into
+1. prioritizes UIDs with items in the final 24 hours of the Short-term TTL via
+   a lifecycle-metadata-only query, independently of the registry cursor and
+   per-user cooldown;
+2. drains previously committed outbox work;
+3. normalizes required submissions;
+4. settles TTL expiry;
+5. asks `canonical_consolidation.py` for an exact item-addressed partition into
    promote, archive, review, or reject;
-5. commits each route through canonical apply and drains new outbox work.
+6. commits each route through canonical apply and drains new outbox work.
 
 Only consolidation can issue the promotion receipt required for a new
 Short-term to Long-term transition. Invalid/partial model output mutates
 nothing. Revision-scoped attempts, leases, bounded retries, review quarantine,
 and scan cursors prevent poison-row starvation and repeated LLM cost.
+Time reaching the TTL is not itself a route: an active Short-term item remains
+default-readable until canonical apply records a terminal disposition. This
+prevents a missed maintenance pass from silently deleting memory while the
+expiry queue continues to prioritize it.
 
 ## Search, graph, and projections
 
