@@ -264,7 +264,7 @@ def releases_chart_panel(panel_id: int) -> dict:
                        "(TestFlight noise excluded); latest verified against the "
                        "App Store lookup API.",
         "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
-        "gridPos": {"x": 0, "y": 14, "w": 24, "h": 6},
+        "gridPos": {"x": 0, "y": 999, "w": 24, "h": 6},
         "timeFrom": "30d",
         "fieldConfig": {
             "defaults": {
@@ -335,7 +335,7 @@ def latest_release_stat(panel_id: int, scope: str) -> dict:
             }],
         },
         "options": {
-            "reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": ""},
+            "reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": "/.*/"},
             "orientation": "horizontal",
             "textMode": "value_and_name",
             "colorMode": "value",

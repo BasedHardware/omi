@@ -184,7 +184,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&drop=1",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -623,7 +623,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "/.*/"
         },
         "orientation": "horizontal",
         "textMode": "value_and_name",
@@ -3835,7 +3835,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&label=WoW&drop=1",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dmacos&root=growthAccounting&fields=active&agg=last&window=1&label=WoW",
             "url_options": {
               "data": "",
               "method": "GET"
