@@ -7,7 +7,7 @@ import hashlib
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -103,6 +103,14 @@ UserMutationPatchBuilder = Callable[[MemoryItem, datetime], Tuple[Payload, Paylo
 # merge path — converges across those races instead of failing (#11726).
 _RETRACT_CONFLICT_ATTEMPTS = 5
 _RETRACT_CONFLICT_BACKOFF_SECONDS = (0.05, 0.1, 0.25, 0.5)
+# Extraction races the same control CAS but runs inside conversation processing,
+# which has no outer convergence loop: an immediate retry re-reads the control a
+# peer just advanced, so same-account writers keep losing in lockstep and the
+# whole enrichment fails. Back the replacement's own rounds off by default.
+_REPLACEMENT_CONFLICT_BACKOFF_SECONDS = (0.05, 0.1, 0.25, 0.5)
+# Retraction already wraps this call in the converging loop above; keeping its
+# inner rounds immediate stops the delete path's latency budget being multiplied.
+_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF = (0.0, 0.0)
 _SETTLED_PROMOTION_FIELDS = frozenset(
     {
         "route",
@@ -1390,19 +1398,39 @@ def _conversation_replacement_digest(
     )
 
 
+def _backoff_before_replacement_retry(attempt: int, schedule: Sequence[float]) -> None:
+    """Pause between conversation-replacement conflict rounds.
+
+    A zero or missing entry keeps the round immediate, which is what callers
+    that own an outer converging loop pass.
+    """
+    if attempt >= len(schedule):
+        return
+    delay = schedule[attempt]
+    if delay > 0:
+        time.sleep(delay)
+
+
 def replace_conversation_sourced_memories(
     uid: str,
     conversation_id: str,
     items: List[Dict[str, Any]],
     *,
     db_client: Any = None,
+    conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
 ) -> Dict[str, Any]:
-    """Atomically replace one conversation's complete canonical memory set."""
+    """Atomically replace one conversation's complete canonical memory set.
+
+    Every same-account canonical write races the account-global control CAS, so
+    a conflicted round must re-plan against the control the peer left behind.
+    ``conflict_backoff_seconds`` bounds those rounds: one entry per retry, and
+    the number of attempts is ``len(...) + 1``.
+    """
     client = db_client if db_client is not None else default_db_client
     replacement_digest = _conversation_replacement_digest(uid, conversation_id, items)
     replacement_id = f"replace_{replacement_digest[:32]}"
     last_conflict: Optional[ConversationSourceReplacementConflict] = None
-    for _attempt in range(3):
+    for _attempt in range(len(conflict_backoff_seconds) + 1):
         observed_control = _read_replacement_control(uid, db_client=client)
         expected_source_items = [
             item
@@ -1438,6 +1466,7 @@ def replace_conversation_sourced_memories(
             last_conflict = ConversationSourceReplacementConflict(
                 "memory control changed during conversation source scan"
             )
+            _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
             continue
         observed_control = confirmed_control
         next_generation = observed_control.source_generation + 1
@@ -1507,6 +1536,7 @@ def replace_conversation_sourced_memories(
             break
         except ConversationSourceReplacementConflict as exc:
             last_conflict = exc
+            _backoff_before_replacement_retry(_attempt, conflict_backoff_seconds)
     else:
         raise ConversationReplacementConflictError(
             "canonical conversation replacement conflicted repeatedly"
@@ -2317,6 +2347,7 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
                 conversation_id,
                 [],
                 db_client=client,
+                conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
             )
         except ConversationReplacementConflictError as exc:
             last_conflict = exc
