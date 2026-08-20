@@ -417,6 +417,15 @@ def _empty_errors() -> list[str]:
 
 
 def canonical_maintenance_enabled() -> bool:
+    """Whether *this process* hosts the ST→LT cron.
+
+    Not a product rollout flag — that is ``MEMORY_ENABLED``, which is universal for
+    authenticated accounts. This one is per-deployable routing, so the ``"false"``
+    default is correct: only ``memory-maintenance-job`` sets it true, and
+    ``scripts/runtime_env_validation/manifest.py`` fails the build if any other job
+    or request-path surface does. Read the deployed value from
+    ``deploy/runtime_env/*.overlay.yaml``, not from this default.
+    """
     raw = os.getenv(MEMORY_CANONICAL_MAINTENANCE_ENABLED_ENV, "false")
     return raw.lower() == "true"
 
