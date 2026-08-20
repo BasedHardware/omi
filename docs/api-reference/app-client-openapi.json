@@ -7063,6 +7063,11 @@
             ],
             "title": "Updated At"
           },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
+          },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
             "default": "private"
@@ -19392,6 +19397,11 @@
               }
             ],
             "title": "Updated At"
+          },
+          "uses_custom_stt": {
+            "default": false,
+            "title": "Uses Custom Stt",
+            "type": "boolean"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
