@@ -109,8 +109,8 @@ void main() {
 }
 
 ServerConversation _conversation(String id, DateTime createdAt) => ServerConversation(
-  id: id,
-  createdAt: createdAt,
-  structured: Structured('Title', 'Overview'),
-  status: ConversationStatus.completed,
-);
+      id: id,
+      createdAt: createdAt,
+      structured: Structured('Title', 'Overview'),
+      status: ConversationStatus.completed,
+    );

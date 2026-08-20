@@ -175,9 +175,8 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
     _socket = await openSpeechProfileSocket(codec: codec, sampleRate: rate, language: language, force: force);
@@ -199,11 +198,11 @@ class SpeechProfileProvider extends ChangeNotifier
     required bool force,
   }) {
     return ServiceManager.instance().socket.speechProfile(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+        );
   }
 
   /// Uploads the recorded speech-profile audio. Overridden in tests to avoid

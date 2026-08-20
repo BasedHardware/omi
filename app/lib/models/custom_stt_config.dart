@@ -127,20 +127,20 @@ class CustomSttConfig {
   }
 
   Map<String, dynamic> toJson() => {
-    'provider': provider.name,
-    'api_key': apiKey,
-    'language': language,
-    'model': model,
-    'url': url,
-    'host': host,
-    'port': port,
-    'request_type': requestType,
-    'headers': headers,
-    'params': params,
-    'audio_field_name': audioFieldName,
-    'schema': schemaJson,
-    'send_raw_audio_to_omi': sendRawAudioToOmi,
-  };
+        'provider': provider.name,
+        'api_key': apiKey,
+        'language': language,
+        'model': model,
+        'url': url,
+        'host': host,
+        'port': port,
+        'request_type': requestType,
+        'headers': headers,
+        'params': params,
+        'audio_field_name': audioFieldName,
+        'schema': schemaJson,
+        'send_raw_audio_to_omi': sendRawAudioToOmi,
+      };
 
   factory CustomSttConfig.fromJson(Map<String, dynamic> json) {
     // Safely cast maps to Map<String, String> by converting all values to strings

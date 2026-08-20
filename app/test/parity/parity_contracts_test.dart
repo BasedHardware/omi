@@ -125,9 +125,9 @@ String _pad(int n) => n.toString().padLeft(2, '0');
 /// Build the item through the production wire decode so bucket cases exercise
 /// the same path a backend response takes.
 GeneratedActionItemResponse _wireItem({DateTime? due, DateTime? created}) => GeneratedActionItemResponse.fromJson({
-  'id': 'parity',
-  'description': 'parity case',
-  'completed': false,
-  if (created != null) 'created_at': created.toUtc().toIso8601String(),
-  if (due != null) 'due_at': due.toUtc().toIso8601String(),
-});
+      'id': 'parity',
+      'description': 'parity case',
+      'completed': false,
+      if (created != null) 'created_at': created.toUtc().toIso8601String(),
+      if (due != null) 'due_at': due.toUtc().toIso8601String(),
+    });
