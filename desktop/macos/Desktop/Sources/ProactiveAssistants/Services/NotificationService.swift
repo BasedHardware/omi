@@ -433,6 +433,28 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
+    // Every proactive notification belongs to one of the four user-facing categories
+    // (Focus, Task, Insight, Memory), and this shared boundary is where a category's
+    // Settings toggle binds every producer — goals and meeting action items included,
+    // not just the assistants that consult their own toggle before generating.
+    // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
+    if respectFrequency,
+      !Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+    {
+      log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .assistantNotificationsDisabled
+      )
+      return
+    }
+
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.

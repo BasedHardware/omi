@@ -218,6 +218,73 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(droppedCount, 1)
   }
 
+  /// The four category toggles bind every proactive producer at the shared
+  /// `sendNotification` boundary — including the dedicated producers that never
+  /// consulted a toggle before generating: goals (Focus) and meeting action items
+  /// (Task). Same construction as the director test: every upstream gate is pinned
+  /// open and the surface pinned to the banner path, so with the category gate
+  /// removed these calls fall through to a delivery dispatch this bundle-less test
+  /// host cannot perform, failing the test; with the gate present they return
+  /// before any surface and leave the presentation ledger untouched.
+  @MainActor
+  func testGoalAndMeetingProducersHonorTheirCategoryTogglesAtTheSharedBoundary() throws {
+    let defaults = UserDefaults.standard
+    let pinnedKeys = [
+      DefaultsKey.authUserId.rawValue,
+      DefaultsKey.automationOwnerOverride.rawValue,
+      NotificationService.masterEnabledDefaultsKey,
+      NotificationService.frequencyDefaultsKey,
+      "desktop_isPaywalled",
+      "askOmiBarEnabled",
+    ]
+    let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
+    let savedFocusEnabled = SuggestionAssistantSettings.shared.isEnabled
+    let savedTaskEnabled = TaskAssistantSettings.shared.notificationsEnabled
+    let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
+    defer {
+      for (key, value) in savedValues {
+        if let value {
+          defaults.set(value, forKey: key)
+        } else {
+          defaults.removeObject(forKey: key)
+        }
+      }
+      SuggestionAssistantSettings.shared.isEnabled = savedFocusEnabled
+      TaskAssistantSettings.shared.notificationsEnabled = savedTaskEnabled
+      ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
+    }
+
+    let owner = "owner-producer-gate-\(UUID().uuidString)"
+    defaults.set(owner, forKey: DefaultsKey.authUserId.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
+    defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
+    defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
+    defaults.set(false, forKey: "desktop_isPaywalled")
+    defaults.set(true, forKey: "askOmiBarEnabled")
+    ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
+    SuggestionAssistantSettings.shared.isEnabled = false
+    TaskAssistantSettings.shared.notificationsEnabled = false
+    let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
+    XCTAssertEqual(liveOwner, owner)
+
+    let service = NotificationService(registerWithSystemNotificationCenter: false)
+    service.sendNotification(
+      ownerID: liveOwner,
+      title: "New Goal",
+      message: "Ship the four-type notification taxonomy",
+      assistantId: "goals")
+    service.sendNotification(
+      ownerID: liveOwner,
+      title: "Meeting notes ready",
+      message: "2 action items from standup",
+      assistantId: "meeting-notes",
+      deliveryMode: .systemBannerOnly)
+
+    XCTAssertNil(
+      service.lastProactivePresentationAtForCurrentOwner(),
+      "a category-suppressed delivery must never advance the proactive presentation ledger")
+  }
+
   @MainActor
   func testDirectorOwnerRefusalInvokesDroppedCallbackExactlyOnce() {
     var droppedCount = 0
