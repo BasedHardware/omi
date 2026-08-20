@@ -48,7 +48,7 @@ struct ModelQoS {
 
     /// Available models shown in the UI picker
     static var availableModels: [(id: String, label: String)] {
-      [("claude-sonnet-4-6", "Sonnet")]
+      [("claude-sonnet-4-6", "Chat agent")]
     }
 
     /// Default model for user selection (floating bar / shortcut picker)

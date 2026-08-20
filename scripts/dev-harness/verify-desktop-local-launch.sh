@@ -186,7 +186,7 @@ if not token:
 status, _ = post_json(
     f"{desktop_backend_url}/v2/chat/completions",
     {
-        "model": "claude-3-5-sonnet-20241022",
+        "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": "ping"}],
         "max_tokens": 1,
     },
