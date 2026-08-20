@@ -8,7 +8,7 @@
         "transcript": {"text": "Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}},
         "screen": {"text": "User typed: Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}}
       },
-      "expected": {"outcome": "create_direct", "interruption": "invoking_surface_only"}
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "clear_commitment",
@@ -16,7 +16,7 @@
         "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 1, "deadline_confidence": 1}},
         "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 1, "deadline_confidence": 1}}
       },
-      "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "immediate_commitment",
@@ -24,7 +24,7 @@
         "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 1, "immediate_action": true}},
         "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 1, "immediate_action": true}}
       },
-      "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "clear_commitment_low_confidence",

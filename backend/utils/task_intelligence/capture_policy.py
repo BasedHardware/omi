@@ -1,4 +1,11 @@
-"""Deterministic shared capture policy used by every extraction surface."""
+"""Deterministic shared capture policy used by every extraction surface.
+
+INVARIANT I1: an automatically extracted task is NEVER written to the user's
+task list. Every capture outcome that would create work is a proposal the user
+must explicitly accept ("Add to Tasks"). There is deliberately no outcome here
+meaning "write a task now" — surfaces that carry a real user gesture (manual
+create, chat/MCP tool invocation, the developer API) do not run this policy.
+"""
 
 from dataclasses import dataclass
 from typing import Any
@@ -46,14 +53,15 @@ def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
     if signals.get('public_broadcast') and not signals.get('direct_mention'):
         return CapturePolicyResult('ignore', 'none')
     if signals.get('explicit_command'):
-        return CapturePolicyResult('create_direct', 'invoking_surface_only')
+        # A command heard in ambient audio is still a model's reading of speech,
+        # not a user gesture against a surface. It proposes; it does not create.
+        return CapturePolicyResult('pending_candidate', 'none')
     if signals.get('clear_commitment') and signals.get('owner') == 'user':
         if signals.get('concrete_deliverable') is not True:
             return CapturePolicyResult('ignore', 'none')
-        if _meets_user_capture_floor(signals):
-            return CapturePolicyResult('auto_accept_silent', 'none')
-        # A concrete first-person commitment may remain in the canonical sidecar at low confidence,
-        # but product projections apply the same confidence floors before showing it.
+        # A concrete first-person commitment is the strongest signal this policy has, and it
+        # still only earns a suggestion. Confidence decides whether the proposal is worth
+        # surfacing, never whether it may bypass the user (I1).
         return CapturePolicyResult('pending_candidate', 'none')
     if signals.get('direct_request') and _meets_user_capture_floor(signals):
         return CapturePolicyResult('pending_candidate', 'none')

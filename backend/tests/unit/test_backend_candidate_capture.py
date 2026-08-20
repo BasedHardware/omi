@@ -151,7 +151,8 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
 
     assert pending.policy.outcome == 'pending_candidate'
     assert pending.candidate is not None
-    assert accepted.policy.outcome == 'auto_accept_silent'
+    # I1: even a high-confidence first-person commitment only proposes.
+    assert accepted.policy.outcome == 'pending_candidate'
     assert accepted.policy.interruption == 'none'
     assert accepted.candidate.capture_confidence == 0.95
     assert low_confidence.policy.outcome == 'pending_candidate'
@@ -184,7 +185,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
             ),
             'conversation-1',
         ).policy.outcome
-        == 'auto_accept_silent'
+        == 'pending_candidate'
     )
     assert (
         conversation_capture._capture_decision(
@@ -345,38 +346,50 @@ def test_canonical_prompt_and_parser_preserve_no_deadline_requests_and_completio
     assert items[1].target_task_id == 'task-budget'
 
 
-def test_rejected_policy_uses_no_drop_compatibility_writer_without_candidate(monkeypatch):
+def test_rejected_item_is_dropped_alone_and_never_falls_back_to_a_writer(monkeypatch):
+    """I1: an ignored item must not drag its siblings onto the legacy writer."""
     _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
         lambda uid: TaskWorkflowControl(workflow_mode='shadow', account_generation=3),
     )
-    decisions = []
+    seen = []
+    created = []
 
     class _NoCandidateDecision:
         candidate = None
 
-    monkeypatch.setattr(
-        conversation_capture,
-        '_capture_decision',
-        lambda action_item, conversation_id: decisions.append((action_item.description, conversation_id))
-        or _NoCandidateDecision(),
-    )
+    class _CandidateDecision:
+        candidate = object()
+
+    def decide(action_item, conversation_id, *args):
+        seen.append((action_item.description, conversation_id))
+        return _NoCandidateDecision() if action_item.description == 'Ignore me' else _CandidateDecision()
+
+    monkeypatch.setattr(conversation_capture, '_capture_decision', decide)
     monkeypatch.setattr(
         conversation_capture.candidate_service,
         'create_candidate',
-        lambda *a, **kw: pytest.fail('should not create candidate when decision.candidate is None'),
+        lambda uid, proposal, **kw: created.append(proposal) or SimpleNamespace(candidate_id='candidate-1'),
     )
 
     assert conversation_capture.capture_enabled('user-1') is True
-    # A rejected extraction item has no Candidate representation. Returning
-    # False delegates the complete extraction to the compatibility writer.
-    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [_action('Send budget')]) is False
-    assert decisions == [('Send budget', 'conversation-1')]
+    handled = conversation_capture.process_before_legacy(
+        'user-1',
+        'conversation-1',
+        [_action('Ignore me'), _action('Send budget')],
+    )
+
+    # Always handled: there is no path back to a writer that bypasses the user.
+    assert handled is True
+    assert seen == [('Ignore me', 'conversation-1'), ('Send budget', 'conversation-1')]
+    # Only the admitted item was proposed; the ignored one was dropped alone.
+    assert len(created) == 1
 
 
-def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notifications(monkeypatch):
+def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch):
+    """I1: conversation extraction creates pending Candidates and nothing else."""
     _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
@@ -384,7 +397,6 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
         lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
     )
     records = []
-    accepted = []
 
     def create(uid, proposal, **kwargs):
         record = _record(proposal, len(records) + 1)
@@ -395,7 +407,7 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     monkeypatch.setattr(
         conversation_capture.candidate_service,
         'accept_candidate',
-        lambda uid, candidate_id, **kwargs: accepted.append(candidate_id),
+        lambda *a, **kw: pytest.fail('extraction must never accept a candidate'),
     )
     monkeypatch.setattr(
         process_conversation,
@@ -405,7 +417,12 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     monkeypatch.setattr(
         process_conversation.action_items_db,
         'create_action_items_batch',
-        lambda *args: pytest.fail('read mode cannot use legacy batch writer'),
+        lambda *args, **kwargs: pytest.fail('extraction must never write an action item'),
+    )
+    monkeypatch.setattr(
+        process_conversation.action_items_db,
+        'create_action_item',
+        lambda *args, **kwargs: pytest.fail('extraction must never write an action item'),
     )
     emitted = []
     monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: emitted.append(event))
@@ -429,8 +446,7 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     )
 
     assert len(records) == 2
-    assert accepted == ['candidate-1']
-    assert records[1].status == 'pending'
+    assert [record.status for record in records] == ['pending', 'pending']
     assert emitted == [
         {
             'uid': 'user-1',
@@ -445,8 +461,10 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     ]
 
 
-def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_writer(monkeypatch):
-    # Workflow mode is diagnostic; every authenticated UID uses Candidate.
+def test_off_mode_still_only_proposes_and_never_reaches_a_writer(monkeypatch):
+    # Workflow mode is diagnostic; every authenticated UID uses Candidate. `off`
+    # is what the control endpoint reports on its own read failure, and it must
+    # not become a route into the task list (I1).
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
@@ -468,8 +486,6 @@ def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_wri
         'create_action_items_batch',
         write,
     )
-    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
 
     conversation = _conversation(
@@ -493,7 +509,7 @@ def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_wri
     monkeypatch.setattr(
         conversation_capture.candidate_service,
         'accept_candidate',
-        lambda uid, candidate_id, **kwargs: None,
+        lambda *a, **kw: pytest.fail('extraction must never accept a candidate'),
     )
     assert conversation_capture.capture_enabled('user-1') is True
     result = conversation_capture.process_before_legacy(

@@ -221,12 +221,12 @@ enum ScreenCapturePolicy {
     if facts.duplicateOf != nil { return .proposeEnrichment }
     if facts.refinesTask != nil { return .proposeUpdate }
     if facts.publicBroadcast && !facts.directMention { return .ignore }
-    if facts.explicitCommand { return .createDirect }
+    // I1: no outcome here may create a task. A command read off the screen is
+    // still a model's reading of pixels, and a high-confidence commitment is
+    // still an inference. Both propose.
+    if facts.explicitCommand { return .pendingCandidate }
     if facts.clearCommitment && facts.owner == "user" {
       guard facts.concreteDeliverable else { return .ignore }
-      if meetsUserCaptureFloor(facts) {
-        return .autoAcceptSilent
-      }
       return .pendingCandidate
     }
     if facts.directRequest && meetsUserCaptureFloor(facts) { return .pendingCandidate }
@@ -236,13 +236,13 @@ enum ScreenCapturePolicy {
 }
 
 enum TaskCaptureModePolicy {
+  /// INVARIANT I1: no workflow mode may route a capture onto the legacy staging
+  /// path, because that path ends in automatic promotion into the user's task
+  /// list. `.off` in particular is what `/v1/candidates/control` returns when its
+  /// own read fails, so treating it as "stage and promote" turned a backend
+  /// hiccup into unrequested tasks. Captures now defer and retry instead.
   static func usesLegacyStaging(_ mode: OmiAPI.TaskWorkflowMode?) -> Bool {
-    switch mode {
-    case .off, .shadow, .write:
-      return true
-    case .read, ._unknown, nil:
-      return false
-    }
+    false
   }
 
   static func allowsLegacyPromotion(_ mode: OmiAPI.TaskWorkflowMode?) -> Bool {

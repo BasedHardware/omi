@@ -124,19 +124,25 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     }
   }
 
-  func testDiscoveryIgnoresNotificationSettingAndReadModeDisablesLegacyPromotion() {
+  func testDiscoveryIgnoresNotificationSettingAndNoModeEnablesLegacyPromotion() {
     XCTAssertTrue(TaskAssistant.discoveryEnabled(settingsEnabled: true, notificationsEnabled: false))
     XCTAssertFalse(TaskAssistant.discoveryEnabled(settingsEnabled: false, notificationsEnabled: true))
-    XCTAssertFalse(TaskCaptureModePolicy.usesLegacyStaging(.read))
-    XCTAssertTrue(TaskCaptureModePolicy.usesLegacyStaging(.off))
-    XCTAssertTrue(TaskCaptureModePolicy.usesLegacyStaging(.shadow))
-    XCTAssertTrue(TaskCaptureModePolicy.usesLegacyStaging(.write))
-    XCTAssertFalse(TaskCaptureModePolicy.usesLegacyStaging(._unknown))
-    XCTAssertFalse(TaskCaptureModePolicy.usesLegacyStaging(nil))
-    XCTAssertFalse(TaskCaptureModePolicy.allowsLegacyPromotion(.read))
-    XCTAssertFalse(TaskCaptureModePolicy.allowsLegacyRanking(.read))
-    XCTAssertFalse(TaskCaptureModePolicy.allowsDestructiveLegacyDeduplication(.read))
-    XCTAssertFalse(TaskCaptureModePolicy.allowsTaskCreatedNotification(.read))
+    // I1: no workflow mode may reach the legacy staging path, whose end is
+    // automatic promotion into the task list. `.off` is what the control
+    // endpoint reports when its own read fails, so it must be inert too.
+    let everyMode: [OmiAPI.TaskWorkflowMode?] = [.read, .off, .shadow, .write, ._unknown, nil]
+    for mode in everyMode {
+      XCTAssertFalse(TaskCaptureModePolicy.usesLegacyStaging(mode))
+      XCTAssertFalse(TaskCaptureModePolicy.allowsLegacyPromotion(mode))
+      XCTAssertFalse(TaskCaptureModePolicy.allowsLegacyRanking(mode))
+      XCTAssertFalse(TaskCaptureModePolicy.allowsDestructiveLegacyDeduplication(mode))
+      XCTAssertFalse(TaskCaptureModePolicy.allowsTaskCreatedNotification(mode))
+    }
+    for effect in TaskLegacyEffect.allCases {
+      for mode in everyMode {
+        XCTAssertFalse(TaskCaptureModePolicy.allows(effect, mode: mode))
+      }
+    }
   }
 
   func testReadModeBehaviorallyBlocksEveryLegacyEffectAndRollbackRestoresIt() async {
@@ -284,7 +290,7 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
       String(data: JSONEncoder().encode(candidate), encoding: .utf8)
     )
 
-    XCTAssertEqual(decision.outcome, .autoAcceptSilent)
+    XCTAssertEqual(decision.outcome, .pendingCandidate)
     XCTAssertTrue(json.contains("screen-42"))
     XCTAssertTrue(json.contains("device_local"))
     XCTAssertFalse(json.contains("Messages"))

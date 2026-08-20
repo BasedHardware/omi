@@ -4312,21 +4312,27 @@ struct TasksPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline)
-          if !viewModel.showCompleted && !viewModel.isMultiSelectMode {
-            SuggestedTasksSection(
-              store: suggestedStore,
-              isExpanded: $suggestionsSectionExpanded,
-              onCanonicalChange: {
-                await viewModel.loadTasks()
-              },
-              onCompleteCreatedTask: { taskID in
-                await viewModel.completeNewlyCreatedTask(id: taskID)
-              }
-            )
+          // Show tasks grouped by due-date category (Today, Tomorrow, Later, No Deadline).
+          // Multi-select keeps this grouping: selecting tasks must not reshuffle the
+          // list out from under the user. Only the row's selection control changes.
+          if !viewModel.showCompleted {
+            if !viewModel.isMultiSelectMode {
+              SuggestedTasksSection(
+                store: suggestedStore,
+                isExpanded: $suggestionsSectionExpanded,
+                onCanonicalChange: {
+                  await viewModel.loadTasks()
+                },
+                onCompleteCreatedTask: { taskID in
+                  await viewModel.completeNewlyCreatedTask(id: taskID)
+                }
+              )
+            }
 
             // Inline creation at top (Cmd+N)
-            if viewModel.isInlineCreating && viewModel.inlineCreateAfterTaskId == nil {
+            if !viewModel.isMultiSelectMode && viewModel.isInlineCreating
+              && viewModel.inlineCreateAfterTaskId == nil
+            {
               InlineTaskCreationRow(
                 text: $inlineCreateText,
                 isFocused: $inlineCreateFocused,
@@ -4434,7 +4440,7 @@ struct TasksPage: View {
               .id("inline-create-top-flat")
             }
 
-            // Flat list for other sort options, completed view, or multi-select mode
+            // Flat list for the completed view and other flat sort options.
             ForEach(viewModel.displayTasks) { task in
               VStack(spacing: 0) {
                 TaskRow(
@@ -4794,8 +4800,10 @@ struct TaskCategorySection: View {
           }
       }
 
-      // Tasks in category with drag-and-drop reordering
-      if !isMultiSelectMode && !isCollapsed {
+      // Tasks in category with drag-and-drop reordering.
+      // Rendered in multi-select too, so selection keeps the category grouping;
+      // TaskDragDropModifier below is disabled while selecting.
+      if !isCollapsed {
         LazyVStack(spacing: OmiSpacing.sm) {
           ForEach(visibleTasks) { task in
             VStack(spacing: 0) {
@@ -4849,7 +4857,7 @@ struct TaskCategorySection: View {
                 ))
 
               // Inline creation row after this task
-              if isInlineCreating && inlineCreateAfterTaskId == task.id {
+              if !isMultiSelectMode && isInlineCreating && inlineCreateAfterTaskId == task.id {
                 InlineTaskCreationRow(
                   text: $inlineCreateText,
                   isFocused: $inlineCreateFocused,
