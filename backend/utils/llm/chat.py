@@ -1243,6 +1243,23 @@ def retrieve_metadata_fields_from_transcript(
     return metadata
 
 
+def retrieve_metadata_fields_from_structured(
+    uid: str,
+    created_at: datetime,
+    structured: Any,
+    tz: str,
+) -> dict[str, Any]:
+    """Extract vector filters from the canonical note, not a second raw-transcript pass."""
+    parts = [
+        str(getattr(structured, 'title', '') or '').strip(),
+        str(getattr(structured, 'overview', '') or '').strip(),
+    ]
+    content = '\n\n'.join(part for part in parts if part)
+    if not content:
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+    return retrieve_metadata_fields_from_transcript(uid, created_at, [{'text': content}], tz)
+
+
 def retrieve_metadata_from_message(
     uid: str, created_at: datetime, message_text: str, tz: str, source_spec: Optional[str] = None
 ) -> dict[str, Any]:

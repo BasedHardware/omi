@@ -343,6 +343,11 @@ checks:
     triggers: [".github/workflows/gcp_admin.yml", ".github/scripts/check_admin_deploy_scope.py", ".github/scripts/check_admin_deploy_scope_admission.py", ".github/scripts/test_check_admin_deploy_scope.py", "web/admin/grafana/dashboards/omi-tv.json", "web/admin/grafana/apply_omi_tv_dashboard.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "generated-client-only diffs must skip admin deploy; real admin runtime diffs and workflow_dispatch must still deploy"
+  - id: grafana-dashboard-build
+    command: ["python3", "web/admin/grafana/test_build_dashboards.py"]
+    triggers: ["web/admin/grafana/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "platform boards must stay honest per-platform and every day-grain column must render on its NYC calendar day (bare UTC dates hid the latest day)"
   - id: web-llm-gateway-only
     command: ["python3", ".github/scripts/check_web_llm_gateway_only.py"]
     triggers: ["web/**/*.js", "web/**/*.jsx", "web/**/*.mjs", "web/**/*.ts", "web/**/*.tsx", "web/**/package.json", ".github/scripts/check_web_llm_gateway_only.py", ".github/checks-manifest.yaml"]
@@ -354,8 +359,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "the gateway-only source guard must reject provider regressions without flagging its own fixtures"
   - id: backend-async-blockers
-    command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
-    triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
+    command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
+    triggers: ["backend/**/*.py", "backend/scripts/scan_async_blockers.py"]
     lanes: ["local", "ci"]
     reason: "backend Python changed"
   - id: backend-datetime-sort-sentinel-ratchet
@@ -540,6 +545,12 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/tests/test-launch-env-forwarding.sh"]
     lanes: ["local", "ci"]
     reason: "`open` launches from launchd, so a documented run.sh env override that is not passed with `open --env` silently does nothing; caught OMI_FORCE_CANONICAL_MEMORY_ATLAS being documented but never forwarded"
+  - id: desktop-settings-seed
+    command: ["bash", "desktop/macos/tests/test-settings-seed.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/omi-settings-seed.sh", "desktop/macos/tests/test-settings-seed.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "the Swift-only fast bundle path bypassed Omi Dev preference seeding, while overlay semantics retained target hotkeys absent from the source; exact domain mirroring plus common prelaunch wiring must stay guarded"
   - id: desktop-agent-runtime-payload
     command: ["bash", "desktop/macos/tests/test-fast-dev-bundle.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]
@@ -672,12 +683,12 @@ checks:
     reason: "mutation-tests prod/all admission, serving smoke order, token handling, and rollback coverage"
   - id: direct-backend-production-admission
     command: ["python3", ".github/scripts/check-direct-backend-production-admission.py"]
-    triggers: [".github/workflows/gcp_backend_agent_proxy.yml", ".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 prevents direct production writers from deploying caller refs or mislabeling checked-out source"
   - id: direct-backend-production-admission-fixtures
     command: ["python3", ".github/scripts/test_check_direct_backend_production_admission.py"]
-    triggers: [".github/workflows/gcp_backend_agent_proxy.yml", ".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 mutation-tests branch bypass and GITHUB_SHA image mislabeling"
   - id: production-data-plane-routing
@@ -687,14 +698,19 @@ checks:
     reason: "INV-DATA-1 mutation-tests every production-family mobile and desktop routing authority and rejects retired GKE desktop-backend ownership"
   - id: desktop-backend-release-boundary
     command: ["python3", ".github/scripts/check-desktop-backend-release-policy.py"]
-    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", "backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "desktop-backend candidates must prove immutable OCI-index-to-linux/amd64 lineage, authenticated streamed chat with terminal usage, and managed voice-provider paths before any Cloud Run traffic shift"
   - id: desktop-backend-release-boundary-fixtures
     command: ["python3", ".github/scripts/test_check_desktop_backend_release_policy.py"]
-    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", ".github/scripts/test_check_desktop_backend_release_policy.py", "backend/scripts/preflight_agent_vm_reconciler_deploy_identity.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
+    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/workflows/desktop_backend_prod.yml", ".github/workflows/desktop_backend_recover_prod.yml", ".github/workflows/desktop_promote_prod.yml", ".github/scripts/verify_desktop_backend_image_lineage.py", ".github/scripts/check-desktop-backend-release-policy.py", ".github/scripts/test_check_desktop_backend_release_policy.py", "backend/Dockerfile.desktop_backend", "backend/**/*.py", "backend/pylock.runtime.toml", "desktop/macos/pi-mono-extension/index.ts", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mutation fixtures reject traffic-before-proof, missing reconciler actAs preflight, mutable/stale/wrong-platform images, automatic production deploys, baked runtime credentials, and chat-contract drift"
+  - id: desktop-backend-traffic-lineage-fixtures
+    command: ["python3", ".github/scripts/test_check_desktop_backend_traffic_regression.py"]
+    triggers: [".github/workflows/desktop_backend_auto_dev.yml", ".github/scripts/check_desktop_backend_traffic_regression.py", ".github/scripts/test_check_desktop_backend_traffic_regression.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "a traffic promotion gate must refuse only backwards promotions; refusing on branch recency discards candidates whose build and acceptance are already paid for"
   - id: desktop-backend-candidate-probe-fixtures
     command: ["python3", ".github/scripts/test_desktop_backend_candidate_probe.py"]
     triggers: [".github/scripts/desktop_backend_candidate_probe.py", ".github/scripts/test_desktop_backend_candidate_probe.py", "backend/**/*.py", "backend/pylock.runtime.toml", ".github/checks-manifest.yaml"]
@@ -727,6 +743,8 @@ exempt:
     reason: "deployment concurrency policy full-tree check, not diff-scoped"
   - path: ".github/scripts/check_admin_deploy_scope.py"
     reason: "runtime classifier invoked by gcp_admin.yml; contract and fixtures are admin-deploy-scope*"
+  - path: ".github/scripts/check_desktop_backend_traffic_regression.py"
+    reason: "runtime promotion gate invoked by desktop_backend_auto_dev.yml; contract and fixtures are desktop-backend-traffic-lineage-fixtures"
   - path: ".github/scripts/check_isinstance_return_ratchet.py"
     reason: "typed error flow-control ratchet uses a committed baseline, not diff-scoped triggers"
   - path: "backend/scripts/check_app_client_openapi_compatibility.py"

@@ -4,6 +4,13 @@
 This is an offline contract gate. It does not call a model or read local user
 data; it proves every director-owned fixture maps to the DEBUG probe ABI and
 keeps lifecycle-only cases explicitly separated.
+
+`--invoke` additionally replays the deck through the DEBUG probe on a running
+named QA bundle. There it scores referent identifiability: a case may declare
+`referentTokens`, the identifying strings its own synthetic context supplies,
+and a spoken decision whose title and message contain none of them fails as
+`unnamed_referent`. `reasoning` is excluded on purpose -- the user never sees
+it, so it cannot be what makes a notification identifiable.
 """
 
 from __future__ import annotations
@@ -35,7 +42,21 @@ DIRECTOR_CASES = {
     "privacy-sensitive-frame-not-evidence",
     "commitment-explicit-due-date",
     "commitment-ambiguous-mention",
+    "referent-pull-request",
+    "referent-email-thread",
+    "referent-document-comment",
+    "referent-person-request",
+    "referent-meeting-conflict",
+    "referent-file-build-failure",
+    "referent-visible-on-screen",
+    "referent-no-identifier",
 }
+
+# Cases whose point is that a spoken message must name the thing it is about.
+# Each declares `referentTokens`: the identifying strings its own synthetic
+# context supplies. A notification that contains none of them is unusable —
+# the user cannot tell which pull request, which thread, which document.
+REFERENT_CASES = {case for case in DIRECTOR_CASES if case.startswith("referent-")}
 
 STABLE_PROACTIVE_ERROR = re.compile(r"\bproactive_(?:http_error status=\d{3}|invalid_response|owner_changed)\b")
 DIRECTOR_DECISIONS = {"suggest", "insight", "task_candidate", "resurface", "silence"}
@@ -125,6 +146,16 @@ def validate(deck: dict) -> tuple[int, int]:
             decision not in DIRECTOR_DECISIONS for decision in allowed_decisions
         ):
             raise ValueError(f"{case['id']}: allowedDecisions must use director decision values")
+        referent_tokens = case.get("referentTokens", [])
+        if not isinstance(referent_tokens, list) or any(
+            not isinstance(token, str) or not token.strip() for token in referent_tokens
+        ):
+            raise ValueError(f"{case['id']}: referentTokens must be non-empty strings")
+        # `referent-no-identifier` is the deliberate exception: its whole point is
+        # that its context supplies no handle, so nothing may be named and nothing
+        # may be invented.
+        if case["id"] in REFERENT_CASES and not referent_tokens and case["id"] != "referent-no-identifier":
+            raise ValueError(f"{case['id']}: referent cases must declare referentTokens")
         if case["id"] in DIRECTOR_CASES:
             params = map_case(case)
             required = {
@@ -184,6 +215,12 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
     forbidden_terms_matched = [
         term for term in forbidden_output_terms if term.casefold() in response_text
     ]
+    # The user-visible surface is title + message; `reasoning` never reaches the
+    # user, so it cannot supply the identifying context.
+    visible_text = "\n".join(str(detail.get(field) or "") for field in ("title", "message")).casefold()
+    referent_tokens = case.get("referentTokens", [])
+    referent_hits = [token for token in referent_tokens if token.casefold() in visible_text]
+    referent_named = bool(referent_hits) if referent_tokens else None
     polarity_matched = expected == "either" or expected == polarity
     allowed_decisions = case.get("allowedDecisions", [])
     decision_matched = not allowed_decisions or decision in allowed_decisions
@@ -194,16 +231,26 @@ def invoke_case(case: dict, port: int, include_text: bool = False) -> dict:
         failure_reasons.append("decision")
     if forbidden_terms_matched:
         failure_reasons.append("forbidden_output")
+    referent_required = decision != "silence" and bool(referent_tokens)
+    if referent_required and not referent_hits:
+        failure_reasons.append("unnamed_referent")
     result = {
         "id": case["id"],
         "expectedAction": expected,
         "decision": decision,
         "polarity": polarity,
-        "matched": polarity_matched and decision_matched and not forbidden_terms_matched,
+        "matched": (
+            polarity_matched
+            and decision_matched
+            and not forbidden_terms_matched
+            and not (referent_required and not referent_hits)
+        ),
         "polarity_matched": polarity_matched,
         "decision_matched": decision_matched,
         "forbidden_output_matched": bool(forbidden_terms_matched),
         "forbidden_terms_matched": forbidden_terms_matched,
+        "referent_named": referent_named,
+        "referent_hits": referent_hits,
         "failure_reasons": failure_reasons,
         "model": detail.get("model"),
         "latency_ms": detail.get("latency_ms"),

@@ -15,6 +15,12 @@ and background processing.
   A caller must have already acquired a finalization-job lease before invoking
   it; it loads the conversation, performs enrichment through the postprocess
   bulkhead, and runs external integrations.
+- `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
+  conversation timestamps plus the union of transcribed-speech intervals, so
+  dual microphone/system-audio transcripts cannot double-count speech.
+- `meeting_receipt.py` is the sole writer of the final meeting verdict. It
+  records reason and measured inputs on the finalization job, projects the
+  verdict to the conversation, and attaches the deterministic Chat intent.
 - Route- or worker-specific ownership, retries, queues, and leases belong
   outside this package: `database/conversation_finalization_jobs.py`,
   `services/conversation_finalization.py`, and their callers own those states.

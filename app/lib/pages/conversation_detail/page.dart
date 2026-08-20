@@ -11,6 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:tuple/tuple.dart';
 
@@ -37,6 +38,7 @@ import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/expandable_text.dart';
 import 'package:omi/widgets/extensions/string.dart';
+
 import 'conversation_detail_provider.dart';
 import 'share.dart';
 import 'test_prompts.dart';
@@ -343,8 +345,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final conversation = provider.conversation;
         final summaryContent =
             conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-                ? conversation.appResults[0].content.trim()
-                : conversation.structured.toString();
+            ? conversation.appResults[0].content.trim()
+            : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -475,16 +477,6 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     HapticFeedback.lightImpact();
   }
 
-  // iOS requires a non-zero sharePositionOrigin (popover anchor); Share.shareXFiles
-  // throws a PlatformException without it.
-  Rect _shareSheetOrigin() {
-    final box = _shareButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
-      return box.localToGlobal(Offset.zero) & box.size;
-    }
-    return const Rect.fromLTWH(0, 0, 100, 100);
-  }
-
   Future<void> _downloadAudio(BuildContext context, ConversationDetailProvider provider) async {
     if (!mounted) return;
 
@@ -558,7 +550,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)], sharePositionOrigin: _shareSheetOrigin());
+        await Share.shareXFiles([
+          XFile(file.path, mimeType: mimeType),
+        ], sharePositionOrigin: shareSheetOrigin(_shareButtonKey));
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -687,9 +681,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       child: MessageListener<ConversationDetailProvider>(
         showError: (error) {
           if (error == 'REPROCESS_FAILED') {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(context.l10n.errorProcessingConversation)));
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(context.l10n.errorProcessingConversation)));
           }
         },
         showInfo: (info) {},
@@ -774,8 +767,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                              provider.conversation,
-                                            );
+                                          provider.conversation,
+                                        );
                                         // Track star/unstar action
                                         PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
@@ -783,9 +776,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                           source: 'detail_page_button',
                                         );
                                       } else {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(SnackBar(content: Text(context.l10n.failedToUpdateStarred)));
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(SnackBar(content: Text(context.l10n.failedToUpdateStarred)));
                                       }
                                     } catch (e) {
                                       Logger.debug('Failed to toggle starred status: $e');
@@ -851,7 +843,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       );
                                       shareConversationLink(
                                         provider.conversation,
-                                        sharePositionOrigin: _shareSheetOrigin(),
+                                        sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
                                       );
                                       // Small delay to let share sheet appear, then clear loading
                                       await Future.delayed(const Duration(milliseconds: 150));
@@ -1114,13 +1106,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                   child: Consumer<ConversationDetailProvider>(
                     builder: (context, provider, child) {
                       final conversation = provider.conversation;
-                      final hasActionItems =
-                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      final hasActionItems = conversation.structured.actionItems
+                          .where((item) => !item.deleted)
+                          .isNotEmpty;
                       return ConversationBottomBar(
                         mode: ConversationBottomBarMode.detail,
                         selectedTab: selectedTab,
                         conversation: conversation,
-                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                        hasSegments:
+                            conversation.transcriptSegments.isNotEmpty ||
                             conversation.photos.isNotEmpty ||
                             conversation.externalIntegration != null,
                         hasActionItems: hasActionItems,
@@ -1745,29 +1739,29 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
             child: _isLoading
                 ? _buildShimmerList()
                 : _events.isEmpty
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(40),
-                          child: Text(
-                            'No calendar events found around this time.',
-                            style: TextStyle(color: Colors.grey, fontSize: 15),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _events.length,
-                        separatorBuilder: (_, __) =>
-                            const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
-                        itemBuilder: (context, index) {
-                          final event = _events[index];
-                          final isLinkingThis = _linkingEventId == event.eventId;
-                          final isSuggested = event.eventId == _suggestedEventId;
-                          return _buildEventTile(event, isSuggested, isLinkingThis);
-                        },
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: Text(
+                        'No calendar events found around this time.',
+                        style: TextStyle(color: Colors.grey, fontSize: 15),
+                        textAlign: TextAlign.center,
                       ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: _events.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Color(0xFF2A2A2E), height: 1, indent: 16, endIndent: 16),
+                    itemBuilder: (context, index) {
+                      final event = _events[index];
+                      final isLinkingThis = _linkingEventId == event.eventId;
+                      final isSuggested = event.eventId == _suggestedEventId;
+                      return _buildEventTile(event, isSuggested, isLinkingThis);
+                    },
+                  ),
           ),
           SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
         ],
@@ -1860,9 +1854,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person =
-                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName = person?.name ??
+                final person = segment.personId != null
+                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
+                    : null;
+                final speakerName =
+                    person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
                 PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
@@ -1921,8 +1917,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId =
-                                  finalPersonId == 'user' ? null : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
+                                  ? null
+                                  : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,
@@ -2268,9 +2265,8 @@ class ActionItemsTab extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'No Action Items',
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),

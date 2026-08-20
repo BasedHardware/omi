@@ -605,22 +605,37 @@ export async function computeProfitability(opts: { days: number; desktopCost: nu
     let subIdx = 0;
     let cumulativeDesktop = 0;
     let cumulativeMobile = 0;
-    const revenue: DailyPoint[] = dateKeys.map((date) => {
-      const endOfDay = Date.parse(`${date}T23:59:59Z`) / 1000;
-      while (subIdx < sortedSubs.length && sortedSubs[subIdx].createdAt <= endOfDay) {
-        const s = sortedSubs[subIdx];
-        if (s.platform === "desktop") cumulativeDesktop += s.monthlyMrr;
-        else if (s.platform === "mobile") cumulativeMobile += s.monthlyMrr;
-        else {
-          cumulativeDesktop += s.monthlyMrr * desktopShare;
-          cumulativeMobile += s.monthlyMrr * mobileShare;
+    // Exact = only subscriptions attributed to the platform; unknown-platform
+    // revenue never enters these. The platform boards chart the exact series
+    // so "Revenue / day (desktop)" cannot include smeared unknown revenue;
+    // the All board keeps the proportional split so its stack ends at live MRR.
+    let cumulativeDesktopExact = 0;
+    let cumulativeMobileExact = 0;
+    const revenue: (DailyPoint & { desktopExact: number; mobileExact: number })[] =
+      dateKeys.map((date) => {
+        const endOfDay = Date.parse(`${date}T23:59:59Z`) / 1000;
+        while (subIdx < sortedSubs.length && sortedSubs[subIdx].createdAt <= endOfDay) {
+          const s = sortedSubs[subIdx];
+          if (s.platform === "desktop") {
+            cumulativeDesktop += s.monthlyMrr;
+            cumulativeDesktopExact += s.monthlyMrr;
+          } else if (s.platform === "mobile") {
+            cumulativeMobile += s.monthlyMrr;
+            cumulativeMobileExact += s.monthlyMrr;
+          } else {
+            cumulativeDesktop += s.monthlyMrr * desktopShare;
+            cumulativeMobile += s.monthlyMrr * mobileShare;
+          }
+          subIdx += 1;
         }
-        subIdx += 1;
-      }
-      const d = round2(cumulativeDesktop);
-      const m = round2(cumulativeMobile);
-      return { date, desktop: d, mobile: m, total: round2(d + m) };
-    });
+        const d = round2(cumulativeDesktop);
+        const m = round2(cumulativeMobile);
+        return {
+          date, desktop: d, mobile: m, total: round2(d + m),
+          desktopExact: round2(cumulativeDesktopExact),
+          mobileExact: round2(cumulativeMobileExact),
+        };
+      });
 
     // Prefer real cost from infra-costs endpoint (Firestore llm_usage buckets
     // + configurable monthly overhead). Fallback to active-users × per-user

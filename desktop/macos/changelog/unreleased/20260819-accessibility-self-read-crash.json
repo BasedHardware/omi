@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a crash that could quit Omi while you were using its own window, once Accessibility was granted"
+}

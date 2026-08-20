@@ -63,10 +63,13 @@ export interface ActionItem {
   completed?: boolean;
   completed_at?: string | null;
   concrete_deliverable?: boolean | null;
+  context?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
+  owner_name?: string | null;
   ownership_confidence?: number | null;
   source_segment_ids?: Array<string>;
   target_task_id?: string | null;
@@ -186,11 +189,6 @@ export interface AdviceResponse {
   advice: string;
 }
 
-export interface AgentKeepaliveResponse {
-  ok: boolean;
-  reason?: string | null;
-}
-
 export interface AgentToolSchema {
   description: string;
   name: string;
@@ -199,11 +197,6 @@ export interface AgentToolSchema {
 
 export interface AgentToolsResponse {
   tools: Array<AgentToolSchema>;
-}
-
-export interface AgentVmInfo {
-  has_vm: boolean;
-  status?: string | null;
 }
 
 export interface Announcement {
@@ -1091,6 +1084,10 @@ export interface Conversation {
   id: string;
   is_locked?: boolean;
   language?: string | null;
+  meeting_dedup_speech_s?: number | null;
+  meeting_duration_s?: number | null;
+  meeting_treatment_eligible?: boolean;
+  meeting_treatment_reason?: string | null;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
@@ -1168,20 +1165,28 @@ export interface ConversationAudioUrlInfo {
 export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
+  meeting_treatment_eligible?: boolean;
   status: string;
 }
 
 export interface ConversationFinalizationStatusResponse {
   attempt_count: number;
   job_id: string;
+  meeting_treatment_eligible?: boolean;
   retryable: boolean;
   status: string;
   task_retry_count: number;
   terminal: boolean;
 }
 
+export interface ConversationLinkActionItemSpec {
+  description: string;
+  task_id?: string | null;
+}
+
 export interface ConversationLinkSpec {
   conversation_id: string;
+  recommended_action_items?: Array<ConversationLinkActionItemSpec>;
   summary: string;
   type: "conversationLink";
 }
@@ -2505,6 +2510,7 @@ export interface Message {
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
   client_message_id?: string | null;
+  content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
@@ -2933,6 +2939,7 @@ export interface ResponseMessage {
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
   client_message_id?: string | null;
+  content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
@@ -3053,6 +3060,12 @@ export interface SearchedMemory {
   reviewed_source?: string | null;
 }
 
+export interface Section {
+  body_markdown: string;
+  heading: string;
+  source_segment_ids?: Array<string>;
+}
+
 export interface SendMessageRequest {
   context?: PageContext | null;
   file_ids?: Array<string> | null;
@@ -3150,6 +3163,10 @@ export interface SharedConversationResponse {
   id: string;
   is_locked?: boolean;
   language?: string | null;
+  meeting_dedup_speech_s?: number | null;
+  meeting_duration_s?: number | null;
+  meeting_treatment_eligible?: boolean;
+  meeting_treatment_reason?: string | null;
   people?: Array<Person>;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
@@ -3308,6 +3325,7 @@ export interface Structured {
   emoji?: string;
   events?: Array<Event>;
   overview?: string;
+  sections?: Array<Section>;
   title?: string;
 }
 
@@ -4124,10 +4142,8 @@ export interface OmiApiSchemas {
   "AddTesterRequest": AddTesterRequest;
   "AdviceAssistantSettings": AdviceAssistantSettings;
   "AdviceResponse": AdviceResponse;
-  "AgentKeepaliveResponse": AgentKeepaliveResponse;
   "AgentToolSchema": AgentToolSchema;
   "AgentToolsResponse": AgentToolsResponse;
-  "AgentVmInfo": AgentVmInfo;
   "Announcement": Announcement;
   "AnnouncementDeleteResponse": AnnouncementDeleteResponse;
   "AnnouncementType": AnnouncementType;
@@ -4261,6 +4277,7 @@ export interface OmiApiSchemas {
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
   "ConversationFinalizationStatusResponse": ConversationFinalizationStatusResponse;
+  "ConversationLinkActionItemSpec": ConversationLinkActionItemSpec;
   "ConversationLinkSpec": ConversationLinkSpec;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
@@ -4521,6 +4538,7 @@ export interface OmiApiSchemas {
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
+  "Section": Section;
   "SendMessageRequest": SendMessageRequest;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
@@ -4857,41 +4875,11 @@ export interface OmiApiPaths {
       };
     };
   };
-  "/v1/agent/keepalive": {
-    post: {
-      operationId: "keepalive_v1_agent_keepalive_post";
-      responses: {
-        "200": AgentKeepaliveResponse;
-        "401": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
   "/v1/agent/tools": {
     get: {
       operationId: "list_tools_v1_agent_tools_get";
       responses: {
         "200": AgentToolsResponse;
-        "401": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
-  "/v1/agent/vm-ensure": {
-    post: {
-      operationId: "ensure_vm_v1_agent_vm_ensure_post";
-      responses: {
-        "200": AgentVmInfo;
-        "401": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
-  "/v1/agent/vm-status": {
-    get: {
-      operationId: "get_vm_status_v1_agent_vm_status_get";
-      responses: {
-        "200": AgentVmInfo;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -9154,66 +9142,9 @@ export async function execute_tool_v1_agent_execute_tool_post(header: { authoriz
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function keepalive_v1_agent_keepalive_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AgentKeepaliveResponse> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/agent/keepalive`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "POST",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
 export async function list_tools_v1_agent_tools_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AgentToolsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/agent/tools`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "GET",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
-export async function ensure_vm_v1_agent_vm_ensure_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AgentVmInfo> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/agent/vm-ensure`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "POST",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
-export async function get_vm_status_v1_agent_vm_status_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AgentVmInfo> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/agent/vm-status`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
@@ -16755,4 +16686,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 405 client methods generated.
+// Total: 402 client methods generated.

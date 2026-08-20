@@ -130,6 +130,10 @@ describe("kernel conversation journal", () => {
         type: "conversationLink",
         conversation_id: "conversation-1",
         summary: "Weekly planning",
+        recommended_action_items: [
+          { description: "Send the deck", task_id: "task-1" },
+          { description: "Book the follow-up" },
+        ],
       }],
       nowMs: 100,
     });
@@ -139,12 +143,39 @@ describe("kernel conversation journal", () => {
       id: expect.any(String),
       conversationId: "conversation-1",
       summary: "Weekly planning",
+      recommendedActionItems: [
+        { description: "Send the deck", taskId: "task-1" },
+        { description: "Book the follow-up" },
+      ],
     }]);
     expect(result.turn?.conversationId).toBe(fixture.conversationId);
     expect(result).toMatchObject({
       accepted: true,
       duplicate: false,
       receipt: { intentId: "intent-meeting" },
+    });
+    const [delivery] = drainBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: 100,
+    });
+    expect(delivery.payload).toMatchObject({
+      text: "Meeting notes ready - Weekly planning",
+      contentBlocks: [{
+        type: "conversationLink",
+        conversationId: "conversation-1",
+      }],
+    });
+    expect(delivery.payload.metadata).not.toContain("content_blocks");
+    failBackendTurnOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      turnId: delivery.turnId,
+      deliveryGeneration: delivery.deliveryGeneration,
+      attemptCount: delivery.attemptCount,
+      conversationGeneration: delivery.conversationGeneration,
+      payloadHash: delivery.payloadHash,
+      errorCode: "test_retry",
+      retryAtMs: 101,
+      nowMs: 100,
     });
     const duplicate = materializeChatFirstIntent(fixture.store, {
       ownerId: fixture.ownerId,
@@ -157,6 +188,10 @@ describe("kernel conversation journal", () => {
         type: "conversationLink",
         conversation_id: "conversation-1",
         summary: "Weekly planning",
+        recommended_action_items: [
+          { description: "Send the deck", task_id: "task-1" },
+          { description: "Book the follow-up" },
+        ],
       }],
       nowMs: 101,
     });
@@ -200,8 +235,9 @@ describe("kernel conversation journal", () => {
     ]);
     const deliveries = drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 103 });
     expect(deliveries).toHaveLength(2);
-    expect(deliveries.map((delivery) => delivery.payload.text)).toEqual(["", ""]);
-    expect(deliveries.every((delivery) => delivery.payload.metadata?.includes("content_blocks"))).toBe(true);
+    expect(deliveries.map((delivery) => delivery.payload.text)).toEqual(["Task", "Continue?"]);
+    expect(deliveries.every((delivery) => delivery.payload.contentBlocks.length === 1)).toBe(true);
+    expect(deliveries.every((delivery) => !delivery.payload.metadata?.includes("content_blocks"))).toBe(true);
 
     fixture.store.close();
   });
@@ -3796,9 +3832,9 @@ describe("kernel conversation journal", () => {
     const [delivery] = drainBackendTurnOutbox(fixture.store, { nowMs: 92 });
     expect(delivery).toMatchObject({
       turnId: "turn-structured",
-      payload: { text: "Done.", sender: "ai" },
+      payload: { text: "Thinking - finished", sender: "ai", contentBlocks: [block] },
     });
-    expect(JSON.parse(delivery.payload.metadata!)).toMatchObject({ content_blocks: [block] });
+    expect(delivery.payload.metadata).toBeNull();
     expect(delivery.payloadHash).toMatch(/^sha256:[a-f0-9]{64}$/);
     fixture.store.close();
   });

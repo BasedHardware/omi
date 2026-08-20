@@ -191,6 +191,7 @@ class GeneratedMessage {
   final Map<String, dynamic>? chartData;
   final String? chatSessionId;
   final String? clientMessageId;
+  final List<Map<String, dynamic>>? contentBlocks;
   final DateTime createdAt;
   final String? dataProtectionLevel;
   final List<GeneratedFileChat> files;
@@ -219,6 +220,7 @@ class GeneratedMessage {
     this.chartData,
     this.chatSessionId,
     this.clientMessageId,
+    this.contentBlocks,
     required this.createdAt,
     this.dataProtectionLevel,
     this.files = const [],
@@ -249,6 +251,7 @@ class GeneratedMessage {
       chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
       chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
       clientMessageId: _readFieldValue<String>(_readField(json, const ["client_message_id"]), "client_message_id", _readString, requiredField: false, nullable: true),
+      contentBlocks: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["content_blocks"]), "content_blocks", _readMapList, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
@@ -280,6 +283,7 @@ class GeneratedMessage {
       'chart_data': chartData,
       'chat_session_id': chatSessionId,
       'client_message_id': clientMessageId,
+      'content_blocks': contentBlocks,
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
       'files': files.map((value) => value.toJson()).toList(),
@@ -312,6 +316,7 @@ class GeneratedResponseMessage {
   final Map<String, dynamic>? chartData;
   final String? chatSessionId;
   final String? clientMessageId;
+  final List<Map<String, dynamic>>? contentBlocks;
   final DateTime createdAt;
   final String? dataProtectionLevel;
   final List<GeneratedFileChat> files;
@@ -341,6 +346,7 @@ class GeneratedResponseMessage {
     this.chartData,
     this.chatSessionId,
     this.clientMessageId,
+    this.contentBlocks,
     required this.createdAt,
     this.dataProtectionLevel,
     this.files = const [],
@@ -372,6 +378,7 @@ class GeneratedResponseMessage {
       chartData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["chart_data"]), "chart_data", _readMap, requiredField: false, nullable: true),
       chatSessionId: _readFieldValue<String>(_readField(json, const ["chat_session_id"]), "chat_session_id", _readString, requiredField: false, nullable: true),
       clientMessageId: _readFieldValue<String>(_readField(json, const ["client_message_id"]), "client_message_id", _readString, requiredField: false, nullable: true),
+      contentBlocks: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["content_blocks"]), "content_blocks", _readMapList, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       files: _required(_readFieldValue<List<GeneratedFileChat>>(_readField(json, const ["files"]), "files", (value) => _readObjectList(value, GeneratedFileChat.fromJson), requiredField: false, nullable: false, defaultValue: const []), "files"),
@@ -404,6 +411,7 @@ class GeneratedResponseMessage {
       'chart_data': chartData,
       'chat_session_id': chatSessionId,
       'client_message_id': clientMessageId,
+      'content_blocks': contentBlocks,
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
       'files': files.map((value) => value.toJson()).toList(),

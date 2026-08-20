@@ -77,6 +77,20 @@ enum AnalyticsEvent: Sendable {
     /// A local search ran. Length buckets only, never the query.
     case searchRan(resultCountBucket: CountBucket)
 
+    /// **The first thing this install ever durably stored**, and the only evidence that the app has
+    /// done its job for somebody rather than merely run.
+    ///
+    /// Nothing else in this schema distinguishes an install that captured all day from one that
+    /// captured nothing: `cfc_capture_state` says a source went live, which is a microphone being
+    /// switched on and says nothing about a row landing; `cfc_daily_active` carries capture minutes,
+    /// which the same install reports on its hundredth day as on its first. Activation is "did the
+    /// thing that makes this product a product ever happen here", and it needs the one moment it
+    /// first did.
+    ///
+    /// Once per install, and *not* once per artifact: this is the activation moment, and a per-write
+    /// event would be a capture pipeline reporting itself several times a second.
+    case firstArtifact(ArtifactKind)
+
     // MARK: - Health — "does it work for them"
 
     /// Sparkle's outcome. Update health is invisible without this and an app that silently stops
@@ -145,6 +159,23 @@ enum AnalyticsEvent: Sendable {
         case activity
         case settings
         case search
+    }
+
+    /// What the install first stored. **Two cases, because two things are stored**, and a case with
+    /// no emitter is the defect this file's `Surface` comment already names.
+    ///
+    /// A memory is conspicuously absent and that is a fact about the product, not an omission: this
+    /// app never stores one. `create_memory` writes to the Omi account, from
+    /// `context-for-claude-mcp` — a different process, spawned by Claude and killed without warning,
+    /// which cannot report anything (see `ToolCallLedger`, and `docs/analytics.md`). The local
+    /// `account_rows` cache is a copy of what the account already holds and is explicitly never an
+    /// authority, so first-storing a *downloaded* memory would fire this for an install that has
+    /// captured nothing at all — the exact question it exists to answer.
+    enum ArtifactKind: String, Sendable, CaseIterable {
+        /// A transcript segment — speech this Mac heard, now on disk.
+        case conversation
+        /// A screen frame.
+        case screen
     }
 
     enum UpdateOutcome: String, Sendable, CaseIterable {
@@ -230,6 +261,7 @@ enum AnalyticsEvent: Sendable {
         case .gestureFired: return "cfc_gesture_fired"
         case .surfaceOpened: return "cfc_surface_opened"
         case .searchRan: return "cfc_search_ran"
+        case .firstArtifact: return "cfc_first_artifact"
         case .updateOutcome: return "cfc_update_outcome"
         case .fallback: return "cfc_fallback"
         }
@@ -265,6 +297,9 @@ enum AnalyticsEvent: Sendable {
 
         case let .searchRan(bucket):
             return ["result_count": .string(bucket.rawValue)]
+
+        case let .firstArtifact(kind):
+            return ["kind": .string(kind.rawValue)]
 
         case let .updateOutcome(outcome):
             return ["outcome": .string(outcome.rawValue)]

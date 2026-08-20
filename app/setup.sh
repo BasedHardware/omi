@@ -235,16 +235,139 @@ function run_build_android() {
     && flutter run "${flutter_args[@]}"
 }
 
+# #####################################
+# iOS prerequisite and device selection
+# #####################################
+
+# True if $1 (a dotted version, e.g. "16.4") is >= $2. Relies on `sort -V`,
+# which Apple's /usr/bin/sort on macOS supports (verified; this is iOS-only
+# tooling, so a non-macOS sort is not a concern).
+function _version_at_least() {
+  local have="$1" want="$2"
+  [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n1)" = "$want" ]
+}
+
+# Named checks with remedies, matching the harness's own pattern
+# (scripts/dev-harness's `Cannot start; missing prerequisites:` block) instead
+# of letting a missing/outdated tool surface as a confusing downstream failure
+# several minutes into a build.
+function check_ios_prerequisites() {
+  local missing=()
+
+  local flutter_version
+  flutter_version=$(flutter --version 2>/dev/null | grep -oE '^Flutter [0-9]+\.[0-9]+\.[0-9]+' | awk '{print $2}')
+  if [[ -z "$flutter_version" ]]; then
+    missing+=("Flutter SDK (v3.44.5 or later) — install from https://docs.flutter.dev/get-started/install")
+  elif ! _version_at_least "$flutter_version" "3.44.5"; then
+    missing+=("Flutter ${flutter_version} found, but v3.44.5 or later is required — run: flutter upgrade")
+  fi
+
+  if ! command -v xcodebuild &>/dev/null; then
+    missing+=("Xcode (v16.4 or later) — install from the App Store, then run: sudo xcode-select --switch /Applications/Xcode.app")
+  else
+    local xcode_version
+    xcode_version=$(xcodebuild -version 2>/dev/null | awk '/^Xcode/ {print $2; exit}')
+    if [[ -z "$xcode_version" ]]; then
+      # xcodebuild is on PATH but produced no version line — an unaccepted
+      # license or missing components, not a real "Xcode is fine" signal.
+      # Left unchecked, this passes the gate silently and surfaces as a
+      # confusing failure deep into the build, exactly what this check exists
+      # to prevent.
+      missing+=("xcodebuild is on PATH but not usable (license not accepted or components missing) — run: sudo xcodebuild -license accept && sudo xcodebuild -runFirstLaunch")
+    elif ! _version_at_least "$xcode_version" "16.4"; then
+      missing+=("Xcode ${xcode_version} found, but v16.4 or later is required — update via the App Store")
+    fi
+  fi
+
+  if ! command -v pod &>/dev/null; then
+    missing+=("CocoaPods (v1.16.2 or later) — install with: sudo gem install cocoapods")
+  else
+    local pod_version
+    pod_version=$(pod --version 2>/dev/null)
+    if [[ -n "$pod_version" ]] && ! _version_at_least "$pod_version" "1.16.2"; then
+      missing+=("CocoaPods ${pod_version} found, but v1.16.2 or later is required — update with: brew upgrade cocoapods (Homebrew) or sudo gem install cocoapods (gem)")
+    fi
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    missing+=("jq (used to select an iOS build destination) — install with: brew install jq")
+  fi
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    echo "❌ Cannot build for iOS; missing prerequisites:" >&2
+    local item
+    for item in "${missing[@]}"; do
+      echo "   - ${item}" >&2
+    done
+    return 1
+  fi
+}
+
+# Picks the iOS destination `flutter run -d` should target, instead of leaving
+# Flutter to fall back to whatever else it finds (macOS desktop, on a machine
+# with no simulator runtime and only a wirelessly-paired phone visible) and
+# reporting an error about a platform the developer never asked for.
+function select_ios_device() {
+  local devices_json
+  devices_json=$(flutter devices --machine 2>/dev/null) || {
+    echo "❌ Could not query connected devices (flutter devices --machine failed)." >&2
+    return 1
+  }
+
+  local ios_devices
+  ios_devices=$(echo "$devices_json" | jq -c '[.[] | select(.targetPlatform == "ios")]')
+  local count
+  count=$(echo "$ios_devices" | jq 'length')
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "❌ No iOS device or simulator found." >&2
+    echo "   Boot a simulator (open -a Simulator) or connect a physical device, then retry." >&2
+    return 1
+  fi
+
+  if [[ "$count" -eq 1 ]]; then
+    echo "$ios_devices" | jq -r '.[0].id'
+    return 0
+  fi
+
+  echo "⚠️  Multiple iOS destinations found. Choose one:" >&2
+  local i=0 line
+  while IFS= read -r line; do
+    i=$((i + 1))
+    echo "   $i) $line" >&2
+  done < <(echo "$ios_devices" | jq -r '.[] | "\(.name) (\(.id))"')
+
+  # Never block on read without a TTY, or a non-interactive run (CI, nested
+  # automation) hangs indefinitely instead of failing with a usable message.
+  if [[ ! -t 0 ]]; then
+    echo "   ❌ No terminal available to choose a device." >&2
+    echo "      Disconnect the extras, or boot only the simulator you want, and re-run." >&2
+    return 1
+  fi
+
+  local choice
+  read -rp "   Enter number [1-${count}]: " choice
+  if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+    echo "$ios_devices" | jq -r ".[$((choice - 1))].id"
+    return 0
+  fi
+  echo "❌ Invalid selection." >&2
+  return 1
+}
+
 # #########
 # Build iOS
 # #########
 function run_build_ios() {
   local flavor="${1:-dev}"
   shift || true
+  check_ios_prerequisites || return 1
+  local device_id
+  device_id=$(select_ios_device) || return 1
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --flavor "$flavor" "$@"
+    && flutter run --flavor "$flavor" -d "$device_id" "$@"
 }
 
 

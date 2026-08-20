@@ -124,7 +124,19 @@ enum ChatContentBlockCodec {
         guard let conversationId = dict["conversationId"] as? String, let summary = dict["summary"] as? String else {
           continue
         }
-        blocks.append(.conversationLink(id: id, conversationId: conversationId, summary: summary))
+        let recommendedActionItems = (dict["recommendedActionItems"] as? [[String: Any]] ?? []).compactMap {
+          item -> ConversationLinkActionItem? in
+          guard let description = item["description"] as? String,
+            !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          else { return nil }
+          return ConversationLinkActionItem(description: description, taskID: item["taskId"] as? String)
+        }
+        blocks.append(
+          .conversationLink(
+            id: id,
+            conversationId: conversationId,
+            summary: summary,
+            recommendedActionItems: recommendedActionItems))
       case "memoryLink":
         guard let memoryId = dict["memoryId"] as? String, let summary = dict["summary"] as? String else { continue }
         blocks.append(.memoryLink(id: id, memoryId: memoryId, summary: summary))
@@ -302,8 +314,18 @@ enum ChatContentBlockCodec {
       var dict: [String: Any] = ["type": "captureLink", "id": id, "conversationId": conversationId, "summary": summary]
       if let momentTimestampMs { dict["momentTimestampMs"] = momentTimestampMs }
       return dict
-    case .conversationLink(let id, let conversationId, let summary):
-      return ["type": "conversationLink", "id": id, "conversationId": conversationId, "summary": summary]
+    case .conversationLink(let id, let conversationId, let summary, let recommendedActionItems):
+      var dict: [String: Any] = [
+        "type": "conversationLink", "id": id, "conversationId": conversationId, "summary": summary,
+      ]
+      if !recommendedActionItems.isEmpty {
+        dict["recommendedActionItems"] = recommendedActionItems.map { item in
+          var encoded: [String: Any] = ["description": item.description]
+          if let taskID = item.taskID { encoded["taskId"] = taskID }
+          return encoded
+        }
+      }
+      return dict
     case .memoryLink(let id, let memoryId, let summary):
       return ["type": "memoryLink", "id": id, "memoryId": memoryId, "summary": summary]
     case .citation(let id, let reference):

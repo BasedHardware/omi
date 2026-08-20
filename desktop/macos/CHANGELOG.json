@@ -2,6 +2,33 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.189",
+      "date": "2026-08-19",
+      "changes": [
+        "Improved meeting notes with participant identity derived privately from local meeting screens",
+        "Only Meetings mode now recognizes Discord, Slack huddle, and WhatsApp calls as meetings, so capture starts when you join those calls",
+        "Added system calendar meeting titles and participants to conversation notes without requiring Google Calendar"
+      ]
+    },
+    {
+      "version": "0.12.188",
+      "date": "2026-08-18",
+      "changes": [
+        "Improved internal Gemini usage reporting so AI capacity and costs can be tracked by workload without collecting request content",
+        "Conversation summaries now show the selected summarization app's output (e.g. General Summary) as the main summary, with a picker to switch apps and set your default — falling back to Omi's own summary when no app result is available",
+        "Improved the efficiency of automatic task extraction without changing which tasks are captured",
+        "Capped very large window captures so high-resolution external displays send smaller images to the assistant"
+      ]
+    },
+    {
+      "version": "0.12.187",
+      "date": "2026-08-17",
+      "changes": [
+        "Tuned which AI model each background assistant uses and slowed the memory-extraction timer to reduce noise; fixed a screen-change detector bug that caused unnecessary captures",
+        "Stopped creating a new cloud agent computer on every app launch"
+      ]
+    },
+    {
       "version": "0.12.185",
       "date": "2026-08-17",
       "changes": [

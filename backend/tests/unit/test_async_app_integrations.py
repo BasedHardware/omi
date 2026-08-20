@@ -351,6 +351,43 @@ class TestDurableExternalIntegrationFanout:
         assert messages == []
         assert client.post.await_count == 1
 
+    @pytest.mark.asyncio
+    async def test_retryable_delivery_failure_is_dropped_on_the_last_attempt(self):
+        """A webhook stuck on 5xx must not dead-letter the user's conversation.
+
+        Webhook health only auto-disables an endpoint after 72h, and the
+        terminal attempt dead-letters the job whatever this delivery does, so
+        keeping it retryable only costs the conversation its fanout.
+        """
+        app = _make_app('app-1', 'https://app.test/hook')
+        app.triggers_on_conversation_creation.return_value = True
+        conversation = types.SimpleNamespace(id='conversation-1', discarded=False, is_locked=False, source=None)
+        response = MagicMock(status_code=530, text='origin unreachable')
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=response)
+
+        with patch.object(app_integrations, 'get_available_apps', return_value=[app]), patch.object(
+            app_integrations, 'get_webhook_client', return_value=client
+        ), patch.object(app_integrations, 'conversation_to_dict', return_value={}), patch.object(
+            app_integrations, 'record_fallback'
+        ) as fallback:
+            messages = await app_integrations.trigger_external_integrations(
+                'uid-1',
+                conversation,
+                idempotency_key='fanout-1',
+                require_delivery=True,
+                last_delivery_attempt=True,
+            )
+
+        assert messages == []
+        assert fallback.call_args.kwargs == {
+            'component': 'webhook',
+            'from_mode': 'durable_delivery',
+            'to_mode': 'dropped',
+            'reason': 'provider_5xx',
+            'outcome': 'exhausted',
+        }
+
 
 class TestSSRFConfigRejection:
     """A developer-configured webhook URL that resolves to a non-public

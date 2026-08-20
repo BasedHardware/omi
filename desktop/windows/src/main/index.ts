@@ -107,9 +107,13 @@ import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { registerTaskHandlers } from './ipc/tasks'
 import { registerBackendDegradedIpc, resetBackendDegraded } from './observability/backendDegraded'
-import { resetPendingDeletes } from './tasks/taskSyncEngine'
+import {
+  resetPendingDeletes,
+  scheduleBackgroundSync,
+  setTaskDeletionListener,
+  startTaskBackgroundSync
+} from './tasks/taskSyncEngine'
 import { onSessionReset } from './assistants/core/session'
-import { setTaskDeletionListener } from './tasks/taskSyncEngine'
 import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
@@ -968,8 +972,8 @@ app.whenReady().then(async () => {
   // startup check + daily timer are wired at ready-to-show below.
   registerAiUserProfileHandlers()
   // Track 3 (task sync engine): local-first Tasks list. Cheap handler registration;
-  // the engine reads the shared backend session (relayed by the renderer) and syncs
-  // on demand when a list/reconcile channel is invoked.
+  // the engine reads the shared backend session (relayed by the renderer), reads
+  // stay SQLite-only, and freshness comes from the throttled census sync below.
   registerTaskHandlers()
   // 429-storm degraded-mode: pull channel so a window that mounts mid-storm can sync
   // the current state (the transitions themselves broadcast on `backend:degraded`).
@@ -985,6 +989,16 @@ app.whenReady().then(async () => {
   // returned ids here so their vectors are evicted. DI seam, no hard import either way.
   setTaskDeletionListener((deleted) => {
     for (const { source, id } of deleted) removeTaskFromEmbeddingIndex(source, id)
+  })
+  // The Firestore-read fix: the task engine's background reconcile (ID census, ≤1
+  // per 5 min) runs on this interval instead of on every local read, which used to
+  // full-list `GET /v1/action-items?limit=500` per Tasks/dashboard read (billing
+  // RCA 2026-08: ~61-73 RPS from omi-windows). Ticks are session-gated no-ops
+  // until the renderer relays a session. Window focus asks for a sync too — the
+  // shared 5-min throttle caps it, so focus spam can't restore the storm.
+  startTaskBackgroundSync()
+  app.on('browser-window-focus', () => {
+    void scheduleBackgroundSync()
   })
   // Track 3 (focus halo): the click-through ring the Focus assistant fires around
   // the active window (red = distracted, green = refocused). Handler registration

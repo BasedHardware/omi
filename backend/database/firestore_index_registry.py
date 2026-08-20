@@ -584,6 +584,23 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
+    identifier='conversation_finalization_jobs_meeting_receipts_due',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('meeting_treatment_eligible', '==', 'meeting_treatment_eligible'),
+        FirestoreQueryFilter('meeting_receipt_intent_id', '==', 'meeting_receipt_intent_id'),
+        FirestoreQueryFilter('meeting_receipt_reconcile_after_at', '<=', 'meeting_receipt_reconcile_after_at'),
+    ),
+    index_fields=(
+        _asc('meeting_treatment_eligible'),
+        _asc('meeting_receipt_intent_id'),
+        _asc('meeting_receipt_reconcile_after_at'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -608,6 +625,9 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    CHAT_FIRST_DEFERRALS_DUE_QUERY,
+    CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    MEETING_RECEIPTS_DUE_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -658,6 +678,21 @@ INDEX_REQUIREMENTS = (
 )
 
 
+# Firestore auto-indexes every field of every document in both directions unless a field is
+# explicitly exempted. For large text fields that no query ever filters or orders on, that index
+# is pure storage cost: measured on `screen_activity`, single-field index bytes were roughly three
+# times the document bytes, and the `ocrText` index alone was the majority of the collection.
+# `ocrText` is only ever read back and rendered; semantic search runs on Pinecone vectors, not on
+# Firestore. Exempting a field only removes single-field indexes — composite indexes declared
+# above are unaffected, so a field named in a composite index can still appear here.
+FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('screen_activity', 'ocrText'),
+    ('screen_activity', 'windowTitle'),
+    ('screen_activity', 'deviceName'),
+    ('screen_activity', 'clientDeviceId'),
+)
+
+
 def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
     """Return Firebase's canonical composite-index manifest deterministically."""
 
@@ -668,4 +703,13 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    return {'indexes': indexes, 'fieldOverrides': []}
+    field_overrides = [
+        {
+            'collectionGroup': collection_group,
+            'fieldPath': field_path,
+            'ttl': False,
+            'indexes': [],
+        }
+        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
+    ]
+    return {'indexes': indexes, 'fieldOverrides': field_overrides}

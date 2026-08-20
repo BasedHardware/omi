@@ -48,8 +48,10 @@ from utils.stt.live_failure import (
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
+    deepgram_fallback_model,
     make_stream_callback,
     modulate_is_configured_fallback,
+    parakeet_is_configured_fallback,
     process_audio_dg,
     process_audio_modulate,
     process_audio_parakeet,
@@ -68,6 +70,7 @@ from utils.transcribe_decisions import (
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +225,50 @@ class ListenReceiver:
                 self.host.stt_model = 'velma-2'
             return socket
         if self.host.stt_service == STTService.modulate:
-            return await process_audio_modulate(modulate_callback or callback, sample_rate, self.host.stt_language)
+            # Velma-2 accepts the upgrade and only then reports being over quota,
+            # so a Modulate primary needs the same chain its siblings use (#11752).
+            dg_fallback_model = deepgram_fallback_model(self.host.stt_language)
+
+            def connect_deepgram_fallback() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=cast(str, dg_fallback_model),
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            def connect_parakeet_fallback() -> Any:
+                return process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model='parakeet',
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                primary_service=STTService.modulate,
+                connect_primary=lambda: process_audio_modulate(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
+                connect_deepgram=connect_deepgram_fallback if dg_fallback_model else None,
+                connect_parakeet=(
+                    connect_parakeet_fallback if parakeet_is_configured_fallback(self.host.stt_language) else None
+                ),
+            )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.deepgram:
+                self.host.stt_model = cast(str, dg_fallback_model)
+            elif actual_service == STTService.parakeet:
+                self.host.stt_model = 'parakeet'
+            return socket
         if self.host.stt_service == STTService.deepgram:
 
             def connect_deepgram() -> Any:
@@ -238,6 +284,18 @@ class ListenReceiver:
 
             if not modulate_is_configured_fallback(self.host.stt_language):
                 return await connect_deepgram()
+
+            def connect_parakeet() -> Any:
+                return process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model='parakeet',
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
             socket, actual_service = await connect_stt_socket_with_fallback(
                 primary_service=STTService.deepgram,
                 connect_primary=connect_deepgram,
@@ -246,10 +304,15 @@ class ListenReceiver:
                     sample_rate,
                     self.host.stt_language,
                 ),
+                connect_parakeet=(
+                    connect_parakeet if parakeet_is_configured_fallback(self.host.stt_language) else None
+                ),
             )
             self.host.stt_service = actual_service
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
+            elif actual_service == STTService.parakeet:
+                self.host.stt_model = 'parakeet'
             return socket
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
@@ -454,11 +517,11 @@ class ListenReceiver:
             self._capture('capture_outbound_stt', outbound_audio)
             self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
 
-    async def _handle_multi_channel_audio(self, data: bytes) -> None:
+    async def _handle_multi_channel_audio(self, data: bytes) -> int:
         request = self.host.request
         channel_index = self.channel_id_to_index.get(data[0])
         if channel_index is None:
-            return
+            return 0
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
@@ -467,10 +530,10 @@ class ListenReceiver:
                 )
             except Exception as error:
                 self._record_decode_failure('opus', error, len(audio), channel=channel_index)
-                return
+                return 0
             self.decode_failure_streak = 0
             if not audio:
-                return
+                return 0
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
         self._capture('capture_client_audio', pcm)
         # Custom-STT clients own transcript production.  Their channel sockets are intentionally
@@ -512,6 +575,8 @@ class ListenReceiver:
                     self.host.audio_bytes_send(mixed, self.host.state.last_audio_received_time or time.time())
                 for buffer in self.channel_mix_buffers:
                     del buffer[: decision.min_len]
+
+        return len(audio)
 
     async def _handle_text(self, message: str) -> None:
         try:
@@ -587,6 +652,7 @@ class ListenReceiver:
     async def receive_data(self) -> None:
         request = self.host.request
         buffer = bytearray()
+        decoded_audio_bytes = 0
         self.host.state.last_audio_received_time = time.time()
         self.host.state.last_activity_time = self.host.state.last_audio_received_time
         try:
@@ -612,7 +678,7 @@ class ListenReceiver:
                         self.host.state.last_usage_record_timestamp = now
                         self.host.start_live_transcription()
                     if self.host.is_multi_channel:
-                        await self._handle_multi_channel_audio(data)
+                        decoded_audio_bytes += await self._handle_multi_channel_audio(data)
                         continue
                     try:
                         decoded: bytes = data
@@ -632,6 +698,7 @@ class ListenReceiver:
                     self.decode_failure_streak = 0
                     if not decoded:
                         continue
+                    decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
@@ -648,8 +715,35 @@ class ListenReceiver:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            if decoded_audio_bytes:
+                sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+                emit_product_event(
+                    uid=str(getattr(request, 'uid', '') or ''),
+                    event='Encoded Audio Duration Measured',
+                    properties={
+                        'recording_id': getattr(self.host, 'recording_session_id', None),
+                        'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                        'codec': request.codec,
+                        'decoded_audio_bytes': decoded_audio_bytes,
+                        'duration_seconds': decoded_audio_bytes / (sample_rate * 2),
+                    },
+                )
             if self.vad_gate is not None:
+                vad_metrics = self.vad_gate.get_metrics()
                 logger.info(json.dumps(self.vad_gate.to_json_log()))
+                speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
+                if speech_ms:
+                    emit_product_event(
+                        uid=str(getattr(request, 'uid', '') or ''),
+                        event='Speech Positive Duration Measured',
+                        properties={
+                            'recording_id': getattr(self.host, 'recording_session_id', None),
+                            'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                            'duration_seconds': speech_ms / 1000,
+                            'measurement': 'server_vad',
+                            'vad_mode': vad_metrics.get('mode') or 'unknown',
+                        },
+                    )
             if not self.host.use_custom_stt:
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()

@@ -486,9 +486,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   _buildNavItem(
                     icon: FontAwesomeIcons.list,
                     title: context.l10n.conversationDisplay,
-                    onTap: () => Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
+                    onTap: () =>
+                        Navigator.of(context)
+                            .push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
                   ),
                   const SizedBox(height: 12),
 
@@ -504,9 +504,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   // Transcription Section
                   GestureDetector(
                     onTap: () async {
-                      await Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()));
+                      await Navigator.of(context)
+                          .push(MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()));
                       if (mounted) {
                         setState(() {});
                       }
@@ -894,9 +893,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               // Always reset the flag so the button is re-enabled even if widget is unmounted
                               provider.loadingExportMemories = false;
                               if (context.mounted) {
-                                ScaffoldMessenger.of(
-                                  context,
-                                ).showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
                                 setState(() {});
                               }
                               return;
@@ -1595,80 +1593,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           icon: FontAwesomeIcons.microphoneSlash,
                           value: provider.vadGateEnabled,
                           onChanged: provider.onVadGateChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Claude Agent
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A2E),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: FaIcon(FontAwesomeIcons.robot, color: Colors.grey.shade400, size: 16),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      const Text(
-                                        'Omi Agent',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.purple.withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: const Text(
-                                          'BETA',
-                                          style: TextStyle(
-                                            color: Colors.purple,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Route chat through desktop agent VM',
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (provider.claudeAgentLoading)
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            else
-                              Switch(
-                                value: provider.claudeAgentEnabled,
-                                onChanged: (v) => provider.onClaudeAgentChanged(v),
-                                activeThumbColor: const Color(0xFF22C55E),
-                              ),
-                          ],
                         ),
                       ],
                     ),

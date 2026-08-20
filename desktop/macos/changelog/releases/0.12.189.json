@@ -1,0 +1,9 @@
+{
+  "version": "0.12.189",
+  "date": "2026-08-19",
+  "changes": [
+    "Improved meeting notes with participant identity derived privately from local meeting screens",
+    "Only Meetings mode now recognizes Discord, Slack huddle, and WhatsApp calls as meetings, so capture starts when you join those calls",
+    "Added system calendar meeting titles and participants to conversation notes without requiring Google Calendar"
+  ]
+}

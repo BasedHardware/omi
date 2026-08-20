@@ -74,6 +74,7 @@ from models.users import (
     Subscription,
     SubscriptionPlan,
     SubscriptionStatus,
+    PlanLimits,
     PlanType,
     PricingOption,
     PhoneCallQuota,
@@ -86,6 +87,7 @@ from utils.apps import get_available_app_by_id
 from utils.subscription import (
     enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,

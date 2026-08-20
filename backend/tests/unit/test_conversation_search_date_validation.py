@@ -60,11 +60,13 @@ _stubs = [
     'utils.conversations.analytics',
     'utils.conversations.render',
     'utils.conversations.process_conversation',
+    'utils.conversations.meeting_receipt',
     'utils.conversations.search',
     'utils.conversations.calendar_linking',
     'utils.conversations.calendar_utils',
     'utils.conversations.location',
     'utils.executors',
+    'utils.product_telemetry',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',
@@ -183,6 +185,19 @@ _register_module('utils.memory.canonical_activation', _canonical_activation_stub
 _retraction_scope_stub = ModuleType('utils.memory.retraction_scope')
 setattr(_retraction_scope_stub, 'retraction_can_be_skipped', MagicMock(return_value=False))
 _register_module('utils.memory.retraction_scope', _retraction_scope_stub)
+
+# The router imports the typed conflict raised by exhausted cascade-retract CAS
+# retries (#11726); expose it as a real RuntimeError subclass so the
+# except-clause in delete_conversation binds to something concrete.
+_canonical_adapter_stub = ModuleType('utils.memory.canonical_memory_adapter')
+
+
+class _ConversationReplacementConflictError(RuntimeError):
+    pass
+
+
+setattr(_canonical_adapter_stub, 'ConversationReplacementConflictError', _ConversationReplacementConflictError)
+_register_module('utils.memory.canonical_memory_adapter', _canonical_adapter_stub)
 
 _apps_stub = ModuleType('utils.apps')
 setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
@@ -683,6 +698,7 @@ def test_finalization_status_endpoint_exposes_retryable_durable_state():
         'retryable': True,
         'attempt_count': 2,
         'task_retry_count': 1,
+        'meeting_treatment_eligible': False,
     }
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),

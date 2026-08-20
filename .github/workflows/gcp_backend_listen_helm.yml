@@ -14,6 +14,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
       branch:
         description: 'Branch to deploy from'
         required: true
@@ -89,7 +93,7 @@ jobs:
   helm-upgrade:
     # On manual dispatch use the chosen environment; on auto push only deploy
     # to dev (prod still requires an explicit workflow_dispatch for safety).
-    environment: ${{ github.event.inputs.environment || 'development' }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'

@@ -380,6 +380,18 @@
             "description": "True only when the commitment names a concrete deliverable or outcome",
             "title": "Concrete Deliverable"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One line explaining why or how the item matters",
+            "title": "Context"
+          },
           "conversation_id": {
             "anyOf": [
               {
@@ -422,6 +434,34 @@
             ],
             "description": "When the action item is due",
             "title": "Due At"
+          },
+          "due_certainty": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirmed",
+                  "tentative"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the due date was confirmed or only discussed tentatively",
+            "title": "Due Certainty"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person's name when the owner is known",
+            "title": "Owner Name"
           },
           "ownership_confidence": {
             "anyOf": [
@@ -1399,30 +1439,6 @@
         "title": "AdviceResponse",
         "type": "object"
       },
-      "AgentKeepaliveResponse": {
-        "properties": {
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          }
-        },
-        "required": [
-          "ok"
-        ],
-        "title": "AgentKeepaliveResponse",
-        "type": "object"
-      },
       "AgentToolSchema": {
         "properties": {
           "description": {
@@ -1461,30 +1477,6 @@
           "tools"
         ],
         "title": "AgentToolsResponse",
-        "type": "object"
-      },
-      "AgentVmInfo": {
-        "properties": {
-          "has_vm": {
-            "title": "Has Vm",
-            "type": "boolean"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
-          }
-        },
-        "required": [
-          "has_vm"
-        ],
-        "title": "AgentVmInfo",
         "type": "object"
       },
       "Announcement": {
@@ -6908,6 +6900,44 @@
             ],
             "title": "Language"
           },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
+          },
           "photos": {
             "default": [],
             "items": {
@@ -7332,6 +7362,11 @@
             "title": "Id",
             "type": "string"
           },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -7355,6 +7390,11 @@
           "job_id": {
             "title": "Job Id",
             "type": "string"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
           },
           "retryable": {
             "title": "Retryable",
@@ -7384,6 +7424,36 @@
         "title": "ConversationFinalizationStatusResponse",
         "type": "object"
       },
+      "ConversationLinkActionItemSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ConversationLinkActionItemSpec",
+        "type": "object"
+      },
       "ConversationLinkSpec": {
         "additionalProperties": false,
         "properties": {
@@ -7393,6 +7463,14 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
             "title": "Conversation Id",
             "type": "string"
+          },
+          "recommended_action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationLinkActionItemSpec"
+            },
+            "maxItems": 8,
+            "title": "Recommended Action Items",
+            "type": "array"
           },
           "summary": {
             "maxLength": 200,
@@ -15343,6 +15421,15 @@
             ],
             "title": "Client Message Id"
           },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -17807,6 +17894,15 @@
             ],
             "title": "Client Message Id"
           },
+          "content_blocks": {
+            "description": "Structured chat content blocks. New rows store these directly; legacy rows are projected from metadata.content_blocks.",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Content Blocks",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -18556,6 +18652,34 @@
         "title": "SearchedMemory",
         "type": "object"
       },
+      "Section": {
+        "properties": {
+          "body_markdown": {
+            "description": "Free-form markdown containing the section details",
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "heading": {
+            "description": "A descriptive heading chosen for this conversation",
+            "title": "Heading",
+            "type": "string"
+          },
+          "source_segment_ids": {
+            "description": "Transcript segment IDs that directly support this section",
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Segment Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "heading",
+          "body_markdown"
+        ],
+        "title": "Section",
+        "type": "object"
+      },
       "SendMessageRequest": {
         "properties": {
           "context": {
@@ -19086,6 +19210,44 @@
               }
             ],
             "title": "Language"
+          },
+          "meeting_dedup_speech_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Dedup Speech S"
+          },
+          "meeting_duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Duration S"
+          },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
+          "meeting_treatment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Treatment Reason"
           },
           "people": {
             "default": [],
@@ -19946,6 +20108,14 @@
             "description": "A brief overview of the conversation, highlighting the key details from it",
             "title": "Overview",
             "type": "string"
+          },
+          "sections": {
+            "description": "Detailed, free-form note sections in the model-chosen structure",
+            "items": {
+              "$ref": "#/components/schemas/Section"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "title": {
             "default": "",
@@ -25745,7 +25915,7 @@
     },
     "/v1/action-items/ids": {
       "get": {
-        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket,\nwhich requires a three-field projection (``completed``, ``status``,\n``deleted``) streamed across the collection.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
+        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket. The\n``completed`` bucket is filtered server-side; only documents in that bucket are\nstreamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``\nexclusion is still applied in Python since Firestore equality filters would drop\nundeleted rows that have no ``deleted`` field.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
         "operationId": "list_action_item_ids_v1_action_items_ids_get",
         "parameters": [
           {
@@ -26818,81 +26988,6 @@
         "summary": "Execute Tool"
       }
     },
-    "/v1/agent/keepalive": {
-      "post": {
-        "description": "Ping the VM's /ping endpoint to reset its idle auto-stop timer.",
-        "operationId": "keepalive_v1_agent_keepalive_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentKeepaliveResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Keepalive"
-      }
-    },
     "/v1/agent/tools": {
       "get": {
         "description": "Return all available tool definitions for a user.",
@@ -26966,156 +27061,6 @@
           }
         ],
         "summary": "List Tools"
-      }
-    },
-    "/v1/agent/vm-ensure": {
-      "post": {
-        "description": "Queue a fenced reconciliation when the persisted VM is unavailable.",
-        "operationId": "ensure_vm_v1_agent_vm_ensure_post",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentVmInfo"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Ensure Vm"
-      }
-    },
-    "/v1/agent/vm-status": {
-      "get": {
-        "description": "Return the user's agent VM info from Firestore.\n\nTools paths do not probe GCE (reconciler authority). They still refuse to\nreport eternal ``ready`` while reconciler demand/missing/lease state is\nalready recorded — that is the shared read contract with desktop status.",
-        "operationId": "get_vm_status_v1_agent_vm_status_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentVmInfo"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Get Vm Status"
       }
     },
     "/v1/announcements": {
