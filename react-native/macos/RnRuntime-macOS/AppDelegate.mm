@@ -2,6 +2,7 @@
 #import "OmiDesktopCommandsModule.h"
 
 #import <React/RCTBundleURLProvider.h>
+#import <React/RCTUIKit.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
 @implementation AppDelegate
@@ -50,6 +51,8 @@
   window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
+  RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
+  rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;
   window.styleMask |= NSWindowStyleMaskFullSizeContentView | NSWindowStyleMaskClosable |
       NSWindowStyleMaskMiniaturizable;

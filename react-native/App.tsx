@@ -67,6 +67,7 @@ import {
   conversationGroupLabel,
   loadDesktopReads,
   loadMemories,
+  desktopBackendConfigurationCopy,
   taskGroup,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -1429,7 +1430,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (backend === undefined || backend === null) {
       const unavailable = {
         status: 'error',
-        error: 'Backend unavailable',
+        error: desktopBackendConfigurationCopy,
       } as const;
       setReadOutcomes({
         conversations: unavailable,
@@ -1534,6 +1535,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       Tasks: readOutcomes.tasks,
     }[route] as DomainReadOutcome<DesktopReadProjection>;
   }, [readOutcomes, route]);
+
+  const allHomeReadsUnavailable =
+    readOutcomes !== null &&
+    readOutcomes.conversations.status === 'error' &&
+    readOutcomes.memories.status === 'error';
 
   const homeResults = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -2278,8 +2284,16 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                             footer={
                               <View style={styles.readStatuses}>
                                 {readsPhase !== 'ready' && (
-                                  <View style={styles.readStatus}>
-                                    <Text style={styles.readStatusText}>
+                                  <View
+                                    style={[
+                                      styles.readStatus,
+                                      macDesktop && styles.macReadStatus,
+                                    ]}>
+                                    <Text
+                                      style={[
+                                        styles.readStatusText,
+                                        macDesktop && styles.macReadStatusText,
+                                      ]}>
                                       {readsPhase === 'initial-loading'
                                         ? 'Loading saved data…'
                                         : readsPhase === 'refreshing'
@@ -2289,6 +2303,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                         ? 'Showing saved data. Could not refresh.'
                                         : 'Saved data is unavailable.'}
                                     </Text>
+                                    {allHomeReadsUnavailable && (
+                                      <Text
+                                        style={[
+                                          styles.readStatusCopy,
+                                          macDesktop &&
+                                            styles.macReadStatusText,
+                                        ]}>
+                                        {readOutcomes?.conversations.status ===
+                                        'error'
+                                          ? readOutcomes.conversations.error
+                                          : desktopBackendConfigurationCopy}
+                                      </Text>
+                                    )}
                                     {(readsPhase ===
                                       'saved-but-refresh-failed' ||
                                       readsPhase === 'unavailable') && (
@@ -2298,27 +2325,34 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                                         onPress={() => refreshReads(false)}
                                         style={({pressed}) => [
                                           styles.retryButton,
+                                          macDesktop && styles.macRetryButton,
                                           pressed && styles.pressed,
                                         ]}>
-                                        <Text style={styles.retryButtonText}>
+                                        <Text
+                                          style={[
+                                            styles.retryButtonText,
+                                            macDesktop &&
+                                              styles.macRetryButtonText,
+                                          ]}>
                                           Retry
                                         </Text>
                                       </FocusPressable>
                                     )}
                                   </View>
                                 )}
-                                {readOutcomes !== null && (
-                                  <View style={styles.readStatuses}>
-                                    <OutcomeStatus
-                                      label="Conversations"
-                                      outcome={readOutcomes.conversations}
-                                    />
-                                    <OutcomeStatus
-                                      label="Memories"
-                                      outcome={readOutcomes.memories}
-                                    />
-                                  </View>
-                                )}
+                                {readOutcomes !== null &&
+                                  !allHomeReadsUnavailable && (
+                                    <View style={styles.readStatuses}>
+                                      <OutcomeStatus
+                                        label="Conversations"
+                                        outcome={readOutcomes.conversations}
+                                      />
+                                      <OutcomeStatus
+                                        label="Memories"
+                                        outcome={readOutcomes.memories}
+                                      />
+                                    </View>
+                                  )}
                               </View>
                             }
                             header={
@@ -2413,6 +2447,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         accessibilityLabel="Home search dock"
                         style={[
                           styles.homeSearchDock,
+                          macDesktop && styles.macHomeSearchDock,
                           compact && styles.homeSearchDockCompact,
                           searchFocused && styles.focusRing,
                         ]}>
@@ -2655,7 +2690,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   macTopNavItemActive: {backgroundColor: '#ffffff'},
-  macTopNavText: {color: '#505050', fontSize: 13, fontWeight: '600'},
+  macTopNavText: {color: '#3e3e3e', fontSize: 13, fontWeight: '600'},
   macTopNavTextActive: {color: '#141414'},
   macPrimaryText: {color: '#141414'},
   navigation: {backgroundColor: '#141414'},
@@ -2770,6 +2805,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 0,
     top: 0,
+  },
+  macHomeSearchDock: {
+    backgroundColor: 'rgba(255, 255, 255, 0.62)',
+    borderColor: 'rgba(20, 20, 20, 0.22)',
   },
   paneCompact: {borderRadius: 0, borderWidth: 0},
   paneCompactSurface: {backgroundColor: '#1c1c1a'},
@@ -3328,6 +3367,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
+  readStatusCopy: {color: '#8d8d8d', fontSize: 12, lineHeight: 18},
+  macReadStatus: {
+    backgroundColor: 'rgba(255, 255, 255, 0.56)',
+    borderColor: 'rgba(20, 20, 20, 0.18)',
+  },
+  macReadStatusText: {color: '#343434'},
   readStatusText: {color: '#b0b0b0', fontSize: 13, fontWeight: '600'},
   retryButton: {
     alignItems: 'center',
@@ -3340,6 +3385,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   retryButtonText: {color: '#ffffff', fontSize: 13, fontWeight: '600'},
+  macRetryButton: {borderColor: 'rgba(20, 20, 20, 0.36)'},
+  macRetryButtonText: {color: '#141414'},
   resultList: {flexGrow: 1, gap: 8, paddingBottom: 28},
   resultRow: {
     backgroundColor: '#202020',

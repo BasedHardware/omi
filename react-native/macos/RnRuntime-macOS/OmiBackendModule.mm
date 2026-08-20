@@ -2,6 +2,27 @@
 
 static NSString *const OmiContractVersion = @"1.0.0";
 
+static BOOL OmiIsLoopbackHost(NSString *host) {
+  NSString *normalized = host.lowercaseString;
+  return [normalized isEqualToString:@"localhost"] ||
+      [normalized isEqualToString:@"127.0.0.1"] ||
+      [normalized isEqualToString:@"::1"];
+}
+
+static NSURL *OmiLocalBaseURL(NSString *value) {
+  NSURL *url = value.length > 0
+      ? [NSURL URLWithString:value]
+      : [NSURL URLWithString:@"http://127.0.0.1:8787"];
+  NSSet<NSString *> *schemes = [NSSet setWithArray:@[ @"http", @"https" ]];
+  BOOL validPath = url.path.length == 0 || [url.path isEqualToString:@"/"];
+  if (url == nil || ![schemes containsObject:url.scheme.lowercaseString] ||
+      !OmiIsLoopbackHost(url.host) || url.user.length > 0 || url.password.length > 0 ||
+      !validPath || url.query.length > 0 || url.fragment.length > 0) {
+    return nil;
+  }
+  return url;
+}
+
 @interface OmiGenerationDelegate : NSObject <NSURLSessionDataDelegate, NSURLSessionTaskDelegate>
 @property(nonatomic, strong) NSMutableData *data;
 @property(nonatomic, strong) NSURLSession *session;
@@ -181,10 +202,9 @@ RCT_EXPORT_MODULE(OmiBackend)
   self = [super init];
   if (self) {
     NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
-    NSString *baseURL = environment[@"OMI_API_BASE_URL"];
-    _baseURL = baseURL.length > 0 ? [NSURL URLWithString:baseURL] : nil;
-    _token = [environment[@"OMI_API_TOKEN"] copy];
-    _clientId = [environment[@"OMI_API_CLIENT_ID"] copy];
+    _baseURL = OmiLocalBaseURL(environment[@"OMI_LOCAL_BACKEND_URL"]);
+    _token = [environment[@"OMI_LOCAL_API_TOKEN"] copy];
+    _clientId = [environment[@"OMI_LOCAL_API_CLIENT_ID"] copy];
     _generations = [NSMutableDictionary dictionary];
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
     configuration.timeoutIntervalForRequest = 10;
@@ -296,7 +316,7 @@ RCT_REMAP_METHOD(generationEvents,
   }
   NSString *path = [NSString stringWithFormat:@"/v1/chat-generations/%@/events", encoded];
   NSURL *url = [NSURL URLWithString:path relativeToURL:self.baseURL].absoluteURL;
-  if (url == nil || self.token.length == 0 || self.clientId.length == 0) {
+  if (url == nil || self.baseURL == nil || self.token.length == 0 || self.clientId.length == 0) {
     reject(@"OMI_HTTP_INVALID_REQUEST", @"Native generation request is unavailable", nil);
     return;
   }

@@ -126,6 +126,37 @@ export type DesktopReadOutcomes = {
   tasks: DomainReadOutcome<TaskProjection>;
 };
 
+export const desktopBackendConfigurationCopy =
+  'Trusted local Omi service configuration is missing. Set OMI_LOCAL_API_CLIENT_ID and OMI_LOCAL_API_TOKEN, then retry.';
+export const desktopBackendServiceCopy =
+  'Trusted local Omi service at 127.0.0.1:8787 is unavailable. Start it, then retry.';
+
+function nativeErrorCode(value: unknown): string | null {
+  if (value === null || typeof value !== 'object') {
+    return null;
+  }
+  const code = (value as {code?: unknown}).code;
+  return typeof code === 'string' ? code : null;
+}
+
+export function desktopReadErrorCopy(error: unknown): string {
+  const code = nativeErrorCode(error);
+  if (
+    code === 'OMI_HTTP_UNCONFIGURED' ||
+    (error instanceof Error &&
+      error.message === 'Native HTTP configuration is unavailable')
+  ) {
+    return desktopBackendConfigurationCopy;
+  }
+  if (
+    code === 'OMI_HTTP_TRANSPORT' ||
+    (error instanceof Error && error.message === 'Native HTTP transport failed')
+  ) {
+    return desktopBackendServiceCopy;
+  }
+  return error instanceof Error ? error.message : 'Desktop read failed';
+}
+
 function object(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} is malformed`);
@@ -515,10 +546,7 @@ export async function loadDesktopReads(
       ? {status: 'success', value: result.value}
       : {
           status: 'error',
-          error:
-            result.reason instanceof Error
-              ? result.reason.message
-              : 'Desktop read failed',
+          error: desktopReadErrorCopy(result.reason),
         };
   return {
     conversations: outcome(conversations),
