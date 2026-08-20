@@ -121,16 +121,40 @@ def generate_visualization(
     else:
         data = get_data(topics)
     # print('data', len(data))
-    all_embeddings = cast(Any, np.array([item[1] for item in data.values()]))
 
-    topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
-    all_embeddings = cast(Any, np.vstack([all_embeddings] + topic_embeddings))
+    embedding_values = [item[1] for item in data.values()]
+    if not embedding_values:
+        return
 
-    umap_transform = cast(Any, umap.UMAP(n_components=2, random_state=0, transform_seed=0))
+    all_embeddings = cast(Any, np.array(embedding_values))
+    if all_embeddings.ndim != 2:
+        return
+
+    topic_points: Any = []
+    if topics:
+        topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
+        all_embeddings = cast(Any, np.vstack([all_embeddings] + topic_embeddings))
+
+    if all_embeddings.shape[0] < 3:
+        return
+
+    umap_transform = cast(
+        Any,
+        umap.UMAP(
+            init='random' if all_embeddings.shape[0] == 3 else 'spectral',
+            n_neighbors=min(15, all_embeddings.shape[0] - 1),
+            n_components=2,
+            random_state=0,
+            transform_seed=0,
+        ),
+    )
     umap_embeddings = umap_transform.fit_transform(all_embeddings)
 
-    data_points = umap_embeddings[: -len(topics)]
-    topic_points = umap_embeddings[-len(topics) :]
+    if topics:
+        data_points = umap_embeddings[: -len(topics)]
+        topic_points = umap_embeddings[-len(topics) :]
+    else:
+        data_points = umap_embeddings
 
     fig: Any = make_subplots(rows=1, cols=1)
 
