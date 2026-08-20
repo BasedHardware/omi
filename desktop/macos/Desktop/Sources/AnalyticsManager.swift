@@ -560,12 +560,14 @@ class AnalyticsManager {
     PostHogManager.shared.appLaunched()
     if let session = appSessionLifecycle.appLaunched() {
       PostHogManager.shared.appSessionStarted(session)
+      log("Analytics: App session started (\(session.kind.rawValue))")
     }
   }
 
   func appBecameActive() {
     if let session = appSessionLifecycle.appBecameActive() {
       PostHogManager.shared.appSessionStarted(session)
+      log("Analytics: App session started (\(session.kind.rawValue))")
     }
   }
 
