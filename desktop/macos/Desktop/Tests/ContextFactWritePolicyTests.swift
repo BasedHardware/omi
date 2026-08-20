@@ -220,6 +220,11 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertNotEqual(
       ContextFactWritePolicy.verdict("The page shows a FAQ question about billing."),
       .floorHumanEvent)
+    // A paraphrased question (asking verb + interrogative clause, no "?") floors.
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The user is asking where to download the latest version of Omi desktop."),
+      .floorHumanEvent)
     // Authoring frames without a question signal never floor via this class.
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(

@@ -220,6 +220,14 @@ enum ContextFactWritePolicy {
     let questionSignal =
       statement.contains("?")
       || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil
+      // The model routinely paraphrases the question away from its punctuation
+      // ("The user is asking where to download the latest version of Omi
+      // desktop.") — an asking verb followed by an interrogative clause is the
+      // same signal.
+      || statement.range(
+        of:
+          #"(?i)\b(?:asking|asks|asked|wants to know|is requesting)\s+(?:\S+\s+){0,2}?(?:where|what|when|who|whom|how|why|which|whether|if)\b"#,
+        options: .regularExpression) != nil
     guard questionSignal else { return false }
     return statement.range(
       of:
