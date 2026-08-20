@@ -195,6 +195,9 @@ class Conversation(BaseModel):
     app_id: Optional[str] = None
 
     discarded: bool = False
+    # True for conversations created via an external data import (e.g. Limitless ZIP).
+    # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
+    imported: bool = False
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 

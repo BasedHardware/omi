@@ -305,7 +305,9 @@ def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
 
     assert created is True
     assert list(lifecycle_store.documents) == [('users', 'uid', 'conversations', 'imported')]
-    assert lifecycle_store.conversation('uid', 'imported')['status'] == ConversationStatus.completed
+    stored = lifecycle_store.conversation('uid', 'imported')
+    assert stored['status'] == ConversationStatus.completed
+    assert stored['imported'] is True
     assert (
         lifecycle_service.persist_imported_conversation(
             'uid',
@@ -320,6 +322,24 @@ def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
         is False
     )
     assert lifecycle_store.conversation('uid', 'imported')['title'] == 'imported title'
+    assert lifecycle_store.conversation('uid', 'imported')['imported'] is True
+
+
+def test_persist_imported_conversation_forces_imported_true(lifecycle_store):
+    created = lifecycle_service.persist_imported_conversation(
+        'uid',
+        {
+            'id': 'forced-imported',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'imported': False,
+            'title': 'should be stamped',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert created is True
+    assert lifecycle_store.conversation('uid', 'forced-imported')['imported'] is True
 
 
 def test_merge_rejects_processing_conversations():

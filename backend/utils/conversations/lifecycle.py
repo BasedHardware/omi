@@ -141,6 +141,9 @@ def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -
     already existed. Re-imports must not overwrite user edits (first import wins).
     """
     _require_status(conversation_data, ConversationStatus.completed)
+    # Stamp imported so selective delete can distinguish ZIP imports from source=limitless
+    # pendant/sync uploads that share the same ConversationSource.
+    conversation_data['imported'] = True
     return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
 
 
