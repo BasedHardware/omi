@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -140,3 +141,38 @@ def test_send_notification_body_is_plain_text() -> None:
         body = sent_messages[0].notification.body
         assert '**' not in body
         assert body == "• 🇺🇸 US President: Donald Trump\n• 🇮🇳 India's President: Droupadi Murmu"
+
+
+def test_bulk_one_failing_chunk_does_not_discard_the_other_chunks_cleanup(monkeypatch) -> None:
+    """A raise in one FCM chunk must not throw away every chunk's invalid-token cleanup.
+
+    ``send_bulk_notification`` fans the sends out with ``asyncio.gather(*tasks)``. Without
+    ``return_exceptions=True`` the first raising chunk propagates straight into the function's outer
+    ``except Exception``, so the ``invalid_tokens`` collected from every OTHER chunk is discarded and
+    ``remove_bulk_tokens`` never runs — the dead tokens survive and are retried on every future
+    notification. ``send_batch`` calls ``messaging.send_each`` with no try of its own for a <=500 chunk,
+    and firebase-admin validates all messages before sending, so one malformed message is enough to
+    raise. The sibling daily-summary fan-out in utils/other/notifications.py already passes
+    ``return_exceptions=True``.
+
+    The env is pinned: this harness does not set PUSH_NOTIFICATION_BACKEND, so under an ambient
+    ``disabled``/``unifiedpush`` value the FCM assertions below would pass vacuously.
+    """
+    monkeypatch.setenv('PUSH_NOTIFICATION_BACKEND', 'fcm')
+    with _loaded_notifications() as (notifications, notification_db, messaging):
+        # 501 tokens over a 500 batch size -> two chunks: the first raises, the second reports a dead token.
+        tokens = [f'token-{i}' for i in range(501)]
+        calls = {'n': 0}
+
+        def _send_each(messages):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                raise RuntimeError('transport rejected the whole chunk')
+            return _FakeBatchResponse([_FakeResponse(success=False, exception=_FakeMessagingException('NOT_FOUND'))])
+
+        messaging.send_each = _send_each
+
+        asyncio.run(notifications.send_bulk_notification(tokens, 'title', 'body'))
+
+        assert calls['n'] == 2, 'both chunks must be attempted'
+        notification_db.remove_bulk_tokens.assert_called_once_with(['token-500'])

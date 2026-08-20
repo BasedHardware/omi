@@ -525,10 +525,22 @@ async def send_bulk_notification(user_tokens: List[str], title: str, body: str, 
             run_blocking(postprocess_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
             for i in range(num_batches)
         ]
-        results = await asyncio.gather(*tasks)
+        # return_exceptions: one raising chunk must not discard every OTHER chunk's invalid-token
+        # cleanup. send_batch calls messaging.send_each with no try of its own for a <=500 chunk, and
+        # firebase-admin validates all messages before sending, so a single malformed message raises
+        # for the whole chunk; without this the exception propagated to the outer handler below and
+        # remove_bulk_tokens never ran, leaving the dead tokens to be retried on every future send.
+        # The sibling daily-summary fan-out (utils/other/notifications.py) already does this.
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Remove invalid tokens
-        invalid_tokens = [token for _, batch_invalid in results for token in batch_invalid]
+        invalid_tokens: List[str] = []
+        for index, result in enumerate(results):
+            if isinstance(result, BaseException):
+                logger.error(f'Bulk notification chunk {index} failed: {result}')
+                continue
+            _response, batch_invalid = result
+            invalid_tokens.extend(batch_invalid)
         if invalid_tokens:
             logger.error(f"Removing {len(invalid_tokens)} invalid tokens")
             await run_blocking(db_executor, notification_db.remove_bulk_tokens, invalid_tokens)
