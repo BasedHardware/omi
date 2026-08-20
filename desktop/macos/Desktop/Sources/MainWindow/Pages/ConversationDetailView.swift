@@ -7,6 +7,34 @@ enum ConversationDetailPane: Equatable {
   case transcript
 }
 
+/// Keeps deferred-processing feedback in the summary's layout flow so it
+/// reserves space instead of painting over metadata that is already available.
+struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
+  let isProcessing: Bool
+  let banner: Banner
+  let content: Content
+
+  init(
+    isProcessing: Bool,
+    @ViewBuilder banner: () -> Banner,
+    @ViewBuilder content: () -> Content
+  ) {
+    self.isProcessing = isProcessing
+    self.banner = banner()
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+      if isProcessing {
+        banner
+      }
+      content
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
   let conversation: ServerConversation
@@ -148,20 +176,16 @@ struct ConversationDetailView: View {
               .padding(.vertical, OmiSpacing.sm)
               .background(Ink.rowFillHover.opacity(0.4))
 
-              VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+              ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+                deferredProcessingSection
+                  .allowsHitTesting(false)
+              } content: {
                 summaryContent
               }
               .padding(OmiSpacing.xxl)
             }
             .glassCard(cornerRadius: OmiChrome.controlRadius)
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
-            .overlay(alignment: .top) {
-              if isEnrichingDeferred {
-                deferredProcessingSection
-                  .padding(OmiSpacing.xxl)
-                  .allowsHitTesting(false)
-              }
-            }
             .padding(OmiSpacing.xxl)
           }
           .glassScrollFade()
@@ -822,8 +846,8 @@ struct ConversationDetailView: View {
 
   // MARK: - Deferred Processing Loader
 
-  /// Overlaid while a lazily-deferred conversation is enriched, preserving the
-  /// position of details that may already be available from the local cache.
+  /// Displayed while a lazily-deferred conversation is enriched, ahead of any
+  /// details that are already available from the local cache.
   private var deferredProcessingSection: some View {
     HStack(spacing: OmiSpacing.md) {
       ProgressView()
