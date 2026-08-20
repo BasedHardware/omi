@@ -453,6 +453,19 @@ final class StopReconciliationTests: XCTestCase {
     XCTAssertEqual(telemetry.durationSeconds, 75)
   }
 
+  @MainActor
+  func testConversationCreatedPayloadUsesCrossPlatformSourceKey() {
+    let properties = PostHogManager.conversationCreatedProperties(
+      source: ConversationSource.desktop.rawValue,
+      durationSeconds: 75
+    )
+
+    XCTAssertEqual(properties["conversation_source"] as? String, ConversationSource.desktop.rawValue)
+    XCTAssertEqual(properties["duration_seconds"] as? Int, 75)
+    XCTAssertNil(properties["source"])
+    XCTAssertEqual(Set(properties.keys), ["conversation_source", "duration_seconds"])
+  }
+
   func testRapidRecordingRotationsMatchTheirOwnFinishedEnvelopeOutOfOrder() {
     let first = FinishedRecordingEnvelope(
       sessionId: 1,
