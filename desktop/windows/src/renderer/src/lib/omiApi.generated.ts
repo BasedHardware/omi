@@ -5864,7 +5864,11 @@ export interface OmiApiPaths {
       operationId: "reprocess_conversation_v1_conversations__conversation_id__reprocess_post";
       responses: {
         "200": Conversation;
+        "400": void;
         "401": void;
+        "403": void;
+        "404": void;
+        "409": void;
         "422": HTTPValidationError;
       };
     };

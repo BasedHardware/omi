@@ -930,7 +930,9 @@ class OmiBleForegroundService : Service() {
             disconnectHistory = events,
             reconnectionCount = reconnectCount.toLong(),
             connectedAt = connectedAt,
-            failToConnectCount = failToConnectCount.toLong()
+            failToConnectCount = failToConnectCount.toLong(),
+            nativeBackgroundBytesConsumed = 0,
+            nativeBackgroundPacketsConsumed = 0
         )
     }
 

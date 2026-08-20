@@ -35877,8 +35877,20 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "description": "The selected app cannot summarize conversations"
+          },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "description": "The selected app is not available to this user"
+          },
+          "404": {
+            "description": "The conversation or selected app does not exist"
+          },
+          "409": {
+            "description": "The selected app is disabled or not enabled by this user"
           },
           "422": {
             "content": {

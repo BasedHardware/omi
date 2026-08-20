@@ -251,6 +251,28 @@ class AccountLevelLeakTests(unittest.TestCase):
                         "All board must keep the account-level panels")
 
 
+class ReleasePanelTests(unittest.TestCase):
+    def test_all_board_has_the_two_line_release_chart(self) -> None:
+        panel = next(p for p in load("omi-tv")["panels"]
+                     if build_dashboards.base_title(p) == build_dashboards.RELEASES_CHART_TITLE)
+        target = panel["targets"][0]
+        self.assertIn("/api/omi/stats/releases", target["url"])
+        self.assertIn("_tzdates=date", target["url"])
+        names = [c["text"] for c in target["columns"]]
+        self.assertEqual(names, ["time", "macOS releases", "iOS releases"])
+
+    def test_platform_boards_show_their_latest_release_stat(self) -> None:
+        for uid, root, absent in [("omi-tv-macos", "latest.macos", "latest.ios"),
+                                  ("omi-tv-mobile", "latest.ios", "latest.macos")]:
+            dash = load(uid)
+            titles = [build_dashboards.base_title(p) for p in dash["panels"]]
+            self.assertNotIn(build_dashboards.RELEASES_CHART_TITLE, titles, uid)
+            stat = next(p for p in dash["panels"]
+                        if build_dashboards.base_title(p).startswith("Latest"))
+            self.assertEqual(stat["targets"][0]["root_selector"], root, uid)
+            self.assertNotEqual(stat["targets"][0]["root_selector"], absent, uid)
+
+
 class ShareTileDescriptionTests(unittest.TestCase):
     def test_share_tile_description_names_its_board_scope(self) -> None:
         for uid, label in [("omi-tv", "all platforms"), ("omi-tv-macos", "macOS"),

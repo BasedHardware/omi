@@ -45,7 +45,11 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
-from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations.process_conversation import (
+    AppUsageAttribution,
+    process_conversation,
+    retrieve_in_progress_conversation,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
@@ -158,7 +162,12 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
                 enriched = process_conversation(
-                    uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
+                    uid,
+                    conv_obj.language or 'en',
+                    conv_obj,
+                    force_process=True,
+                    is_reprocess=False,
+                    app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                 )
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
@@ -367,7 +376,17 @@ def get_conversation_finalization_status(
     return status
 
 
-@router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
+@router.post(
+    '/v1/conversations/{conversation_id}/reprocess',
+    response_model=Conversation,
+    responses={
+        400: {'description': 'The selected app cannot summarize conversations'},
+        403: {'description': 'The selected app is not available to this user'},
+        404: {'description': 'The conversation or selected app does not exist'},
+        409: {'description': 'The selected app is disabled or not enabled by this user'},
+    },
+    tags=['conversations'],
+)
 def reprocess_conversation(
     conversation_id: str,
     language_code: Optional[str] = None,
@@ -394,11 +413,47 @@ def reprocess_conversation(
     if not language_code:
         language_code = conversation.language or 'en'
 
+    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
+
     processed_conversation = process_conversation(
-        uid, language_code, conversation, force_process=True, is_reprocess=True, app_id=app_id
+        uid,
+        language_code,
+        conversation,
+        force_process=True,
+        is_reprocess=True,
+        app_id=app_id,
+        explicit_app=explicit_app,
+        app_usage_attribution=(
+            AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
+        ),
     )
 
     return processed_conversation
+
+
+def _validate_reprocess_app_selection(uid: str, app_id: str) -> App:
+    """Resolve one explicit selection before reprocessing mutates the conversation."""
+
+    # Imported here, not at module scope, for the same reason line ~1510 already does: the
+    # apps chain pulls the memory/social graph at import time, and the sanctioned isolation
+    # seam (backend/docs/test_isolation.md) loads this router bare to test pure request
+    # validation. A module-level import would make those suites stub a graph they never call.
+    from database.apps import get_app_by_id_db
+    from utils.apps import get_available_app_model_by_id, is_user_app_enabled
+
+    if get_app_by_id_db(app_id) is None:
+        raise HTTPException(status_code=404, detail='App not found')
+
+    app = get_available_app_model_by_id(app_id, uid)
+    if app is None:
+        raise HTTPException(status_code=403, detail='App is not available to this user')
+    if not app.works_with_memories():
+        raise HTTPException(status_code=400, detail='App does not support conversation summarization')
+    if app.disabled:
+        raise HTTPException(status_code=409, detail='App is currently unavailable')
+    if not is_user_app_enabled(uid, app_id):
+        raise HTTPException(status_code=409, detail='App must be enabled before it can summarize a conversation')
+    return app
 
 
 def _ensure_aware(value: datetime) -> datetime:

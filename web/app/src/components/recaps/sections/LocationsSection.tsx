@@ -37,13 +37,11 @@ export function LocationsSection({
   }
 
   return (
-    <div
-      className={cn(
-        'overflow-hidden',
-        showBorder && 'rounded-xl border border-white/[0.04]',
-        className,
-      )}
-    >
+    <div className={cn(
+      'overflow-hidden',
+      showBorder && 'rounded-xl border border-white/[0.04]',
+      className
+    )}>
       <LocationMap
         locations={locations}
         height={height}

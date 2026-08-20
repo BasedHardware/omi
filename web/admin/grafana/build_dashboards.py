@@ -247,6 +247,117 @@ def user_growth_series(panel, scope: str, field: str, series_name: str) -> None:
     panel["timeFrom"] = "30d"
 
 
+
+RELEASES_PATH = "/api/omi/stats/releases?days=30"
+RELEASES_CHART_TITLE = "Releases / day — macOS vs iOS"
+
+
+def releases_chart_panel(panel_id: int) -> dict:
+    """All-board timeline: one chart, two series — release cadence per
+    platform. A multi-day flat zero on either line is the alarm."""
+    return {
+        "id": panel_id,
+        "type": "timeseries",
+        "title": RELEASES_CHART_TITLE,
+        "description": "macOS: GitHub releases tagged -macos (candidates included). "
+                       "iOS: first day a version clears 200 daily App Store users "
+                       "(TestFlight noise excluded); latest verified against the "
+                       "App Store lookup API.",
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+        "gridPos": {"x": 0, "y": 999, "w": 24, "h": 6},
+        "timeFrom": "30d",
+        "fieldConfig": {
+            "defaults": {
+                "unit": "short",
+                "min": 0,
+                "color": {"mode": "palette-classic"},
+                "custom": {
+                    "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 70,
+                    "showPoints": "always", "pointSize": 5, "barAlignment": 0,
+                    "stacking": {"mode": "none", "group": "A"},
+                    "axisPlacement": "auto", "gradientMode": "none",
+                    "spanNulls": False,
+                },
+            },
+            "overrides": [
+                {"matcher": {"id": "byName", "options": "macOS releases"},
+                 "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#3b82f6"}}]},
+                {"matcher": {"id": "byName", "options": "iOS releases"},
+                 "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "#22c55e"}}]},
+            ],
+        },
+        "options": {
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": True},
+            "tooltip": {"mode": "multi", "sort": "none"},
+        },
+        "targets": [{
+            "refId": "A",
+            "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+            "type": "json", "source": "url", "parser": "backend", "format": "timeseries",
+            "url": f"{PROXY}{RELEASES_PATH}",
+            "url_options": {"method": "GET", "data": ""},
+            "root_selector": "daily",
+            "columns": [
+                {"selector": "date", "text": "time", "type": "timestamp",
+                 "timestampFormat": "2006-01-02"},
+                {"selector": "macos", "text": "macOS releases", "type": "number"},
+                {"selector": "ios", "text": "iOS releases", "type": "number"},
+            ],
+        }],
+    }
+
+
+def latest_release_stat(panel_id: int, scope: str) -> dict:
+    """Platform-board tile: latest release version + date, with days-since
+    colored green (fresh) → red (3+ days stale)."""
+    key = "macos" if scope == "macos" else "ios"
+    label = "macOS" if scope == "macos" else "Mobile"
+    return {
+        "id": panel_id,
+        "type": "stat",
+        "title": f"Latest {label} release",
+        "description": ("GitHub releases tagged -macos" if scope == "macos"
+                        else "App Store lookup (exact store release)"),
+        "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+        "gridPos": {"x": 0, "y": 8, "w": 4, "h": 4},
+        "fieldConfig": {
+            "defaults": {
+                "unit": "short",
+                "thresholds": {"mode": "absolute", "steps": [
+                    {"color": "#22c55e", "value": None},
+                    {"color": "#f59e0b", "value": 2},
+                    {"color": "#ef4444", "value": 3},
+                ]},
+            },
+            "overrides": [{
+                "matcher": {"id": "byName", "options": "days ago"},
+                "properties": [{"id": "unit", "value": "d"}],
+            }],
+        },
+        "options": {
+            "reduceOptions": {"values": False, "calcs": ["lastNotNull"], "fields": "/.*/"},
+            "orientation": "horizontal",
+            "textMode": "value_and_name",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "text": {"valueSize": 16, "titleSize": 11},
+        },
+        "targets": [{
+            "refId": "A",
+            "datasource": {"type": "yesoreyeram-infinity-datasource", "uid": "omi-admin-api"},
+            "type": "json", "source": "url", "parser": "backend", "format": "table",
+            "url": f"{PROXY}{RELEASES_PATH}",
+            "url_options": {"method": "GET", "data": ""},
+            "root_selector": f"latest.{key}",
+            "columns": [
+                {"selector": "display", "text": "release", "type": "string"},
+                {"selector": "daysSince", "text": "days ago", "type": "number"},
+            ],
+        }],
+    }
+
+
 def set_share_tile_description(dash, platform_label: str) -> None:
     """The share-rate proxy is platform-scoped per board; keep its description
     honest about which population the denominator counts."""
@@ -325,6 +436,10 @@ def build_platform_board(base, scope: str) -> dict:
     retarget_var(dash, "d_cum", path=viral_scoped, root="userGrowth", fields="users")
 
     set_share_tile_description(dash, label)
+    drop_panels(dash, {RELEASES_CHART_TITLE})
+    share_idx = next(i for i, p in enumerate(dash["panels"])
+                     if base_title(p).startswith("Share rate"))
+    dash["panels"].insert(share_idx + 1, latest_release_stat(990, scope))
 
     series_label = "Desktop" if scope == "macos" else "Mobile"
     for title, new_title, series in [
@@ -397,6 +512,8 @@ def build_platform_board(base, scope: str) -> dict:
 
 def main() -> None:
     base = json.loads(BASE_PATH.read_text(encoding="utf-8"))
+    if not any(base_title(p) == RELEASES_CHART_TITLE for p in base["panels"]):
+        base["panels"].append(releases_chart_panel(991))
     apply_tzdates(base)
     set_share_tile_description(base, "all platforms")
     apply_platform(base, "all")

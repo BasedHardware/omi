@@ -126,7 +126,9 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 REPOSITORY, SOURCE_SHA, "Release Eligibility"
             )
 
-        self.assertEqual((status, conclusion, html_url, error), ("completed", "success", "https://example.test/new", None))
+        self.assertEqual(
+            (status, conclusion, html_url, error), ("completed", "success", "https://example.test/new", None)
+        )
         run.assert_called_once_with(
             [
                 "gh",
@@ -601,18 +603,20 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("ref: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertLess(
             workflow.index("Create and regular-merge PR to sync changelog back to main"),
-            workflow.index("Publish immutable tag from exact live main source"),
+            workflow.index("Publish immutable tag from merged green source"),
         )
-        self.assertIn("Replan release source after changelog sync", workflow)
-        self.assertIn("git checkout --detach origin/main", workflow)
-        self.assertIn('SHOULD_RELEASE="${{ steps.replan.outputs.should_release }}"', workflow)
-        self.assertIn('PLANNED_SOURCE_SHA="${{ steps.final-plan.outputs.source_sha }}"', workflow)
-        self.assertIn("if: steps.final-plan.outputs.should_release == 'true'", workflow)
+        self.assertNotIn("Replan release source after changelog sync", workflow)
+        self.assertNotIn("Select final release plan", workflow)
+        self.assertIn('PLANNED_SOURCE_SHA="${{ steps.plan.outputs.source_sha }}"', workflow)
+        self.assertIn("if: steps.plan.outputs.should_release == 'true'", workflow)
         self.assertIn("python3 .github/scripts/publish-desktop-candidate-tag.py", workflow)
         self.assertIn("python3 .github/scripts/check-codemagic-tag-intake.py", workflow)
         self.assertIn("--timeout-seconds 600", workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
-        self.assertEqual(workflow.count('CANDIDATE_SHA="$MAIN_SHA"'), 2)
+        self.assertIn('CANDIDATE_SHA="$CHANGELOG_COMMIT"', workflow)
+        self.assertIn('CANDIDATE_SHA="$PLANNED_SOURCE_SHA"', workflow)
+        self.assertNotIn('CANDIDATE_SHA="$MAIN_SHA"', workflow)
+        self.assertIn('BRANCH="${BRANCH}-recovery-${GITHUB_RUN_ID}"', workflow)
         self.assertNotIn("wait_for_required_source_checks", Path(SCRIPT).read_text(encoding="utf-8"))
 
     def test_auto_release_is_an_hourly_train_plus_manual_dispatch(self) -> None:
@@ -625,9 +629,10 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             _parse_push_filter(workflow)
         self.assertIn(
-            "--min-tag-interval-seconds \"${{ github.event_name == 'schedule' && '3300' || '0' }}\"",
+            "--min-tag-interval-seconds 3600",
             workflow,
         )
+        self.assertNotIn("--min-tag-interval-seconds 3300", workflow)
 
     def test_hourly_train_defers_while_the_latest_candidate_is_young(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -639,7 +644,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 patch.object(
                     sys,
                     "argv",
-                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3300"],
+                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3600"],
                 ),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
             ):
@@ -668,7 +673,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 patch.object(
                     sys,
                     "argv",
-                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3300"],
+                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3600"],
                 ),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
             ):
@@ -690,7 +695,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 patch.object(
                     sys,
                     "argv",
-                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3300"],
+                    [str(SCRIPT), "--repository", REPOSITORY, "--min-tag-interval-seconds", "3600"],
                 ),
                 patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
             ):

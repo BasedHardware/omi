@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Omi quitting by itself during first-run permission setup"
+}

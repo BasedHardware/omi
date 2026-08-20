@@ -457,11 +457,22 @@ class HistoricalMemoryAdapter:
         return value
 
     @staticmethod
-    def _historical_memory(raw: MemoryPayload, *, include_locked_content: bool = False) -> MemoryDB:
+    def _historical_memory(
+        raw: MemoryPayload,
+        *,
+        include_locked_content: bool = False,
+        uid: Optional[str] = None,
+    ) -> MemoryDB:
         # Missing visibility is a compatibility case.  Public is the released
         # legacy default and is therefore retained for old documents.
         payload = memory_api_payload(raw, MemoryApiExposure.LEGACY)
         payload.setdefault("visibility", "public")
+        # Historical rows live under ``users/{uid}/memories/{id}`` and a legacy
+        # cohort never stored the redundant ``uid`` field, which ``MemoryDB``
+        # requires.  The owning path is the authority for it, so fall back to
+        # it instead of dropping the row during Pydantic validation.
+        if uid is not None:
+            payload.setdefault("uid", uid)
         # A few early historical documents predate ``updated_at``.  Keep those
         # rows readable and let every sort surface use the same creation-time
         # fallback instead of dropping the row during Pydantic validation.
@@ -487,7 +498,7 @@ class HistoricalMemoryAdapter:
         if not isinstance(memory_id, str) or not memory_id.strip():
             return None
         try:
-            memory = cls._historical_memory(raw, include_locked_content=include_locked_content)
+            memory = cls._historical_memory(raw, include_locked_content=include_locked_content, uid=uid)
         except ValidationError as exc:
             # Never log ValidationError.__str__ — it embeds input_value (memory content).
             logger.warning(

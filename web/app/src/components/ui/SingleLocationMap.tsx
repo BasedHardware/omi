@@ -1,14 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  useMap,
-  ZoomControl,
-} from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { ExternalLink } from 'lucide-react';
 
@@ -84,10 +77,7 @@ export default function SingleLocationMap({
   return (
     <div
       className={className}
-      style={{
-        height: typeof height === 'number' ? `${height}px` : height,
-        width: '100%',
-      }}
+      style={{ height: typeof height === 'number' ? `${height}px` : height, width: '100%' }}
     >
       <MapContainer
         center={[latitude, longitude]}
