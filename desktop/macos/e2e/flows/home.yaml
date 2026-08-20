@@ -1,7 +1,7 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — second-brain value canvas and the shared chat transcript under the always-on search bar, plus header controls and Capture/Listening status
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopWindowLayoutPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/SecondBrainHome.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QuerySearchBar.swift
@@ -26,12 +27,18 @@ preconditions:
 
 steps:
   - id: S1
-    name: Verify Home tab is active
-    do: "Verify the app opens on the conversation. The top bar shows Home, Memories, Tasks, Rewind and Apps pills. Below it, a search bar with the placeholder 'Search what you've seen and heard…' sits above the chat panel, whose own composer ('Ask a follow-up…') is pinned under the transcript. Typing in the search bar swaps the panel to live-narrowing results; clearing it returns to the chat."
+    name: Verify Home explains Omi before the first question
+    do: "Verify the app opens on the second-brain value canvas. It says either 'Your life, ready to answer.' or 'Your second brain starts here.', followed by 'The second brain you trust more than your first.' A single context diagram connects Heard, Seen, Remembered and Decided to 'One personal answer', using real counts or an honest counting state. Three starter questions are visible and the existing chat composer ('Ask a follow-up…') remains pinned below the canvas."
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - Chat
+        - The second brain you trust more than your first.
+
+  - id: S1b
+    name: Verify both new and returning paths use the same chat
+    do: "For a returning profile with transcript history, verify 'Continue last conversation' reveals the existing transcript without duplicating messages. Return to Home, activate a starter question, and verify the value canvas is replaced by that same transcript while the question sends through the existing composer. For a just-completed onboarding profile, verify the canvas uses the user's greeting and onboarding starter questions before the first send."
+    expect:
+      interactive_count: { min: 2 }
 
   - id: S2
     name: Verify the two inputs are distinct

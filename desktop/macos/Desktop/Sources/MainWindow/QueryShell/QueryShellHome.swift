@@ -43,6 +43,7 @@ struct QueryShellHome: View {
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var tasksStore = TasksStore.shared
+  @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   var taskChatCoordinator: TaskChatCoordinator? = nil
   /// The Chat-first shell keeps the existing modern Home presentation even when the reversible legacy
   /// preference is enabled. This is presentation-only; capability sampling and rich-block access
@@ -96,6 +97,10 @@ struct QueryShellHome: View {
   /// `.focused()` does not reach, and a flag already `true` could never re-claim a caret AppKit had
   /// since given away — which is precisely the case the `didBecomeActive` claim below exists for.
   @State private var caretClaims = 0
+  /// Home earns the word "Home" before it becomes a transcript: every visit begins with the compact
+  /// proof of what Omi knows and three real questions. Any send, automation handoff or explicit
+  /// continue swaps this for the established `QueryAnswerThread`; no transcript state is copied.
+  @State private var showsSecondBrainHome = true
 
   private var usesLegacyPresentation: Bool {
     useLegacyHomeDesign && !forceModernPresentation
@@ -169,6 +174,7 @@ struct QueryShellHome: View {
     // A typed character belongs in the field even when the field is not focused: this is a search
     // surface, and a search surface that swallows the first letter you type is broken.
     .onAppear {
+      if chatProvider.isSending { showsSecondBrainHome = false }
       claimCaret()
     }
     // **Coming back to Omi puts the caret back in the field.** This surface's whole job is to be typed
@@ -219,6 +225,7 @@ struct QueryShellHome: View {
     .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
       guard !usesLegacyPresentation else { return }
       searchText = HomeBridgeIntent.openChat.searchTextAfter(searchText)
+      showsSecondBrainHome = false
       claimCaret()
     }
     // `home_close_panel` collapses Home to its resting chat state — the same thing Escape does.
@@ -232,6 +239,7 @@ struct QueryShellHome: View {
     .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
       guard !usesLegacyPresentation, let query = note.userInfo?["query"] as? String else { return }
       searchText = HomeBridgeIntent.ask.searchTextAfter(searchText)
+      showsSecondBrainHome = false
       chatProvider.draftText = query
       ask()
     }
@@ -247,7 +255,14 @@ struct QueryShellHome: View {
       searchText = ""
       return true
     }
-    .task { await loadScreenCount() }
+    .task {
+      async let screen: Void = loadScreenCount()
+      async let suggestions: Void = homeSuggestionsStore.refreshIfNeeded()
+      _ = await (screen, suggestions)
+    }
+    .onChange(of: chatProvider.isSending) { _, isSending in
+      if isSending { showsSecondBrainHome = false }
+    }
     // **No rule here reads an empty field as an instruction.** Emptying the bar used to eject you
     // from answer mode — so backspacing your last question to type a follow-up threw the conversation
     // off screen mid-edit, and the composer could never be cleared by the send either. `esc Results`
@@ -311,12 +326,21 @@ struct QueryShellHome: View {
         onOpenRewind: openRewind
       )
     case .answer:
-      QueryAnswerThread(
-        chatProvider: chatProvider,
-        onOpenCitation: openCitation,
-        onRetry: retry,
-        chatFirstRichBlockContext: chatFirstRichBlockContext
-      )
+      if showsSecondBrainHome {
+        SecondBrainHome(
+          snapshot: secondBrainSnapshot,
+          hasConversation: !chatProvider.messages.isEmpty,
+          onAsk: askFromSecondBrainHome,
+          onContinueConversation: revealConversation
+        )
+      } else {
+        QueryAnswerThread(
+          chatProvider: chatProvider,
+          onOpenCitation: openCitation,
+          onRetry: retry,
+          chatFirstRichBlockContext: chatFirstRichBlockContext
+        )
+      }
     }
   }
 
@@ -387,6 +411,7 @@ struct QueryShellHome: View {
   private func clearTranscript() {
     Task {
       await chatProvider.clearChat()
+      showsSecondBrainHome = true
     }
   }
 
@@ -418,6 +443,7 @@ struct QueryShellHome: View {
     let submission = QueryShellSubmission.resolve(text: chatProvider.draftText)
     if chatProvider.draftText != submission.text { chatProvider.draftText = submission.text }
     guard submission.mode != nil else { return }
+    showsSecondBrainHome = false
     claimCaret()
     guard let question = submission.question else { return }
     lastAskedQuestion = question
@@ -431,6 +457,18 @@ struct QueryShellHome: View {
       messageLength: question.count, hasSelectedAppContext: false, source: "query_shell")
     chatProvider.dismissOnboardingOpener()
     Task { await chatProvider.sendMessage(question) }
+  }
+
+  private func askFromSecondBrainHome(_ question: String) {
+    showsSecondBrainHome = false
+    PostOnboardingPromptSuggestions.consume()
+    lastAskedQuestion = question
+    send(question)
+  }
+
+  private func revealConversation() {
+    showsSecondBrainHome = false
+    claimCaret()
   }
 
   /// Re-sends the question that failed, not whatever the bar holds now — the send emptied it.
@@ -564,6 +602,17 @@ struct QueryShellHome: View {
     let conversations = appState.conversations.filter { $0.deleted != true }.count
     let tasks = tasksStore.tasks.filter { !$0.isRetired }.count
     return conversations + memoriesViewModel.memories.count + tasks + screenCount
+  }
+
+  private var secondBrainSnapshot: SecondBrainHomeSnapshot {
+    SecondBrainHomeSnapshot.compose(
+      conversations: appState.conversations.filter { $0.deleted != true }.count,
+      memories: memoriesViewModel.memories.count,
+      tasks: tasksStore.tasks.filter { !$0.isRetired }.count,
+      screenCount: screenCount,
+      personalizedPrompts: homeSuggestionsStore.personalizedQuestions,
+      onboardingPrompts: PostOnboardingPromptSuggestions.suggestions(),
+      opener: chatProvider.onboardingOpener)
   }
 
   private func loadScreenCount() async {

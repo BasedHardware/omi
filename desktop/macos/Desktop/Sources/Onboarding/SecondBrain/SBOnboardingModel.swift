@@ -284,7 +284,7 @@ final class SBOnboardingModel: ObservableObject {
     switch step {
     case .promise:
       return
-        "Hey, I'm Omi, your second brain. I hear your conversations, remember everything, and handle the follow-ups. Three quick things:"
+        "Hey, I'm Omi — the second brain you trust more than your first. I connect what happens on your computer with your real-life conversations, so every answer is personal. Three quick things:"
     case .name: return "What should I call you?"
     case .howHeard: return "Quick one. How did you hear about Omi?"
     case .language:
@@ -328,7 +328,7 @@ final class SBOnboardingModel: ObservableObject {
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
       return
-        "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
+        "Your second brain is ready, \(name). One last thing: should I listen all the time, or only during your meetings?"
     }
   }
 
