@@ -702,20 +702,24 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
             ),
         )
 
-    sessions = (
+    legacy_session = (
         CURRENT_CHAT_SESSION_QUERY.build(
             collection,
             {'app_id': app_id},
             field_filter_factory=FieldFilter,
         )
-        .limit(CURRENT_CHAT_SESSION_SCAN_LIMIT)
+        .order_by('__name__', direction=firestore.Query.ASCENDING)
+        .limit(1)
         .stream()
     )
 
+    legacy_docs = [_typed_doc(session) for session in legacy_session]
+    if len(legacy_docs) > 1:
+        legacy_docs = legacy_docs[:1]
+
     newest: Optional[Dict[str, Any]] = None
     newest_key: Optional[tuple] = None
-    for session in sessions:
-        data = _typed_doc(session)
+    for data in legacy_docs:
         # `_typed_doc` returns {} for a document with no fields, which sorts as
         # untimestamped and loses to anything real rather than being skipped.
         created = data.get('created_at')

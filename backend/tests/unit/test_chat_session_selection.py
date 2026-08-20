@@ -34,8 +34,10 @@ def _query_returning(docs):
     """Stands in for the Firestore chain `get_chat_session` builds."""
     query = MagicMock()
     query.where.return_value = query
+    query.order_by.return_value = query
     query.limit.return_value = query
-    query.stream.return_value = iter(docs)
+    timestamped = [doc for doc in docs if doc.to_dict().get('created_at') is not None]
+    query.stream.side_effect = [iter(timestamped), iter(docs)]
     collection = MagicMock()
     collection.document.return_value.collection.return_value = query
     return collection, query
@@ -105,3 +107,10 @@ def test_the_timestamped_query_orders_by_created_at(monkeypatch):
     _, query = _run(monkeypatch, [_doc('only', NOW)])
 
     assert query.order_by.called
+
+
+def test_legacy_fallback_uses_a_deterministic_document_order(monkeypatch):
+    result, query = _run(monkeypatch, [_doc('a'), _doc('b')])
+
+    assert result['id'] == 'a'
+    query.order_by.assert_any_call('__name__', direction=chat_db.firestore.Query.ASCENDING)
