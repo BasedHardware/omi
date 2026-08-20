@@ -51,9 +51,15 @@ enum PageGlassLanePolicy {
   /// It takes the raw index rather than a `SidebarNavItem` because the router's `switch` sends every
   /// unrecognised index to Home through its `default:` branch. Resolving an unknown index to anything
   /// else here would wrap Home in a second panel on exactly the routes nobody tests.
-  static func ownsItsPanels(selectedIndex: Int, memoryDestinationRawValue: Int? = nil) -> Bool {
+  static func ownsItsPanels(
+    selectedIndex: Int,
+    memoryDestinationRawValue: Int? = nil,
+    usesLegacyHomeDesign: Bool = false
+  ) -> Bool {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
-    case .dashboard, .rewind:
+    case .dashboard:
+      return !usesLegacyHomeDesign
+    case .rewind:
       return true
     case .conversations:
       // **Only this index is the Memory hub.** It is one rail slot wearing four different pages, and
@@ -113,11 +119,14 @@ struct PageGlassLane<Content: View>: View {
   /// The hub page being rendered when `selectedIndex` is the Memory hub's rail index. Nil for every
   /// other destination, whose glass does not depend on a sub-page.
   var memoryDestinationRawValue: Int? = nil
+  var usesLegacyHomeDesign: Bool = false
   @ViewBuilder var content: () -> Content
 
   var body: some View {
     if PageGlassLanePolicy.ownsItsPanels(
-      selectedIndex: selectedIndex, memoryDestinationRawValue: memoryDestinationRawValue)
+      selectedIndex: selectedIndex,
+      memoryDestinationRawValue: memoryDestinationRawValue,
+      usesLegacyHomeDesign: usesLegacyHomeDesign)
     {
       // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather
       // than the surface it was given — see `ShellModalScrim`. Published here rather than chosen at
