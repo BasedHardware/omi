@@ -7,8 +7,6 @@ enum ConversationDetailPane: Equatable {
   case transcript
 }
 
-/// Keeps deferred-processing feedback in the summary's layout flow so it
-/// reserves space instead of painting over metadata that is already available.
 struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
   let isProcessing: Bool
   let banner: Banner
@@ -846,8 +844,8 @@ struct ConversationDetailView: View {
 
   // MARK: - Deferred Processing Loader
 
-  /// Displayed while a lazily-deferred conversation is enriched, ahead of any
-  /// details that are already available from the local cache.
+  /// Overlaid while a lazily-deferred conversation is enriched, preserving the
+  /// position of details that may already be available from the local cache.
   private var deferredProcessingSection: some View {
     HStack(spacing: OmiSpacing.md) {
       ProgressView()
