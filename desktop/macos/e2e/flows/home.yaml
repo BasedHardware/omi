@@ -27,22 +27,34 @@ preconditions:
 
 steps:
   - id: S1
-    name: Verify Home explains Omi before the first question
-    do: "Verify the app opens on the second-brain value canvas. It says either 'Your life, ready to answer.' or 'Your second brain starts here.', followed by 'The second brain you trust more than your first.' A single context diagram connects Heard, Seen, Remembered and Decided to 'One personal answer', using real counts or an honest counting state. Three starter questions are visible and the existing chat composer ('Ask a follow-up…') remains pinned below the canvas."
+    name: Verify Home proves Omi before the first question
+    do: "For a returning profile with no transcript, verify Home leads with one large question. When personalized suggestions exist, the most specific one is primary rather than the universal fallback. 'Recently available to Omi' shows real conversation, task, or memory text when available; the fallback names only non-zero sources or honestly says screen history is not ready. No zero metrics, repeated count sentence, or abstract data-flow diagram is visible. The existing chat composer remains pinned below the canvas."
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - The second brain you trust more than your first.
+        - Search history
 
   - id: S1b
     name: Verify both new and returning paths use the same chat
-    do: "For a returning profile with transcript history, verify 'Continue last conversation' reveals the existing transcript without duplicating messages. Return to Home, activate a starter question, and verify the value canvas is replaced by that same transcript while the question sends through the existing composer. For a just-completed onboarding profile, verify the canvas uses the user's greeting and onboarding starter questions before the first send."
+    do: "For a returning profile with transcript history, verify Home opens directly to the existing transcript without an overview interstitial. For a just-completed onboarding profile, verify Home uses the user's greeting and onboarding starter questions; when the screen demo produced an answer, verify a bounded excerpt appears under 'Your first Omi answer' with 'Answered during your screen demo'. Activate the primary question and verify it enters the shared composer/send path and the canvas is replaced by that same transcript without duplicated messages."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S1c
+    name: Protect an in-progress question
+    do: "Type a draft in the shared chat composer while the value canvas is visible. Verify the suggested questions become unavailable and explain that the draft must be finished or cleared. Confirm activating a suggestion cannot replace the typed draft."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S1d
+    name: Verify the value canvas at the minimum window and large text
+    do: "Resize the named test bundle to the supported minimum window. At the largest in-app font scale, verify the headline, primary question, source evidence, secondary questions, and composer remain reachable by scrolling, with no clipped text or horizontal overflow. Turn Reduce Motion on and revisit Home; the canvas appears without the entrance translation."
     expect:
       interactive_count: { min: 2 }
 
   - id: S2
     name: Verify the two inputs are distinct
-    do: "Verify the search bar above the panel is pure search (magnifying glass, no send control) and the chat composer inside the panel carries the conversation controls: text field, paperclip (Attach files), microphone, and the send disc."
+    do: "Verify resting Home shows the compact 'Search history ⌘K' affordance rather than a competing text box. Activate it and verify it expands into the pure search field (magnifying glass, no send control) and receives focus; press Escape to collapse it. The chat composer inside the panel remains the only send surface and carries the text field, paperclip (Attach files), microphone, and send disc."
     expect:
       interactive_count: { min: 4 }
 

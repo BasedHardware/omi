@@ -8,6 +8,9 @@ import SwiftUI
 struct QuerySearchBar: View {
   @Binding var text: String
   var accessibilityID: String = "query-search-field"
+  var focusClaim: Int = 0
+
+  @FocusState private var isFocused: Bool
 
   var body: some View {
     HStack(spacing: QueryShellLayout.heroRowSpacing) {
@@ -18,6 +21,7 @@ struct QuerySearchBar: View {
         .textFieldStyle(.plain)
         .scaledFont(size: QueryShellLayout.queryFontSize, weight: .regular)
         .foregroundStyle(Ink.primary)
+        .focused($isFocused)
         .accessibilityIdentifier(accessibilityID)
       if !text.isEmpty {
         Button {
@@ -34,5 +38,9 @@ struct QuerySearchBar: View {
     .padding(.horizontal, QueryShellLayout.barPaddingHorizontal)
     .frame(minHeight: QueryShellLayout.barMinHeight)
     .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
+    .onAppear {
+      if focusClaim > 0 { isFocused = true }
+    }
+    .onChange(of: focusClaim) { _, _ in isFocused = true }
   }
 }
