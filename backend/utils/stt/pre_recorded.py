@@ -4,6 +4,7 @@ import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
+from math import ceil
 from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
@@ -37,6 +38,7 @@ from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddi
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
+_MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS = 30.0
 
 logger = logging.getLogger(__name__)
 
@@ -120,18 +122,18 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
 
 # Lazily initialized because constructing the SDK client at import makes every
 # backend consumer credential-dependent, including schema export and unit discovery.
-_deepgram_options: Optional[DeepgramClientOptions] = None
 _deepgram_client: Optional[DeepgramClient] = None
 _deepgram_client_lock = RLock()
 
 
-def _get_deepgram_options() -> DeepgramClientOptions:
-    global _deepgram_options
-    if _deepgram_options is None:
-        with _deepgram_client_lock:
-            if _deepgram_options is None:
-                _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-    return _deepgram_options
+def _deepgram_options() -> DeepgramClientOptions:
+    """Build fresh options per client.
+
+    DeepgramClient.__init__ calls config.set_apikey(), so a cached options
+    object shared with a BYOK client rewrites the credential the managed
+    client still holds — every later request would bill that user's key.
+    """
+    return DeepgramClientOptions(options={"keepalive": "true"})
 
 
 def _get_deepgram_client() -> DeepgramClient:
@@ -142,7 +144,7 @@ def _get_deepgram_client() -> DeepgramClient:
                 api_key = os.getenv('DEEPGRAM_API_KEY')
                 if not api_key:
                     raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
-                _deepgram_client = DeepgramClient(api_key, _get_deepgram_options())
+                _deepgram_client = DeepgramClient(api_key, _deepgram_options())
     return _deepgram_client
 
 
@@ -150,7 +152,7 @@ def _deepgram_client_for_request() -> DeepgramClient:
     """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, _get_deepgram_options())
+        return DeepgramClient(byok, _deepgram_options())
     return _get_deepgram_client()
 
 
@@ -1183,21 +1185,56 @@ def _retrieve_user_speaker_id(words: List[Dict[str, Any]], skip_n_seconds: int) 
 def _merge_segments(
     words: List[Dict[str, Any]], skip_n_seconds: int, user_speaker_id: Optional[str]
 ) -> List[Dict[str, Any]]:
+    def split_long_entry(entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+        start = float(entry['start'])
+        end = float(entry['end'])
+        duration = end - start
+        if duration <= _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS:
+            return [entry]
+
+        text_words = str(entry['text']).split()
+        if not text_words:
+            return [entry]
+
+        chunk_count = min(ceil(duration / _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS), len(text_words))
+        chunk_duration = duration / chunk_count
+        words_per_chunk, remainder = divmod(len(text_words), chunk_count)
+        chunks: List[Dict[str, Any]] = []
+        text_offset = 0
+        for index in range(chunk_count):
+            chunk_word_count = words_per_chunk + (1 if index < remainder else 0)
+            next_text_offset = text_offset + chunk_word_count
+            chunk = dict(entry)
+            chunk['start'] = start + index * chunk_duration
+            chunk['end'] = end if index == chunk_count - 1 else start + (index + 1) * chunk_duration
+            chunk['text'] = ' '.join(text_words[text_offset:next_text_offset])
+            chunks.append(chunk)
+            text_offset = next_text_offset
+        return chunks
+
     segments: List[Dict[str, Any]] = []
     for word in words:
         if word['start'] < skip_n_seconds:
             continue
-        word['is_user'] = word['speaker'] == user_speaker_id if word['speaker'] else False
+        for entry in split_long_entry(word):
+            entry['is_user'] = entry['speaker'] == user_speaker_id if entry['speaker'] else False
 
-        same_prev_speaker = word['speaker'] == segments[-1]['speaker'] if segments else False
-        seconds_from_prev = word['start'] - segments[-1]['end'] if segments else 0
+            same_prev_speaker = entry['speaker'] == segments[-1]['speaker'] if segments else False
+            seconds_from_prev = entry['start'] - segments[-1]['end'] if segments else 0
 
-        # TODO: consider having a max segment size too
-        if segments and same_prev_speaker and seconds_from_prev < 30:
-            segments[-1]['end'] = word['end']
-            segments[-1]['text'] += ' ' + word['text']
-        else:
-            segments.append(word)
+            within_max_duration = (
+                entry['end'] - segments[-1]['start'] < _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS if segments else False
+            )
+            if (
+                segments
+                and same_prev_speaker
+                and seconds_from_prev < _MAX_PRE_RECORDED_SEGMENT_DURATION_SECONDS
+                and within_max_duration
+            ):
+                segments[-1]['end'] = entry['end']
+                segments[-1]['text'] += ' ' + entry['text']
+            else:
+                segments.append(entry)
     return segments
 
 

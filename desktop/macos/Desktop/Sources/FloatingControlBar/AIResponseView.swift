@@ -114,8 +114,13 @@ struct AIResponseView: View {
         return ["chatFirstGoal", id].joined(separator: "\u{1E}")
       case .captureLink(let id, _, _, _):
         return ["chatFirstCapture", id].joined(separator: "\u{1E}")
+      case .conversationLink(let id, _, _, _):
+        return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .citation(let id, let reference):
+        return ["citation", id, String(reference.ordinal), reference.sourceID]
+          .joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -190,8 +195,12 @@ struct AIResponseView: View {
       ForEach(grouped) { group in
         switch group {
         case .text(_, let text):
-          OmiMarkdown(text: text, sender: .ai)
+          OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
             .textSelection(.enabled)
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        case .commentary(_, let text):
+          TurnCommentaryRow(text: text)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .toolCalls(_, let calls):
@@ -210,7 +219,7 @@ struct AIResponseView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         // The floating/notch surface never opts into rich chat-first controls.
         // Keep journaled blocks inert if an older runtime projects them here.
-        case .questionCard, .taskCard, .goalLink, .captureLink, .memoryLink:
+        case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
           EmptyView()
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
@@ -240,7 +249,7 @@ struct AIResponseView: View {
         }
       }
     } else if !message.text.isEmpty {
-      OmiMarkdown(text: message.text, sender: .ai)
+      OmiMarkdown(text: message.text, sender: .ai, citations: message.inlineCitationReferences)
         .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -707,99 +716,55 @@ struct MessageHoverOverlay<Content: View>: View {
 
 // MARK: - Metadata Popover
 
-/// Developer popover showing full context used to generate an AI response
+/// Developer popover showing observed turn evidence, not a reconstructed prompt.
 struct MessageMetadataPopover: View {
   let metadata: MessageMetadata
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-        // Header
         Text("Response Context")
           .font(.headline)
           .foregroundColor(.primary)
 
-        // Key info
-        if let model = metadata.model {
-          metadataRow(label: "Model", value: model)
-        }
-        if metadata.hasScreenshot, let size = metadata.screenshotSizeBytes {
-          let kb = size / 1024
-          let base64Chars = (size * 4 + 2) / 3  // base64 expansion
-          metadataRow(label: "Screenshot", value: "1 image (\(kb) KB, ~\(base64Chars / 1024) KB base64)")
-        } else {
-          metadataRow(label: "Screenshot", value: "None")
-        }
-
-        Divider()
-
-        // Context fed into the prompt
-        Text("Context in Prompt")
-          .scaledFont(size: OmiType.caption, weight: .semibold)
-          .foregroundColor(.primary)
-        metadataRow(label: "User memories/facts", value: "\(metadata.memoriesCount)")
-        metadataRow(label: "Conversation history turns", value: "\(metadata.conversationTurns)")
-        metadataRow(label: "Tasks", value: "\(metadata.tasksCount)")
-        metadataRow(label: "Goals", value: "\(metadata.goalsCount)")
-        metadataRow(label: "Available tools", value: "\(metadata.availableToolsCount)")
-
-        // Tool calls
         if !metadata.toolNames.isEmpty {
-          Divider()
           VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Tools used (\(metadata.toolNames.count))")
               .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(.primary)
-            ForEach(metadata.toolNames, id: \.self) { tool in
-              Text("  \(tool)")
+            ForEach(Array(metadata.toolNames.enumerated()), id: \.offset) { _, tool in
+              Text(tool)
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .textSelection(.enabled)
             }
-            if metadata.sqlQueryCount > 0 {
-              metadataRow(
-                label: "SQL queries",
-                value: "\(metadata.sqlQueryCount) queries, \(metadata.sqlRowsReturned) rows returned"
-              )
-            }
+          }
+        }
+        if let sql = metadata.sqlSummary {
+          metadataRow(label: "SQL", value: sql)
+        }
+        metadataRow(label: "Screenshot", value: metadata.screenshotSummary)
+
+        if !metadata.sourceOutcomes.isEmpty {
+          Divider()
+          Text("Context admitted")
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(.primary)
+          ForEach(metadata.sourceOutcomes) { source in
+            metadataRow(label: source.source, value: source.outcome)
           }
         }
 
-        // Full system prompt — always expanded, scrollable
-        if let prompt = metadata.systemPrompt, !prompt.isEmpty {
-          Divider()
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            HStack {
-              Text("Full System Prompt")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-                .foregroundColor(.primary)
-              Spacer()
-              Text("\(prompt.count) chars")
-                .scaledFont(size: OmiType.micro)
-                .foregroundColor(.secondary)
-              Button(action: {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(prompt, forType: .string)
-              }) {
-                Image(systemName: "doc.on.doc")
-                  .scaledFont(size: OmiType.micro)
-                  .foregroundColor(.secondary)
-              }
-              .buttonStyle(.plain)
-              .help("Copy prompt")
-            }
-            Text(prompt)
-              .scaledFont(size: OmiType.micro)
-              .foregroundColor(.primary)
-              .textSelection(.enabled)
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
+        metadataRow(label: "History", value: metadata.historySummary)
+        metadataRow(label: "Offered", value: metadata.offeredToolsSummary)
+        if !metadata.pathSummary.isEmpty {
+          metadataRow(label: "Path", value: metadata.pathSummary)
         }
       }
       .padding()
-      .frame(width: 450)
+      .frame(width: 420)
     }
-    .frame(width: 450, height: 500)
+    .frame(width: 420, height: 420)
   }
 
   private func metadataRow(label: String, value: String) -> some View {

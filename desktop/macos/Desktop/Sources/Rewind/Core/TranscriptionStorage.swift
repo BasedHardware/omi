@@ -65,6 +65,7 @@ actor TranscriptionStorage {
     timezone: String = "UTC",
     inputDeviceName: String? = nil,
     clientConversationId: String? = nil,
+    conversationRole: TranscriptionConversationRole = .ambient,
     finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile
   ) async throws -> Int64 {
     let db = try await ensureInitialized()
@@ -77,6 +78,7 @@ actor TranscriptionStorage {
       inputDeviceName: inputDeviceName,
       status: .recording,
       clientConversationId: clientConversationId,
+      conversationRole: conversationRole,
       finalizationStrategy: finalizationStrategy
     )
 
@@ -207,18 +209,24 @@ actor TranscriptionStorage {
   ) async throws -> Bool {
     let db = try await ensureInitialized()
 
-    let completed = try await db.write { database -> Bool in
+    let result = try await db.write { database -> (accepted: Bool, telemetry: ConversationCreatedTelemetry?) in
       guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         throw TranscriptionStorageError.sessionNotFound
+      }
+
+      if record.status == .completed, record.backendSynced, record.backendId == backendId {
+        log("TranscriptionStorage: Skipping duplicate completion for session \(id)")
+        return (false, nil)
       }
 
       guard allowBackendIdOverride || record.canAcceptCompletion(backendId: backendId) else {
         log(
           "TranscriptionStorage: Skipping conflicting completion for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))"
         )
-        return false
+        return (false, nil)
       }
 
+      let wasAlreadyCompleted = record.status == .completed && record.backendSynced
       let completedAt = Date()
       record.status = .completed
       record.conversationStatus = conversationStatus
@@ -230,13 +238,23 @@ actor TranscriptionStorage {
       record.finalizationCompletedAt = completedAt
       record.updatedAt = completedAt
       try record.update(database)
-      return true
+      let telemetry =
+        wasAlreadyCompleted
+        ? nil : ConversationCreatedTelemetry(session: record, conversationId: backendId)
+      return (true, telemetry)
     }
 
-    if completed {
+    if result.accepted {
       log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
     }
-    return completed
+    if let telemetry = result.telemetry {
+      await AnalyticsManager.shared.conversationCreated(
+        conversationId: telemetry.conversationId,
+        source: telemetry.source,
+        durationSeconds: telemetry.durationSeconds
+      )
+    }
+    return result.accepted
   }
 
   /// Mark session as failed with error.
@@ -1065,7 +1083,7 @@ actor TranscriptionStorage {
     }
   }
 
-  /// Source-scoped cache read for the cohort-only Omi capture archive.
+  /// Source-scoped cache read for the universal Omi capture archive.
   /// Filtering happens before ordering and limiting so a cached page cannot
   /// be filled by another source and then client-filtered.
   func getLocalOmiCaptureConversations(

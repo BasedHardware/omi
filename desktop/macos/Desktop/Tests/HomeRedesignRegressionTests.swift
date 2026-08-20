@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import SwiftUI
 import XCTest
 
@@ -77,119 +78,199 @@ final class MainChatNavigationRequestStoreTests: XCTestCase {
   }
 }
 
-final class ChatBubbleMetadataRevealTests: XCTestCase {
-  func testKeyboardFocusAloneRevealsMetadataRow() {
-    // Regression: the quiet-timeline redesign gated the row on pointer hover
-    // only, leaving Tab / Full Keyboard Access focused on invisible buttons.
-    XCTAssertTrue(
-      ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: true, transientFeedback: false))
+final class ChatBubbleMetadataControlMetricsTests: XCTestCase {
+  func testMetadataControlsUseStablePointerTargetsAndMatchingInsets() {
+    XCTAssertGreaterThanOrEqual(ChatBubbleMetadataControlMetrics.targetSize, 24)
+    XCTAssertEqual(ChatBubbleMetadataControlMetrics.leadingInset, OmiSpacing.xxs)
+    XCTAssertEqual(ChatBubbleMetadataControlMetrics.topInset, ChatBubbleMetadataControlMetrics.leadingInset)
   }
 
-  func testHiddenOnlyWhenNeitherHoveredNorFocusedNorMidInteraction() {
-    XCTAssertFalse(
-      ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: false, transientFeedback: false))
+  func testPointerCanCrossFromMessageIntoControlsWithoutHidingThem() throws {
+    var hover = ChatBubbleMetadataHoverState()
+
+    XCTAssertNil(hover.update(.row, hovering: true))
+    let rowExit = try XCTUnwrap(hover.update(.row, hovering: false))
+    XCTAssertTrue(hover.keepsMetadataVisible)
+
+    XCTAssertNil(hover.update(.controls, hovering: true))
+    hover.completeRelease(rowExit)
     XCTAssertTrue(
-      ChatBubbleMetadataReveal.isVisible(hovering: true, controlFocused: false, transientFeedback: false))
-    XCTAssertTrue(
-      ChatBubbleMetadataReveal.isVisible(hovering: false, controlFocused: false, transientFeedback: true))
+      hover.keepsMetadataVisible,
+      "a stale row-exit release must not hide buttons after the pointer enters them")
+
+    let controlsExit = try XCTUnwrap(hover.update(.controls, hovering: false))
+    hover.completeRelease(controlsExit)
+    XCTAssertFalse(hover.keepsMetadataVisible)
   }
 }
 
-/// **Revealing the metadata band must not change what the transcript measures.**
-///
-/// The band was zero-height at rest and took its intrinsic height on reveal, so
-/// a hovered assistant row was ~16 pt taller than the same row unhovered, and
-/// every row below it moved. Scrolling happens with the pointer over the
-/// transcript, so rows entered and left hover continuously during a gesture and
-/// the document reflowed under the cursor — measured on the mounted transcript
-/// as a document height that oscillated between 7773 and 7789 pt depending on
-/// where the mouse was.
-///
-/// Both halves are asserted here because either one alone is satisfiable by a
-/// bug: a band that reserves its height keeps the row stable, and a band that
-/// never renders keeps it stable too.
+/// Metadata controls need a real layout and hit-test region. Painting controls
+/// outside a zero-height row left visible pixels that could not receive clicks.
 @MainActor
 final class ChatBubbleMetadataBandLayoutTests: XCTestCase {
   private static let width: CGFloat = 480
-  /// The gap the transcript keeps after an assistant row, which is the space
-  /// the band draws into.
-  private static let gap = ChatTranscriptLayout.regularRowSpacing
 
-  func testRevealingTheMetadataBandDoesNotChangeTheRowHeight() {
-    XCTAssertEqual(
-      rowHeight(revealed: true),
-      rowHeight(revealed: false),
-      accuracy: 0.5,
-      "a revealed metadata band must add no layout height, or a hovered row pushes "
-        + "every row below it down and the document reflows under the pointer")
+  func testSyncedAssistantRowReservesARealMetadataControlRegion() {
+    let synced = rowHeight(showsMetadata: true)
+    let streaming = rowHeight(showsMetadata: false)
+
+    XCTAssertGreaterThanOrEqual(
+      synced - streaming,
+      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.topInset - 1,
+      "the metadata strip must remain inside the row's hit-test bounds")
   }
 
-  func testTheRevealedMetadataBandStillPaints() throws {
-    let revealed = try render(revealed: true)
-    let hidden = try render(revealed: false)
+  func testFinishedUnsyncedReplyReservesTheSameMetadataControlRegionAsASyncedReply() {
+    let synced = rowHeight(isStreaming: false, isSynced: true)
+    let unsynced = rowHeight(isStreaming: false, isSynced: false)
+    let streaming = rowHeight(isStreaming: true, isSynced: false)
 
-    XCTAssertGreaterThan(
-      differingPixels(revealed, hidden), 20,
-      "the metadata band drew nothing when revealed — drawing out of a zero-height "
-        + "frame is what keeps the row stable, so losing the paint is the other failure")
+    XCTAssertEqual(synced, unsynced, accuracy: 1)
+    XCTAssertGreaterThanOrEqual(
+      unsynced - streaming,
+      ChatBubbleMetadataControlMetrics.targetSize + ChatBubbleMetadataControlMetrics.topInset - 1)
   }
 
-  private func bubble(revealed: Bool) -> ChatBubble {
-    var bubble = ChatBubble(
+  private func bubble(showsMetadata: Bool) -> ChatBubble {
+    bubble(isStreaming: !showsMetadata, isSynced: showsMetadata)
+  }
+
+  private func bubble(isStreaming: Bool, isSynced: Bool) -> ChatBubble {
+    ChatBubble(
       message: ChatMessage(
         id: "assistant-band",
         text: "A one-line answer.",
         createdAt: Date(timeIntervalSince1970: 1_700_000_000),
         sender: .ai,
-        isSynced: true),
+        isStreaming: isStreaming,
+        isSynced: isSynced),
       app: nil,
       showsOmiMark: false,
       onRate: { _ in })
-    bubble.metadataRevealOverrideForTesting = revealed
-    return bubble
   }
 
-  private func rowHeight(revealed: Bool) -> CGFloat {
-    NSHostingView(rootView: bubble(revealed: revealed).frame(width: Self.width)).fittingSize.height
+  private func rowHeight(showsMetadata: Bool) -> CGFloat {
+    rowHeight(isStreaming: !showsMetadata, isSynced: showsMetadata)
   }
 
-  /// Renders the row plus the gap underneath it over an opaque mid-grey ground,
-  /// so the comparison holds whichever appearance the test host is in — chat ink
-  /// is near-white in one and near-black in the other.
-  private func render(revealed: Bool) throws -> NSBitmapImageRep {
-    let height = rowHeight(revealed: false) + Self.gap
-    let host = NSHostingView(
-      rootView: VStack(spacing: 0) {
-        bubble(revealed: revealed)
-        Spacer(minLength: 0)
-      }
-      .frame(width: Self.width, height: height, alignment: .top)
-    )
-    host.frame = NSRect(x: 0, y: 0, width: Self.width, height: height)
+  private func rowHeight(isStreaming: Bool, isSynced: Bool) -> CGFloat {
+    NSHostingView(rootView: bubble(isStreaming: isStreaming, isSynced: isSynced).frame(width: Self.width))
+      .fittingSize.height
+  }
+}
 
-    let ground = NSView(frame: host.frame)
-    ground.wantsLayer = true
-    ground.layer?.backgroundColor = NSColor(white: 0.5, alpha: 1).cgColor
-    ground.addSubview(host)
-    ground.layoutSubtreeIfNeeded()
+final class ChatBubbleMetadataBandTests: XCTestCase {
+  func testFinishedReplyOffersRatingsBeforeJournalSync() {
+    let message = ChatMessage(
+      id: "live-tail",
+      text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+      sender: .ai,
+      isStreaming: false,
+      isSynced: false)
 
-    let rep = try XCTUnwrap(ground.bitmapImageRepForCachingDisplay(in: ground.bounds))
-    ground.cacheDisplay(in: ground.bounds, to: rep)
-    return rep
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .actions)
   }
 
-  private func differingPixels(_ lhs: NSBitmapImageRep, _ rhs: NSBitmapImageRep) -> Int {
-    guard lhs.pixelsWide == rhs.pixelsWide, lhs.pixelsHigh == rhs.pixelsHigh else { return 0 }
-    var differing = 0
-    for y in 0..<lhs.pixelsHigh {
-      for x in 0..<lhs.pixelsWide {
-        guard let left = lhs.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
-          let right = rhs.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
-        else { continue }
-        if abs(left.brightnessComponent - right.brightnessComponent) > 0.02 { differing += 1 }
-      }
-    }
-    return differing
+  func testStreamingReplyHidesTheMetadataBand() {
+    let message = ChatMessage(
+      id: "live-tail",
+      text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+      sender: .ai,
+      isStreaming: true,
+      isSynced: false)
+
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .hidden)
+  }
+
+  func testEmptyCompletedReplyKeepsTimestampOnly() {
+    let message = ChatMessage(
+      id: "empty-tail",
+      text: "",
+      sender: .ai,
+      isStreaming: false,
+      isSynced: false)
+
+    XCTAssertEqual(ChatBubbleMetadataBand.of(message), .timestampOnly)
+  }
+}
+
+@MainActor
+final class ChatBubbleIdentityTests: XCTestCase {
+  func testSyncAndMetadataAreVisibleIdentity() {
+    let unsynced = bubble(isSynced: false, metadata: nil)
+    let synced = bubble(isSynced: true, metadata: nil)
+    let withInfo = bubble(isSynced: false, metadata: Self.sampleMetadata)
+
+    XCTAssertNotEqual(unsynced, synced)
+    XCTAssertNotEqual(unsynced, withInfo)
+  }
+
+  func testMatchingCompletedRepliesRemainEqual() {
+    XCTAssertEqual(
+      bubble(isSynced: false, metadata: Self.sampleMetadata),
+      bubble(isSynced: false, metadata: Self.sampleMetadata))
+  }
+
+  func testLateArtifactsAreVisibleIdentity() {
+    let withoutArtifact = bubble(isSynced: false, metadata: nil)
+    let withArtifact = ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        resources: [
+          ChatResource(
+            id: "artifact:late",
+            origin: .generatedArtifact,
+            title: "result.json",
+            subtitle: "application/json",
+            mimeType: "application/json",
+            thumbnailURL: nil,
+            imageData: nil,
+            uri: "omi-artifact://late",
+            artifactId: "late",
+            sessionId: nil,
+            runId: nil,
+            state: .ready)
+        ]),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _ in })
+    XCTAssertNotEqual(withoutArtifact, withArtifact)
+  }
+
+  func testJournalFailureIsVisibleIdentity() {
+    let completed = bubble(isSynced: false, metadata: nil)
+    let failed = ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: false,
+        journalStatus: .failed),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _ in })
+    XCTAssertNotEqual(completed, failed)
+  }
+
+  private static let sampleMetadata = MessageMetadata(toolNames: ["search"])
+
+  private func bubble(isSynced: Bool, metadata: MessageMetadata?) -> ChatBubble {
+    ChatBubble(
+      message: ChatMessage(
+        id: "live-tail",
+        text: "On it — I'll look up the backend IDs and delete the duplicates now.",
+        sender: .ai,
+        isStreaming: false,
+        isSynced: isSynced,
+        metadata: metadata),
+      app: nil,
+      showsOmiMark: true,
+      onRate: { _ in })
   }
 }
 
@@ -219,6 +300,76 @@ final class ChatRowPresentationTests: XCTestCase {
       "\(ChatContinuityInvariants.proactiveNotificationContinuityKeyPrefix)\(id.uuidString)")
   }
 
+  func testTypedNotificationContinuitySurvivesJournalProjection() {
+    let id = UUID()
+    let key = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: id, kind: .insight)
+    let push = message("A useful connection", sender: .ai, clientTurnId: key)
+
+    XCTAssertEqual(key, "notification:insight:\(id.uuidString)")
+    XCTAssertEqual(ChatContinuityInvariants.proactiveNotificationKind(push), .insight)
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).systemImage, "sparkles")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).label, "Insight")
+  }
+
+  func testInsightGlyphIsSparklesAcrossSurfacesAndDoesNotCollideWithSuggestion() {
+    XCTAssertEqual(ProactiveNotificationBadge.insightSystemImage, "sparkles")
+    XCTAssertEqual(ProactiveNotificationBadge.suggestionSystemImage, "lightbulb")
+    XCTAssertEqual(
+      ProactiveNotificationBadge(kind: .insight).systemImage,
+      ProactiveNotificationBadge.insightSystemImage)
+    XCTAssertEqual(
+      ProactiveNotificationBadge(kind: .suggestion).systemImage,
+      ProactiveNotificationBadge.suggestionSystemImage)
+    XCTAssertNotEqual(
+      ProactiveNotificationBadge.insightSystemImage,
+      ProactiveNotificationBadge.suggestionSystemImage,
+      "Insight and Suggestion must keep distinct glyphs")
+  }
+
+  func testLegacyNotificationContinuityUsesTheNeutralBadge() {
+    let key = ChatContinuityInvariants.proactiveNotificationContinuityKey(id: UUID())
+    let push = message("An older notification", sender: .ai, clientTurnId: key)
+
+    XCTAssertEqual(ChatContinuityInvariants.proactiveNotificationKind(push), .general)
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .general).systemImage, "bell")
+  }
+
+  func testExistingAssistantIDsMapToDistinctNotificationKinds() {
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "suggestion"), .suggestion)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "insight"), .insight)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "task"), .task)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "memory-extraction"), .memory)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "goals"), .goal)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "meeting-notes"), .meetingNotes)
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
+  }
+
+  /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
+  /// Insight, Memory — matching the four toggles in Settings → Notifications. Focus is
+  /// the focus-nudge assistant alone; tips, resurfaced items, and generated goals are
+  /// insights. `.general` is reserved for functional system alerts outside the taxonomy.
+  func testEveryProactiveKindPresentsAsOneOfTheFourCategories() {
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .suggestion).label, "Focus")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .task).label, "Task")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .insight).label, "Insight")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .resurface).label, "Insight")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .goal).label, "Insight")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .memory).label, "Memory")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .general).label, "Notification")
+  }
+
+  func testNotificationJournalTextPreservesTheHeadlineAndBody() {
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Insight",
+        body: "PR blocked, needs review"),
+      "Insight\nPR blocked, needs review")
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(title: "Meeting notes ready", body: ""),
+      "Meeting notes ready")
+  }
+
   func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {
     XCTAssertEqual(ChatRowPresentation.of(message("Sounds good.", sender: .ai)), .assistantReply)
     XCTAssertEqual(ChatRowPresentation.of(message("hey", sender: .user)), .userTurn)
@@ -240,7 +391,19 @@ final class ChatRowPresentationTests: XCTestCase {
 
 /// The stamp under a reply is read to the minute, not to the year.
 final class ChatMessageTimestampFormatTests: XCTestCase {
-  private let calendar = Calendar(identifier: .gregorian)
+  /// Fixtures are built and rendered in one pinned zone, so neither the machine's zone nor its
+  /// language decides whether these assertions hold. `America/New_York` matches what the rest of
+  /// the desktop suite pins; the month and year below are only stable against a pinned `locale`,
+  /// since production deliberately renders in the user's own (`ja_JP` says 6月, not "Jun").
+  private var calendar = Calendar(identifier: .gregorian)
+  private let locale = Locale(identifier: "en_US_POSIX")
+
+  override func setUpWithError() throws {
+    try super.setUpWithError()
+    calendar.timeZone = try XCTUnwrap(
+      TimeZone(identifier: "America/New_York"),
+      "the pinned fixture zone must exist in the system time zone database")
+  }
 
   private func date(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ min: Int) -> Date {
     var components = DateComponents()
@@ -255,7 +418,8 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testTodayIsJustTheTime() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar)
+    let text = ChatMessageTimestampFormat.text(
+      for: date(2026, 8, 6, 13, 28), now: now, calendar: calendar, locale: locale)
 
     XCTAssertFalse(text.contains("2026"), "the year on a message sent hours ago is chrome")
     XCTAssertFalse(text.contains("Aug"))
@@ -264,7 +428,8 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testAnEarlierDayThisYearAddsTheDayButNotTheYear() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar)
+    let text = ChatMessageTimestampFormat.text(
+      for: date(2026, 6, 1, 9, 5), now: now, calendar: calendar, locale: locale)
 
     XCTAssertTrue(text.contains("Jun"))
     XCTAssertFalse(text.contains("2026"))
@@ -272,14 +437,15 @@ final class ChatMessageTimestampFormatTests: XCTestCase {
 
   func testAnotherYearIsTheOnlyCaseWorthNamingTheYearFor() {
     let now = date(2026, 8, 6, 17, 0)
-    let text = ChatMessageTimestampFormat.text(for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar)
+    let text = ChatMessageTimestampFormat.text(
+      for: date(2025, 12, 24, 9, 5), now: now, calendar: calendar, locale: locale)
 
     XCTAssertTrue(text.contains("2025"))
   }
 }
 
 final class ChatBubbleLayoutRegressionTests: XCTestCase {
-  func testCollapsedReplyKeepsEllipsisAsTheInlineShowMoreAnchor() {
+  func testCollapsedReplyKeepsAnEllipsisBeforeTheBelowMessageExpansionControl() {
     let source = String(repeating: "reply ", count: 100)
     let collapsed = ChatBubbleTruncation.displayText(source, isStreaming: false, isExpanded: false)
 

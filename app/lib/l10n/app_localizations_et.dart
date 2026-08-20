@@ -323,7 +323,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get searchApps => 'Otsi rakendusi...';
 
   @override
-  String get myApps => 'Minu rakendused';
+  String get myApps => 'Minu loodud';
 
   @override
   String get installedApps => 'Paigaldatud rakendused';
@@ -9834,4 +9834,17 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Avaa kauppa';
+
+  @override
+  String get sendRawAudioToOmi => 'Saada töötlemata heli Omisse';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.';
+
+  @override
+  String get findDevice => 'Leia';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostikat ei õnnestunud jagada. Proovi uuesti.';
 }

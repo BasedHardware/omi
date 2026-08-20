@@ -7,6 +7,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
       release_sha:
         description: 'Exact main SHA with a successful Release Eligibility proof (deploy mode only)'
         required: false
@@ -137,7 +141,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'repair-traffic-only'
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -191,7 +195,7 @@ jobs:
     if: >-
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy'
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
       contents: 'read'
@@ -365,7 +369,7 @@ jobs:
       needs.validate-production-boundary.result == 'success' &&
       needs.firestore_readiness.result == 'success' &&
       (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'

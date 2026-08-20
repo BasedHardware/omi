@@ -14,18 +14,11 @@ from utils.task_intelligence import conversation_capture
 from models.action_item import EvidenceRef, TaskCreatePayload
 from models.structured_extraction import ActionItemsExtraction
 from utils.llm import conversation_processing
-from utils.memory.memory_system import MemorySystem
-from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 def _enable_canonical(monkeypatch):
-    """Patch conversation_capture so user-1 resolves to the canonical cohort."""
-    set_canonical_cohort(monkeypatch, 'user-1')
-    monkeypatch.setattr(
-        conversation_capture,
-        'resolve_memory_system',
-        lambda uid, db_client=None: MemorySystem.CANONICAL,
-    )
+    """Retained test helper name; universal capture needs no cohort setup."""
+    return None
 
 
 def _action(
@@ -352,7 +345,7 @@ def test_canonical_prompt_and_parser_preserve_no_deadline_requests_and_completio
     assert items[1].target_task_id == 'task-budget'
 
 
-def test_shadow_mode_uses_canonical_extraction_without_writing(monkeypatch):
+def test_rejected_policy_uses_no_drop_compatibility_writer_without_candidate(monkeypatch):
     _enable_canonical(monkeypatch)
     monkeypatch.setattr(
         conversation_capture.task_control_db,
@@ -377,8 +370,9 @@ def test_shadow_mode_uses_canonical_extraction_without_writing(monkeypatch):
     )
 
     assert conversation_capture.capture_enabled('user-1') is True
-    # Canonical users route through process_before_legacy (returns True).
-    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [_action('Send budget')]) is True
+    # A rejected extraction item has no Candidate representation. Returning
+    # False delegates the complete extraction to the compatibility writer.
+    assert conversation_capture.process_before_legacy('user-1', 'conversation-1', [_action('Send budget')]) is False
     assert decisions == [('Send budget', 'conversation-1')]
 
 
@@ -413,6 +407,8 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
         'create_action_items_batch',
         lambda *args: pytest.fail('read mode cannot use legacy batch writer'),
     )
+    emitted = []
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: emitted.append(event))
 
     process_conversation._save_action_items(
         'user-1',
@@ -435,11 +431,22 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     assert len(records) == 2
     assert accepted == ['candidate-1']
     assert records[1].status == 'pending'
+    assert emitted == [
+        {
+            'uid': 'user-1',
+            'event': 'Task Extracted',
+            'properties': {
+                'task_count': 2,
+                'conversation_id': 'conversation-1',
+                'task_source': 'transcript',
+                'persistence_path': 'canonical_candidate',
+            },
+        }
+    ]
 
 
 def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_writer(monkeypatch):
-    # Legacy (non-canonical) users keep the legacy writer untouched.
-    set_canonical_cohort(monkeypatch)  # empty cohort = everyone is legacy
+    # Workflow mode is diagnostic; every authenticated UID uses Candidate.
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
@@ -474,13 +481,7 @@ def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_wri
         )
     )
 
-    # Legacy user: capture_enabled is False, so legacy writer runs.
-    assert conversation_capture.capture_enabled('user-1') is False
-    process_conversation._save_action_items('user-1', conversation)
-    assert len(writes) == 1
-
-    # Canonical user: capture_enabled is True, process_before_legacy returns True.
-    _enable_canonical(monkeypatch)
+    assert conversation_capture.capture_enabled('user-1') is True
     candidates = {}
 
     def create(uid, proposal, **kwargs):
@@ -500,7 +501,8 @@ def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_wri
     )
     assert result is True
     assert len(candidates) == 1
-    # reconcile_after_legacy is a no-op for canonical users.
+    assert writes == []
+    # reconcile_after_legacy is a no-op for universal Candidate captures.
     assert conversation_capture.reconcile_after_legacy('user-1', 'conversation-1', [], []) is None
 
 

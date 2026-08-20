@@ -54,17 +54,42 @@ class _FakeQuery:
         self._docs = docs
         self._filters = list(filters or [])
         self._limit = None
+        self._offset = 0
+        self._select: Optional[List[str]] = None
+
+    last_select: Optional[List[str]] = None
 
     def where(self, *args, **kwargs):
         filt = kwargs.get('filter') or (args[0] if args else None)
-        return _FakeQuery(self._docs, self._filters + [filt])
+        q = _FakeQuery(self._docs, self._filters + [filt])
+        q._limit = self._limit
+        q._offset = self._offset
+        q._select = self._select
+        return q
 
     def order_by(self, *args, **kwargs):
         return self
 
+    def select(self, fields):
+        q = _FakeQuery(self._docs, self._filters)
+        q._limit = self._limit
+        q._offset = self._offset
+        q._select = list(fields)
+        _FakeQuery.last_select = list(fields)
+        return q
+
+    def offset(self, n: int):
+        q = _FakeQuery(self._docs, self._filters)
+        q._limit = self._limit
+        q._offset = n
+        q._select = self._select
+        return q
+
     def limit(self, n: int):
         q = _FakeQuery(self._docs, self._filters)
         q._limit = n
+        q._offset = self._offset
+        q._select = self._select
         return q
 
     def stream(self):
@@ -78,6 +103,8 @@ class _FakeQuery:
                 docs = [d for d in docs if bool(d._data.get('completed')) is bool(value)]
             elif field == 'conversation_id' and op == '==':
                 docs = [d for d in docs if d._data.get('conversation_id') == value]
+        if self._offset:
+            docs = docs[self._offset :]
         if self._limit is not None:
             docs = docs[: self._limit]
         # yield copies so callers can mutate safely
@@ -185,6 +212,51 @@ def test_get_action_items_skips_deleted_in_active_bucket(ai_mod, monkeypatch):
     assert ids[0] == 'a1'
 
 
+def test_completed_filter_scans_page_plus_slack_not_double(ai_mod, monkeypatch):
+    """Windows sends completed= + limit=500; the old 2× overscan pulled ~1000 full docs."""
+    ai, recorded, metrics = ai_mod
+    docs = [_FakeDoc(_item(f'c{i}', completed=True)) for i in range(2000)]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    page = ai.get_action_items('uid', completed=True, limit=500, offset=0)
+    assert len(page) == 500
+    assert recorded[0][1] == metrics.FirestoreReadMode.BOUNDED
+    assert recorded[0][2] <= 500 + ai._ACTION_ITEMS_LIST_DELETED_SLACK
+    assert recorded[0][2] < 1000
+
+
+def test_completed_offset_is_a_live_item_slice_not_a_firestore_offset(ai_mod, monkeypatch):
+    """Client offset counts returned rows. Firestore offset would also skip deleted docs.
+
+    High offset still reads offset+limit+slack (capped at HARD_MAX), not 2×.
+    """
+    ai, recorded, metrics = ai_mod
+    docs = [_FakeDoc(_item(f'c{i}', completed=True)) for i in range(2000)]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    page = ai.get_action_items('uid', completed=True, limit=500, offset=1500)
+    assert [x['id'] for x in page[:2]] == ['c1500', 'c1501']
+    assert len(page) == 500
+    assert recorded[0][1] == metrics.FirestoreReadMode.BOUNDED
+    assert recorded[0][2] <= ai._ACTION_ITEMS_LIST_HARD_MAX
+    assert recorded[0][2] < 2 * (1500 + 500)
+
+
+def test_list_projects_lean_fields_and_omits_provenance(ai_mod, monkeypatch):
+    ai, recorded, _metrics = ai_mod
+    _FakeQuery.last_select = None
+    docs = [_FakeDoc(_item('a1', completed=False))]
+    monkeypatch.setattr(ai, 'db', _FakeDB(docs))
+
+    ai.get_action_items('uid', completed=False, limit=10, offset=0)
+    assert _FakeQuery.last_select is not None
+    assert 'description' in _FakeQuery.last_select
+    assert 'completed' in _FakeQuery.last_select
+    assert 'deleted' in _FakeQuery.last_select
+    assert 'provenance' not in _FakeQuery.last_select
+    assert recorded[0][2] <= 10 + ai._ACTION_ITEMS_LIST_DELETED_SLACK
+
+
 @pytest.mark.parametrize(
     ('node_total', 'edge_total', 'expected_nodes', 'expected_edges', 'expected_truncated'),
     (
@@ -263,24 +335,6 @@ def test_knowledge_graph_get_is_deterministic_and_bounded_for_large_fixtures(
     assert assertions.order_fields == [kg.KNOWLEDGE_GRAPH_DOCUMENT_ORDER]
 
 
-def test_legacy_get_memories_no_first_page_5000_force():
-    import routers.memories as mem
-
-    calls = []
-
-    def fake_get(uid, limit, offset):
-        calls.append((uid, limit, offset))
-        return []
-
-    with patch.object(mem.memories_db, 'get_memories', side_effect=fake_get):
-        mem._legacy_get_memories('u', limit=100, offset=0)
-    assert calls == [('u', 100, 0)]
-
-    with patch.object(mem.memories_db, 'get_memories', side_effect=fake_get):
-        mem._legacy_get_memories('u', limit=9999, offset=0)
-    assert calls[-1] == ('u', 500, 0)
-
-
 def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     import routers.knowledge_graph as kg_router
 
@@ -293,7 +347,15 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
         'node_limit': 500,
         'edge_limit': 1000,
     }
-    monkeypatch.setattr(kg_router, 'get_knowledge_graph_payload', lambda uid: payload)
+    page = SimpleNamespace(
+        nodes=payload['nodes'],
+        edges=payload['edges'],
+        has_more=payload['truncated'],
+        next_cursor='next',
+    )
+    monkeypatch.setattr(
+        kg_router.canonical_graph_service, 'get_canonical_knowledge_graph', lambda *args, **kwargs: page
+    )
     app = FastAPI()
     app.include_router(kg_router.router)
     app.dependency_overrides[kg_router.auth.get_current_user_uid] = lambda: 'u'
@@ -301,7 +363,7 @@ def test_knowledge_graph_route_exposes_truncation(monkeypatch):
     response = TestClient(app).get('/v1/knowledge-graph')
 
     assert response.status_code == 200
-    assert response.json() == payload
+    assert response.json() == {**payload, 'node_limit': 500, 'edge_limit': 500}
 
 
 def test_knowledge_graph_route_keeps_firebase_auth_dependency():

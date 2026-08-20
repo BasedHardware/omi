@@ -295,9 +295,10 @@ def test_fetch_expired_short_term_memory_items_firestore_queries_terminal_eligib
 
     assert [item.memory_id for item in items] == ['stale-short-term']
     assert all(item.tier == MemoryTier.short_term for item in items)
-    assert db_client.stream_order_fields == [['expires_at', 'memory_id']]
+    assert db_client.stream_order_fields == [['expires_at', 'memory_id'], ['captured_at', 'memory_id']]
     assert ('status', '==', MemoryItemStatus.active.value) in db_client.stream_filters[0]
     assert ('processing_state', '==', ProcessingState.processed.value) in db_client.stream_filters[0]
+    assert ('processing_state', '==', ProcessingState.processed.value) in db_client.stream_filters[1]
 
 
 def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_before_runner_persistence():
@@ -318,8 +319,8 @@ def test_fetch_expired_short_term_memory_items_firestore_applies_bounded_limit_b
         if path.startswith('users/u1/short_term_lifecycle_transitions/')
     }
     assert report.created_count == 1
-    assert db_client.stream_limits == [1]
-    assert db_client.streamed_snapshot_counts == [1]
+    assert db_client.stream_limits == [1, 1]
+    assert db_client.streamed_snapshot_counts == [1, 1]
     assert len(transition_docs) == 1
     [payload] = transition_docs.values()
     assert payload['memory_item_id'] == 'a-stale-short-term'
@@ -348,8 +349,31 @@ def test_ineligible_earlier_ids_cannot_starve_expired_short_term_work_at_the_que
     )
 
     assert [item.memory_id for item in items] == ['z-eligible-expired']
-    assert db_client.stream_limits == [250]
-    assert db_client.streamed_snapshot_counts == [1]
+    assert db_client.stream_limits == [250, 250]
+    assert db_client.streamed_snapshot_counts == [1, 1]
+
+
+def test_fetch_expired_includes_legacy_stamps_past_the_48_hour_policy() -> None:
+    db_client = _FirestoreFake()
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    policy_expired = _memory_item(
+        'legacy-policy-expired',
+        captured_at=now - timedelta(hours=49),
+        expires_at=now + timedelta(days=28),
+    )
+    still_fresh = _memory_item(
+        'legacy-still-fresh',
+        captured_at=now - timedelta(hours=12),
+        expires_at=now + timedelta(days=29),
+    )
+    db_client.docs = {
+        f'users/u1/memory_items/{policy_expired.memory_id}': _stored_item(policy_expired),
+        f'users/u1/memory_items/{still_fresh.memory_id}': _stored_item(still_fresh),
+    }
+
+    items = fetch_expired_short_term_memory_items_firestore(uid='u1', db_client=db_client, now=now)
+
+    assert [item.memory_id for item in items] == ['legacy-policy-expired']
 
 
 def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_transitions_idempotently():

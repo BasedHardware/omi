@@ -110,8 +110,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       }
       // Fetch enabled chat apps
       provider.fetchChatApps();
-      // Pre-connect agent WebSocket so it's ready when the user sends a message
-      provider.preConnectAgent();
       // Chat quota is checked via 402 error when sending messages
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
@@ -188,6 +186,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     final appleHealthService = AppleHealthService();
     if (appleHealthService.isAvailable) {
       final integrationProvider = context.read<IntegrationProvider>();
+      await integrationProvider.ensureLoaded();
+      if (!mounted) return;
       if (integrationProvider.isAppConnected(IntegrationApp.appleHealth)) {
         debugPrint('🍎 [Apple Health] Starting auto-sync on chat open...');
         final success = await appleHealthService.syncHealthDataToBackend(days: 7);

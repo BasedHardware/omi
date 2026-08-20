@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "माझी अ‍ॅप्स",
+    "myApps": "माझे बनवलेले",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10780,5 +10780,9 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें"
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "sendRawAudioToOmi": "Omi ला कच्चा ऑडिओ पाठवा",
+    "sendRawAudioToOmiDescription": "Omi ला कच्चा ऑडिओ पाठवणे थांबवण्यासाठी हे बंद करा. प्रतिलेख आणि क्लाउड वैशिष्ट्यांसाठी आवश्यक डेटा अजूनही Omi ला पाठवला जाऊ शकतो.",
+    "findDevice": "शोधा",
+    "diagnosticsShareFailed": "डायग्नोस्टिक्स शेअर करता आले नाही. कृपया पुन्हा प्रयत्न करा."
 }

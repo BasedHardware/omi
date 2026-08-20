@@ -27,7 +27,7 @@ final class ChatFirstDestinationParityTests: XCTestCase {
     XCTAssertEqual(
       Set(MemoryHubDestination.switcherOrder), Set(MemoryHubDestination.allCases),
       "the hub's switcher must offer every hub view")
-    XCTAssertEqual(MemoryHubDestination.switcherOrder, [.conversations, .memories, .brainMap])
+    XCTAssertEqual(MemoryHubDestination.switcherOrder, [.activity, .conversations, .memories, .brainMap])
   }
 
   /// Selecting a hub view in the chat-first shell has to move its typed route as well as the

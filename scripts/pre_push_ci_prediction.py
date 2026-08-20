@@ -79,12 +79,19 @@ ROUTING_INPUTS = {
     ".github/scripts/test_pre_push_ci_prediction.py",
 }
 
+FLUTTER_GENERATION_DEFINITION_INPUTS = {
+    ".github/workflows/mobile-app-checks.yml",
+}
+
+FLUTTER_GENERATION_DEFINITION_PREFIXES = (".github/actions/detect-changes/",)
+
 DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/Desktop/Package.swift",
     "desktop/macos/Desktop/Package.resolved",
     "desktop/macos/test.sh",
     "desktop/macos/scripts/run-swift-ci.sh",
     "desktop/macos/scripts/swift-test-suites.sh",
+    "desktop/macos/scripts/swift-test-skips.json",
     "desktop/macos/scripts/swift-test-skip-ratchet.py",
     "desktop/macos/scripts/check_desktop_test_quality.py",
     "desktop/macos/scripts/check-main-actor-xctest-hooks.py",
@@ -121,6 +128,20 @@ def _load_desktop_flow_lint_inputs() -> frozenset[str]:
 
 
 DESKTOP_FLOW_LINT_INPUTS = _load_desktop_flow_lint_inputs()
+
+
+def _load_desktop_release_pathspecs() -> tuple[str, ...]:
+    """Load the planner's releasable pathspecs so exact-SHA CI stays aligned."""
+    path = REPO_ROOT / ".github/scripts/plan-desktop-release.py"
+    spec = importlib.util.spec_from_file_location("plan_desktop_release_for_ci", path)
+    if spec is None or spec.loader is None:  # pragma: no cover - repository corruption
+        raise RuntimeError(f"cannot load desktop release planner from {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.DESKTOP_RELEASE_PATHS)
+
+
+DESKTOP_RELEASE_PATHSPECS = _load_desktop_release_pathspecs()
 
 
 def _default_read_text(path: str) -> str | None:
@@ -184,6 +205,13 @@ def _is_app_l10n_input(path: str) -> bool:
     return (path.startswith("app/lib/l10n/") and path.endswith(".arb")) or path == "app/l10n.yaml"
 
 
+def _defines_flutter_generation(path: str) -> bool:
+    # Routing metadata cannot make a committed generated file stale, but the
+    # files that define the regeneration commands or forward their outputs can:
+    # they must keep waking the regeneration lanes they own.
+    return path in FLUTTER_GENERATION_DEFINITION_INPUTS or path.startswith(FLUTTER_GENERATION_DEFINITION_PREFIXES)
+
+
 def _is_app_compile_smoke_input(path: str) -> bool:
     if path.startswith("app/lib/l10n/app_") and (path.endswith(".arb") or path.endswith(".dart")):
         return False
@@ -207,17 +235,23 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+def _matches_desktop_release_pathspec(path: str, pathspec: str) -> bool:
+    """Match a changed file against one planner git pathspec."""
+    if path == pathspec:
+        return True
+    # Planner directory pathspecs (for example desktop/macos) have no suffix.
+    if Path(pathspec).suffix:
+        return False
+    prefix = pathspec.rstrip("/") + "/"
+    return path.startswith(prefix)
+
+
 def _is_releasable_desktop_path(path: str) -> bool:
     if path.startswith("desktop/macos/changelog/"):
         return False
     if path in {"desktop/macos/CHANGELOG.json", "desktop/macos/AGENTS.md"}:
         return False
-    return path.startswith("desktop/macos/") or path in {
-        "codemagic.yaml",
-        ".github/scripts/plan-desktop-release.py",
-        ".github/workflows/desktop_auto_release.yml",
-        ".github/workflows/desktop-swift-ci.yml",
-    }
+    return any(_matches_desktop_release_pathspec(path, pathspec) for pathspec in DESKTOP_RELEASE_PATHSPECS)
 
 
 def _is_desktop_swift_test_input(path: str) -> bool:
@@ -305,16 +339,21 @@ def resolve_impact(
         if path in WINDOWS_KGWORKER_NATIVE_CLOSURE_INPUTS:
             selected.add("windows-kgworker-native-closure")
 
+    if any(_defines_flutter_generation(path) for path in normalized_paths):
+        selected.update({"flutter-codegen", "flutter-l10n"})
+
     if selector_changed:
-        # The selector is the boundary. A change to it runs all of its fixtures
-        # and conservatively wakes each component lane it can influence.
+        # The selector is the boundary. A change to it conservatively wakes each
+        # component lane it can influence. It deliberately excludes the
+        # generated-artifact regeneration lanes (flutter-codegen, flutter-l10n):
+        # editing routing metadata cannot make a committed generated file stale,
+        # and waking build_runner from a manifest-only diff costs ~17 minutes at
+        # push time. Those lanes stay owned by their real generator inputs.
         selected.update(
             {
                 "app-ci-only",
                 "app-analysis-tests",
                 "app-compile-smoke",
-                "flutter-l10n",
-                "flutter-codegen",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
@@ -328,7 +367,11 @@ def resolve_impact(
     )
     if releasable_desktop:
         selected.add("desktop-ci-only")
-    if releasable_desktop and (event == "push" or package_changed):
+        # Release compile runs on PRs too, not just pushes: strict-concurrency
+        # errors that only manifest under whole-module release optimization
+        # otherwise land on main and wedge the release train (#11373/#11374 —
+        # the KG ResolveOutcome Sendable break shipped through a PR whose debug
+        # lane stayed green and blocked every candidate for three merges).
         selected.add("desktop-swift-release-compile")
 
     return ImpactPlan(frozenset(selected))

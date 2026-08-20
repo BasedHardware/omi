@@ -321,7 +321,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get searchApps => 'ค้นหาแอป...';
 
   @override
-  String get myApps => 'แอปของฉัน';
+  String get myApps => 'สร้างโดยฉัน';
 
   @override
   String get installedApps => 'แอปที่ติดตั้งแล้ว';
@@ -9784,4 +9784,17 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'เปิดสโตร์';
+
+  @override
+  String get sendRawAudioToOmi => 'ส่งเสียงดิบไปยัง Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'ปิดเพื่อไม่ให้ส่งเสียงดิบไปยัง Omi ข้อความถอดเสียงและข้อมูลที่ฟีเจอร์คลาวด์ต้องใช้อาจยังถูกส่งไปยัง Omi';
+
+  @override
+  String get findDevice => 'ค้นหา';
+
+  @override
+  String get diagnosticsShareFailed => 'ไม่สามารถแชร์ข้อมูลวินิจฉัยได้ โปรดลองใหม่';
 }

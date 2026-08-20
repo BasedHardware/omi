@@ -5,7 +5,19 @@ import ImageIO
 import ScreenCaptureKit
 
 final class ScreenCaptureService: Sendable {
-  private static let maxSize: CGFloat = 3000
+  /// Long-edge cap for ScreenCaptureKit stream config and the screencapture fallback.
+  ///
+  /// `SCWindow.frame` is in points; `SCStreamConfiguration.width/height` are in
+  /// pixels. On a typical Mac the clamp never fires — the largest production
+  /// frame across 400 sampled chunks was 1710×1072. It *can* fire on an
+  /// external 5K/6K display at "More Space" scaling.
+  ///
+  /// 2304 = 3×768, the next Gemini tile-grid step below 3000. Measured token
+  /// cost on high-DPI sources drops 22–46% at 2304 vs 3000, with quality
+  /// indistinguishable from 3000. Do not lower this to 1536: that rung saves
+  /// nothing further on landscape sources and starts silently confabulating
+  /// on-screen text (measured on a retina terminal capture).
+  static let maxSize: CGFloat = 2304
   private let jpegQuality: CGFloat = 0.8
   private static let activeWindowResolveTimeoutNs: UInt64 = 500_000_000  // 500ms
   private static let activeWindowCacheTTL: TimeInterval = 2
@@ -20,9 +32,49 @@ final class ScreenCaptureService: Sendable {
   nonisolated(unsafe) private static var axFailureCountByBundleID: [String: Int] = [:]
   private static let axSkipThreshold = 3
 
+  /// Re-arm every AX suppression after the permission may have changed.
+  ///
+  /// Both pieces of state are conclusions drawn while the permission was broken, so both are
+  /// stale once it is not. The per-bundle counts go too: a `cannotComplete` recorded under a
+  /// broken grant says nothing about whether that app implements AX.
+  ///
+  /// Returns whether anything was actually suppressed, so the caller can log a recovery
+  /// rather than a no-op on every routine permission poll.
+  /// Drive the suppression the way a real `apiDisabled` would, so the re-arm can be tested
+  /// without a machine whose Accessibility grant is actually broken.
+  nonisolated static func suppressAccessibilityForTesting() {
+    axStateLock.withLock {
+      axSystemwideDisabled = true
+      axFailureCountByBundleID["com.example.test"] = axSkipThreshold
+    }
+  }
+
+  nonisolated static func isAccessibilitySuppressedForTesting() -> Bool {
+    axStateLock.withLock { axSystemwideDisabled || !axFailureCountByBundleID.isEmpty }
+  }
+
+  @discardableResult
+  nonisolated static func rearmAccessibilityAfterPermissionChange() -> Bool {
+    let wasSuppressed = axStateLock.withLock {
+      let suppressed = axSystemwideDisabled || !axFailureCountByBundleID.isEmpty
+      axSystemwideDisabled = false
+      axFailureCountByBundleID.removeAll()
+      return suppressed
+    }
+    if wasSuppressed {
+      log("ACCESSIBILITY_AX: permission changed — re-armed AX attempts without requiring a relaunch")
+    }
+    return wasSuppressed
+  }
+
   /// When the AX API is disabled system-wide (apiDisabled error), skip all AX attempts
   /// to avoid spamming a failing call on every capture cycle (every ~1 second).
   /// Must be accessed only while holding axStateLock.
+  ///
+  /// Cleared by `rearmAccessibilityAfterPermissionChange()`. The latch is a rate limit on a
+  /// call that is known to be failing, not a verdict for the life of the process: a user who
+  /// grants Accessibility in System Settings expects Omi to start reading window contents
+  /// without being told to quit and reopen it.
   nonisolated(unsafe) private static var axSystemwideDisabled = false
 
   /// Cache the last successfully resolved active window (with a non-nil window ID).
@@ -51,12 +103,19 @@ final class ScreenCaptureService: Sendable {
   /// for up to `sharedContentTTL` seconds; refresh on demand when a target window isn't
   /// present in the cache.
   private static let sharedContentLock = NSLock()
-  nonisolated(unsafe) private static var cachedSharedContent: Any?  // SCShareableContent, typed Any so this decl predates macOS 14 gate
+  // SCShareableContent, typed Any so this decl predates the macOS 14 gate.
+  nonisolated(unsafe) private static var cachedSharedContent: Any?
   nonisolated(unsafe) private static var sharedContentCachedAt: Date?
   private static let sharedContentTTL: TimeInterval = 5.0
 
   @available(macOS 14.0, *)
   private static func sharedContent(forceRefresh: Bool = false) async throws -> SCShareableContent {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      throw ScreenCaptureKitUnavailable.grantNotLiveInThisProcess
+    }
     if !forceRefresh,
       !UserDefaults.standard.bool(forKey: .rewindDisableContentCache)
     {
@@ -83,6 +142,16 @@ final class ScreenCaptureService: Sendable {
 
   init() {}
 
+  /// TCC as observed the first time this snapshot is read. AppState init is the
+  /// first production caller (`checkPermission()`), which is before any
+  /// onboarding grant. Later `CGPreflightScreenCaptureAccess` can flip to true
+  /// without the window-server connection picking up the grant.
+  static let grantedAtProcessStart: Bool = CGPreflightScreenCaptureAccess()
+
+  private enum ScreenCaptureKitUnavailable: Error {
+    case grantNotLiveInThisProcess
+  }
+
   /// Check whether macOS TCC says this app has Screen Recording permission.
   ///
   /// Do not spawn `/usr/sbin/screencapture` here. That helper process can fail
@@ -90,6 +159,7 @@ final class ScreenCaptureService: Sendable {
   /// "Screen Recording disabled" state while System Settings correctly showed
   /// the app as allowed.
   static func checkPermission(forceActualTestIfPreflightDenied: Bool = false) -> Bool {
+    _ = grantedAtProcessStart
     let preflightGranted = CGPreflightScreenCaptureAccess()
 
     if !preflightGranted {
@@ -169,6 +239,22 @@ final class ScreenCaptureService: Sendable {
     }
   }
 
+  /// ScreenCaptureKit talks to the window-server connection opened at launch.
+  /// A first-in-session TCC grant is visible to preflight and dead to SCK;
+  /// calling SCK in that window aborts on some Macs instead of throwing.
+  @available(macOS 14.0, *)
+  static func requestScreenCaptureKitPermissionIfUsableInThisProcess() async -> Bool {
+    _ = grantedAtProcessStart
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      log("ScreenCaptureKit: this process launched before the grant; skipping until relaunch")
+      return false
+    }
+    return await requestScreenCaptureKitPermission()
+  }
+
   /// Force re-register this app with Launch Services to ensure it's the authoritative version
   /// This fixes issues where multiple app bundles with the same bundle ID confuse macOS
   /// about which app to grant permissions to.
@@ -237,12 +323,15 @@ final class ScreenCaptureService: Sendable {
     // Screen Recording list (PERM-02). This mirrors requestMicrophonePermission,
     // which activates before requesting and reliably creates its TCC row.
     NSApp.activate()
+    _ = grantedAtProcessStart
     CGRequestScreenCaptureAccess()
 
-    // 2. Request ScreenCaptureKit permission (macOS 14+)
+    // 2. Request ScreenCaptureKit permission (macOS 14+) only when this
+    // process's window-server connection already carries the grant. Calling
+    // SCK immediately after the first TCC dialog returns aborts on some Macs.
     if #available(macOS 14.0, *) {
       Task {
-        _ = await requestScreenCaptureKitPermission()
+        _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
       }
     }
 
@@ -257,9 +346,10 @@ final class ScreenCaptureService: Sendable {
   static func requestAllScreenCapturePermissionsAwaitingScreenCaptureKit() async -> Bool {
     ensureLaunchServicesRegistration()
     NSApp.activate()
+    _ = grantedAtProcessStart
     let tccGranted = CGRequestScreenCaptureAccess()
     if #available(macOS 14.0, *) {
-      _ = await requestScreenCaptureKitPermission()
+      _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
     }
     return tccGranted || checkPermission()
   }
@@ -296,6 +386,13 @@ final class ScreenCaptureService: Sendable {
   /// swallowed so this never blocks or disrupts onboarding.
   @available(macOS 14.0, *)
   static func primeCaptureConsent() async {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      log("primeCaptureConsent skipped: Screen Recording is not live in this process until relaunch")
+      return
+    }
     do {
       let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
       guard let display = content.displays.first else { return }
@@ -314,6 +411,12 @@ final class ScreenCaptureService: Sendable {
   /// Returns true if ScreenCaptureKit consent is granted, false if declined
   @available(macOS 14.0, *)
   static func testScreenCaptureKitPermission() async -> Bool {
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      return false
+    }
     do {
       _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
       return true
@@ -331,6 +434,12 @@ final class ScreenCaptureService: Sendable {
     let tccGranted = CGPreflightScreenCaptureAccess()
     if !tccGranted {
       return false  // Not broken, just not granted
+    }
+    guard
+      ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+        grantedAtLaunch: grantedAtProcessStart)
+    else {
+      return false  // Grant isn't live in this process; relaunch, don't probe SCK
     }
 
     let sckGranted = await testScreenCaptureKitPermission()
@@ -350,6 +459,13 @@ final class ScreenCaptureService: Sendable {
     // 2. Re-request ScreenCaptureKit consent (macOS 14+)
     //    This can fix the "TCC says yes but SCK says no" broken state
     if #available(macOS 14.0, *) {
+      guard
+        ScreenRecordingPermissionPolicy.shouldInvokeScreenCaptureKit(
+          grantedAtLaunch: grantedAtProcessStart)
+      else {
+        log("Screen capture: Soft recovery skipped SCK; grant is not live until relaunch")
+        return false
+      }
       let sckGranted = await requestScreenCaptureKitPermission()
       if sckGranted {
         log("Screen capture: Soft recovery succeeded (SCK re-consent granted)")
@@ -406,7 +522,7 @@ final class ScreenCaptureService: Sendable {
 
       // Re-request ScreenCaptureKit consent
       if #available(macOS 14.0, *) {
-        _ = await requestScreenCaptureKitPermission()
+        _ = await requestScreenCaptureKitPermissionIfUsableInThisProcess()
       }
 
       await MainActor.run {
@@ -660,10 +776,15 @@ final class ScreenCaptureService: Sendable {
 
     // Try Accessibility API first (most accurate - gets actual focused window).
     // Skip if AX is disabled system-wide (apiDisabled) or this app exceeded the cannotComplete threshold.
-    let skipAX = axStateLock.withLock {
-      axSystemwideDisabled
-        || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
-    }
+    // Same-process accessibility reads re-enter our own view graph on the caller's thread, and
+    // this runs on the capture tick — see `AccessibilityProcessBoundary`. The window-list
+    // heuristic below still resolves our own window.
+    let skipAX =
+      !AccessibilityProcessBoundary.isForeignProcess(activePID)
+      || axStateLock.withLock {
+        axSystemwideDisabled
+          || (!bundleID.isEmpty && (axFailureCountByBundleID[bundleID] ?? 0) >= axSkipThreshold)
+      }
     if !skipAX,
       let axResult = getWindowInfoViaAccessibility(
         pid: activePID, bundleID: bundleID, windowList: windowList)

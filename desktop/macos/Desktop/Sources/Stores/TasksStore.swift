@@ -37,7 +37,7 @@ class TasksStore: ObservableObject {
   }
 
   /// Legacy surfaces deliberately preserve a local edit while offline; the
-  /// cohort-only inline task controls roll a rejected mutation back instead.
+  /// universal inline task controls roll a rejected mutation back instead.
   enum TaskUpdateRemoteFailureBehavior: Equatable, Sendable {
     case preserveLocalEdit
     case rollbackForChatFirst
@@ -49,6 +49,13 @@ class TasksStore: ObservableObject {
     case rolledBackAfterRemoteFailure
     case rollbackFailed
     case localWriteFailed
+    case ownerChanged
+  }
+
+  enum BulkDeleteOutcome: Equatable, Sendable {
+    case deletedEverywhere
+    case localFailure(remoteDeletedIDs: Set<String>)
+    case remoteFailure(confirmedIDs: Set<String>)
     case ownerChanged
   }
 
@@ -118,7 +125,9 @@ class TasksStore: ObservableObject {
     var fetchDatedTasks: ((_ ownerID: String) async throws -> [TaskActionItem])?
     var fetchNoDeadlinePage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
     var fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])?
+    var fetchSelectionTaskIds: ((_ completed: Bool, _ ownerID: String) async throws -> [String])?
     var fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)?
+    var loadTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)?
     var reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)?
     var fetchDeletedPage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)?
     var syncPage:
@@ -148,7 +157,9 @@ class TasksStore: ObservableObject {
         (_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage
       )? = nil,
       fetchAllTaskIds: ((_ ownerID: String) async throws -> [String])? = nil,
+      fetchSelectionTaskIds: ((_ completed: Bool, _ ownerID: String) async throws -> [String])? = nil,
       fetchTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)? = nil,
+      loadTaskDetail: ((_ id: String, _ ownerID: String) async throws -> TaskActionItem?)? = nil,
       reconcileVisibility: ((_ items: [TaskActionItem], _ ownerID: String) async throws -> Int)? = nil,
       fetchDeletedPage: ((_ offset: Int, _ limit: Int, _ ownerID: String) async throws -> ActionItemsPage)? = nil,
       syncPage: (
@@ -174,7 +185,9 @@ class TasksStore: ObservableObject {
       self.fetchDatedTasks = fetchDatedTasks
       self.fetchNoDeadlinePage = fetchNoDeadlinePage
       self.fetchAllTaskIds = fetchAllTaskIds
+      self.fetchSelectionTaskIds = fetchSelectionTaskIds
       self.fetchTaskDetail = fetchTaskDetail
+      self.loadTaskDetail = loadTaskDetail
       self.reconcileVisibility = reconcileVisibility
       self.fetchDeletedPage = fetchDeletedPage
       self.syncPage = syncPage
@@ -193,7 +206,7 @@ class TasksStore: ObservableObject {
     }
   }
 
-  private struct OwnerOperationLease: Equatable, Sendable {
+  struct OwnerOperationLease: Equatable, Sendable {
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
     let generation: UInt64
 
@@ -486,9 +499,15 @@ class TasksStore: ObservableObject {
         )
       }
       guard isCurrent(lease) else { return }
-      let sortedOverdue = snapshot.overdue.sorted(by: Self.sortByDueDateThenSource)
-      let sortedToday = snapshot.today.sorted(by: Self.sortByDueDateThenSource)
-      let sortedNoDueDate = snapshot.noDueDate.sorted(by: Self.sortByDueDateThenSource)
+      // Unreviewed AI captures stay out of dashboard / nudge / realtime lanes.
+      // The Tasks page uses incompleteTasks and shows those rows as ordinary
+      // due-date tasks after Candidate review replaced the sparkle list.
+      let sortedOverdue = snapshot.overdue.filter(DashboardTaskLanePolicy.admits)
+        .sorted(by: Self.sortByDueDateThenSource)
+      let sortedToday = snapshot.today.filter(DashboardTaskLanePolicy.admits)
+        .sorted(by: Self.sortByDueDateThenSource)
+      let sortedNoDueDate = snapshot.noDueDate.filter(DashboardTaskLanePolicy.admits)
+        .sorted(by: Self.sortByDueDateThenSource)
       // Only update @Published properties if values actually changed to avoid unnecessary objectWillChange
       if overdueTasks != sortedOverdue { overdueTasks = sortedOverdue }
       if todaysTasks != sortedToday { todaysTasks = sortedToday }
@@ -1079,7 +1098,7 @@ class TasksStore: ObservableObject {
     return [fullSyncTask, relevanceTask]
   }
 
-  private func captureOwnerLease(
+  func captureOwnerLease(
     expectedOwnerID: String? = nil,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) -> OwnerOperationLease? {
@@ -1113,7 +1132,7 @@ class TasksStore: ObservableObject {
     )
   }
 
-  private func isCurrent(_ lease: OwnerOperationLease) -> Bool {
+  func isCurrent(_ lease: OwnerOperationLease) -> Bool {
     lease.generation == ownerOperationGeneration
       && RuntimeOwnerIdentity.isAuthorizationCurrent(lease.authorizationSnapshot)
       && !Task.isCancelled
@@ -1390,20 +1409,29 @@ class TasksStore: ObservableObject {
     operations: OwnerBoundOperations
   ) async throws -> OwnerBoundOperations.ActionItemsPage {
     guard isCurrent(lease) else { throw LocalMutationAuthorizationError.revoked }
+    let page: OwnerBoundOperations.ActionItemsPage
     if let fetchDeletedPage = operations.fetchDeletedPage {
-      return try await fetchDeletedPage(offset, limit, lease.ownerID)
+      page = try await fetchDeletedPage(offset, limit, lease.ownerID)
+    } else {
+      let response = try await APIClient.shared.getActionItems(
+        limit: limit,
+        offset: offset,
+        deleted: true,
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      page = .init(items: response.items, hasMore: response.hasMore)
     }
-    let response = try await APIClient.shared.getActionItems(
-      limit: limit,
-      offset: offset,
-      deleted: true,
-      expectedOwnerId: lease.ownerID,
-      authorizationSnapshot: lease.authorizationSnapshot
-    )
-    return .init(items: response.items, hasMore: response.hasMore)
+    // The lane is the authority on retirement, not `isRetired`'s re-derivation
+    // from whatever fields this response happened to carry. Stamping it here —
+    // after both transports, so neither can skip it — is what stops a retired
+    // row being written to the local cache as live and resurfacing as a live
+    // task. Every caller of this page (first load and auto-refresh) syncs it
+    // into SQLite, so normalizing anywhere later would leave one path wrong.
+    return .init(items: page.items.map { $0.retired() }, hasMore: page.hasMore)
   }
 
-  private func syncPage(
+  func syncPage(
     _ items: [TaskActionItem],
     overrideStagedDeletions: Bool = false,
     lease: OwnerOperationLease,
@@ -1658,7 +1686,7 @@ class TasksStore: ObservableObject {
     }
   }
 
-  private func refreshDashboard(
+  func refreshDashboard(
     lease: OwnerOperationLease,
     operations: OwnerBoundOperations
   ) async {
@@ -2378,7 +2406,10 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
 
-    guard !items.isEmpty else { return }
+    if items.isEmpty {
+      await flushPendingBackendDeletions(lease: lease)
+      return
+    }
     log("TasksStore: Retrying sync for \(items.count) unsynced items")
 
     var synced = 0
@@ -2448,6 +2479,52 @@ class TasksStore: ObservableObject {
     if isCurrent(lease) {
       log("TasksStore: Retry sync completed — \(synced)/\(items.count) items synced")
     }
+    await flushPendingBackendDeletions(lease: lease)
+  }
+
+  /// Push unacknowledged deletions to the backend and purge the tombstones it confirms.
+  ///
+  /// Second half of the tombstone contract in `deleteTask`: the tombstone records that the
+  /// user deleted the task, this flush makes the server agree, and only the server's
+  /// confirmation removes the local row. Partial confirmations purge exactly the confirmed
+  /// IDs — the rest stay tombstoned for the next pass.
+  private func flushPendingBackendDeletions(lease: OwnerOperationLease) async {
+    guard isCurrent(lease) else { return }
+    let pending: [String]
+    do {
+      pending = try await ActionItemStorage.shared.getPendingBackendDeletionIds()
+    } catch {
+      if isCurrent(lease) { logError("TasksStore: Failed to read pending deletions", error: error) }
+      return
+    }
+    guard isCurrent(lease), !pending.isEmpty else { return }
+    log("TasksStore: Flushing \(pending.count) unacknowledged task deletions")
+
+    var confirmed: [String] = []
+    do {
+      try await APIClient.shared.batchDeleteActionItems(
+        ids: pending,
+        expectedOwnerId: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot
+      )
+      confirmed = pending
+    } catch let partial as APIClient.BatchDeletePartialFailure {
+      confirmed = partial.confirmedIDs
+    } catch {
+      guard isCurrent(lease) else { return }
+      logError("TasksStore: Deletion flush failed — tombstones retained", error: error)
+      return
+    }
+
+    guard isCurrent(lease) else { return }
+    for id in confirmed {
+      try? await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+        backendId: id,
+        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+      )
+      guard isCurrent(lease) else { return }
+    }
+    log("TasksStore: Deletion flush confirmed \(confirmed.count)/\(pending.count)")
   }
 
   /// One-time backfill: assign relevance scores to all unscored active tasks.
@@ -2693,76 +2770,11 @@ class TasksStore: ObservableObject {
     return RuntimeOwnerIdentity.currentOwnerId()
   }
 
-  private nonisolated static func localMutationAuthorization(
+  nonisolated static func localMutationAuthorization(
     snapshot: RuntimeOwnerAuthorizationSnapshot
   ) -> LocalMutationAuthorization {
     LocalMutationAuthorization {
       RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
-    }
-  }
-
-  /// Hydrates a canonical goal-detail task through the owner-fenced store
-  /// before a goal page attempts any mutation.
-  func resolveCanonicalTask(
-    id: String,
-    expectedOwnerID: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    operations: OwnerBoundOperations = OwnerBoundOperations()
-  ) async -> TaskActionItem? {
-    let normalizedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalizedID.isEmpty,
-      let lease = captureOwnerLease(
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot
-      )
-    else { return nil }
-
-    if let existing = tasks.first(where: { $0.id == normalizedID && $0.deleted != true }) {
-      return existing
-    }
-    do {
-      let remoteTask: TaskActionItem?
-      if let fetchTaskDetail = operations.fetchTaskDetail {
-        remoteTask = try await fetchTaskDetail(normalizedID, lease.ownerID)
-      } else {
-        remoteTask = try await APIClient.shared.getActionItem(
-          id: normalizedID,
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
-      }
-      guard isCurrent(lease),
-        let remoteTask,
-        remoteTask.id == normalizedID,
-        remoteTask.deleted != true
-      else { return nil }
-      try await syncPage([remoteTask], lease: lease, operations: operations)
-      guard isCurrent(lease),
-        let hydratedTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: normalizedID),
-        hydratedTask.deleted != true
-      else { return nil }
-      publishHydratedCanonicalTask(hydratedTask)
-      await refreshDashboard(lease: lease, operations: operations)
-      guard isCurrent(lease) else { return nil }
-      return hydratedTask
-    } catch {
-      guard isCurrent(lease) else { return nil }
-      self.error = "This task is no longer available."
-      logError("TasksStore: Failed to hydrate canonical task", error: error)
-      return nil
-    }
-  }
-
-  private func publishHydratedCanonicalTask(_ task: TaskActionItem) {
-    incompleteTasks.removeAll { $0.id == task.id }
-    completedTasks.removeAll { $0.id == task.id }
-    deletedTasks.removeAll { $0.id == task.id }
-    if task.deleted == true {
-      deletedTasks.insert(task, at: 0)
-    } else if task.completed {
-      completedTasks.insert(task, at: 0)
-    } else {
-      incompleteTasks.insert(task, at: 0)
     }
   }
 
@@ -2826,8 +2838,8 @@ class TasksStore: ObservableObject {
 
     // 4. Update in-memory arrays immediately (optimistic UI)
     if newCompleted {
-      incompleteTasks.removeAll { $0.id == task.id }
       completedTasks.insert(updatedTask, at: 0)
+      incompleteTasks.removeAll { $0.id == task.id }
 
       // Compact relevance scores to fill the gap
       if let score = task.relevanceScore {
@@ -2861,8 +2873,8 @@ class TasksStore: ObservableObject {
         }
       }
     } else {
-      completedTasks.removeAll { $0.id == task.id }
       incompleteTasks.insert(updatedTask, at: 0)
+      completedTasks.removeAll { $0.id == task.id }
     }
 
     // 5. Refresh dashboard arrays immediately (SQLite was already updated in step 1)
@@ -2999,11 +3011,11 @@ class TasksStore: ObservableObject {
     }
     guard isCurrent(lease) else { return }
     if attemptedCompleted {
-      completedTasks.removeAll { $0.id == task.id }
       incompleteTasks.insert(task, at: 0)
+      completedTasks.removeAll { $0.id == task.id }
     } else {
-      incompleteTasks.removeAll { $0.id == task.id }
       completedTasks.insert(task, at: 0)
+      incompleteTasks.removeAll { $0.id == task.id }
     }
     self.error = backendError.localizedDescription
   }
@@ -3152,15 +3164,28 @@ class TasksStore: ObservableObject {
     let ownerID = lease.ownerID
     if let beforeLocalMutation { await beforeLocalMutation() }
     guard isCurrent(lease) else { return }
-    // Local-first: soft-delete in SQLite immediately for instant UI update
+    // Local-first, but as a tombstone, not a hard delete: the row keeps `deleted = 1,
+    // backendSynced = 0` until the server acknowledges, so a failed backend call cannot be
+    // forgotten and hydration cannot resurrect the task. Hard-deleting here was how 450
+    // deleted tasks came back after a reinstall.
+    let isLocalOnly = ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly
     do {
-      try await ActionItemStorage.shared.deleteActionItemByBackendId(
-        task.id,
-        deletedBy: "user",
-        authorization: Self.localMutationAuthorization(
-          snapshot: lease.authorizationSnapshot
+      if isLocalOnly {
+        // No backend row exists; a tombstone would wait forever for an ack.
+        try await ActionItemStorage.shared.deleteActionItemByBackendId(
+          task.id,
+          authorization: Self.localMutationAuthorization(
+            snapshot: lease.authorizationSnapshot
+          )
         )
-      )
+      } else {
+        try await ActionItemStorage.shared.markActionItemDeletedPendingBackendSync(
+          backendId: task.id,
+          authorization: Self.localMutationAuthorization(
+            snapshot: lease.authorizationSnapshot
+          )
+        )
+      }
     } catch {
       guard isCurrent(lease) else { return }
       logError("TasksStore: Failed to soft-delete task locally", error: error)
@@ -3210,9 +3235,8 @@ class TasksStore: ObservableObject {
       }
     }
 
-    // Hard-delete on backend in background. Unsynced local-only tasks have
-    // no backend row to delete.
-    if ActionItemTaskIdentity(surfacedId: task.id).isLocalOnly {
+    // Delete on backend; only an acknowledgement clears the local tombstone.
+    if isLocalOnly {
       log("TasksStore: Skipped backend delete for unsynced local task \(task.id)")
       return
     }
@@ -3222,9 +3246,15 @@ class TasksStore: ObservableObject {
         expectedOwnerId: ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
+      guard isCurrent(lease) else { return }
+      try? await ActionItemStorage.shared.markActionItemDeletionAcknowledged(
+        backendId: task.id,
+        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+      )
     } catch {
       guard isCurrent(lease) else { return }
-      logError("TasksStore: Failed to hard-delete task on backend (local delete preserved)", error: error)
+      logError(
+        "TasksStore: Backend delete not acknowledged — tombstone retained for retry", error: error)
     }
   }
 
@@ -3235,6 +3265,13 @@ class TasksStore: ObservableObject {
     expectedOwnerID: String? = nil
   ) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
+    // Undo of a tombstoned delete: the row still exists locally (deleted, whether or not
+    // the backend acked). Purge it before the re-insert below or undo would duplicate it.
+    try? await ActionItemStorage.shared.deleteActionItemByBackendId(
+      task.id,
+      authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+    )
+    guard isCurrent(lease) else { return }
 
     // A local-only task never had a backend row (deleteTask skipped the backend
     // delete). Restoring it through the backend-recreate path below is wrong on
@@ -3609,71 +3646,13 @@ class TasksStore: ObservableObject {
 
   // MARK: - Bulk Actions
 
-  func deleteMultipleTasks(
-    ids: [String],
-    expectedOwnerID: String? = nil
-  ) async {
-    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    // Collect relevance scores before removing from memory
-    let allTasks = incompleteTasks + completedTasks
-    let scores = ids.compactMap { id in allTasks.first(where: { $0.id == id })?.relevanceScore }
-
-    // Local-first: soft-delete all in SQLite and remove from memory immediately
-    for id in ids {
-      do {
-        try await ActionItemStorage.shared.deleteActionItemByBackendId(
-          id,
-          deletedBy: "user",
-          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
-        )
-      } catch {
-        if isCurrent(lease) {
-          logError("TasksStore: Failed to soft-delete task \(id) locally", error: error)
-        }
-      }
-      guard isCurrent(lease) else { return }
-      incompleteTasks.removeAll { $0.id == id }
-      completedTasks.removeAll { $0.id == id }
-    }
-
-    // Compact relevance scores (process highest first so shifts don't affect each other)
-    for score in scores.sorted(by: >) {
-      try? await ActionItemStorage.shared.compactScoresAfterRemoval(
-        removedScore: score,
-        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
-      )
-      guard isCurrent(lease) else { return }
-    }
-    if !scores.isEmpty {
-      Task { @MainActor [weak self] in
-        await self?.syncScoresToBackend(lease: lease)
-      }
-    }
-
-    // Hard-delete on backend in background (skip unsynced local-only ids)
-    for id in ids where !ActionItemTaskIdentity(surfacedId: id).isLocalOnly {
-      do {
-        try await APIClient.shared.deleteActionItem(
-          id: id,
-          expectedOwnerId: lease.ownerID,
-          authorizationSnapshot: lease.authorizationSnapshot
-        )
-      } catch {
-        if isCurrent(lease) {
-          logError("TasksStore: Failed to hard-delete task \(id) on backend (local delete preserved)", error: error)
-        }
-      }
-      guard isCurrent(lease) else { return }
-    }
-  }
-
   /// Sync all scored tasks' relevance scores to backend
   private func syncScoresToBackend(expectedOwnerID: String? = nil) async {
     guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
     await syncScoresToBackend(lease: lease)
   }
 
-  private func syncScoresToBackend(lease: OwnerOperationLease) async {
+  func syncScoresToBackend(lease: OwnerOperationLease) async {
     guard isCurrent(lease) else { return }
     do {
       let tasks = try await ActionItemStorage.shared.getAllScoredTasks()

@@ -30,23 +30,25 @@ from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, Pro
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState
 from utils.memory.canonical_consolidation import (
+    CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
     ConsolidationAgentDecision,
     ConsolidationReport,
     apply_consolidation_decision,
     run_canonical_consolidation,
 )
 from utils.memory.canonical_required_processing import (
+    REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     RequiredMemoryProcessingReport,
     RequiredMemoryProcessor,
     run_required_memory_processing,
 )
 from utils.memory.canonical_vector_sync import delete_canonical_memory_vector, sync_canonical_memory_vector
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.short_term_lifecycle import ShortTermDisposition
-from utils.memory.v3.compatibility_projection_sync import (
-    delete_v3_compatibility_projection_item,
-    upsert_v3_compatibility_projection_item,
+from utils.memory.memory_system import (
+    MemorySystem as MemorySystem,  # compatibility export for legacy test doubles
+    ensure_canonical_apply_control_state,
+    resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
+from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -115,25 +117,11 @@ def _delete_atom_projection_and_citations(uid: str, memory_id: str, *, db_client
 
 def _canonical_outbox_side_effects(*, db_client: Any) -> CanonicalMemoryOutboxSideEffects:
     def projection_upsert(item: MemoryItem, account_generation: int) -> bool:
-        if not sync_atom_keyword_index_for_item(item, db_client=db_client):
-            return False
-        return upsert_v3_compatibility_projection_item(
-            item,
-            expected_account_generation=account_generation,
-            db_client=db_client,
-        )
+        del account_generation
+        return sync_atom_keyword_index_for_item(item, db_client=db_client)
 
     def projection_delete(uid: str, memory_id: str, account_generation: int) -> bool:
-        # Remove the user-facing compatibility row first. External projection
-        # cleanup remains retryable, while a transient provider failure must
-        # never leave deleted/private content visible through `/v3`.
-        if not delete_v3_compatibility_projection_item(
-            uid,
-            memory_id,
-            expected_account_generation=account_generation,
-            db_client=db_client,
-        ):
-            return False
+        del account_generation
         return _delete_atom_projection_and_citations(uid, memory_id, db_client=db_client)
 
     def vector_upsert(item: MemoryItem, commit_id: str) -> bool:
@@ -257,8 +245,9 @@ def run_canonical_short_term_ttl_lifecycle(
     client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return CanonicalShortTermLifecycleReport(uid=uid, skipped_reason="not_canonical_cohort")
+    # Universal accounts lazily receive the apply ledger.  Integrity failures
+    # propagate and fail this UID closed; they never select a legacy lifecycle.
+    ensure_canonical_apply_control_state(uid, db_client=client)
 
     items = fetch_expired_short_term_memory_items_firestore(
         uid=uid,
@@ -272,7 +261,7 @@ def run_canonical_short_term_ttl_lifecycle(
     terminal = 0
     for item in items:
         disposition = None
-        if item.expires_at and item.expires_at <= current_time and item.tier == MemoryLayer.short_term:
+        if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
             disposition = ShortTermDisposition.reject_or_hide
         record, was_created = process_short_term_lifecycle_item(
             item,
@@ -335,11 +324,15 @@ def run_canonical_short_term_maintenance(
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
     required_processor: Optional[RequiredMemoryProcessor] = None,
+    required_processing_attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    required_processing_result_guard: Optional[Callable[[], None]] = None,
+    required_processing_limit: int = 0,
+    consolidation_attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
+    consolidation_result_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
     client: Any = db_client if db_client is not None else default_db_client
-    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
-        return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
+    ensure_canonical_apply_control_state(uid, db_client=client)
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     # Settle already-committed invalidations before reading Short-term rows.
@@ -351,12 +344,18 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         now=pre_outbox_now,
     )
-    required_processing = run_required_memory_processing(
-        uid,
-        db_client=client,
-        processor=required_processor,
-        now=current_time,
-    )
+    if required_processing_limit > 0:
+        required_processing = run_required_memory_processing(
+            uid,
+            db_client=client,
+            processor=required_processor,
+            now=current_time,
+            attempt_lease_seconds=required_processing_attempt_lease_seconds,
+            result_guard=required_processing_result_guard,
+            limit=required_processing_limit,
+        )
+    else:
+        required_processing = RequiredMemoryProcessingReport(uid=uid)
     lifecycle = run_canonical_short_term_ttl_lifecycle(
         uid,
         db_client=client,
@@ -370,6 +369,8 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         llm_invoke=llm_invoke,
         recurrence_signal_sink=recurrence_signal_sink,
+        attempt_lease_seconds=consolidation_attempt_lease_seconds,
+        result_guard=consolidation_result_guard,
     )
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.

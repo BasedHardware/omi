@@ -74,9 +74,104 @@ routes:
     path: /v1/screen-activity/sync
     policy: *desktop_migration_policy
   - route_type: http
+    method: GET
+    path: /v1/screen-activity
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/screen-activity/summary
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v3/speech-profile/status
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: POST
     path: /v1/tts/synthesize
     policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v1/stt/transcribe
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: stt:transcribe
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: unknown
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
   - route_type: http
     method: POST
     path: /v1/webhooks/sentry
@@ -92,6 +187,10 @@ routes:
   - route_type: http
     method: GET
     path: /v2/agent/status
+    policy: *desktop_migration_policy
+  - route_type: http
+    method: POST
+    path: /v2/agent/vm/stop-self
     policy: *desktop_migration_policy
   - route_type: http
     method: POST
@@ -113,6 +212,29 @@ routes:
     method: PATCH
     path: /updates/releases/promote
     policy: *desktop_migration_policy
+  - route_type: http
+    method: GET
+    path: /v1/users/available-languages
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: public_documented
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
   - route_type: http
     method: POST
     path: /v1/conversations/shared/chat
@@ -336,7 +458,7 @@ routes:
         state: active
   - route_type: http
     method: POST
-    path: /v2/desktop/beta/promote-qualified
+    path: /v2/desktop/beta/promote-candidate
     policy:
       review_status: reviewed
       auth:
@@ -459,6 +581,29 @@ routes:
       byok: not_applicable
       rate_limit:
         policy_name: memories:delete_batch
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: PATCH
+    path: /v3/memories/{memory_id}/read
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: memories:modify
         key_subject: uid
         enforcement: fail_closed
         placement: wrapper
@@ -682,6 +827,7 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
       byok: validated_when_headers_present
@@ -705,6 +851,30 @@ routes:
       auth:
         mechanisms:
           - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: unknown
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v2/chat/materialize-prompts
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+          - admin_key_uid_prefix
         placement: dependency
         scopes: []
       byok: validated_when_headers_present
@@ -1665,26 +1835,140 @@ routes:
       owner: backend
   - route_type: http
     method: POST
-    path: /v2/agent/vm/stop-self
+    path: /v1/knowledge-graph/extract
     policy:
       review_status: reviewed
       auth:
         mechanisms:
-          - google_compute_identity_token
-        placement: handler
-        scopes:
-          - exact_firestore_vm_owner
-          - exact_project_zone_instance
+          - firebase_id_token
+        placement: dependency
+        scopes: []
       byok: not_applicable
       rate_limit:
-        policy_name: agent_vm_stop_broker
-        key_subject: ip
+        policy_name: knowledge_graph:extract
+        key_subject: uid
         enforcement: fail_closed
-        placement: inline
+        placement: wrapper
       timeout_class: default_method
-      surface: internal_control_plane
-      visibility: internal
-      data_domain: agent_vm_lifecycle
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/users/ai-profile/synthesize
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: users:ai_profile_synthesize
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/conversations/topic
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: conversations:topic
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/connectors/synthesize
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: connectors:synthesize
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v1/memories/extract
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: memories:extract
+        key_subject: uid
+        enforcement: fail_closed
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: memories
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v2/chat/generate-reply
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes:
+          - exact_chat_owner
+      byok: validated_when_headers_present
+      rate_limit:
+        policy_name: chat:send_message
+        key_subject: uid
+        enforcement: fail_open
+        placement: wrapper
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: chat
       deprecation:
         state: active
       owner: backend

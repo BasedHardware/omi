@@ -692,7 +692,7 @@ auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSig
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
 # Each non-production app writes to its own bundle-and-launch log path. Never clear a
-# machine-global log here: another named QA or qualification bundle may still be running.
+# machine-global log here: another named QA bundle may still be running.
 
 if [ "$FAST_ONLY" = "1" ]; then
     # --fast-only already proved that the installed bundle fingerprint matches;
@@ -1316,16 +1316,6 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     fi
 fi
 
-if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
-    step "Seeding shortcuts/settings from Omi Dev..."
-    if ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
-        auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
-        auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
-    else
-        echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
-    fi
-fi
-
 if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; then
     step "Seeding Rewind history from Omi Dev..."
     if ! ./scripts/omi-rewind-seed.sh "$BUNDLE_ID"; then
@@ -1334,6 +1324,20 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; the
 fi
 
 fi # full bundle path
+
+# Curated preferences are launch configuration, not bundle contents. Re-sync
+# them after both full installs and executable-only fast rebuilds so a reused
+# named bundle cannot retain hotkeys/settings that diverged from Omi Dev.
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
+    step "Seeding shortcuts/settings from Omi Dev..."
+    if ! ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
+        echo "ERROR: could not mirror shortcuts/settings from Omi Dev." >&2
+        echo "Set OMI_SKIP_SETTINGS_SEED=1 only when intentionally testing bundle-local settings." >&2
+        exit 1
+    fi
+    auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
+    auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
+fi
 
 signal_desktop_launch() {
     local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"
@@ -1410,8 +1414,11 @@ build_launch_env_args() {
     if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
     fi
+    if [ -n "${OMI_FORCE_CONTEXT_BUCKETS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CONTEXT_BUCKETS=$OMI_FORCE_CONTEXT_BUCKETS")
+    fi
     # Forward automation token overrides when the caller already pinned them
-    # (e.g. qualify-desktop-beta.sh). Default token discovery prefers Darwin
+    # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin
     # user temp in harness clients, matching NSTemporaryDirectory().
     if [ -n "${OMI_AUTOMATION_TOKEN_FILE:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_AUTOMATION_TOKEN_FILE=$OMI_AUTOMATION_TOKEN_FILE")

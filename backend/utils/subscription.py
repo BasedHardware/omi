@@ -10,6 +10,7 @@ import stripe
 import database.users as users_db
 import database.user_usage as user_usage_db
 from database import redis_db
+from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys
@@ -109,6 +110,50 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
     return subscription.current_period_end
 
 
+# Cloud screen-activity vectors are a paid desktop capability.
+#
+# Screen rows themselves are cheap; the vector is not. Embedding and storing a 3,072-dim vector
+# per delivered row is the large majority of what a synced screen row costs, and the vector's
+# only purpose server-side is semantic screen search. Free-tier desktop users keep their rows in
+# Firestore (so cloud chat can still read screen history by time and app) and keep on-device
+# semantic search, which reads embeddings from the local store and never needs Pinecone.
+#
+# Because the rows are retained, a user who upgrades can have their vectors backfilled from the
+# stored OCR text: this gate defers the cost, it does not destroy the ability to recover.
+_SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS = 300
+_screen_vector_entitlement_cache: Dict[str, Tuple[bool, float]] = {}
+
+
+def grants_cloud_screen_vectors(uid: str) -> bool:
+    """True when this user's synced screen rows should also be written to the vector store.
+
+    Uses the desktop access tier rather than `is_paid_plan`, because screen activity is a
+    desktop capability: a mobile-only paid plan did not buy it. BYOK does NOT grant it either
+    — BYOK means the user supplies their own LLM keys, but the vector store is ours and the
+    cost being avoided here is ours.
+
+    Fails OPEN (writes the vector) on any lookup error, matching
+    `should_defer_desktop_processing`: a Firestore blip must never silently strip a paying
+    user's screen search. The failure mode is a small overspend, not a lost capability.
+    """
+    cached = _screen_vector_entitlement_cache.get(uid)
+    if cached is not None and time.monotonic() - cached[1] < _SCREEN_VECTOR_ENTITLEMENT_CACHE_TTL_SECONDS:
+        return cached[0]
+    try:
+        subscription = users_db.get_user_valid_subscription(uid)
+        plan = subscription.plan if subscription else PlanType.basic
+        entitled = effective_desktop_access_tier(plan, subscription) != DESKTOP_ACCESS_TIER_FREE
+    except Exception as e:
+        logger.warning("grants_cloud_screen_vectors lookup failed for uid=%s: %s", uid, e)
+        return True
+    _screen_vector_entitlement_cache[uid] = (entitled, time.monotonic())
+    return entitled
+
+
+def clear_cloud_screen_vector_entitlement_cache(uid: str) -> None:
+    _screen_vector_entitlement_cache.pop(uid, None)
+
+
 def should_defer_desktop_processing(uid: str) -> bool:
     """True for Desktop users on the Free effective tier without active BYOK.
 
@@ -188,7 +233,7 @@ def _request_has_all_byok_keys() -> bool:
     return all(p in keys and keys[p] for p in _BYOK_REQUIRED_PROVIDERS)
 
 
-def _is_trial_expired_uncached(uid: str) -> bool:
+def _is_trial_expired_uncached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
     """Is this user past their 3-day desktop trial?
 
     The trial applies only to the Free Desktop tier. Neo may use that tier for
@@ -197,11 +242,11 @@ def _is_trial_expired_uncached(uid: str) -> bool:
     a Firebase blip never paywalls a paying user.
     """
     try:
-        subscription = users_db.get_user_valid_subscription(uid)
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
         plan = subscription.plan if subscription else PlanType.basic
         if not desktop_trial_paywall_eligible(plan, subscription):
             return False
-        if users_db.is_byok_active(uid):
+        if users_db.is_byok_active(uid, firestore_client=firestore_client):
             return False
         user_record = _get_user(uid)
         creation_ms: int = cast(int, user_record.user_metadata.creation_timestamp)
@@ -214,7 +259,7 @@ def _is_trial_expired_uncached(uid: str) -> bool:
         return False
 
 
-def _is_trial_expired_cached(uid: str) -> bool:
+def _is_trial_expired_cached(uid: str, *, firestore_client: Any | None = None, provision: bool = True) -> bool:
     # Request-level escape hatch: a request carrying all 4 BYOK provider
     # headers is never paywalled, regardless of cached Firestore state. The
     # cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
@@ -231,7 +276,9 @@ def _is_trial_expired_cached(uid: str) -> bool:
         # is not left with a zero-access decision until this key's TTL expires.
         if cached:
             try:
-                subscription = users_db.get_user_valid_subscription(uid)
+                subscription = users_db.get_user_valid_subscription(
+                    uid, firestore_client=firestore_client, provision=provision
+                )
                 plan = subscription.plan if subscription else PlanType.basic
                 if not desktop_trial_paywall_eligible(plan, subscription):
                     clear_trial_paywall_cache(uid)
@@ -259,7 +306,7 @@ def _is_trial_expired_cached(uid: str) -> bool:
                 )
                 return False
         return bool(cached)
-    expired = _is_trial_expired_uncached(uid)
+    expired = _is_trial_expired_uncached(uid, firestore_client=firestore_client, provision=provision)
     try:
         redis_db.set_generic_cache(cache_key, expired, ttl=_TRIAL_PAYWALL_CACHE_TTL_SECONDS)
     except Exception as e:
@@ -267,7 +314,13 @@ def _is_trial_expired_cached(uid: str) -> bool:
     return expired
 
 
-def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
+def is_trial_paywalled(
+    uid: str,
+    platform: Optional[str],
+    *,
+    firestore_client: Any | None = None,
+    provision: bool = True,
+) -> bool:
     """True iff the request is from a desktop client AND the user has used
     their full 3-day free trial without subscribing or activating BYOK.
 
@@ -279,7 +332,7 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
         return False  # trial paywall disabled — never block on account age
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
         return False
-    return _is_trial_expired_cached(uid)
+    return _is_trial_expired_cached(uid, firestore_client=firestore_client, provision=provision)
 
 
 def clear_trial_paywall_cache(uid: str) -> None:
@@ -476,7 +529,8 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     Mobile sells Plus + Unlimited; desktop sells Operator + Architect; web sells
     all four. Neo is deprecated everywhere and hidden on every platform. A
     subscriber on a hidden plan still sees it via `filter_plans_for_user`'s
-    current-plan / ever-purchased escapes.
+    current-plan escape (Neo) or the mobile manage-only fast path (Operator /
+    Architect). See docs/agents/plan-catalog.md.
     """
     p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
@@ -488,51 +542,55 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     return set()
 
 
-def has_ever_purchased(uid: str, subscription: Optional[Subscription] = None) -> bool:
-    """True if the user has ever gone through subscription checkout.
+def desktop_to_consumer_plan_change_error(current_plan: PlanType, target_plan: PlanType) -> Optional[str]:
+    """Error text if a desktop-entitled plan would be swapped onto a consumer tier.
 
-    Used to keep the deprecated Neo plan visible on mobile to lapsed/returning
-    subscribers (so they can resubscribe) while hiding it from brand-new users
-    who never bought a plan. A Stripe customer id is created at first checkout
-    and persists across cancellations and plan changes; a current paid plan or
-    a stored stripe_subscription_id are cheaper positive signals checked first.
+    Operator and Architect are manage-only from mobile: cancel or wait out the
+    period. Immediate proration onto Plus / Unlimited / Neo strips desktop.
+    Same-family desktop changes (Operator ↔ Architect) stay allowed for the
+    desktop and web storefronts. Do not add a "user confirmed in the app"
+    exception — confirmation is not this boundary. See docs/agents/plan-catalog.md.
     """
-    if subscription is not None:
-        if is_paid_plan(subscription.plan):
-            return True
-        if subscription.stripe_subscription_id:
-            return True
-    return bool(users_db.get_stripe_customer_id(uid))
+    if current_plan in DESKTOP_ENTITLED_PLAN_TYPES and target_plan not in DESKTOP_ENTITLED_PLAN_TYPES:
+        return (
+            "This plan is managed from desktop. Switching to a mobile plan is not "
+            "available here. Cancel at period end or contact support."
+        )
+    return None
 
 
 def filter_plans_for_user(
     definitions: List[Dict[str, Any]],
     current_plan: PlanType,
     platform: Optional[str] = None,
-    ever_purchased: bool = False,
 ) -> List[Dict[str, Any]]:
     """Drop legacy / platform-hidden plans from the purchase catalog.
 
-    Subscribers already on a "wrong-platform" plan (e.g. a Neo subscriber
-    opening the desktop app) still see their current plan so the management UI
-    works. On mobile, Neo also stays visible to anyone who has ever purchased a
-    plan (`ever_purchased`) so lapsed subscribers can resubscribe — new /
-    never-paid users don't see it. Only the *purchase* catalog is filtered.
+    Locked audience rules (docs/agents/plan-catalog.md) — do not re-widen:
+
+    1. Neo (`unlimited`) is shown only when `current_plan` is already Neo
+       (active or cancel-at-period-end). Never gate it on "has ever paid".
+    2. On mobile, Operator / Architect are manage-only: return *only* the
+       current desktop plan so cheaper mobile tiers cannot be purchased
+       from the phone. Desktop and web keep selling both.
+    3. Fully churned ex-Neo users are `basic` and receive Plus + Unlimited,
+       the replacement catalog, not the deprecated Neo SKU.
+
+    The current-plan escape still applies on desktop/web so a Neo subscriber
+    opening those surfaces can manage/cancel.
     """
-    hidden = _platform_hidden_plans(platform)
     is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
+    if is_mobile and current_plan in DESKTOP_ENTITLED_PLAN_TYPES:
+        return [d for d in definitions if d.get('plan_type') == current_plan]
+
+    hidden = _platform_hidden_plans(platform)
     out: List[Dict[str, Any]] = []
     for d in definitions:
         plan_type = d.get('plan_type')
         if d.get('legacy') and plan_type != current_plan:
             continue
         if plan_type in hidden and plan_type != current_plan:
-            # Mobile-only escape: keep the deprecated Neo plan visible to users
-            # who have bought a plan before (so they can resubscribe/manage).
-            if is_mobile and plan_type == PlanType.unlimited and ever_purchased:
-                pass
-            else:
-                continue
+            continue
         out.append(d)
     return out
 
@@ -693,6 +751,48 @@ def get_plan_type_from_price_id(price_id: str) -> PlanType:
     raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
 
 
+def price_ids_match_plan_and_interval(
+    current_price_id: Optional[str], target_price_id: Optional[str], current_interval: Optional[str] = None
+) -> bool:
+    if not current_price_id or not target_price_id:
+        return False
+    try:
+        if get_plan_type_from_price_id(current_price_id) != get_plan_type_from_price_id(target_price_id):
+            return False
+    except ValueError:
+        return False
+
+    target_interval = None
+    for definition in get_paid_plan_definitions():
+        if target_price_id == definition['monthly_price_id']:
+            target_interval = 'month'
+        elif target_price_id == definition['annual_price_id']:
+            target_interval = 'year'
+        if target_interval:
+            break
+    if not target_interval:
+        return False
+
+    if not current_interval:
+        for definition in get_paid_plan_definitions():
+            if current_price_id == definition['monthly_price_id']:
+                current_interval = 'month'
+            elif current_price_id == definition['annual_price_id']:
+                current_interval = 'year'
+            if current_interval:
+                break
+    if not current_interval:
+        try:
+            current_price = stripe.Price.retrieve(current_price_id)
+            recurring = getattr(current_price, 'recurring', None)
+            if recurring is not None:
+                current_interval = getattr(recurring, 'interval', None)
+        except Exception as e:
+            logger.error(f"Error retrieving current price interval: {sanitize(str(e))}")
+            return False
+    return current_interval == target_interval
+
+
 def is_purchasable_price_id(price_id: str) -> bool:
     """True only if price_id is a currently-purchasable plan price (the active catalog).
 
@@ -784,7 +884,13 @@ def get_plan_display_name(plan: PlanType) -> str:
     return PLAN_DISPLAY_NAMES.get(plan, plan.value.capitalize())
 
 
-def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[str, Any]:
+def get_chat_quota_snapshot(
+    uid: str,
+    platform: Optional[str] = None,
+    *,
+    firestore_client: Any | None = None,
+    provision: bool = True,
+) -> Dict[str, Any]:
     """Cheap computation of `is_allowed / used / limit / unit / plan` — shared
     between the `/v1/users/me/usage-quota` endpoint and the enforcement helper.
 
@@ -795,8 +901,8 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(uid, platform):
-        usage = user_usage_db.get_monthly_chat_usage(uid)
+    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
+        usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
         return {
             'plan': PlanType.basic,
             'unit': 'questions',
@@ -806,10 +912,10 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
             'reset_at': usage['reset_at'],
         }
 
-    subscription = users_db.get_user_valid_subscription(uid)
+    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
-    usage = user_usage_db.get_monthly_chat_usage(uid)
+    usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
 
     if limits.chat_cost_usd_per_month is not None:
         unit = 'cost_usd'
@@ -841,7 +947,13 @@ def get_chat_quota_snapshot(uid: str, platform: Optional[str] = None) -> Dict[st
 OVERAGE_ENABLED_PLANS = {PlanType.operator, PlanType.unlimited, PlanType.architect}
 
 
-def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
+def enforce_chat_quota(
+    uid: str,
+    platform: Optional[str] = None,
+    *,
+    firestore_client: Any | None = None,
+    provision: bool = True,
+) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
     - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
@@ -859,8 +971,10 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     # Paywall test override — bypass BYOK + plan checks so the same 402
     # surfaces that a free user past 30 questions would hit. Desktop only;
     # mobile callers continue down the normal plan path.
-    if is_trial_paywalled(uid, platform):
-        snapshot = get_chat_quota_snapshot(uid, platform=platform)
+    if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
+        snapshot = get_chat_quota_snapshot(
+            uid, platform=platform, firestore_client=firestore_client, provision=provision
+        )
         raise HTTPException(
             status_code=402,
             detail={
@@ -878,10 +992,12 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
     # Require an LLM provider key on this request (not just any BYOK header)
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
-    if users_db.is_byok_active(uid) and (get_byok_key('openai') or get_byok_key('anthropic')):
+    if users_db.is_byok_active(uid, firestore_client=firestore_client) and (
+        get_byok_key('openai') or get_byok_key('anthropic')
+    ):
         return
 
-    snapshot = get_chat_quota_snapshot(uid, platform=platform)
+    snapshot = get_chat_quota_snapshot(uid, platform=platform, firestore_client=firestore_client, provision=provision)
     if snapshot['allowed']:
         return
 
@@ -904,6 +1020,39 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
             'limit': snapshot['limit'],
             'reset_at': snapshot['reset_at'],
         },
+    )
+
+
+def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None) -> None:
+    """Quota for the desktop serving plane: production customer data, no Free provision.
+
+    Development desktop-backend ADC stays on the compute project for ``agentVm``.
+    Entitlements read the customer SA (``SERVICE_ACCOUNT_JSON`` or the Auth file).
+    """
+    enforce_chat_quota(
+        uid,
+        platform,
+        firestore_client=get_customer_firestore_client(),
+        provision=False,
+    )
+
+
+def is_desktop_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
+    """Desktop trial gate against the customer Firestore, never a compute-project shadow.
+
+    The decisions that need no Firestore run first: resolving the customer client
+    initializes credentials, so a disabled paywall or a non-desktop platform must
+    neither pay for that nor require ambient ADC to answer "not paywalled".
+    """
+    if not TRIAL_PAYWALL_ENABLED:
+        return False
+    if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
+        return False
+    return is_trial_paywalled(
+        uid,
+        platform,
+        firestore_client=get_customer_firestore_client(),
+        provision=False,
     )
 
 
@@ -1134,6 +1283,14 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
     return None
 
 
+def is_pending_cancellation(subscription: Optional[Subscription], now: Optional[int] = None) -> bool:
+    if not subscription or not subscription.cancel_at_period_end:
+        return False
+    if not subscription.current_period_end:
+        return True
+    return subscription.current_period_end > (now or int(time.time()))
+
+
 def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tuple[bool, str]:
     """
     Checks if a user can make a new payment based on their current subscription status.
@@ -1152,6 +1309,18 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     if not subscription or subscription.plan == PlanType.basic:
         if _has_active_stripe_subscription(uid):
             return False, "User already has an active subscription (pending sync)"
+        # A cancel-at-period-end subscription is still active until the period
+        # ends but is skipped by _has_active_stripe_subscription (it continues
+        # past cancel_at_period_end subs). Enforce the same defer-plan-change rule
+        # so a different target price can't be checked out before the current
+        # period ends, while allowing same-price reactivation.
+        pending_cancel_sub = find_active_paid_subscription_for_user(uid)
+        if pending_cancel_sub is not None and is_pending_cancellation(pending_cancel_sub):
+            if target_price_id and not price_ids_match_plan_and_interval(
+                pending_cancel_sub.current_price_id, target_price_id
+            ):
+                return False, "Plan changes are available after the current subscription ends"
+            return True, "User can reactivate the current subscription"
         return True, "User can make payment"
 
     # If unlimited plan but inactive, user can pay
@@ -1160,7 +1329,24 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
 
     # If subscription is canceled (cancel_at_period_end=True), allow resubscription
     # This handles the case where user canceled but period hasn't ended yet
-    if subscription.cancel_at_period_end:
+    if is_pending_cancellation(subscription):
+        if target_price_id:
+            current_price_id = subscription.current_price_id
+            if not current_price_id and subscription.stripe_subscription_id:
+                try:
+                    stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                    stripe_sub_dict = stripe_sub.to_dict() if stripe_sub else {}
+                    items = stripe_sub_dict.get('items', {}).get('data', [])
+                    if items:
+                        current_price_id = items[0].get('price', {}).get('id')
+                except Exception as e:
+                    logger.error(f"Error retrieving current price ID: {sanitize(str(e))}")
+
+            if price_ids_match_plan_and_interval(current_price_id, target_price_id):
+                return True, "User can reactivate the current subscription"
+
+            return False, "Plan changes are available after the current subscription ends"
+
         return True, "User can resubscribe (current subscription is scheduled for cancellation)"
 
     # If unlimited plan and active, check if this is a plan change
@@ -1304,56 +1490,39 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
     If Firestore says `basic` but there is a Stripe subscription with a future period end
     that actually maps to an unlimited plan, fix it once by reconciling with Stripe.
     """
-    if (
-        not subscription
-        or subscription.plan != PlanType.basic
-        or not subscription.stripe_subscription_id
-        or not subscription.current_period_end
-    ):
+    if not subscription or subscription.plan != PlanType.basic:
         return subscription
 
     try:
-        period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
-        # Only bother reconciling if the stored period end is still in the future.
-        if period_end_dt < datetime.now(timezone.utc):
-            return subscription
+        if subscription.stripe_subscription_id and subscription.current_period_end:
+            period_end_dt = datetime.fromtimestamp(subscription.current_period_end, tz=timezone.utc)
+            if period_end_dt >= datetime.now(timezone.utc):
+                stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+                stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
+                if stripe_sub_dict:
+                    items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
+                    price_id: Optional[str] = None
+                    if items and items[0].get('price'):
+                        price_id = items[0]['price'].get('id')
 
-        stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-        stripe_sub_dict: Optional[Dict[str, Any]] = stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
-        if not stripe_sub_dict:
-            return subscription
+                    stripe_status = stripe_sub_dict.get('status')
+                    if stripe_status in ('active', 'trialing') and price_id:
+                        try:
+                            plan_type = get_plan_type_from_price_id(price_id)
+                        except ValueError:
+                            plan_type = None
 
-        items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
-        price_id: Optional[str] = None
-        if items and items[0].get('price'):
-            price_id = items[0]['price'].get('id')
+                        if plan_type and is_paid_plan(plan_type):
+                            subscription.plan = plan_type
+                            subscription.status = SubscriptionStatus.active
+                            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
+                            subscription.current_period_start = stripe_sub_dict.get('current_period_start')
+                            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+                            subscription.current_price_id = price_id
+                            subscription.limits = get_plan_limits(plan_type)
+                            users_db.update_user_subscription(uid, subscription.model_dump())
+                            return subscription
 
-        stripe_status = stripe_sub_dict.get('status')
-        if stripe_status in ('active', 'trialing') and price_id:
-            try:
-                plan_type = get_plan_type_from_price_id(price_id)
-            except ValueError:
-                plan_type = None
-
-            # If the stored Stripe sub is actually a paid plan, fix our local record.
-            if plan_type and is_paid_plan(plan_type):
-                subscription.plan = plan_type
-                subscription.status = SubscriptionStatus.active
-                subscription.current_period_end = stripe_sub_dict.get('current_period_end')
-                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
-                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
-                subscription.current_price_id = price_id
-                subscription.limits = get_plan_limits(plan_type)
-
-                # Persist the corrected subscription back to Firestore (without dynamic fields).
-                users_db.update_user_subscription(uid, subscription.model_dump())
-                return subscription
-
-        # Stored sub is canceled / unknown / not a paid plan. The user may have
-        # canceled it and started a *different* active subscription (possibly on
-        # a new Stripe customer) — the stored sub id alone can't see that. Adopt
-        # the customer's current active paid sub so an old sub's cancellation
-        # can't leave a paying user stranded on basic.
         active = find_active_paid_subscription_for_user(uid)
         if active:
             users_db.update_user_subscription(uid, active.model_dump())

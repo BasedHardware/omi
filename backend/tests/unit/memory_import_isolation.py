@@ -73,6 +73,7 @@ def make_database_client_stub() -> ModuleType:
     client_mod.db = MagicMock()
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
+    client_mod.get_customer_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -148,9 +149,13 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     langchain_core.output_parsers.PydanticOutputParser = MagicMock()
     langchain_core.prompts = types.ModuleType("langchain_core.prompts")
     langchain_core.prompts.ChatPromptTemplate = MagicMock()
+    langchain_core.messages = types.ModuleType("langchain_core.messages")
+    langchain_core.messages.HumanMessage = MagicMock()
+    langchain_core.messages.SystemMessage = MagicMock()
     _set("langchain_core", langchain_core)
     _set("langchain_core.output_parsers", langchain_core.output_parsers)
     _set("langchain_core.prompts", langchain_core.prompts)
+    _set("langchain_core.messages", langchain_core.messages)
 
     langchain_core.callbacks = types.ModuleType("langchain_core.callbacks")
     langchain_core.callbacks.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
@@ -295,6 +300,7 @@ WS_I_HEAVY_STUB_MODULE_NAMES = (
     "langchain_core",
     "langchain_core.output_parsers",
     "langchain_core.prompts",
+    "langchain_core.messages",
     "langchain_core.callbacks",
     "langchain_core.runnables",
     "utils.llm.usage_tracker",
@@ -799,14 +805,18 @@ def install_memory_product_router_stubs(
 ) -> list[str]:
     sys.modules["fastapi"] = fastapi_stub
     sys.modules["database._client"] = MagicMock()
-    vector_db_stub = types.ModuleType("database.vector_db")
+    memories_stub = AutoMockModule("database.memories")
+    memories_stub.get_memories = MagicMock(return_value=[])
+    sys.modules["database.memories"] = memories_stub
+    vector_db_stub = AutoMockModule("database.vector_db")
     vector_db_stub.query_memory_vector_candidates = MagicMock(return_value=[])
     sys.modules["database.vector_db"] = vector_db_stub
     sys.modules["utils.other.endpoints"] = auth_stub
     database_pkg = sys.modules.get("database")
     if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, "memories", memories_stub)
         setattr(database_pkg, "vector_db", vector_db_stub)
-    return ["fastapi", "database._client", "database.vector_db", "utils.other.endpoints"]
+    return ["fastapi", "database._client", "database.memories", "database.vector_db", "utils.other.endpoints"]
 
 
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False

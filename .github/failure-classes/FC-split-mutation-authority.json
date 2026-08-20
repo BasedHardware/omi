@@ -5,8 +5,7 @@
   "canonical_prevention": "Converge writes and lifecycle transitions behind the canonical repository or coordinator instead of synchronizing competing owners.",
   "canonical_prevention_artifact": [
     "desktop/macos/agent/tests/convergence-authority-ratchet.test.ts",
-    "backend/tests/unit/test_canonical_maintenance_ordering.py",
-    "backend/tests/unit/test_agent_vm_reconciler_authority.py"
+    "backend/tests/unit/test_canonical_maintenance_ordering.py"
   ],
   "evidence_prs": [9365, 9597],
   "scope_hints": ["desktop/macos/**", "backend/**"],

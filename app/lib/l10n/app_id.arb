@@ -101,7 +101,7 @@
     "createYourOwnApp": "Buat Aplikasi Anda Sendiri",
     "buildAndShareApp": "Bangun dan bagikan aplikasi kustom Anda",
     "searchApps": "Cari aplikasi...",
-    "myApps": "Aplikasi Saya",
+    "myApps": "Dibuat oleh saya",
     "installedApps": "Aplikasi Terinstal",
     "unableToFetchApps": "Tidak dapat mengambil aplikasi :(\n\nSilakan periksa koneksi internet Anda dan coba lagi.",
     "aboutOmi": "Tentang Omi",
@@ -3256,5 +3256,9 @@
     "accountCutoverMigrationInProgressTitle": "Migrasi sedang berlangsung",
     "accountCutoverMigrationInProgressMessage": "Akun Anda sedang dimigrasi. Fitur produk dijeda hingga migrasi selesai.",
     "accountCutoverMigrationRollbackMessage": "Akun Anda dalam pemeliharaan setelah rollback migrasi. Beberapa data yang lebih baru mungkin terisolasi.",
-    "accountCutoverOpenStore": "Buka toko"
+    "accountCutoverOpenStore": "Buka toko",
+    "sendRawAudioToOmi": "Kirim audio mentah ke Omi",
+    "sendRawAudioToOmiDescription": "Nonaktifkan agar audio mentah tidak dikirim ke Omi. Transkrip dan data yang diperlukan fitur cloud mungkin tetap dikirim ke Omi.",
+    "findDevice": "Temukan",
+    "diagnosticsShareFailed": "Tidak dapat membagikan diagnostik. Silakan coba lagi."
 }

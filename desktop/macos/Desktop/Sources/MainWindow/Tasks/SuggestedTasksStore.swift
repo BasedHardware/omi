@@ -25,30 +25,157 @@ protocol SuggestedTasksClient: AnyObject, Sendable {
 
 extension APIClient: SuggestedTasksClient {}
 
-enum SuggestedCardAction: String, Equatable {
+/// Clears the matching local canonical outbox receipt after Suggested dismiss/reject
+/// so paraphrase reuse does not keep a dead Candidate id for the rest of the
+/// 30-minute burst window. Owner-aware and throwing: callers durable-queue and
+/// only acknowledge success after this returns `true` (at least one receipt
+/// terminalized). A `false` result is a normal zero-match — retain for retry.
+protocol CanonicalCandidateReceiptInvalidating: Sendable {
+  func invalidateLocalReceipt(candidateID: String, ownerID: String) async throws -> Bool
+}
+
+struct StagedCanonicalCandidateReceiptInvalidator: CanonicalCandidateReceiptInvalidating {
+  func invalidateLocalReceipt(candidateID: String, ownerID: String) async throws -> Bool {
+    // Refuse before touching storage so an initiating-owner cleanup never opens
+    // or writes the currently-active foreign Rewind pool.
+    guard RewindDatabase.currentUserId == ownerID else {
+      throw CanonicalReceiptInvalidationError.ownerMismatch(
+        expected: ownerID, actual: RewindDatabase.currentUserId)
+    }
+    return try await StagedTaskStorage.shared.invalidateCanonicalReceipt(
+      candidateID: candidateID,
+      ownerID: ownerID
+    )
+  }
+}
+
+/// Owner-scoped durable queue for receipt invalidations that could not safely
+/// touch the active Rewind DB (owner switched mid-reject). Applied when that
+/// owner becomes active again. MainActor-confined because UserDefaults is not
+/// Sendable and SuggestedTasksStore only mutates this from the main actor.
+@MainActor
+protocol PendingCanonicalReceiptInvalidationPersisting: AnyObject {
+  func load(ownerID: String) -> Set<String>
+  func save(_ candidateIDs: Set<String>, ownerID: String)
+}
+
+@MainActor
+final class PendingCanonicalReceiptInvalidationDefaults: PendingCanonicalReceiptInvalidationPersisting {
+  private let defaults: UserDefaults
+  private let keyPrefix: String
+  private let now: () -> Date
+  private let retention: TimeInterval
+
+  init(
+    defaults: UserDefaults = .standard,
+    keyPrefix: String = "suggested.canonicalReceipt.pendingInvalidation.",
+    now: @escaping () -> Date = Date.init,
+    retention: TimeInterval = ScreenCandidateReconciliation.reuseWindow
+  ) {
+    self.defaults = defaults
+    self.keyPrefix = keyPrefix
+    self.now = now
+    self.retention = retention
+  }
+
+  private func key(ownerID: String) -> ScopedDefaultsKey {
+    .pendingCanonicalReceiptInvalidation(ownerID: ownerID, keyPrefix: keyPrefix)
+  }
+
+  private func timestampsKey(ownerID: String) -> ScopedDefaultsKey {
+    .pendingCanonicalReceiptInvalidationTimestamps(ownerID: ownerID, keyPrefix: keyPrefix)
+  }
+
+  func load(ownerID: String) -> Set<String> {
+    let storageKey = key(ownerID: ownerID)
+    let timestampStorageKey = timestampsKey(ownerID: ownerID)
+    let storedIDs = Set(defaults.stringArray(forKey: storageKey) ?? [])
+    let timestamps = defaults.dictionary(forKey: timestampStorageKey) as? [String: Double] ?? [:]
+    let cutoff = now().timeIntervalSince1970 - retention
+    // Missing timestamps are from the unreleased pre-TTL format. Drop them:
+    // retaining an unbounded zero-match queue would retry unrelated backend
+    // candidates forever on every Suggested load.
+    let retained = storedIDs.filter { id in
+      guard let enqueuedAt = timestamps[id] else { return false }
+      return enqueuedAt >= cutoff
+    }
+    let retainedSet = Set(retained)
+    if retainedSet != storedIDs || timestamps.count != retainedSet.count {
+      save(retainedSet, ownerID: ownerID)
+    }
+    return retainedSet
+  }
+
+  func save(_ candidateIDs: Set<String>, ownerID: String) {
+    let storageKey = key(ownerID: ownerID)
+    let timestampStorageKey = timestampsKey(ownerID: ownerID)
+    if candidateIDs.isEmpty {
+      defaults.removeObject(forKey: storageKey)
+      defaults.removeObject(forKey: timestampStorageKey)
+    } else {
+      let currentTime = now().timeIntervalSince1970
+      let cutoff = currentTime - retention
+      let existing = defaults.dictionary(forKey: timestampStorageKey) as? [String: Double] ?? [:]
+      let retained = candidateIDs.compactMap { id -> (String, Double)? in
+        let enqueuedAt = existing[id] ?? currentTime
+        return enqueuedAt >= cutoff ? (id, enqueuedAt) : nil
+      }
+      .sorted { lhs, rhs in
+        lhs.1 == rhs.1 ? lhs.0 < rhs.0 : lhs.1 > rhs.1
+      }
+      let retainedEntries = Array(retained)
+      guard !retainedEntries.isEmpty else {
+        defaults.removeObject(forKey: storageKey)
+        defaults.removeObject(forKey: timestampStorageKey)
+        return
+      }
+      defaults.set(retainedEntries.map(\.0).sorted(), forKey: storageKey)
+      defaults.set(Dictionary(lastWriteWins: retainedEntries), forKey: timestampStorageKey)
+    }
+  }
+}
+
+enum SuggestedCardAction: String, Equatable, Hashable {
   case doNow
   case later
   case dismiss
   case saveEdit
   case cancelEdit
-  case alreadyHandled
-  case notMine
-  case notUseful
+
+  /// User-facing label for the Tasks-page review row.
+  var label: String {
+    switch self {
+    case .doNow: return "Accept"
+    case .later: return "Later"
+    case .dismiss: return "Reject"
+    case .saveEdit: return "Save"
+    case .cancelEdit: return "Cancel"
+    }
+  }
+
+  /// Stable accessibility suffix used as `suggested-<id>-<candidateID>`.
+  var accessibilityID: String {
+    switch self {
+    case .doNow: return "accept"
+    case .later: return "later"
+    case .dismiss: return "reject"
+    case .saveEdit: return "save"
+    case .cancelEdit: return "cancel"
+    }
+  }
 }
 
 enum SuggestedCardState: Equatable {
   case ready
   case editing
-  case dismissReasons
   case busy
 }
 
 enum SuggestedActionPolicy {
   static func actions(for state: SuggestedCardState) -> [SuggestedCardAction] {
     switch state {
-    case .ready: return [.doNow, .later, .dismiss]
+    case .ready: return [.doNow, .dismiss]
     case .editing: return [.saveEdit, .cancelEdit]
-    case .dismissReasons: return [.alreadyHandled, .notMine, .notUseful]
     case .busy: return []
     }
   }
@@ -58,8 +185,6 @@ struct SuggestedCandidate: Identifiable, Equatable {
   let id: String
   let title: String
   let detail: String?
-  let provenanceLabel: String
-  let evidenceCount: Int
   let accountGeneration: Int
   let isEditableTask: Bool
   let createdAt: String
@@ -157,6 +282,8 @@ final class SuggestedTasksStore: ObservableObject {
   private let client: any SuggestedTasksClient
   private let suppressionStore: any SuggestedSuppressionPersisting
   private let feedbackOutboxStore: any SuggestedFeedbackOutboxPersisting
+  private let receiptInvalidator: any CanonicalCandidateReceiptInvalidating
+  private let pendingReceiptInvalidationStore: any PendingCanonicalReceiptInvalidationPersisting
   private let now: () -> Date
   private let reportAttribution: (TaskIntelligenceAttributionEvent) -> Void
   private var recordsByID: [String: OmiAPI.CandidateRecord] = [:]
@@ -178,12 +305,18 @@ final class SuggestedTasksStore: ObservableObject {
     client: any SuggestedTasksClient = APIClient.shared,
     suppressionStore: any SuggestedSuppressionPersisting = SuggestedSuppressionDefaults(),
     feedbackOutboxStore: any SuggestedFeedbackOutboxPersisting = SuggestedFeedbackOutboxDefaults(),
+    receiptInvalidator: any CanonicalCandidateReceiptInvalidating =
+      StagedCanonicalCandidateReceiptInvalidator(),
+    pendingReceiptInvalidationStore: any PendingCanonicalReceiptInvalidationPersisting =
+      PendingCanonicalReceiptInvalidationDefaults(),
     now: @escaping () -> Date = Date.init,
     reportAttribution: ((TaskIntelligenceAttributionEvent) -> Void)? = nil
   ) {
     self.client = client
     self.suppressionStore = suppressionStore
     self.feedbackOutboxStore = feedbackOutboxStore
+    self.receiptInvalidator = receiptInvalidator
+    self.pendingReceiptInvalidationStore = pendingReceiptInvalidationStore
     self.now = now
     self.reportAttribution =
       reportAttribution ?? { AnalyticsManager.shared.taskIntelligenceAttribution($0) }
@@ -235,6 +368,11 @@ final class SuggestedTasksStore: ObservableObject {
         isLoading = false
       }
     }
+
+    // Owner reactivation / ordinary load: apply any durable receipt cleanups
+    // queued while this owner's Rewind DB was offline (e.g. mid-reject switch).
+    await applyPendingReceiptInvalidations(for: ownerScope.suppressionOwnerID)
+    guard loadScopeIsCurrent(ownerScope, token: loadToken) else { return }
 
     let control: OmiAPI.TaskWorkflowControl
     do {
@@ -476,6 +614,14 @@ final class SuggestedTasksStore: ObservableObject {
       self.error = "That Suggested action did not sync. Try again."
       return
     }
+    // Backend reject succeeded — clear the local pending/accepted receipt by
+    // opaque candidate id before any UI owner bookkeeping. If the Rewind owner
+    // already flipped, queue the invalidation for that owner and apply it when
+    // they reactivate (never write into another account's DB).
+    await invalidateReceiptAfterSuccessfulReject(
+      candidateID: candidateID,
+      ownerID: suppressionOwnerID
+    )
     guard ownersAreCurrent(suppressionOwnerID: suppressionOwnerID, feedbackOwnerID: feedbackOwnerID)
     else {
       refreshOwnerScopedState()
@@ -497,6 +643,107 @@ final class SuggestedTasksStore: ObservableObject {
       idempotencyKey: "suggested:\(candidateID):dismiss:\(reason?.rawValue ?? "none")",
       record: record
     )
+  }
+
+  /// Durable-queue then attempt receipt cleanup for the owner that initiated reject.
+  /// The candidate id is persisted for `ownerID` *before* any await so a crash or
+  /// same-owner failure cannot lose the cleanup. Removal is per-id acknowledgement
+  /// only after the invalidator reports a real terminalized match (`true`).
+  /// Zero-match (`false`) retains the queue so a later create→mark can still be cleaned.
+  private func invalidateReceiptAfterSuccessfulReject(
+    candidateID: String,
+    ownerID: String
+  ) async {
+    enqueuePendingReceiptInvalidation(candidateID: candidateID, ownerID: ownerID)
+    guard rewindAndSuppressionOwnersMatch(ownerID) else { return }
+    let didTerminalize: Bool
+    do {
+      didTerminalize = try await receiptInvalidator.invalidateLocalReceipt(
+        candidateID: candidateID, ownerID: ownerID)
+    } catch {
+      log(
+        "SuggestedTasks: Receipt invalidation for \(candidateID) owner \(ownerID) failed; keeping durable queue: \(error.localizedDescription)"
+      )
+      // Same-owner failure and owner flip across the await both keep the queued id.
+      // Re-merge in case a concurrent applyPending acknowledged other ids.
+      enqueuePendingReceiptInvalidation(candidateID: candidateID, ownerID: ownerID)
+      return
+    }
+    guard didTerminalize else {
+      log(
+        "SuggestedTasks: Receipt invalidation for \(candidateID) matched zero local receipts; retaining durable queue for retry"
+      )
+      enqueuePendingReceiptInvalidation(candidateID: candidateID, ownerID: ownerID)
+      return
+    }
+    // Owner may have flipped across the await — only acknowledge when the
+    // initiating owner is still the active Rewind/UI owner; otherwise leave queued.
+    guard rewindAndSuppressionOwnersMatch(ownerID) else {
+      enqueuePendingReceiptInvalidation(candidateID: candidateID, ownerID: ownerID)
+      return
+    }
+    acknowledgePendingReceiptInvalidation(candidateID: candidateID, ownerID: ownerID)
+  }
+
+  private func applyPendingReceiptInvalidations(for ownerID: String) async {
+    let pending = pendingReceiptInvalidationStore.load(ownerID: ownerID)
+    guard !pending.isEmpty else { return }
+    var remaining = pending
+    for candidateID in pending.sorted() {
+      guard rewindAndSuppressionOwnersMatch(ownerID) else {
+        // Keep every unprocessed id (merge-on-save) and abort the rest of the pass.
+        mergePendingReceiptInvalidations(remaining, ownerID: ownerID)
+        return
+      }
+      let didTerminalize: Bool
+      do {
+        didTerminalize = try await receiptInvalidator.invalidateLocalReceipt(
+          candidateID: candidateID, ownerID: ownerID)
+      } catch {
+        log(
+          "SuggestedTasks: Pending receipt invalidation for \(candidateID) owner \(ownerID) failed; retaining queue: \(error.localizedDescription)"
+        )
+        mergePendingReceiptInvalidations(remaining, ownerID: ownerID)
+        return
+      }
+      guard didTerminalize else {
+        // Zero-match is normal (create→mark still in flight). Keep this id and
+        // continue siblings so one missing receipt does not stall the queue.
+        log(
+          "SuggestedTasks: Pending receipt invalidation for \(candidateID) matched zero local receipts; retaining for retry"
+        )
+        continue
+      }
+      guard rewindAndSuppressionOwnersMatch(ownerID) else {
+        mergePendingReceiptInvalidations(remaining, ownerID: ownerID)
+        return
+      }
+      remaining.remove(candidateID)
+      acknowledgePendingReceiptInvalidation(candidateID: candidateID, ownerID: ownerID)
+    }
+  }
+
+  private func rewindAndSuppressionOwnersMatch(_ ownerID: String) -> Bool {
+    suppressionStore.currentOwnerID() == ownerID && RewindDatabase.currentUserId == ownerID
+  }
+
+  private func enqueuePendingReceiptInvalidation(candidateID: String, ownerID: String) {
+    var pending = pendingReceiptInvalidationStore.load(ownerID: ownerID)
+    pending.insert(candidateID)
+    pendingReceiptInvalidationStore.save(pending, ownerID: ownerID)
+  }
+
+  /// Per-id acknowledgement with merge-on-save so a concurrent enqueue cannot be lost.
+  private func acknowledgePendingReceiptInvalidation(candidateID: String, ownerID: String) {
+    var pending = pendingReceiptInvalidationStore.load(ownerID: ownerID)
+    pending.remove(candidateID)
+    pendingReceiptInvalidationStore.save(pending, ownerID: ownerID)
+  }
+
+  private func mergePendingReceiptInvalidations(_ remaining: Set<String>, ownerID: String) {
+    var pending = pendingReceiptInvalidationStore.load(ownerID: ownerID)
+    pending.formUnion(remaining)
+    pendingReceiptInvalidationStore.save(pending, ownerID: ownerID)
   }
 
   private var persistenceOwnersAreCurrent: Bool {
@@ -809,8 +1056,6 @@ final class SuggestedTasksStore: ObservableObject {
       id: record.candidateId,
       title: title,
       detail: detail,
-      provenanceLabel: provenanceLabel(for: record.sourceSurface),
-      evidenceCount: record.evidenceRefs.count,
       accountGeneration: record.accountGeneration,
       isEditableTask: record.subjectKind == .task && record.proposedAction == .create,
       createdAt: record.createdAt
@@ -824,15 +1069,6 @@ final class SuggestedTasksStore: ObservableObject {
     case .change(let task): return task.description_ ?? "Review a task update"
     case .none: return "Review suggested work"
     }
-  }
-
-  private static func provenanceLabel(for source: String) -> String {
-    if source.contains("screen") { return "From your current context" }
-    if source.contains("conversation") || source.contains("transcript") {
-      return "From a conversation"
-    }
-    if source.contains("integration") || source.contains("email") { return "From a connected app" }
-    return "Suggested by Omi"
   }
 
   private static func iso8601(_ date: Date) -> String {

@@ -207,13 +207,20 @@ final class MemoryAtlasConnectionSelectionTests: XCTestCase {
     XCTAssertTrue(
       String(source[picker.lowerBound...].prefix(1600)).contains("selectionTrail.removeAll()"),
       "Reaching for something on the canvas must start a fresh trail")
+    XCTAssertTrue(
+      String(source[picker.lowerBound...].prefix(1600)).contains("adoptSelection("),
+      "Selecting an entity must reuse the Focus camera so the neighbourhood is framed")
 
-    guard let clear = source.range(of: "private func clearSelection() {") else {
+    guard let clear = source.range(of: "private func clearSelection(") else {
       return XCTFail("Clearing the selection must be one entry point")
     }
     XCTAssertTrue(
-      String(source[clear.lowerBound...].prefix(300)).contains("selectionTrail.removeAll()"),
+      String(source[clear.lowerBound...].prefix(400)).contains("selectionTrail.removeAll()"),
       "Closing the inspector must not leave a trail behind for the next selection")
+    XCTAssertTrue(
+      String(source[clear.lowerBound...].prefix(400)).contains(
+        "resetViewport(preservingNeighbourhood: true)"),
+      "Homed camera after clearing a selection must keep the neighbourhood layer for the next Escape")
   }
 
   private func atlasSource() throws -> String {

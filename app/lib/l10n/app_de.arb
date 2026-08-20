@@ -101,7 +101,7 @@
     "createYourOwnApp": "Erstellen Sie Ihre eigene App",
     "buildAndShareApp": "Erstellen und teilen Sie Ihre eigene App",
     "searchApps": "Apps suchen...",
-    "myApps": "Meine Apps",
+    "myApps": "Von mir erstellt",
     "installedApps": "Installierte Apps",
     "unableToFetchApps": "Apps konnten nicht geladen werden :(\n\nBitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
     "aboutOmi": "Über Omi",
@@ -3191,5 +3191,9 @@
     "accountCutoverMigrationInProgressTitle": "Migration läuft",
     "accountCutoverMigrationInProgressMessage": "Dein Konto wird migriert. Produktfunktionen sind pausiert, bis die Migration abgeschlossen ist.",
     "accountCutoverMigrationRollbackMessage": "Dein Konto ist nach einem Migrations-Rollback in Wartung. Neuere Daten können isoliert sein.",
-    "accountCutoverOpenStore": "Store öffnen"
+    "accountCutoverOpenStore": "Store öffnen",
+    "sendRawAudioToOmi": "Roh-Audio an Omi senden",
+    "sendRawAudioToOmiDescription": "Deaktivieren, damit kein Roh-Audio an Omi gesendet wird. Transkripte und für Cloud-Funktionen benötigte Daten können weiterhin an Omi gesendet werden.",
+    "findDevice": "Finden",
+    "diagnosticsShareFailed": "Diagnose konnte nicht geteilt werden. Bitte versuche es erneut."
 }

@@ -416,12 +416,12 @@ def check_codemagic_release_publishers() -> list[str]:
         return [*errors, "canonical and preview workflows must both have scripts"]
     if canonical_scripts is not preview_scripts:
         errors.append("preview scripts must be the exact YAML alias node used by the canonical workflow")
-    # 23 = 21 hardening-approved steps + the INV-BETA-1 "Create Omi Beta variant"
-    # step (founder-reviewed re-land, PR #10317) + the separately surfaced
-    # signed Omi Beta smoke step. Stable and Beta keep identical evidence gates;
-    # distinct provider steps make an otherwise private-log failure diagnosable.
-    if len(canonical_scripts) != 23:
-        errors.append("canonical workflow must retain exactly 23 approved script steps")
+    # 21 approved steps retain the release security boundary while moving the
+    # stable/Beta Apple submissions into two identity-labelled parallel batches.
+    # The full Beta smoke remains distinct; stable keeps the structural artifact
+    # audit without paying for a duplicate launch/auth/notification exercise.
+    if len(canonical_scripts) != 21:
+        errors.append("canonical workflow must retain exactly 21 approved script steps")
 
     for scalar in _iter_semantic_strings(canonical):
         for forbidden_authority in _FORBIDDEN_NORMAL_RELEASE_GCP_AUTHORITIES:
@@ -513,7 +513,7 @@ def main() -> int:
     errors.extend(check_desktop_candidate_trigger_authority())
     errors.extend(check_codemagic_release_publishers())
     errors.extend(check_desktop_preview_publishing())
-    errors.extend(check_desktop_qualification_runner())
+    errors.extend(check_desktop_promotion_independent_of_qualification())
     errors.extend(check_desktop_update_docs())
     errors.extend(check_no_unprovisioned_beta_backend_hosts())
     errors.extend(check_mobile_codemagic_release_triggers())
@@ -565,8 +565,10 @@ def check_desktop_codemagic_release() -> list[str]:
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
         "desktop/macos/scripts/publish-desktop-debug-symbols.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+        "desktop/macos/scripts/create-desktop-dmgs.sh",
+        "desktop/macos/scripts/create-omi-beta-variant.sh",
+        "desktop/macos/scripts/notarize-desktop-artifacts.sh",
         "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
-        "desktop/macos/scripts/test-tool-surfaces.sh",
         "desktop/macos/Desktop/Omi-Release.entitlements",
         "desktop/macos/Desktop/Node.entitlements",
         "desktop/macos/dmg-assets/dmgbuild_settings.py",
@@ -602,8 +604,36 @@ def check_desktop_codemagic_release() -> list[str]:
 
     smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
     beta_smoke_index = desktop_workflow_body.find("Smoke signed desktop beta artifact")
+    prepare_beta_index = desktop_workflow_body.find("Prepare Omi Beta identity")
+    notarize_apps_index = desktop_workflow_body.find("Notarize stable and Beta apps concurrently")
+    create_dmgs_index = desktop_workflow_body.find("Create stable and Beta DMGs concurrently")
+    notarize_dmgs_index = desktop_workflow_body.find("Notarize stable and Beta DMGs concurrently")
+    sparkle_index = desktop_workflow_body.find("Create stable and Beta Sparkle archives")
     release_index = desktop_workflow_body.find("Create GitHub release")
-    dispatch_index = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
+    promotion_index = desktop_workflow_body.find("Promote signed candidate to Omi Beta")
+    if not (
+        -1
+        < prepare_beta_index
+        < notarize_apps_index
+        < create_dmgs_index
+        < notarize_dmgs_index
+        < sparkle_index
+        < smoke_index
+    ):
+        errors.append(
+            "desktop release must prepare both identities, notarize apps, create DMGs, notarize DMGs, "
+            "and sign Sparkle archives before smoke"
+        )
+    for required_fragment in (
+        "scripts/notarize-desktop-artifacts.sh",
+        "scripts/create-desktop-dmgs.sh",
+        '--artifact stable "$APP_BUNDLE"',
+        '--artifact beta "$BUILD_DIR/$BETA_APP_NAME.app"',
+        '--artifact stable "$DMG_PATH"',
+        '--artifact beta "$BETA_DMG_PATH"',
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"parallel desktop packaging is missing required fragment: {required_fragment}")
     if smoke_index == -1:
         errors.append("desktop release must run the signed artifact smoke before publishing the GitHub release")
     elif release_index == -1 or smoke_index > release_index:
@@ -611,9 +641,11 @@ def check_desktop_codemagic_release() -> list[str]:
     if beta_smoke_index == -1:
         errors.append("desktop release must run the signed Omi Beta artifact smoke in a distinct provider step")
     elif release_index == -1 or not (smoke_index < beta_smoke_index < release_index):
-        errors.append("desktop signed Omi Beta artifact smoke must run after stable smoke and before Create GitHub release")
-    if dispatch_index == -1 or release_index == -1 or dispatch_index < release_index:
-        errors.append("desktop release must dispatch trusted macOS qualification after GitHub candidate publication")
+        errors.append(
+            "desktop signed Omi Beta artifact smoke must run after stable smoke and before Create GitHub release"
+        )
+    if promotion_index == -1 or release_index == -1 or promotion_index < release_index:
+        errors.append("desktop release must promote the signed candidate after GitHub publication")
     reserve_index = desktop_workflow_body.find("/v2/desktop/beta/candidates/reserve")
     canonical_publish_index = desktop_workflow_body.find('gh release create "$CM_TAG"')
     if (
@@ -631,39 +663,43 @@ def check_desktop_codemagic_release() -> list[str]:
     ):
         if required_fragment not in desktop_workflow_body:
             errors.append(f"desktop candidate reservation is missing fail-closed fragment: {required_fragment}")
-    if "desktop_qualify_beta.yml" not in desktop_workflow_body:
-        errors.append("desktop release must dispatch the trusted macOS qualification workflow")
     for required_fragment in (
         "for attempt in 1 2 3",
-        "preserving immutable evidence",
-        "duplicate dispatches",
+        "/v2/desktop/beta/promote-candidate",
+        "Retries are idempotent",
     ):
         if required_fragment not in desktop_workflow_body:
-            errors.append(f"desktop qualification handoff is missing reliable dispatch fragment: {required_fragment}")
-    dispatch_start = desktop_workflow_body.find("Dispatch trusted macOS beta qualification")
-    dispatch_body = desktop_workflow_body[dispatch_start:] if dispatch_start != -1 else ""
-    if (
-        'GH_TOKEN="${GITHUB_TOKEN:?desktop_secrets GITHUB_TOKEN is required for qualification dispatch}"'
-        not in dispatch_body
-    ):
-        errors.append("Codemagic qualification dispatch must bind GH_TOKEN to the scoped desktop_secrets GITHUB_TOKEN")
-    if "gh release edit \"$CM_TAG\"" in dispatch_body:
+            errors.append(f"desktop Beta promotion is missing reliable handoff fragment: {required_fragment}")
+    promotion_body = desktop_workflow_body[promotion_index:] if promotion_index != -1 else ""
+    if "gh workflow run desktop_qualify_beta.yml" in desktop_workflow_body:
+        errors.append("Codemagic must not dispatch the retired Beta qualification gate")
+    if "gh release edit \"$CM_TAG\"" in promotion_body:
         errors.append("Codemagic must not write release-body dispatch state outside the trusted workflow serialiser")
     if "candidate remains non-live" not in desktop_workflow_body:
-        errors.append("desktop qualification handoff must state that a failed dispatch cannot publish beta")
+        errors.append("desktop promotion handoff must state that a failed request cannot publish beta")
     if (
-        "ERROR: qualification dispatch was not confirmed after bounded retry" not in dispatch_body
-        or "exit 1" not in dispatch_body
+        "ERROR: Beta promotion was not confirmed after bounded retry" not in promotion_body
+        or "exit 1" not in promotion_body
     ):
-        errors.append("desktop qualification handoff must fail closed after bounded dispatch retries")
+        errors.append("desktop promotion handoff must fail closed after bounded retries")
     if "gh release delete \"$CM_TAG\"" in desktop_workflow_body:
         errors.append("desktop candidate retries must not delete immutable qualification evidence")
     if "docker info" in desktop_workflow_body:
         errors.append("Codemagic desktop release must not run Docker-backed beta qualification")
     if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
         errors.append("desktop release smoke step must invoke scripts/smoke-signed-desktop-artifact.sh")
-    if "--notification-callback-canary" not in desktop_workflow_body:
-        errors.append("desktop release smoke must prove the UserNotifications callback before publishing a candidate")
+    stable_smoke_body = (
+        desktop_workflow_body[smoke_index:beta_smoke_index] if smoke_index != -1 and beta_smoke_index != -1 else ""
+    )
+    beta_smoke_body = (
+        desktop_workflow_body[beta_smoke_index:release_index] if beta_smoke_index != -1 and release_index != -1 else ""
+    )
+    for forbidden_fragment in ("--launch", "--auth-storage-canary", "--notification-callback-canary"):
+        if forbidden_fragment in stable_smoke_body:
+            errors.append(f"stable structural smoke must not run duplicate behavioral probe {forbidden_fragment}")
+    for required_fragment in ("--launch", "--auth-storage-canary", "--notification-callback-canary"):
+        if required_fragment not in beta_smoke_body:
+            errors.append(f"signed Beta smoke is missing required behavioral probe {required_fragment}")
 
     smoke_script = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
     if smoke_script.exists():
@@ -699,7 +735,7 @@ def check_desktop_codemagic_release() -> list[str]:
         "--result-json \"$BUILD_DIR/desktop-smoke-result.json\"",
         "build/desktop-smoke-result.json",
         "desktop-smoke-result.json",
-        "desktop_qualify_beta.yml",
+        "/v2/desktop/beta/promote-candidate",
         "BETA_PROMOTION_TOKEN",
     ):
         if required_fragment not in desktop_workflow_body:
@@ -709,7 +745,7 @@ def check_desktop_codemagic_release() -> list[str]:
 
 
 def check_desktop_candidate_trigger_authority() -> list[str]:
-    """Keep the normal candidate lane on Codemagic's native immutable-tag trigger."""
+    """Keep the normal candidate lane on one exact-tag API dispatch."""
     errors: list[str] = []
     codemagic = ROOT / "codemagic.yaml"
     candidate_workflow = ROOT / ".github/workflows/desktop_auto_release.yml"
@@ -723,16 +759,20 @@ def check_desktop_candidate_trigger_authority() -> list[str]:
         codemagic_text,
         flags=re.DOTALL,
     )
-    required_trigger = (
-        "    triggering:\n"
-        "      events:\n"
-        "        - tag\n"
-        "      tag_patterns:\n"
-        '        - pattern: "v*-macos"\n'
-        "          include: true"
-    )
-    if match is None or required_trigger not in match.group("body"):
-        errors.append("normal omi-desktop-swift-release candidate lane must natively trigger on v*-macos tags")
+    if match is None:
+        errors.append("normal omi-desktop-swift-release candidate lane is missing")
+    elif re.search(r"^    triggering:\s*$", match.group("body"), flags=re.MULTILINE):
+        errors.append("normal omi-desktop-swift-release must not race direct dispatch with a native trigger")
+
+    candidate_text = candidate_workflow.read_text(encoding="utf-8")
+    for required_fragment in (
+        "check-codemagic-tag-intake.py",
+        '--workflow-id "omi-desktop-swift-release"',
+        "--timeout-seconds 0",
+        "--dispatch-fallback-on-absence",
+    ):
+        if required_fragment not in candidate_text:
+            errors.append(f"normal desktop candidate lane is missing direct Codemagic dispatch: {required_fragment}")
 
     direct_build_endpoint = "https://api.codemagic.io/builds"
     for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
@@ -809,7 +849,7 @@ def check_desktop_preview_publishing() -> list[str]:
             "/previews/${PREVIEW_SLUG}/${PREVIEW_SOURCE_SHA}/Omi-Preview.dmg",
             "${DESKTOP_PREVIEW_REGISTRY_URL%/}/v2/desktop/previews/publish",
             "External previews do not create GitHub releases.",
-            "External previews do not enter beta or stable qualification.",
+            "External previews do not enter the shared Beta channel.",
         ):
             if required not in preview_workflow and required not in codemagic_text:
                 errors.append(f"desktop preview workflow is missing required guard fragment: {required}")
@@ -866,106 +906,40 @@ def check_desktop_preview_publishing() -> list[str]:
     return errors
 
 
-def check_desktop_qualification_runner() -> list[str]:
-    path = ROOT / ".github/workflows/desktop_qualify_beta.yml"
-    if not path.exists():
-        return ["desktop release is missing the trusted macOS qualification workflow"]
-
-    text = path.read_text(encoding="utf-8")
+def check_desktop_promotion_independent_of_qualification() -> list[str]:
+    """Promotion and recovery must not reintroduce the deleted qualification lane."""
     errors: list[str] = []
-    if "pull_request:" in text or "push:" in text:
-        errors.append("desktop qualification runner must not execute pull-request or push workflows")
-    for required_fragment in (
-        "workflow_dispatch:",
-        "self-hosted",
-        "macos",
-        "omi-desktop-qualification",
-        'git -C "$source_dir" checkout --quiet --detach "refs/tags/$RELEASE_TAG"',
-        "check-desktop-auto-beta-candidate.py",
-        "--automatic",
-        "actions/create-github-app-token@v3",
-        "Checkout trusted qualification controls",
-        "path: qualification-controls",
-        "group: desktop-beta-qualification-m1",
-        "cancel-in-progress: false",
-    ):
-        if required_fragment not in text:
-            errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
-    if "desktop_promote_beta.yml" in text:
-        errors.append("desktop qualification runner must not promote beta inside its own run")
-    if "qualify-m4-mini" in text or "plan-fallbacks" in text:
-        errors.append("desktop qualification runner must use only the global M1 fallback lane")
-    probe_start = text.find("Prove production Firebase UID continuity on Beta development authorities")
-    probe_end = text.find("Fetch candidate release inputs into this run only", probe_start)
-    probe = text[probe_start:probe_end] if probe_start >= 0 and probe_end > probe_start else ""
-    for required_fragment in (
-        "umask 077",
-        'gha_application_credentials_file="${GOOGLE_APPLICATION_CREDENTIALS:?google-github-actions/auth did not provide credentials}"',
-        'gha_credentials_file="${GOOGLE_GHA_CREDS_PATH:-$gha_application_credentials_file}"',
-        "trap 'rm -f -- \"$gha_application_credentials_file\" \"$gha_credentials_file\" \"$signer_file\" \"$token_file\"' EXIT",
-        'rm -f -- "$signer_file"',
-        'rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"',
-        "unset GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
-        "unset FIREBASE_PROBE_SIGNER_B64",
-    ):
-        if required_fragment not in probe:
-            errors.append(f"desktop qualification runner is missing Firebase probe cleanup: {required_fragment}")
-    if not (
-        probe.find("firebase_release_probe_token.py")
-        < probe.rfind('rm -f -- "$signer_file"')
-        < probe.rfind('rm -f -- "$gha_application_credentials_file" "$gha_credentials_file"')
-        < probe.find("probe_beta_uid_continuity.py")
-    ):
-        errors.append("desktop qualification runner must remove Firebase probe and GitHub auth credentials before probing")
-    if "working-directory: qualification-controls" not in probe:
-        errors.append("desktop qualification runner must run the Firebase probe from trusted main controls")
-
     promotion = ROOT / ".github/workflows/desktop_promote_beta.yml"
     promotion_text = promotion.read_text(encoding="utf-8") if promotion.exists() else ""
     for required_fragment in (
-        'workflows: ["Qualify Desktop Beta Candidate"]',
-        "types: [completed]",
-        "github.event.workflow_run.conclusion == 'success'",
-        "github.event.workflow_run.head_repository.full_name == github.repository",
-        "github.event.workflow_run.id",
-        "qualification-evidence.json",
-        "EVIDENCE_SOURCE_SHA",
-        "qualification_run_id",
-        "qualification_run_attempt",
-        "beta_uid_continuity",
-        "/v2/desktop/beta/promote-qualified",
+        "workflow_call:",
+        "release_tag:",
+        "/v2/desktop/beta/promote-candidate",
+        'Authorization: Bearer ${BETA_PROMOTION_TOKEN}',
         "environment: beta",
     ):
         if required_fragment not in promotion_text:
-            errors.append(f"desktop beta promotion workflow is missing post-qualification guard: {required_fragment}")
+            errors.append(f"desktop beta promotion retry is missing signed-candidate guard: {required_fragment}")
+    for forbidden_fragment in ("workflow_run:", "desktop_qualify_beta.yml", "qualification_run_id"):
+        if forbidden_fragment in promotion_text:
+            errors.append(f"desktop beta promotion retry still depends on qualification: {forbidden_fragment}")
 
     recovery = ROOT / ".github/workflows/desktop_recover_beta.yml"
     recovery_text = recovery.read_text(encoding="utf-8") if recovery.exists() else ""
     for required_fragment in (
-        "actions: read",
         "uses: ./.github/workflows/desktop_promote_beta.yml",
-        "qualification_run_id:",
-        "qualification_run_attempt:",
+        "release_tag:",
+        "signed-smoke evidence",
     ):
         if required_fragment not in recovery_text:
-            errors.append(f"desktop beta recovery workflow is missing retained-evidence access guard: {required_fragment}")
-
-    candidate_gate = ROOT / ".github/scripts/check-desktop-auto-beta-candidate.py"
-    candidate_gate_text = candidate_gate.read_text(encoding="utf-8") if candidate_gate.exists() else ""
-    for required_fragment in (
-        "UserNotifications settings callback completion canary passed",
-        "notification_callback_canary",
-        "callback canary",
-    ):
-        if required_fragment not in candidate_gate_text:
-            errors.append(
-                f"desktop beta candidate gate is missing UserNotifications callback evidence guard: {required_fragment}"
-            )
+            errors.append(f"desktop beta recovery workflow is missing signed-evidence guard: {required_fragment}")
+    if "qualification_run_id" in recovery_text:
+        errors.append("desktop beta recovery workflow still requires retired qualification identity")
     return errors
 
 
 def check_desktop_update_docs() -> list[str]:
-    """Keep operator docs aligned with Stable/Beta's qualified artifact identities."""
+    """Keep operator docs aligned with Stable/Beta's signed artifact identities."""
     path = ROOT / "docs/doc/developer/desktop-updates.mdx"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     errors: list[str] = []
@@ -1059,7 +1033,9 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
         else:
             triggers = workflow.get("on")
             if not isinstance(triggers, dict):
-                errors.append("mobile internal build dispatcher must declare push, schedule, and workflow_dispatch triggers")
+                errors.append(
+                    "mobile internal build dispatcher must declare push, schedule, and workflow_dispatch triggers"
+                )
             else:
                 push = triggers.get("push")
                 if not isinstance(push, dict) or push.get("branches") != ["main"] or push.get("paths") != ["app/**"]:
@@ -1100,7 +1076,9 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
                             workflow_values = None
                         break
                 if workflow_values != ("ios-internal-auto", "android-internal-auto"):
-                    errors.append("mobile internal build dispatcher script must declare both Codemagic mobile workflows")
+                    errors.append(
+                        "mobile internal build dispatcher script must declare both Codemagic mobile workflows"
+                    )
 
     if (ROOT / ".github/workflows/mobile_internal_auto.yml").exists():
         errors.append("mobile internal releases must not be dispatched through GitHub Actions")

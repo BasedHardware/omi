@@ -894,10 +894,12 @@ def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict
         '${{vars.CLOUD_RUN_VPC_SUBNET}}': _expected_flag_value(
             env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
         ),
-        '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
-        '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
-        '${{ vars.MEMORY_ENABLED_USERS }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
-        '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+        '${{ vars.MEMORY_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
+        '${{vars.MEMORY_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
+        '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE')
+        or _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
+        '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE')
+        or _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
         '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
         '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
         '${{ vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED }}': _manifest_env_value(

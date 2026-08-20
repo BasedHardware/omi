@@ -12,9 +12,11 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/CursorScreenTracker.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarAdviceDelivery.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarPresentation.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarMouseInterception.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift

@@ -17,7 +17,7 @@ as arguments to these wrappers), while separately reporting asyncio.to_thread()
 itself as an unmanaged offload.
 
 Usage:
-  python3 scan_async_blockers.py [--dirs backend/routers backend/utils backend/agent-proxy backend/dependencies.py] [--json]
+  python3 scan_async_blockers.py [--dirs backend/routers backend/utils backend/dependencies.py] [--json]
   python3 scan_async_blockers.py --diff-base origin/main --fail-on high_network_io,mixed_await_sync_db
 
 Exit codes:
@@ -36,8 +36,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, Union, cast
 
 DEFAULT_FAIL_ON = ("high_network_io",)
-DEFAULT_SCAN_DIRS = ("backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py")
-LOCAL_SCAN_DIRS = ("routers", "utils", "agent-proxy", "dependencies.py")
+DEFAULT_SCAN_DIRS = ("backend/routers", "backend/utils", "backend/dependencies.py")
+LOCAL_SCAN_DIRS = ("routers", "utils", "dependencies.py")
 FAIL_ON_CATEGORIES = (
     "high_network_io",
     "async_helpers_with_blocking",
@@ -182,8 +182,14 @@ def _walk_body(node: FunctionNode) -> Iterator[ast.AST]:
 
 
 def has_await(node: ast.AsyncFunctionDef) -> bool:
+    """True when the coroutine actually suspends.
+
+    ``async for`` and ``async with`` suspend without an ``ast.Await`` node, and a
+    function using either cannot be rewritten as a plain ``def``. Counting only
+    ``await`` reported those endpoints as structurally-sync.
+    """
     for child in _walk_body(node):
-        if isinstance(child, ast.Await):
+        if isinstance(child, (ast.Await, ast.AsyncFor, ast.AsyncWith)):
             return True
     return False
 

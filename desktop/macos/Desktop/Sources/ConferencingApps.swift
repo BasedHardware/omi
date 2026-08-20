@@ -6,13 +6,26 @@ import Foundation
 /// window (or the whole screen) indicates an active call ("meeting").
 ///
 /// Single source of truth shared by:
-///  - `MeetingDetector`, which gates system-audio capture in "Only during meetings" mode, and
+///  - `MeetingDetector`, which gates meetings-only capture and rotates Always-mode conversations, and
 ///  - `ProactiveAssistantsPlugin`, which throttles screen capture while a call app is frontmost.
 enum ConferencingApps {
 
-  /// Apps whose primary purpose is video/audio calls. Matched by app/owner name, which is
+  /// Shipping and legacy Telegram bundle IDs shared by meeting detection and proactive capture.
+  /// Keep both because existing installations may still report the legacy identifier.
+  static let telegramBundleIDs: Set<String> = [
+    "com.tdesktop.telegram",
+    "ru.keepcoder.telegram",
+  ]
+
+  /// Apps that host audio/video calls. Matched by app/owner name, which is
   /// available from `NSRunningApplication` and `CGWindowList` **without** Screen Recording
   /// permission.
+  ///
+  /// Includes chat apps whose calls hold the microphone (Discord voice, Slack huddles,
+  /// WhatsApp calls) — same shape as Teams. Meeting gating still requires the app to be
+  /// *using the microphone* (`nativeCallBundleIDs` + `callAppIsUsingMicrophone()`), so an
+  /// idle Slack/Discord/WhatsApp window does not start capture; this owner-name list only
+  /// feeds the call-window/share-indicator screen paths.
   static let nativeCallApps: Set<String> = [
     "Microsoft Teams",
     "zoom.us",
@@ -21,6 +34,9 @@ enum ConferencingApps {
     "Cisco Webex Meetings",
     "GoTo Meeting",
     "GoToMeeting",
+    "Discord",
+    "Slack",
+    "WhatsApp",
   ]
 
   /// Browser app names. Browser-based calls are matched by window title.
@@ -41,10 +57,27 @@ enum ConferencingApps {
     "Teams - Microsoft",  // Teams web app
   ]
 
+  /// A joined Google Meet tab is titled with the bare meeting code ("Meet - amc-iajq-asx"),
+  /// which contains none of `browserCallKeywords`. Kept here rather than in a caller so this
+  /// stays the single conferencing catalog — the divergence #11832 consolidated.
+  static let browserCallTitlePattern = "(?i)^meet\\s*[-\u{2013}]\\s*[a-z]{3}-[a-z]{4}-[a-z]{3}\\b"
+
+  /// Whether a window title names a browser-hosted call, by keyword or by bare meeting code.
+  static func isBrowserCallTitle(_ title: String) -> Bool {
+    let lower = title.lowercased()
+    for keyword in browserCallKeywords where lower.contains(keyword.lowercased()) {
+      return true
+    }
+    return title.range(of: browserCallTitlePattern, options: .regularExpression) != nil
+  }
+
   /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
   /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
   /// the microphone, so it won't be treated as a meeting.
-  static let nativeCallBundleIDs: Set<String> = [
+  ///
+  /// Chat apps are listed because their calls (Discord voice, Slack huddles, WhatsApp calls)
+  /// open the microphone — the mic-in-use rule below is what keeps idle chat non-meetings.
+  static let nativeCallBundleIDs: Set<String> = Set([
     "us.zoom.xos",  // Zoom
     "com.microsoft.teams",  // Microsoft Teams (classic)
     "com.microsoft.teams2",  // Microsoft Teams (new)
@@ -54,7 +87,10 @@ enum ConferencingApps {
     "com.webex.meetingmanager",  // Webex (older)
     "com.logmein.gotomeeting",  // GoTo Meeting
     "com.logmein.goto",  // GoTo
-  ]
+    "com.hnc.discord",  // Discord (com.hnc.Discord)
+    "com.tinyspeck.slackmacgap",  // Slack
+    "net.whatsapp.whatsapp",  // WhatsApp (net.whatsapp.WhatsApp)
+  ]).union(telegramBundleIDs)
 
   /// Whether a bundle ID belongs to a known native conferencing app (case-insensitive).
   static func isNativeCallApp(bundleID: String) -> Bool {

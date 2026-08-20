@@ -153,6 +153,22 @@ class TestFactoryRouting:
         assert pr._deepgram_client_for_request() is client
         assert factory.call_args.args[0] == 'user-byok-key'
 
+    def test_byok_client_leaves_managed_credential_intact(self, monkeypatch):
+        """DeepgramClient.__init__ rewrites the options it is handed, so each
+        client needs its own — a shared object bills the managed client's
+        requests to whichever BYOK key was constructed last."""
+        monkeypatch.setattr(pr, '_deepgram_client', None)
+        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
+        monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
+
+        managed = pr._deepgram_client_for_request()
+        assert managed._config.api_key == 'managed-key'
+
+        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
+        assert pr._deepgram_client_for_request()._config.api_key == 'user-byok-key'
+
+        assert managed._config.api_key == 'managed-key'
+
 
 class TestTranscribeBytes:
     def test_missing_endpoint_raises_controlled_configuration_error(self, monkeypatch):
@@ -525,15 +541,15 @@ class TestStreamingFactoryRouting:
             assert service == STTService.deepgram
             assert model == 'nova-3'
 
-    def test_parakeet_fallback_without_url_uses_velma(self):
+    def test_parakeet_fallback_without_url_uses_policy_default(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
         with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(os.environ, {}, clear=False):
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.modulate
-                assert model == 'velma-2'
+                assert service == STTService.deepgram
+                assert model == 'nova-3'
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup

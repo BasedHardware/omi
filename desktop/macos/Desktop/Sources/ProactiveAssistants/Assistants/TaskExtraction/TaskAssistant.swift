@@ -153,7 +153,6 @@ actor TaskAssistant: ProactiveAssistant {
     let startOfDay = calendar.startOfDay(for: Date())
     return calendar.date(bySettingHour: 23, minute: 59, second: 0, of: startOfDay) ?? startOfDay
   }
-
   /// Get the current system prompt from settings (accessed on MainActor for thread safety)
   private var systemPrompt: String {
     get async {
@@ -161,6 +160,59 @@ actor TaskAssistant: ProactiveAssistant {
         TaskAssistantSettings.shared.analysisPrompt
       }
     }
+  }
+
+  /// This policy is identical for every task-extraction request. Keep it in the
+  /// system instruction so Gemini can include it in the reusable implicit-cache
+  /// prefix instead of stranding it after per-frame context in the user turn.
+  static let cacheStableCapturePolicy = """
+    Analyze this screenshot. If you see a potential request, search for duplicates first.
+    If there is clearly no request on screen (~90% of screenshots), call no_task_found immediately.
+
+    CANONICAL CAPTURE POLICY (overrides older/custom duplicate instructions):
+    - A matching active task is evidence, not a reason to discard the observation.
+    - Exact duplicate with useful new evidence: call extract_task with duplicate_of set to its task id.
+    - A follow-up that changes an active task: call extract_task with refines_task set to its task id.
+    - Evidence that an active task was completed: call extract_task with capture_kind already_done and refines_task set to its task id.
+    - Use reject_task only for a previously rejected/deleted item or a true no-op with no useful new evidence.
+    """
+
+  static func requestPrompts(
+    baseSystemPrompt: String,
+    appName: String,
+    today: String,
+    profileText: String?,
+    contextEvidence: String
+  ) -> (system: String, user: String) {
+    var userPrompt =
+      "Screenshot from \(appName). Today is \(today). Analyze this screenshot for any unaddressed request directed at the user.\n\n"
+
+    let messagingApps: Set<String> = ["Telegram", "WhatsApp", "\u{200E}WhatsApp", "Messages", "Slack", "Discord"]
+    if messagingApps.contains(appName) {
+      userPrompt += """
+        REMINDER — THIS IS A MESSAGING APP:
+        - If this screenshot shows a chat sidebar/conversation list rather than an open conversation, SKIP entirely.
+        - If it shows an open conversation, read the FULL conversation flow between the user and the other person.
+        - LEFT-SIDE messages = from the other person. RIGHT-SIDE/colored = from the user.
+        - PRIORITY: Look for where the user AGREED or COMMITTED to doing something the other person asked.
+          Example: Other person says "Can you send me the report?" → User replies "Sure, will do" → Extract task: "Send [person] the report"
+        - ALSO: Look for incoming requests the user hasn't responded to yet.
+        - The task title should describe what was asked for, naming the other person in the conversation.
+
+        """
+    }
+
+    if let profileText {
+      userPrompt += "USER PROFILE (who this user is — use for context, not as a task source):\n"
+      userPrompt += profileText + "\n\n"
+    }
+
+    userPrompt += contextEvidence
+
+    return (
+      system: baseSystemPrompt + "\n\n" + cacheStableCapturePolicy,
+      user: userPrompt
+    )
   }
 
   /// Get the extraction interval from settings
@@ -171,7 +223,6 @@ actor TaskAssistant: ProactiveAssistant {
       }
     }
   }
-
   /// Get the minimum confidence threshold from settings
   private var minConfidence: Double {
     get async {
@@ -185,7 +236,10 @@ actor TaskAssistant: ProactiveAssistant {
 
   init(apiKey: String? = nil) throws {
     self.geminiClient = try GeminiClient(
-      apiKey: apiKey, model: ModelQoS.Gemini.taskExtraction, fallbackModel: "gemini-2.5-flash")
+      apiKey: apiKey,
+      model: ModelQoS.Gemini.taskExtraction,
+      fallbackModel: "gemini-2.5-flash",
+      workload: .extraction)
 
     let (stream, continuation) = AsyncStream.makeStream(of: TriggerEvent.self, bufferingPolicy: .bufferingNewest(1))
     self.triggerStream = stream
@@ -270,6 +324,12 @@ actor TaskAssistant: ProactiveAssistant {
 
     for await trigger in triggerStream {
       guard isRunning else { break }
+
+      // A prior capture may have been persisted while offline or left retryable
+      // after a transient delivery failure. Drain that durable outbox before
+      // extracting the new frame so an equivalent new observation can adopt or
+      // coalesce against a leader that has already had another delivery chance.
+      await retryCanonicalOutbox()
 
       let (frame, triggerType): (CapturedFrame, String) = {
         switch trigger {
@@ -603,6 +663,29 @@ actor TaskAssistant: ProactiveAssistant {
           try await StagedTaskStorage.shared.discardCanonicalOutbox(id: localID)
           return
         }
+
+        // The model's duplicate search is advisory. Repeated screenshots can
+        // paraphrase the same visible ask, and canonical exact-description
+        // identity will not merge those variants. Resolve delivery in one DB
+        // transaction so dismiss-vs-reuse and first-writer dual-create cannot
+        // mint two Candidates for the same observation burst.
+        switch try await StagedTaskStorage.shared.resolveCanonicalCaptureDelivery(
+          for: localRecord,
+          localOutboxID: localID
+        ) {
+        case .adoptedExistingReceipt(let receipt):
+          log(
+            "Task: Reused canonical capture candidate=\(receipt.candidateID) for semantically equivalent observation"
+          )
+          return
+        case .coalescedIntoDeliveryLeader:
+          log(
+            "Task: Coalesced equivalent capture into older delivery leader; skipping backend create"
+          )
+          return
+        case .proceedAsDeliveryLeader:
+          break
+        }
         let delivery = CanonicalScreenCandidateDelivery(
           client: APICanonicalScreenCandidateClient()
         )
@@ -729,7 +812,7 @@ actor TaskAssistant: ProactiveAssistant {
         await TaskPromotionService.shared.promoteIfNeeded()
       }
     } catch {
-      logError("Task: Candidate outbox delivery failed; will retry", error: error)
+      await CandidateOutboxRetryPolicy.handleDeliveryFailure(error, localID: localID)
     }
   }
 
@@ -828,21 +911,7 @@ actor TaskAssistant: ProactiveAssistant {
   /// Normalize (app, window) into a stable dedupe key. Strips Telegram-style trailing
   /// counters and collapses whitespace so the same chat across reopens hashes the same.
   static func analyzedKey(for frame: CapturedFrame) -> String {
-    let app = frame.appName.lowercased()
-    let title = normalizedWindowTitle(frame.windowTitle)
-    return "\(app)::\(title)"
-  }
-
-  private static func normalizedWindowTitle(_ title: String?) -> String {
-    guard let raw = title, !raw.isEmpty else { return "" }
-    var t = raw.lowercased()
-    // Strip Telegram-style trailing message counters: " (247887)" / "(247887)".
-    if let range = t.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression) {
-      t.removeSubrange(range)
-    }
-    // Collapse whitespace runs so " foo   bar " == "foo bar".
-    t = t.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    return t
+    ContextTitleNormalizer.legacyTaskIdentityKey(appName: frame.appName, windowTitle: frame.windowTitle)
   }
 
   private func pruneStaleDedupeEntries(now: Date, ttl: TimeInterval) {
@@ -920,44 +989,15 @@ actor TaskAssistant: ProactiveAssistant {
     dateFormatter.dateFormat = "yyyy-MM-dd (EEEE)"
     let todayStr = dateFormatter.string(from: Date())
 
-    var prompt =
-      "Screenshot from \(appName). Today is \(todayStr). Analyze this screenshot for any unaddressed request directed at the user.\n\n"
-
-    // For messaging apps, add an extra reminder about conversation analysis
-    let messagingApps: Set<String> = ["Telegram", "WhatsApp", "\u{200E}WhatsApp", "Messages", "Slack", "Discord"]
-    if messagingApps.contains(appName) {
-      prompt += """
-        REMINDER — THIS IS A MESSAGING APP:
-        - If this screenshot shows a chat sidebar/conversation list rather than an open conversation, SKIP entirely.
-        - If it shows an open conversation, read the FULL conversation flow between the user and the other person.
-        - LEFT-SIDE messages = from the other person. RIGHT-SIDE/colored = from the user.
-        - PRIORITY: Look for where the user AGREED or COMMITTED to doing something the other person asked.
-          Example: Other person says "Can you send me the report?" → User replies "Sure, will do" → Extract task: "Send [person] the report"
-        - ALSO: Look for incoming requests the user hasn't responded to yet.
-        - The task title should describe what was asked for, naming the other person in the conversation.
-
-        """
-    }
-
-    // Inject AI user profile for context
-    if let profile = await AIUserProfileService.shared.getLatestProfile() {
-      prompt += "USER PROFILE (who this user is — use for context, not as a task source):\n"
-      prompt += profile.profileText + "\n\n"
-    }
-
-    prompt += Self.contextEvidencePrompt(context)
-
-    prompt += """
-      Analyze this screenshot. If you see a potential request, search for duplicates first.
-      If there is clearly no request on screen (~90% of screenshots), call no_task_found immediately.
-
-      CANONICAL CAPTURE POLICY (overrides older/custom duplicate instructions):
-      - A matching active task is evidence, not a reason to discard the observation.
-      - Exact duplicate with useful new evidence: call extract_task with duplicate_of set to its task id.
-      - A follow-up that changes an active task: call extract_task with refines_task set to its task id.
-      - Evidence that an active task was completed: call extract_task with capture_kind already_done and refines_task set to its task id.
-      - Use reject_task only for a previously rejected/deleted item or a true no-op with no useful new evidence.
-      """
+    let profileText = await AIUserProfileService.shared.getLatestProfile()?.profileText
+    let currentSystemPrompt = await systemPrompt
+    let prompts = Self.requestPrompts(
+      baseSystemPrompt: currentSystemPrompt,
+      appName: appName,
+      today: todayStr,
+      profileText: profileText,
+      contextEvidence: Self.contextEvidencePrompt(context)
+    )
 
     // 3. Define 5 tools
     let tools = GeminiTool(functionDeclarations: [
@@ -1078,10 +1118,7 @@ actor TaskAssistant: ProactiveAssistant {
       ),
     ])
 
-    // 4. Get system prompt
-    let currentSystemPrompt = await systemPrompt
-
-    // 5. Build initial contents
+    // 4. Build initial contents
     // Wrap base64 encoding in autoreleasepool — Swift concurrency doesn't
     // drain autorelease pools, causing bridged NSString objects to accumulate.
     var contents: [GeminiImageToolRequest.Content] = autoreleasepool {
@@ -1090,14 +1127,14 @@ actor TaskAssistant: ProactiveAssistant {
         GeminiImageToolRequest.Content(
           role: "user",
           parts: [
-            GeminiImageToolRequest.Part(text: prompt),
+            GeminiImageToolRequest.Part(text: prompts.user),
             GeminiImageToolRequest.Part(mimeType: "image/jpeg", data: base64Data),
           ]
         )
       ]
     }
 
-    // 6. Tool-calling loop (max 8 iterations — enough headroom for 2-3 distinct
+    // 5. Tool-calling loop (max 8 iterations — enough headroom for 2-3 distinct
     // commitments per frame each doing search + extract).
     var searchCount = 0
     var extractedResults: [TaskExtractionResult] = []
@@ -1107,7 +1144,7 @@ actor TaskAssistant: ProactiveAssistant {
     toolLoop: for iteration in 0..<8 {
       let result = try await geminiClient.sendImageToolLoop(
         contents: contents,
-        systemPrompt: currentSystemPrompt,
+        systemPrompt: prompts.system,
         tools: [tools],
         forceToolCall: iteration == 0,
         thinkingBudget: 1024
@@ -1427,6 +1464,36 @@ actor TaskAssistant: ProactiveAssistant {
 
   // MARK: - Prompt Context
 
+  /// Merges legacy staged descriptions with canonical pending/accepted lines for
+  /// extraction dedup context. Reserves slots for canonical identity so a full
+  /// 30-item staged list cannot crowd pending candidates out of the prompt.
+  static func mergeDedupContextDescriptions(
+    staged: [String],
+    canonical: [String],
+    limit: Int = 30
+  ) -> [String] {
+    guard limit > 0 else { return [] }
+
+    func uniqued(_ values: [String], into seen: inout Set<String>) -> [String] {
+      values.filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    var seen = Set<String>()
+    let distinctCanonical = uniqued(canonical, into: &seen)
+    seen.removeAll(keepingCapacity: true)
+    let distinctStaged = uniqued(staged, into: &seen).filter { description in
+      !distinctCanonical.contains { $0.caseInsensitiveCompare(description) == .orderedSame }
+    }
+
+    let reservedCanonical =
+      distinctCanonical.isEmpty ? 0 : min(distinctCanonical.count, max(1, limit / 3))
+    let stagedBudget = max(0, limit - reservedCanonical)
+    let stagedTake = Array(distinctStaged.prefix(stagedBudget))
+    let remaining = max(0, limit - stagedTake.count)
+    let canonicalTake = Array(distinctCanonical.prefix(remaining))
+    return stagedTake + canonicalTake
+  }
+
   /// Renders the task-context evidence block of the extraction prompt. Extracted
   /// as a pure function so the id contract is unit-testable: only ACTIVE TASKS
   /// carry an `[id:…]` the model may target with duplicate_of/refines_task;
@@ -1569,7 +1636,13 @@ actor TaskAssistant: ProactiveAssistant {
     var stagedTaskDescriptions: [String] = []
     do {
       let stagedTasks = try await StagedTaskStorage.shared.getAllStagedTasks(limit: 30)
-      stagedTaskDescriptions = stagedTasks.map { $0.description }
+      let canonicalCandidateDescriptions =
+        try await StagedTaskStorage.shared.getRecentCanonicalCandidateDescriptions(limit: 30)
+      var seen = Set<String>()
+      // Keep canonical candidates ahead of legacy descriptions within the limit.
+      let distinctDescriptions = (canonicalCandidateDescriptions + stagedTasks.map { $0.description })
+        .filter { seen.insert($0.lowercased()).inserted }
+      stagedTaskDescriptions = Array(distinctDescriptions.prefix(30))
     } catch {
       logError("Task: Failed to load staged tasks for context", error: error)
     }

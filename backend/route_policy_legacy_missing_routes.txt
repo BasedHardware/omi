@@ -58,7 +58,6 @@ backend-main:http:GET:/.well-known/oauth-protected-resource/v1/mcp/sse
 backend-main:http:GET:/.well-known/openai-apps-challenge
 backend-main:http:GET:/authorize
 backend-main:http:GET:/memory/admin/users/{uid}/non-active-route-report
-backend-main:http:GET:/memory/admin/users/{uid}/read-rollout-decision
 backend-main:http:GET:/memory/archive/search
 backend-main:http:GET:/memory/search
 backend-main:http:GET:/memory/vector/search
@@ -74,7 +73,6 @@ backend-main:http:GET:/v1/admin/fair-use/flagged
 backend-main:http:GET:/v1/admin/fair-use/user/{uid}
 backend-main:http:GET:/v1/advice
 backend-main:http:GET:/v1/agent/tools
-backend-main:http:GET:/v1/agent/vm-status
 backend-main:http:GET:/v1/announcements/all
 backend-main:http:GET:/v1/announcements/changelogs
 backend-main:http:GET:/v1/announcements/features
@@ -331,8 +329,6 @@ backend-main:http:POST:/v1/admin/fair-use/user/{uid}/set-stage
 backend-main:http:POST:/v1/advice
 backend-main:http:POST:/v1/advice/mark-all-read
 backend-main:http:POST:/v1/agent/execute-tool
-backend-main:http:POST:/v1/agent/keepalive
-backend-main:http:POST:/v1/agent/vm-ensure
 backend-main:http:POST:/v1/agents/hume/callback
 backend-main:http:POST:/v1/announcements
 backend-main:http:POST:/v1/announcements/{announcement_id}/dismiss

@@ -89,13 +89,16 @@ struct DesktopTopBar: View {
         .frame(width: laneWidth, height: TopNavigationLayoutMetrics.barHeight)
         .inkGlassPanel(
           cornerRadius: TopNavigationLayoutMetrics.barCornerRadius,
-          shadow: TopNavigationLayoutMetrics.barShadow)
+          shadow: TopNavigationLayoutMetrics.barShadow
+        )
+        .shellWindowDragHandle()
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(height: TopNavigationLayoutMetrics.barHeight)
-    .padding(.vertical, OmiSpacing.sm)
+    // Gap below the bar only: padding above it would put the top resize handle on empty air.
+    .padding(.bottom, OmiSpacing.sm)
     // The compact fallback's menu is the one surface here that draws outside the bar. Elevation
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).
@@ -146,19 +149,16 @@ struct DesktopTopBar: View {
     }
   }
 
-  /// Every nav press on this bar: the brand, the pills and the settings gear. They were four copies of
-  /// the same two lines; being one place is also what makes the cue fire once per press instead of
-  /// once per call site that remembered to fire it.
+  /// Every nav press on this bar: the brand, the pills and the settings gear. Keeping the transition
+  /// in one place prevents those entry points from drifting apart.
   ///
   /// `Rewind` is the one destination the shell does not reach by index — each shell hands the bar its
   /// own way in (an overlay here, a `More` route in chat-first), so the pill calls that.
   private func navigate(to index: Int) {
     guard index != SidebarNavItem.rewind.rawValue else {
-      OmiUISound.play(.navigate)
       onRewind()
       return
     }
-    OmiUISound.play(.navigate)
     OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
   }
 }
@@ -170,14 +170,12 @@ enum TopNavigationLayoutMetrics {
   /// It is the **source** of that lane rather than a copy of it: `QueryShellLayout.laneWidth` and
   /// `PageGlassLaneLayout.laneWidth` both delegate here, so the bar and whatever is under it cannot
   /// drift apart.
+  ///
+  /// The lane fills the window. The 900 pt readable cap is a window-max
+  /// (`DesktopWindowLayoutPolicy.maximumContentWidth`), not an internal inset: capping here
+  /// inside a larger window is what drew the invisible click border around the glass.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
-    max(
-      0,
-      min(
-        ChatComposerLayout.contentLaneMaxWidth,
-        availableWidth - (ChatComposerLayout.pageMargin * 2)
-      )
-    )
+    max(0, availableWidth - (DesktopWindowLayoutPolicy.windowInset * 2))
   }
 
   /// The bar's own height.

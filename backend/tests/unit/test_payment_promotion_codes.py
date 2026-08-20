@@ -3,6 +3,7 @@
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -10,6 +11,24 @@ import pytest
 
 PAYMENT_SOURCE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
 STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py"
+_MISSING = object()
+
+
+@pytest.fixture(autouse=True)
+def restore_module_stubs():
+    modules = dict(sys.modules)
+    routers_module = modules.get("routers")
+    router_payment = getattr(routers_module, "payment", _MISSING) if routers_module else _MISSING
+    yield
+    for module_name in tuple(sys.modules):
+        if module_name not in modules:
+            del sys.modules[module_name]
+    sys.modules.update(modules)
+    if routers_module:
+        if router_payment is _MISSING:
+            routers_module.__dict__.pop("payment", None)
+        else:
+            routers_module.payment = router_payment
 
 
 def _read_source(path: Path) -> str:
@@ -80,6 +99,35 @@ def test_upgrade_catches_stripe_invalid_request_error():
     assert "stripe.error.InvalidRequestError" in upgrade_section
 
 
+@pytest.fixture(scope="module")
+def payment_router():
+    return _setup_payment_module(include_client=False)
+
+
+def test_upgrade_rejects_subscription_pending_cancellation(payment_router):
+    router = payment_router
+    current_subscription = SimpleNamespace(stripe_subscription_id="sub_pending", plan="paid")
+    router.users_db.get_user_subscription.return_value = current_subscription
+
+    stripe_subscription = MagicMock()
+    stripe_subscription.to_dict.return_value = {
+        "id": "sub_pending",
+        "status": "active",
+        "cancel_at_period_end": True,
+        "current_period_end": 2_000_000_000,
+        "items": {"data": [{"id": "si_1", "price": {"id": "price_current"}}]},
+    }
+
+    with patch.object(router, "_validate_price_id"), patch.object(
+        router.is_paid_plan, "__call__", return_value=True
+    ), patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription):
+        with pytest.raises(router.HTTPException) as exc_info:
+            router.upgrade_subscription_endpoint(router.UpgradeSubscriptionRequest(price_id="price_target"), uid="u1")
+
+    assert exc_info.value.status_code == 409
+    assert "after the current subscription ends" in exc_info.value.detail
+
+
 def test_upgrade_releases_attached_schedule_before_change():
     """A subscription already attached to a schedule must be released before
     Subscription.modify() / SubscriptionSchedule.create(), otherwise Stripe
@@ -92,6 +140,74 @@ def test_upgrade_releases_attached_schedule_before_change():
     release_pos = upgrade_section.index("_release_attached_schedules(stripe_sub)")
     assert release_pos < upgrade_section.index("stripe.Subscription.modify"), "release must precede modify"
     assert release_pos < upgrade_section.index("SubscriptionSchedule.create"), "release must precede schedule create"
+
+
+def test_reactivate_falls_back_to_stripe_when_local_subscription_is_stale():
+    """A pending-cancellation subscription found from Stripe must still reactivate.
+
+    When the local Firestore row is missing/stale (no stripe_subscription_id),
+    _try_reactivate_subscription must fall back to Stripe as source of truth and
+    clear cancel_at_period_end instead of dropping into a fresh-checkout flow.
+    """
+    router = _setup_payment_module(include_client=False)
+
+    # Local row is stale: no stripe_subscription_id.
+    router.users_db.get_user_subscription.return_value = SimpleNamespace(
+        plan="basic", status="active", stripe_subscription_id=None
+    )
+    # Stripe is the recovery source of truth: it holds the pending-cancellation sub.
+    stripe_found = MagicMock()
+    stripe_found.stripe_subscription_id = "sub_from_stripe"
+    stripe_found.plan = "pro"
+    stripe_found.status = "active"
+    stripe_found.current_price_id = "price_same"
+    stripe_found.cancel_at_period_end = True
+    stripe_found.model_dump.return_value = {"stripe_subscription_id": "sub_from_stripe"}
+    router.find_active_paid_subscription_for_user.return_value = stripe_found
+
+    stripe_subscription = MagicMock()
+    stripe_subscription.to_dict.return_value = {
+        "id": "sub_from_stripe",
+        "status": "active",
+        "cancel_at_period_end": True,
+        "current_period_end": 2_000_000_000,
+        "items": {"data": [{"id": "si_1", "price": {"id": "price_same"}}]},
+    }
+
+    with patch.object(router.stripe.Subscription, "retrieve", return_value=stripe_subscription), patch.object(
+        router.stripe.Subscription, "modify"
+    ) as mock_modify:
+        result = router._try_reactivate_subscription("u1", "price_same")
+
+    assert result is not None
+    assert result["status"] == "reactivated"
+    # The Stripe-side subscription must be reactivated, not a new checkout created.
+    mock_modify.assert_called_once_with("sub_from_stripe", cancel_at_period_end=False)
+    router.set_credits_invalidation_signal.assert_called_once_with("u1")
+    router.record_fallback.assert_called_once_with(
+        component="other",
+        from_mode="firestore_subscription",
+        to_mode="stripe_subscription",
+        reason="local_heal",
+        outcome="recovered",
+        log=router.logger,
+    )
+
+
+def test_reactivate_records_exhausted_recovery_when_stripe_has_no_subscription(payment_router):
+    router = payment_router
+    router.users_db.get_user_subscription.return_value = SimpleNamespace(stripe_subscription_id=None)
+    router.find_active_paid_subscription_for_user.return_value = None
+
+    assert router._try_reactivate_subscription("u1", "price_same") is None
+    router.record_fallback.assert_called_once_with(
+        component="other",
+        from_mode="firestore_subscription",
+        to_mode="stripe_subscription",
+        reason="local_heal",
+        outcome="exhausted",
+        log=router.logger,
+    )
 
 
 def test_checkout_catches_stripe_invalid_request_error():
@@ -162,6 +278,12 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.adapt_plans_for_legacy_client = MagicMock()
     sub_mod.clear_trial_paywall_cache = MagicMock()
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
+    sub_mod.price_ids_match_plan_and_interval = MagicMock(return_value=True)
+    sub_mod.desktop_to_consumer_plan_change_error = MagicMock(return_value=None)
+
+    fallback_mod = types.ModuleType("utils.observability.fallback")
+    fallback_mod.record_fallback = MagicMock()
+    sys.modules["utils.observability.fallback"] = fallback_mod
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"
@@ -213,6 +335,9 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     # Force re-import of payment router
     if "routers.payment" in sys.modules:
         del sys.modules["routers.payment"]
+    routers_module = sys.modules.get("routers")
+    if routers_module:
+        routers_module.__dict__.pop("payment", None)
 
     from routers import payment as payment_router
 

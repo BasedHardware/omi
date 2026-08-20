@@ -4,6 +4,7 @@ tier: manual
 description: Rewind overlay — open via View menu (⌘⌥R), verify permission gate, search, date picker (v0.12.119+ redesign — Rewind is no longer in top nav)
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindSearchBar.swift
@@ -16,6 +17,7 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelinePlayerView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindTimelineView.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindCitationFocusState.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/ScreenshotThumbnailView.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/SearchResultsFilmstrip.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindPalette.swift
@@ -88,6 +90,12 @@ steps:
     # window with no visible extent that effect is a 1 pt accent rectangle on the user's wallpaper —
     # in the one hue this product never uses (INV-UI-1). Focus is kept; the paint is not.
     do: "Click once on the Rewind page background so the page itself holds keyboard focus, then look at the window's left, right and bottom edges and at the line under the top bar. Verify no accent-coloured rectangle or hairline is traced there and none appears on the wallpaper. Then press the arrow keys and verify frames still step, confirming focus was kept rather than removed."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3e
+    name: Screenshot citations focus the exact Rewind frame
+    do: "From Chat, activate a settled screenshot citation whose preview names a known app and time. Verify Rewind opens with that cited screenshot selected, not merely the newest frame or the previous Rewind position. Close Rewind, activate the same citation again, and verify the one-shot focus request resolves to the same screenshot without leaving stale focus on later ordinary Rewind opens."
     expect:
       interactive_count: { min: 1 }
 

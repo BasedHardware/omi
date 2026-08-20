@@ -221,13 +221,15 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Execute SQL",
-      "Run SQL on the local omi.db database for structured local data.",
+      "Run exact structured or quantitative queries on the local omi.db database.",
       [
         "Supports SELECT, INSERT, UPDATE, DELETE.",
-        "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
+        "Use for counts, date ranges, aggregates, and narrow structured inspection. get_work_context owns recent-work and document/page/file location questions.",
+        "The durable work index is context_visits(handlesJson) joined to context_buckets; use it instead of screenshots for work aggregates or diagnostics.",
+        "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
         "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
         "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-        "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
+        "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
       ],
     ),
   },
@@ -237,7 +239,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Semantic Search",
       "Vector similarity search on the user's screen history.",
       [
-        "Use for fuzzy/conceptual questions about what the user saw, read, or worked on where exact SQL keywords will not work.",
+        "Use for fuzzy/conceptual questions about screen content after get_work_context cannot identify the document, URL, or file.",
         "Examples: \"reading about machine learning\", \"working on design mockups\".",
         "Parameters: query (required), days (default 7), app_filter (optional).",
       ],
@@ -347,7 +349,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Save Knowledge Graph",
       "Save a knowledge graph of entities and relationships extracted from the user's data.",
       [
-        "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
+        "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
         "node_type must be one of: person, organization, place, thing, concept.",
         "Use when exploring the user's files during onboarding to build their knowledge graph.",
         "Deduplication is handled automatically; provide all entities you find.",
@@ -412,10 +414,11 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Create Memory",
-      "Save one user-provided fact or preference to short-term memory.",
+      "Save one explicitly requested fact or preference to short-term memory.",
       [
-        "Use only when the user explicitly and affirmatively asks you to remember or save the supplied content.",
-        "Do not infer memories from conversation context, and do not call for a negative request such as 'do not remember this'.",
+        "Use only when the user explicitly and affirmatively asks you to remember or save something.",
+        "Pass a clean standalone fact: strip the command and lightly clean pronouns. Do not invent names, dates, or facts the user did not ask to persist, and do not infer from the rest of the chat.",
+        "Do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
         "This writes short-term memory through the authorized desktop backend path; it does not promote, edit, or delete long-term memory.",
       ],
     ),
@@ -592,11 +595,12 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
       "Get Work Context",
-      "Get the user's current screen plus a compressed timeline of recent on-screen activity.",
+      "Identify the documents, URLs, and files the user was recently working in.",
       [
-        "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-        "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
-        "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
+        "Call this before semantic_search or execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
+        "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
+        "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
+        "For the live screen use capture_screen; this tool is history, not current visual evidence.",
       ],
     ),
   },
@@ -667,14 +671,45 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
 
 const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
+    name: "get_work_context",
+    label: "Get Work Context",
+    description:
+      "Primary tool for recent-work questions and locating a document, URL, page, or file. Call get_work_context before semantic_search or execute_sql for requests such as 'what was I doing in X?' or 'where was that doc?'. It returns durable handles and is historical context, not current visual evidence.",
+    promptSnippet: "get_work_context - Identify recent work by document/URL/file before screen-history search",
+    promptGuidelines: [
+      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with semantic_search or execute_sql. It is not for direct current-screen questions.",
+      "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
+      "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
+      "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      minutes: { type: "number", description: "Minutes of recent activity to summarize (default 10, max 120)" },
+      include_screen: {
+        type: "boolean",
+        description:
+          "Also return the recent screenshot timeline and a screenshot_id (default false). Only set this when visits/briefs handles cannot answer the question, or the question is visual.",
+      },
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires local Rewind database; raw screenshot pixels still require separate approval."],
+    adapters: piLocalApiAndScreenContextStdio(),
+  },
+  {
     name: "execute_sql",
     label: "Execute SQL",
     description:
-      "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only in agent adapters.",
-    promptSnippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)",
+      "Run exact structured or quantitative queries on the user's local omi.db SQLite database: counts, date ranges, aggregates, and narrow record inspection. For recent-work questions such as 'what was I doing in X?' or locating a document, URL, page, or file, call get_work_context first and do not query screenshots.ocrText. The durable work index is context_visits(handlesJson) joined to context_buckets. Raw ocrText columns are refused; use substr(ocrText, 1, 200) only for an explicit bounded preview. Read-only in agent adapters.",
+    promptSnippet: "execute_sql - Query exact structured local stats and aggregates (SELECT only)",
     promptGuidelines: [
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
+      "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
+      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer.",
     ],
     latency: "fast local",
     inputSchema: schema(
@@ -703,9 +738,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "semantic_search",
     label: "Semantic Search",
     description:
-      "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.",
+      "Vector similarity search on screen content. Use for fuzzy/conceptual content only after get_work_context cannot identify the document, URL, or file; get_work_context owns recent-work and location questions.",
     promptSnippet: "semantic_search - Search screen history by meaning",
-    promptGuidelines: ["Prefer semantic_search over execute_sql when the user asks about something they 'saw' or worked on."],
+    promptGuidelines: [
+      "For recent work or document/page/file location, call get_work_context before semantic_search.",
+      "Use semantic_search instead of execute_sql only for fuzzy or conceptual screen-content questions that handles cannot answer.",
+    ],
     latency: "fast local",
     inputSchema: schema(
       {
@@ -892,11 +930,14 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptSnippet: "save_knowledge_graph - Save entities and relationships to the user's knowledge graph",
     promptGuidelines: [
       "Use when exploring the user's files during onboarding or knowledge-graph building.",
-      "Deduplication is handled automatically; include all meaningful entities and relationships you found.",
     ],
-    latency: "fast local",
+    latency: "fast network",
     inputSchema: schema(
       {
+        discovery_text: {
+          type: "string",
+          description: "Raw discovery notes. Backend knowledge_graph SSOT extracts nodes/edges.",
+        },
         nodes: {
           type: "array",
           items: {
@@ -925,10 +966,12 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
           },
         },
       },
-      ["nodes", "edges"],
+      [],
     ),
     annotations: localWrite,
-    timeoutClass: "normal",
+    // discovery_text makes this a network edge with a 60s backend request; the normal
+    // 30s relay deadline would report failure while that request is still in flight.
+    timeoutClass: "long",
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Used by onboarding/knowledge graph flows."],
@@ -1020,19 +1063,24 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "create_memory",
     label: "Create Memory",
     description:
-      "Save exactly one user-provided fact or preference to short-term memory. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Never infer a memory, and never call for a negative request such as 'do not remember this'.",
+      "Save one explicitly requested fact or preference to short-term memory as a clean standalone fact. Call only after an explicit affirmative user command such as 'remember this' or 'save this'. Strip the command and lightly clean pronouns; do not invent facts. Never call for a mere statement, a question, or a negative request such as 'do not remember this'.",
     promptSnippet: "create_memory - Save one explicitly requested fact or preference to short-term memory",
     promptGuidelines: [
-      "The current user message must explicitly and affirmatively ask Omi to remember or save the supplied content.",
-      "Pass only the content to remember; do not add inferred facts, categories, tags, or metadata.",
-      "Do not call when the user merely states a fact, asks a question, asks for a suggestion, or says not to remember/save something.",
+      "When the current user message explicitly and affirmatively asks Omi to remember or save something, call this tool with a clean standalone fact.",
+      "Strip the command (for example, 'Please remember that I prefer tea' → 'I prefer tea'). Light rewrite and pronoun cleanup are OK; do not invent names, dates, or facts the user did not ask to persist.",
+      "Do not infer from the rest of the chat, and do not call for a mere statement of fact, a question, or a negative request such as 'do not remember this'.",
+      "Confirm the save in one line. Never tell the user about validators or internal save rules.",
       "This is a one-way non-idempotent write. Do not retry automatically after an unknown outcome; tell the user the save status is uncertain.",
       "The backend stores this as a short-term memory candidate. Do not claim it was promoted to long-term memory.",
     ],
     latency: "fast network",
     inputSchema: schema(
       {
-        content: { type: "string", description: "The exact user-provided content to save as a short-term memory." },
+        content: {
+          type: "string",
+          description:
+            "A clean standalone fact to save as a short-term memory. Strip the remember/save command; light rewrite is OK. Do not invent facts.",
+        },
       },
       ["content"],
     ),
@@ -1427,26 +1475,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     runtimePreconditions: ["Local API only."],
     adapters: localApiOnly(),
   },
-  {
-    name: "get_work_context",
-    label: "Get Work Context",
-    description:
-      "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
-    promptSnippet: "get_work_context - Get recent work context",
-    promptGuidelines: [
-      "Use this for recent work/activity history, not for direct current-screen questions.",
-      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
-      "For current visual detail, use capture_screen when approval is available rather than answering from this tool.",
-    ],
-    latency: "fast local",
-    inputSchema: schema({ minutes: { type: "number", description: "Minutes of recent activity to summarize (default 10, max 120)" } }),
-    annotations: readOnlyLocal,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires local Rewind database; raw screenshot pixels still require separate approval."],
-    adapters: piLocalApiAndScreenContextStdio(),
-  },
 ];
 
 export const swiftToolManifest: OmiToolManifestEntry[] = finalizeManifestEntries(
@@ -1613,9 +1641,9 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
 }
 
 export const omiToolManifest: OmiToolManifestEntry[] = [
-  ...swiftToolManifest.slice(0, 4),
+  ...swiftToolManifest.slice(0, 5),
   ...agentControlCapabilityManifest.map(controlEntry),
-  ...swiftToolManifest.slice(4),
+  ...swiftToolManifest.slice(5),
 ] satisfies OmiToolManifestEntry[];
 
 /**
@@ -1652,7 +1680,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Create Canonical Goal", "Create a user-confirmed canonical goal in Chat-first.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
@@ -1675,7 +1703,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Get Canonical Goals", "Read canonical goal records for a Chat-first response.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: ["Requires a server-authoritative chat-first capability on the current main Chat run."],
@@ -1713,7 +1741,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "swiftTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Render Chat Blocks", "Add validated structured cards to the current main Chat response.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
     ]),
     intendedForAgents: true,
     runtimePreconditions: [
@@ -1746,7 +1774,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     capabilityDoc: doc(
       "Show Rewind Evidence",
       "Attach one local historical screenshot as evidence on the current main Chat response.",
-      ["Only available to the server-enabled chat-first main Chat cohort."],
+      ["Available when the server-projected Chat-first capability is active."],
     ),
     intendedForAgents: true,
     runtimePreconditions: [
@@ -1790,7 +1818,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     executor: { kind: "nodeTool" },
     surfaces: ["desktop_chat"],
     capabilityDoc: doc("Search Chat History", "Recover a bounded older decision from the current Chat transcript.", [
-      "Only available to the server-enabled chat-first main Chat cohort.",
+      "Available when the server-projected Chat-first capability is active.",
       "The parent kernel searches only the caller-owned current journal generation.",
     ]),
     intendedForAgents: true,

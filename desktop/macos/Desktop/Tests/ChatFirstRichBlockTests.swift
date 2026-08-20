@@ -3,6 +3,58 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstRichBlockTests: XCTestCase {
+  private func conversation(id: String) -> ServerConversation {
+    ServerConversation(
+      id: id,
+      createdAt: Date(timeIntervalSince1970: 1_000),
+      updatedAt: Date(timeIntervalSince1970: 1_001),
+      startedAt: Date(timeIntervalSince1970: 1_000),
+      finishedAt: Date(timeIntervalSince1970: 1_060),
+      structured: Structured(
+        title: "Meeting notes",
+        overview: "Overview",
+        emoji: "",
+        category: "other",
+        actionItems: [],
+        events: []
+      ),
+      transcriptSegments: [],
+      transcriptSegmentsIncluded: false,
+      geolocation: nil,
+      photos: [],
+      appsResults: [],
+      source: .desktop,
+      language: "en",
+      status: .completed,
+      discarded: false,
+      deleted: false,
+      isLocked: false,
+      starred: false,
+      folderId: nil,
+      inputDeviceName: nil,
+      deferred: false
+    )
+  }
+
+  func testConversationLinkCarriesExactFetchedRecordAndRejectsUnavailableResponses() {
+    let fetched = conversation(id: "meeting-42")
+    XCTAssertEqual(
+      ChatFirstConversationLinkPolicy.validatedConversation(fetched, requestedID: "meeting-42"),
+      fetched
+    )
+    XCTAssertNil(
+      ChatFirstConversationLinkPolicy.validatedConversation(nil, requestedID: "meeting-42"),
+      "A failed detail fetch must render the unavailable state rather than fall back to the list"
+    )
+    XCTAssertNil(
+      ChatFirstConversationLinkPolicy.validatedConversation(
+        conversation(id: "different-meeting"),
+        requestedID: "meeting-42"
+      ),
+      "A mismatched detail response must render the unavailable state"
+    )
+  }
+
   func testBlockWireRejectsTheEntireToolPayloadWhenAnyBlockIsMalformed() {
     let converted = ChatFirstBlockWire.backendBlocks(
       from: [
@@ -24,15 +76,27 @@ final class ChatFirstRichBlockTests: XCTestCase {
             ["type": "taskCard", "taskId": "task-1"],
             ["type": "goalLink", "goalId": "goal-1", "summary": "Ship the plan"],
             ["type": "memoryLink", "memoryId": "memory-1", "summary": "Remember the launch constraint"],
+            [
+              "type": "conversationLink",
+              "conversationId": "conversation-1",
+              "summary": "Meeting notes",
+              "recommendedActionItems": [
+                ["description": "Send the deck", "taskId": "task-2"],
+                ["description": "Book the follow-up"],
+              ],
+            ],
           ]
         ]
       )
     )
 
-    XCTAssertEqual(converted.count, 3)
+    XCTAssertEqual(converted.count, 4)
     XCTAssertEqual(converted[0]["task_id"] as? String, "task-1")
     XCTAssertEqual(converted[1]["goal_id"] as? String, "goal-1")
     XCTAssertEqual(converted[2]["memory_id"] as? String, "memory-1")
+    let actionItems = try XCTUnwrap(converted[3]["recommended_action_items"] as? [[String: Any]])
+    XCTAssertEqual(actionItems.map { $0["description"] as? String }, ["Send the deck", "Book the follow-up"])
+    XCTAssertEqual(actionItems.first?["task_id"] as? String, "task-2")
   }
 
   func testCodecRoundTripsEveryChatFirstBlock() throws {
@@ -59,6 +123,15 @@ final class ChatFirstRichBlockTests: XCTestCase {
         conversationId: "capture-1",
         momentTimestampMs: 42_000,
         summary: "Planning conversation"
+      ),
+      .conversationLink(
+        id: "conversation-link",
+        conversationId: "conversation-1",
+        summary: "Meeting notes",
+        recommendedActionItems: [
+          ConversationLinkActionItem(description: "Send the deck", taskID: "task-2"),
+          ConversationLinkActionItem(description: "Book the follow-up", taskID: nil),
+        ]
       ),
       .memoryLink(id: "memory-link", memoryId: "memory-1", summary: "Launch constraint"),
     ]
@@ -96,11 +169,44 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(timestamp, 42_000)
     XCTAssertEqual(captureSummary, "Planning conversation")
 
-    guard case .memoryLink(_, let memoryID, let memorySummary) = restored[4] else {
+    guard
+      case .conversationLink(
+        _, let conversationID, let conversationSummary, let recommendedActionItems) = restored[4]
+    else {
+      return XCTFail("conversation link should survive persisted replay")
+    }
+    XCTAssertEqual(conversationID, "conversation-1")
+    XCTAssertEqual(conversationSummary, "Meeting notes")
+    XCTAssertEqual(
+      recommendedActionItems,
+      [
+        ConversationLinkActionItem(description: "Send the deck", taskID: "task-2"),
+        ConversationLinkActionItem(description: "Book the follow-up", taskID: nil),
+      ])
+
+    guard case .memoryLink(_, let memoryID, let memorySummary) = restored[5] else {
       return XCTFail("memory link should survive persisted replay")
     }
     XCTAssertEqual(memoryID, "memory-1")
     XCTAssertEqual(memorySummary, "Launch constraint")
+  }
+
+  func testLegacyConversationLinkWithoutRecommendedItemsDegradesToTheExistingCard() {
+    let restored = ChatContentBlockCodec.decode([
+      [
+        "type": "conversationLink",
+        "id": "conversation-link",
+        "conversationId": "conversation-1",
+        "summary": "Meeting notes",
+      ]
+    ])
+
+    guard let first = restored.first,
+      case .conversationLink(_, _, _, let recommendedActionItems) = first
+    else {
+      return XCTFail("legacy conversation link should still decode")
+    }
+    XCTAssertTrue(recommendedActionItems.isEmpty)
   }
 
   func testQuestionSelectionReceiptRoundTripsAndRetiresTheOptions() throws {
@@ -230,6 +336,30 @@ final class ChatFirstRichBlockTests: XCTestCase {
     )
   }
 
+  func testTaskCardRetainsCompletedPresentationWhileCanonicalTaskRehydrates() {
+    let completed = task(id: "task-1", completed: true)
+
+    XCTAssertEqual(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: nil,
+        retainedCompletedTask: completed
+      ),
+      completed
+    )
+    XCTAssertNil(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: nil,
+        retainedCompletedTask: task(id: "task-1", completed: false)
+      )
+    )
+    XCTAssertNil(
+      ChatFirstTaskCardPresentation.displayTask(
+        liveTask: task(id: "task-1", completed: true, taskStatus: "superseded"),
+        retainedCompletedTask: completed
+      )
+    )
+  }
+
   func testTaskCaptureLinksFailClosedOutsideTheOmiDeviceArchive() {
     let omiCaptureTask = task(
       id: "omi-task",
@@ -258,7 +388,8 @@ final class ChatFirstRichBlockTests: XCTestCase {
     id: String,
     completed: Bool,
     conversationID: String? = nil,
-    source: String? = nil
+    source: String? = nil,
+    taskStatus: String? = nil
   ) -> TaskActionItem {
     TaskActionItem(
       id: id,
@@ -266,7 +397,8 @@ final class ChatFirstRichBlockTests: XCTestCase {
       completed: completed,
       createdAt: Date(timeIntervalSince1970: 0),
       conversationId: conversationID,
-      source: source
+      source: source,
+      taskStatus: taskStatus
     )
   }
 }

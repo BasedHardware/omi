@@ -101,7 +101,7 @@
     "createYourOwnApp": "나만의 앱 만들기",
     "buildAndShareApp": "맞춤형 앱을 만들고 공유하세요",
     "searchApps": "앱 검색...",
-    "myApps": "내 앱",
+    "myApps": "내가 만듦",
     "installedApps": "설치된 앱",
     "unableToFetchApps": "앱을 가져올 수 없습니다 :(\n\n인터넷 연결을 확인하고 다시 시도해 주세요.",
     "aboutOmi": "Omi 소개",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "마이그레이션 진행 중",
     "accountCutoverMigrationInProgressMessage": "계정을 마이그레이션하는 중입니다. 마이그레이션이 끝날 때까지 제품 기능이 일시 중지됩니다.",
     "accountCutoverMigrationRollbackMessage": "마이그레이션 롤백 후 계정이 유지보수 상태입니다. 일부 최신 데이터가 고립될 수 있습니다.",
-    "accountCutoverOpenStore": "스토어 열기"
+    "accountCutoverOpenStore": "스토어 열기",
+    "sendRawAudioToOmi": "원본 오디오를 Omi로 보내기",
+    "sendRawAudioToOmiDescription": "끄면 원본 오디오가 Omi로 전송되지 않습니다. 텍스트 변환 결과와 클라우드 기능에 필요한 데이터는 계속 Omi로 전송될 수 있습니다.",
+    "findDevice": "찾기",
+    "diagnosticsShareFailed": "진단 정보를 공유하지 못했습니다. 다시 시도해 주세요."
 }

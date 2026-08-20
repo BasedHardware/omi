@@ -322,7 +322,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get searchApps => 'Szukaj aplikacji...';
 
   @override
-  String get myApps => 'Moje aplikacje';
+  String get myApps => 'Stworzone przeze mnie';
 
   @override
   String get installedApps => 'Zainstalowane aplikacje';
@@ -9869,4 +9869,17 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String get sendRawAudioToOmi => 'Wysyłaj surowy dźwięk do Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Wyłącz, aby surowy dźwięk nie był wysyłany do Omi. Transkrypcje i dane wymagane przez funkcje chmurowe mogą nadal być wysyłane do Omi.';
+
+  @override
+  String get findDevice => 'Znajdź';
+
+  @override
+  String get diagnosticsShareFailed => 'Nie udało się udostępnić diagnostyki. Spróbuj ponownie.';
 }

@@ -322,7 +322,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get searchApps => 'جستجوی اپلیکیشن‌ها...';
 
   @override
-  String get myApps => 'اپلیکیشن‌های من';
+  String get myApps => 'ساخته‌شده توسط من';
 
   @override
   String get installedApps => 'اپلیکیشن‌های نصب‌شده';
@@ -9840,4 +9840,17 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
+  String get sendRawAudioToOmi => 'ارسال صدای خام به Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'برای جلوگیری از ارسال صدای خام به Omi این گزینه را خاموش کنید. متن پیاده‌شده و داده‌های مورد نیاز قابلیت‌های ابری ممکن است همچنان به Omi ارسال شوند.';
+
+  @override
+  String get findDevice => 'پیدا کردن';
+
+  @override
+  String get diagnosticsShareFailed => 'اشتراک‌گذاری اطلاعات تشخیصی ممکن نشد. لطفاً دوباره تلاش کنید.';
 }

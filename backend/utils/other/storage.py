@@ -27,6 +27,7 @@ from google.cloud.exceptions import NotFound
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
 from database import users as users_db
 import logging
@@ -771,6 +772,36 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
         blob.delete()
 
 
+# PCM16 mono: one sample is 2 bytes. A chunk whose byte count is not a multiple
+# of this is truncated mid-sample.
+_PCM16_FRAME_BYTES = 2
+
+
+def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
+    """Drop a trailing partial PCM16 sample so decoded chunks stay frame-aligned.
+
+    A chunk stored truncated mid-sample (interrupted upload) makes every later
+    chunk in the merge byte-misaligned and leaves the merged buffer an odd byte
+    count, which pydub rejects with a deterministic ValueError. The audio-merge
+    Cloud Task retried that unretryable error to exhaustion and then marked
+    playback permanently unavailable, losing the artifact for the conversation.
+    Trimming the partial sample costs 1/32000s and keeps the merge buildable.
+    """
+    remainder = len(pcm_data) % _PCM16_FRAME_BYTES
+    if not remainder:
+        return pcm_data
+    record_fallback(
+        component='audio_merge',
+        from_mode='pcm16_frames',
+        to_mode='pcm16_frames_truncated',
+        reason='malformed_doc',
+        outcome='recovered',
+        log=logger,
+    )
+    logger.warning(f'audio chunk not PCM16 frame-aligned, trimming {remainder} trailing byte(s): {source}')
+    return pcm_data[:-remainder]
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -853,7 +884,7 @@ def download_audio_chunks_and_merge(
             else:
                 pcm_data = raw_data
 
-            return pcm_data
+            return _align_pcm16_frames(pcm_data, path)
         except Exception as e:
             logger.warning(f"Failed to decode/decrypt {path}: {e}")
             return None
@@ -888,7 +919,7 @@ def download_audio_chunks_and_merge(
                 else:
                     pcm_data = raw_data
 
-                return (timestamp, pcm_data)
+                return (timestamp, _align_pcm16_frames(pcm_data, chunk_path))
             except Exception as e:
                 logger.warning(
                     f"Failed to decode/decrypt {ext} chunk at {formatted_timestamp}: {e}, trying next format"

@@ -101,7 +101,7 @@
     "createYourOwnApp": "أنشئ تطبيقك الخاص",
     "buildAndShareApp": "أنشئ وشارك تطبيقك المخصص",
     "searchApps": "البحث عن التطبيقات...",
-    "myApps": "تطبيقاتي",
+    "myApps": "من إنشائي",
     "installedApps": "التطبيقات المثبتة",
     "unableToFetchApps": "تعذر جلب التطبيقات :(\n\nيرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
     "aboutOmi": "حول Omi",
@@ -3190,5 +3190,9 @@
     "accountCutoverMigrationInProgressTitle": "الترحيل قيد التقدم",
     "accountCutoverMigrationInProgressMessage": "حسابك قيد الترحيل. ميزات المنتج متوقفة مؤقتًا حتى انتهاء الترحيل.",
     "accountCutoverMigrationRollbackMessage": "حسابك قيد الصيانة بعد التراجع عن الترحيل. قد تُعزل بعض البيانات الأحدث.",
-    "accountCutoverOpenStore": "فتح المتجر"
+    "accountCutoverOpenStore": "فتح المتجر",
+    "sendRawAudioToOmi": "إرسال الصوت الخام إلى Omi",
+    "sendRawAudioToOmiDescription": "أوقف هذا الخيار لمنع إرسال الصوت الخام إلى Omi. قد يستمر إرسال النصوص والبيانات اللازمة للميزات السحابية إلى Omi.",
+    "findDevice": "العثور",
+    "diagnosticsShareFailed": "تعذّرت مشاركة التشخيص. يُرجى المحاولة مرة أخرى."
 }

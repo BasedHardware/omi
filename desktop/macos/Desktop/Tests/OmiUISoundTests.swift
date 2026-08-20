@@ -121,6 +121,19 @@ final class OmiUISoundTests: XCTestCase {
     XCTAssertEqual(OmiUICue.complete.effect, .chime)
   }
 
+  @MainActor
+  func testAppWidePaletteContainsOnlyArrivalAndCompletionSounds() throws {
+    try writeAllAssets()
+    let output = RecordingSoundOutput()
+    let service = makeService(output: output)
+
+    for cue in OmiUICue.allCases { service.play(cue) }
+
+    XCTAssertEqual(OmiUICue.allCases, [.reveal, .complete])
+    XCTAssertEqual(output.oneShots, [.swoosh, .chime])
+    XCTAssertFalse(output.oneShots.contains(.click))
+  }
+
   // MARK: - Chrome versus content
 
   /// The system's "Play user interface sound effects" switch governs chrome. `AVAudioEngine` never
@@ -150,7 +163,7 @@ final class OmiUISoundTests: XCTestCase {
 
     for cue in OmiUICue.allCases { service.play(cue) }
 
-    XCTAssertEqual(Set(output.oneShots), [.click, .swoosh, .chime])
+    XCTAssertEqual(Set(output.oneShots), [.swoosh, .chime])
   }
 
   // MARK: - The app's own mute
@@ -212,8 +225,7 @@ final class OmiUISoundTests: XCTestCase {
     for cue in OmiUICue.allCases { service.play(cue) }
 
     XCTAssertFalse(output.oneShots.contains(.swoosh), "nothing moved, so nothing narrates a move")
-    XCTAssertTrue(output.oneShots.contains(.click))
-    XCTAssertTrue(output.oneShots.contains(.chime))
+    XCTAssertEqual(output.oneShots, [.chime])
   }
 
   // MARK: - No cue storms
@@ -225,20 +237,20 @@ final class OmiUISoundTests: XCTestCase {
     let clock = ManualClock()
     let service = makeService(output: output, clock: clock)
 
-    // A SwiftUI change handler re-entered inside one frame.
-    service.play(.navigate)
+    // A completion handler re-entered inside one frame.
+    service.play(.complete)
     clock.advance(by: OmiUISoundService.coalescingWindow / 2)
-    service.play(.navigate)
-    XCTAssertEqual(output.oneShots, [.click])
+    service.play(.complete)
+    XCTAssertEqual(output.oneShots, [.chime])
 
     // A different cue in the same breath is a different event and still lands.
-    service.play(.commit)
-    XCTAssertEqual(output.oneShots, [.click, .click])
+    service.play(.reveal)
+    XCTAssertEqual(output.oneShots, [.chime, .swoosh])
 
     // Past the window, the user has genuinely acted again.
     clock.advance(by: OmiUISoundService.coalescingWindow)
-    service.play(.navigate)
-    XCTAssertEqual(output.oneShots, [.click, .click, .click])
+    service.play(.complete)
+    XCTAssertEqual(output.oneShots, [.chime, .swoosh, .chime])
   }
 
   @MainActor
@@ -248,7 +260,7 @@ final class OmiUISoundTests: XCTestCase {
     let clock = ManualClock()
     let service = makeService(output: output, reduceMotion: { true }, clock: clock)
 
-    // Reduce Motion is off after the first press; the swoosh that never played must not be what
+    // Reduce Motion is off after the first attempt; the swoosh that never played must not be what
     // stops the next one.
     service.play(.reveal)
     let heard = makeService(output: output, reduceMotion: { false }, clock: clock)
@@ -260,7 +272,7 @@ final class OmiUISoundTests: XCTestCase {
   // MARK: - Degrading to silence
 
   /// Nothing on disk is the shape a broken install takes. Every cue must be a no-op, not a throw
-  /// and not a crash — a click is never allowed to be the thing that breaks.
+  /// and not a crash — a status cue is never allowed to be the thing that breaks.
   @MainActor
   func testCuesAreSilentAndHarmlessWhenNoAssetLoads() {
     let output = RecordingSoundOutput()

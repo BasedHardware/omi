@@ -94,7 +94,40 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
     XCTAssertTrue(GeminiClient.shouldAutoRetry(authorized))
     XCTAssertFalse(GeminiClient.shouldAutoRetry(denied))
     XCTAssertFalse(GeminiClient.shouldAutoRetry(absent))
-    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.networkConnectionLost)))
-    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.timedOut)))
+  }
+
+  /// A *response* still needs the backend's `X-Omi-Retryable` authorization to be replayed
+  /// — that contract is unchanged and asserted above. A transport failure produces no
+  /// response, so there is no authority to consult, and the previous policy discarded it
+  /// after a single attempt.
+  ///
+  /// That excluded the one error class most worth retrying.
+  /// `NSURLErrorNetworkConnectionLost` (-1005) is a stale pooled-connection race, not an
+  /// outage: URLSession reuses a keep-alive socket the server has already closed and the
+  /// request dies in milliseconds. Measured on a live desktop session, 12 of 13 suggestion
+  /// evaluations failed this way — 4-7s apart, with plain requests to the same host
+  /// returning 200 in ~0.4s throughout — and every one was dropped without a second try.
+  ///
+  /// Replay is safe here because every call this client makes is a `generateContent`
+  /// inference: prompt plus image in, text out, no server-side state change. A duplicate
+  /// costs one extra inference and nothing else.
+  func testTransportFailuresAreReplayedWithoutBackendAuthorization() {
+    for code in [
+      URLError.Code.networkConnectionLost, .timedOut, .cannotConnectToHost,
+      .notConnectedToInternet, .dnsLookupFailed, .cannotFindHost,
+    ] {
+      XCTAssertTrue(
+        GeminiClient.shouldAutoRetry(URLError(code)),
+        "expected transport failure \(code.rawValue) to be replayable")
+    }
+  }
+
+  /// The widened replay must stay bounded to transport failures. A cancelled request is the
+  /// user or a superseding evaluation withdrawing the work, and replaying it would resurrect
+  /// work nobody is waiting for.
+  func testNonTransportURLErrorsAreStillNotReplayed() {
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.cancelled)))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.badURL)))
+    XCTAssertFalse(GeminiClient.shouldAutoRetry(URLError(.userAuthenticationRequired)))
   }
 }

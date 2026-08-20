@@ -1,53 +1,36 @@
 import logging
 import uuid
-from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional, cast
 
 import database._client as db_client_module
-from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
-import database.memories as memories_db
 from database.memory_imports import ingest_memory_import_batch
 from database import review_queue
-from database.vector_db import (
-    delete_memory_vector,
-    delete_memory_vectors_batch,
-    upsert_memory_vector,
-    upsert_memory_vectors_batch,
-)
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.v3.composed_get_service import V3ComposedRequestParams, V3ComposedResponse
-from utils.memory.v3.production_runtime import build_v3_production_runtime
-from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
-from utils.memory.canonical_memory_adapter import (
-    CanonicalBatchMutationLimitError,
-    CanonicalMemoryNotFoundError,
-    delete_canonical_memories_batch,
-    memory_item_to_memorydb,
-    read_canonical_memory_item,
+from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
+    MemoryPayload,
+    MemoryService,
+    fetch_memory_dict,
 )
-from utils.memory.memory_service import MemoryPayload, MemoryService, fetch_memory_dict
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
     import_write_violation_for_guard,
     is_per_file_local_import_tags,
 )
-from utils.memory.memory_api_contract import (
-    MemoryApiExposure,
-    memory_write_payload,
-)
-from utils.memory.memory_api_response import memory_batch_response, memory_item_response, memory_list_response
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_api_contract import MemoryApiExposure
+from utils.memory.memory_api_response import memory_item_response, memory_list_response
+from utils.memory.memory_system import MemorySystem
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device_from_request
 from utils.memory.device_scope_filter import device_scope_validation_error
-from utils.log_sanitizer import sanitize_pii
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -68,6 +51,15 @@ class MemoryValueRequest(BaseModel):
     value: str
 
 
+class MemoryReadStatusRequest(BaseModel):
+    """Durable UI read/dismiss mutation for a single memory."""
+
+    model_config = {"extra": "forbid"}
+
+    is_read: Optional[bool] = None
+    is_dismissed: Optional[bool] = None
+
+
 class ReviewResolutionResponse(BaseModel):
     model_config = {"extra": "allow"}
 
@@ -82,62 +74,18 @@ MEMORIES_BATCH_MAX = 100
 # assertions are removed by the retryable outbox after reads fail closed.
 MEMORIES_BATCH_DELETE_MAX = 100
 
-V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'memory_read']
-
-_MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
-    {
-        'X-Omi-Memory-Read-Source',
-        'X-Omi-Memory-Read-Decision',
-        'X-Omi-Memory-Next-Cursor',
-        'X-Omi-Memory-Device-Scope-Supported',
-        'X-Omi-Memory-Canonical-Lifecycle-Exposed',
-        'X-Omi-Memory-Default-Delete-Supported',
-        'Link',
-        'Cache-Control',
-    }
-)
-
 _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-Exposed'
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
+_MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
 
 
-@dataclass(frozen=True)
-class V3GetRuntime:
-    """Lazy, overrideable F4 runtime bundle for GET `/v3/memories`.
-
-    The production/default dependency below is structurally disabled in F4. TestClient
-    may override the exact dependency to supply a composed service and typed source
-    decision. This bundle intentionally does not construct Firestore clients, cursor
-    keyrings, projection adapters, production readers, or telemetry emitters at import.
-    """
-
-    enabled: bool = False
-    source_decision: V3GetSourceDecision = 'disabled'
-    service: Optional[Callable[[V3ComposedRequestParams, object], object]] = None
-    adapters: object = None
-    source_selector: object = None
-    control_reader: object = None
-    legacy_reader: object = None
-    projection_reader: object = None
-    cursor_keyring: object = None
-    cursor_codec: object = None
-    clock: object = None
-    deadline: object = None
-    observer: object = None
-
-
-def get_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
-    """Return the production/default runtime bundle for GET `/v3/memories`.
-
-    The code-owned canonical-memory selector chooses the cohort. Enrolled
-    accounts then require a valid, generation-matched projection/control state;
-    any unavailable or stale state fails closed instead of returning legacy
-    memory. Client headers, query params, request bodies, and persisted user
-    docs alone cannot activate canonical memory.
-    """
-
-    return build_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
+def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
+    """Treat missing/blank cursor as first-page so ``?cursor=`` cannot skip the fallback."""
+    if cursor is None:
+        return None
+    stripped = cursor.strip()
+    return stripped or None
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -203,11 +151,6 @@ class ReviewResolutionRequest(BaseModel):
 
 async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: str) -> None:
     mode = import_write_block_mode()
-    db_client = getattr(db_client_module, 'db', None)
-    # Canonical users must never fall back from evidence ingress into a direct
-    # product-memory write, regardless of the legacy rollout env default.
-    if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
-        mode = "enforce"
     if mode == "off":
         return
     try:
@@ -248,79 +191,9 @@ async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: st
         return
 
 
-def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
-    # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
-    # on a negative argument and would otherwise 500 the request.
-    # Do NOT force first-page limit=5000: that unbounded first load caused prod GET /v3/memories
-    # to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts. Callers must page via limit/offset.
-    offset = max(0, offset)
-    limit = max(1, min(limit, 500))
-    memories = memories_db.get_memories(uid, limit, offset)
-
-    valid_memories: List[MemoryDB] = []
-    for memory in memories:
-        if memory.get('is_locked', False):
-            content = memory.get('content', '')
-            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-        try:
-            valid_memories.append(MemoryDB.model_validate(memory))
-        except ValidationError as e:
-            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid memory doc {memory.get('id', 'unknown')}: missing/invalid fields {missing_fields}"
-            )
-            continue
-    return valid_memories
-
-
-def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
-    """Serialize legacy memories without canonical lifecycle fields.
-
-    The single source of truth for which fields are canonical-only lives in
-    ``utils.memory.memory_api_contract``. Keep this wrapper small so every
-    legacy response takes the same field contract.
-    """
-
-    return memory_list_response(
-        memories,
-        MemoryApiExposure.LEGACY,
-        headers={
-            _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
-            _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
-            _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
-        },
-    )
-
-
-def _legacy_memory_response(memory: MemoryDB) -> JSONResponse:
-    return memory_item_response(memory, MemoryApiExposure.LEGACY)
-
-
-def _legacy_batch_memories_response(memories: List[MemoryDB]) -> JSONResponse:
-    return memory_batch_response(memories, MemoryApiExposure.LEGACY, created_count=len(memories))
-
-
-def _apply_memory_response_headers(http_response: Response, memory_response: V3ComposedResponse) -> None:
-    for name, value in memory_response.headers.items():
-        if name in _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS:
-            http_response.headers[name] = value
-    http_response.headers['Cache-Control'] = 'no-store'
-
-
-def _memory_allowlisted_headers(memory_response: V3ComposedResponse) -> Dict[str, str]:
-    return {
-        name: value
-        for name, value in memory_response.headers.items()
-        if name in _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS
-    }
-
-
-def _raise_memory_http_exception(memory_response: V3ComposedResponse) -> None:
-    raise HTTPException(
-        status_code=memory_response.http_status,
-        detail=memory_response.public_error or 'memory_read_failed',
-        headers=_memory_allowlisted_headers(memory_response),
-    )
+def _memory_response(memory: MemoryDB) -> JSONResponse:
+    """Serialize the universal memory contract for released clients."""
+    return memory_item_response(memory, MemoryApiExposure.CANONICAL)
 
 
 def _resolve_get_memories_device_scope(
@@ -364,104 +237,65 @@ def _set_default_delete_capability_header(http_response: Response, *, supported:
     http_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true' if supported else 'false'
 
 
-def _canonical_lifecycle_exposed_for(memory_response: V3ComposedResponse) -> bool:
-    return memory_response.http_status == 200 and memory_response.source in {
-        'memory',
-        'memory_compatibility_projection',
-    }
-
-
-def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client: Any) -> bool:
-    decision = canonical_write_decision(uid, db_client=db_client)
-    if decision.enabled:
-        return True
-    if decision.fail_closed:
-        logger.warning("canonical_write fail_closed uid=%s reason=%s", sanitize_pii(uid), decision.reason)
-        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-    return False
-
-
-def _mirror_delete_into_legacy(uid: str, memory_ids: List[str], *, db_client: Any) -> None:
-    """Mirror a canonical delete into legacy while the user still reads legacy.
-
-    Canonical writes can become ready in persisted control state before canonical
-    reads pass their control/head/grant/projection checks. In that convergence
-    window a canonical-only delete is invisible: the client drops the row
-    optimistically and the next refresh re-reads legacy, where it still exists,
-    so the memory "comes back" seconds later (#10446). Deleting is symmetric
-    with dual-write, so mirror it until read cutover.
-
-    Best-effort by design: canonical is already authoritative and its delete has
-    committed, so a legacy cleanup failure must not fail the request the user
-    already saw succeed. Firestore deletes of absent documents are no-ops, so
-    canonical-only memories mirror harmlessly.
-    """
-    if not memory_ids:
-        return
-    if canonical_read_enabled(uid, db_client=db_client):
-        return
-    try:
-        memories_db.delete_memories_batch(uid, memory_ids)
-    except Exception:
-        logger.exception("legacy mirror delete failed uid=%s count=%d", sanitize_pii(uid), len(memory_ids))
-        return
-    try:
-        delete_memory_vectors_batch(uid, memory_ids)
-    except Exception:
-        logger.exception("legacy mirror vector delete failed uid=%s count=%d", sanitize_pii(uid), len(memory_ids))
-
-
-def _purge_legacy_memories(uid: str) -> None:
-    """Delete every legacy memory for a user, plus its vectors.
-
-    Collects ids before the Firestore delete so the Pinecone vectors can be purged too —
-    otherwise orphaned vectors become search noise nothing ever cleans up.
-    """
-    memory_ids: List[str] = []
-    offset = 0
-    batch_size = 1000
-    while True:
-        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
-        if not memories:
-            break
-        memory_ids.extend([memory_id for m in memories if isinstance((memory_id := m.get('id')), str) and memory_id])
-        offset += batch_size
-
-    memories_db.delete_all_memories(uid)
-
-    if memory_ids:
-        delete_memory_vectors_batch(uid, memory_ids)
-
-
-def _mirror_delete_all_into_legacy(uid: str, *, db_client: Any) -> None:
-    """Mirror a canonical delete-all into legacy while the user still reads legacy.
-
-    Same window and reasoning as _mirror_delete_into_legacy: when persisted
-    write readiness precedes read cutover, the canonical wipe is invisible
-    because GET /v3/memories still reads legacy, so "delete everything" leaves
-    the user's list intact on the next refresh (#10446). No-ops after read
-    cutover, and best-effort because canonical is authoritative and already
-    committed.
-    """
-    if canonical_read_enabled(uid, db_client=db_client):
-        return
-    try:
-        _purge_legacy_memories(uid)
-    except Exception:
-        logger.exception("legacy mirror delete-all failed uid=%s", sanitize_pii(uid))
-
-
-def _validate_memory(uid: str, memory_id: str) -> MemoryPayload:
-    return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
-
-
 def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
-        if item is None:
-            raise HTTPException(status_code=404, detail='Memory not found')
-        return memory_item_to_memorydb(item).dict()
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
+
+
+# Matches the helper's own truncation budget so a caller cannot send text whose tail
+# the extractor would silently drop.
+MAX_EXTRACT_TEXT_CHARS = 40_000
+MAX_EXISTING_MEMORY_CHARS = 1_000
+
+
+class ExtractMemoryLogRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    text: str = Field(..., min_length=1, max_length=MAX_EXTRACT_TEXT_CHARS)
+    text_source: str = Field(default="memory_log", min_length=1, max_length=64)
+    existing_memories: List[str] = Field(default_factory=list, max_length=200)
+
+
+class ExtractMemoryLogResponse(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    memories: List[str]
+    profile: str = ""
+
+
+@router.post('/v1/memories/extract', tags=['memories'], response_model=ExtractMemoryLogResponse)
+async def extract_memory_log(
+    body: ExtractMemoryLogRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:extract"))
+    ),
+):
+    """Return-only memory-log extraction through the managed memories feature (OpenRouter Luna).
+
+    Does not write Firestore. Desktop onboarding/import should call this instead of inventing
+    memories via Anthropic Haiku chat completions, then persist via the normal memory write APIs.
+    """
+    # Deferred with the LLM helper: this router is covered by a module-isolation test
+    # that stubs a minimal dependency graph, and utils.subscription pulls database.users
+    # in at import time.
+    from utils.llm import memories as memories_llm
+    from utils.subscription import is_trial_paywalled
+
+    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
+        raise HTTPException(status_code=402, detail='trial_expired')
+    source = (body.text_source or "memory_log").strip() or "memory_log"
+    existing = [m.strip()[:MAX_EXISTING_MEMORY_CHARS] for m in body.existing_memories if m.strip()][:200]
+    extraction = await run_blocking(
+        llm_executor,
+        lambda: memories_llm.extract_memory_log_from_text(
+            uid,
+            body.text,
+            text_source=source,
+            existing_memories=existing,
+        ),
+    )
+    if extraction is None:
+        raise HTTPException(status_code=502, detail="memories_extract_failed")
+    return ExtractMemoryLogResponse(memories=list(extraction.memories), profile=extraction.profile or "")
 
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
@@ -498,7 +332,7 @@ async def create_memory(
     # simply do not want stored.
     if is_per_file_local_import_tags(memory.tags):
         logger.info("memory_import.per_file_item_dropped endpoint=/v3/memories uid=%s", uid)
-        return _legacy_memory_response(memory_db)
+        return _memory_response(memory_db)
 
     parity_capture = _start_memory_parity_capture(
         uid,
@@ -506,66 +340,39 @@ async def create_memory(
         session_id=memory_db.id,
         memories=[memory_db],
     )
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        try:
-            memory_service = MemoryService(db_client=db_client)
-            created = await run_blocking(
-                db_executor,
-                memory_service.create_external_memory,
-                uid,
-                memory_db,
-                memory_system=MemorySystem.CANONICAL,
-                consumer="v3_manual" if manually_added else "v3_api",
-                operation="create_memory",
-                upsert_vector=False,
-                require_canonical_promotion=True,
-            )
-            _finish_memory_parity_capture(parity_capture, [created])
-            return created
-        except Exception:
-            logger.exception("Canonical create_memory failed uid=%s", uid)
-            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-
     try:
-        await run_blocking(
+        created = await run_blocking(
             db_executor,
-            memories_db.create_memory,
+            MemoryService(db_client=getattr(db_client_module, 'db', None)).create_external_memory,
             uid,
-            memory_write_payload(memory_db, MemoryApiExposure.LEGACY),
+            memory_db,
+            memory_system=MemorySystem.CANONICAL,
+            consumer="v3_manual" if manually_added else "v3_api",
+            operation="create_memory",
+            upsert_vector=False,
+            require_canonical_promotion=True,
         )
     except Exception:
-        logger.exception("Firestore create_memory failed uid=%s", uid)
+        logger.exception("MemoryService create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
-    _finish_memory_parity_capture(parity_capture, [memory_db])
-
-    try:
-        await run_blocking(
-            postprocess_executor,
-            upsert_memory_vector,
-            uid,
-            memory_db.id,
-            memory_db.content,
-            memory_db.category.value,
-            memory_db.subject_entity_id,
-        )
-    except Exception:
-        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
-
-    return _legacy_memory_response(memory_db)
+    _finish_memory_parity_capture(parity_capture, [created])
+    return created
 
 
 @router.post(
-    '/v3/memories/batch',
-    tags=['memories'],
+    "/v3/memories/batch",
+    tags=["memories"],
     response_model=BatchMemoriesResponse,
 )
 async def create_memories_batch(
     request_context: Request,
     request: BatchMemoriesRequest,
     uid: str = Depends(
-        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:batch"))
+        cast(
+            Callable[..., str],
+            _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:batch"),
+        )
     ),
 ):
     await _guard_import_memory_write(request_context, endpoint="/v3/memories/batch", uid=uid)
@@ -577,8 +384,8 @@ async def create_memories_batch(
     per user), blowing through the 120 req/min per-Authorization Cloud Armor
     rule and collaterally 429-ing unrelated calls (goals, sync, chat).
 
-    One HTTP request here = one Firestore batch write + one embeddings call +
-    one Pinecone upsert, regardless of batch size.
+    One HTTP request delegates the canonical batch write to MemoryService. The
+    canonical outbox owns vector projection; this route never writes Pinecone.
     """
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
@@ -619,7 +426,7 @@ async def create_memories_batch(
             client_device_id=device_context.client_device_id,
         )
         memory_dbs.append(memory_db)
-        if memory.visibility == 'public':
+        if memory.visibility == "public":
             has_public = True
 
     parity_capture = _start_memory_parity_capture(
@@ -629,89 +436,26 @@ async def create_memories_batch(
         memories=memory_dbs,
     )
 
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        memory_service = MemoryService(db_client=db_client)
-        # Pre-validate the entire batch so a whitespace-only (or otherwise
-        # canonical-rejected) item fails fast *before* any per-item write
-        # commits. This preserves the legacy single-batch-write semantics:
-        # either all items persist or none do, so client retries never observe
-        # partial results.
-        for memory_db in memory_dbs:
-            if not (memory_db.content or '').strip():
-                raise HTTPException(
-                    status_code=400,
-                    detail='Memory content cannot be empty or whitespace-only.',
-                )
-        committed_ids: List[str] = []
-        for memory_db in memory_dbs:
-            created = await run_blocking(
-                db_executor,
-                memory_service.create_external_memory,
-                uid,
-                memory_db,
-                memory_system=MemorySystem.CANONICAL,
-                consumer="v3_manual" if memory_db.manually_added else "v3_api",
-                operation="batch_create_memory",
-                upsert_vector=False,
-                require_canonical_promotion=True,
-            )
-            committed_ids.append(created.id)
-        if has_public:
-            submit_with_context(postprocess_executor, update_personas_async, uid)
-        server_memories: List[MemoryDB] = []
-        for memory_id in committed_ids:
-            item = await run_blocking(db_executor, read_canonical_memory_item, uid, memory_id, db_client=db_client)
-            if item is not None:
-                server_memories.append(memory_item_to_memorydb(item))
-            else:
-                logger.error("Canonical create_memories_batch readback missing uid=%s memory_id=%s", uid, memory_id)
-                raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-        _finish_memory_parity_capture(parity_capture, server_memories)
-        return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
-
-    # Persist to Firestore first — that write is the authoritative result.
-    # Mirror create_memory above: isolate the best-effort vector upsert so a
-    # transient/BYOK embedding failure (e.g. an OpenAI key without
-    # text-embedding-3-large access -> 403) can't 500 a request whose memories
-    # were already saved, which would make the client retry and duplicate them.
     try:
-        await run_blocking(
+        server_memories = await run_blocking(
             db_executor,
-            memories_db.save_memories,
+            MemoryService(db_client=getattr(db_client_module, "db", None)).create_external_memory_batch,
             uid,
-            [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs],
+            memory_dbs,
+            memory_system=MemorySystem.CANONICAL,
+            consumer="v3_batch",
+            operation="batch_create_memory",
+            upsert_vectors=False,
+            require_canonical_promotion=True,
         )
     except Exception:
-        logger.exception("Firestore save_memories failed uid=%s count=%s", uid, len(memory_dbs))
+        logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
-    _finish_memory_parity_capture(parity_capture, memory_dbs)
-
-    # Pinecone batch upsert runs on a worker thread (postprocess pool, like the
-    # single-create path) so a slow embeddings/Pinecone call can't starve the
-    # FastAPI sync threadpool.
-    try:
-        await run_blocking(
-            postprocess_executor,
-            upsert_memory_vectors_batch,
-            uid,
-            [
-                {
-                    "memory_id": m.id,
-                    "content": m.content,
-                    "category": m.category.value,
-                    "subject_entity_id": m.subject_entity_id,
-                }
-                for m in memory_dbs
-            ],
-        )
-    except Exception:
-        logger.exception(
-            "Batch vector upsert failed uid=%s count=%s (memories saved, vectors missing)", uid, len(memory_dbs)
-        )
-
-    return _legacy_batch_memories_response(memory_dbs)
+    if has_public:
+        submit_with_context(postprocess_executor, update_personas_async, uid)
+    _finish_memory_parity_capture(parity_capture, server_memories)
+    return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
 
 @router.post(
@@ -736,13 +480,6 @@ async def create_memory_import_batch(
     if db_client is None:
         logger.error("memory import ingest unavailable: firestore client missing uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
-
-    write_decision = await run_blocking(db_executor, canonical_write_decision, uid, db_client=db_client)
-    if write_decision.memory_system != MemorySystem.CANONICAL:
-        raise HTTPException(status_code=403, detail="memory_import_requires_canonical")
-    if not write_decision.enabled:
-        logger.warning("memory import ingest disabled uid=%s reason=%s", uid, write_decision.reason)
-        raise HTTPException(status_code=503, detail="memory_import_canonical_not_ready")
 
     parity_capture = SurfaceParityCapture.from_environ(
         principal_id=uid,
@@ -783,10 +520,13 @@ def get_memories(
     limit: int = 100,
     offset: int = 0,
     cursor: Optional[str] = None,
+    include_archive: bool = Query(
+        False,
+        description="When true, include Archive-tier memories that are otherwise excluded from default reads.",
+    ),
     device_scope: str = Query('all'),
     client_device_id: Optional[str] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
-    memory_runtime: V3GetRuntime = Depends(get_v3_get_runtime),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
@@ -796,92 +536,104 @@ def get_memories(
         x_app_platform=x_app_platform,
         x_device_id_hash=x_device_id_hash,
     )
+    _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
+    _set_device_scope_capability_header(response, supported=True)
+    _set_canonical_lifecycle_exposure_header(response, exposed=True)
+    _set_default_delete_capability_header(response, supported=True)
     db_client = getattr(db_client_module, 'db', None)
-    is_canonical = canonical_read_enabled(
-        uid,
-        db_client=db_client,
-        source_decision=memory_runtime.source_decision,
-        cursor_memory_read_requested=bool(cursor),
-    )
+    bounded_limit = max(1, min(limit, 500))
+    bounded_offset = max(0, offset)
 
-    if scope_request.device_scope != 'all' and not is_canonical:
+    response_headers = {
+        _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
+        _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',
+        _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'true',
+        'Cache-Control': 'no-store',
+    }
+
+    # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
+    # accounts beyond the bounded offset compatibility window.
+    cursor = _normalize_memory_list_cursor(cursor)
+    if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
-            detail='device_scope filtering is only supported for canonical memory users',
-            headers={
-                _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
-                _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
-                _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER: 'false',
-            },
+            detail="Memory cursor pagination cannot be combined with offset",
         )
 
-    if is_canonical:
-        _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
-        _set_device_scope_capability_header(response, supported=True)
-        _set_canonical_lifecycle_exposure_header(response, exposed=True)
-        _set_default_delete_capability_header(response, supported=True)
-        # Clamp pagination parameters before handing an eligible account to a
-        # canonical reader.
-        clamped_offset = max(0, offset)
-        # `/v3/memories` is the generation-bound V3 projection contract. The
-        # canonical selector must not bypass that contract through the general
-        # memory-service reader: an unavailable or stale projection is a 503,
-        # never a legacy/general-memory fallback. Device-scoped reads remain on
-        # the canonical service path because V3's compatibility projection has
-        # no device-scope representation.
-        if scope_request.device_scope != 'all':
-            # Preserve the historical first-page expansion for this separate
-            # canonical service path.
-            clamped_limit = max(1, min(limit, 5000))
-            if clamped_offset == 0:
-                clamped_limit = 5000
-            return MemoryService(db_client=db_client).read(
+    if cursor is not None:
+        page = MemoryService(db_client=db_client).read_page(
+            uid,
+            limit=bounded_limit,
+            cursor=cursor,
+            device_scope_request=scope_request,
+            include_pending_processing=True,
+            include_archive=include_archive,
+        )
+        if page.next_cursor:
+            response_headers[_MEMORY_NEXT_CURSOR_HEADER] = page.next_cursor
+        return memory_list_response(
+            page.memories,
+            MemoryApiExposure.CANONICAL,
+            headers=response_headers,
+        )
+
+    if bounded_offset == 0:
+        # Prefer the composite cursor on the first page so sync/export can continue
+        # past the legacy 5000 offset window without a second request shape.
+        try:
+            page = MemoryService(db_client=db_client).read_page(
                 uid,
-                limit=clamped_limit,
-                offset=clamped_offset,
+                limit=bounded_limit,
+                cursor=None,
                 device_scope_request=scope_request,
                 include_pending_processing=True,
+                include_archive=include_archive,
             )
-        # V3's compositional contract limits a page to 500 items.
-        limit = max(1, min(limit, 500))
-        offset = clamped_offset
+        except HTTPException as exc:
+            # First page must succeed whenever the legacy offset read can serve
+            # it. The cursor path 503s on a missing cursor secret
+            # ("Memory cursor unavailable"); the canonical keyset scan wraps any
+            # underlying failure as "Canonical memory unavailable"; the
+            # historical keyset scan wraps its own as "Historical memory
+            # unavailable". The keyset scans order by (updated_at DESC,
+            # __name__) and so fail while that composite index is building,
+            # which the offset read's single-field order does not — so all three
+            # fall back to read(). The keyset scans also walk past every row they
+            # must not emit before they can fill the page, so an account whose
+            # historical set is fully suppressed by canonical exhausts the scan
+            # row budget ("Memory scan budget exceeded") — that walk is what took
+            # the first page past the 30s edge timeout in prod on 2026-08-18, and
+            # the offset read serves it without the walk.
+            # Unrelated errors (4xx, other 503s) propagate.
+            if exc.status_code != 503 or exc.detail not in (
+                "Memory cursor unavailable",
+                "Canonical memory unavailable",
+                "Historical memory unavailable",
+                MEMORY_LIST_SCAN_BUDGET_DETAIL,
+            ):
+                raise
+        else:
+            if page.next_cursor:
+                response_headers[_MEMORY_NEXT_CURSOR_HEADER] = page.next_cursor
+            return memory_list_response(
+                page.memories,
+                MemoryApiExposure.CANONICAL,
+                headers=response_headers,
+            )
 
-    if memory_runtime.source_decision != 'memory_read':
-        return _legacy_memories_response(_legacy_get_memories(uid, limit, offset))
-
-    _set_device_scope_capability_header(response, supported=False)
-    _set_canonical_lifecycle_exposure_header(response, exposed=False)
-    _set_default_delete_capability_header(response, supported=False)
-
-    if memory_runtime.service is None:
-        logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
-        raise HTTPException(status_code=503, detail='infrastructure_failure')
-
-    params = V3ComposedRequestParams(limit=limit, offset=offset, cursor=cursor)
-    memory_response = memory_runtime.service(params, memory_runtime.adapters)
-    if not isinstance(memory_response, V3ComposedResponse):
-        logger.info("v3_get route=GET /v3/memories source=none status=503 decision=adapter_contract")
-        raise HTTPException(status_code=503, detail='infrastructure_failure')
-
-    canonical_lifecycle_exposed = _canonical_lifecycle_exposed_for(memory_response)
-    memory_response.headers[_MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER] = 'true' if canonical_lifecycle_exposed else 'false'
-    memory_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = (
-        'true' if canonical_lifecycle_exposed else 'false'
+    memories = MemoryService(db_client=db_client).read(
+        uid,
+        limit=bounded_limit,
+        offset=bounded_offset,
+        device_scope_request=scope_request,
+        include_pending_processing=True,
+        include_archive=include_archive,
     )
-    memory_response.headers[_MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER] = 'true'
-    _apply_memory_response_headers(response, memory_response)
-    logger.info(
-        "v3_get route=GET /v3/memories source=%s status=%s decision=%s",
-        memory_response.source,
-        memory_response.http_status,
-        memory_response.public_error or memory_response.decision,
+    return memory_list_response(
+        memories,
+        MemoryApiExposure.CANONICAL,
+        headers=response_headers,
     )
-    if memory_response.http_status != 200:
-        _raise_memory_http_exception(memory_response)
-    headers = _memory_allowlisted_headers(memory_response)
-    headers['Cache-Control'] = 'no-store'
-    exposure = MemoryApiExposure.CANONICAL if canonical_lifecycle_exposed else MemoryApiExposure.LEGACY
-    return memory_list_response(memory_response.body or [], exposure, headers=headers)
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'], response_model=List[Dict[str, Any]])
@@ -970,37 +722,16 @@ def delete_memories_batch(
     if not memory_ids:
         return {'status': 'ok'}
 
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        # The adapter validates and tombstones the full selection in one Firestore
-        # transaction. A concurrent mutation retries the transaction, so a later
-        # missing item can never leave earlier items committed from a failed request.
-        try:
-            delete_canonical_memories_batch(uid, memory_ids, db_client=db_client)
-        except CanonicalBatchMutationLimitError:
-            raise HTTPException(status_code=413, detail='Memory batch is too large to delete atomically')
-        except CanonicalMemoryNotFoundError:
-            raise HTTPException(status_code=404, detail='Memory not found')
-        _mirror_delete_into_legacy(uid, memory_ids, db_client=db_client)
-        return {'status': 'ok'}
-
-    # Legacy cohort: enforce the same per-memory guard as _validate_memory, but via a
-    # single batched get_all fetch instead of N serial reads. A requested id absent from
-    # the result is either missing or belongs to another user (get_memories_by_ids is
-    # scoped to the caller's uid collection) — both map to the single-delete 404.
-    fetched = {m['id']: m for m in memories_db.get_memories_by_ids(uid, memory_ids) if isinstance(m.get('id'), str)}
-    for memory_id in memory_ids:
-        memory = fetched.get(memory_id)
-        if memory is None:
-            raise HTTPException(status_code=404, detail='Memory not found')
-        if memory.get('is_locked', False):
-            raise HTTPException(status_code=402, detail='A paid plan is required to access this memory.')
-
-    memories_db.delete_memories_batch(uid, memory_ids)
+    service = MemoryService(db_client=getattr(db_client_module, 'db', None))
     try:
-        delete_memory_vectors_batch(uid, memory_ids)
-    except Exception:
-        logger.exception("Vector batch delete failed uid=%s count=%d (Firestore already deleted)", uid, len(memory_ids))
+        # The service performs a complete read-only validation pass before any
+        # canonical write, preserving the released all-or-nothing contract.
+        service.delete_batch(uid, memory_ids)
+    except HTTPException:
+        # Preserve service-owned 402/404/413 mappings and observability details.
+        raise
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
 
 
@@ -1011,23 +742,10 @@ def delete_memory(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete"))
     ),
 ):
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        try:
-            MemoryService(db_client=db_client).delete(uid, memory_id)
-        except CanonicalBatchMutationLimitError:
-            raise HTTPException(status_code=413, detail='Memory lineage is too large to delete atomically')
-        except ValueError:
-            raise HTTPException(status_code=404, detail='Memory not found')
-        _mirror_delete_into_legacy(uid, [memory_id], db_client=db_client)
-        return {'status': 'ok'}
-
-    _validate_memory(uid, memory_id)
-    memories_db.delete_memory(uid, memory_id)
     try:
-        delete_memory_vector(uid, memory_id)
-    except Exception:
-        logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
+        MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
 
 
@@ -1041,16 +759,11 @@ def delete_memories(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:delete_all"))
     ),
 ):
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        if scope == 'default':
-            MemoryService(db_client=db_client).delete_default(uid)
-        else:
-            MemoryService(db_client=db_client).delete_all(uid)
-        _mirror_delete_all_into_legacy(uid, db_client=db_client)
-        return {'status': 'ok'}
-
-    _purge_legacy_memories(uid)
+    service = MemoryService(db_client=getattr(db_client_module, 'db', None))
+    if scope == 'default':
+        service.delete_default(uid)
+    else:
+        service.delete_all(uid)
     return {'status': 'ok'}
 
 
@@ -1062,13 +775,9 @@ def review_memory(
         cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
     ),
 ):
-    db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).review(uid, memory_id, value)
-        return {'status': 'ok'}
-    _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.review_memory(uid, memory_id, value)
+    service = MemoryService(db_client=getattr(db_client_module, 'db', None))
+    _validate_mutable_memory(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
+    service.review(uid, memory_id, value)
     return {'status': 'ok'}
 
 
@@ -1090,26 +799,11 @@ def edit_memory(
         raise HTTPException(status_code=422, detail="Missing memory mutation value")
 
     db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
-        return {'status': 'ok'}
-
-    memory = _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.edit_memory(uid, memory_id, mutation_value)
-    # Re-embed so semantic search reflects the new content. Without this the Pinecone
-    # vector keeps matching the OLD text — a silent staleness bug that breaks the
-    # "constantly updated brain" (search would still surface the pre-edit fact).
+    _validate_mutable_memory(uid, memory_id, db_client=db_client)
     try:
-        upsert_memory_vector(
-            uid,
-            memory_id,
-            mutation_value,
-            memory.get('category', 'system'),
-            subject_entity_id=memory.get('subject_entity_id'),
-        )
-    except Exception:
-        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
+        MemoryService(db_client=db_client).update_content(uid, memory_id, mutation_value)
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
     return {'status': 'ok'}
 
 
@@ -1132,14 +826,36 @@ def update_memory_visibility(
     if mutation_value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        _validate_mutable_memory(uid, memory_id, db_client=db_client)
-        MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
-        submit_with_context(postprocess_executor, update_personas_async, uid)
-        return {'status': 'ok'}
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.change_memory_visibility(uid, memory_id, mutation_value)
+    MemoryService(db_client=db_client).update_visibility(uid, memory_id, mutation_value)
+    submit_with_context(postprocess_executor, update_personas_async, uid)
     return {'status': 'ok'}
+
+
+@router.patch('/v3/memories/{memory_id}/read', tags=['memories'], response_model=MemoryDB)
+def update_memory_read_status(
+    memory_id: str,
+    request: MemoryReadStatusRequest,
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "memories:modify"))
+    ),
+):
+    """Persist durable insight/memory read and dismiss state for desktop clients."""
+
+    if request.is_read is None and request.is_dismissed is None:
+        raise HTTPException(status_code=422, detail="Missing memory read mutation value")
+    db_client = getattr(db_client_module, 'db', None)
+    _validate_mutable_memory(uid, memory_id, db_client=db_client)
+    try:
+        memory = MemoryService(db_client=db_client).update_read_status(
+            uid,
+            memory_id,
+            is_read=request.is_read,
+            is_dismissed=request.is_dismissed,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail='Memory not found')
+    return _memory_response(memory)
 
 
 @router.patch('/v3/memories/{memory_id}/baseline', tags=['memories'], response_model=MemoryMutationResponse)
@@ -1148,17 +864,9 @@ def update_memory_baseline(
     value: bool,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
-    """Toggle the baseline flag for a memory.
+    """Preserve the released baseline flag through universal memory authority."""
 
-    Baseline memories are always injected first into the AI context window.
-    Not supported for canonical-path users: MemoryItem has no is_baseline field,
-    so writing to the legacy store would silently have no effect for canonical readers.
-    Canonical users receive 503 explicitly rather than a silent wrong-store write.
-    """
     db_client = getattr(db_client_module, 'db', None)
-    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
-        raise HTTPException(status_code=503, detail='Service temporarily unavailable')
     _validate_mutable_memory(uid, memory_id, db_client=db_client)
-    memories_db.update_memory_fields(uid, memory_id, {'is_baseline': value})
-    submit_with_context(postprocess_executor, update_personas_async, uid)
+    MemoryService(db_client=db_client).update_baseline(uid, memory_id, value)
     return {'status': 'ok'}

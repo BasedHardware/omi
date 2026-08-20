@@ -76,6 +76,18 @@ class CaptureLinkSpec(_StrictModel):
     summary: str = Field(min_length=1, max_length=200)
 
 
+class ConversationLinkActionItemSpec(_StrictModel):
+    description: str = Field(min_length=1, max_length=300)
+    task_id: StableId | None = None
+
+
+class ConversationLinkSpec(_StrictModel):
+    type: Literal['conversationLink']
+    conversation_id: StableId
+    summary: str = Field(min_length=1, max_length=200)
+    recommended_action_items: list[ConversationLinkActionItemSpec] = Field(default_factory=list, max_length=8)
+
+
 class MemoryLinkSpec(_StrictModel):
     type: Literal['memoryLink']
     memory_id: StableId
@@ -83,6 +95,11 @@ class MemoryLinkSpec(_StrictModel):
 
 
 ChatFirstBlockSpec = Annotated[
+    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, ConversationLinkSpec, MemoryLinkSpec],
+    Field(discriminator='type'),
+]
+
+LegacyChatFirstBlockSpec = Annotated[
     Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, MemoryLinkSpec],
     Field(discriminator='type'),
 ]
@@ -219,6 +236,25 @@ class MaterializePromptsResponse(_StrictModel):
     intents: list[ProactiveIntent] = Field(default_factory=list)
 
 
+class LegacyProactiveIntent(_StrictModel):
+    intent_id: StableId
+    continuity_key: StableId
+    account_generation: int = Field(ge=0)
+    source: ProactiveIntentSource
+    subject: ChatFirstSubject | None = None
+    blocks: list[LegacyChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+    delivery_state: ProactiveIntentDeliveryState = 'ready'
+    created_at: datetime
+    delivered_at: datetime | None = None
+    materialization_receipt_id: StableId | None = None
+    cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
+    cold_start_sequence_terminal_receipt_id: StableId | None = None
+
+
+class LegacyMaterializePromptsResponse(_StrictModel):
+    intents: list[LegacyProactiveIntent] = Field(default_factory=list)
+
+
 class DeferralCreateRequest(_StrictModel):
     """The idempotent server receiver for the kernel-owned deferral outbox."""
 
@@ -268,6 +304,7 @@ def stable_block_id(*, uid: str, generation: int, block: ChatFirstBlockSpec) -> 
 
 __all__ = [
     'CaptureLinkSpec',
+    'ConversationLinkSpec',
     'ChatFirstBlockSpec',
     'ChatFirstBlockValidationReceipt',
     'ChatFirstBlockValidationRequest',

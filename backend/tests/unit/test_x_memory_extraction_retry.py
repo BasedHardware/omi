@@ -10,8 +10,8 @@ from fastapi import HTTPException
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from models.memories import Memory, MemoryCategory
+from models.memory_contracts import MemoryExtractionError
 from utils import x_connector
-from utils.memory.memory_system import MemorySystem
 
 
 async def _inline_run_blocking(_executor, func, *args, **kwargs):
@@ -70,7 +70,6 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
     memory = Memory(content='User prefers tea', category=MemoryCategory.interesting)
 
     monkeypatch.setattr(x_connector, 'extract_memories_from_text', lambda *args: [memory])
-    monkeypatch.setattr(x_connector, 'resolve_memory_system', lambda *args, **kwargs: MemorySystem.CANONICAL)
     monkeypatch.setattr(
         x_connector.x_posts_db,
         'mark_memory_extraction_completed',
@@ -81,7 +80,7 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
         def __init__(self, **_kwargs):
             pass
 
-        def write(self, *_args, **_kwargs):
+        def create_external_memory_batch(self, *_args, **_kwargs):
             raise HTTPException(status_code=503, detail='canonical write unavailable')
 
     monkeypatch.setattr(x_connector, 'MemoryService', FailingMemoryService)
@@ -94,6 +93,106 @@ def test_pending_x_source_is_acknowledged_only_after_memory_writes_succeed(monke
     monkeypatch.setattr(x_connector, 'extract_memories_from_text', lambda *args: [])
     assert x_connector._extract_and_index('uid-1', [post]) == 0
     assert acknowledgements == [('uid-1', ['post-1'])]
+
+
+def test_scheduled_flex_extraction_is_strict_and_fenced_before_acknowledgement(monkeypatch):
+    post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    model = object()
+    events = []
+
+    def extract(*_args, **kwargs):
+        events.append(('extract', kwargs))
+        return []
+
+    monkeypatch.setattr(x_connector, 'extract_memories_from_text', extract)
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda _uid, _post_ids: events.append(('ack', None)),
+    )
+
+    assert (
+        x_connector._extract_and_index(
+            'uid-1',
+            [post],
+            llm=model,
+            result_guard=lambda: events.append(('guard', None)),
+        )
+        == 0
+    )
+    assert events == [
+        ('extract', {'strict': True, 'llm': model}),
+        ('guard', None),
+        ('ack', None),
+    ]
+
+
+def test_scheduled_x_flex_deferral_remains_pending_without_acknowledgement(monkeypatch):
+    from utils.memory.promotion_flex import PromotionFlexDeferred
+
+    post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    acknowledgements = []
+    monkeypatch.setattr(
+        x_connector,
+        'extract_memories_from_text',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(PromotionFlexDeferred('capacity')),
+    )
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda uid, post_ids: acknowledgements.append((uid, post_ids)),
+    )
+
+    with pytest.raises(PromotionFlexDeferred, match='capacity'):
+        x_connector._extract_and_index('uid-1', [post], llm=object())
+
+    assert acknowledgements == []
+
+
+def test_provider_5xx_skips_only_the_failed_chunk_and_leaves_it_pending(monkeypatch):
+    """A strict provider 5xx on one chunk cannot starve the batches behind it in the same cycle, and the failed chunk stays pending for the next sync."""
+    first_post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    second_post = {'id': 'post-2', 'text': 'Second batch', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+
+    calls = []
+    acknowledgements = []
+    created_batches = []
+    recorded = []
+
+    def extract(*_args, **_kwargs):
+        chunk_text = _args[1]
+        calls.append(chunk_text)
+        if 'I prefer tea' in chunk_text:
+            raise MemoryExtractionError('external_text_memory_extractor')
+        return [Memory(content='Second batch memory', category=MemoryCategory.interesting)]
+
+    class RecordingMemoryService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create_external_memory_batch(self, _uid, memory_dbs, **_kwargs):
+            created_batches.append(memory_dbs)
+
+    monkeypatch.setattr(x_connector, 'MEMORY_BATCH_CHARS', 10)
+    monkeypatch.setattr(x_connector, 'extract_memories_from_text', extract)
+    monkeypatch.setattr(x_connector, 'MemoryService', RecordingMemoryService)
+    monkeypatch.setattr(x_connector, 'capture_memory_write', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda _uid, post_ids: acknowledgements.append(post_ids),
+    )
+    monkeypatch.setattr(x_connector, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
+
+    total = x_connector._extract_and_index('uid-1', [first_post, second_post], llm=object())
+
+    assert total == 1
+    assert len(calls) == 2, 'a 5xx chunk must not starve the batches behind it in the same cycle'
+    assert acknowledgements == [['post-2']], 'the failed chunk stays pending for the next sync'
+    assert len(created_batches) == 1 and len(created_batches[0]) == 1
+    assert recorded and recorded[0]['reason'] == 'provider_5xx'
+    assert recorded[0]['to_mode'] == 'chunk_deferred'
+    assert recorded[0]['outcome'] == 'degraded'
 
 
 async def _async_value(value):

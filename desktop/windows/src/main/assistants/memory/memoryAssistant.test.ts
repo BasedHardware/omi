@@ -9,7 +9,7 @@ import type { MemoryToPersist } from './persist'
 const h = vi.hoisted(() => ({
   settings: {
     memoryEnabled: true,
-    memoryExtractionIntervalMin: 10,
+    memoryExtractionIntervalMin: 30,
     memoryMinConfidence: 0.7,
     memoryExcludedApps: [] as string[]
   },
@@ -71,7 +71,7 @@ function result(over: Partial<MemoryExtractionResult> = {}): MemoryExtractionRes
 
 beforeEach(() => {
   h.settings.memoryEnabled = true
-  h.settings.memoryExtractionIntervalMin = 10
+  h.settings.memoryExtractionIntervalMin = 30
   h.settings.memoryMinConfidence = 0.7
   h.settings.memoryExcludedApps = []
   vi.clearAllMocks()
@@ -106,10 +106,10 @@ describe('isEnabled — gated solely by memoryEnabled', () => {
 })
 
 describe('shouldAnalyze — the fixed extraction interval', () => {
-  it('runs only once the interval has elapsed (10 min default → 600000 ms)', () => {
+  it('runs only once the interval has elapsed (30 min default → 1800000 ms)', () => {
     const a = new MemoryAssistant()
-    expect(a.shouldAnalyze(0, 599_999)).toBe(false)
-    expect(a.shouldAnalyze(0, 600_000)).toBe(true)
+    expect(a.shouldAnalyze(0, 1_799_999)).toBe(false)
+    expect(a.shouldAnalyze(0, 1_800_000)).toBe(true)
   })
 
   it('honours a custom interval from settings', () => {

@@ -30,15 +30,39 @@ overlay:
         OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
           value: '1.0'
           category: rollout
-        MEMORY_MODE:
-          value: 'off'
-        MEMORY_ENABLED_USERS:
-          value: ''
-        MEMORY_V3_GET_ENABLED:
-          value: 'false'
+        MEMORY_ENABLED:
+          value: 'on'
+        CONVERSATION_NOTES_V2_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+          value: 'true'
+          category: rollout
+        CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'true'
+          category: rollout
     pusher:
       values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
       env:
+        OMI_LLM_GATEWAY_URL:
+          value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
+          category: service_discovery
+        OMI_ENV_STAGE:
+          value: dev
+          category: runtime_identity
+        OMI_LLM_GATEWAY_FEATURE_MODE:
+          value: gateway
+          category: rollout
+        OMI_LLM_CHAT_AGENT_ROUTE:
+          value: gateway
+          category: rollout
+        OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
+          value: 'false'
+          category: rollout
+        OMI_LLM_GATEWAY_SERVICE_TOKEN:
+          secret:
+            name: dev-omi-backend-secrets
+            key: OMI_LLM_GATEWAY_SERVICE_TOKEN
         GITHUB_TOKEN:
           secret:
             name: dev-omi-backend-secrets
@@ -88,7 +112,7 @@ overlay:
           value: parakeet,modulate-velma-2
           category: stt_policy
         STT_SERVICE_MODELS:
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: dg-nova-3,modulate-velma-2,parakeet
           category: stt_policy
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
@@ -166,7 +190,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: dg-nova-3,modulate-velma-2,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -215,6 +239,15 @@ overlay:
           HOSTED_PUSHER_API_URL:
             value: http://pusher.omiapi.com
             category: service_discovery
+          CONVERSATION_NOTES_V2_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -233,15 +266,11 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
           # `/v3/memories` and the canonical graph use signed cursors even for
-          # the initial page, so an enrolled user must fail closed until this
-          # versioned binding is present.
+          # the initial page, so cursor reads fail closed until this versioned
+          # binding is present.
           MEMORY_V3_CURSOR_SECRET_VERSION:
             value: dev-v1
             category: memory_rollout
@@ -294,12 +323,8 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -348,12 +373,8 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -402,12 +423,8 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
         forbidden_env:
         - HOSTED_PUSHER_API_URL
         secrets:
@@ -419,7 +436,11 @@ overlay:
             version: latest
     jobs:
       notifications-job:
+        flags:
+          --task-timeout: 3600s
         env:
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           PINECONE_INDEX_NAME:
@@ -434,16 +455,16 @@ overlay:
         env:
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
+            value: 'true'
+          MEMORY_CANONICAL_MAINTENANCE_FLEX:
+            value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             value: 'false'
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
             value: '25'
           PINECONE_INDEX_NAME:

@@ -11,15 +11,17 @@ from fastapi.responses import JSONResponse
 from google.cloud import firestore
 from pydantic import BaseModel, StrictInt, StrictStr
 
-from database._client import get_firestore_client
+from database._client import get_customer_firestore_client
 from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
-from utils.subscription import is_trial_paywalled
+from utils.subscription import enforce_desktop_chat_quota
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
+# Leftover AI Studio Live token mint. Vertex Live is not wired here; this is
+# not the $1k/day Flash text bill. See backend/docs/vertex-pt-flash.md.
 _GEMINI_AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
 _OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 _GEMINI_LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
@@ -116,7 +118,7 @@ async def _post_json(
 
 
 def _record_session(uid: str, token: str, provider: str, model: str, expires_at: str) -> None:
-    get_firestore_client().collection("users").document(uid).collection("realtime_sessions").document(
+    get_customer_firestore_client().collection("users").document(uid).collection("realtime_sessions").document(
         hashlib.sha256(token.encode()).hexdigest()
     ).set(
         {
@@ -139,11 +141,7 @@ async def _persist_session(uid: str, token: str, provider: str, model: str, expi
 
 @router.post("/v2/realtime/session")
 async def mint_session(request: MintRequest, uid: str = Depends(get_current_user_uid)) -> JSONResponse:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
-        return JSONResponse(
-            status_code=402,
-            content={"error": "trial_expired", "message": "Desktop trial expired. Upgrade or bring your own keys."},
-        )
+    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop")
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
@@ -218,7 +216,7 @@ def _record_usage(
         )
     updates["desktop_chat.quota_questions"] = firestore.Increment(1)
     updates[f"{account}.quota_questions"] = firestore.Increment(1)
-    get_firestore_client().collection("users").document(uid).collection("llm_usage").document(date).set(
+    get_customer_firestore_client().collection("users").document(uid).collection("llm_usage").document(date).set(
         updates, merge=True
     )
 
@@ -245,11 +243,7 @@ def _usage_cost(report: UsageReport) -> float:
 
 @router.post("/v2/realtime/usage", status_code=204)
 async def report_usage(report: UsageReport, uid: str = Depends(get_current_user_uid)) -> Response:
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop"):
-        return JSONResponse(
-            status_code=402,
-            content={"error": "trial_expired", "message": "Desktop trial expired. Upgrade or bring your own keys."},
-        )
+    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop")
     input_tokens = max(report.input_text_tokens, 0) + max(report.input_audio_tokens, 0)
     output_tokens = max(report.output_text_tokens, 0) + max(report.output_audio_tokens, 0)
     cached_tokens = max(report.input_cached_tokens, 0)

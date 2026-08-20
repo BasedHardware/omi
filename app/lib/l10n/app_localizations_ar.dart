@@ -321,7 +321,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get searchApps => 'البحث عن التطبيقات...';
 
   @override
-  String get myApps => 'تطبيقاتي';
+  String get myApps => 'من إنشائي';
 
   @override
   String get installedApps => 'التطبيقات المثبتة';
@@ -9782,4 +9782,17 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
+  String get sendRawAudioToOmi => 'إرسال الصوت الخام إلى Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'أوقف هذا الخيار لمنع إرسال الصوت الخام إلى Omi. قد يستمر إرسال النصوص والبيانات اللازمة للميزات السحابية إلى Omi.';
+
+  @override
+  String get findDevice => 'العثور';
+
+  @override
+  String get diagnosticsShareFailed => 'تعذّرت مشاركة التشخيص. يُرجى المحاولة مرة أخرى.';
 }

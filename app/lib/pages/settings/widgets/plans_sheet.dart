@@ -376,6 +376,9 @@ class _PlansSheetState extends State<PlansSheet> {
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
+    if (currentSub?.cancelAtPeriodEnd == true && priceId != currentSub?.currentPriceId) {
+      return;
+    }
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.wireName; // backend plan_id, e.g. 'plus', 'unlimited_v2'
@@ -1166,18 +1169,24 @@ class _PlansSheetState extends State<PlansSheet> {
                         _buildPromoCodeField(),
                         const SizedBox(height: 16),
 
-                        // Continue/Keep Unlimited button - only show for non-annual unlimited users
+                        // Continue/Upgrade — hidden for same-tier annual (nothing to
+                        // change) and for desktop-plan → mobile-tier switches.
                         Builder(
                           builder: (context) {
                             final currentPlan = _getCurrentPlanDetails();
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
-                                !hasScheduledUpgrade &&
-                                !isCancelled &&
-                                !usageProvider.isLoadingPlans &&
-                                usageProvider.availablePlans != null;
+                            final currentSub = usageProvider.subscription?.subscription;
+                            final shouldShowContinueButton = shouldShowPlanContinueButton(
+                              isOnAnnualPlan: isOnAnnualPlan,
+                              hasScheduledUpgrade: hasScheduledUpgrade,
+                              isCancelled: isCancelled,
+                              plansLoaded: !usageProvider.isLoadingPlans && usageProvider.availablePlans != null,
+                              selectedTierId: selectedTierId,
+                              currentTierId: currentSub?.plan.wireName,
+                              currentGrantsDesktop: currentSub?.plan.grantsDesktop ?? false,
+                            );
 
                             if (!shouldShowContinueButton) {
                               return const SizedBox.shrink();
@@ -1369,7 +1378,7 @@ class _PlansSheetState extends State<PlansSheet> {
                           },
                         ),
                         const SizedBox(height: 16),
-                        if (isUnlimited == true && !isCancelled) ...[
+                        if (isUnlimited == true || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
                           SizedBox(
                             width: double.infinity,
                             height: 50,
@@ -1388,6 +1397,12 @@ class _PlansSheetState extends State<PlansSheet> {
                                       ),
                                     ),
                                   );
+                                  // The user may have paid an overdue invoice or
+                                  // recovered a canceled plan inside the portal, so
+                                  // refresh subscription state on return instead of
+                                  // leaving the UI showing Free until a manual reload.
+                                  await provider.fetchSubscription();
+                                  await provider.loadAvailablePlans();
                                 } else {
                                   AppSnackbar.showSnackbarError(l10n.couldNotOpenPaymentSettings);
                                 }
@@ -1402,15 +1417,17 @@ class _PlansSheetState extends State<PlansSheet> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () {
-                              _handleCancelSubscription();
-                            },
-                            child: Text(
-                              context.l10n.cancelSubscription,
-                              style: const TextStyle(color: Colors.red, fontSize: 16),
+                          if (isUnlimited == true && !isCancelled) ...[
+                            TextButton(
+                              onPressed: () {
+                                _handleCancelSubscription();
+                              },
+                              child: Text(
+                                context.l10n.cancelSubscription,
+                                style: const TextStyle(color: Colors.red, fontSize: 16),
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(height: 8),
                         ],
                       ],

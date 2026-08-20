@@ -35,6 +35,10 @@ class CreatePerson(BaseModel):
     name: str = Field(min_length=2, max_length=40)
 
 
+# Person photo deferred pending product input on storage: no photo/avatar/image
+# field today; GCS people_profiles/ is speech-sample audio only; the app uses
+# local speaker icons; unlike app/persona logos there is no person-photo URL or
+# upload pattern to mirror. Do not invent an optional photo string yet.
 class Person(BaseModel):
     id: str
     name: str

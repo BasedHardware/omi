@@ -16,6 +16,9 @@ os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
+# Product tests exercise the normal universal write-enabled deployment. Tests
+# for the global incident fence override this explicitly to ``off``/``shadow``.
+os.environ.setdefault('MEMORY_MODE', 'read')
 
 # Some unit tests exercise canonical-memory LLM call paths. Provide a fake key
 # so client construction remains hermetic when those tests invoke it.
@@ -100,10 +103,12 @@ def pytest_runtest_logreport(report):
 def pytest_runtest_call(item):
     """Measure per-test CPU time (call phase only) for the duration guard.
 
-    CPU time (``time.process_time``) is load-independent: a test that does X ms of work
-    reads ~X ms whether the machine is idle or running many sibling pytest processes, so a
-    hard limit is deterministic (unlike wall-clock ``report.duration``, which inflates under
-    parallel contention). Only the *call* phase is measured so that shared class/file setup
+    CPU time (``time.process_time``) is far less load-sensitive than wall-clock
+    ``report.duration``, but it is not load-independent: contention stall cycles are charged
+    to the process, so identical work reads ~2x higher CPU when the file-isolated runner
+    saturates the machine. The blocking budget therefore has to keep headroom over the warn
+    target (see ``test.sh``) rather than sit just above it. Only the *call* phase is measured
+    so that shared class/file setup
     (FastAPI app / TestClient construction, per-process module import) — which file-isolated
     runs charge once to the first test — is not misattributed as a per-test regression. The
     advisory timing summary still reports wall-clock for visibility.
@@ -176,10 +181,12 @@ def _enforce_fast_unit_duration_guard(session):
         session.exitstatus = 1
         return
 
-    # The guard measures per-test CPU time (``_test_item_cpu``), not wall-clock. CPU time is
-    # load-independent: a test that does X ms of work reads ~X ms whether the machine is idle or
-    # running many sibling pytest processes, whereas wall-clock ``report.duration`` inflates
-    # unpredictably under parallel contention and makes a hard limit flake. Sleep/wait-based
+    # The guard measures per-test CPU time (``_test_item_cpu``), not wall-clock, because
+    # wall-clock inflates unpredictably under parallel contention. CPU time is the better
+    # signal but not an immune one: it still inflated ~2x on a saturated host, so the budget
+    # relies on headroom rather than on the measurement being exact. A calibration probe
+    # cannot correct for this -- a cache-resident CPU loop does not inflate at all, so the
+    # inflation is memory-bound and workload-specific. Sleep/wait-based
     # slowness (real asyncio sleeps, network, stress) is excluded from the PR unit lane via
     # ``slow``/``integration`` markers, so CPU time is the right signal here. The advisory
     # timing summary in pytest_terminal_summary still reports wall-clock for visibility.

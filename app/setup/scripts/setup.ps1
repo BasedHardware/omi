@@ -3,7 +3,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.41.9)
+# - Flutter SDK (v3.44.5)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -25,7 +25,7 @@ Write-Host "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Joi
 Write-Host "Prerequisites (stable versions, use these or higher):"
 Write-Host ""
 Write-Host "Common for all developers:"
-Write-Host "- Flutter SDK (v3.41.9)"
+Write-Host "- Flutter SDK (v3.44.5)"
 Write-Host "- Opus Codec: https://opus-codec.org"
 Write-Host ""
 Write-Host "For iOS Developers:"
@@ -46,14 +46,14 @@ function SetupFirebase {
     New-Item -ItemType Directory -Force -Path "android/app/src/dev/", "ios/Config/Dev/", "ios/Runner/"
     
     # Copy files
-    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_dev.dart"
+    Copy-Item "lib/firebase_options_local.dart" -Destination "lib/firebase_options_dev.dart"
     Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/dev/google-services.json"
     Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Dev/GoogleService-Info.plist"
     Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Runner/GoogleService-Info.plist"
 
     # Mocking setup
     New-Item -ItemType Directory -Force -Path "android/app/src/prod/", "ios/Config/Prod/"
-    Copy-Item "setup/prebuilt/firebase_options_local.dart" -Destination "lib/firebase_options_prod.dart"
+    Copy-Item "lib/firebase_options_local.dart" -Destination "lib/firebase_options_prod.dart"
     Copy-Item "setup/prebuilt/google-services-local.json" -Destination "android/app/src/prod/google-services.json"
     Copy-Item "setup/prebuilt/GoogleService-Info-Local.plist" -Destination "ios/Config/Prod/GoogleService-Info.plist"
 }

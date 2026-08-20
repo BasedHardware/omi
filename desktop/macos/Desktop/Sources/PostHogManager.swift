@@ -501,10 +501,9 @@ extension PostHogManager {
   // but it actually tracks when a conversation/recording is created, not a "memory".
   // This matches Flutter's naming for analytics consistency.
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(conversationId _: String, source: String, durationSeconds: Int? = nil) {
     var properties: [String: Any] = [
-      "conversation_id": conversationId,
-      "source": source,
+      "source": source
     ]
     if let duration = durationSeconds {
       properties["duration_seconds"] = duration
@@ -621,6 +620,17 @@ extension PostHogManager {
       properties: [
         "conversation_id": conversationId,
         "app_id": appId,
+      ])
+  }
+
+  /// Reprocess fired without a specific app (one-tap row affordance for
+  /// untitled/failed conversations). Separate event so we can distinguish
+  /// from the existing "reprocess-with-app" funnel in product metrics.
+  func conversationReprocessedDefault(conversationId: String) {
+    track(
+      "Conversation Reprocessed Default",
+      properties: [
+        "conversation_id": conversationId
       ])
   }
 
@@ -840,14 +850,16 @@ extension PostHogManager {
   func suggestionAssistantEvaluationFailed(
     identity: SuggestionAssistantTelemetry.Identity,
     shape: SuggestionAssistantTelemetry.EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
   ) {
     track(
       SuggestionAssistantTelemetry.evaluationFailedEventName,
       properties: SuggestionAssistantTelemetry.evaluationFailedPayload(
         identity: identity,
         shape: shape,
-        latency: latency
+        latency: latency,
+        reason: reason
       )
     )
   }
@@ -862,10 +874,29 @@ extension PostHogManager {
     )
   }
 
-  func insightGenerated(category: String?) {
+  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
     var properties: [String: Any] = [:]
-    if let cat = category { properties["category"] = cat }
+    if let cat = InsightAssistantTelemetry.boundedCategory(category) { properties["category"] = cat }
+    if let deliveryID { properties["delivery_id"] = deliveryID.uuidString }
     track("Advice Generated", properties: properties.isEmpty ? nil : properties)
+  }
+
+  func insightAssistantDeliveryOutcome(
+    _ outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    deliveryID: UUID,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
+    track(
+      InsightAssistantTelemetry.deliveryOutcomeEventName,
+      properties: InsightAssistantTelemetry.deliveryOutcomePayload(
+        outcome,
+        reason: reason,
+        identity: identity,
+        surface: surface
+      )
+    )
   }
 
   // MARK: - Apps Events
@@ -996,6 +1027,7 @@ extension PostHogManager {
     title: String,
     assistantId: String,
     surface: String,
+    dismissalKind: NotificationDismissalKind,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     var properties = notificationProperties(
@@ -1004,6 +1036,7 @@ extension PostHogManager {
       assistantId: assistantId,
       surface: surface
     )
+    properties["dismissal_kind"] = dismissalKind.rawValue
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",

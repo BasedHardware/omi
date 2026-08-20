@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-rollout-flag-absent-from-a-cohost-of-its-code-path",
+  "violated_contract": "A rollout flag must be declared on every deployed service that executes the code path it gates, or enabling it produces two different behaviours for the same user action. process_conversation runs in two services: backend-listen finalizes a live conversation, and the Cloud Run backend runs it inline for POST /v1/conversations/{id}/reprocess. The CONVERSATION_NOTES_V2_ENABLED, CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED, and CONVERSATION_OCR_CONTEXT_ENABLED flags were declared only on backend-listen, so os.getenv fell through to the False default on the reprocess host. Turning the rollout on would have produced a v2 note when a meeting ended and a legacy note when the user pressed regenerate on that same conversation \u2014 a discrepancy that reads as model nondeterminism, not as missing configuration, because both paths return a well-formed summary.",
+  "canonical_prevention": "Enumerate the services that host a gated code path and assert the flag resolves identically across all of them in the composed runtime manifest, in every environment, rather than asserting a value per service. test_conversation_notes_v2_beta_rollout pins the per-environment values, asserts that backend-listen and the Cloud Run backend can never disagree on any of the three flags, and checks the deployed Helm values file against the composed manifest, since Helm reads the values file rather than runtime_env.yaml. The deploy validator's Cloud Run state fixtures carry the flags too, so a deploy that omits them on the reprocess host fails validation instead of shipping.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversation_notes_v2_beta_rollout.py"
+  ],
+  "evidence_prs": [
+    11834,
+    11865
+  ],
+  "scope_hints": [
+    "backend/deploy/**",
+    "backend/charts/**"
+  ],
+  "status": "open"
+}

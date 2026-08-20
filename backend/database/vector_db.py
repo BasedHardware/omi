@@ -70,7 +70,7 @@ class VectorRecordDoc(TypedDict):
 
     All three keys are always populated by every upsert site in this module,
     so the contract is total=True. ``metadata`` stays ``Dict[str, Any]`` so
-    canonical-cohort projection keys (added by ``build_memory_vector_metadata``)
+    canonical memory projection keys (added by ``build_memory_vector_metadata``)
     remain representable without enumerating every metadata field.
     """
 
@@ -165,6 +165,7 @@ def query_vectors(
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
     k: int = 5,
+    query_vector: Optional[List[float]] = None,
 ) -> List[str]:
     if index is None:
         return []
@@ -177,7 +178,7 @@ def query_vectors(
     if created_at is not None:
         filter_data['created_at'] = created_at
 
-    xq = embeddings.embed_query(query)
+    xq = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
     matches: List[Any] = xc['matches']
     return [item['id'].replace(f'{uid}-', '') for item in matches]
@@ -557,7 +558,7 @@ def upsert_canonical_memory_vector(
     *,
     projection_commit_id: str | None = None,
 ) -> List[float] | None:
-    """Upsert one canonical-cohort memory vector using a user-scoped provider id."""
+    """Upsert one canonical memory vector using a user-scoped provider id."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector upsert')
         return None
@@ -788,11 +789,13 @@ def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
         if not embedding:
             continue
         ts_value: Any = row['timestamp']
-        timestamp = (
-            int(datetime.fromisoformat(ts_value.replace('Z', '+00:00')).timestamp())
-            if isinstance(ts_value, str)
-            else int(ts_value)
-        )
+        if isinstance(ts_value, str):
+            parsed_timestamp = datetime.fromisoformat(ts_value.replace('Z', '+00:00'))
+            if parsed_timestamp.tzinfo is None:
+                parsed_timestamp = parsed_timestamp.replace(tzinfo=timezone.utc)
+            timestamp = int(parsed_timestamp.timestamp())
+        else:
+            timestamp = int(ts_value)
         metadata = {
             "uid": uid,
             "screenshot_id": str(row.get("storageId") or row['id']),
@@ -1038,7 +1041,9 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> No
     if not action_item_ids:
         return
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
-    index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
@@ -1160,16 +1165,22 @@ def search_transcript_chunks(
     limit: int = 20,
     starts_at: Optional[int] = None,
     ends_at: Optional[int] = None,
+    query_vector: Optional[List[float]] = None,
 ) -> List[Dict[str, Any]]:
     """Semantic search over transcript chunks. Returns chunk references
     [{conversation_id, chunk_index, created_at, score}] — hydrate text from
     Firestore (utils.conversations.transcript_chunks.hydrate_chunk_texts)."""
     if index is None:
         return []
-    vector = embeddings.embed_query(query)
     filter_data: Dict[str, Any] = {'uid': uid}
-    if starts_at is not None and ends_at is not None:
-        filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
+    # Same one-sided / invalid-range rules as summary vector search (_created_at_filter).
+    created_at = _created_at_filter(starts_at, ends_at)
+    if (starts_at is not None or ends_at is not None) and created_at is None:
+        logger.warning('Skipping transcript chunk search with invalid date filter')
+        return []
+    if created_at is not None:
+        filter_data['created_at'] = created_at
+    vector = query_vector if query_vector is not None else embeddings.embed_query(query)
     xc = index.query(
         vector=vector,
         top_k=limit,

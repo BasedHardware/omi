@@ -5,8 +5,8 @@ import SwiftUI
 
 // MARK: - Memory Graph Page
 
-/// One explicit compatibility boundary: canonical-memory users get the atlas,
-/// while the established graph remains available until a user is migrated.
+/// One explicit compatibility boundary: the assertion-backed graph gets the atlas,
+/// while the established graph remains a read-only historical projection.
 enum MemoryGraphPresentationMode: Equatable {
   case canonicalAtlas
   case legacyBrainMap
@@ -166,6 +166,10 @@ class MemoryGraphViewModel: ObservableObject {
   /// canonical graph revision. The SwiftUI Brain Map can re-render freely
   /// without rebuilding the relationship layout or losing its gesture cache.
   @Published private(set) var canonicalAtlasProjection: MemoryAtlasProjection?
+  /// False until a canonical fetch has returned, so the tab can show a loader
+  /// instead of a synthetic owner or a fake empty map. Failures stay in
+  /// loading and retry instead of counting as "attempted."
+  @Published private(set) var hasAttemptedCanonicalAtlasLoad = false
 
   let scene = SCNScene()
   let cameraNode = SCNNode()
@@ -294,6 +298,7 @@ class MemoryGraphViewModel: ObservableObject {
       graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
       canonicalAtlasProjection = nil
       isEmpty = true
+      isLoading = true
     }
     guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       log("Memory atlas: canonical load skipped while owner authorization is unavailable")
@@ -321,28 +326,48 @@ class MemoryGraphViewModel: ObservableObject {
       }
     }
 
-    do {
-      let response = try await canonicalGraphFetcher(authorizationSnapshot)
-      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+    var lastError: Error?
+    for attempt in 1...3 {
+      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot),
+        !Task.isCancelled
+      else { return }
+      do {
+        let response = try await canonicalGraphFetcher(authorizationSnapshot)
+        guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+          return
+        }
+        let hasContent = Self.hasAtlasContent(response)
+        var projection: MemoryAtlasProjection?
+        if hasContent {
+          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+          let ownerName = givenName.isEmpty ? displayName : givenName
+          projection = await Task.detached(priority: .userInitiated) {
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
+          }.value
+          guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+            return
+          }
+        }
+        canonicalAtlasProjection = projection
+        graphResponse = response
+        isEmpty = !hasContent
+        hasLoadedCanonicalAtlas = true
+        hasAttemptedCanonicalAtlasLoad = true
+        lastLoadedAt = Date()
+        log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
         return
-      }
-      let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-      let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-      let ownerName = givenName.isEmpty ? displayName : givenName
-      let projection = await Task.detached(priority: .userInitiated) {
-        MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
-      }.value
-      guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
+      } catch is CancellationError {
         return
+      } catch {
+        lastError = error
+        if attempt < 3 {
+          try? await Task.sleep(nanoseconds: 800_000_000)
+        }
       }
-      canonicalAtlasProjection = projection
-      graphResponse = response
-      isEmpty = !Self.hasAtlasContent(response)
-      hasLoadedCanonicalAtlas = true
-      lastLoadedAt = Date()
-      log("Memory atlas: \(response.atlasNodes.count) nodes, \(response.edges.count) edges")
-    } catch {
-      log("Failed to load memory atlas: \(error.localizedDescription)")
+    }
+    if let lastError {
+      log("Failed to load memory atlas: \(lastError.localizedDescription)")
     }
   }
 
@@ -717,6 +742,7 @@ class MemoryGraphViewModel: ObservableObject {
     isPreparing = false
     hasRunEmptyBootstrap = false
     hasLoadedCanonicalAtlas = false
+    hasAttemptedCanonicalAtlasLoad = false
     loadedGraphSignature = nil
     cameraNode.position = SCNVector3(0, 0, 2000)
   }

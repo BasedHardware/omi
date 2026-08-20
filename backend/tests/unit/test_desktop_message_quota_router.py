@@ -110,6 +110,7 @@ def test_desktop_human_message_records_quota_once_after_persistence_acceptance()
             app_id=None,
             session_id=None,
             metadata=None,
+            content_blocks=None,
             client_message_id='client-msg-1',
             message_source='desktop_chat',
             journal_revision=None,
@@ -161,6 +162,7 @@ def test_desktop_reconcile_response_preserves_canonical_identity_and_artifacts()
         assert payload['messages'][0]['client_message_id'] == 'turn-canonical'
         assert payload['messages'][0]['session_id'] == 'session-1'
         assert payload['messages'][0]['metadata'] == metadata
+        assert payload['messages'][0]['content_blocks'] == [{'type': 'agent_spawn'}]
         module.chat_db.get_messages_reconcile_page.assert_called_once_with(
             'test-uid',
             app_id=None,
@@ -168,6 +170,37 @@ def test_desktop_reconcile_response_preserves_canonical_identity_and_artifacts()
             limit=100,
             cursor_message_id=None,
         )
+    finally:
+        _cleanup(saved)
+
+
+def test_desktop_message_forwards_first_class_content_blocks():
+    client, module, saved = _make_client()
+    blocks = [{'type': 'conversationLink', 'summary': 'Weekly planning'}]
+    try:
+        response = client.post(
+            '/v2/desktop/messages',
+            json={
+                'text': 'Meeting notes ready - Weekly planning',
+                'sender': 'ai',
+                'content_blocks': blocks,
+            },
+        )
+
+        assert response.status_code == 200
+        module.chat_db.save_message.assert_called_once_with(
+            'test-uid',
+            text='Meeting notes ready - Weekly planning',
+            sender='ai',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            content_blocks=blocks,
+            client_message_id=None,
+            message_source='desktop_chat',
+            journal_revision=None,
+        )
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:
         _cleanup(saved)
 
@@ -205,6 +238,7 @@ def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
             app_id=None,
             session_id=None,
             metadata=None,
+            content_blocks=None,
             client_message_id='client-msg-1',
             message_source='desktop_chat',
             journal_revision=None,
@@ -268,6 +302,7 @@ def test_desktop_message_forwards_bounded_journal_revision():
             app_id=None,
             session_id='session-1',
             metadata=None,
+            content_blocks=None,
             client_message_id='turn-1',
             message_source='desktop_chat',
             journal_revision=12,
@@ -337,6 +372,7 @@ def test_realtime_voice_human_message_does_not_record_desktop_message_quota():
             app_id=None,
             session_id=None,
             metadata=None,
+            content_blocks=None,
             client_message_id='voice-msg-1',
             message_source='realtime_voice',
             journal_revision=None,

@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parents[1]
 CHECKER_PATH = SCRIPT_DIR / "check_release_eligibility.py"
@@ -52,6 +51,13 @@ class ReleaseIdentityTests(unittest.TestCase):
         with self.assertRaisesRegex(VERIFIER.ReleaseEligibilityError, "refs/heads/main"):
             VERIFIER.validate(self.identity(ref="refs/heads/release"))
 
+    def test_accepts_ci_evidence_ref_matching_the_release_sha(self) -> None:
+        VERIFIER.validate(self.identity(ref=f"refs/heads/ci-evidence/{SHA}"))
+
+    def test_rejects_ci_evidence_ref_that_does_not_match_the_release_sha(self) -> None:
+        with self.assertRaisesRegex(VERIFIER.ReleaseEligibilityError, "ci-evidence"):
+            VERIFIER.validate(self.identity(ref=f"refs/heads/ci-evidence/{BASE_SHA}"))
+
     def test_rejects_ambiguous_or_non_sha_release_identity(self) -> None:
         for value in ("main", "a" * 7, "A" * 40, "0" * 40):
             with self.subTest(value=value), self.assertRaisesRegex(VERIFIER.ReleaseEligibilityError, "release SHA"):
@@ -82,53 +88,74 @@ class WorkflowContractTests(unittest.TestCase):
     def test_non_main_push_trigger_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
-        workflow.write_text(workflow.read_text(encoding="utf-8").replace("branches: [main]", "branches: [development]"), encoding="utf-8")
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace("branches: [main]", "branches: [development]"),
+            encoding="utf-8",
+        )
         self.assertIn("release eligibility must trigger only on pushes to main", CHECKER.validate(root))
 
     def test_path_filter_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("branches: [main]", "branches: [main]\n    paths: ['backend/**']"),
+            workflow.read_text(encoding="utf-8").replace(
+                "branches: [main]", "branches: [main]\n    paths: ['backend/**']"
+            ),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility must not path-filter or otherwise narrow main pushes", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility must not path-filter or otherwise narrow main pushes", CHECKER.validate(root)
+        )
 
-    def test_manual_dispatch_is_rejected(self) -> None:
+    def test_missing_workflow_dispatch_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("on:\n", "on:\n  workflow_dispatch:\n", 1),
+            workflow.read_text(encoding="utf-8").replace("  workflow_dispatch:\n", "", 1),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility must declare only the automatic push trigger", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility must declare the automatic push trigger and workflow_dispatch",
+            CHECKER.validate(root),
+        )
 
     def test_quoted_extra_trigger_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("on:\n", "on:\n  'workflow_dispatch':\n", 1),
+            workflow.read_text(encoding="utf-8").replace("on:\n", "on:\n  'repository_dispatch':\n", 1),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility must declare only the automatic push trigger", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility must declare the automatic push trigger and workflow_dispatch",
+            CHECKER.validate(root),
+        )
 
     def test_conditional_result_job_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("    runs-on: ubuntu-latest", "    if: github.ref == 'refs/heads/main'\n    runs-on: ubuntu-latest"),
+            workflow.read_text(encoding="utf-8").replace(
+                "    runs-on: ubuntu-latest", "    if: github.ref == 'refs/heads/main'\n    runs-on: ubuntu-latest"
+            ),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility result job must not be conditionally skipped or tolerated", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility result job must not be conditionally skipped or tolerated", CHECKER.validate(root)
+        )
 
     def test_result_job_continue_on_error_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
         workflow.write_text(
-            workflow.read_text(encoding="utf-8").replace("    runs-on: ubuntu-latest", "    continue-on-error: true\n    runs-on: ubuntu-latest"),
+            workflow.read_text(encoding="utf-8").replace(
+                "    runs-on: ubuntu-latest", "    continue-on-error: true\n    runs-on: ubuntu-latest"
+            ),
             encoding="utf-8",
         )
-        self.assertIn("release eligibility result job must not be conditionally skipped or tolerated", CHECKER.validate(root))
+        self.assertIn(
+            "release eligibility result job must not be conditionally skipped or tolerated", CHECKER.validate(root)
+        )
 
     def test_action_invocation_cannot_be_skipped_or_tolerated(self) -> None:
         for field in ("if: github.ref == 'refs/heads/main'", "continue-on-error: true"):
@@ -159,14 +186,18 @@ class WorkflowContractTests(unittest.TestCase):
     def test_ambiguous_workflow_sha_is_rejected(self) -> None:
         root = self.fixture_root()
         workflow = root / ".github/workflows/release-eligibility.yml"
-        workflow.write_text(workflow.read_text(encoding="utf-8").replace("sha: ${{ github.sha }}", "sha: main"), encoding="utf-8")
+        workflow.write_text(
+            workflow.read_text(encoding="utf-8").replace("sha: ${{ github.sha }}", "sha: main"), encoding="utf-8"
+        )
         self.assertIn("release eligibility must pass sha as ${{ github.sha }}", CHECKER.validate(root))
 
     def test_missing_checkout_sha_binding_is_rejected(self) -> None:
         root = self.fixture_root()
         action = root / ".github/actions/release-eligibility/action.yml"
         action.write_text(
-            action.read_text(encoding="utf-8").replace("--checkout-sha \"$RELEASE_CHECKOUT_SHA\"", "--checkout-sha main"),
+            action.read_text(encoding="utf-8").replace(
+                "--checkout-sha \"$RELEASE_CHECKOUT_SHA\"", "--checkout-sha main"
+            ),
             encoding="utf-8",
         )
         self.assertIn("release identity validator must receive the checkout SHA", CHECKER.validate(root))
@@ -213,17 +244,49 @@ class WorkflowContractTests(unittest.TestCase):
                     self.assertIn(old, text)
                     uv_start = text.index(old)
                     preflight_start = text.index("    - name: Run canonical deterministic CI preflight")
-                    text = (
-                        text[:uv_start]
-                        + text[uv_start + len(old) : preflight_start]
-                        + text[preflight_start:]
-                        + old
-                    )
+                    text = text[:uv_start] + text[uv_start + len(old) : preflight_start] + text[preflight_start:] + old
                 else:
                     self.assertIn(old, text)
                     text = text.replace(old, new, 1)
                 action.write_text(text, encoding="utf-8")
                 self.assertIn(expected, CHECKER.validate(root))
+
+    def test_bun_setup_is_required_pinned_and_before_canonical_preflight(self) -> None:
+        setup = (
+            "    - name: Set up Bun for canonical checks\n"
+            "      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6\n\n"
+        )
+        cases = (
+            ("missing", setup, "", "release eligibility is missing its Bun setup step"),
+            (
+                "unpinned",
+                "uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
+                "uses: oven-sh/setup-bun@v2",
+                "release eligibility Bun setup step must use the pinned setup action",
+            ),
+            (
+                "conditional",
+                "    - name: Set up Bun for canonical checks\n      uses:",
+                "    - name: Set up Bun for canonical checks\n      if: github.ref == 'refs/heads/main'\n      uses:",
+                "release eligibility Bun setup step must not be conditionally skipped or tolerated",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                action = root / ".github/actions/release-eligibility/action.yml"
+                text = action.read_text(encoding="utf-8")
+                self.assertIn(old, text)
+                action.write_text(text.replace(old, new, 1), encoding="utf-8")
+                self.assertIn(expected, CHECKER.validate(root))
+
+        root = self.fixture_root()
+        action = root / ".github/actions/release-eligibility/action.yml"
+        text = action.read_text(encoding="utf-8")
+        self.assertIn(setup, text)
+        text = text.replace(setup, "", 1) + setup
+        action.write_text(text, encoding="utf-8")
+        self.assertIn("release eligibility must set up Bun before the canonical preflight", CHECKER.validate(root))
 
     def test_critical_action_steps_cannot_be_skipped_or_fail_open(self) -> None:
         cases = (

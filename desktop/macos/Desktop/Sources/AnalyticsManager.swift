@@ -2,6 +2,15 @@ import AppKit
 import Foundation
 import Sentry
 
+/// Closed reason a presented notification left the screen. Auto-hide and explicit
+/// close must not share a single "dismissed" bucket — that made engagement
+/// unreadable (expiry counted as a user dismiss).
+enum NotificationDismissalKind: String, CaseIterable, Sendable {
+  case user
+  case timeout
+  case replaced
+}
+
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
@@ -39,6 +48,12 @@ class AnalyticsManager {
   /// at the same production boundary as PostHog so tests can assert the real
   /// event payload without initializing analytics or exposing a mutable global.
   private var suggestionAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  private var insightAssistantTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Delivery callbacks can race (for example a floating-bar enqueue and a system-banner
+  /// completion). Keep one terminal outcome per opaque advice delivery ID at this boundary.
+  private var recordedInsightDeliveryIDSet: Set<UUID> = []
+  private var recordedInsightDeliveryIDOrder: [UUID] = []
+  private static let maxRecordedInsightDeliveryIDs = 512
 
   func setSuggestionAssistantTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
@@ -48,6 +63,22 @@ class AnalyticsManager {
 
   private func captureSuggestionAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
     suggestionAssistantTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Scoped observation of Advice delivery telemetry. Tests install a capture at the same
+  /// production boundary as PostHog; production leaves it nil.
+  func setInsightAssistantTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    if capture != nil {
+      recordedInsightDeliveryIDSet.removeAll()
+      recordedInsightDeliveryIDOrder.removeAll()
+    }
+    insightAssistantTelemetryCaptureForTests = capture
+  }
+
+  private func captureInsightAssistantTelemetryForTests(_ event: String, properties: [String: Any]) {
+    insightAssistantTelemetryCaptureForTests?(event, properties)
   }
 
   /// Test observer for integration-connect telemetry. Mirrors the
@@ -65,6 +96,21 @@ class AnalyticsManager {
 
   private func captureIntegrationConnectTelemetryForTests(_ event: String, properties: [String: Any]) {
     integrationConnectTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Integration-nudge seam: nil in production; tests install a scoped capture
+  /// to observe the real event names and payloads these methods emit.
+  private var integrationNudgeTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setIntegrationNudgeTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationNudgeTelemetryCaptureForTests = capture
+  }
+
+  private func trackIntegrationNudge(_ event: String, properties: [String: Any]) {
+    integrationNudgeTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
   }
 
   func setDevicePairingTelemetryCaptureForTests(
@@ -240,6 +286,41 @@ class AnalyticsManager {
       IntegrationConnectTelemetry.failedEventName, properties: payload)
     PostHogManager.shared.track(
       IntegrationConnectTelemetry.failedEventName, properties: payload)
+  }
+
+  // MARK: - Integration Nudge Events
+
+  func integrationNudgeShown(
+    entry: IntegrationNudgeCatalogEntry,
+    trigger: IntegrationNudgeTrigger,
+    shownCount: Int
+  ) {
+    trackIntegrationNudge(
+      IntegrationNudgeTelemetry.shownEventName,
+      properties: IntegrationNudgeTelemetry.shownPayload(
+        integrationName: entry.displayName,
+        route: entry.route,
+        triggerID: trigger.id,
+        triggerKind: trigger.kind,
+        shownCount: shownCount
+      )
+    )
+  }
+
+  func integrationNudgeActioned(
+    entry: IntegrationNudgeCatalogEntry,
+    action: IntegrationNudgeTelemetry.Action,
+    triggerID: String
+  ) {
+    trackIntegrationNudge(
+      IntegrationNudgeTelemetry.actionedEventName,
+      properties: IntegrationNudgeTelemetry.actionedPayload(
+        integrationName: entry.displayName,
+        route: entry.route,
+        action: action,
+        triggerID: triggerID
+      )
+    )
   }
 
   // MARK: - Monitoring Events
@@ -868,6 +949,10 @@ class AnalyticsManager {
     PostHogManager.shared.conversationReprocessed(conversationId: conversationId, appId: appId)
   }
 
+  func conversationReprocessedDefault(conversationId: String) {
+    PostHogManager.shared.conversationReprocessedDefault(conversationId: conversationId)
+  }
+
   // MARK: - Settings Events (Additional)
 
   func settingToggled(setting: String, enabled: Bool) {
@@ -1039,12 +1124,14 @@ class AnalyticsManager {
   func suggestionAssistantEvaluationFailed(
     identity: SuggestionAssistantTelemetry.Identity,
     shape: SuggestionAssistantTelemetry.EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
   ) {
     let payload = SuggestionAssistantTelemetry.evaluationFailedPayload(
       identity: identity,
       shape: shape,
-      latency: latency
+      latency: latency,
+      reason: reason
     )
     captureSuggestionAssistantTelemetryForTests(
       SuggestionAssistantTelemetry.evaluationFailedEventName,
@@ -1053,7 +1140,8 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantEvaluationFailed(
       identity: identity,
       shape: shape,
-      latency: latency
+      latency: latency,
+      reason: reason
     )
   }
 
@@ -1069,8 +1157,52 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantDeliveryOutcome(outcome, identity: identity)
   }
 
-  func insightGenerated(category: String?) {
-    PostHogManager.shared.insightGenerated(category: category)
+  func insightGenerated(category: String?, deliveryID: UUID? = nil) {
+    let properties: [String: Any] = {
+      var value: [String: Any] = [:]
+      if let category = InsightAssistantTelemetry.boundedCategory(category) {
+        value["category"] = category
+      }
+      if let deliveryID {
+        value["delivery_id"] = deliveryID.uuidString
+      }
+      return value
+    }()
+    captureInsightAssistantTelemetryForTests("Advice Generated", properties: properties)
+    PostHogManager.shared.insightGenerated(category: category, deliveryID: deliveryID)
+  }
+
+  /// Record one terminal outcome for a generated Advice item. The bounded recent-ID window
+  /// absorbs racing presentation callbacks without allowing process-lifetime growth.
+  func insightAssistantDeliveryOutcome(
+    _ outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    deliveryID: UUID,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    guard recordedInsightDeliveryIDSet.insert(deliveryID).inserted else { return }
+    recordedInsightDeliveryIDOrder.append(deliveryID)
+    if recordedInsightDeliveryIDOrder.count > Self.maxRecordedInsightDeliveryIDs {
+      let evicted = recordedInsightDeliveryIDOrder.removeFirst()
+      recordedInsightDeliveryIDSet.remove(evicted)
+    }
+    let identity = InsightAssistantTelemetry.DeliveryIdentity(deliveryID: deliveryID)
+    let payload = InsightAssistantTelemetry.deliveryOutcomePayload(
+      outcome,
+      reason: reason,
+      identity: identity,
+      surface: surface
+    )
+    captureInsightAssistantTelemetryForTests(
+      InsightAssistantTelemetry.deliveryOutcomeEventName,
+      properties: payload
+    )
+    PostHogManager.shared.insightAssistantDeliveryOutcome(
+      outcome,
+      reason: reason,
+      deliveryID: deliveryID,
+      surface: surface
+    )
   }
 
   // MARK: - Apps Events
@@ -1180,12 +1312,15 @@ class AnalyticsManager {
     title: String,
     assistantId: String,
     surface: String,
+    dismissalKind: NotificationDismissalKind,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
+      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      properties["dismissal_kind"] = dismissalKind.rawValue
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+        properties: properties
       )
     }
     PostHogManager.shared.notificationDismissed(
@@ -1193,6 +1328,7 @@ class AnalyticsManager {
       title: title,
       assistantId: assistantId,
       surface: surface,
+      dismissalKind: dismissalKind,
       suggestionIdentity: suggestionIdentity
     )
   }

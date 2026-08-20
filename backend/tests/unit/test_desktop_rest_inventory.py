@@ -180,8 +180,12 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/personas/generate-prompt',
     '/v3/memories/mark-all-read',
     '/v3/memories/visibility',  # backend has /v3/memories/{memory_id}/visibility
-    '/v3/memories/{param}/read',
     '/v3/memory-imports/batch',  # backend route exists but lacks response_model export
+    # Added by the context-director third retrieval source (#11613): the backend
+    # route exists (routers/tools.py, ToolResponse) but /v1/tools is not part of
+    # the app-client OpenAPI surface. Follow-up: expose the tools search routes
+    # in the app-client contract and remove this entry.
+    '/v1/tools/conversations/search-chunks',
     # These backend routes exist but return unmodeled (loose) responses, so
     # adding them to the app-client surface would regress the strict
     # `unmodeled_success_response_count == 0` gate. They are tracked for a
@@ -197,6 +201,7 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/tools/calendar-events',
     '/v1/tools/conversations',
     '/v1/tools/conversations/search',
+    '/v1/tools/conversations/search-chunks',  # #11613 desktop client; OpenAPI export follow-up
     '/v1/tools/memories',
     '/v1/tools/memories/search',
 }

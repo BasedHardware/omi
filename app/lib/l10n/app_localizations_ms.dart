@@ -322,7 +322,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get searchApps => 'Cari apl...';
 
   @override
-  String get myApps => 'Aplikasi Saya';
+  String get myApps => 'Dicipta oleh saya';
 
   @override
   String get installedApps => 'Aplikasi Dipasang';
@@ -9865,4 +9865,17 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Buka toko';
+
+  @override
+  String get sendRawAudioToOmi => 'Hantar audio mentah ke Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Matikan untuk menghalang audio mentah daripada dihantar ke Omi. Transkrip dan data yang diperlukan oleh ciri awan mungkin masih dihantar ke Omi.';
+
+  @override
+  String get findDevice => 'Cari';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat berkongsi diagnostik. Sila cuba lagi.';
 }

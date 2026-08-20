@@ -1,7 +1,7 @@
 ---
 title: "App Setup"
 icon: "mobile"
-description: "Set up the Omi Flutter app for development. Build automatically with our dev backend, or manually with your own."
+description: "Set up the Omi Flutter app for development. Build automatically against the local backend harness, or manually with your own."
 ---
 
 ## Overview
@@ -12,7 +12,7 @@ There are two ways to set up the Omi app for development:
   <Card title="Automatic Setup" icon="wand-magic-sparkles" href="#build-the-app-automatically">
     **Recommended for most developers**
 
-    One command setup using Omi's development backend
+    One command setup against the local backend harness
   </Card>
   <Card title="Manual Setup" icon="wrench" href="#build-the-app-manually">
     **For custom backends**
@@ -50,11 +50,33 @@ Before starting, make sure you have the following installed:
 You'll also need [NDK](https://developer.android.com/ndk/downloads) to build Opus for ARM devices.
 </Note>
 
+<Note>
+The local backend harness additionally needs **Python 3.11** (not 3.12+ — the
+backend pins 3.11), a **Java runtime** for the Firestore emulator, and
+**firebase-tools** (or `npx`). `make dev-up` names any of these that are missing.
+</Note>
+
 ---
 
 ## Build the App Automatically
 
-This is the **recommended** way to get started. It sets up your environment to use Omi's development backend with just one command.
+This is the **recommended** way to get started. `setup.sh` builds the `dev` flavor
+against the **local backend harness** — the Python API on port `8000` and the
+Firebase Auth emulator on port `9099`, using the `demo-omi-local` Firebase
+project. iOS builds address them as `127.0.0.1`; Android builds default to the
+emulator's host alias `10.0.2.2`.
+
+<Warning>
+`setup.sh` does **not** start the backend or the emulator — start the harness
+first (step 1 below), or the app builds and launches but every request fails to
+connect.
+
+Do not point this build at `https://api.omiapi.com/`. That API verifies Firebase
+ID tokens against Omi's production Firebase project, and Firebase tokens are
+project-scoped, so a `demo-omi-local` token is rejected with **401 Unauthorized**
+on every call — sign-in appears to succeed and nothing else works. Production
+data requires the explicit `beta` profile (see [Mobile beta](https://github.com/BasedHardware/omi/blob/main/app/README.md#mobile-beta--dogfood)).
+</Warning>
 
 ### Video Walkthrough
 
@@ -71,6 +93,28 @@ This is the **recommended** way to get started. It sets up your environment to u
 ### Setup Steps
 
 <Steps>
+  <Step title="Start the local backend harness" icon="server">
+    From the **root of the repository**, one-time setup then start the services:
+
+    ```bash
+    make dev-init   # once: creates backend/.venv and copies the env template
+    make dev-up     # starts the Firestore + Auth emulators and the Python API
+    ```
+
+    `make dev-init` builds `backend/.venv` from whatever `python3` resolves to,
+    and the backend requires **Python 3.11** — make sure that's what you get, or
+    the harness fails later with import errors.
+
+    No provider API keys? Use fake providers instead:
+
+    ```bash
+    PROVIDER_MODE=offline make dev-up
+    ```
+
+    Check what came up with `make dev-status`, and stop it later with
+    `make dev-down`. Ports, seeded local users, and troubleshooting live in the
+    [local emulator runbook](https://github.com/BasedHardware/omi/blob/main/docs/runbooks/local-emulator-manual-qa.md).
+  </Step>
   <Step title="Navigate to the app directory" icon="folder">
     ```bash
     cd app
@@ -103,7 +147,15 @@ This is the **recommended** way to get started. It sets up your environment to u
 </Steps>
 
 <Tip>
-The automatic setup uses Omi's development backend, making it the fastest way to start building apps and making changes.
+The automatic setup runs entirely on your machine — local API, local emulators,
+no production data — making it the fastest way to start building apps and making
+changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN or Tailscale
+address before running both `setup.sh ios` and `make dev-up` (in the same shell,
+or exported so both commands see it) — this now makes the harness itself listen
+there too, not just the app you build. Only a private address works (LAN, e.g.
+`192.168.x.x`, or Tailscale/CGNAT, e.g. `100.x.x.x`); a public address is
+rejected. Use `OMI_DEV_BIND_HOST` instead if you want the harness to bind a
+different address than the one the app is compiled to reach.
 </Tip>
 
 ---
@@ -124,7 +176,7 @@ Manual setup gives you full control, allowing you to use your own backend.
     <AccordionGroup>
       <Accordion title="Example output" icon="terminal">
         ```
-        [✓] Flutter (Channel stable, 3.41.9, on macOS 15.4.1)
+        [✓] Flutter (Channel stable, 3.44.5, on macOS 15.4.1)
         [✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0)
         [✓] Xcode - develop for iOS and macOS (Xcode 16.4)
         [✓] Chrome - develop for the web
@@ -136,7 +188,7 @@ Manual setup gives you full control, allowing you to use your own backend.
       </Accordion>
       <Accordion title="Recommended versions" icon="info-circle">
         This project is tested with specific tool versions. See [`app/setup.sh`](https://github.com/BasedHardware/omi/blob/main/app/setup.sh) for recommended versions:
-        - Flutter 3.41.9
+        - Flutter 3.44.5
         - Xcode 16.4
         - Android SDK Platform 35
         - NDK 28.2.13676358
@@ -176,12 +228,20 @@ Manual setup gives you full control, allowing you to use your own backend.
 
     | Key | Description |
     |-----|-------------|
-    | `API_BASE_URL` | Your backend URL (use `https://api.omiapi.com/` for dev, or [set up your own](/doc/developer/backend/Backend_Setup)) |
-    | `OPENAI_API_KEY` | Optional - for AI features |
+    | `API_BASE_URL` | Your backend URL — `http://127.0.0.1:8000/` for the local harness, or [set up your own](/doc/developer/backend/Backend_Setup) |
     | `GOOGLE_MAPS_API_KEY` | Optional - for location features |
 
     <Warning>
     Be sure to include the trailing `/` in `API_BASE_URL` or you'll get malformed URLs. If you change this later, delete the builds folder and recreate the runner.
+    </Warning>
+
+    <Warning>
+    Whatever backend you point at must verify Firebase ID tokens against the
+    **same Firebase project** the app signs into. Tokens are project-scoped, so a
+    mismatch returns **401 Unauthorized** on every authenticated call while
+    sign-in still appears to succeed. Omi's shared `https://api.omiapi.com/`
+    verifies against the production project and will reject tokens from the
+    `demo-omi-local` emulator or from your own Firebase project.
     </Warning>
   </Step>
   <Step title="Run Build Runner" icon="hammer">
@@ -195,7 +255,11 @@ Manual setup gives you full control, allowing you to use your own backend.
     Firebase is **mandatory** for the app to run.
 
     <Warning>
-    The repo ships **prebuilt Firebase configs** for both dev and prod. If you're using Omi's development backend (the common case), they're already in place after `setup.sh` — skip to the next step.
+    `setup.sh` installs **local emulator Firebase configs** (the `demo-omi-local`
+    project) for the `dev` flavor. If you're using the local backend harness (the
+    common case), they're already in place — skip to the next step. These configs
+    only work against the Firebase Auth emulator; they are not credentials for
+    any hosted Firebase project.
 
     **Never run `flutterfire configure`** against Omi's bundle IDs — it overwrites the prebuilt prod credentials in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, and `app/android/app/src/prod/`.
     </Warning>
@@ -261,6 +325,34 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     - Enable Google/Apple sign-in in Firebase Console
     - Verify SHA1/SHA256 keys are added to Firebase
     - Check bundle IDs match your Firebase configuration
+  </Accordion>
+  <Accordion title="App can't reach the backend (connection refused / timeouts)" icon="plug">
+    `setup.sh` builds against `http://127.0.0.1:8000` but does not start anything.
+    Run `make dev-up` from the repo root first, and confirm with `make dev-status`.
+
+    On a physical device, `127.0.0.1` is the phone — set `OMI_DEV_HOST` to your
+    Mac's LAN or Tailscale address before running **both** `setup.sh` (so the
+    build points at your machine) and `make dev-up` (so the harness actually
+    listens there — it defaults to loopback-only otherwise, which is why a
+    device build alone used to reach nothing). Export it in the same shell so
+    both commands see it. The Android emulator uses `10.0.2.2` by default.
+  </Accordion>
+  <Accordion title="Sign-in works but every request returns 401" icon="triangle-exclamation">
+    The app and the backend are on **different Firebase projects**. Firebase ID
+    tokens are project-scoped: a token minted for one project cannot be verified
+    by a backend initialized for another, so authentication succeeds locally and
+    every authenticated API call is rejected.
+
+    This shows up on the manual path, where you choose both sides: your own
+    Firebase project signs the user in while `API_BASE_URL` points at a backend
+    initialized for a different project. Point `API_BASE_URL` at a backend that
+    verifies against *your* project.
+
+    Omi's shared `https://api.omiapi.com/` is never a valid target for a
+    self-configured build — it verifies against Omi's own Firebase project, and
+    the `demo-omi-local` configs `setup.sh` installs are emulator-only fakes that
+    no hosted backend can verify. Production data requires the explicit `beta`
+    profile.
   </Accordion>
   <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
     **Error Message:**

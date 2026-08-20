@@ -124,7 +124,7 @@ enum ChatFirstTaskPagePolicy {
   }
 }
 
-/// Cohort-only lightweight checklist. It reads and mutates the one shared
+/// Universal lightweight checklist. It reads and mutates the one shared
 /// TasksStore; legacy TasksPage continues to own the legacy-shell UI unchanged.
 @MainActor
 struct ChatFirstTasksPage: View {

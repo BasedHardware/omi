@@ -2,6 +2,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import database.memories as memories_db
+from fastapi import HTTPException
+
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.product_memory import (
     MemoryAccessPolicy,
@@ -50,6 +53,14 @@ class _FirestoreFake:
     def collection(self, path):
         self.collection_paths.append(path)
         return _CollectionRef(self, path)
+
+
+@pytest.fixture(autouse=True)
+def _empty_historical_store(monkeypatch):
+    """Canonical fixtures in this module intentionally have no legacy rows."""
+    monkeypatch.setattr(memories_db, 'get_memories', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
 
 
 def _evidence(source_id='conv1'):
@@ -229,7 +240,7 @@ def test_fetch_default_product_memory_search_rejects_uid_mismatches():
     item = _memory_item('wrong-uid', now=now, uid='other-user')
     db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item)})
 
-    with pytest.raises(ValueError, match='memory item uid mismatch'):
+    with pytest.raises(HTTPException) as exc_info:
         fetch_default_product_memory_search(
             uid='u1',
             query='coffee',
@@ -237,6 +248,7 @@ def test_fetch_default_product_memory_search_rejects_uid_mismatches():
             now=now,
             db_client=db_client,
         )
+    assert exc_info.value.status_code == 503
 
 
 def test_fetch_archive_product_memory_search_requires_archive_capability_and_keeps_default_separate():

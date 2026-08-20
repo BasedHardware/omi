@@ -9,7 +9,6 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
-from config.canonical_memory_cohort import is_canonical_memory_user
 from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
@@ -86,9 +85,9 @@ def _goal_control_ref(uid: str, *, firestore_client: Any):
     )
 
 
-def _validate_canonical_write(snapshot: Any, *, uid: str, account_generation: int) -> None:
-    if not is_canonical_memory_user(uid):
-        raise GoalConflictError('canonical task intelligence is not enabled')
+def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    """Validate only the persisted generation fence for a task mutation."""
+
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
@@ -126,7 +125,7 @@ def _begin_goal_mutation(
     firestore_client: Any,
 ) -> tuple[Any, Optional[dict[str, Any]], str]:
     control_snapshot = _goal_control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
-    _validate_canonical_write(control_snapshot, uid=uid, account_generation=account_generation)
+    _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
     receipt_ref = _goal_mutation_receipt_ref(
         uid,
         operation=operation,
@@ -338,15 +337,28 @@ def get_all_goals(
     uid: str,
     include_inactive: bool = False,
     *,
+    limit: Optional[int] = None,
     firestore_client: Any = None,
 ) -> List[Dict[str, Any]]:
+    """Fetch a user's goals, newest first.
+
+    ``limit`` bounds the returned page after the in-Python newest-first sort. It is opt-in:
+    every existing caller omits it and keeps the full-list behaviour they rely on.
+
+    The bound is deliberately NOT pushed into the Firestore query: ``order_by('created_at')``
+    excludes documents that lack the field entirely, and legacy or manually created goals can
+    lack ``created_at`` — a query-level order+limit would silently drop them. Instead the full
+    stream is sorted here (goals without ``created_at`` coerce to ``datetime.min`` and sort
+    last) and the page is sliced, so the bound caps the response payload while dateless legacy
+    goals still appear once dated goals run out.
+    """
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
     goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]
     goals.sort(key=_goal_created_at_sort_key, reverse=True)
-    return goals
+    return goals if limit is None else goals[:limit]
 
 
 def create_goal(
@@ -754,7 +766,7 @@ def _append_goal_progress_event(
     def apply(write_transaction):
         if account_generation is not None:
             control_snapshot = _goal_control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-            _validate_canonical_write(control_snapshot, uid=uid, account_generation=account_generation)
+            _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         goal_snapshot = goal_ref.get(transaction=write_transaction)
         if not goal_snapshot.exists:
             raise GoalNotFoundError(goal_id)

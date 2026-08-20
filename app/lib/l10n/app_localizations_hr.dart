@@ -323,7 +323,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get searchApps => 'Pretraži aplikacije...';
 
   @override
-  String get myApps => 'Moje aplikacije';
+  String get myApps => 'Moje kreacije';
 
   @override
   String get installedApps => 'Instalirane aplikacije';
@@ -9875,4 +9875,17 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get sendRawAudioToOmi => 'Šalji neobrađeni zvuk u Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Isključite kako biste spriječili slanje neobrađenog zvuka u Omi. Transkripti i podaci potrebni za funkcije u oblaku i dalje se mogu slati u Omi.';
+
+  @override
+  String get findDevice => 'Pronađi';
+
+  @override
+  String get diagnosticsShareFailed => 'Dijagnostiku nije bilo moguće podijeliti. Pokušaj ponovno.';
 }

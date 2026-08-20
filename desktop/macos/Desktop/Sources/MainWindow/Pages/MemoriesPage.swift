@@ -204,8 +204,8 @@ class MemoriesViewModel: ObservableObject {
   }
 
   /// Whether the backend supports device_scope filtering for this user.
-  /// Canonical memory users support it; legacy users get a 400. Legacy rows
-  /// have no capture provenance, so after that fallback we preserve the
+  /// Universal memory supports it; historical rows can lack capture provenance,
+  /// so after that fallback we preserve the
   /// unscoped list rather than falsely filtering every row out locally.
   private var deviceScopeSupported = true
 
@@ -1186,7 +1186,7 @@ class MemoriesViewModel: ObservableObject {
 
     log("MemoriesViewModel: Starting one-time cache reconcile for user \(userId)")
 
-    var offset = 0
+    var cursor: String? = nil
     let batchSize = 500
     var backendIds = Set<String>()
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
@@ -1195,16 +1195,16 @@ class MemoriesViewModel: ObservableObject {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
-          offset: offset,
+          cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
-        if batch.isEmpty { break }
+        if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
         for memory in batch { backendIds.insert(memory.id) }
-        offset += batch.count
 
-        if batch.count < batchSize { break }
+        guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else { break }
+        cursor = nextCursor
       }
 
       // Guard against pruning on a partial/failed pull: only reconcile when the
@@ -1242,7 +1242,7 @@ class MemoriesViewModel: ObservableObject {
 
     log("MemoriesViewModel: Starting one-time default-scope sync for user \(userId)")
 
-    var offset = 0
+    var cursor: String? = nil
     var totalSynced = 0
     let batchSize = 500
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
@@ -1251,17 +1251,17 @@ class MemoriesViewModel: ObservableObject {
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
-          offset: offset,
+          cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
-        if batch.isEmpty { break }
+        if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
         totalSynced += batch.count
-        offset += batch.count
         log("MemoriesViewModel: Full sync progress - \(totalSynced) additional memories synced")
 
-        if batch.count < batchSize { break }
+        guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else { break }
+        cursor = nextCursor
       }
 
       UserDefaults.standard.set(true, forKey: syncKey)
@@ -1695,6 +1695,22 @@ class MemoriesViewModel: ObservableObject {
     guard !didRegisterAutomationActions else { return }
     didRegisterAutomationActions = true
     let registry = DesktopAutomationActionRegistry.shared
+    // The Add Memory sheet's Save button is only reachable by clicking, and cursor
+    // synthesis is barred, so its filled and empty states were unverifiable outside
+    // production. This presents the real sheet with the real draft text.
+    registry.register(
+      name: "memories_open_add_sheet",
+      summary: "Present the Add Memory sheet, optionally pre-filled with draft text",
+      params: ["text"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      self.newMemoryText = params["text"] ?? ""
+      self.showingAddMemory = true
+      return [
+        "presented": "true",
+        "draft_is_empty": self.newMemoryText.isEmpty ? "true" : "false",
+      ]
+    }
     registry.register(
       name: "memories_search",
       summary: "Set memories search query and return filtered result count",
@@ -2812,7 +2828,7 @@ private struct MemoryCardView: View {
               .foregroundColor(Ink.secondary)
           }
 
-          // Badge when the server sent an authoritative layer (canonical cohort always does).
+          // Badge when the server sent an authoritative lifecycle layer.
           // Only badge memories the backend actually tiered; legacy/untiered
           // records carry no real tier, so we show no badge for them.
           if memory.tierIsExplicit {

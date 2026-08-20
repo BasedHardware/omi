@@ -44,13 +44,13 @@ def test_tools_rest_memory_routes_guard_results_before_response_envelope():
     )
     assert contents.index(
         "result = preserve_chat_memory_tool_result_boundary('get_memories_tool', result)"
-    ) < contents.index('return _ok("get_memories", result)')
+    ) < contents.index('return _ok("get_memories", result')
     assert contents.index('result = search_memories_text(') < contents.index(
         "result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)"
     )
     assert contents.index(
         "result = preserve_chat_memory_tool_result_boundary('search_memories_tool', result)"
-    ) < contents.index('return _ok("search_memories", result)')
+    ) < contents.index('return _ok("search_memories", result')
 
 
 def test_chat_memory_tool_caller_preserves_memory_quoted_evidence_without_unwrapping():

@@ -1,7 +1,7 @@
 version: 2
 name: home
 tier: manual
-description: Home tab — the query bar, the results panel and its header controls, Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
+description: Home tab — chat-first panel under the always-on search bar, plus its header controls and Capture/Listening status (v0.12.119+ redesign, replaces dashboard.yaml)
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
@@ -11,36 +11,49 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellHome.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryShellModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryHeroBar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QuerySearchBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryAnswerThread.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimeline.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatPromptTimelineModel.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollPositionDetector.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatTranscriptGeometry.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryChatCapability.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatCitation.swift
 preconditions:
   - auth_ready
 
 steps:
   - id: S1
     name: Verify Home tab is active
-    do: "Verify the app opens on the search surface. The top bar shows the Omi mark, Library and Apps on the left and three wordless icons (microphone, screen capture, settings) on the right. Below it, a query bar with the placeholder 'Search what you've seen and heard…' sits above a separate results panel with a visible gap between them."
+    do: "Verify the app opens on the conversation. The top bar shows Home, Memories, Tasks, Rewind and Apps pills. Below it, a search bar with the placeholder 'Search what you've seen and heard…' sits above the chat panel, whose own composer ('Ask a follow-up…') is pinned under the transcript. Typing in the search bar swaps the panel to live-narrowing results; clearing it returns to the chat."
     expect:
       interactive_count: { min: 6 }
       text_visible:
-        - Home
+        - Chat
 
   - id: S2
-    name: Verify the query bar is a composer
-    do: "Verify the query bar carries every control needed to hold a conversation: the text field, a paperclip (Attach files), the two keyboard hints ('⏎ Search' and '⌘⏎ Ask'), and the push-to-talk microphone disc."
+    name: Verify the two inputs are distinct
+    do: "Verify the search bar above the panel is pure search (magnifying glass, no send control) and the chat composer inside the panel carries the conversation controls: text field, paperclip (Attach files), microphone, and the send disc."
     expect:
       interactive_count: { min: 4 }
 
   - id: S2b
     name: Ask, then stop
-    do: "Type a question and press ⌘⏎. The panel swaps to the answer thread. While the answer is still streaming, verify the '⌘⏎ Ask' hint has been replaced by a 'Stop' button in the same slot, and click it. The turn ends without an error card."
+    do: "Type a question in the chat composer and press ⏎. The answer streams into the transcript. While it is still streaming, verify the send disc has been replaced by a Stop control in the same slot, and click it. The turn ends without an error card."
     expect:
       interactive_count: { min: 2 }
 
   - id: S2c
     name: Conversation menu and the way back
-    do: "In answer mode, open the '…' menu next to '‹ Results' and verify it offers Copy conversation, Clear conversation and AI settings. Click '‹ Results', then navigate to Conversations and back to Home: the panel's corner now offers a 'Chat ›' chip. Click it and verify the same conversation is still there with no duplicated turns."
+    do: "Open the '…' menu in the panel's corner and verify it offers Copy conversation, Clear conversation and AI settings. Type in the search bar and verify the panel shows live-narrowing results; clear it (or press esc) and verify the same conversation returns with no duplicated turns."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S2d
+    name: Inline citations preview and open their exact source
+    do: "Ask a question grounded in at least one task, memory, or conversation and request citations. After the answer settles, verify its bracketed citation markers are individual focusable controls rather than plain text and no duplicate source rail appears below the answer. Hover a marker and verify an anchored preview shows the source type, title, and bounded summary without moving the transcript. Activate the marker with the pointer, then repeat with Tab and Return; verify the app opens the exact cited task, memory, or conversation rather than the generic destination. Return to Chat and verify the citation remains interactive after journal replay."
     expect:
       interactive_count: { min: 2 }
 
@@ -63,3 +76,9 @@ steps:
     expect:
       text_visible:
         - Settings
+
+  - id: S6
+    name: Prompt rail and older messages
+    do: "In a long conversation, hover the trailing-edge hairline marks and verify a preview shows the prompt, the start of the reply, and a timestamp. Click a mark and verify the transcript jumps to that prompt. Scroll to the top, click Show older messages or Load earlier messages, and verify the same rows stay in view rather than jumping to the newly loaded oldest message."
+    expect:
+      interactive_count: { min: 2 }

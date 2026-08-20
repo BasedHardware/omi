@@ -14,12 +14,13 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+
+import 'task_categorization.dart';
 import 'widgets/action_item_form_sheet.dart';
+import 'widgets/action_item_shimmer_widget.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
-
-enum TaskCategory { today, tomorrow, later, noDeadline, overdue }
 
 class ActionItemsPage extends StatefulWidget {
   final VoidCallback? onAddGoal;
@@ -344,48 +345,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     List<ActionItemWithMetadata> items,
     bool showCompleted,
   ) {
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-    final sevenDaysAgo = now.subtract(const Duration(days: 7));
-
-    final Map<TaskCategory, List<ActionItemWithMetadata>> categorized = {
-      TaskCategory.today: [],
-      TaskCategory.tomorrow: [],
-      TaskCategory.noDeadline: [],
-      TaskCategory.later: [],
-      TaskCategory.overdue: [],
-    };
-
-    for (var item in items) {
-      // Skip completed items unless showing completed
-      if (item.completed && !showCompleted) continue;
-      if (!item.completed && showCompleted) continue;
-
-      if (item.dueAt == null) {
-        // No deadline tasks older than 7 days go to overdue
-        if (!showCompleted && item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-          categorized[TaskCategory.overdue]!.add(item);
-        } else {
-          categorized[TaskCategory.noDeadline]!.add(item);
-        }
-      } else {
-        final dueDate = item.dueAt!;
-        if (!showCompleted && dueDate.isBefore(startOfToday)) {
-          // Due date in the past → overdue
-          categorized[TaskCategory.overdue]!.add(item);
-        } else if (dueDate.isBefore(startOfTomorrow)) {
-          categorized[TaskCategory.today]!.add(item);
-        } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-          categorized[TaskCategory.tomorrow]!.add(item);
-        } else {
-          categorized[TaskCategory.later]!.add(item);
-        }
-      }
-    }
-
-    return categorized;
+    // Extracted to task_categorization.dart so the bucketing rule is testable
+    // against the shared contracts/parity fixtures.
+    return categorizeTasks(items, showCompleted);
   }
 
   String _getCategoryTitle(BuildContext context, TaskCategory category) {
@@ -589,7 +551,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   }
 
   Widget _buildLoadingState() {
-    return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const NeverScrollableScrollPhysics(),
+      slivers: const [
+        SliverPadding(padding: EdgeInsets.only(top: 16)),
+        ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
   }
 
   Widget _buildEmptyTasksList() {

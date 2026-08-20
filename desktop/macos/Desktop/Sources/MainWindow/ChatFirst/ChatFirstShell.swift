@@ -2,7 +2,7 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
-/// Cohort-only main-window shell. It shares the existing data owners with the
+/// Universal main-window shell. It shares the existing data owners with the
 /// legacy shell but owns no second chat state, task state, or navigation index.
 struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
@@ -65,7 +65,7 @@ struct ChatFirstShell: View {
       destination
         .id(navigation.route.stableName)
     }
-    // The hidden title bar puts the traffic lights over the content view.
+    // The top bar occupies the hidden title-bar band; the window's top edge is the glass.
     .padding(.top, GlassShell.titlebarClearance)
     .environmentObject(navigation)
     .onAppear {
@@ -80,6 +80,11 @@ struct ChatFirstShell: View {
     .onDisappear { automationRuntime.uninstall() }
     .onChange(of: navigation.route) { _, route in
       syncMemoryDestination(for: route)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopMeetingConversationDidComplete)) { _ in
+      _ = promptMaterializationCoordinator.meetingConversationDidComplete(
+        windowForeground: isMainWindowForeground
+      )
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
       memoryDestinationRawValue = MemoryHubDestination.brainMap.rawValue
@@ -103,6 +108,11 @@ struct ChatFirstShell: View {
       }
       return true
     }
+  }
+
+  private var isMainWindowForeground: Bool {
+    guard NSApp.isActive, let window = NSApp.mainWindow else { return false }
+    return window.isKeyWindow && window.isVisible
   }
 
   @ViewBuilder
@@ -190,7 +200,10 @@ struct ChatFirstShell: View {
         viewModelContainer: viewModelContainer,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         destinationRawValue: $memoryDestinationRawValue,
-        onSelectDestination: selectHubDestination
+        onSelectDestination: selectHubDestination,
+        // The Activity spine's screenshot rows leave for Rewind through the
+        // shell that owns the route — without this the rows are inert here.
+        onOpenRewind: { navigation.selectMore(.rewind) }
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -315,8 +328,6 @@ struct ChatFirstShell: View {
       )
     case .permissions:
       PermissionsPage(appState: appState)
-    case .help:
-      HelpPage()
     case .settings:
       HStack(spacing: 0) {
         SettingsSidebar(
@@ -324,7 +335,8 @@ struct ChatFirstShell: View {
           highlightedSettingId: $highlightedSettingID,
           onBack: {
             _ = navigation.handleEscapeNavigation()
-          }
+          },
+          appState: appState
         )
         SettingsPage(
           appState: appState,
@@ -337,7 +349,7 @@ struct ChatFirstShell: View {
   }
 
   /// Existing Dashboard callbacks still speak in legacy sidebar items. Keep
-  /// that compatibility at this one boundary while the cohort shell itself is
+  /// that compatibility at this one boundary while the Chat-first shell itself is
   /// entirely route-typed.
   private var legacySelectionBinding: Binding<Int> {
     Binding(
@@ -362,7 +374,6 @@ struct ChatFirstShell: View {
       case .rewind: return .rewind
       case .apps: return .apps
       case .permissions: return .permissions
-      case .help: return .help
       case .settings: return .settings
       }
     }
@@ -377,7 +388,7 @@ enum ChatFirstPageGlassLanePolicy {
     case .chat, .more(.dashboard), .more(.rewind):
       return false
     case .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.permissions), .more(.help), .more(.settings):
+      .more(.apps), .more(.permissions), .more(.settings):
       return true
     }
   }
@@ -393,7 +404,6 @@ enum ChatFirstPageGlassLanePolicy {
     case .more(.rewind): return SidebarNavItem.rewind.rawValue
     case .more(.apps): return SidebarNavItem.apps.rawValue
     case .more(.permissions): return SidebarNavItem.permissions.rawValue
-    case .more(.help): return SidebarNavItem.help.rawValue
     case .more(.settings): return SidebarNavItem.settings.rawValue
     }
   }
@@ -493,7 +503,10 @@ private struct ChatFirstConversationsHost: View {
           automationRuntime: automationRuntime
         )
       } else {
-        ConversationsPageHost(appState: appState)
+        ConversationsPageHost(
+          appState: appState,
+          initialConversation: navigation.pendingConversation
+        )
       }
     }
     .onAppear {
@@ -567,7 +580,10 @@ private struct ChatFirstRestoredTasksHost: View {
     if let task = tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true }) {
       return task
     }
-    if let task = try? await APIClient.shared.getActionItem(id: id), task.deleted != true {
+    // Straight off the wire, so legacy `deleted` may be absent and retirement
+    // only stated through canonical lifecycle status. Cache reads above and
+    // below are already normalized (`ActionItemRecord.from` stores `isRetired`).
+    if let task = try? await APIClient.shared.getActionItem(id: id), !task.isRetired {
       return task
     }
     await tasksStore.loadCompletedTasks()

@@ -85,6 +85,26 @@ enum SettingsControlMetrics {
   static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
     calendar.component(.hour, from: date)
   }
+
+  /// Daily Summary persists hour only. Any minute the picker offers is snapped to `:00`
+  /// immediately so the control never shows a time that cannot round-trip.
+  static func canonicalizeDailySummaryTime(_ date: Date, calendar: Calendar = .current) -> Date {
+    dailySummaryDate(forHour: dailySummaryHour(from: date, calendar: calendar), referenceDate: date, calendar: calendar)
+  }
+
+  /// General → Notifications mirrors macOS TCC/banner style only. Product enablement lives in
+  /// Notifications & Privacy (master + frequency).
+  static func generalNotificationPermissionStatusText(
+    hasPermission: Bool, bannersDisabled: Bool
+  ) -> String {
+    if !hasPermission {
+      return "macOS notification permission is off"
+    }
+    if bannersDisabled {
+      return "Permission granted, but macOS banners are off"
+    }
+    return "macOS banners enabled"
+  }
 }
 
 struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {
@@ -750,53 +770,54 @@ extension SettingsContentView {
 
           GlassSeparator()
 
-          settingRow(
-            title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
-            settingId: "about.channel"
-          ) {
-            if AppBuild.isBetaProductionBundle {
-              // Omi Beta is permanently a beta-channel client; switching it to stable
-              // would make Sparkle replace it with the stable-identity app in place.
-              Text(UpdateChannel.beta.displayName)
+          if !AppBuild.isBetaProductionBundle {
+            settingRow(
+              title: "Omi Beta",
+              subtitle: "Install the separate Omi Beta app. It runs beside this one.",
+              settingId: "about.channel"
+            ) {
+              Button("Get Omi Beta") {
+                openURLInDefaultBrowser(AppBuild.omiBetaInstallURL)
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            }
+          } else {
+            settingRow(
+              title: "Omi Beta",
+              subtitle: "This app updates from the Beta feed and runs beside Omi.",
+              settingId: "about.channel"
+            ) {
+              Text("Installed")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
-            } else {
-              SettingsMenuPicker(
-                selection: Binding(
-                  get: { updaterViewModel.updateChannel },
-                  set: { newChannel in
-                    // Switching beta → stable with a newer build: confirm first
-                    if updaterViewModel.updateChannel == .beta && newChannel == .stable
-                      && updaterViewModel.isDowngradeToStable
-                    {
-                      showDowngradeAlert = true
-                    } else {
-                      updaterViewModel.updateChannel = newChannel
-                    }
-                  }
-                )
-              ) {
-                ForEach(UpdateChannel.allCases, id: \.self) { channel in
-                  Text(channel.displayName).tag(channel)
-                }
-              }
             }
           }
         }
       }
-      .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
-        Button("Stay on Beta", role: .cancel) {}
-        Button("Switch to Stable") {
-          updaterViewModel.updateChannel = .stable
-          if let url = URL(string: "https://macos.omi.me") {
-            NSWorkspace.shared.open(url)
+
+      settingsCard(settingId: "about.discord") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.2.fill")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Community")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
+
+            Text("Get help from the omi community and team")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
           }
+
+          Spacer()
+
+          Button("Join Discord") {
+            openURLInDefaultBrowser(SupportLinks.discord)
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
         }
-      } message: {
-        let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
-        Text(
-          "You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now."
-        )
       }
 
       settingsCard(settingId: "about.reportissue") {

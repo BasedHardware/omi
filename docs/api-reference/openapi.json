@@ -160,6 +160,11 @@
             "title": "Id",
             "type": "string"
           },
+          "meeting_treatment_eligible": {
+            "default": false,
+            "title": "Meeting Treatment Eligible",
+            "type": "boolean"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -273,6 +278,35 @@
             ],
             "description": "Stable client-generated session ID. When provided, retries return the same conversation ID.",
             "title": "Client Session Id"
+          },
+          "conversation_finalization_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user_stop",
+                  "finish_and_continue",
+                  "meeting_started",
+                  "meeting_ended",
+                  "max_duration_rotation",
+                  "crash_recovery",
+                  "retry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Finalization Reason"
+          },
+          "conversation_role": {
+            "default": "ambient",
+            "enum": [
+              "ambient",
+              "meeting"
+            ],
+            "title": "Conversation Role",
+            "type": "string"
           },
           "finished_at": {
             "anyOf": [
@@ -3853,7 +3887,7 @@
     },
     "/v1/dev/user/memories/vector/search": {
       "get": {
-        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope, a persisted app/key\ndefault-read grant, and the server-owned rollout state enables developer_api\nmemory default-memory reads. Vector hits are hydrated from authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
+        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope and a persisted app/key\ndefault-read grant. Vector hits are hydrated through the universal repository\nagainst authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
         "operationId": "search_memories_vector_v1_dev_user_memories_vector_search_get",
         "parameters": [
           {

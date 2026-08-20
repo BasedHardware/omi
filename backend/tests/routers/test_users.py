@@ -4,9 +4,11 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from routers import users as users_router
+from services.users import data_export
 
 
 class _FakeRequest:
@@ -389,14 +391,15 @@ def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
     assert released == []
 
 
-def test_export_all_user_data_keeps_streaming_headers():
-    users_router.iter_user_data_export = MagicMock(return_value=iter(['{"ok": true}\n']))
+def test_export_all_user_data_keeps_streaming_headers(monkeypatch):
+    iter_export = MagicMock(return_value=iter(['{"ok": true}\n']))
+    monkeypatch.setattr(users_router, 'iter_user_data_export', iter_export)
 
     response = users_router.export_all_user_data(uid='uid1')
 
     assert response.media_type == 'application/json'
     assert response.headers['content-disposition'] == 'attachment; filename="omi-export.json"'
-    users_router.iter_user_data_export.assert_called_once_with('uid1')
+    iter_export.assert_called_once_with('uid1')
 
     async def _consume():
         parts = []
@@ -405,6 +408,47 @@ def test_export_all_user_data_keeps_streaming_headers():
         return ''.join(parts)
 
     assert asyncio.run(_consume()) == '{"ok": true}\n'
+
+
+def test_export_all_user_data_returns_500_before_streaming_headers_when_memory_preflight_fails(monkeypatch):
+    def _failing_iter(_uid, *, include_archive=True):
+        yield MagicMock(model_dump=MagicMock(return_value={'id': 'mem-ok'}))
+        raise RuntimeError('canonical memory unavailable')
+
+    monkeypatch.setattr(
+        data_export,
+        'MemoryService',
+        MagicMock(return_value=MagicMock(iter_export_memories=_failing_iter)),
+    )
+    app = FastAPI()
+    app.include_router(users_router.router)
+    app.dependency_overrides[users_router.auth.get_current_user_uid] = lambda: 'uid1'
+
+    response = TestClient(app, raise_server_exceptions=False).get('/v1/users/export')
+
+    assert response.status_code == 500
+    assert 'content-disposition' not in response.headers
+
+
+def test_task_assistant_prompt_contract_accepts_shipped_default_size_and_rejects_oversize():
+    accepted = users_router.UpdateAssistantSettingsRequest(
+        task={'analysis_prompt': 'x' * users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH}
+    )
+
+    assert len(accepted.task.analysis_prompt) == users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH
+    with pytest.raises(ValueError):
+        users_router.UpdateAssistantSettingsRequest(
+            task={'analysis_prompt': 'x' * (users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH + 1)}
+        )
+
+
+def test_task_assistant_prompt_contract_counts_unicode_code_points():
+    flag = '🇺🇸'
+    prompt = flag * (users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH // len(flag) + 1)
+
+    assert len(prompt) == users_router.ASSISTANT_ANALYSIS_PROMPT_MAX_LENGTH + 2
+    with pytest.raises(ValueError):
+        users_router.UpdateAssistantSettingsRequest(task={'analysis_prompt': prompt})
 
 
 def test_update_person_name_missing_returns_404():
@@ -424,3 +468,57 @@ def test_update_person_name_existing_returns_ok():
 
     assert result == {'status': 'ok'}
     update_person.assert_called_once_with('uid1', 'p1', 'Alice')
+
+
+def test_byok_subscription_endpoint_returns_unlimited_plan():
+    # `PlanLimits` was used in this module without being imported, so every BYOK
+    # user's GET /v1/users/me/subscription raised NameError -> 500 in prod.
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
+        users_router, 'has_byok_keys', MagicMock(return_value=True)
+    ):
+        response = users_router.get_user_subscription_endpoint(uid='uid1')
+
+    assert response.subscription.plan == users_router.PlanType.unlimited
+    assert response.subscription.features == ['byok']
+    assert response.subscription.limits.transcription_seconds is None
+
+
+def test_marketplace_reviewer_subscription_endpoint_returns_unlimited_plan():
+    # Same missing import on the reviewer branch (routers/users.py:1193).
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.dict(
+        users_router.os.environ, {'MARKETPLACE_APP_REVIEWERS': 'reviewer-uid'}
+    ):
+        response = users_router.get_user_subscription_endpoint(uid='reviewer-uid')
+
+    assert response.subscription.plan == users_router.PlanType.unlimited
+    assert response.subscription.limits.words_transcribed is None
+
+
+def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
+    # `get_default_basic_subscription` was called at routers/users.py:1220 without being
+    # imported, so a user whose subscription is missing or expired got NameError -> 500
+    # instead of the basic plan the branch exists to return.
+    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
+        users_router, 'get_user_subscription', MagicMock(return_value=None)
+    ), patch.object(users_router, 'reconcile_basic_plan_with_stripe', MagicMock()), patch.object(
+        users_router, 'get_user_valid_subscription', MagicMock(return_value=None)
+    ), patch.object(
+        users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={})
+    ), patch.object(
+        users_router, 'get_paid_plan_definitions', MagicMock(return_value=[])
+    ), patch.object(
+        users_router, 'should_hide_subscription_ui', MagicMock(return_value=False)
+    ), patch.object(
+        users_router,
+        'get_phone_call_quota_snapshot',
+        MagicMock(return_value=MagicMock(to_client_dict=lambda: {'has_access': False, 'is_paid': False})),
+    ), patch.object(
+        users_router,
+        'get_chat_quota_snapshot',
+        MagicMock(return_value={'used': 0.0, 'limit': None, 'unit': 'questions', 'allowed': True, 'reset_at': None}),
+    ):
+        response = users_router.get_user_subscription_endpoint(
+            uid='uid-without-subscription', x_app_platform='ios', x_app_version='1.0.0'
+        )
+
+    assert response.subscription.plan == users_router.PlanType.basic

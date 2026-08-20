@@ -101,7 +101,7 @@
     "createYourOwnApp": "Crea la tua app",
     "buildAndShareApp": "Costruisci e condividi la tua app personalizzata",
     "searchApps": "Cerca app...",
-    "myApps": "Le mie app",
+    "myApps": "Creato da me",
     "installedApps": "App installate",
     "unableToFetchApps": "Impossibile recuperare le app :(\n\nControlla la tua connessione internet e riprova.",
     "aboutOmi": "Informazioni su Omi",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Migrazione in corso",
     "accountCutoverMigrationInProgressMessage": "Il tuo account è in migrazione. Le funzioni del prodotto sono in pausa fino al termine della migrazione.",
     "accountCutoverMigrationRollbackMessage": "Il tuo account è in manutenzione dopo un rollback della migrazione. Alcuni dati più recenti potrebbero essere isolati.",
-    "accountCutoverOpenStore": "Apri store"
+    "accountCutoverOpenStore": "Apri store",
+    "sendRawAudioToOmi": "Invia l'audio grezzo a Omi",
+    "sendRawAudioToOmiDescription": "Disattiva per impedire l'invio dell'audio grezzo a Omi. Le trascrizioni e i dati necessari alle funzioni cloud possono ancora essere inviati a Omi.",
+    "findDevice": "Trova",
+    "diagnosticsShareFailed": "Impossibile condividere la diagnostica. Riprova."
 }

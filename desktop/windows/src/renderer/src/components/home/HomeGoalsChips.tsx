@@ -6,6 +6,7 @@ import { goalEmoji, DEFAULT_GOAL_EMOJI } from '../../lib/goalEmoji'
 import { isCompleted, progressColor, progressPct } from '../../lib/goalVisuals'
 import { cache as goalsCache, hydrateGoalsFromDisk, writeCache } from '../../lib/goalsCache'
 import { getCacheUid } from '../../lib/persistentCache'
+import { useThrottledWindowFocus } from '../../lib/focusRefetch'
 import type { GoalResponse as Goal } from '../../lib/omiApi.generated'
 import type { HubHomeWidgetsProps } from './hub/hubHomeWidgetsSlot'
 
@@ -119,13 +120,12 @@ export function HomeGoalsChips({ onShowAll, onOpenGoal }: HubHomeWidgetsProps): 
   }, [pathname, fetchGoals])
 
   // Refetch on window focus, so a goal added/completed in another window shows up.
-  useEffect(() => {
-    const onFocus = (): void => {
-      if (auth.currentUser) fetchGoals()
-    }
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [fetchGoals])
+  // Throttled — the app blurs its own main window on every bar/orb interaction, so an
+  // unthrottled listener fired many times a minute during normal voice use. See
+  // lib/focusRefetch.ts.
+  useThrottledWindowFocus(() => {
+    if (auth.currentUser) fetchGoals()
+  })
 
   // Loading — a height-stable skeleton so the cluster never jumps when data lands.
   if (goals === null) {

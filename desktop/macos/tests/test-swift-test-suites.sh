@@ -57,6 +57,27 @@ final class PiMonoWiringTests: XCTestCase {
     func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {}
 }
 SWIFT
+cat >"$TMPDIR/tests/AuthRefreshResilienceTests.swift" <<'SWIFT'
+import XCTest
+final class AuthRefreshResilienceTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+cat >"$TMPDIR/tests/AuthTokenStorageTests.swift" <<'SWIFT'
+import XCTest
+final class AuthTokenStorageTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+# Never listed in OMI_SWIFT_TEST_SERIAL_SUITES below: the runner must derive its
+# sequential membership from the owner-authority fixture it drives.
+cat >"$TMPDIR/tests/OwnerAuthorityAdopterTests.swift" <<'SWIFT'
+import XCTest
+final class OwnerAuthorityAdopterTests: XCTestCase {
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+    func testOne() {}
+}
+SWIFT
 
 cat >"$TMPDIR/bin/xcrun" <<'SH'
 #!/usr/bin/env bash
@@ -101,6 +122,11 @@ if [[ "$*" == *"swift test"* ]]; then
   # Do not rendezvous on specific suite names: xargs -P 2 starts the first two
   # suites alphabetically, which are not guaranteed to be AlphaTests/BetaTests.
   active_count="$(find "$active_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+  if [[ "$suite" == AuthRefreshResilienceTests || "$suite" == AuthTokenStorageTests \
+    || "$suite" == OwnerAuthorityAdopterTests ]] \
+    && [ "$active_count" -ge 2 ]; then
+    touch "$FAKE_XCRUN_SYNC_DIR/serial-overlap"
+  fi
   if [ "$active_count" -ge 2 ]; then
     touch "$FAKE_XCRUN_SYNC_DIR/overlap-proven"
   fi
@@ -113,6 +139,18 @@ fi
 if [ "$suite" = "AlphaTests" ]; then
   echo "alpha failed"
   exit 42
+fi
+
+if [ "$suite" = "CrasherTests" ]; then
+  # What SwiftPM actually emits when the xctest host dies on a signal: the
+  # signal line and nothing else. The crash reporter writes the frames.
+  if [ -z "${FAKE_XCRUN_SKIP_CRASH_REPORT:-}" ]; then
+    mkdir -p "$OMI_SWIFT_TEST_CRASH_REPORT_DIR"
+    printf 'fixture crash report for %s\nThread 0 Crashed: SwiftUI layout frame\n' "$suite" \
+      >"$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-fixture.ips"
+  fi
+  echo "error: Exited with unexpected signal code 11"
+  exit 1
 fi
 
 if [ -n "${FAKE_XCRUN_HANG_SUITE:-}" ] && [ "$FAKE_XCRUN_HANG_SUITE" = "$suite" ]; then
@@ -140,7 +178,9 @@ export FAKE_XCRUN_SCRATCH_LOG="$TMPDIR/xcrun-scratch.log"
 export FAKE_XCRUN_SYNC_DIR="$TMPDIR/xcrun-sync"
 export OMI_SWIFT_TEST_DISCOVERY_ROOT="$TMPDIR/tests"
 export OMI_SWIFT_TEST_PACKAGE_PATH="$TMPDIR/package"
+export OMI_SWIFT_TEST_CRASH_REPORT_DIR="$TMPDIR/crash-reports"
 export OMI_SWIFT_TEST_SUITE_WORKERS=2
+export OMI_SWIFT_TEST_SERIAL_SUITES="AuthRefreshResilienceTests AuthTokenStorageTests"
 mkdir -p "$FAKE_XCRUN_SYNC_DIR"
 
 if "$RUNNER" >"$TMPDIR/runner.out" 2>"$TMPDIR/runner.err"; then
@@ -156,9 +196,21 @@ fi
 if ! grep -q "alpha failed" "$TMPDIR/runner.out"; then
   fail "runner did not preserve the failed suite log"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
+if ! grep -q "Ran 9 Swift suites in isolation with 2 worker(s)." "$TMPDIR/runner.out"; then
   fail "runner did not report suite count and worker count"
 fi
+if [ -f "$FAKE_XCRUN_SYNC_DIR/serial-overlap" ]; then
+  fail "shared-auth-domain suites overlapped another suite"
+fi
+derived_serial_scratch="$(awk -F '\t' '$1 == "OwnerAuthorityAdopterTests" {print $2}' \
+  "$FAKE_XCRUN_SCRATCH_LOG")"
+if [ -z "$derived_serial_scratch" ]; then
+  fail "runner did not execute the owner-authority fixture suite"
+fi
+case "$derived_serial_scratch" in
+  */serial-*.build) ;;
+  *) fail "runner did not derive sequential execution from the owner-authority fixture" ;;
+esac
 if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest" "$FAKE_XCRUN_LOG"; then
   fail "runner did not pass ratcheted skips to SwiftPM"
 fi
@@ -182,9 +234,20 @@ unset OMI_SWIFT_TEST_SUITE_WORKERS SWIFT_TEST_SUITE_WORKERS
 if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
   fail "default runner unexpectedly succeeded despite AlphaTests failure"
 fi
-if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)," "$TMPDIR/default-runner.out"; then
+if ! grep -q "Ran 9 Swift suites in isolation with 4 worker(s)," "$TMPDIR/default-runner.out"; then
   fail "runner did not default local suite execution to four workers"
 fi
+
+# A discovery set made entirely of serial suites still executes with one
+# effective worker and must not report the misleading zero-worker summary.
+export OMI_SWIFT_TEST_SERIAL_SUITES="ActionItemsFTSRepairTests AlphaTests APIClientRoutingTests AuthRefreshResilienceTests AuthTokenStorageTests BetaTests ChatDiscoverabilityTests PiMonoWiringTests"
+if "$RUNNER" >"$TMPDIR/all-serial-runner.out" 2>"$TMPDIR/all-serial-runner.err"; then
+  fail "all-serial runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if ! grep -q "Ran 9 Swift suites in isolation with 1 worker(s)," "$TMPDIR/all-serial-runner.out"; then
+  fail "all-serial runner did not report one effective worker"
+fi
+export OMI_SWIFT_TEST_SERIAL_SUITES="AuthRefreshResilienceTests AuthTokenStorageTests"
 
 # ...and the same per-suite budget as CI. A smaller local default is not a
 # harmless local nicety: the slowest legitimate suite needs ~245s, so a 120s
@@ -226,6 +289,46 @@ export FAKE_XCRUN_LOCKWAIT_SECONDS=5
 "$RUNNER" >"$TMPDIR/lockwait-runner.out" 2>"$TMPDIR/lockwait-runner.err" || true
 if grep -q -- "--- FAILED: BetaTests ---" "$TMPDIR/lockwait-runner.out"; then
   fail "runner charged SwiftPM build-lock wait against the per-suite run budget"
+fi
+
+# A suite killed by a signal leaves no frames in SwiftPM's log, and the hosted
+# runner's crash reports die with the machine. The runner must surface them
+# next to the failing suite or a CI-only crasher stays undiagnosable (#11573).
+unset FAKE_XCRUN_LOCKWAIT_SUITE FAKE_XCRUN_LOCKWAIT_SECONDS
+unset OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS
+cat >"$TMPDIR/tests/CrasherTests.swift" <<'SWIFT'
+import XCTest
+final class CrasherTests: XCTestCase {
+    func testOne() {}
+}
+SWIFT
+if "$RUNNER" >"$TMPDIR/crash-runner.out" 2>"$TMPDIR/crash-runner.err"; then
+  fail "crash fixture unexpectedly succeeded"
+fi
+if ! grep -q "Signal-killed Swift suites: CrasherTests" "$TMPDIR/crash-runner.out"; then
+  fail "runner did not name the signal-killed suite"
+fi
+if ! grep -q -- "--- CRASH REPORT: " "$TMPDIR/crash-runner.out"; then
+  fail "runner did not surface the crash report for a signal-killed suite"
+fi
+if ! grep -q "Thread 0 Crashed: SwiftUI layout frame" "$TMPDIR/crash-runner.out"; then
+  fail "runner did not print the crash report's contents"
+fi
+
+# A report predating the run belongs to some earlier process; attributing it to
+# this run's crasher would send the next reader after the wrong backtrace.
+rm -f "$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-fixture.ips"
+printf 'stale report\n' >"$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-stale.ips"
+touch -t 202001010000 "$OMI_SWIFT_TEST_CRASH_REPORT_DIR/xctest-stale.ips"
+export FAKE_XCRUN_SKIP_CRASH_REPORT=1
+if "$RUNNER" >"$TMPDIR/stale-crash-runner.out" 2>"$TMPDIR/stale-crash-runner.err"; then
+  fail "stale-report fixture unexpectedly succeeded"
+fi
+if grep -q "stale report" "$TMPDIR/stale-crash-runner.out"; then
+  fail "runner attributed a pre-run crash report to this run"
+fi
+if ! grep -q "No crash reports newer than this run" "$TMPDIR/stale-crash-runner.out"; then
+  fail "runner did not report the absence of a fresh crash report"
 fi
 
 echo "swift-test-suites tests passed"

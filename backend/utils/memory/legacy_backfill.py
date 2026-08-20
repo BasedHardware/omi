@@ -19,7 +19,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
@@ -31,14 +31,19 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence
 from models.memory_apply import ApplyStatus, MemoryControlState, build_patch_mutation_identity
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
+from models.product_memory import (
+    MemoryItemStatus,
+    MemoryLayer,
+    ProcessingState,
+    MemoryItem,
+    default_short_term_expiry,
+)
 from utils.memory.canonical_memory_adapter import extraction_memory_id
-from utils.memory.legacy_backfill_bulk_support import (
+from utils.memory.legacy_backfill_support import (
     apply_with_control_refresh,
     fetch_active_legacy_rows,
     rows_missing_canonical_destinations,
 )
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.required_promotion import (
     ADMISSION_CANDIDATE_STATUS_PENDING,
@@ -54,19 +59,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 50
 LEGACY_SCAN_PAGE_SIZE = 500
-COHORT_GATE_REASON = "cohort_gate: uid not in CANONICAL_MEMORY_USERS (use allow_admin_override=True to bypass)"
-COHORT_OVERRIDE_ACK_REQUIRED_REASON = (
-    "cohort_gate: allow_admin_override requires acknowledge_non_canonical_uid=True "
-    "(CLI: --i-understand-uid-not-whitelisted)"
-)
 Payload = Dict[str, Any]
 LegacyRow = Dict[str, Any]
 LegacyReader = Callable[..., List[LegacyRow]]
 BucketSampleMap = Dict[str, List[Payload]]
-
-
-class BackfillCohortGateError(ValueError):
-    """Raised when backfill is invoked for a uid outside the canonical cohort."""
 
 
 class LegacyBackfillBucket(str, Enum):
@@ -202,7 +198,6 @@ class BackfillReport:
     vector_sync_failures: int = 0
     keyword_sync_failures: int = 0
     kg_extraction_failures: int = 0
-    cohort_gated: bool = False
     errors: List[str] = field(default_factory=_empty_str_list)
     selected_bucket: Optional[str] = None
     bucket_counts: Dict[str, int] = field(default_factory=_empty_bucket_counts)
@@ -260,7 +255,6 @@ class LegacyBackfillRemediationApplyReport:
     vector_sync_failures: int
     keyword_sync_failures: int
     kg_invalidation_failures: int
-    cohort_gated: bool = False
     errors: List[str] = field(default_factory=_empty_str_list)
 
 
@@ -297,34 +291,6 @@ def legacy_backfill_idempotency_key(*, uid: str, legacy_memory_id: str) -> str:
 def legacy_source_fingerprint(legacy_rows: Sequence[LegacyRow]) -> str:
     legacy_ids = sorted(_row_str(row, "id") for row in legacy_rows)
     return deterministic_contract_id("legacy-backfill-source-set", {"legacy_ids": legacy_ids})
-
-
-def assert_canonical_cohort_for_backfill(
-    uid: str,
-    *,
-    allow_admin_override: bool = False,
-    acknowledge_non_canonical_uid: bool = False,
-    operator_context: Optional[str] = None,
-    db_client: Any = None,
-) -> None:
-    """Require ``uid`` to be in the canonical whitelist before backfill runs."""
-    if allow_admin_override:
-        if not acknowledge_non_canonical_uid:
-            raise BackfillCohortGateError(COHORT_OVERRIDE_ACK_REQUIRED_REASON)
-        memory_system = resolve_memory_system(uid, db_client=db_client)
-        if memory_system != MemorySystem.CANONICAL:
-            logger.warning(
-                "legacy backfill cohort override",
-                extra={
-                    "event": "legacy_backfill_cohort_override",
-                    "uid": uid,
-                    "memory_system": memory_system.value,
-                    "operator_context": sanitize(operator_context or "unspecified"),
-                },
-            )
-        return
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
-        raise BackfillCohortGateError(COHORT_GATE_REASON)
 
 
 def live_extraction_memory_id_for_legacy_row(*, uid: str, legacy_row: LegacyRow) -> Optional[str]:
@@ -681,8 +647,6 @@ def apply_legacy_backfill_remediation_archives(
     expected_archive_count: Optional[int] = None,
     dry_run: bool = True,
     run_id: Optional[str] = None,
-    allow_admin_override: bool = False,
-    acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
     db_client: Any = None,
 ) -> LegacyBackfillRemediationApplyReport:
@@ -694,28 +658,7 @@ def apply_legacy_backfill_remediation_archives(
     """
 
     client: Any = db_client if db_client is not None else default_db_client
-    try:
-        assert_canonical_cohort_for_backfill(
-            uid,
-            allow_admin_override=allow_admin_override,
-            acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
-            operator_context=operator_context,
-            db_client=client,
-        )
-    except BackfillCohortGateError as exc:
-        return LegacyBackfillRemediationApplyReport(
-            uid=uid,
-            dry_run=dry_run,
-            expected_archive_count=expected_archive_count,
-            candidate_count=0,
-            archived_count=0,
-            idempotent_count=0,
-            vector_sync_failures=0,
-            keyword_sync_failures=0,
-            kg_invalidation_failures=0,
-            cohort_gated=True,
-            errors=[str(exc)],
-        )
+    del operator_context  # Accepted for operator-side audit plumbing; never an entitlement input.
 
     candidates = _archive_remediation_candidates(uid, db_client=client)
     candidate_count = len(candidates)
@@ -1035,7 +978,7 @@ def _upgrade_pending_admission_candidate(
         "expected_item_revision": item.item_revision,
         "expected_content_hash": item.content_hash,
         "promotion_audit": promotion,
-        "expires_at": (item.expires_at or datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+        "expires_at": (item.expires_at or default_short_term_expiry(datetime.now(timezone.utc))).isoformat(),
     }
     if isinstance(source_subject_id, str) and source_subject_id:
         patch_payload["subject_entity_id"] = source_subject_id
@@ -1152,14 +1095,14 @@ def _apply_one_legacy_row(
     }
     captured_at = None
     updated_at = None
-    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    expires_at = default_short_term_expiry(datetime.now(timezone.utc))
     if bucket is not None:
         now = datetime.now(timezone.utc)
         captured_at = _coerce_optional_legacy_datetime(legacy_row.get("created_at")) or now
         updated_at = _coerce_optional_legacy_datetime(legacy_row.get("updated_at")) or captured_at
         if updated_at < captured_at:
             updated_at = captured_at
-        expires_at = now + timedelta(days=30)
+        expires_at = default_short_term_expiry(now)
         promotion.update(
             {
                 "migration_strategy": "bucketed_legacy_backfill",
@@ -1306,30 +1249,11 @@ def _coerce_legacy_backfill_bucket(value: LegacyBackfillBucket | str | None) -> 
     return LegacyBackfillBucket(value)
 
 
-def _cohort_gated_report(uid: str, *, dry_run: bool, reason: str = COHORT_GATE_REASON) -> BackfillReport:
-    return BackfillReport(
-        uid=uid,
-        dry_run=dry_run,
-        source_count=0,
-        intended_count=0,
-        written_count=0,
-        skipped_already_present=0,
-        skipped_both_store_duplicate=0,
-        skipped_semantic_duplicate=0,
-        destination_count=0,
-        verified=False,
-        cohort_gated=True,
-        errors=[reason],
-    )
-
-
 def backfill_user_bucketed(
     uid: str,
     *,
     bucket: LegacyBackfillBucket | str | None = None,
     dry_run: bool = True,
-    allow_admin_override: bool = False,
-    acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
     db_client: Any = None,
     get_non_filtered_memories_fn: LegacyReader = get_non_filtered_memories,
@@ -1342,17 +1266,7 @@ def backfill_user_bucketed(
     """
     selected_bucket = _coerce_legacy_backfill_bucket(bucket)
     client: Any = db_client if db_client is not None else default_db_client
-    try:
-        assert_canonical_cohort_for_backfill(
-            uid,
-            allow_admin_override=allow_admin_override,
-            acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
-            operator_context=operator_context,
-            db_client=client,
-        )
-    except BackfillCohortGateError as exc:
-        report = _cohort_gated_report(uid, dry_run=dry_run, reason=str(exc))
-        return report
+    del operator_context  # Accepted for operator-side audit plumbing; never an entitlement input.
 
     effective_run_id = run_id or f"legacy_bucket_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     legacy_rows = _fetch_active_legacy_memories(
@@ -1517,8 +1431,6 @@ def backfill_user(
     max_rows: Optional[int] = None,
     continue_on_error: bool = False,
     stop_requested: Optional[Callable[[], bool]] = None,
-    allow_admin_override: bool = False,
-    acknowledge_non_canonical_uid: bool = False,
     operator_context: Optional[str] = None,
     db_client: Any = None,
     get_non_filtered_memories_fn: LegacyReader = get_non_filtered_memories,
@@ -1526,21 +1438,11 @@ def backfill_user(
 ) -> BackfillReport:
     """Stage active legacy memories as canonical admission candidates.
 
-      **Does not modify or delete legacy data** — read-only on ``database.memories``.
-      Requires ``uid`` in ``CANONICAL_MEMORY_USERS`` unless ``allow_admin_override=True``
-    and ``acknowledge_non_canonical_uid=True``.
+    **Does not modify or delete legacy data** — read-only on ``database.memories``.
+    This is an explicit, bounded, per-UID repair tool; it never discovers users.
     """
     client: Any = db_client if db_client is not None else default_db_client
-    try:
-        assert_canonical_cohort_for_backfill(
-            uid,
-            allow_admin_override=allow_admin_override,
-            acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
-            operator_context=operator_context,
-            db_client=client,
-        )
-    except BackfillCohortGateError as exc:
-        return _cohort_gated_report(uid, dry_run=dry_run, reason=str(exc))
+    del operator_context  # Accepted for operator-side audit plumbing; never an entitlement input.
 
     effective_run_id = run_id or f"legacy_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     legacy_rows = _fetch_active_legacy_memories(

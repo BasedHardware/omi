@@ -101,7 +101,7 @@
     "createYourOwnApp": "Створіть власний додаток",
     "buildAndShareApp": "Створюйте та діліться своїм власним додатком",
     "searchApps": "Шукати додатки...",
-    "myApps": "Мої додатки",
+    "myApps": "Створено мною",
     "installedApps": "Встановлені додатки",
     "unableToFetchApps": "Не вдалося завантажити додатки :(\n\nБудь ласка, перевірте підключення до інтернету та спробуйте ще раз.",
     "aboutOmi": "Про Omi",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Триває міграція",
     "accountCutoverMigrationInProgressMessage": "Ваш обліковий запис мігрує. Функції продукту призупинено до завершення міграції.",
     "accountCutoverMigrationRollbackMessage": "Ваш обліковий запис на обслуговуванні після відкату міграції. Частина новіших даних може бути ізольована.",
-    "accountCutoverOpenStore": "Відкрити магазин"
+    "accountCutoverOpenStore": "Відкрити магазин",
+    "sendRawAudioToOmi": "Надсилати необроблений звук до Omi",
+    "sendRawAudioToOmiDescription": "Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.",
+    "findDevice": "Знайти",
+    "diagnosticsShareFailed": "Не вдалося поділитися діагностикою. Спробуйте ще раз."
 }

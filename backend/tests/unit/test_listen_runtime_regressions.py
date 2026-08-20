@@ -10,7 +10,9 @@ import pytest
 from routers.listen.contracts import ListenRequest
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
+from utils.async_tasks import WebSocketTaskSupervisor
 from utils.listen_session_bootstrap import ListenConnectBase
+from utils.onboarding import ONBOARDING_QUESTIONS, OnboardingHandler
 from utils.stt.streaming import STTService
 from starlette.websockets import WebSocketState
 
@@ -190,6 +192,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     runtime.request = request
     runtime.use_custom_stt = False
     runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
 
     async def bootstrap_persistence_call(*_args, **_kwargs):
         return False
@@ -219,10 +222,78 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
     monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
-    monkeypatch.setattr(runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace())
+
+    async def _noop_question():
+        return None
+
+    monkeypatch.setattr(
+        runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace(send_current_question=_noop_question)
+    )
 
     assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=1.0, cancel=False)
     assert selected_multi_language_options == [('es', False, None)]
+
+
+@pytest.mark.anyio
+async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkeypatch):
+    """An onboarding session's question flow is server-driven: the first question
+    must reach the client at connect time, before any segments arrive. Dropping
+    this kickoff leaves the speech-profile page frozen at 0% with no question."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='onboarding-user',
+        language='en',
+        onboarding_mode=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert [event['type'] for event in sent_events] == ['onboarding_question']
+    first_question = sent_events[0]
+    assert first_question['question'] == ONBOARDING_QUESTIONS[0]['question']
+    assert first_question['question_index'] == 0
+    assert first_question['total_questions'] == len(ONBOARDING_QUESTIONS)
+    assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
 
 
 @pytest.mark.anyio
@@ -276,25 +347,46 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
     )
 
 
-def test_runtime_emits_speaker_suggestion_event():
+def test_runtime_emits_speaker_suggestion_event(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
     runtime = object.__new__(ListenSessionRuntime)
-    runtime.request = SimpleNamespace(speaker_auto_assign_enabled=True)
+    runtime.request = SimpleNamespace(uid='user-1', speaker_auto_assign_enabled=True)
+    runtime.recording_session_id = 'recording-1'
+    runtime.state = SimpleNamespace(current_conversation_id='conversation-1')
     emitted_events = []
+    product_events = []
     runtime.send_event = emitted_events.append
+    monkeypatch.setattr(runtime_module, 'emit_product_event', lambda **event: product_events.append(event))
 
     runtime.emit_speaker_suggestion(4, 'person-123', 'Avery', 'segment-123')
 
     assert emitted_events[0].event_type == 'speaker_label_suggestion'
     assert emitted_events[0].speaker_id == 4
     assert emitted_events[0].person_name == 'Avery'
+    assert product_events == [
+        {
+            'uid': 'user-1',
+            'event': 'Speaker Identity Proposed',
+            'properties': {
+                'recording_id': 'recording-1',
+                'conversation_id': 'conversation-1',
+                'speaker_id': 4,
+                'matched_existing_person': True,
+                'auto_assign_enabled': True,
+                'proposal_source': 'live_speaker_identification',
+            },
+        }
+    ]
 
 
 class _LiveSTTAttempt:
     instances = []
 
-    def __init__(self, *, provider, platform):
+    def __init__(self, *, provider, platform, **context):
         self.provider = provider
         self.platform = platform
+        self.context = context
         self.finished = False
         self.terminals = []
         self.__class__.instances.append(self)
@@ -316,6 +408,11 @@ def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, 
         live_transcription_attempt=None,
     )
     runtime.stt_service = STTService.deepgram
+    runtime.stt_model = 'nova-3'
+    runtime.stt_language = 'en'
+    runtime.recording_session_id = 'recording-123'
+    runtime.request = SimpleNamespace(uid='user-123', source='phone')
+    runtime.state.current_conversation_id = 'conversation-123'
     runtime.client_device_context = SimpleNamespace(platform='ios')
     return runtime
 
@@ -335,6 +432,14 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     assert len(_LiveSTTAttempt.instances) == 1
     assert _LiveSTTAttempt.instances[0].provider == 'deepgram'
     assert _LiveSTTAttempt.instances[0].platform == 'ios'
+    assert _LiveSTTAttempt.instances[0].context == {
+        'uid': 'user-123',
+        'recording_id': 'recording-123',
+        'conversation_id': 'conversation-123',
+        'source': 'phone',
+        'model': 'nova-3',
+        'language': 'en',
+    }
     assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
 
 
@@ -481,6 +586,14 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     return processor, delivered, flushed
 
 
+class _ProductTelemetryClient:
+    def __init__(self):
+        self.events = []
+
+    def capture(self, **event):
+        self.events.append(event)
+
+
 @pytest.mark.anyio
 async def test_transcript_delivery_marks_live_transcription_success_only_after_a_nonempty_client_send(monkeypatch):
     class WebSocket:
@@ -530,6 +643,68 @@ async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client
     # Nothing reached the client, so the live-transcription attempt is not a success.
     assert delivered == []
     assert processor.host.state.active is False
+
+
+@pytest.mark.anyio
+async def test_transcript_loop_emits_diarization_completion_after_terminal_flush(monkeypatch):
+    from utils.product_telemetry import set_product_telemetry_client_for_tests
+
+    websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
+    processor, _delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.segment_buffer[0]['speaker_id'] = 2
+    processor.host.recording_session_id = 'recording-1'
+    telemetry = _ProductTelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+
+    await processor.process_loop()
+
+    assert flushed == ['conversation-1']
+    assert telemetry.events[0]['event'] == 'Diarization Completed'
+    assert telemetry.events[0]['properties']['speaker_count'] == 1
+    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+
+
+@pytest.mark.anyio
+async def test_transcript_loop_attributes_diarization_completion_to_each_conversation(monkeypatch):
+    from utils.product_telemetry import set_product_telemetry_client_for_tests
+
+    websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
+    processor, _delivered, _flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.host.recording_session_id = 'recording-1'
+    telemetry = _ProductTelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+    processor.segment_buffer[0]['speaker_id'] = 2
+    waits = 0
+    updates = 0
+
+    async def wait(_seconds):
+        nonlocal waits
+        waits += 1
+        if waits == 2:
+            processor.host.state.active = False
+        return False
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        nonlocal updates
+        updates += 1
+        if updates == 1:
+            processor.host.state.current_conversation_id = 'conversation-2'
+            processor.segment_buffer.append(
+                {'id': 'segment-2', 'text': 'World', 'start': 1.0, 'end': 1.5, 'speaker_id': 3}
+            )
+        return SimpleNamespace(id=f'conversation-{updates}'), segments, []
+
+    processor.host.wait = wait
+    processor._update_live_conversation = update
+
+    await processor.process_loop()
+
+    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
+        'conversation-1',
+        'conversation-2',
+    ]
+    assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
 
 
 async def _async_result(value):

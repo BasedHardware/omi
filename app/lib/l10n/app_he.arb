@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "האפליקציות שלי",
+    "myApps": "נוצר על ידי",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10780,5 +10780,9 @@
     "accountCutoverMigrationInProgressTitle": "העברה בתהליך",
     "accountCutoverMigrationInProgressMessage": "החשבון שלכם בהעברה. תכונות המוצר מושהות עד לסיום ההעברה.",
     "accountCutoverMigrationRollbackMessage": "החשבון שלכם בתחזוקה לאחר ביטול העברה. ייתכן שנתונים חדשים יותר נותרו מבודדים.",
-    "accountCutoverOpenStore": "פתחו חנות"
+    "accountCutoverOpenStore": "פתחו חנות",
+    "sendRawAudioToOmi": "שליחת שמע גולמי ל-Omi",
+    "sendRawAudioToOmiDescription": "כבו כדי למנוע שליחת שמע גולמי ל-Omi. תמלילים ונתונים הדרושים לתכונות הענן עדיין עשויים להישלח ל-Omi.",
+    "findDevice": "איתור",
+    "diagnosticsShareFailed": "לא ניתן היה לשתף את האבחון. נסה שוב."
 }

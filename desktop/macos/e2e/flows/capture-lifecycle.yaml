@@ -4,10 +4,12 @@ tier: 2
 description: Hermetic capture lifecycle via capture_test_transcript seam (no mic/STT)
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceBargeInPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
@@ -49,6 +51,10 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextFeature.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/DerivedDataEgressPolicy.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/OnDeviceMeetingIdentityService.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
   - desktop/macos/Desktop/Sources/Bluetooth/BtDevice.swift
   - desktop/macos/Desktop/Sources/Bluetooth/DeviceUUIDs.swift
@@ -70,6 +76,8 @@ covers:
   - desktop/macos/Desktop/Sources/SingleInstanceGuard.swift
   - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ShellStatusIcons.swift
   - desktop/macos/Desktop/Sources/MainWindow/CaptureListeningLogic.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+MeetingBoundaries.swift
+  - desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
 preconditions:
   - automation_bridge_ready
 
@@ -113,6 +121,24 @@ steps:
       result.detail.segment_count: "2"
 
   - id: S5
+    name: Rotate into a detected meeting
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: meeting_start
+    expect:
+      result.detail.conversation_role: "meeting"
+
+  - id: S6
+    name: Rotate back to ambient after the meeting ends
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: meeting_end
+    expect:
+      result.detail.conversation_role: "ambient"
+
+  - id: S7
     name: Stop hermetic capture lifecycle
     bridge.action:
       name: capture_test_transcript
@@ -123,7 +149,7 @@ steps:
       result.detail.conversation_count_increased: "true"
       result.detail.segment_count: "2"
 
-  - id: S6
+  - id: S8
     name: Navigate to Conversations
     bridge.navigate:
       target: conversations
@@ -131,7 +157,7 @@ steps:
     wait:
       state.selectedTabIndex: 1
 
-  - id: S7
+  - id: S9
     name: Reconcile cached list and canonical detail
     bridge.action:
       name: conversation_reconciliation_snapshot
@@ -145,7 +171,7 @@ steps:
       result.detail.cache_revision_matches: "true"
       result.detail.opened_detail: "true"
 
-  - id: S8
+  - id: S10
     name: Assert conversation list reflects new capture
     bridge.action:
       name: conversation_list_snapshot
@@ -155,7 +181,7 @@ steps:
       ok: true
       result.detail.is_transcribing: "false"
 
-  - id: S9
+  - id: S11
     name: Logs clean
     log.expect:
       absent:

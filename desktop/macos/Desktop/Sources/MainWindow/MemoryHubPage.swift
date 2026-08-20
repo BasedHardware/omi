@@ -34,12 +34,15 @@ struct MemoryHubPage: View {
   /// How this shell applies a hub selection. The modern shell only has to write the persisted
   /// destination; the chat-first shell also moves its own typed route, so it passes its own.
   var onSelectDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// Rewind lives on the shell rail, not in this hub, so the Activity spine's way into it has to be
+  /// supplied by the host that owns the rail index. Hosts without one leave the card inert.
+  var onOpenRewind: (() -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
   }
 
-  /// Canonical-cohort users get the atlas on the Brain Map destination; users
+  /// The universal assertion-backed graph gets the atlas on the Brain Map destination; users
   /// who have not entered the canonical lifecycle keep the legacy graph.
   private var brainMapPresentationMode: MemoryGraphPresentationMode {
     MemoryGraphPresentationMode.resolve(
@@ -63,7 +66,6 @@ struct MemoryHubPage: View {
   }
 
   private func select(_ next: MemoryHubDestination) {
-    OmiUISound.play(.navigate)
     OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
       if let onSelectDestination {
         onSelectDestination(next)
@@ -76,6 +78,19 @@ struct MemoryHubPage: View {
   @ViewBuilder
   private var hubContent: some View {
     switch destination {
+    case .activity:
+      ActivityHubTab(
+        appState: appState,
+        memoriesViewModel: memoriesViewModel,
+        onOpenConversation: { id in
+          ConversationDetailAutomationState.shared.requestOpen(
+            conversationId: id, showTranscript: false)
+          select(.conversations)
+        },
+        onOpenBrainMap: { select(.brainMap) },
+        onOpenRewind: { onOpenRewind?() }
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .memories:
       adaptiveContent(
         MemoriesPage(viewModel: viewModelContainer.memoriesViewModel),
@@ -89,8 +104,8 @@ struct MemoryHubPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The lifecycle capability is established by the first authoritative
         // memory response. Without this, opening straight into a persisted
-        // Brain Map destination would resolve the legacy graph for a canonical
-        // user purely because the Memories destination was never visited.
+        // Brain Map destination would resolve the compatibility graph before
+        // the server capability was known purely because Memories was never visited.
         .task { await memoriesViewModel.loadMemoriesIfNeeded() }
     }
   }
@@ -112,7 +127,7 @@ struct MemoryHubPage: View {
     case .legacyBrainMap:
       MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
     case .undetermined:
-      // Neither surface may mount before the cohort is known. The legacy graph
+      // Neither surface may mount before the server capability is known. The compatibility graph
       // in particular latches the shared view model's in-flight guard and runs
       // an empty-graph rebuild bootstrap, so a one-frame appearance left the
       // atlas permanently blank and fired a destructive rebuild.
@@ -120,14 +135,14 @@ struct MemoryHubPage: View {
         Color.clear  // The shell's glass is the ground.
         ProgressView().tint(Ink.secondary)
       }
-      .accessibilityIdentifier("brain_map_resolving_cohort")
+      .accessibilityIdentifier("brain_map_resolving_capability")
     }
   }
 
   /// An update island around the Canvas-heavy Brain Map.
   ///
   /// `MemoryHubPage` has to observe `MemoriesViewModel` long enough to resolve
-  /// the canonical cohort, but its normal list refreshes must not rebuild the
+  /// the server lifecycle capability, but its normal list refreshes must not rebuild the
   /// map's SwiftUI graph. Reference identity is intentional: evidence reads
   /// and open actions use the current model at invocation time, while the map
   /// itself observes `MemoryGraphViewModel` for the only state that changes its

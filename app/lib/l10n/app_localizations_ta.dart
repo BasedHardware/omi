@@ -323,7 +323,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get searchApps => 'பயன்பாடுகளைத் தேடுங்கள்...';
 
   @override
-  String get myApps => 'என் பயன்பாடுகள்';
+  String get myApps => 'நான் உருவாக்கியவை';
 
   @override
   String get installedApps => 'நிறுவப்பட்ட பயன்பாடுகள்';
@@ -9909,4 +9909,17 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get sendRawAudioToOmi => 'மூல ஆடியோவை Omi-க்கு அனுப்பவும்';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'மூல ஆடியோ Omi-க்கு அனுப்பப்படுவதைத் தடுக்க இதை அணைக்கவும். உரைமாற்றங்களும் கிளவுட் அம்சங்களுக்குத் தேவையான தரவும் இன்னும் Omi-க்கு அனுப்பப்படலாம்.';
+
+  @override
+  String get findDevice => 'கண்டறி';
+
+  @override
+  String get diagnosticsShareFailed => 'கண்டறிதல் தரவைப் பகிர முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 }

@@ -323,7 +323,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get searchApps => 'అనువర్తనాలను శోధించండి...';
 
   @override
-  String get myApps => 'నా అనువర్తనాలు';
+  String get myApps => 'నా సృష్టి';
 
   @override
   String get installedApps => 'ఇన్‌స్టాల్ చేసిన అనువర్తనాలు';
@@ -9888,4 +9888,17 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get sendRawAudioToOmi => 'ముడి ఆడియోను Omiకి పంపండి';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'ముడి ఆడియో Omiకి పంపబడకుండా ఉండటానికి దీన్ని ఆఫ్ చేయండి. ట్రాన్స్‌క్రిప్ట్‌లు మరియు క్లౌడ్ ఫీచర్లకు అవసరమైన డేటా ఇప్పటికీ Omiకి పంపబడవచ్చు.';
+
+  @override
+  String get findDevice => 'కనుగొనండి';
+
+  @override
+  String get diagnosticsShareFailed => 'డయాగ్నొస్టిక్స్‌ను షేర్ చేయలేకపోయాము. దయచేసి మళ్లీ ప్రయత్నించండి.';
 }

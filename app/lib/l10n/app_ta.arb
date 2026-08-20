@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "என் பயன்பாடுகள்",
+    "myApps": "நான் உருவாக்கியவை",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10780,5 +10780,9 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें"
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "sendRawAudioToOmi": "மூல ஆடியோவை Omi-க்கு அனுப்பவும்",
+    "sendRawAudioToOmiDescription": "மூல ஆடியோ Omi-க்கு அனுப்பப்படுவதைத் தடுக்க இதை அணைக்கவும். உரைமாற்றங்களும் கிளவுட் அம்சங்களுக்குத் தேவையான தரவும் இன்னும் Omi-க்கு அனுப்பப்படலாம்.",
+    "findDevice": "கண்டறி",
+    "diagnosticsShareFailed": "கண்டறிதல் தரவைப் பகிர முடியவில்லை. மீண்டும் முயற்சிக்கவும்."
 }

@@ -14,6 +14,14 @@ PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
 # default too, while preserving an explicit one-worker escape hatch for a
 # diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
 WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
+# These suites exercise the production-standard UserDefaults auth domain. On
+# hosted runners CoreFoundation can still route that domain through the shared
+# cfprefsd service even when workers have distinct CFFIXED_USER_HOME values.
+# Keep the small auth cluster sequential and give each suite a fresh runtime;
+# the remaining hundreds of suites retain worker-level parallelism.
+# Membership is also derived from the source below, so a new adopter of the
+# owner-authority fixture cannot silently rejoin the parallel pool.
+SERIAL_SUITES="${OMI_SWIFT_TEST_SERIAL_SUITES:-APIClientAuthRetryTests AuthRefreshResilienceTests AuthSessionAttemptFenceTests AuthTokenStorageTests ChatToolExecutorCreateMemoryTests FirebaseAuthAvailabilityTests KernelJournalOwnerBoundAuthTests RuntimeOwnerIdentityTests}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 # The per-suite budget must clear the slowest legitimate suite, not the median
 # one: MemoryAtlasPerformanceHarnessTests runs 19 tests whose XCTest `measure`
@@ -21,10 +29,38 @@ PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 # a clean main while CI (300s, see .github/workflows/desktop-swift-ci.yml) was
 # green. Keep this in sync with that workflow — the check below proves it.
 SUITE_TIMEOUT_SECONDS="${OMI_SWIFT_TEST_SUITE_TIMEOUT_SECONDS:-300}"
+# A suite killed by a signal writes nothing but SwiftPM's one-line "Exited with
+# unexpected signal code N" into its log — no frames. The system crash reporter
+# holds the backtrace, and on a hosted runner it is discarded with the machine,
+# so a crasher that only reproduces on CI is undebuggable from the log alone
+# (#11573). Print the reports this run produced next to the failing suites.
+CRASH_REPORT_DIR="${OMI_SWIFT_TEST_CRASH_REPORT_DIR:-$HOME/Library/Logs/DiagnosticReports}"
+CRASH_REPORT_LIMIT="${OMI_SWIFT_TEST_CRASH_REPORT_LIMIT:-6}"
 
 fail() {
   echo "FAIL: $*" >&2
   exit 1
+}
+
+dump_crash_reports() {
+  local marker="$1"
+  if [ ! -d "$CRASH_REPORT_DIR" ]; then
+    echo "No crash reports: $CRASH_REPORT_DIR does not exist."
+    return
+  fi
+  local reports
+  reports="$(find "$CRASH_REPORT_DIR" -maxdepth 1 -type f -name '*.ips' -newer "$marker" 2>/dev/null \
+    | sort | head -n "$CRASH_REPORT_LIMIT")"
+  if [ -z "$reports" ]; then
+    echo "No crash reports newer than this run in $CRASH_REPORT_DIR."
+    return
+  fi
+  local report
+  while IFS= read -r report; do
+    echo "--- CRASH REPORT: $report ---"
+    cat "$report"
+    echo
+  done <<<"$reports"
 }
 
 terminate_process_tree() {
@@ -167,13 +203,60 @@ fi
 
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not
 # silently skipped (SwiftPM compiles the whole Tests target; this must match).
+suite_class_pattern='^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) [A-Za-z0-9_]+:.*XCTestCase'
+suite_class_name='s/^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) ([A-Za-z0-9_]+):.*/\5/'
+
 declare -a suites=()
 while IFS= read -r suite; do
   suites+=("$suite")
 done < <(find "$TESTS_ROOT" -type f -name '*.swift' -print0 \
-  | xargs -0 grep -hE '^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) [A-Za-z0-9_]+:.*XCTestCase' \
-  | sed -E 's/^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) ([A-Za-z0-9_]+):.*/\5/' \
+  | xargs -0 grep -hE "$suite_class_pattern" \
+  | sed -E "$suite_class_name" \
   | sort -u)
+
+# A suite that drives RuntimeOwnerAuthorityTestFixture transitions the
+# process-global owner authority through that same standard domain, so it
+# belongs to the sequential cluster whether or not anyone remembered to list
+# it. ChatToolExecutorPolicyTests did not, and a concurrent suite moving
+# `auth_userId` underneath it failed its tool calls with
+# `authorized_execution_owner_changed`, which blocked a release cut (#11511).
+declare -a fixture_files=()
+while IFS= read -r fixture_file; do
+  fixture_files+=("$fixture_file")
+done < <(find "$TESTS_ROOT" -type f -name '*.swift' \
+  -exec grep -l 'RuntimeOwnerAuthorityTestFixture' {} +)
+
+declare -a derived_serial_suites=()
+if [ "${#fixture_files[@]}" -gt 0 ]; then
+  while IFS= read -r suite; do
+    derived_serial_suites+=("$suite")
+  done < <(grep -hE "$suite_class_pattern" "${fixture_files[@]}" \
+    | sed -E "$suite_class_name" \
+    | sort -u)
+fi
+
+is_serial_suite() {
+  case " $SERIAL_SUITES " in
+    *" $1 "*) return 0 ;;
+  esac
+  local candidate
+  for candidate in ${derived_serial_suites[@]+"${derived_serial_suites[@]}"}; do
+    if [ "$candidate" = "$1" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+declare -a parallel_suites=()
+declare -a serial_suites=()
+for suite in "${suites[@]}"; do
+  if is_serial_suite "$suite"; then
+    serial_suites+=("$suite")
+  else
+    parallel_suites+=("$suite")
+  fi
+done
 
 "$SKIP_RATCHET" --check --tests-root "$TESTS_ROOT"
 
@@ -182,6 +265,7 @@ suite_log_dir="$(mktemp -d)"
 suite_worker_dir="$(mktemp -d)"
 trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
 failed_suites=""
+crashed_suites=""
 suite_count="${#suites[@]}"
 worker_count=0
 
@@ -196,10 +280,16 @@ if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
   xcrun swift build --package-path "$PACKAGE_PATH" --build-tests
 fi
 
-if [ "$suite_count" -gt 0 ]; then
+# Only reports written after this point belong to the suite run; the prebuild
+# and anything the runner did earlier must not be attributed to a crasher.
+crash_marker="$suite_worker_dir/run-start"
+touch "$crash_marker"
+
+parallel_suite_count="${#parallel_suites[@]}"
+if [ "$parallel_suite_count" -gt 0 ]; then
   worker_count="$WORKERS"
-  if [ "$worker_count" -gt "$suite_count" ]; then
-    worker_count="$suite_count"
+  if [ "$worker_count" -gt "$parallel_suite_count" ]; then
+    worker_count="$parallel_suite_count"
   fi
 
   declare -a worker_lists=()
@@ -213,9 +303,9 @@ if [ "$suite_count" -gt 0 ]; then
     worker_runtime_paths+=("$suite_worker_dir/worker-$worker.runtime")
   done
 
-  for ((suite_index = 0; suite_index < suite_count; suite_index++)); do
+  for ((suite_index = 0; suite_index < parallel_suite_count; suite_index++)); do
     worker=$((suite_index % worker_count))
-    printf '%s\n' "${suites[$suite_index]}" >>"${worker_lists[$worker]}"
+    printf '%s\n' "${parallel_suites[$suite_index]}" >>"${worker_lists[$worker]}"
   done
 
   for ((worker = 0; worker < worker_count; worker++)); do
@@ -237,6 +327,24 @@ if [ "$suite_count" -gt 0 ]; then
     | xargs -0 -n3 -P "$worker_count" "$SCRIPT_PATH" __run_worker "$suite_log_dir" || true
 fi
 
+# Run shared-auth-domain suites only after every parallel worker has exited.
+# A distinct runtime per suite prevents sequential residue as well as races.
+for ((serial_index = 0; serial_index < ${#serial_suites[@]}; serial_index++)); do
+  suite="${serial_suites[$serial_index]}"
+  serial_build_path="$suite_worker_dir/serial-$serial_index.build"
+  serial_runtime_path="$suite_worker_dir/serial-$serial_index.runtime"
+  if [ "$PREBUILD" = "1" ]; then
+    cp -cR "$package_root/.build" "$serial_build_path"
+  else
+    mkdir -p "$serial_build_path"
+  fi
+  mkdir -p "$serial_runtime_path/home" "$serial_runtime_path/tmp"
+  "$SCRIPT_PATH" __run_suite "$suite_log_dir" "$suite" "$serial_build_path" "$serial_runtime_path" || true
+done
+if [ "$worker_count" -eq 0 ] && [ "${#serial_suites[@]}" -gt 0 ]; then
+  worker_count=1
+fi
+
 for suite in "${suites[@]}"; do
   status_path="$suite_log_dir/$suite.status"
   if [ ! -f "$status_path" ]; then
@@ -249,8 +357,16 @@ for suite in "${suites[@]}"; do
     failed_suites="$failed_suites $suite"
     echo "--- FAILED: $suite ---"
     cat "$suite_log_dir/$suite.log"
+    if grep -q "Exited with unexpected signal" "$suite_log_dir/$suite.log"; then
+      crashed_suites="$crashed_suites $suite"
+    fi
   fi
 done
+
+if [ -n "$crashed_suites" ]; then
+  echo "Signal-killed Swift suites:$crashed_suites"
+  dump_crash_reports "$crash_marker"
+fi
 
 echo "Ran $suite_count Swift suites in isolation with $worker_count worker(s), ${SUITE_TIMEOUT_SECONDS}s per-suite budget."
 

@@ -128,6 +128,7 @@ class InsightAssistantSettings {
     set {
       let isCustom = newValue != InsightAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("insight", isShippedDefault: !isCustom)
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Insight analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")

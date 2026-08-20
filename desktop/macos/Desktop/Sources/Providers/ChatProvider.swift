@@ -315,6 +315,11 @@ enum AgentTimelineOpenFeedback {
   }
 }
 
+struct ConversationLinkActionItem: Equatable {
+  let description: String
+  let taskID: String?
+}
+
 enum ChatContentBlock: Identifiable {
   case text(id: String, text: String)
   case toolCall(
@@ -337,7 +342,16 @@ enum ChatContentBlock: Identifiable {
   case taskCard(id: String, taskId: String)
   case goalLink(id: String, goalId: String, summary: String)
   case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
+  case conversationLink(
+    id: String,
+    conversationId: String,
+    summary: String,
+    recommendedActionItems: [ConversationLinkActionItem]
+  )
   case memoryLink(id: String, memoryId: String, summary: String)
+  /// Answer-level provenance. Unlike a rich link card, this is rendered at the matching inline
+  /// numeric marker and is otherwise invisible in the transcript.
+  case citation(id: String, reference: ChatCitationReference)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -368,7 +382,9 @@ enum ChatContentBlock: Identifiable {
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
+    case .conversationLink(let id, _, _, _): return id
     case .memoryLink(let id, _, _): return id
+    case .citation(let id, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -653,165 +669,6 @@ final class ChatToolTraceInputStore: @unchecked Sendable {
 
 // MARK: - Chat Message Model
 
-/// Metadata about the context and resources used to generate an AI response
-struct MessageMetadata {
-  var model: String?
-  var inputTokens: Int?
-  var outputTokens: Int?
-  var cacheReadTokens: Int?
-  var cacheWriteTokens: Int?
-  var costUsd: Double?
-  var systemPrompt: String?
-  var hasScreenshot: Bool
-  var screenshotSizeBytes: Int?
-  var toolNames: [String]
-  /// Total rows returned across all execute_sql tool calls during this response
-  var sqlRowsReturned: Int
-  /// Number of execute_sql tool calls made during this response
-  var sqlQueryCount: Int
-
-  var totalTokens: Int? {
-    guard let input = inputTokens, let output = outputTokens else { return nil }
-    return input + output + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
-  }
-
-  // MARK: - Dynamic context sections from system prompt
-
-  /// A single tagged section found in the system prompt
-  struct PromptSection {
-    let tag: String
-    let itemCount: Int
-    let charCount: Int
-
-    /// Human-readable label derived from the XML tag name
-    var label: String {
-      tag.replacingOccurrences(of: "_", with: " ")
-        .localizedCapitalized
-    }
-  }
-
-  /// Dynamically discovers all XML-tagged sections in the system prompt and counts items in each.
-  /// This is future-proof: any new `<some_tag>...</some_tag>` section automatically appears.
-  var promptSections: [PromptSection] {
-    guard let prompt = systemPrompt else { return [] }
-    var sections: [PromptSection] = []
-    var seen = Set<String>()
-
-    // Find all <tag>...</tag> pairs
-    guard let pattern = try? NSRegularExpression(pattern: #"<([a-z][a-z0-9_]*)>"#, options: []) else { return [] }
-    let matches = pattern.matches(in: prompt, range: NSRange(prompt.startIndex..., in: prompt))
-
-    for match in matches {
-      guard let tagRange = Range(match.range(at: 1), in: prompt) else { continue }
-      let tag = String(prompt[tagRange])
-
-      // Skip duplicates
-      guard !seen.contains(tag) else { continue }
-      seen.insert(tag)
-
-      let openTag = "<\(tag)>"
-      let closeTag = "</\(tag)>"
-      guard let openRange = prompt.range(of: openTag),
-        let closeRange = prompt.range(of: closeTag),
-        openRange.upperBound < closeRange.lowerBound
-      else { continue }
-
-      let content = String(prompt[openRange.upperBound..<closeRange.lowerBound])
-      let charCount = content.count
-
-      // Count meaningful lines (items starting with "- ", or role-prefixed lines for conversation)
-      let lines = content.components(separatedBy: "\n")
-      let itemCount: Int
-      if tag == "conversation_history" {
-        itemCount = lines.filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }.count
-      } else {
-        let bulletLines = lines.filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }.count
-        // If no bullet items, count non-empty non-header lines
-        if bulletLines > 0 {
-          itemCount = bulletLines
-        } else {
-          itemCount = lines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.count
-        }
-      }
-
-      sections.append(PromptSection(tag: tag, itemCount: itemCount, charCount: charCount))
-    }
-
-    return sections
-  }
-
-  // Backward-compatible summary counts used by the floating-bar metadata popover.
-  // These intentionally keep the older semantics instead of exposing every raw XML section.
-  var memoriesCount: Int {
-    guard let prompt = systemPrompt,
-      let factsStart = prompt.range(of: "<user_facts>"),
-      let factsEnd = prompt.range(of: "</user_facts>")
-    else { return 0 }
-    let factsSection = String(prompt[factsStart.upperBound..<factsEnd.lowerBound])
-    return
-      factsSection
-      .components(separatedBy: "\n")
-      .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
-      .count
-  }
-
-  var conversationTurns: Int {
-    guard let prompt = systemPrompt,
-      let histStart = prompt.range(of: "<conversation_history>"),
-      let histEnd = prompt.range(of: "</conversation_history>")
-    else { return 0 }
-    let histSection = String(prompt[histStart.upperBound..<histEnd.lowerBound])
-    return
-      histSection
-      .components(separatedBy: "\n")
-      .filter { $0.hasPrefix("User:") || $0.hasPrefix("Assistant:") }
-      .count
-  }
-
-  var tasksCount: Int {
-    guard let prompt = systemPrompt,
-      let tasksStart = prompt.range(of: "<user_tasks>"),
-      let tasksEnd = prompt.range(of: "</user_tasks>")
-    else { return 0 }
-    let tasksSection = String(prompt[tasksStart.upperBound..<tasksEnd.lowerBound])
-    return
-      tasksSection
-      .components(separatedBy: "\n")
-      .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
-      .count
-  }
-
-  var goalsCount: Int {
-    guard let prompt = systemPrompt,
-      let goalsStart = prompt.range(of: "<user_goals>"),
-      let goalsEnd = prompt.range(of: "</user_goals>")
-    else { return 0 }
-    let goalsSection = String(prompt[goalsStart.upperBound..<goalsEnd.lowerBound])
-    return
-      goalsSection
-      .components(separatedBy: "\n")
-      .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ") }
-      .count
-  }
-
-  var availableToolsCount: Int {
-    guard let prompt = systemPrompt else { return 0 }
-    return [
-      "execute_sql",
-      "semantic_search",
-      "spawn_agent",
-      "run_agent_and_wait",
-      "search_tasks",
-      "get_daily_recap",
-      "complete_task",
-      "delete_task",
-      "save_knowledge_graph",
-    ]
-    .filter { prompt.contains("**\($0)**") }
-    .count
-  }
-}
-
 /// A single chat message
 struct ChatMessage: Identifiable {
   var id: String  // Mutable to sync with server-generated ID
@@ -938,23 +795,17 @@ struct ChatQuestionCardContinuation: Sendable {
 }
 
 extension ChatMessage {
+  /// User-visible answer, excluding pre-tool commentary the model streamed before tools.
+  var visibleAnswerText: String {
+    ChatAssistantAnswerText.visible(
+      contentBlocks: contentBlocks,
+      fallback: text,
+      isStreaming: isStreaming
+    )
+  }
+
   var copyableText: String {
-    // A completed assistant turn can contain internal reasoning and transient
-    // tool/lifecycle blocks alongside its user-visible answer. The message
-    // copy affordance promises the answer, so retain only final text blocks.
-    let finalOutput =
-      contentBlocks
-      .compactMap { block -> String? in
-        guard case .text(_, let text) = block else { return nil }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-      }
-      .joined(separator: "\n")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    if !finalOutput.isEmpty {
-      return finalOutput
-    }
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    visibleAnswerText
   }
 
   var displayResources: [ChatResource] {
@@ -982,9 +833,12 @@ extension ChatContentBlock {
       return trimmed.isEmpty ? nil : trimmed
     case .taskCard:
       return nil
-    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary), .memoryLink(_, _, let summary):
+    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary),
+      .conversationLink(_, _, let summary, _), .memoryLink(_, _, let summary):
       let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
+    case .citation:
+      return nil
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
@@ -1045,7 +899,9 @@ extension ChatMessage {
   /// Convert a backend message to a local ChatMessage
   init(from db: ChatMessageDB) {
     let resources = ChatResource.decodeResourcesFromMessageMetadata(db.metadata)
-    let contentBlocks = ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
+    let contentBlocks =
+      db.contentBlocksJSON.flatMap(ChatContentBlockCodec.decode)
+      ?? ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
     self.init(
       id: db.id,
       text: db.text,
@@ -1326,6 +1182,8 @@ class ChatProvider: ObservableObject {
   lazy var kernelTurnProjection = KernelTurnProjection(host: self)
   private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private var journalOwnerByMessageID: [String: String] = [:]
+  var pendingMessageRatings = ChatMessageRatingQueue()
+  var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
   private var agentBridgeStarted = false
   /// The root shell supplies one server-authoritative sample before this
@@ -1829,6 +1687,7 @@ class ChatProvider: ObservableObject {
     kernelTurnProjection.invalidateOwnerState()
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
+    pendingMessageRatings.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
     // auth-required card after a successful account switch incorrectly asks
@@ -1896,6 +1755,7 @@ class ChatProvider: ObservableObject {
   private struct KernelQueryContext {
     let session: AgentSurfaceSession
     let snapshot: AgentContextSnapshot
+    let promptCitationReferences: [ChatCitationReference]
   }
 
   static func responseLanguageInstruction(languageCodes: [String]) -> String? {
@@ -1960,6 +1820,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil
   ) async throws -> KernelQueryContext {
@@ -1978,12 +1839,17 @@ class ChatProvider: ObservableObject {
       surfaceKind: surface.surfaceKind
     )
     let workspacePath = session.profile.workingDirectory
-    let memoryText = formatMemoriesSection()
     // Canonical goals are retrieved through the capability-scoped tool. An
     // enabled Chat-first session must not quietly inject legacy GoalStorage
     // rows into the model context.
-    let goalText = isChatFirstEnabled(for: surface) ? "" : formatGoalSection()
-    let taskText = formatTasksSection()
+    let includesLegacyGoals = !isChatFirstEnabled(for: surface)
+    let promptCitationLedger =
+      includePromptCitations
+      ? makePromptCitationLedger(includesLegacyGoals: includesLegacyGoals)
+      : ChatPromptCitationLedger(sources: [])
+    let memoryText = formatMemoriesSection(citations: promptCitationLedger)
+    let goalText = includesLegacyGoals ? formatGoalSection(citations: promptCitationLedger) : ""
+    let taskText = formatTasksSection(citations: promptCitationLedger)
     let identityText = formatAIProfileSection()
     var surfacePayload: [String: Any] = [
       "presentation": systemPromptStyle == .floating ? "floating" : "main",
@@ -1997,6 +1863,7 @@ class ChatProvider: ObservableObject {
       AssistantSettings.shared.hasExplicitVoiceLanguages
         ? Self.responseLanguageInstruction(languageCodes: AssistantSettings.shared.voiceLanguages)
         : nil,
+      promptCitationLedger.responseInstruction,
     ]
     .compactMap { $0 }
     .filter { !$0.isEmpty }
@@ -2073,7 +1940,10 @@ class ChatProvider: ObservableObject {
       sessionId: session.sessionId,
       surfaceKind: surface.surfaceKind
     )
-    return KernelQueryContext(session: session, snapshot: snapshot)
+    return KernelQueryContext(
+      session: session,
+      snapshot: snapshot,
+      promptCitationReferences: promptCitationLedger.references)
   }
 
   /// Publishes realtime inputs through the same typed kernel source path used
@@ -2089,7 +1959,8 @@ class ChatProvider: ObservableObject {
         systemPromptSuffix: nil,
         notificationContext: nil,
         screenPayload: nil,
-        includeScreenSource: false
+        includeScreenSource: false,
+        includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
         from: context.snapshot,
@@ -2626,18 +2497,53 @@ class ChatProvider: ObservableObject {
   }
 
   /// Formats cached memories into a string for the prompt
-  private func formatMemoriesSection() -> String {
+  private func formatMemoriesSection(citations: ChatPromptCitationLedger) -> String {
     guard !cachedMemories.isEmpty else { return "" }
 
     let userName = AuthService.shared.displayName.isEmpty ? "the user" : AuthService.shared.givenName
 
     var lines: [String] = ["<user_facts>", "Facts about \(userName):"]
     for memory in cachedMemories.prefix(30) {  // Limit to 30 most relevant
-      lines.append("- [memory] \(memory.content)")
+      let marker = citations.marker(kind: .memory, sourceID: memory.id).map { " \($0)" } ?? ""
+      // Kind labels in square brackets get copied as fake citations (`[memory]`, `[memory 5023]`).
+      lines.append("- \(memory.content)\(marker)")
     }
     lines.append("</user_facts>")
 
     return lines.joined(separator: "\n")
+  }
+
+  private func makePromptCitationLedger(includesLegacyGoals: Bool) -> ChatPromptCitationLedger {
+    let formatter = ISO8601DateFormatter()
+    var sources = cachedMemories.prefix(30).map {
+      ChatPromptCitationSource(
+        kind: .memory,
+        sourceID: $0.id,
+        title: $0.headline ?? "Memory",
+        preview: $0.content,
+        createdAt: formatter.string(from: $0.createdAt))
+    }
+    if includesLegacyGoals {
+      sources.append(
+        contentsOf: cachedGoals.filter(\.isActive).map {
+          ChatPromptCitationSource(
+            kind: .goal,
+            sourceID: $0.id,
+            title: $0.title,
+            preview: $0.description ?? $0.title,
+            createdAt: formatter.string(from: $0.createdAt))
+        })
+    }
+    sources.append(
+      contentsOf: cachedTasks.map {
+        ChatPromptCitationSource(
+          kind: .task,
+          sourceID: $0.id,
+          title: $0.description,
+          preview: $0.contextSummary ?? $0.description,
+          createdAt: formatter.string(from: $0.createdAt))
+      })
+    return ChatPromptCitationLedger(sources: sources)
   }
 
   // MARK: - Load Goals
@@ -2666,7 +2572,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Formats goals into a prompt section
-  private func formatGoalSection() -> String {
+  private func formatGoalSection(citations: ChatPromptCitationLedger) -> String {
     let activeGoals = cachedGoals.filter { $0.isActive }
     guard !activeGoals.isEmpty else { return "" }
 
@@ -2680,6 +2586,9 @@ class ChatProvider: ObservableObject {
         line += " (progress: \(Int(goal.currentValue))/\(Int(goal.targetValue))"
         if let unit = goal.unit, !unit.isEmpty { line += " \(unit)" }
         line += ")"
+      }
+      if let marker = citations.marker(kind: .goal, sourceID: goal.id) {
+        line += " \(marker)"
       }
       lines.append(line)
     }
@@ -2707,7 +2616,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Formats cached tasks into a prompt section
-  private func formatTasksSection() -> String {
+  private func formatTasksSection(citations: ChatPromptCitationLedger) -> String {
     guard !cachedTasks.isEmpty else { return "" }
 
     var lines: [String] = ["\n<user_tasks>", "Current tasks:"]
@@ -2724,6 +2633,9 @@ class ChatProvider: ObservableObject {
       }
       if let category = task.category {
         line += " [category: \(category)]"
+      }
+      if let marker = citations.marker(kind: .task, sourceID: task.id) {
+        line += " \(marker)"
       }
       lines.append(line)
     }
@@ -2898,9 +2810,13 @@ class ChatProvider: ObservableObject {
     utcFormatter.timeZone = TimeZone(identifier: "UTC")
     prompt = prompt.replacingOccurrences(of: "{current_datetime_utc}", with: utcFormatter.string(from: Date()))
 
-    prompt = prompt.replacingOccurrences(of: "{memories_section}", with: formatMemoriesSection())
-    prompt = prompt.replacingOccurrences(of: "{goal_section}", with: formatGoalSection())
-    prompt = prompt.replacingOccurrences(of: "{tasks_section}", with: formatTasksSection())
+    let citationLedger = makePromptCitationLedger(includesLegacyGoals: true)
+    prompt = prompt.replacingOccurrences(
+      of: "{memories_section}", with: formatMemoriesSection(citations: citationLedger))
+    prompt = prompt.replacingOccurrences(
+      of: "{goal_section}", with: formatGoalSection(citations: citationLedger))
+    prompt = prompt.replacingOccurrences(
+      of: "{tasks_section}", with: formatTasksSection(citations: citationLedger))
     prompt = prompt.replacingOccurrences(of: "{ai_profile_section}", with: formatAIProfileSection())
     prompt = prompt.replacingOccurrences(of: "{database_schema}", with: cachedDatabaseSchema)
 
@@ -3286,7 +3202,9 @@ class ChatProvider: ObservableObject {
       )
       for entry in importPlan {
         let row = entry.row
-        let blocks = ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
+        let blocks =
+          row.contentBlocksJSON.flatMap(ChatContentBlockCodec.decode)
+          ?? ChatContentBlockCodec.decodeFromMessageMetadata(row.metadata)
         let resources = ChatResource.decodeResourcesFromMessageMetadata(row.metadata)
         let accepted = await kernelTurnProjection.importRemoteTurn(
           surface: surface,
@@ -3570,7 +3488,8 @@ class ChatProvider: ObservableObject {
   /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
   /// reconstruct them and a journal projection can never be their authority:
   /// `rating` (user-set), `metadata` (model/token/cost stats attached at
-  /// completion, rendered in the message footer) and `notificationScreenshot`.
+  /// completion, rendered in the message footer), `notificationScreenshot`,
+  /// and in-memory kind-only citation rewrites until the journal catches up.
   /// Replacing a row wholesale with the projection would drop them, so carry
   /// them forward from the row being replaced. A field the projection *does*
   /// carry (non-nil) wins, so this stays correct if the journal schema later
@@ -3580,12 +3499,20 @@ class ChatProvider: ObservableObject {
     if merged.rating == nil { merged.rating = existing.rating }
     if merged.metadata == nil { merged.metadata = existing.metadata }
     if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
+    // Kind-only binding rewrites markers and appends citation blocks in memory.
+    // A stale journal echo still has `[memory]` and no citation blocks; keep the
+    // already-bound row so chips do not vanish between hydrate and the next bind.
+    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
+      merged.text = existing.text
+      merged.contentBlocks = existing.contentBlocks
+    }
     return merged
   }
 
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
+    pendingMessageRatings.removeAll()
     resetMessagesPagination()
   }
 
@@ -3672,7 +3599,9 @@ class ChatProvider: ObservableObject {
   private func finishJournalTarget(
     generation: Int,
     queryResult: AgentClient.QueryResult,
-    disposition: KernelJournalTerminalDisposition
+    disposition: KernelJournalTerminalDisposition,
+    acceptedMessage: ChatMessage? = nil,
+    acceptedContent: String? = nil
   ) async -> Bool {
     guard let target = journalTerminalTargets.claim(generation: generation) else {
       return false
@@ -3685,7 +3614,10 @@ class ChatProvider: ObservableObject {
       target.onFinalized?(false)
       return false
     }
-    let message = messages.first(where: { $0.id == target.assistantMessageId })
+    // Capture the accepted projection before terminalization. Pending tool-result journal refreshes
+    // can otherwise replace the in-memory row between final rendering and this async commit.
+    let message =
+      acceptedMessage ?? messages.first(where: { $0.id == target.assistantMessageId })
     let resultResources =
       queryResult.artifacts.map(ChatResource.artifact)
       + queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
@@ -3697,7 +3629,7 @@ class ChatProvider: ObservableObject {
         producingRunId: queryResult.runId,
         producingAttemptId: queryResult.attemptId,
         disposition: disposition,
-        acceptedContent: queryResult.text,
+        acceptedContent: acceptedContent ?? queryResult.text,
         acceptedResources: resultResources,
         ownerID: target.ownerID
       ) != nil
@@ -3897,11 +3829,21 @@ class ChatProvider: ObservableObject {
     guard !normalizedQuestionID.isEmpty, !normalizedOptionID.isEmpty, let ownerID = runtimeOwnerId else { return }
     let surface = mainChatSurfaceReference()
     guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil else { return }
+    let session: AgentSurfaceSession
+    do {
+      session = try await resolveKernelQuerySession(surface: surface, requestedModelProfile: nil)
+    } catch {
+      logError("Question-card session resolution failed", error: error)
+      errorMessage = "That suggestion is no longer available."
+      return
+    }
     _ = await sendMessage(
       "",
       surfaceRef: surface,
       turnOwner: .mainChat,
       clientTurnId: Self.questionInteractionContinuityKey(
+        ownerID: ownerID,
+        conversationID: session.conversationId,
         questionID: normalizedQuestionID,
         optionID: normalizedOptionID
       ),
@@ -3913,7 +3855,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Root-only prompt materialization is inert until this main-chat surface
-  /// has a current cohort capability projection.
+  /// has a current server capability projection.
   func chatFirstMaterializationContext() -> ChatFirstMaterializationContext? {
     guard let ownerID = runtimeOwnerId else { return nil }
     let surface = mainChatSurfaceReference()
@@ -4527,6 +4469,7 @@ class ChatProvider: ObservableObject {
         preAdmittedQuestionReply = continuation
         await kernelTurnProjection.refresh(surface: resolvedSurface)
       } catch {
+        logError("Question-card selection failed", error: error)
         errorMessage = "That suggestion is no longer available."
         telemetryAttempt.fail(errorClass: .sessionSetup)
         clearChatTelemetryState(for: sendGen)
@@ -4725,6 +4668,7 @@ class ChatProvider: ObservableObject {
         systemPromptSuffix: systemPromptSuffix,
         notificationContext: notificationContext,
         screenPayload: screenPayload,
+        includePromptCitations: turnOwner != .floatingVoice,
         requestedModelProfile: model,
         pinnedSession: pinnedSession
       )
@@ -4879,6 +4823,31 @@ class ChatProvider: ObservableObject {
             )
           }
           self.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+          var durableReferences = ChatCitationProvenanceRegistry.references(
+            fromAnnotatedToolOutput: output)
+          if durableReferences.isEmpty,
+            let provenance = ChatCitationProvenanceRegistry.provenanceIDs(fromToolOutput: output)
+          {
+            durableReferences = await ChatCitationProvenanceRegistry.shared.peekSnapshot(
+              runID: provenance.runID,
+              attemptID: provenance.attemptID
+            ).references
+          }
+          if !durableReferences.isEmpty,
+            let messageIndex = self.messages.firstIndex(where: { $0.id == aiMessageId })
+          {
+            let existing = Set(
+              self.messages[messageIndex].contentBlocks.compactMap { block -> Int? in
+                guard case .citation(_, let reference) = block else { return nil }
+                return reference.ordinal
+              })
+            self.messages[messageIndex].contentBlocks.append(
+              contentsOf: durableReferences.filter { !existing.contains($0.ordinal) }.map { reference in
+                .citation(
+                  id: "citation-tool-\(reference.ordinal)-\(UUID().uuidString)",
+                  reference: reference)
+              })
+          }
           responseMetrics.recordToolResult(name: name, result: output)
           let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
           self.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
@@ -5028,6 +4997,9 @@ class ChatProvider: ObservableObject {
         )
       else {
         // A stopped/timed-out bridge may still deliver a late success.
+        _ = await ChatCitationProvenanceRegistry.shared.consume(
+          runID: queryResult.runId,
+          attemptID: queryResult.attemptId)
         // Never let it resurrect the old bubble, overwrite a newer
         // turn's bridge ownership, or persist a response the user did
         // not accept. Remove only this turn's buffered segments.
@@ -5118,6 +5090,11 @@ class ChatProvider: ObservableObject {
 
       // Determine the final text to display and save
       let messageText: String
+      let toolCitationSnapshot = await ChatCitationProvenanceRegistry.shared.consumeSnapshot(
+        runID: queryResult.runId,
+        attemptID: queryResult.attemptId)
+      let terminalCitationReferences =
+        kernelContext.promptCitationReferences + toolCitationSnapshot.references
       let metricsSnapshot = responseMetrics.snapshot()
       if screenContextEligibleForTurn, !metricsSnapshot.screenContext.screenToolRequested {
         ScreenContextToolTelemetry.trackInvariant(
@@ -5126,38 +5103,33 @@ class ChatProvider: ObservableObject {
           toolName: "get_work_context"
         )
       }
-      if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
-        // Message still in memory — update it in-place
-        messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
-        messages[index].text = messageText
-        messages[index].isStreaming = false
-        // Merge the parent agent's own artifacts with any produced by
-        // sub-agents that completed since the last coordinator check, so
-        // a finished sub-agent's file surfaces as a card on this response.
-        let deltaResources = queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
-        messages[index].resources = mergedResources(
-          existing: messages[index].resources,
-          adding: queryResult.artifacts.map(ChatResource.artifact) + deltaResources
-        )
-        messages[index].metadata = MessageMetadata(
-          model: effectiveRequestModel,
-          inputTokens: queryResult.inputTokens,
-          outputTokens: queryResult.outputTokens,
-          cacheReadTokens: queryResult.cacheReadTokens,
-          cacheWriteTokens: queryResult.cacheWriteTokens,
-          costUsd: queryResult.costUsd,
-          systemPrompt: "kernel-context:\(kernelContext.snapshot.version):\(kernelContext.snapshot.snapshotGeneration)",
-          hasScreenshot: effectiveImageData != nil,
-          screenshotSizeBytes: effectiveImageData?.count,
-          toolNames: toolTiming.toolNames,
-          sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
-          sqlQueryCount: metricsSnapshot.sqlQueryCount
-        )
-        completeRemainingToolCalls(
+      if messages.contains(where: { $0.id == aiMessageId }) {
+        messageText = await finalizeAssistantMessageCitations(
           messageId: aiMessageId,
-          terminalStatus: .completed,
-          scheduleJournal: false
-        )
+          queryText: queryResult.text,
+          selectedReferences: toolCitationSnapshot.selectedReferences,
+          requestedSources: ChatCitationMarkup.explicitlyRequestsSources(effectivePrompt),
+          terminalCitationReferences: terminalCitationReferences)
+        if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
+          let deltaResources = queryResult.completionDeltaArtifacts.map(ChatResource.artifact)
+          messages[index].resources = mergedResources(
+            existing: messages[index].resources,
+            adding: queryResult.artifacts.map(ChatResource.artifact) + deltaResources
+          )
+          messages[index].metadata = MessageMetadata.fromCompletedTurn(
+            snapshot: kernelContext.snapshot,
+            profile: kernelContext.session.profile,
+            imageByteCount: effectiveImageData?.count,
+            toolNames: toolTiming.toolNames,
+            sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
+            sqlQueryCount: metricsSnapshot.sqlQueryCount
+          )
+          completeRemainingToolCalls(
+            messageId: aiMessageId,
+            terminalStatus: .completed,
+            scheduleJournal: false
+          )
+        }
       } else {
         // The assistant row this turn owns is gone from the transcript while
         // the turn is still authoritative. A session switch is only one way to
@@ -5204,6 +5176,7 @@ class ChatProvider: ObservableObject {
         runtimeRunId: queryResult.runId,
         runtimeAttemptId: queryResult.attemptId
       )
+      let acceptedMessageSnapshot = messages.first(where: { $0.id == aiMessageId })
       _ = await ChatVisibleTurnCompletion.finish(
         lifecycle: turnLifecycle,
         telemetryAttempt: telemetryAttempt,
@@ -5216,7 +5189,9 @@ class ChatProvider: ObservableObject {
           return await self.finishJournalTarget(
             generation: sendGen,
             queryResult: queryResult,
-            disposition: .accept
+            disposition: .accept,
+            acceptedMessage: acceptedMessageSnapshot,
+            acceptedContent: messageText
           )
         }
       )
@@ -5286,6 +5261,11 @@ class ChatProvider: ObservableObject {
     } catch {
       if activeBridgeSendGeneration == sendGen {
         activeBridgeSendGeneration = nil
+      }
+      if let correlatedTerminalResult {
+        _ = await ChatCitationProvenanceRegistry.shared.consume(
+          runID: correlatedTerminalResult.runId,
+          attemptID: correlatedTerminalResult.attemptId)
       }
       // QueryTracer: error path — close spans and write the (partial) trace
       // so failed/timed-out queries still show up in benchmarks.
@@ -5452,7 +5432,7 @@ class ChatProvider: ObservableObject {
           telemetryAttempt.fail(
             errorClass: errorClass,
             partialResponse: hadPartialResponse,
-            detail: .from(error),
+            detail: recordAgentRuntimeRecoveryDiagnostics(error),
             watchdogFired: watchdogFired
           )
           logError(
@@ -5561,7 +5541,7 @@ class ChatProvider: ObservableObject {
   func presentOnboardingOpener() {
     let name = Self.firstName(AuthService.shared.givenName)
     let mode: OnboardingOpenerComposer.ListeningMode =
-      AssistantSettings.shared.systemAudioCaptureMode == .always ? .always : .meetingsOnly
+      AssistantSettings.shared.audioRecordingMode == .always ? .always : .meetingsOnly
     let baseStarters = HomeSuggestionComposer.compose(
       personalized: HomeSuggestionsStore.shared.personalizedQuestions,
       onboarding: PostOnboardingPromptSuggestions.suggestions())
@@ -5684,8 +5664,17 @@ class ChatProvider: ObservableObject {
     return (user: attemptId, assistant: "\(attemptId)-assistant")
   }
 
-  nonisolated static func questionInteractionContinuityKey(questionID: String, optionID: String) -> String {
-    "qri_\(sha256Prefix("\(questionID)\u{0}\(optionID)", byteCount: 16))"
+  /// Must remain byte-for-byte identical to the local kernel's continuity key.
+  /// Question IDs can repeat across users and conversations (notably sparse
+  /// cold-start IDs), so the canonical owner and conversation are part of the
+  /// idempotency scope rather than a client-only approximation.
+  nonisolated static func questionInteractionContinuityKey(
+    ownerID: String,
+    conversationID: String,
+    questionID: String,
+    optionID: String
+  ) -> String {
+    "qri_\(sha256Prefix("\(ownerID)\u{0}\(conversationID)\u{0}\(questionID)\u{0}\(optionID)", byteCount: 16))"
   }
 
   nonisolated private static func questionInteractionTurnID(continuityKey: String, role: String) -> String {
@@ -6434,36 +6423,6 @@ class ChatProvider: ObservableObject {
       if changed {
         messages[messageIndex].resources = updatedResources
         scheduleJournalUpdate(messageId: messages[messageIndex].id)
-      }
-    }
-  }
-
-  // MARK: - Message Rating
-
-  /// Rate a message (thumbs up/down)
-  /// - Parameters:
-  ///   - messageId: The message ID to rate
-  ///   - rating: 1 for thumbs up, -1 for thumbs down, nil to clear rating
-  func rateMessage(_ messageId: String, rating: Int?) async {
-    // Update local state immediately for responsive UI
-    if let index = messages.firstIndex(where: { $0.id == messageId }) {
-      messages[index].rating = rating
-    }
-
-    // Persist to backend
-    do {
-      try await APIClient.shared.rateMessage(messageId: messageId, rating: rating)
-      log("Rated message \(messageId) with rating: \(String(describing: rating))")
-
-      // Track analytics
-      if let rating = rating {
-        AnalyticsManager.shared.messageRated(rating: rating)
-      }
-    } catch {
-      logError("Failed to rate message", error: error)
-      // Revert local state on failure
-      if let index = messages.firstIndex(where: { $0.id == messageId }) {
-        messages[index].rating = nil
       }
     }
   }

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-task-candidate-unowned-commitment",
+  "violated_contract": "A durable user-surface action may be gated on the existence of a commitment only when that commitment is the user's own. task_candidate graduates into the user's task list and presents an interactive interruption; a third-party commitment, however explicit or dated, must not satisfy that gate.",
+  "canonical_prevention": "State first-person ownership as an explicit precondition of task_candidate in the director prompt, keep the third-party insight-or-silence rule beside it, and retain a full-equality prompt-contract test that includes both sentences.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift"
+  ],
+  "evidence_prs": [
+    11536
+  ],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextBucketRollup.swift",
+    "desktop/macos/Desktop/Tests/ContextBucketPromptAssemblerTests.swift"
+  ],
+  "status": "open"
+}

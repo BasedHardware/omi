@@ -96,146 +96,6 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
   }
 }
 
-/// The time axis behind the atlas. Built from entity `createdAt` timestamps so
-/// the user can scrub — or watch — their memory come into being. Playback is
-/// density-aware: a tight imported/backfilled cluster is expanded into a short,
-/// deterministic sequence instead of appearing as one unreadable burst. Dates
-/// shown to the user always remain the original dates from memory data.
-struct MemoryAtlasTimeline: Equatable {
-  struct Entry: Equatable {
-    let nodeID: String
-    let createdAt: Date
-    let playbackFraction: Double
-  }
-
-  let start: Date
-  let end: Date
-  /// Entity-birth counts across the density-expanded playback axis, for the
-  /// histogram. This describes animation pacing, not rewritten history.
-  let buckets: [Int]
-  let entries: [Entry]
-  let playbackFractionByNodeID: [String: Double]
-
-  var hasChronologicalRange: Bool { end > start }
-  var span: TimeInterval { max(end.timeIntervalSince(start), 1) }
-
-  func date(atFraction fraction: Double) -> Date {
-    let clamped = min(max(fraction, 0), 1)
-    guard let first = entries.first else {
-      return start.addingTimeInterval(span * clamped)
-    }
-    guard clamped > first.playbackFraction else { return first.createdAt }
-    // This deliberately steps to the last real creation date rather than
-    // interpolating an invented timestamp between two memories.
-    return entries[max(firstPlaybackIndex(after: clamped) - 1, 0)].createdAt
-  }
-
-  func fraction(for date: Date) -> Double {
-    guard let first = entries.first, let last = entries.last else { return 1 }
-    guard date > first.createdAt else { return first.playbackFraction }
-    guard date < last.createdAt else { return last.playbackFraction }
-    return entries[max(firstDateIndex(after: date) - 1, 0)].playbackFraction
-  }
-
-  func isVisible(nodeID: String, at fraction: Double) -> Bool {
-    (playbackFractionByNodeID[nodeID] ?? 1) <= min(max(fraction, 0), 1)
-  }
-
-  func visibleNodeCount(at fraction: Double) -> Int {
-    let clamped = min(max(fraction, 0), 1)
-    return firstPlaybackIndex(after: clamped)
-  }
-
-  func spawnProgress(nodeID: String, at fraction: Double) -> Double {
-    guard let bornAt = playbackFractionByNodeID[nodeID] else { return 0 }
-    let age = fraction - bornAt
-    let window = max(0.012, min(0.05, 5 / Double(max(entries.count, 1))))
-    guard age >= 0, age < window else { return 0 }
-    return 1 - age / window
-  }
-
-  /// Retained for the legacy Date-based preview path. Live replay uses
-  /// `spawnProgress(nodeID:at:)` so dense imports bloom one-at-a-time.
-  var spawnWindow: TimeInterval { span / 26 }
-
-  private func firstPlaybackIndex(after fraction: Double) -> Int {
-    var lower = 0
-    var upper = entries.count
-    while lower < upper {
-      let middle = lower + (upper - lower) / 2
-      if entries[middle].playbackFraction > fraction {
-        upper = middle
-      } else {
-        lower = middle + 1
-      }
-    }
-    return lower
-  }
-
-  private func firstDateIndex(after date: Date) -> Int {
-    var lower = 0
-    var upper = entries.count
-    while lower < upper {
-      let middle = lower + (upper - lower) / 2
-      if entries[middle].createdAt > date {
-        upper = middle
-      } else {
-        lower = middle + 1
-      }
-    }
-    return lower
-  }
-
-  static func make(from nodes: [KnowledgeGraphNode], bucketCount: Int = 40) -> MemoryAtlasTimeline? {
-    let orderedNodes = nodes.sorted {
-      if $0.createdAt == $1.createdAt { return $0.id < $1.id }
-      return $0.createdAt < $1.createdAt
-    }
-    guard orderedNodes.count > 1, let start = orderedNodes.first?.createdAt, let end = orderedNodes.last?.createdAt
-    else {
-      return nil
-    }
-
-    let hasChronologicalRange = end > start
-    let chronologicalSpan = max(end.timeIntervalSince(start), 1)
-    // Chronology remains the majority signal for naturally distributed
-    // memories, while rank gives dense imports enough playback room to be
-    // comprehensible. Both inputs are monotonic, so this cannot reorder data
-    // or fabricate a date.
-    let chronologicalWeight = hasChronologicalRange ? 0.32 : 0
-    let densityWeight = 1 - chronologicalWeight
-    let denominator = Double(max(orderedNodes.count - 1, 1))
-    let entries = orderedNodes.enumerated().map { index, node in
-      let chronologicalFraction =
-        hasChronologicalRange
-        ? node.createdAt.timeIntervalSince(start) / chronologicalSpan
-        : 0
-      let densityFraction = Double(index) / denominator
-      return Entry(
-        nodeID: node.id,
-        createdAt: node.createdAt,
-        playbackFraction: chronologicalWeight * chronologicalFraction + densityWeight * densityFraction
-      )
-    }
-
-    var buckets = Array(repeating: 0, count: max(bucketCount, 1))
-    for entry in entries {
-      let index = min(
-        buckets.count - 1,
-        max(0, Int(entry.playbackFraction * Double(buckets.count)))
-      )
-      buckets[index] += 1
-    }
-    return MemoryAtlasTimeline(
-      start: start,
-      end: end,
-      buckets: buckets,
-      entries: entries,
-      playbackFractionByNodeID: Dictionary(lastWriteWins: entries.map { ($0.nodeID, $0.playbackFraction) })
-    )
-  }
-}
-
 struct MemoryAtlasEdgePlacement: Identifiable {
   let edge: KnowledgeGraphEdge
   let source: CGPoint
@@ -471,64 +331,6 @@ enum MemoryAtlasDetailLevel: Equatable {
   case detail
   case focus
   case inspect
-}
-
-enum MemoryAtlasZoomPolicy {
-  /// At or below this entity count the whole atlas fits on one screen, so the
-  /// density budgets tuned for thousands of entities stop being a kindness and
-  /// start being the reason the page looks empty.
-  static let smallAtlasCeiling = 60
-  static let minimumZoom: CGFloat = 0.75
-  /// Where reading the map as a whole ends and reading one part of it begins.
-  /// Named because four places were deciding it independently with the same
-  /// literal, and one of them now also decides whether the user is still
-  /// inside a neighbourhood.
-  static let neighborhoodZoom: CGFloat = 1.35
-  static let compactMaximumZoom: CGFloat = 1.35
-  static let focusModeZoom: CGFloat = 3.2
-  static let inspectModeZoom: CGFloat = 7.5
-  static let focusTargetZoom: CGFloat = 4
-
-  /// The final inspection level needs enough screen-space for every entity to
-  /// have a readable label. A square-root curve tracks the area required by a
-  /// larger graph: four times as many entities need roughly twice the zoom.
-  /// This intentionally has no arbitrary product ceiling, so a growing memory
-  /// graph always has a reachable all-labelled state.
-  static func fullyLabelledZoom(nodeCount: Int) -> CGFloat {
-    // Labels need substantially more room than dots. The 3.6x factor comes
-    // from the label footprint rather than node radius, then rounds to a
-    // usable 500% increment for the zoom control. This yields 16,000% for
-    // the sampled ~1,946-entity graph, leaving dense constellations legible.
-    let densityScaledZoom = ceil(sqrt(CGFloat(max(nodeCount, 1))) * 3.6 / 5) * 5
-    return max(16, densityScaledZoom)
-  }
-
-  /// Begins Canvas-based labels before the final all-labelled state. This uses
-  /// the same density curve as the maximum zoom, so a larger memory graph
-  /// earns more room before every visible dot is named. At this level Canvas
-  /// draws labels only for nodes inside the current viewport; it never creates
-  /// a SwiftUI label view per entity.
-  static func automaticCanvasLabelZoom(nodeCount: Int) -> CGFloat {
-    let threshold = fullyLabelledZoom(nodeCount: nodeCount) * 0.25
-    return max(inspectModeZoom, ceil(threshold * 2) / 2)
-  }
-
-  static func maximumZoom(nodeCount: Int, compact: Bool) -> CGFloat {
-    compact ? compactMaximumZoom : fullyLabelledZoom(nodeCount: nodeCount)
-  }
-
-  static func focusedZoom(currentZoom: CGFloat, nodeCount: Int, compact: Bool) -> CGFloat {
-    min(max(currentZoom, focusTargetZoom), maximumZoom(nodeCount: nodeCount, compact: compact))
-  }
-
-  static func panPreservingCenterZoom(
-    _ pan: CGSize,
-    from currentZoom: CGFloat,
-    to nextZoom: CGFloat
-  ) -> CGSize {
-    let ratio = nextZoom / max(currentZoom, minimumZoom)
-    return CGSize(width: pan.width * ratio, height: pan.height * ratio)
-  }
 }
 
 struct MemoryAtlasRenderPlan {
@@ -1954,6 +1756,47 @@ enum MemoryAtlasHitTesting {
 
 // MARK: - Canonical Atlas Containers
 
+/// Holds the canvas until a complete graph is ready, so the first visit cannot
+/// paint a synthetic owner as the whole map.
+private struct CanonicalMemoryAtlasLoadGate<Content: View>: View {
+  @ObservedObject var viewModel: MemoryGraphViewModel
+  @ViewBuilder var content: () -> Content
+
+  var body: some View {
+    switch MemoryAtlasSurfacePresentation.phase(
+      isLoading: viewModel.isLoading,
+      isEmpty: viewModel.isEmpty,
+      hasProjection: viewModel.canonicalAtlasProjection != nil,
+      hasAttemptedLoad: viewModel.hasAttemptedCanonicalAtlasLoad
+    ) {
+    case .loading:
+      ZStack {
+        Color.clear
+        ProgressView()
+          .controlSize(.regular)
+          .tint(Ink.secondary)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .accessibilityIdentifier("canonical_memory_atlas_loading")
+    case .empty:
+      VStack(spacing: OmiSpacing.sm) {
+        Image(systemName: "brain")
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(Ink.secondary)
+        Text("Brain map will appear once enough linked memories are available.")
+          .scaledFont(size: 12.5)
+          .foregroundColor(Ink.secondary)
+          .multilineTextAlignment(.center)
+      }
+      .padding(OmiSpacing.lg)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .accessibilityIdentifier("canonical_memory_atlas_empty")
+    case .ready:
+      content()
+    }
+  }
+}
+
 struct CanonicalMemoryAtlasPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
   let onBack: () -> Void
@@ -2012,16 +1855,18 @@ struct CanonicalMemoryAtlasPage: View {
 
       Divider().overlay(Ink.separator.opacity(0.25))
 
-      CanonicalMemoryAtlasSurface(
-        graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
-        projection: viewModel.canonicalAtlasProjection,
-        compact: false,
-        evidenceProvider: evidenceProvider,
-        onOpenMemory: onOpenMemory,
-        onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
-        isRebuilding: viewModel.isRebuilding,
-        onLeave: onBack
-      )
+      CanonicalMemoryAtlasLoadGate(viewModel: viewModel) {
+        CanonicalMemoryAtlasSurface(
+          graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
+          projection: viewModel.canonicalAtlasProjection,
+          compact: false,
+          evidenceProvider: evidenceProvider,
+          onOpenMemory: onOpenMemory,
+          onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
+          isRebuilding: viewModel.isRebuilding,
+          onLeave: onBack
+        )
+      }
     }
     .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_page")
@@ -2039,7 +1884,7 @@ struct CanonicalMemoryAtlasPage: View {
 /// The hub already owns navigation chrome (the Memory menu selects the
 /// destination), so this variant renders the surface full-bleed instead of
 /// stacking the page's own back/title bar underneath the hub bar. It is the
-/// canonical-cohort counterpart to `MemoryGraphPage`, which fills the same tab
+/// assertion-backed counterpart to `MemoryGraphPage`, which fills the same tab
 /// for users still on the legacy graph.
 struct CanonicalMemoryAtlasTabView: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
@@ -2050,16 +1895,18 @@ struct CanonicalMemoryAtlasTabView: View {
   var onLeave: (() -> Void)?
 
   var body: some View {
-    CanonicalMemoryAtlasSurface(
-      graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
-      projection: viewModel.canonicalAtlasProjection,
-      compact: false,
-      evidenceProvider: evidenceProvider,
-      onOpenMemory: onOpenMemory,
-      onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
-      isRebuilding: viewModel.isRebuilding,
-      onLeave: onLeave
-    )
+    CanonicalMemoryAtlasLoadGate(viewModel: viewModel) {
+      CanonicalMemoryAtlasSurface(
+        graph: viewModel.canonicalAtlasProjection?.graph ?? viewModel.graphResponse,
+        projection: viewModel.canonicalAtlasProjection,
+        compact: false,
+        evidenceProvider: evidenceProvider,
+        onOpenMemory: onOpenMemory,
+        onRebuild: { Task { await viewModel.rebuildCanonicalAtlas() } },
+        isRebuilding: viewModel.isRebuilding,
+        onLeave: onLeave
+      )
+    }
     .background(Color.clear)
     .accessibilityIdentifier("canonical_memory_atlas_tab")
     .task { await viewModel.prepareCanonicalAtlas() }
@@ -2326,6 +2173,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
     .animation(OmiMotion.gated(.easeOut(duration: 0.18)), value: selectedNodeID)
     .task(id: evidenceSelectionKey) { await loadEvidence() }
+    .onEscapeKey(priority: .content) {
+      guard !compact else { return false }
+      return dismissTopmostState()
+    }
   }
 
   @ViewBuilder
@@ -2435,7 +2286,6 @@ private struct CanonicalMemoryAtlasSurface: View {
               onScroll: { delta, location in
                 scrollZoom(by: delta, anchoredAt: location, in: proxy.size)
               },
-              onEscape: dismissTopmostState,
               onFocusSearch: { searchIsFocused = true }
             )
             .accessibilityHidden(true)
@@ -2541,8 +2391,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         snapshot.nodeByID[edge.edge.sourceId] != nil
       {
         selectionTrail.removeAll()
-        selectedNodeID = edge.edge.sourceId
-        selectedEdgeID = edgeID
+        adoptSelection(edge.edge.sourceId, edgeID: edgeID)
         return
       }
       // By name as well as by id, because an entity's id is a server key
@@ -2558,8 +2407,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         snapshot.nodeByID[$0] != nil ? $0 : nil
       }) ?? named?.id {
         selectionTrail.removeAll()
-        selectedEdgeID = nil
-        selectedNodeID = nodeID
+        adoptSelection(nodeID)
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasTimeRequested)) {
@@ -3256,9 +3104,12 @@ private struct CanonicalMemoryAtlasSurface: View {
     let hitDiameter = max(diameter, 24)
 
     return Button {
-      selectionTrail.removeAll()
-      selectedEdgeID = nil
-      selectedNodeID = selected ? nil : placement.id
+      if selected {
+        clearSelection(resetCamera: true)
+      } else {
+        selectionTrail.removeAll()
+        adoptSelection(placement.id)
+      }
     } label: {
       ZStack {
         if selected {
@@ -3337,7 +3188,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       onOpenMemory: openCitedMemory,
       onBack: backAction,
       onFocus: { focus(on: placement) },
-      onClose: clearSelection
+      onClose: { clearSelection(resetCamera: true) }
     )
   }
 
@@ -3376,7 +3227,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       onOpenMemory: openCitedMemory,
       onBack: backAction,
       onFocus: { focus(on: anchor) },
-      onClose: clearSelection
+      onClose: { clearSelection(resetCamera: true) }
     )
   }
 
@@ -3392,20 +3243,27 @@ private struct CanonicalMemoryAtlasSurface: View {
     if let current = selectedNodeID, current != row.otherNodeID {
       selectionTrail.append(current)
     }
-    selectedEdgeID = nil
-    selectedNodeID = row.otherNodeID
+    adoptSelection(row.otherNodeID)
   }
 
   private func goBack() {
     guard let previous = selectionTrail.popLast() else { return }
-    selectedEdgeID = nil
-    selectedNodeID = previous
+    adoptSelection(previous)
   }
 
-  private func clearSelection() {
+  private func adoptSelection(_ nodeID: String, edgeID: String? = nil) {
+    selectedEdgeID = edgeID
+    selectedNodeID = nodeID
+    if let placement = snapshot.nodeByID[nodeID] {
+      focus(on: placement)
+    }
+  }
+
+  private func clearSelection(resetCamera: Bool = false) {
     selectionTrail.removeAll()
     selectedEdgeID = nil
     selectedNodeID = nil
+    if resetCamera { resetViewport(preservingNeighbourhood: true) }
   }
 
   private func selectionStrip(for placement: MemoryAtlasNodePlacement) -> some View {
@@ -3462,7 +3320,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       .foregroundColor(Ink.secondary)
 
       Button {
-        clearSelection()
+        clearSelection(resetCamera: true)
       } label: {
         Image(systemName: "xmark")
           .scaledFont(size: 10, weight: .semibold)
@@ -3651,6 +3509,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var asOfLabel: String {
     guard let asOf = asOfDate else { return "Now — the whole map" }
+    guard MemoryAtlasPlayback.isCredible(asOf) else { return "Import replay" }
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
@@ -3661,7 +3520,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func shortDate(_ date: Date?) -> String {
-    guard let date else { return "" }
+    guard let date, MemoryAtlasPlayback.isCredible(date) else { return "" }
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM d, yyyy"
     return formatter.string(from: date)
@@ -3695,7 +3554,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     isCameraMoving = true
     playbackTask = Task { @MainActor in
       var last = Date()
-      let totalSeconds = 6.5
+      let totalSeconds = MemoryAtlasPlayback.duration(entityCount: snapshot.nodes.count)
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: 33_000_000)
         if Task.isCancelled { return }
@@ -3865,11 +3724,8 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func point(for normalized: CGPoint, in size: CGSize) -> CGPoint {
-    let span = MemoryAtlasLayoutEngine.projectionSpan(of: size)
-    return CGPoint(
-      x: (normalized.x - 0.5) * span * zoom + size.width / 2 + pan.width,
-      y: (normalized.y - 0.5) * span * zoom + size.height / 2 + pan.height
-    )
+    MemoryAtlasRenderPlanner.renderedPoint(
+      for: normalized, viewportSize: size, zoom: zoom, pan: pan)
   }
 
   private func canvasPaintBounds(for size: CGSize) -> CGRect {
@@ -3932,12 +3788,13 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private func selectFirstSearchResult() {
     guard let matchingNodeIDs, !matchingNodeIDs.isEmpty else { return }
-    selectionTrail.removeAll()
-    selectedEdgeID = nil
-    selectedNodeID =
-      snapshot.nodes.first {
+    guard
+      let nodeID = snapshot.nodes.first(where: {
         matchingNodeIDs.contains($0.id) && nodeIsVisibleAtCurrentTime($0)
-      }?.id
+      })?.id
+    else { return }
+    selectionTrail.removeAll()
+    adoptSelection(nodeID)
   }
 
   /// Routes a click on the canvas to whatever it landed on.
@@ -3950,8 +3807,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       // Reaching for something on the canvas starts a fresh trail; only
       // following a listed connection extends one.
       selectionTrail.removeAll()
-      selectedEdgeID = nil
-      selectedNodeID = node.id
+      adoptSelection(node.id)
       return
     }
 
@@ -3974,8 +3830,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       snapshot.nodeByID[hit.edge.sourceId] != nil
     else { return }
     selectionTrail.removeAll()
-    selectedNodeID = hit.edge.sourceId
-    selectedEdgeID = hit.id
+    adoptSelection(hit.edge.sourceId, edgeID: hit.id)
   }
 
   private func nearestNode(to location: CGPoint, in size: CGSize, visibleNodes: [MemoryAtlasNodePlacement] = [])
@@ -4027,24 +3882,34 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private func focus(on placement: MemoryAtlasNodePlacement) {
     guard viewportSize.width > 0, viewportSize.height > 0 else { return }
-    let focusedZoom = MemoryAtlasZoomPolicy.focusedZoom(
+    var positions = [placement.normalizedPosition]
+    if let neighborIDs = snapshot.neighborIDsByNodeID[placement.id] {
+      for neighborID in neighborIDs {
+        if let neighbor = snapshot.nodeByID[neighborID] {
+          positions.append(neighbor.normalizedPosition)
+        }
+      }
+    }
+    let camera = MemoryAtlasZoomPolicy.focusedNeighborhood(
+      positions: positions,
+      viewport: viewportSize,
       currentZoom: zoom,
-      nodeCount: snapshot.nodes.count,
-      compact: compact
-    )
-    let focusedPan = CGSize(
-      width: (0.5 - placement.normalizedPosition.x) * viewportSize.width * focusedZoom,
-      height: (0.5 - placement.normalizedPosition.y) * viewportSize.height * focusedZoom
+      zoomRange: MemoryAtlasZoomPolicy.minimumZoom...maximumZoom
     )
     withAnimation(.easeOut(duration: 0.22)) {
-      zoom = focusedZoom
-      settledZoom = focusedZoom
-      pan = focusedPan
-      settledPan = focusedPan
+      zoom = camera.zoom
+      settledZoom = camera.zoom
+      pan = camera.pan
+      settledPan = camera.pan
     }
   }
 
-  private func resetViewport() {
+  private func resetViewport(preservingNeighbourhood: Bool = false) {
+    if preservingNeighbourhood, enteredRegionID != nil {
+      departureZoom = MemoryAtlasNeighbourhoodLabels.overviewDepartureZoom(
+        neighbourhoodZoom: MemoryAtlasZoomPolicy.neighborhoodZoom,
+        minimumZoom: MemoryAtlasZoomPolicy.minimumZoom)
+    }
     withAnimation(.easeOut(duration: 0.2)) {
       zoom = 1
       settledZoom = 1
@@ -4071,7 +3936,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     case .selectionStep:
       goBack()
     case .selection:
-      clearSelection()
+      clearSelection(resetCamera: true)
     case .neighbourhood:
       leaveNeighbourhood()
     case .passThrough:
@@ -4092,12 +3957,10 @@ private struct CanonicalMemoryAtlasSurface: View {
 /// owned by SwiftUI.
 private struct MemoryAtlasInputMonitor: NSViewRepresentable {
   let onScroll: (CGFloat, CGPoint) -> Void
-  /// Reports whether the map used the key. False hands it back to the page.
-  let onEscape: () -> Bool
   let onFocusSearch: () -> Void
 
   func makeCoordinator() -> Coordinator {
-    Coordinator(onScroll: onScroll, onEscape: onEscape, onFocusSearch: onFocusSearch)
+    Coordinator(onScroll: onScroll, onFocusSearch: onFocusSearch)
   }
 
   func makeNSView(context: Context) -> PassiveEventView {
@@ -4113,7 +3976,6 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
 
   func updateNSView(_ nsView: PassiveEventView, context: Context) {
     context.coordinator.onScroll = onScroll
-    context.coordinator.onEscape = onEscape
     context.coordinator.onFocusSearch = onFocusSearch
   }
 
@@ -4149,7 +4011,6 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
 
   final class Coordinator {
     var onScroll: (CGFloat, CGPoint) -> Void
-    var onEscape: () -> Bool
     var onFocusSearch: () -> Void
     fileprivate var windowNumber: Int?
     fileprivate var frameInWindow: CGRect = .zero
@@ -4157,11 +4018,9 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
 
     init(
       onScroll: @escaping (CGFloat, CGPoint) -> Void,
-      onEscape: @escaping () -> Bool,
       onFocusSearch: @escaping () -> Void
     ) {
       self.onScroll = onScroll
-      self.onEscape = onEscape
       self.onFocusSearch = onFocusSearch
     }
 
@@ -4170,10 +4029,6 @@ private struct MemoryAtlasInputMonitor: NSViewRepresentable {
         [weak self] event in
         guard let self, event.windowNumber == self.windowNumber else {
           return event
-        }
-
-        if event.type == .keyDown, event.keyCode == 53 {
-          return self.onEscape() ? nil : event
         }
 
         if event.type == .keyDown,

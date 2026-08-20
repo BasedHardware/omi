@@ -7,12 +7,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
-PRIVATE_AGENT_VM_READINESS_CONTRACT = (
-    "--network=default",
-    "--subnet=default",
-    "--vpc-egress=private-ranges-only",
-    "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
-)
 
 
 def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[str]:
@@ -50,12 +44,10 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "--format='none'",
         "SERVICE_ACCOUNT_JSON",
         "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "USE_VERTEX_AI=true",
+        "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+        "GCP_LOCATION=us-central1",
         "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
-        "AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}",
-        "AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}",
-        "Build and publish Agent VM image",
-        "backend/agent_vm/Dockerfile",
-        "gs://$AGENT_GCS_BUCKET/startup.sh",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
@@ -87,25 +79,63 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
             (
                 "Preflight production desktop secret resource names",
                 "Build and push immutable Docker image",
-                "Build and publish Agent VM image",
             ),
             workflow=workflow,
         )
     )
     return errors
 
+def _validate_private_network_egress(text: str, *, workflow: str, request_step: str) -> list[str]:
+    """Pin the desktop backend to the backend VPC that carries the LLM gateway.
 
-def _validate_private_agent_vm_readiness(text: str, *, workflow: str, request_step: str) -> list[str]:
+    This used to require ``--network=default``, which dated from the retired
+    per-user Agent VMs. The LLM gateway is only published on an internal L7
+    load balancer inside ``CLOUD_RUN_VPC_NETWORK`` and that VPC has no peering
+    with ``default``, so the desktop backend could not reach it and silently
+    served managed chat straight from Anthropic. Keep the service on the same
+    VPC as the other backend Cloud Run services.
+    """
     errors: list[str] = []
-    reconciler_block = _step_block(text, "Deploy Agent VM reconciler Cloud Run Job")
     request_block = _step_block(text, request_step)
-    for block_name, block in (("reconciler", reconciler_block), ("request service", request_block)):
-        if block is None:
-            errors.append(f"{workflow}: missing {block_name} deployment step for private Agent VM readiness")
-            continue
-        for fragment in PRIVATE_AGENT_VM_READINESS_CONTRACT:
-            if fragment not in block:
-                errors.append(f"{workflow}: {block_name} missing private Agent VM readiness contract {fragment!r}")
+    if request_block is None:
+        errors.append(f"{workflow}: missing request service deployment step for private network egress")
+        return errors
+    for fragment in (
+        "--network=${{ vars.CLOUD_RUN_VPC_NETWORK }}",
+        "--subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}",
+        "--vpc-egress=private-ranges-only",
+    ):
+        if fragment not in request_block:
+            errors.append(f"{workflow}: request service missing private network egress contract {fragment!r}")
+    return errors
+
+
+def _validate_llm_gateway_wiring(text: str, *, workflow: str, request_step: str) -> list[str]:
+    """Keep managed desktop chat on the gateway instead of a direct provider.
+
+    ``should_route_features_through_gateway`` treats an unset feature mode as
+    "direct", so omitting these bindings does not fail loudly - it bills
+    Anthropic. It also raises outside dev/local when the feature mode is on
+    without ``ALLOW_PROD_FEATURE_MODE`` and a URL, so the three must land
+    together. The URL is resolved by the gateway serving gate, which fails the
+    deploy when the data plane is not actually serving.
+    """
+    errors: list[str] = []
+    if "verify-llm-gateway-serving.py" not in text:
+        errors.append(f"{workflow}: missing LLM gateway serving gate before deployment")
+    request_block = _step_block(text, request_step)
+    if request_block is None:
+        errors.append(f"{workflow}: missing request service deployment step for LLM gateway wiring")
+        return errors
+    for fragment in (
+        "OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}",
+        "OMI_LLM_GATEWAY_FEATURE_MODE=gateway",
+        "OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true",
+        "OMI_LLM_CHAT_AGENT_ROUTE=gateway",
+        "OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
+    ):
+        if fragment not in request_block:
+            errors.append(f"{workflow}: request service missing LLM gateway binding {fragment!r}")
     return errors
 
 
@@ -180,14 +210,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             workflow=workflow,
         )
     )
-    request_step = "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
-    errors.extend(_validate_private_agent_vm_readiness(text, workflow=workflow, request_step=request_step))
-    # Static workflow tripwire: deploy-cloudrun's parseFlags splits an unquoted
-    # --args=-m,... token, making Python treat -m as a gcloud flag instead of a
-    # container argument.  The quoted full token preserves the intended argv.
-    if "'--args=-m,jobs.agent_vm_reconciler'" not in text:
-        errors.append(f"{workflow}: Agent VM reconciler Python module argument must remain action-parser-safe")
-
+    request_step = (
+        "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
+    )
+    errors.extend(_validate_private_network_egress(text, workflow=workflow, request_step=request_step))
+    errors.extend(_validate_llm_gateway_wiring(text, workflow=workflow, request_step=request_step))
     if production:
         for fragment in (
             "on:\n  workflow_dispatch:",
@@ -226,6 +253,8 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+            "USE_VERTEX_AI=true",
+            "GCP_LOCATION=us-central1",
             "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
             "${{ secrets.GCP_SERVICE_ACCOUNT }}",
@@ -253,13 +282,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")
         dev_runtime_steps = (
             "Deploy desktop-backend to Cloud Run",
-            "Deploy Agent VM reconciler Cloud Run Job",
         )
         dev_runtime_env = (
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-            "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
         )
         for step in dev_runtime_steps:
             block = _step_block(text, step)
@@ -277,44 +304,23 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             for line in desktop_block.splitlines()
         ):
             errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
+        if desktop_block is not None:
+            for env_var in ("USE_VERTEX_AI=true", "GCP_LOCATION=us-central1"):
+                if not any(line.strip() == env_var for line in desktop_block.splitlines()):
+                    errors.append(f"{workflow}: desktop candidate missing Vertex PT runtime env {env_var!r}")
     return errors
 
 
-def validate_desktop_release_gates(qualification: str, stable: str) -> list[str]:
+def validate_desktop_release_gates(stable: str) -> list[str]:
     errors: list[str] = []
-    shared_required = (
+    for fragment in (
         "Verify live desktop-backend chat compatibility",
         '.chat_contract_version == "1"',
-    )
-    for workflow, text, endpoint in (
-        (
-            "desktop_qualify_beta.yml",
-            qualification,
-            "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
-        ),
-        (
-            "desktop_promote_prod.yml",
-            stable,
-            "https://desktop-backend-hhibjajaja-uc.a.run.app",
-        ),
+        "https://desktop-backend-hhibjajaja-uc.a.run.app",
     ):
-        for fragment in (*shared_required, endpoint):
-            if fragment not in text:
-                errors.append(f"{workflow}: missing desktop-backend compatibility gate {fragment!r}")
-    for fragment in (
-        "https://api.omiapi.com/v1/health",
-        '.status == "ok"',
-        'python_status: "ok"',
-        "Prove production Firebase UID continuity on Beta development authorities",
-        "probe_beta_uid_continuity.py",
-        "FIREBASE_AUTH_PROJECT_ID: based-hardware",
-        "firebase_release_probe_token.py",
-    ):
-        if fragment not in qualification:
-            errors.append(f"desktop_qualify_beta.yml: missing development Python compatibility gate {fragment!r}")
-    if qualification.find(shared_required[0]) >= qualification.find("Qualify exact candidate on the M1 Studio"):
-        errors.append("desktop_qualify_beta.yml: backend compatibility must precede candidate qualification")
-    if stable.find(shared_required[0]) >= stable.find("Advance explicit stable pointer"):
+        if fragment not in stable:
+            errors.append(f"desktop_promote_prod.yml: missing desktop-backend compatibility gate {fragment!r}")
+    if stable.find("Verify live desktop-backend chat compatibility") >= stable.find("Advance explicit stable pointer"):
         errors.append("desktop_promote_prod.yml: backend compatibility must precede Stable pointer mutation")
     return errors
 
@@ -374,7 +380,6 @@ def validate_all(
     *,
     dev: str,
     prod: str,
-    qualification: str,
     stable: str,
     recovery: str,
     dockerfile: str,
@@ -384,7 +389,7 @@ def validate_all(
     return [
         *validate_deploy_workflow(dev, production=False),
         *validate_deploy_workflow(prod, production=True),
-        *validate_desktop_release_gates(qualification, stable),
+        *validate_desktop_release_gates(stable),
         *validate_recovery_workflow(recovery),
         *validate_contract_sources(
             dockerfile=dockerfile,
@@ -398,7 +403,6 @@ def main() -> int:
     errors = validate_all(
         dev=(WORKFLOWS / "desktop_backend_auto_dev.yml").read_text(encoding="utf-8"),
         prod=(WORKFLOWS / "desktop_backend_prod.yml").read_text(encoding="utf-8"),
-        qualification=(WORKFLOWS / "desktop_qualify_beta.yml").read_text(encoding="utf-8"),
         stable=(WORKFLOWS / "desktop_promote_prod.yml").read_text(encoding="utf-8"),
         recovery=(WORKFLOWS / "desktop_backend_recover_prod.yml").read_text(encoding="utf-8"),
         dockerfile=(ROOT / "backend/Dockerfile.desktop_backend").read_text(encoding="utf-8"),

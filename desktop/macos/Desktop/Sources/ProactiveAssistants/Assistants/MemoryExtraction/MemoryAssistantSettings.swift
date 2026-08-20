@@ -17,7 +17,11 @@ class MemoryAssistantSettings {
   // MARK: - Default Values
 
   private let defaultEnabled = true
-  private let defaultExtractionInterval: TimeInterval = 600.0  // 10 minutes
+  // 30 minutes. Was 10; memory extraction measured the worst value of any proactive
+  // lane (50.5% of macOS notification volume at 0.240% CTR, ~53 calls per stored
+  // memory), so its default cadence carries a 3x cut. Users can still pick a faster
+  // interval in Settings — 1800 is an existing step on the interval ladder.
+  private let defaultExtractionInterval: TimeInterval = 1800.0
   private let defaultMinConfidence: Double = 0.7
   private let defaultNotificationsEnabled = false
 
@@ -189,6 +193,7 @@ class MemoryAssistantSettings {
     set {
       let isCustom = newValue != MemoryAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("memory", isShippedDefault: !isCustom)
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Memory analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")

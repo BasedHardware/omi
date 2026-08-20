@@ -1,249 +1,210 @@
 # Memory architecture map
 
-This package owns the routing and orchestration seams for Omi's legacy and canonical memory systems. Persistence contracts live in `backend/database/` and `backend/models/`; HTTP entry points live in `backend/routers/`. This is a call-path map, not a data-model specification. See `docs/memory/domain_model.md` for the latter.
+This package owns the universal memory repository and canonical processing
+pipeline. Persistence contracts live in `backend/database/` and
+`backend/models/`; HTTP entry points live in `backend/routers/`. The normative
+data model is `docs/memory/domain_model.md`, and the convergence record is
+`docs/epics/universal_memory_task_convergence.md`.
 
-## `GET /v3/memories`
+## One logical authority, two retained formats
 
-The entry point is `backend/routers/memories.py:get_memories`. Its live routing order matters:
-
-1. `canonical_activation.py:canonical_read_enabled` selects the direct canonical lane. The router calls `memory_service.py:MemoryService.read`.
-2. Otherwise, any production runtime decision other than `memory_read` selects `_legacy_get_memories` in the router.
-3. Only a `memory_read` runtime decision that did not select the direct canonical lane enters `v3_composed_get_service.py:compose_v3_get`.
-
-The runtime dependency is built lazily by `routers/memories.py:get_v3_get_runtime` → `v3_production_runtime.py:build_v3_production_runtime`. Legacy fallback happens in the router; the production composed adapter deliberately cannot fall back to legacy. `v3_request_adapter.py` and `v3_memory_read_service.py` describe planner/test contracts but are not in this live GET path.
-
-### Direct canonical request
-
-```text
-backend/routers/memories.py:get_memories
-  canonical_activation.py:canonical_read_enabled        choose the pinned, read-ready cohort
-    memory_system_pin.py → memory_system.py              pin code + environment cohort membership
-    backend/config/memory_rollout.py                     load mode and enabled users
-    v3_control_state_adapter.py → default_read_rollout.py read persisted control and global gates
-    memory_read_rollout_core.py                          evaluate shared grant/convergence gates
-    v3_account_generation_source.py                     read the trusted account generation
-    v3_control_reader_contract.py                       make the fail-closed route decision
-  memory_service.py:MemoryService.read                   public routing seam
-  memory_service.py:CanonicalMemoryBackend.read          canonical backend boundary
-  canonical_memory_adapter.py:read_canonical_memories    assemble the product response
-  product_memory_read_service.py                         read authoritative memory_items
-  canonical_visibility_filter.py                         apply default lifecycle visibility
-  device_scope_filter.py                                 apply all/current/specific-device scope
-  canonical_memory_adapter.py:memory_item_to_memorydb    restore the released MemoryDB shape
-```
-
-The legacy lane is shorter: `routers/memories.py:_legacy_get_memories` → `database/memories.py:get_memories` → `memory_api_response.py:memory_list_response`. `memory_api_contract.py` removes canonical-only fields so legacy responses remain compatible.
-
-### Composed projection request
+Every authenticated account uses `memory_service.py:MemoryService`. New writes
+always enter canonical `memory_items`. Existing
+`users/{uid}/memories` documents remain readable through
+`HistoricalMemoryAdapter`, which is deliberately read-only.
 
 ```text
-backend/routers/memories.py:get_memories
-  v3_composed_get_service.py:compose_v3_get               stage budgets and fail-closed orchestration
-  v3_production_runtime.py:_ProductionV3Adapters
-    backend/config/memory_rollout.py                       load server-owned rollout configuration
-    v3_control_state_adapter.py:read_v3_control            merge env rollout and persisted control state
-      default_read_rollout.py → memory_read_rollout_core.py evaluate global/grant/convergence gates
-    v3_account_generation_source.py                       read the trusted account generation
-    v3_control_reader_contract.py:decide_v3_control_route enforce grant, convergence, generation, and mode
-    v3_production_runtime.py:build_snapshot                attest projection state and bind the request
-    v3_cursor.py                                           verify/create an HMAC keyset cursor
-    v3_projection_reader_contract.py                      typed projection request/page boundary
-    backend/database/memory_compatibility_projection.py   query and validate projection state/items
-  v3_archive_visibility_readiness.py                      exclude archive/historical rows by default
-  memory_api_response.py → memory_api_contract.py         serialize the released response shape
+released memory surface
+  -> MemoryService
+     -> CanonicalMemoryBackend                 authoritative reads and writes
+     -> HistoricalMemoryAdapter                bounded compatibility reads only
+     -> memory_historical_overrides            durable suppression/materialization fence
+  -> one MemoryDB response contract
 ```
 
-Every page is bound to the subject, account and projection generations, projection commit, filter hash, cursor policy, and read timestamp. A mismatched state, row fence, cursor, partial page, or exhausted budget fails closed; it does not bleed into legacy data.
+Canonical wins a stable-ID collision. An active override suppresses the
+historical copy after materialization; a tombstone suppresses it after delete.
+Sorting, visibility, device, locked-memory, and lifecycle policy are applied by
+the service rather than selected by physical origin.
 
-## Capture, terminal routing, and Long-term admission
+No request chooses a memory system from a UID list, user enrollment document,
+header, or client claim. `MEMORY_MODE`, `MEMORY_V3_GET_ENABLED`, and the
+canonical maintenance/consolidation flags are deployment-wide safety controls.
+There is no runtime user inventory.
 
-Canonical writes enter through `MemoryService` (HTTP writes start in
-`backend/routers/memories.py`). Every new conversation, explicit-user, import,
-API, plugin, and integration intake is staged as Short-term.
-`memory_service.py:create_external_memory` adds required-processing metadata,
-then `canonical_memory_adapter.py:write_canonical_external_memory` /
-`write_canonical_extraction_memory` persists evidence and submits an operation
-to `backend/database/memory_apply_store.py:apply_long_term_patch_firestore`.
-Conversation capture accepts a candidate only when every quote reference is
-grounded in one transcript segment. Extraction completes before source
-replacement: an extraction failure preserves prior canonical state, while a
-successful empty reprocess fully retracts the prior conversation-sourced state.
+## Released read surfaces
 
-`memory_apply_store.py` calls the pure transition in
-`backend/models/memory_apply.py:apply_long_term_patch_transaction`. One
-Firestore transaction advances the apply control and state head, writes the
-commit and authoritative `memory_items`, and journals the operation. A
-Short-term → Long-term transition additionally validates the server-authored
-promotion admission receipt and writes
-`memory_graph_assertions/{memory_id}` in that same transaction. Processed,
-projection-eligible transitions also persist deterministic `projection_sync` /
-`vector_sync` outbox events. This apply-store commit chain is the canonical
-memory ledger.
-`backend/database/memory_ledger.py` is the older fact ledger used by legacy
-projections; do not use it as the canonical durability seam.
+`backend/routers/memories.py` and the chat, agent, MCP, developer, integration,
+tool, and X-connector adapters call `MemoryService` directly. The normal list
+path merges canonical and historical rows with stable ordering and duplicate
+suppression. The retired cutover projection cannot represent that mixed view,
+so `cursor` requests fail explicitly with HTTP 400 instead of selecting a
+second authority. Released clients continue to use bounded offset paging.
+
+The authoritative canonical read path is:
+
+```text
+MemoryService.read/search/get
+  canonical_memory_adapter.py
+  product_memory_read_service.py
+  canonical_visibility_filter.py
+  device_scope_filter.py
+  memory_item_to_memorydb
+```
+
+Historical rows are adapted to the same released model without inventing
+promotion receipts or changing public IDs. Missing historical visibility keeps
+the released public default; missing device identity is device-neutral.
+
+## Writes and lazy historical mutation
+
+Explicit, import, conversation, API, plugin, integration, and X-connector
+intake all stage canonical Short-term items. Canonical apply state is created
+lazily on first write and is fenced by UID, account generation, source
+generation, idempotency, and content hash.
+
+Mutating a historical-only item is deterministic and local:
+
+1. read and validate the historical row;
+2. write the canonical representation with the same public ID;
+3. durably write its active override or tombstone;
+4. best-effort remove the historical row and obsolete vector entry.
+
+The override is committed before cleanup so a retry or cleanup outage cannot
+resurrect or duplicate content. This path does not call an LLM, create an
+embedding, or require a bulk account backfill. Batch mutations prevalidate the
+whole request before the first write.
+
+## Canonical processing and Long-term admission
+
+`memory_apply_store.py` is the canonical transaction boundary. It advances the
+apply control/head, item, commit, operation journal, graph assertion, and
+projection/vector outbox fences together. `canonical_consolidation.py` is the
+sole new Short-term -> Long-term admission authority and requires the
+server-authored promotion receipt defined by INV-MEM-4.
 
 Scheduled maintenance runs:
 
 ```text
 backend/modal/memory_maintenance_job.py
   canonical_short_term_maintenance_cron.py
-  short_term_promotion.py:run_canonical_short_term_maintenance
-    memory_outbox_worker.py              drain already-committed work before row parsing
-    canonical_required_processing.py     process required user/import submissions
-    short_term_promotion.py               audit TTL and reject expired indexed items
-    canonical_consolidation.py            give every pending item one terminal route
-      promote                             atomically admit Long-term + graph assertion
-      archive / review / reject           settle outside default access
-      memory_apply_store.py               commit item, ledger, operation, assertion, outbox
-    memory_outbox_worker.py              drain events committed by this pass
+  short_term_promotion.py
+    memory_outbox_worker.py
+    TTL audit
+    canonical_consolidation.py
+      pending required submissions + processed Short-term
+      one Luna call: normalize if needed, then promote | archive | review | reject
+    memory_outbox_worker.py
 ```
 
-`canonical_consolidation.py` is the sole L2 route owner. Its model response must
-be an exact item-addressed partition of the pending batch into `promote`,
-`archive`, `review`, or `reject` before the first mutation. There is no generic
-promotion pass and no user-asserted/fast-track bypass. All routes mutate
-authoritative state only through `memory_apply_store.py`. Captured
-`subject_entity_id` and subject attribution are authoritative: promotion cannot
-rewrite a known source subject or turn a third-party subject into the user.
-Invalid model output, recurrence handoff failures, and apply conflicts record a
-revision-scoped, leased attempt in `memory_runs` before the LLM call. Retried
-sources are isolated from fresh items, and after three failed attempts the
-canonical apply boundary settles the source as `review`. If the Archive review
-route conflicts, that same boundary commits a blocked Short-term review plus
-projection deletes, removing the quarantined revision from the eligible query;
-if storage prevents both commits, later runs retry only those terminal routes
-without another LLM call. A durable ordered scan cursor advances past any
-still-blocked query page and resets after reaching later work, so even
-store-level terminal failures cannot pin the oldest query window forever.
-Either condition is reported as a cohort error, so the maintenance job cannot
-claim success while work is blocked, and later selected items continue routing.
+The job inventories accounts from a content-free universal maintenance
+registry. First canonical apply-state provisioning idempotently registers the
+UID; each job run advances a persisted bounded cursor and wraps at the end.
+This is neither a rollout allowlist nor an unbounded users scan. Scheduler owns
+cadence; the job is the sole host of
+`MEMORY_CANONICAL_MAINTENANCE_ENABLED`.
 
-The shared knowledge-graph read overlays current version-fenced assertions on
-retained legacy records with bounded Firestore scans (2,000 assertions/nodes
-and 5,000 edges). Its edge page is referentially closed over the returned node
-page, and any edge removed to preserve that closure sets `truncated=true`.
-Because canonical assertions are graph authority, public delete and rebuild
-routes (`DELETE /v1/knowledge-graph` and
-`POST /v1/knowledge-graph/rebuild`) return HTTP 409 for canonical or
-retained-assertion accounts; internal memory tombstones still remove their
-assertion and derived graph state.
+The scheduled final planner and six-hour X memory
+extractor share one optional OpenAI Flex switch and use dedicated gateway lanes.
+Manual and post-OAuth X syncs remain Standard. Ordinary `memory_conflict`,
+`memory_l2`, and `memories` traffic keeps its Standard timeout and cannot
+request Flex. `OMI_BACKGROUND_FLEX_CAPABLE` is present only on the two owning
+jobs. The live Firestore control is stage-scoped because dev and prod can share
+the customer Firestore project: dev uses
+`llm_runtime_controls/background_flex_dev`, and prod uses
+`llm_runtime_controls/background_flex_prod`. Each document must contain
+exactly:
 
-Automatic intake is cost-bounded by deterministic datastore query and per-LLM
-batch caps. Every item selected for a pass receives a terminal route; overflow
-remains immediately eligible on the next Scheduler run, so low-volume users,
-explicit corrections, and bounded-query remainders cannot be stranded behind
-a daily watermark.
+```json
+{"enabled":false,"generation":1}
+```
 
-The normal `projection_sync` and `vector_sync` events committed with canonical
-state are the retry authority for keyword/compatibility and vector projections.
-`backend/database/memory_outbox_worker.py` leases pending, retryable, and
-expired-processing events; reloads the authoritative item; checks account,
-revision, and content fences; applies an idempotent side effect; and
-acknowledges only success. Failures use bounded backoff and then dead-letter.
-When an expired processing lease is reclaimed, the worker repairs the provider
-to current authoritative state before acknowledging, even when the original
-event fences are stale. Restricted items are delete-only: their content never
-reaches keyword, compatibility, embedding, or vector providers; only
-UID-and-memory-fenced deletes contact those providers to purge prior state.
-Typesense and Pinecone writes use a stable `memproj:` hash of
-`(uid, memory_id)`. Before upsert or repair, the provider writer deletes every
-row matching that UID and memory ID, including the retired bare-ID identity;
-cleanup failure prevents acknowledgement. Rebuild and account deletion use
-UID-only provider purges so orphaned rows do not depend on Firestore
-enumeration.
-This normal outbox is the sole delivery authority for keyword/compatibility and
-vector projections; route/apply paths do not perform a regular synchronous
-projection fast path. Privacy tombstones enqueue the same normal delete events
-atomically with the item/evidence tombstone; immediate provider deletion is
-only an exposure-reduction acceleration. The authoritative tombstone fences
-graph reads immediately; its durable projection-delete event then removes the
-derived per-memory graph assertion before pruning shared KG citations. This
-keeps the released 100-item privacy request inside Firestore's transaction
-limit without weakening read-time deletion. TTL expiry settles processed
-Short-term items through the canonical reject/apply route so their stale
-projections cannot accumulate.
+Set `enabled` to `true` to route eligible scheduled workloads through
+Flex, and increment `generation` with every control change. Setting it back to
+`false` restores their legacy Standard paths without a redeploy. An in-flight
+response from an older generation is discarded before durable apply. Flex
+resource deferrals release promotion leases for the next scheduled run and
+do not consume model-output quality retry budgets; X raw posts remain pending.
+Flex-mode memory maintenance scans a bounded registry page (up to 400 UIDs),
+skips accounts with no active Short-term row, and skips accounts dreamed in
+the last 20 hours unless they already have more than 10 active Short-term
+rows (hourly overflow drain). Remaining users run until the 15-minute Flex
+reservation no longer fits in the one-hour job budget. A Flex deferral leaves
+the durable cursor on the unfinished UID so later accounts are not skipped.
+The job does not run a separate required-processing LLM: explicit submissions
+enter the consolidation batch with `requires_normalization=true`, and apply
+stamps the L2 receipt then the route from that one decision. Promote
+`memory_text` is always rebound to the stored L2 content when
+`promotion.required` is set, including retries after L2 already committed.
+Consolidation
+keeps 20 Short-term items per Luna call and splits the planner rules onto a
+cached prefix so later batches of the same hour reuse that prefix; one pass
+can issue up to 25 such calls (500 items). Both owning
+jobs use verified private gateway endpoints, zero SDK retries, and a one-hour
+Cloud Run task budget.
 
-Canonical review rows are revision-scoped derived projections, never a second
-mutation authority. A resolution transaction reads the pending review and
-validates its source commit, item revision, content hash, and `route=review`
-against the authoritative item before writing both outcomes atomically.
-`accept` and `correct` clear the settled route and return the item to pending
-Short-term processing; `reject` and `drop` atomically redact the review while
-privacy-tombstoning the item. A stale or competing command therefore cannot
-change either side. Review reads also recheck the authoritative item and return
-only a redacted tombstone when cleanup is delayed. Durable review cleanup uses
-bounded indexed `fact_id` and `conflict_with` queries, including historical
-rows that predate denormalized reference metadata.
+## Search, graph, and derived providers
 
-Privacy deletion closes every non-tombstoned member of the requested canonical
-lineage, including hidden and superseded aliases. Tombstones remove semantic
-item content and embedded evidence payloads while retaining only the IDs,
-revisions, generations, and timestamps needed for lineage and delete delivery.
-A standalone evidence document remains active only while a non-deleted memory
-still references it. Delete-all processes bounded transactions and then repeats
-a control-fenced scan until it observes a stable empty set; sustained concurrent
-writes fail the request instead of returning a partial success.
+Canonical item state is authoritative. Keyword/vector results are candidates
+only and must hydrate against the universal repository before return. Restricted,
+archived, superseded, or tombstoned items stay excluded according to the
+surface policy even when a provider row lags.
 
-Conversation source replacement uses the denormalized `source_ids` projection
-through a cursor-bounded indexed query. Withdrawing a source-owned canonical
-survivor reactivates independently sourced superseded Long-term rows in that
-same transaction, including a rebuilt graph assertion and projection upserts.
-An emitted-but-invalid extraction batch fails before replacement; only a
-genuinely empty provider result is allowed to retract the prior source cohort.
+The normal `projection_sync` and `vector_sync` outbox is the retry authority for
+Typesense, compatibility, Pinecone, and derived graph delivery. Restricted
+items are delete-only. Provider identity is the stable `memproj:` hash of
+`(uid, memory_id)`; cleanup also removes the retired bare-ID identity.
 
-Account deletion installs its durable top-level wipe marker before provider
-purge. Projection workers treat that marker as a delete-only fence, and the
-purge refuses to erase its journal while any projection lease is active.
+`memory_graph_assertions/{memory_id}` is graph authority. Retained historical
+graph data is a bounded read overlay only and cannot admit, mutate, or delete a
+memory. Public graph mutation routes therefore preserve canonical assertion
+semantics for every account.
 
-For enrolled `/v3` reads, `projection_sync` also updates the matching
-`v3_compatibility_projection_items` row. The enrollment-created projection
-state is a stable account-generation fence shared by every row; item deliveries
-reuse that fence so one edit cannot invalidate unrelated rows. Each row
-mutation transactionally reads the state fence and rejects a concurrent account
-generation change. Upserts fail closed when the state is missing or malformed.
-Deletes remove the compatibility row before retryable external cleanup so a
-provider outage cannot keep retired or restricted content visible, while a
-stale delete cannot remove a newly re-created account's row.
+## Privacy, export, and account lifecycle
 
-The authoritative per-memory graph is
-`memory_graph_assertions/{memory_id}`. Shared KG nodes/edges are a read-side
-merge/projection of current assertions and legacy graph data, never an
-independent Long-term admission step.
+Edit, review, visibility, category/tags, baseline, single delete, batch delete,
+delete-default, delete-all, source replacement, export, and account deletion
+all enter through the universal authority. Canonical tombstones and historical
+override tombstones suppress reads immediately; outbox/provider cleanup may
+complete asynchronously without changing that authority.
 
-The reviewed legacy-backfill remediation executor follows the same ledger and
-normal-outbox path: it can only archive deterministic legacy artifacts and
-retains evidence. Backfill never invokes keyword, vector, or legacy KG writers
-directly; historical graph repair must use an explicit assertion migration or
-normal promotion admission.
+Data export iterates the merged logical set once. Account deletion closes over
+historical rows/vectors and canonical items, evidence, operations, reviews,
+assertions, outbox/projections, overrides, and task sidecars. Account-generation
+fences prevent an old lease or retry from resurrecting a recreated account.
 
-## Rollout and legacy sunset
+## Operational controls and rollback
 
-`backend/config/memory_rollout.py` owns the runtime contract:
+The supported controls and rollback floor are documented in
+`docs/runbooks/universal-memory-operations.md`.
 
-- `CANONICAL_MEMORY_USERS` in `config/canonical_memory_cohort.py` is the one product entitlement: it selects canonical memory, task intelligence, and Chat-first together.
-- `MEMORY_MODE`, `MEMORY_ENABLED_USERS`, and `MEMORY_V3_GET_ENABLED` remain maintenance/readiness metadata only. Request routing must never use them to select or suppress a user.
-- An enrolled account whose canonical projection is unavailable fails closed; it never falls back to legacy memory.
-- `MEMORY_V3_CURSOR_SECRET`, `MEMORY_V3_CURSOR_TTL_SECONDS`, `MEMORY_V3_CURSOR_POLICY_VERSION`, and `MEMORY_V3_CURSOR_SECRET_VERSION` bind cursor behavior.
-- Persisted control state additionally gates rollout stage, default-memory grant, global reads, write convergence, account/projection generations, and projection readiness.
-- `MEMORY_CANONICAL_MAINTENANCE_ENABLED` gates scheduled maintenance; Cloud
-  Scheduler owns cadence.
-- `MEMORY_CANONICAL_CONSOLIDATION_ENABLED`, `MEMORY_CANONICAL_CONSOLIDATION_BATCH_THRESHOLD`, `MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP`, and `MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM` tune consolidation. The batch cap bounds each LLM call, and one maintenance pass drains every batch in its deterministic datastore-bounded selection.
-- The minimal operator matrix, activation order, retired names, and rollback
-  order live in `docs/runbooks/canonical-memory-rollout-flags.md`.
-- Required processing queries only active pending required rows; a negative user review moves the row to terminal `processing_rejected`. TTL queries only active, processed, expired Short-term rows ordered by `expires_at, memory_id`, while consolidation queries active, processed, source-active Short-term rows ordered by `captured_at, memory_id`. Every query applies its server-owned limit after these eligibility filters, so unrelated rows cannot starve work beyond the cap.
-- Vector repair persistence is a persisted rollout capability (`vector_repair_outbox_enabled` in `default_read_rollout.py`), not an environment switch.
+- `MEMORY_ENABLED=on|off` is the one user-facing product flag. Unset fail-closes
+  to off. `on` enables intake and list; it does not by itself enable ST→LT
+  maintenance. `MEMORY_MODE` and `MEMORY_V3_GET_ENABLED` are one-deploy aliases
+  only (`write|read` → on, `off|shadow` → off) and are not written in overlays.
+- `MEMORY_CANONICAL_MAINTENANCE_ENABLED` is job-only and stays a separate ops
+  switch. Do not derive it from `MEMORY_ENABLED=on`. Both env overlays pin it
+  on with `MEMORY_CANONICAL_MAINTENANCE_FLEX=true`.
+- `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` and its batch/candidate settings are
+  global cost/incident controls.
+- `GET /v3/memories` first page uses `read_page`, which 503s
+  `Memory cursor unavailable` when `MEMORY_V3_CURSOR_SECRET` is missing. That is
+  the list fence, not `MEMORY_V3_GET_ENABLED` (unused on the route). First page
+  falls back to offset `read()` for that 503.
 
-Legacy has no date-based removal. `docs/memory/domain_model.md` requires all users to be migrated and verified plus explicit owner sign-off before legacy data is deleted. Until that gate, legacy records remain the durable rollback source; changing routing is reversible, deleting the stores is not.
+The universal dual-format reader is the rollback floor. A rollback may stop new
+canonical intake or L2 maintenance globally, but must keep the universal reader
+and historical adapter deployed. Physical legacy deletion is a separate,
+explicitly approved operation after production evidence.
 
-## Where changes belong
+## Change rules
 
-- Add a public read/write/search surface through `MemoryService`; use `surface_routing.py` to pin one cohort decision per request. Do not call both stores defensively.
-- Add a canonical list filter in `canonical_visibility_filter.py` for lifecycle semantics or `device_scope_filter.py` for capture-device semantics, then invoke it from `canonical_memory_adapter.py`.
-- Add a composed filter end-to-end: request fields in `v3_composed_get_service.py`, cursor-bound `_filter_hash` in `v3_production_runtime.py`, typed fields in `v3_projection_reader_contract.py`, and the query in `database/memory_compatibility_projection.py`.
-- Add a read mode in the runtime/control decision and bind it into `V3ComposedExecutionContext` plus `v3_cursor.py`; a mode must not reuse another mode's cursor.
-- Add a projection by implementing the `ProjectionReader` (`V3ProjectionReadRequest` → `V3ProjectionPage`) contract and binding it in `v3_production_runtime.py`. Keep storage validation in `backend/database/`.
-- Add canonical state transitions to `backend/models/memory_apply.py` and execute them with `memory_apply_store.py`; do not write authoritative items, commits, and outbox records independently.
-- Add or change a Short-term terminal route in
-  `canonical_consolidation.py`; do not add a second promotion loop or
-  call-site bypass. Every new Long-term admission must carry the current
-  receipt and graph plan through the atomic apply boundary.
+- Add public reads or mutations through `MemoryService`, never by selecting a
+  physical store in a router.
+- Historical storage may only be read or idempotently cleaned by lazy
+  materialization/account deletion.
+- Add canonical state transitions to `models/memory_apply.py` and execute them
+  through `database/memory_apply_store.py`.
+- Add Long-term terminal routing only in `canonical_consolidation.py`.
+- Task packages must not import memory cohort/system-selection modules;
+  recurrence is an optional evidence handoff, not task entitlement.

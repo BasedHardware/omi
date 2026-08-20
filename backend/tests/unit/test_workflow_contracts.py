@@ -64,7 +64,6 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
     }
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
-        "backend/utils/memory/canonical_legacy_backfill.py": "tests/unit/test_canonical_legacy_backfill.py",
         "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
         "backend/routers/conversations.py": "tests/unit/test_conversation_lifecycle_contract.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
@@ -117,11 +116,20 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
     for path in (
         "backend/AGENTS.md",
         "backend/docs/runbooks/resilience-dashboards.md",
-        "backend/charts/monitoring/alerts/resilience.json",
     ):
         selected, reason = selector.tests_for_changed_paths([path], all_tests)
         assert selected == [], path
         assert reason == "no backend files changed", (path, reason)
+
+    # Monitoring telemetry contract sources (#9587) select monitoring unit tests.
+    selected, reason = selector.tests_for_changed_paths(
+        ["backend/charts/monitoring/alerts/resilience.json"],
+        all_tests,
+    )
+    assert "tests/unit/test_monitoring_telemetry_contract.py" in selected
+    assert "tests/unit/test_monitoring_alert_rule_contract.py" in selected
+    assert "tests/unit/test_journey_observability.py" in selected
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)
     # Not a FULL_RUN_GLOBS path; unmapped flat utils still use the fallback.
@@ -288,7 +296,6 @@ def test_pre_push_selects_release_guard_and_focused_test_for_release_contract_ch
     function_end = pre_push.index("\n}\n", function_start)
     guard = pre_push[function_start:function_end]
 
-    assert ".github/workflows/desktop_qualify_beta.yml" in guard
     assert ".github/scripts/check-release-process-guards.py" in guard
     assert "scripts/run-release-process-guards.sh" in guard
     assert "tests/unit/test_desktop_release_scripts.py" in guard
@@ -311,24 +318,16 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text(encoding="utf-8")
     repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
     desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text(encoding="utf-8")
-    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text(
-        encoding="utf-8"
-    )
+
     swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text(encoding="utf-8")
     pre_push = (repo / "scripts/pre-push").read_text(encoding="utf-8")
 
     assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
     assert "has_backend_isolation_gate" in detect_changes
     assert "has_desktop_rust" not in desktop_checks
-    assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
-    assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
-    assert "- 'backend/database/__init__.py'" in agent_proxy_auto_deploy
-    assert "- 'backend/database/account_deletion_policy.py'" in agent_proxy_auto_deploy
-    assert "^backend/agent-proxy/Dockerfile$" in detect_changes
     assert "scan_import_time_side_effects.py" in manifest
     assert "check_module_stub_pollution.py" in manifest
     assert '"--check-allowlist-monotonic", "{base}"' in manifest
-    assert "backend/agent-proxy" in manifest
     assert "backend/dependencies.py" in manifest
     assert "unmanaged_thread_offload" in manifest
     assert "scan_import_time_side_effects.py" not in backend_checks
@@ -388,6 +387,16 @@ def test_mobile_generated_files_only_run_for_codegen_or_localization_changes():
     assert 'fetch-depth: 1' in generated
     assert 'fetch-depth: 1' in android
     assert 'fetch-depth: 0' in changes
+
+
+def test_mobile_jobs_share_the_repository_flutter_toolchain_pin():
+    repo = BACKEND_DIR.parent
+    mobile_checks = (repo / ".github/workflows/mobile-app-checks.yml").read_text(encoding="utf-8")
+    repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+
+    pinned_version = re.search(r"flutter-version:\s*([^\s#]+)", repo_checks)
+    assert pinned_version is not None
+    assert mobile_checks.count(f"flutter-version: {pinned_version.group(1)}") == 3
 
 
 def test_installed_pre_push_hook_falls_back_for_older_worktrees():

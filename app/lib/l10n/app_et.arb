@@ -101,7 +101,7 @@
     "createYourOwnApp": "Loo oma rakendus",
     "buildAndShareApp": "Looge ja jagage oma kohandatud rakendust",
     "searchApps": "Otsi rakendusi...",
-    "myApps": "Minu rakendused",
+    "myApps": "Minu loodud",
     "installedApps": "Paigaldatud rakendused",
     "unableToFetchApps": "Rakenduste laadimine ebaõnnestus :(\n\nPalun kontrollige oma internetiühendust ja proovige uuesti.",
     "aboutOmi": "Omi kohta",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Siirto käynnissä",
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
-    "accountCutoverOpenStore": "Avaa kauppa"
+    "accountCutoverOpenStore": "Avaa kauppa",
+    "sendRawAudioToOmi": "Saada töötlemata heli Omisse",
+    "sendRawAudioToOmiDescription": "Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.",
+    "findDevice": "Leia",
+    "diagnosticsShareFailed": "Diagnostikat ei õnnestunud jagada. Proovi uuesti."
 }

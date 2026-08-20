@@ -16,9 +16,7 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-_SPEC = importlib.util.spec_from_file_location(
-    "desktop_changelog", Path(__file__).with_name("desktop-changelog.py")
-)
+_SPEC = importlib.util.spec_from_file_location("desktop_changelog", Path(__file__).with_name("desktop-changelog.py"))
 changelog = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(changelog)
 
@@ -71,18 +69,10 @@ class ChangelogRequirementTests(unittest.TestCase):
     def test_internal_release_controls_are_exempt_but_product_source_is_not(self) -> None:
         for path in (
             "desktop/macos/docs/release.md",
-            "desktop/macos/scripts/qualify-desktop-beta.sh",
-            # Sibling qualification-runner helper (EXEMPT_DESKTOP_PATHS).
-            "desktop/macos/scripts/qualification-swift-cache.sh",
-            "desktop/macos/scripts/qualification-lease-command.sh",
             # CI-only flow validation and its shared source inventory do not
             # alter the desktop application users receive.
             "desktop/macos/scripts/desktop-flow-lint.py",
             "desktop/macos/scripts/desktop_flow_contract.py",
-            # Test files are never user-facing app changes (EXEMPT_DESKTOP_PATH_PREFIXES).
-            # #10374's timeout bump touched this file; without the exemption the
-            # post-merge push run of the changelog gate reddened main (#10387).
-            "desktop/macos/tests/test-qualify-desktop-beta-contract.sh",
             "desktop/macos/tests/some-other-desktop-test.sh",
             # Generated Swift is derived from the OpenAPI contract, never a
             # user-facing app note (EXEMPT_DESKTOP_PATH_PREFIXES).
@@ -102,6 +92,154 @@ class ChangelogRequirementTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
+
+    def test_release_lane_accepts_fragments_already_in_the_tree(self) -> None:
+        # Release Eligibility runs on main pushes, where the merged PR's
+        # no-changelog-needed label is invisible (#11373 wedged the release
+        # train exactly this way). The release contract is that the NEXT
+        # RELEASE has notes — fragments already in the tree satisfy it.
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/20260810-fix.json"
+            if args[0] == "show":
+                return '{"change": "Fixed a thing"}'
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            self.assertTrue(checker.tree_has_unreleased_fragment("HEAD"))
+
+    def test_release_lane_rejects_an_empty_unreleased_directory(self) -> None:
+        with unittest.mock.patch.object(checker, "run_git", return_value=""):
+            self.assertFalse(checker.tree_has_unreleased_fragment("HEAD"))
+
+    def test_release_lane_still_fails_on_an_invalid_tree_fragment(self) -> None:
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/bad.json"
+            if args[0] == "show":
+                return "{}"
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            with self.assertRaises(SystemExit):
+                checker.tree_has_unreleased_fragment("HEAD")
+
+    def test_kind_none_is_a_valid_exemption_but_not_release_notes(self) -> None:
+        self.assertEqual(
+            checker.classify_fragment({"kind": "none"}, "desktop/macos/changelog/unreleased/none.json"),
+            "none",
+        )
+        self.assertEqual(
+            checker.classify_fragment({"change": "Fixed a thing"}, "desktop/macos/changelog/unreleased/fix.json"),
+            "user_facing",
+        )
+        with self.assertRaises(SystemExit):
+            checker.classify_fragment({}, "desktop/macos/changelog/unreleased/empty.json")
+
+    def test_release_lane_ignores_leftover_kind_none_fragments(self) -> None:
+        # A spent internal-only marker must not satisfy "the next release has notes".
+        def fake_git(args: list[str]) -> str:
+            if args[0] == "ls-tree":
+                return "desktop/macos/changelog/unreleased/20260818-dead-code.json"
+            if args[0] == "show":
+                return '{"kind": "none"}'
+            raise AssertionError(f"unexpected git invocation: {args}")
+
+        with unittest.mock.patch.object(checker, "run_git", side_effect=fake_git):
+            self.assertFalse(checker.tree_has_unreleased_fragment("HEAD"))
+
+
+PR_11778_SOURCES = (
+    "desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Core/ProactiveModels.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift",
+    "desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift",
+)
+
+
+class MergeBoundaryAgreementTests(unittest.TestCase):
+    """#11778: a green PR-run must not be able to redden the post-merge push run."""
+
+    def test_11778_production_sources_require_a_changelog(self) -> None:
+        for path in PR_11778_SOURCES:
+            with self.subTest(path=path):
+                self.assertTrue(checker.is_desktop_change_requiring_changelog(path))
+
+    def test_11778_label_without_fragment_pr_and_push_both_fail(self) -> None:
+        requiring = list(PR_11778_SOURCES)
+        pr_code, pr_message = checker.evaluate_changelog_requirement(
+            requiring_changelog=requiring,
+            skip=True,
+            has_new_fragment=False,
+            accept_tree_fragments=False,
+            has_tree_user_facing_fragment=False,
+        )
+        push_code, push_message = checker.evaluate_changelog_requirement(
+            requiring_changelog=requiring,
+            skip=False,
+            has_new_fragment=False,
+            accept_tree_fragments=True,
+            has_tree_user_facing_fragment=False,
+        )
+        self.assertEqual(pr_code, push_code)
+        self.assertEqual(pr_code, 1)
+        self.assertIn("kind", pr_message)
+        self.assertIn("no-changelog-needed", pr_message)
+        self.assertIn("kind", push_message)
+
+    def test_11778_kind_none_fragment_pr_and_push_both_pass(self) -> None:
+        requiring = list(PR_11778_SOURCES)
+        pr_code, _ = checker.evaluate_changelog_requirement(
+            requiring_changelog=requiring,
+            skip=True,
+            has_new_fragment=True,
+            accept_tree_fragments=False,
+            has_tree_user_facing_fragment=False,
+        )
+        push_code, _ = checker.evaluate_changelog_requirement(
+            requiring_changelog=requiring,
+            skip=False,
+            has_new_fragment=True,
+            accept_tree_fragments=True,
+            has_tree_user_facing_fragment=False,
+        )
+        self.assertEqual(pr_code, push_code)
+        self.assertEqual(pr_code, 0)
+
+    def test_skip_still_passes_when_only_exempt_paths_changed(self) -> None:
+        code, message = checker.evaluate_changelog_requirement(
+            requiring_changelog=[],
+            skip=True,
+            has_new_fragment=False,
+            accept_tree_fragments=False,
+            has_tree_user_facing_fragment=False,
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("skipped", message)
+
+    def test_leftover_kind_none_does_not_satisfy_a_later_production_push(self) -> None:
+        code, _ = checker.evaluate_changelog_requirement(
+            requiring_changelog=list(PR_11778_SOURCES),
+            skip=False,
+            has_new_fragment=False,
+            accept_tree_fragments=True,
+            has_tree_user_facing_fragment=False,
+        )
+        self.assertEqual(code, 1)
+
+
+class NoneKindFragmentIOTests(unittest.TestCase):
+    def test_none_kind_fragment_contributes_no_release_notes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "20260818-dead-code.json"
+            changelog.write_json(path, {"kind": "none"})
+            self.assertEqual(changelog.read_unreleased_fragment(path), [])
+
+    def test_none_kind_is_valid_for_repository_wide_validate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "20260818-dead-code.json"
+            changelog.write_json(path, {"kind": "none"})
+            self.assertEqual(changelog.read_unreleased_fragment(path), [])
 
 
 if __name__ == "__main__":

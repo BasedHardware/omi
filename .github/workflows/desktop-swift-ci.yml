@@ -5,7 +5,13 @@ on:
     branches: main
   pull_request:
     branches: main
-    types: [opened, synchronize, reopened, closed]
+  # Recovery hatch. `plan-desktop-release.py` requires this workflow's checks on the
+  # exact source SHA, so any interruption — the workflow being disabled, a run cancelled
+  # by concurrency, an infrastructure blip — leaves that SHA permanently unreleasable:
+  # push events do not replay, and neither a force-push nor a PR close/reopen produces a
+  # run for a commit already on main. Manual dispatch is the only way to re-mint the
+  # evidence without an unrelated commit.
+  workflow_dispatch:
 
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
@@ -16,7 +22,6 @@ concurrency:
 jobs:
   changes:
     name: Detect Desktop Swift Changes
-    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
@@ -91,7 +96,11 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' }}
     runs-on: macos-15
-    timeout-minutes: 60
+    # A cold runner currently needs about 60 minutes for manifest checks,
+    # launcher coverage, the full debug suite, and the independent release-mode
+    # UserNotifications regression. Leave headroom so a successful final link
+    # is not cancelled by the job deadline.
+    timeout-minutes: 90
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -123,9 +132,10 @@ jobs:
         run: |
           MANIFEST_ARGS=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Repo Checks owns PR metadata enforcement and reruns it for label
-            # changes. This macOS-only lane has no live PR metadata, so it must
-            # not independently reject the supported no-changelog-needed label.
+            # Repo Checks owns PR-body metadata. This macOS-only lane still
+            # passes --skip-changelog so it does not depend on labels; the
+            # checker itself no longer treats that skip as an exemption for
+            # production desktop paths (SCA-343 / #11778).
             MANIFEST_ARGS+=(--skip-changelog)
           fi
           python3 .github/scripts/run_checks.py \
@@ -244,8 +254,12 @@ jobs:
           require_success "$NOTIFICATION_REQUIRED" "notification release regression" "$NOTIFICATION_OUTCOME"
 
   desktop-swift:
-    # Keep this name stable: desktop release planning requires this exact
-    # check to pass for the source SHA that will be tagged.
+    # Keep this name a literal: desktop release planning looks this check up by
+    # exact name on the source SHA. GitHub does not evaluate `name:` for a
+    # SKIPPED job, so an expression here publishes the raw expression text as
+    # the check name — which made the required check *absent* rather than
+    # skipped on every commit that did not touch desktop paths, and left the
+    # planner reporting "missing" instead of the truth.
     name: Desktop Swift Build & Tests
     needs: [changes, desktop-swift-verify]
     if: ${{ always() && needs.changes.outputs.should_run == 'true' }}
@@ -264,6 +278,7 @@ jobs:
           fi
 
   desktop-swift-release-compile:
+    # Literal for the same reason as `desktop-swift` above.
     name: Desktop Swift Release Compile
     needs: changes
     if: needs.changes.outputs.should_release_compile == 'true'

@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
-from ._client import db
+from ._client import db, get_firestore_client
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,49 @@ def get_action_item_ids(uid: str) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
+def get_visible_action_item_ids(
+    uid: str,
+    *,
+    completed: bool,
+    firestore_client: Any = None,
+) -> List[str]:
+    """Return IDs in one visible Tasks status bucket.
+
+    The account-wide ID census intentionally includes every document for reconciliation
+    and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
+    rows and include only rows that the explicit ``completed`` list filter can render.
+
+    The ``completed`` filter is pushed server-side via ``FieldFilter`` so Firestore only
+    streams (and bills) documents in the requested bucket, instead of the whole collection.
+    Firestore equality does not match documents where the field is absent and does not
+    conflate 1/0 with booleans, so this is equivalent to the old Python identity check
+    (``completed_value is completed``) for every doc the query now returns.
+
+    ``deleted`` is deliberately NOT pushed into the query as
+    ``.where('deleted', '==', False)``: Firestore equality filters never match documents
+    where the field is absent, and most rows have no ``deleted`` field at all (it is only
+    set on soft-deleted rows). A server-side filter on it would silently drop every
+    undeleted row. Keep this check in Python instead.
+    """
+    client = firestore_client or get_firestore_client()
+    coll = client.collection('users').document(uid).collection(action_items_collection)
+    query = coll.select(['completed', 'deleted']).where(filter=FieldFilter('completed', '==', completed))
+    visible_ids: List[str] = []
+    doc_count = 0
+    for doc in query.stream():
+        doc_count += 1
+        data = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        visible_ids.append(doc.id)
+    record_firestore_read(
+        FirestoreReadFamily.ACTION_ITEMS_VISIBLE_IDS,
+        FirestoreReadMode.UNBOUNDED,
+        doc_count,
+    )
+    return visible_ids
+
+
 def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     action_item_data = dict(action_item_data)
@@ -127,19 +170,46 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
-    # Normalize any ISO date strings to aware datetimes. These fields can arrive as strings from
-    # tool- and LLM-created action items (not only from validated API models), so a single malformed
-    # string must not raise and 500 the whole create/update. Drop the bad value with a warning and let
-    # the field fall back to its default or stay unset, matching the tolerant date handling on the read
-    # path and in _coerce_utc_datetime.
+    # Normalize date fields to timezone-aware UTC datetimes. These can arrive as
+    # ISO strings or datetime objects from tool-/LLM-created action items (extraction
+    # models use plain ``datetime``, not ``AwareDatetime``). Firestore rejects
+    # tz-naive datetimes, and a failed batch create on the fire-and-forget
+    # postprocess path silently drops extracted tasks. Mirror
+    # ``api_key_metadata._coerce_utc_datetime`` / ``mcp_action_items.parse_due_at``:
+    # parse strings tolerantly, attach UTC to naive values, drop only malformed
+    # / out-of-range values (ValueError or OverflowError from UTC normalization)
+    # so a single bad field cannot 500 the whole create/update or batch.
     for date_field in ('created_at', 'updated_at', 'due_at', 'completed_at'):
         value = action_item_data.get(date_field)
-        if isinstance(value, str) and value:
-            try:
-                action_item_data[date_field] = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+        if value is None or value == '':
+            if date_field in action_item_data and value == '':
                 action_item_data.pop(date_field, None)
+            continue
+        try:
+            if isinstance(value, datetime):
+                parsed = value
+            elif isinstance(value, str):
+                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            else:
+                logger.warning(
+                    "Dropping non-datetime %s type=%s on action item write",
+                    date_field,
+                    type(value).__name__,
+                )
+                action_item_data.pop(date_field, None)
+                continue
+
+            # OverflowError: boundary aware values whose offset conversion leaves
+            # Python's datetime range (same tolerance as api_key_metadata).
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+        except (OverflowError, ValueError):
+            logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+            action_item_data.pop(date_field, None)
+            continue
+        action_item_data[date_field] = parsed
 
     return action_item_data
 
@@ -391,6 +461,46 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
 # Hard safety caps for list reads. Unbounded streams + in-process sort caused prod GET
 # /v1/action-items to hit HTTP_GET_TIMEOUT (30s) → 504 on large accounts.
 _ACTION_ITEMS_LIST_HARD_MAX = 2000
+# Slack so a handful of soft-deleted rows in a Firestore prefix still fill the page.
+_ACTION_ITEMS_LIST_DELETED_SLACK = 32
+# Lean projection for GET /v1/action-items. Omit `provenance` (evidence arrays dominate
+# payload on large accounts; ActionItemResponse defaults it to []). Do not add
+# `order_by due_at` here: missing `due_at` is excluded from that index and would
+# drop undated tasks. Existing `action_items_completed_due` stays for due-range reads.
+_ACTION_ITEMS_LIST_SELECT_FIELDS = (
+    'description',
+    'status',
+    'completed',
+    'deleted',
+    'goal_id',
+    'workstream_id',
+    'owner',
+    'due_at',
+    'due_confidence',
+    'source',
+    'priority',
+    'sort_order',
+    'indent_level',
+    'recurrence_rule',
+    'recurrence_parent_id',
+    'created_at',
+    'updated_at',
+    'completed_at',
+    'superseded_by',
+    'conversation_id',
+    'is_locked',
+    'exported',
+    'export_date',
+    'export_platform',
+    'apple_reminder_id',
+)
+
+
+def _list_scan_budget(row_budget: int) -> int:
+    """Docs to pull for one page: the page itself plus deleted slack, never 2× the page."""
+    if row_budget <= 0:
+        return 0
+    return min(_ACTION_ITEMS_LIST_HARD_MAX, int(row_budget) + _ACTION_ITEMS_LIST_DELETED_SLACK)
 
 
 def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
@@ -404,11 +514,17 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
 
 
 def _stream_action_items_bounded(query: Any, *, max_docs: int) -> tuple[List[Dict[str, Any]], int]:
-    """Stream at most max_docs Firestore documents; skip soft-deleted rows."""
+    """Stream at most max_docs Firestore documents; skip soft-deleted rows.
+
+    Applies a field projection and a Firestore ``limit`` so the backend process
+    never downloads full documents past the page budget (Python ``break`` alone
+    still lets the client library buffer the rest of the stream).
+    """
     action_items: List[Dict[str, Any]] = []
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
+    query = query.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
     for doc in query.stream():
         document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
@@ -468,7 +584,11 @@ def get_action_items(
     Legacy documents with missing/null ``completed`` are harvested via a separate bounded
     unfiltered scan and treated as active after ``_prepare_action_item_for_read``.
     All paths are hard-capped so GET /v1/action-items cannot unbounded-scan under
-    HTTP_GET_TIMEOUT. Pagination is applied after the product sort.
+    HTTP_GET_TIMEOUT. Pagination is applied after the product sort. When
+    ``completed`` is set, the scan budget is the page plus deleted slack
+    (not 2× the page). Offset is a live-item slice after that sort so it stays
+    aligned with Windows ``offset += items.length`` — Firestore ``offset``
+    counts deleted documents and would skip/duplicate across pages.
     """
     offset = max(0, int(offset or 0))
     if limit is None or limit <= 0:
@@ -499,8 +619,7 @@ def get_action_items(
         q = _base_query()
         if completed_filter is not None:
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
-        scan = min(_ACTION_ITEMS_LIST_HARD_MAX, max(row_budget * 2, row_budget + 32))
-        items, docs = _stream_action_items_bounded(q, max_docs=scan)
+        items, docs = _stream_action_items_bounded(q, max_docs=_list_scan_budget(row_budget))
         total_docs += docs
         items.sort(key=_action_item_list_sort_key)
         return items[:row_budget]

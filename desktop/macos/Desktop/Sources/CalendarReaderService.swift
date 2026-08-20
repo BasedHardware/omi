@@ -282,13 +282,14 @@ actor CalendarReaderService {
   }
 
   /// Synthesize profile memories and tasks from calendar events.
-  /// Uses local LLM (AgentBridge) to extract ~10 memories and 2-3 tasks.
+  /// The prompt and the model live in the backend behind POST /v1/connectors/synthesize;
+  /// this only formats the event rows and persists what comes back.
   func synthesizeFromEvents(events: [CalendarEvent]) async -> (
     memories: Int, tasks: Int, profileSummary: String
   ) {
     guard !events.isEmpty else { return (0, 0, "") }
 
-    // Format events compactly for the LLM
+    // Format events compactly for the backend
     var eventLines: [String] = []
     for event in events {
       var parts = ["[\(event.startTime)] \(event.summary)"]
@@ -304,36 +305,6 @@ actor CalendarReaderService {
       }
       eventLines.append(parts.joined(separator: " | "))
     }
-    let eventsText = eventLines.joined(separator: "\n")
-
-    let today = ISO8601DateFormatter().string(from: Date()).prefix(10)
-    let synthesisPrompt = """
-      Analyze these \(events.count) Google Calendar events and extract profile information about the user.
-
-      CALENDAR EVENTS:
-      \(eventsText)
-
-      Today's date: \(today)
-
-      Respond ONLY with valid JSON (no markdown, no code fences):
-      {
-        "memories": [
-          "factual statement about the user based on calendar patterns"
-        ],
-        "tasks": [
-          {"description": "actionable item based on upcoming events", "priority": "high", "due_at": "2026-03-20T09:00:00Z"}
-        ],
-        "profile": "2-3 sentence summary of who this user is based on their calendar"
-      }
-
-      RULES:
-      - Extract 10-15 memories (facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life). Memories generalize PATTERNS (weekly standups, regular gym, recurring 1-on-1s), not one-off events, in third person ("The user...").
-      - Extract 0-3 tasks. A task is a SPECIFIC preparation the user still owes for a real upcoming event: name the event and what's owed ("Prep the demo for Thursday's call with Daniel"), with an ISO date in due_at. Never a vague "follow up" or a task for a past event.
-      - Prefer 0 tasks over a weak or generic one. An empty tasks array is correct when nothing genuine is owed.
-      - Task priorities: "high", "medium", or "low"
-      - Profile should summarize professional identity and schedule patterns
-      - Do NOT include sensitive medical, financial, or religious details in tasks
-      """
 
     // Retry the synthesis on transient failure instead of silently dropping the import.
     let maxAttempts = 2
@@ -345,51 +316,14 @@ actor CalendarReaderService {
           throw NSError(
             domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
         }
-        let result = try await AgentClient.run(
-          surface: .service("calendar_reader"),
-          prompt: synthesisPrompt,
-          model: ModelQoS.Claude.synthesis,
-          systemPrompt:
-            "You are a profile extraction assistant. Analyze calendar events and output structured JSON. Be concise and factual.",
-          onTextDelta: { @Sendable _ in },
-          onToolCall: { @Sendable _, _, _ in return "" },
-          onToolActivity: { @Sendable _, _, _, _ in }
+        let synthesis = try await APIClient.shared.synthesizeConnectorItems(
+          source: "calendar",
+          items: eventLines
         )
 
-        var responseText = result.text
-        log(
-          "CalendarReaderService: Synthesis raw response (\(responseText.count) chars): \(responseText.prefix(300))"
-        )
-
-        // Extract JSON from response — handle markdown code fences and leading text
-        if let jsonStart = responseText.range(of: "```json") {
-          responseText = String(responseText[jsonStart.upperBound...])
-          if let jsonEnd = responseText.range(of: "```") {
-            responseText = String(responseText[..<jsonEnd.lowerBound])
-          }
-        } else if let jsonStart = responseText.range(of: "```") {
-          responseText = String(responseText[jsonStart.upperBound...])
-          if let jsonEnd = responseText.range(of: "```") {
-            responseText = String(responseText[..<jsonEnd.lowerBound])
-          }
-        }
-        // Also try finding raw JSON object if there's leading text
-        if let braceStart = responseText.firstIndex(of: "{") {
-          responseText = String(responseText[braceStart...])
-        }
-        responseText = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let jsonData = responseText.data(using: .utf8),
-          let parsed = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
-        else {
-          log(
-            "CalendarReaderService: Failed to parse synthesis response: \(responseText.prefix(200))")
-          return (0, 0, "")
-        }
-
-        let memoryStrings = parsed["memories"] as? [String] ?? []
-        let taskDicts = parsed["tasks"] as? [[String: Any]] ?? []
-        let profileSummary = parsed["profile"] as? String ?? ""
+        let memoryStrings = synthesis.memories
+        let taskDicts = synthesis.tasks
+        let profileSummary = synthesis.profile
 
         let artifacts = memoryStrings.map { memory in
           ImportEvidenceBatchItem(
@@ -417,13 +351,10 @@ actor CalendarReaderService {
         // Save tasks
         var tasksSaved = 0
         for taskDict in taskDicts {
-          guard let description = taskDict["description"] as? String else { continue }
-          let priority = taskDict["priority"] as? String ?? "medium"
-          let dueAtStr = taskDict["due_at"] as? String
-          var dueAt: Date? = nil
-          if let dueAtStr = dueAtStr {
-            dueAt = ISO8601DateFormatter().date(from: dueAtStr)
-          }
+          let description = taskDict.description
+          guard !description.isEmpty else { continue }
+          let priority = taskDict.priority.isEmpty ? "medium" : taskDict.priority
+          let dueAt = taskDict.dueAt.isEmpty ? nil : ISO8601DateFormatter().date(from: taskDict.dueAt)
           let task = await TasksStore.shared.createTask(
             description: description,
             dueAt: dueAt,

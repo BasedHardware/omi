@@ -24,6 +24,7 @@ def make_request(
     body: bytes = b'{"contents":[{"parts":[{"text":"hello"}]}]}',
     *,
     query_string: bytes = b"",
+    workload: str | None = None,
 ) -> Request:
     sent = False
     pending = asyncio.Event()
@@ -35,13 +36,16 @@ def make_request(
             return {"type": "http.request", "body": body, "more_body": False}
         await pending.wait()
 
+    headers = [(b"x-omi-request-id", b"request-12345678")]
+    if workload is not None:
+        headers.append((b"x-omi-workload", workload.encode()))
     return Request(
         {
             "type": "http",
             "method": "POST",
             "path": "/v1/proxy/gemini/models/gemini-2.5-flash:generateContent",
             "query_string": query_string,
-            "headers": [(b"x-omi-request-id", b"request-12345678")],
+            "headers": headers,
         },
         receive,
     )
@@ -140,7 +144,7 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
         return function(*args)
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
-    monkeypatch.setattr(desktop_proxy, "is_trial_paywalled", lambda uid, platform: True)
+    monkeypatch.setattr(desktop_proxy, "is_desktop_trial_paywalled", lambda uid, platform: True)
 
     with pytest.raises(HTTPException) as error:
         await desktop_proxy._authorized_desktop_user("user")
@@ -150,24 +154,234 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch):
+@pytest.mark.parametrize(("model_tier", "used_requests"), [("", 1), ("", 30), ("max", 300)])
+async def test_server_gemini_meter_keeps_pro_within_the_soft_limit(monkeypatch, model_tier, used_requests):
+    fallbacks = []
+
     async def run_blocking(_, function, *args, **kwargs):
         if function is desktop_proxy.redis_db.check_rate_limit:
             if args[1] == "desktop_gemini_daily":
-                return True, 31, 86_400
-            return True, 1, 60
-        return 31, 86_400
+                return True, desktop_proxy._DAILY_HARD_LIMIT - used_requests, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
 
     monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
     monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
-    monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+    monkeypatch.setattr(desktop_proxy, "record_fallback", lambda **fields: fallbacks.append(fields))
+    if model_tier:
+        monkeypatch.setenv("OMI_MODEL_TIER", model_tier)
+    else:
+        monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
 
     assert (
         await desktop_proxy._meter_server_request(
             "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
         )
-        == "models/gemini-2.5-flash:generateContent"
+        == "models/gemini-2.5-pro:generateContent"
     )
+    assert fallbacks == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("model_tier", "used_requests"), [("", 31), ("max", 301)])
+async def test_server_gemini_meter_downgrades_pro_after_the_soft_limit(monkeypatch, model_tier, used_requests):
+    fallbacks = []
+
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, desktop_proxy._DAILY_HARD_LIMIT - used_requests, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "record_fallback", lambda **fields: fallbacks.append(fields))
+    if model_tier:
+        monkeypatch.setenv("OMI_MODEL_TIER", model_tier)
+    else:
+        monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+
+    assert (
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
+        )
+        == "models/gemini-2.5-flash-lite:generateContent"
+    )
+    assert fallbacks == [
+        {
+            "component": "gemini_model",
+            "from_mode": "pro",
+            "to_mode": "flash_lite",
+            "reason": "quota",
+            "outcome": "degraded",
+        }
+    ]
+
+
+def test_quota_demotion_never_targets_the_pt_model():
+    """Regression: over-quota Pro used to demote onto `gemini-2.5-flash`, silently
+    dumping the Insight tool loop (~11% of the reservation) onto the saturated
+    Vertex PT lane. The demotion target must stay a `shared`/on-demand model."""
+    assert desktop_proxy._QUOTA_DEMOTION_MODEL != desktop_proxy.VERTEX_PT_MODEL
+    assert desktop_proxy._QUOTA_DEMOTION_MODEL in desktop_proxy._ALLOWED_MODELS
+    assert desktop_proxy._QUOTA_DEMOTION_MODEL in desktop_proxy._VERTEX_MODELS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["embedContent", "batchEmbedContents"])
+async def test_server_gemini_meter_does_not_downgrade_embedding_actions(monkeypatch, action):
+    fallbacks = []
+
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, desktop_proxy._DAILY_HARD_LIMIT - 31, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "record_fallback", lambda **fields: fallbacks.append(fields))
+    monkeypatch.delenv("OMI_MODEL_TIER", raising=False)
+    path = f"models/gemini-2.5-pro:{action}"
+
+    assert await desktop_proxy._meter_server_request("user", path, "gemini-2.5-pro", action) == path
+    assert fallbacks == []
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_allows_request_at_the_daily_hard_limit(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return True, 0, 0
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    path = "models/gemini-2.5-flash:generateContent"
+
+    assert await desktop_proxy._meter_server_request("user", path, "gemini-2.5-flash", "generateContent") == path
+
+
+@pytest.mark.asyncio
+async def test_server_gemini_meter_rejects_request_over_the_daily_hard_limit(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return False, 0, 86_400
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._meter_server_request(
+            "user", "models/gemini-2.5-pro:generateContent", "gemini-2.5-pro", "generateContent"
+        )
+
+    assert error.value.status_code == 429
+    assert error.value.detail == "Gemini daily request limit exceeded"
+    assert error.value.retryable is False
+    assert error.value.headers == {"Retry-After": "86400", "X-Omi-Retryable": "false"}
+
+
+@pytest.mark.asyncio
+async def test_proxy_marks_daily_quota_exhaustion_non_retryable_and_preserves_retry_after(monkeypatch):
+    async def run_blocking(_, function, *args, **kwargs):
+        if function is desktop_proxy.redis_db.check_rate_limit:
+            if args[1] == "desktop_gemini_daily":
+                return False, 0, 86_400
+            return True, desktop_proxy._BURST_LIMIT - 1, 0
+        raise AssertionError(f"unexpected blocking call: {function}")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+
+    assert error.value.status_code == 429
+    assert error.value.headers["X-Omi-Retryable"] == "false"
+    assert error.value.headers["Retry-After"] == "86400"
+
+
+@pytest.mark.asyncio
+async def test_server_paid_flash_fails_closed_without_project(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("USE_VERTEX_AI", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "must-not-be-used")
+
+    with pytest.raises(desktop_proxy.RoutingFailure) as error:
+        await desktop_proxy._upstream(
+            "models/gemini-2.5-flash:generateContent",
+            "gemini-2.5-flash",
+            "generateContent",
+            {},
+        )
+
+    assert error.value.code == "routing_vertex_not_configured"
+    assert desktop_proxy.VERTEX_PT_CONTRACT in error.value.message
+    assert desktop_proxy.VERTEX_PT_MODEL == "gemini-2.5-flash"
+    assert desktop_proxy.VERTEX_PT_EXPIRES == "~2027-05-28"
+
+
+@pytest.mark.asyncio
+async def test_server_paid_flash_uses_vertex_never_studio_or_key(monkeypatch):
+    async def token():
+        return "adc-token"
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy._vertex_tokens, "get_access_token", token)
+    monkeypatch.setenv("USE_VERTEX_AI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+    monkeypatch.setenv("GEMINI_API_KEY", "must-not-be-used")
+
+    for action in ("generateContent", "streamGenerateContent"):
+        route = await desktop_proxy._upstream(
+            f"models/{desktop_proxy.VERTEX_PT_MODEL}:{action}",
+            desktop_proxy.VERTEX_PT_MODEL,
+            action,
+            {"alt": "sse"} if action == "streamGenerateContent" else {},
+        )
+        assert route.provider == "vertex_ai"
+        assert "aiplatform.googleapis.com" in route.url
+        assert "us-central1" in route.url
+        assert "generativelanguage.googleapis.com" not in route.url
+        assert "key" not in route.params
+        assert route.params.get("key") is None
+
+
+@pytest.mark.asyncio
+async def test_byok_flash_stays_on_ai_studio(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    monkeypatch.setenv("USE_VERTEX_AI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+
+    route = await desktop_proxy._upstream(
+        "models/gemini-2.5-flash:generateContent",
+        "gemini-2.5-flash",
+        "generateContent",
+        {},
+    )
+
+    assert route.provider == "ai_studio_byok"
+    assert route.params["key"] == "user-key"
+    assert "generativelanguage.googleapis.com" in route.url
+
+
+def test_vertex_pt_model_pin_points_at_the_docs():
+    docs = BACKEND_DIR / "docs" / "vertex-pt-flash.md"
+    text = docs.read_text(encoding="utf-8")
+    assert desktop_proxy.VERTEX_PT_MODEL in text
+    assert desktop_proxy.VERTEX_PT_EXPIRES in text
+    assert desktop_proxy.VERTEX_PT_CONTRACT.split(",")[0] in text
+    assert "generativelanguage.googleapis.com" in text
 
 
 @pytest.mark.asyncio
@@ -290,6 +504,114 @@ async def test_proxy_dispatches_once_and_classifies_read_timeout(monkeypatch):
     assert response.status_code == 504
     assert response.headers["x-omi-failure-phase"] == "read"
     assert response.headers["x-omi-retryable"] == "false"
+
+
+def test_output_token_cap_follows_byok(monkeypatch):
+    """Server-paid requests are bounded at 2048 output tokens; BYOK keeps 8192."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert desktop_proxy._output_token_cap() == 2048
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    assert desktop_proxy._output_token_cap() == 8192
+
+
+def test_sanitize_applies_the_requested_output_cap():
+    """No desktop client sets maxOutputTokens, so the cap passed by the caller is
+    both the injected default and the clamp; smaller explicit values pass through."""
+    absent = json.loads(desktop_proxy._sanitize(b'{"generationConfig": {}}', "generateContent", max_output_tokens=2048))
+    assert absent["generationConfig"]["maxOutputTokens"] == 2048
+    oversized = json.loads(
+        desktop_proxy._sanitize(
+            b'{"generationConfig": {"maxOutputTokens": 9000}}', "generateContent", max_output_tokens=2048
+        )
+    )
+    assert oversized["generationConfig"]["maxOutputTokens"] == 2048
+    smaller = json.loads(
+        desktop_proxy._sanitize(
+            b'{"generationConfig": {"maxOutputTokens": 512}}', "generateContent", max_output_tokens=2048
+        )
+    )
+    assert smaller["generationConfig"]["maxOutputTokens"] == 512
+    byok = json.loads(
+        desktop_proxy._sanitize(
+            b'{"generationConfig": {"maxOutputTokens": 9000}}', "generateContent", max_output_tokens=8192
+        )
+    )
+    assert byok["generationConfig"]["maxOutputTokens"] == 8192
+
+
+@pytest.mark.asyncio
+async def test_proxy_dispatches_server_paid_bodies_with_the_2048_cap(monkeypatch):
+    """End-to-end wiring: a server-paid request leaves the proxy carrying the
+    2048 default (regression for every request inheriting the 8192 default)."""
+    dispatched: list[bytes] = []
+
+    class CapturingClient:
+        async def post(self, url, *, params, content, headers):
+            dispatched.append(content)
+            return httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={
+                    "usageMetadata": {
+                        "promptTokenCount": 120,
+                        "cachedContentTokenCount": 80,
+                        "candidatesTokenCount": 14,
+                        "thoughtsTokenCount": 6,
+                        "totalTokenCount": 140,
+                    },
+                    "trafficType": "PROVISIONED_THROUGHPUT",
+                },
+            )
+
+    async def route(path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: CapturingClient())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+
+    response = await desktop_proxy._proxy(
+        make_request(workload="extraction"),
+        "models/gemini-2.5-flash:generateContent",
+        False,
+        "user",
+    )
+
+    assert response.status_code == 200
+    assert len(dispatched) == 1
+    config = json.loads(dispatched[0])["generationConfig"]
+    assert config["maxOutputTokens"] == 2048
+    event = json.loads(output.getvalue())
+    assert event["workload_class"] == "extraction"
+    assert event["traffic_type"] == "PROVISIONED_THROUGHPUT"
+    assert event["prompt_token_count"] == 120
+    assert event["cached_content_token_count"] == 80
+    assert event["candidates_token_count"] == 14
+    assert event["thoughts_token_count"] == 6
+    assert event["total_token_count"] == 140
+
+
+def test_missing_usage_and_unknown_workload_are_safely_bucketed(monkeypatch):
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+    missing_usage = desktop_proxy.ProxyTelemetry(make_request(), streaming=False)
+    missing_usage.observe_gemini_response({"candidates": []})
+    missing_usage.complete(outcome="success", status_code=200, retryable=False, phase="body")
+    event = json.loads(output.getvalue())
+    assert event["workload_class"] == "unknown"
+    assert event["traffic_type"] == "unknown"
+    assert "prompt_token_count" not in event
+    assert (
+        desktop_proxy.ProxyTelemetry(make_request(workload="private-feature-name"), streaming=False).workload_class
+        == "unknown"
+    )
 
 
 @pytest.mark.asyncio
@@ -464,13 +786,19 @@ async def test_proxy_bounds_concurrency_pool_wait_and_labels_phase(monkeypatch):
 async def test_streaming_defers_resource_acquisition_until_body_iteration(monkeypatch):
     streams_opened = 0
     streams_closed = 0
-    chunk = b'data: {"ok":true}\n\n'
+    chunks = [
+        b'data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}],',
+        b'"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":4,',
+        b'"candidatesTokenCount":2,"thoughtsTokenCount":1,"totalTokenCount":13},',
+        b'"trafficType":"ON_DEMAND"}\r\n\r\n',
+    ]
 
     class UpstreamResponse:
         status_code = 200
 
         async def aiter_bytes(self):
-            yield chunk
+            for chunk in chunks:
+                yield chunk
 
     class StreamContext:
         async def __aenter__(self):
@@ -500,12 +828,811 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
     monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
     monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
 
-    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:streamGenerateContent", True, "user")
+    response = await desktop_proxy._proxy(
+        make_request(workload="interactive"), "models/gemini-2.5-flash:streamGenerateContent", True, "user"
+    )
 
     assert response.status_code == 200
     assert streams_opened == 0
-    chunks = [chunk async for chunk in response.body_iterator]
-    assert chunks == [chunk]
+    received = [chunk async for chunk in response.body_iterator]
+    assert received == chunks
     assert streams_opened == 1
     assert streams_closed == 1
+    event = json.loads(output.getvalue())
+    assert event["workload_class"] == "interactive"
+    assert event["traffic_type"] == "ON_DEMAND"
+    assert event["prompt_token_count"] == 10
+    assert event["cached_content_token_count"] == 4
+    assert event["candidates_token_count"] == 2
+    assert event["thoughts_token_count"] == 1
+    assert event["total_token_count"] == 13
+
+
+@pytest.fixture(autouse=True)
+def _reset_pt_promotion_state():
+    """Observed capacity and learned reachability are module state; never leak
+    them between tests. Reachability is a per-model table now, so clearing one
+    target field is no longer enough."""
+    desktop_proxy._pt_target_ready = False
+    desktop_proxy._pt_target_probed_at = None
+    desktop_proxy._model_unavailable_at.clear()
+    yield
+    desktop_proxy._pt_target_ready = False
+    desktop_proxy._pt_target_probed_at = None
+    desktop_proxy._model_unavailable_at.clear()
+
+
+def _retarget(path: str) -> str:
+    return desktop_proxy._retarget_path(*desktop_proxy._path_parts(path))
+
+
+def test_pro_is_remapped_to_the_migration_target(monkeypatch):
+    """gemini-2.5-pro is $10.00/1M out; the target is $1.50."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert _retarget("models/gemini-2.5-pro:generateContent") == "models/gemini-3.1-flash-lite:generateContent"
+
+
+def test_client_pinned_flash_lite_is_never_promoted(monkeypatch):
+    """gemini-3.1-flash-lite costs 3.75x more per output token than
+    gemini-2.5-flash-lite, so promoting the client-pinned low-value lanes
+    (macOS ModelQoS.lightweight, Windows memory/goals/insight) would be a large
+    cost regression, not a saving."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert _retarget("models/gemini-2.5-flash-lite:generateContent") == ("models/gemini-2.5-flash-lite:generateContent")
+
+
+def test_byok_models_are_never_remapped(monkeypatch):
+    """BYOK users pay for the model they asked for."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    assert _retarget("models/gemini-2.5-pro:generateContent") == "models/gemini-2.5-pro:generateContent"
+
+
+def test_flash_stays_on_the_current_reservation_until_target_capacity_exists(monkeypatch):
+    """Moving dedicated traffic early pays for an idle reservation AND on-demand."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
+
+
+def test_flash_is_remapped_once_the_target_reservation_is_observed(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    desktop_proxy._record_pt_target_observation(True)
+    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-3.1-flash-lite:generateContent"
+
+
+def test_operator_override_pins_the_reservation_back(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    desktop_proxy._record_pt_target_observation(True)
+    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, "gemini-2.5-flash")
+    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
+
+
+def test_overflow_never_targets_the_live_reservation(monkeypatch):
+    """FC-degraded-fallback-consumes-protected-budget across the migration."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    ladder = desktop_proxy.ptr.resolve_overflow_ladder
+    assert ladder(pt_model="gemini-2.5-flash")[0] == "gemini-3.1-flash-lite"
+    assert ladder(pt_model="gemini-3.1-flash-lite")[0] == "gemini-2.5-flash-lite"
+    for pt in ("gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"):
+        assert pt not in ladder(pt_model=pt)
+
+
+def test_overflow_plan_is_empty_for_traffic_that_cannot_exhaust_the_reservation(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash-lite") == []
+
+
+def test_overflow_plan_probes_the_target_before_paying_on_demand(monkeypatch):
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    plan = desktop_proxy._overflow_plan("gemini-2.5-flash")
+    assert plan == [
+        ("gemini-3.1-flash-lite", "dedicated"),
+        ("gemini-3.1-flash-lite", "shared"),
+        ("gemini-2.5-flash-lite", "shared"),
+    ]
+
+
+def test_overflow_skips_a_rung_traffic_has_proved_unreachable(monkeypatch):
+    """Keeping an unreachable rung in the plan would spend a round trip to 404
+    on every overflow request."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == [("gemini-2.5-flash-lite", "shared")]
+
+
+def test_pro_falls_back_when_the_target_is_unreachable(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    assert _retarget("models/gemini-2.5-pro:generateContent") == (
+        f"models/{desktop_proxy._QUOTA_DEMOTION_MODEL}:generateContent"
+    )
+
+
+def test_an_unavailable_target_cannot_be_considered_a_live_reservation():
+    """A model that cannot be reached cannot be holding prepaid capacity."""
+    desktop_proxy._record_pt_target_observation(True)
+    assert desktop_proxy._pt_target_is_ready() is True
+    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    assert desktop_proxy._pt_target_is_ready() is False
+
+
+def test_model_unavailability_is_distinguished_from_capacity_conditions():
+    not_enabled = "Publisher model `projects/p/locations/l/publishers/google/models/m` was not found"
+    assert desktop_proxy.ptr.is_model_unavailable(404, not_enabled)
+    assert not desktop_proxy.ptr.is_model_unavailable(404, "The requested resource was not found")
+    assert not desktop_proxy.ptr.is_model_unavailable(429, "Exceeded the Provisioned Throughput.")
+    assert not desktop_proxy._overflow_triggered(404, not_enabled)
+
+
+def test_overflow_can_be_disabled_for_an_emergency(monkeypatch):
+    monkeypatch.setenv(desktop_proxy._OVERFLOW_ENABLED_ENV, "false")
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == []
+
+
+def test_thinking_budget_is_sent_to_every_model_family():
+    """Measured 2026-08-18: gemini-3.1-flash-lite honors thinkingBudget
+    (0 -> thoughts 0, 1024 -> thoughts 278) and 2.5 models reject
+    thinkingLevel with HTTP 400. One body is therefore valid on both families,
+    so a fallback that crosses families rewrites nothing."""
+    body = desktop_proxy._sanitize(b'{"contents":[]}', "generateContent")
+    assert json.loads(body)["generationConfig"]["thinkingConfig"] == {
+        "thinkingBudget": desktop_proxy._DEFAULT_THINKING_BUDGET
+    }
+
+
+@pytest.mark.asyncio
+async def test_dedicated_capacity_is_requested_only_for_the_reservation(monkeypatch):
+    async def token():
+        return "token"
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy._vertex_tokens, "get_access_token", token)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+
+    reserved = await desktop_proxy._upstream(
+        "models/gemini-2.5-flash:generateContent", "gemini-2.5-flash", "generateContent", {}
+    )
+    on_demand = await desktop_proxy._upstream(
+        "models/gemini-3.1-flash-lite:generateContent", "gemini-3.1-flash-lite", "generateContent", {}
+    )
+
+    header = desktop_proxy.ptr.REQUEST_TYPE_HEADER
+    assert reserved.headers[header] == "dedicated"
+    assert on_demand.headers[header] == "shared"
+
+
+def _pt_exhausted_response(url: str) -> httpx.Response:
+    return httpx.Response(
+        429,
+        request=httpx.Request("POST", url),
+        json={"error": {"code": 429, "message": "Too many requests. Exceeded the Provisioned Throughput."}},
+    )
+
+
+def _ok_response(url: str) -> httpx.Response:
+    return httpx.Response(
+        200,
+        request=httpx.Request("POST", url),
+        json={"usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15}},
+    )
+
+
+class _ScriptedClient:
+    """Replies per attempt so an overflow ladder can be asserted in order."""
+
+    def __init__(self, replies):
+        self._replies = list(replies)
+        self.calls: list[tuple[str, str, bytes]] = []
+
+    async def post(self, url, *, params, content, headers):
+        header = desktop_proxy.ptr.REQUEST_TYPE_HEADER
+        self.calls.append((url, headers.get(header, ""), content))
+        return self._replies[len(self.calls) - 1](url)
+
+
+def _install_proxy_doubles(monkeypatch, client):
+    routed: list[tuple[str, str]] = []
+
+    async def route(path, model, action, query, *, request_type=None):
+        routed.append((model, request_type or ""))
+        return desktop_proxy.UpstreamRoute(
+            f"https://provider.invalid/{model}",
+            {desktop_proxy.ptr.REQUEST_TYPE_HEADER: request_type or "dedicated"},
+            {},
+            "vertex_ai",
+            "adc",
+            "us-central1",
+        )
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def passthrough(_request, awaitable):
+        # The disconnect watcher polls a test Request whose receive() never
+        # returns, which would hold every attempt open for the full 75s
+        # provider deadline. Its real behaviour is covered by
+        # test_disconnect_cancels_in_flight_provider_call.
+        return await awaitable
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", passthrough)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_client", lambda: client)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+    return routed
+
+
+@pytest.mark.asyncio
+async def test_saturated_reservation_probes_the_target_then_pays_on_demand(monkeypatch):
+    """A full reservation must not silently spill onto pay-as-you-go flash.
+
+    Attempt 1 is the reservation. Attempt 2 asks the migration target for
+    dedicated capacity and is refused. Attempt 3 buys the same work on-demand
+    at gemini-3.1-flash-lite rates ($1.50/1M out) instead of gemini-2.5-flash
+    spillover ($2.50/1M out).
+    """
+    client = _ScriptedClient([_pt_exhausted_response, _pt_exhausted_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    assert response.status_code == 200
+    assert routed == [
+        ("gemini-2.5-flash", ""),
+        ("gemini-3.1-flash-lite", "dedicated"),
+        ("gemini-3.1-flash-lite", "shared"),
+    ]
+    assert desktop_proxy._pt_target_is_ready() is False
+
+
+@pytest.mark.asyncio
+async def test_a_successful_dedicated_probe_promotes_the_reservation(monkeypatch):
+    """This is the whole migration mechanism: no deploy, no flag, no date."""
+    client = _ScriptedClient([_pt_exhausted_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    assert response.status_code == 200
+    assert routed == [("gemini-2.5-flash", ""), ("gemini-3.1-flash-lite", "dedicated")]
+    assert desktop_proxy._pt_target_is_ready() is True
+    # And from now on flash requests are served by the new reservation.
+    assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-3.1-flash-lite:generateContent"
+
+
+@pytest.mark.asyncio
+async def test_generic_rate_limiting_is_not_converted_into_extra_spend(monkeypatch):
+    """A per-project 429 is backpressure. Treating it as overflow would buy
+    on-demand capacity to work around a limit that is not about capacity."""
+
+    def throttled(url):
+        return httpx.Response(
+            429,
+            request=httpx.Request("POST", url),
+            json={"error": {"code": 429, "message": "Quota exceeded for requests per minute"}},
+        )
+
+    client = _ScriptedClient([throttled])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    assert response.status_code == 429
+    assert routed == [("gemini-2.5-flash", "")]
+
+
+@pytest.mark.asyncio
+async def test_overflow_keeps_the_bounded_generation_config(monkeypatch):
+    """Overflow crosses model families, and the caps that bound paid output
+    must survive the crossing. thinkingBudget is honored by both families
+    (measured 2026-08-18), so the body is forwarded rather than rewritten."""
+    client = _ScriptedClient([_pt_exhausted_response, _pt_exhausted_response, _ok_response])
+    _install_proxy_doubles(monkeypatch, client)
+
+    await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    reserved = json.loads(client.calls[0][2])["generationConfig"]
+    overflowed = json.loads(client.calls[-1][2])["generationConfig"]
+    assert reserved["thinkingConfig"] == {"thinkingBudget": desktop_proxy._DEFAULT_THINKING_BUDGET}
+    assert overflowed["thinkingConfig"] == {"thinkingBudget": desktop_proxy._DEFAULT_THINKING_BUDGET}
+    assert overflowed["maxOutputTokens"] == desktop_proxy._SERVER_PAID_MAX_OUTPUT_TOKENS
+
+
+@pytest.mark.asyncio
+async def test_streaming_overflow_falls_back_and_leaks_no_provider_slot(monkeypatch):
+    """The streaming ladder must close every refused attempt and release its
+    slot, or a saturated reservation would drain the concurrency pool."""
+    opened: list[str] = []
+    closed = 0
+
+    class Refused:
+        status_code = 429
+
+        def __init__(self):
+            self.text = "Too many requests. Exceeded the Provisioned Throughput."
+
+        async def aread(self):
+            return self.text.encode()
+
+        async def aiter_bytes(self):
+            yield b""
+
+    class Served:
+        status_code = 200
+        text = ""
+
+        async def aread(self):
+            return b""
+
+        async def aiter_bytes(self):
+            yield b'data: {"usageMetadata":{"totalTokenCount":3}}\r\n\r\n'
+
+    class StreamContext:
+        def __init__(self, response):
+            self._response = response
+
+        async def __aenter__(self):
+            return self._response
+
+        async def __aexit__(self, *_args):
+            nonlocal closed
+            closed += 1
+
+    class Client:
+        def stream(self, _method, url, **_kwargs):
+            opened.append(url)
+            return StreamContext(Refused() if len(opened) < 3 else Served())
+
+    async def route(path, model, action, query, *, request_type=None):
+        return desktop_proxy.UpstreamRoute(
+            f"https://provider.invalid/{model}",
+            {desktop_proxy.ptr.REQUEST_TYPE_HEADER: request_type or "dedicated"},
+            {},
+            "vertex_ai",
+            "adc",
+            "us-central1",
+        )
+
+    async def passthrough(_request, awaitable):
+        return await awaitable
+
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", passthrough)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: semaphore)
+
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=True)
+    primary = await route("p", "gemini-2.5-flash", "streamGenerateContent", {})
+    body = b'{"generationConfig":{"thinkingConfig":{"thinkingBudget":1024}}}'
+    emitted = [
+        chunk
+        async for chunk in desktop_proxy._stream_provider(
+            make_request(),
+            primary,
+            body,
+            telemetry,
+            model="gemini-2.5-flash",
+            action="streamGenerateContent",
+            query={},
+        )
+    ]
+
+    assert b"usageMetadata" in b"".join(emitted)
+    assert [url.rsplit("/", 1)[-1] for url in opened] == [
+        "gemini-2.5-flash",
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-flash-lite",
+    ]
+    assert closed == 3
+    assert semaphore.locked() is False
+
+
+def test_migration_contract_is_documented():
+    """Same rule as the existing pin test: the reservation's behaviour is only
+    safe to change if the note operators read changes with it."""
+    text = (BACKEND_DIR / "docs" / "vertex-pt-flash.md").read_text(encoding="utf-8")
+    assert desktop_proxy.VERTEX_PT_TARGET_MODEL in text
+    assert desktop_proxy._PT_MODEL_OVERRIDE_ENV in text
+    assert desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV in text
+    assert desktop_proxy._OVERFLOW_ENABLED_ENV in text
+    assert desktop_proxy.ptr.REQUEST_TYPE_HEADER in text
+    # The generalized fallback table and the endpoint split are operator-facing
+    # behaviour: an operator reading only this note must be able to predict
+    # which model and which endpoint a degraded request lands on.
+    assert "MODEL_FALLBACKS" in text
+    assert desktop_proxy.ptr.MULTI_REGION_HOST in text
+    assert f"locations/{desktop_proxy.ptr.MULTI_REGION_LOCATION}" in text
+    assert desktop_proxy._MULTI_REGION_LOCATION_ENV in text
+    for model, chain in desktop_proxy.ptr.MODEL_FALLBACKS.items():
+        assert model in text, f"{model} has a declared fallback chain but is undocumented"
+        for rung in chain:
+            assert rung in text
+
+
+def test_a_new_instance_probes_immediately_regardless_of_uptime(monkeypatch):
+    """time.monotonic() has an arbitrary origin: on a freshly started container
+    it can be smaller than the probe TTL. Seeding the last-probe time with 0.0
+    would suppress the first probe for the first 10 minutes of every new
+    instance's life, which is most of a Cloud Run instance's life."""
+    monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: 1.0)
+    desktop_proxy._pt_target_probed_at = None
+    assert desktop_proxy._pt_probe_due() is True
+
+    desktop_proxy._record_pt_target_observation(False)
+    assert desktop_proxy._pt_probe_due() is False
+
+
+def _model_not_found_response(url: str) -> httpx.Response:
+    model = url.rsplit("/", 1)[-1]
+    return httpx.Response(
+        404,
+        request=httpx.Request("POST", url),
+        json={
+            "error": {
+                "code": 404,
+                "message": (
+                    f"Publisher model `projects/based-hardware/locations/us-central1"
+                    f"/publishers/google/models/{model}` was not found or your project "
+                    f"does not have access to it."
+                ),
+            }
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_pro_recovers_when_the_target_model_is_not_enabled(monkeypatch):
+    """Observed in production 2026-08-18: every gemini-3.x model was listed in
+    the global publisher catalog and 404 on the project-scoped endpoint. A Pro
+    request remapped onto it must still be served, not fail."""
+    client = _ScriptedClient([_model_not_found_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+
+    assert response.status_code == 200
+    assert routed == [
+        ("gemini-3.1-flash-lite", ""),
+        ("gemini-2.5-flash-lite", "shared"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_one_404_stops_the_whole_fleet_retrying_a_dead_model(monkeypatch):
+    """The latch is what keeps a project-wide access gap from costing a wasted
+    round trip on every single request."""
+    client = _ScriptedClient([_model_not_found_response, _ok_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+
+    await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+    assert desktop_proxy._model_believed_available(desktop_proxy.VERTEX_PT_TARGET_MODEL) is False
+
+    await desktop_proxy._proxy(make_request(), "models/gemini-2.5-pro:generateContent", False, "user")
+    # Second request goes straight to a model the project can call.
+    assert routed[-1] == ("gemini-2.5-flash-lite", "")
+
+
+@pytest.mark.asyncio
+async def test_access_granted_later_promotes_without_a_deploy(monkeypatch):
+    """Availability is re-checked on the same TTL as capacity, so enabling
+    gemini-3.x for the project recovers the routing on its own."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: clock["now"])
+
+    desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+    assert _retarget("models/gemini-2.5-pro:generateContent") != ("models/gemini-3.1-flash-lite:generateContent")
+
+    clock["now"] += desktop_proxy._PT_PROBE_TTL_SECONDS + 1
+    assert _retarget("models/gemini-2.5-pro:generateContent") == ("models/gemini-3.1-flash-lite:generateContent")
+
+
+# --- Endpoint selection ----------------------------------------------------
+
+
+def test_gemini_3_x_is_routed_to_the_us_multi_region_endpoint(monkeypatch):
+    """The production defect behind #11826.
+
+    Measured 2026-08-18 with credentials that can invoke inference:
+    gemini-3.1-flash-lite answers 200 on locations/us and 404s on us-central1,
+    us-east5, us-west1, europe-west4 and asia-northeast1. The proxy built a
+    regional URL for every model, so no 3.x request could ever succeed. It was
+    never a project access gap.
+    """
+    monkeypatch.delenv(desktop_proxy._MULTI_REGION_LOCATION_ENV, raising=False)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+    assert desktop_proxy._vertex_url("gemini-3.1-flash-lite", "generateContent") == (
+        "https://aiplatform.googleapis.com/v1/projects/based-hardware/locations/us"
+        "/publishers/google/models/gemini-3.1-flash-lite:generateContent"
+    )
+
+
+def test_the_multi_region_residency_pin_is_us_and_is_operator_flippable(monkeypatch):
+    """`global` may serve a request from anywhere in the world; `us` keeps
+    inference in the US multi-region, matching where every other server-paid
+    Gemini call in this service already runs. Users' conversations and
+    transcripts go through this path, so widening residency must be a
+    deliberate operator flip, never a side effect of a routing change."""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.delenv(desktop_proxy._MULTI_REGION_LOCATION_ENV, raising=False)
+    assert "/locations/us/" in str(desktop_proxy._vertex_url("gemini-3.1-flash-lite", "generateContent"))
+
+    monkeypatch.setenv(desktop_proxy._MULTI_REGION_LOCATION_ENV, "global")
+    assert "/locations/global/" in str(desktop_proxy._vertex_url("gemini-3.1-flash-lite", "generateContent"))
+
+
+def test_the_reservation_model_is_never_routed_off_its_region(monkeypatch):
+    """FC-degraded-fallback-consumes-protected-budget / the 2026-08-04 incident.
+
+    gemini-2.5-flash ALSO answers 200 on locations/us and locations/global
+    (trafficType=ON_DEMAND), so "route whatever answers multi-region to
+    multi-region" is a tempting simplification. It would bypass the 5 GSU
+    us-central1 Provisioned Throughput order and bill on-demand while the
+    reservation kept charging ~$290/day — paying twice for the same tokens,
+    which is precisely the 2026-08-04 double-pay regression recorded in
+    docs/vertex-pt-flash.md. The endpoint rule is by model family, never by
+    what happens to answer.
+    """
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+    monkeypatch.setenv(desktop_proxy._MULTI_REGION_LOCATION_ENV, "global")
+    url = desktop_proxy._vertex_url("gemini-2.5-flash", "generateContent")
+    assert url == (
+        "https://us-central1-aiplatform.googleapis.com/v1/projects/based-hardware/locations/us-central1"
+        "/publishers/google/models/gemini-2.5-flash:generateContent"
+    )
+    assert "locations/global" not in url
+    assert "locations/us/" not in url
+    assert "//aiplatform.googleapis.com" not in url
+
+
+@pytest.mark.asyncio
+async def test_a_fallback_across_families_also_crosses_endpoints(monkeypatch):
+    """The reservation and the model that absorbs its overflow do not share a
+    location, so location must be resolved per model, not once per process."""
+
+    async def token():
+        return "token"
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy._vertex_tokens, "get_access_token", token)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware")
+    monkeypatch.setenv("GCP_LOCATION", "us-central1")
+
+    reserved = await desktop_proxy._upstream(
+        "models/gemini-2.5-flash:generateContent", "gemini-2.5-flash", "generateContent", {}
+    )
+    overflow = await desktop_proxy._upstream(
+        "models/gemini-3.1-flash-lite:generateContent", "gemini-3.1-flash-lite", "generateContent", {}
+    )
+    assert reserved.region == "us-central1"
+    assert overflow.region == "us"
+    # Multi-region labels must survive the telemetry sanitizer, not log as none.
+    assert desktop_proxy._safe_region(overflow.region) == "us"
+
+
+# --- Generalized fallback chains -------------------------------------------
+
+
+def test_every_routable_model_declares_a_fallback_chain():
+    """A model the proxy can route to but that has no declared chain would have
+    no defined behaviour when it stops answering."""
+    text_models = {m for m in desktop_proxy._ALLOWED_MODELS}
+    assert text_models <= set(desktop_proxy.ptr.MODEL_FALLBACKS)
+
+
+def test_reachability_is_learned_per_model_not_globally(monkeypatch):
+    """One dead model must not take the rest of the ladder down with it."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
+    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
+    assert desktop_proxy._model_believed_available("gemini-2.5-flash-lite") is True
+    assert desktop_proxy._model_believed_available("gemini-2.5-flash") is True
+
+
+def test_a_new_instance_believes_every_model_reachable_regardless_of_uptime(monkeypatch):
+    """Same arbitrary-origin trap as the probe timestamp: time.monotonic() on a
+    fresh container can be smaller than the TTL, so an observation seeded with
+    0.0 would mark every model dead for the first 10 minutes of the instance's
+    life. Absence of a key, not a zero, means 'never observed'."""
+    monkeypatch.setattr(desktop_proxy.time, "monotonic", lambda: 1.0)
+    desktop_proxy._model_unavailable_at.clear()
+    for model in desktop_proxy.ptr.MODEL_FALLBACKS:
+        assert desktop_proxy._model_believed_available(model) is True
+
+
+def test_a_success_clears_a_stale_unreachable_latch(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
+    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
+    desktop_proxy._record_model_available("gemini-3.1-flash-lite")
+    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is True
+
+
+def test_byok_traffic_never_teaches_the_reachability_table(monkeypatch):
+    """BYOK goes to AI Studio on the user's own key, so its answers say nothing
+    about what this project can reach on Vertex. One user's key must not be
+    able to latch a model dead for the whole fleet."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    desktop_proxy._record_model_unavailable("gemini-3.1-flash-lite")
+    assert desktop_proxy._model_unavailable_at == {}
+    assert desktop_proxy._recovery_plan("gemini-3.1-flash-lite", 404, "publisher model was not found") == []
+
+
+@pytest.mark.parametrize("pt_model", ["gemini-2.5-flash", "gemini-3.1-flash-lite"])
+def test_no_recovery_plan_ever_routes_onto_the_reservation(monkeypatch, pt_model):
+    """FC-degraded-fallback-consumes-protected-budget, through the proxy rather
+    than the policy module, at both PT states."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, pt_model)
+    not_found = "Publisher model was not found or your project does not have access to it."
+    exhausted = "Too many requests. Exceeded the provisioned throughput."
+    for model in sorted(desktop_proxy.ptr.MODEL_FALLBACKS):
+        desktop_proxy._model_unavailable_at.clear()
+        for status, message in ((404, not_found), (429, exhausted)):
+            plan = desktop_proxy._recovery_plan(model, status, message)
+            assert pt_model not in [rung for rung, _ in plan], (model, status, plan)
+
+
+def test_a_dead_model_is_never_offered_its_own_name_as_a_fallback(monkeypatch):
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    plan = desktop_proxy._recovery_plan("gemini-3.1-flash-lite", 404, "publisher model was not found")
+    assert "gemini-3.1-flash-lite" not in [rung for rung, _ in plan]
+
+
+def test_a_terminal_model_has_no_recovery_plan(monkeypatch):
+    """gemini-2.5-flash-lite is the floor of the ladder. Inventing a fallback
+    for it would promote the client-pinned lanes onto a costlier model."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    assert desktop_proxy._recovery_plan("gemini-2.5-flash-lite", 404, "publisher model was not found") == []
+
+
+@pytest.mark.asyncio
+async def test_a_404_on_any_model_falls_back_and_latches_it(monkeypatch):
+    """Generalized from the migration target to every routable model: the
+    second request must not repeat the round trip that already failed."""
+    client = _ScriptedClient([_model_not_found_response, _ok_response, _ok_response])
+    routed = _install_proxy_doubles(monkeypatch, client)
+    desktop_proxy._record_pt_target_observation(True)  # 3.1-flash-lite now holds PT
+
+    response = await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+
+    assert response.status_code == 200
+    # Flash is served by the promoted reservation, 404s, and steps to the floor.
+    assert routed == [("gemini-3.1-flash-lite", ""), ("gemini-2.5-flash-lite", "shared")]
+    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
+
+    # The second request never re-attempts the latched model: a model that
+    # cannot be reached cannot be holding prepaid capacity, so the reservation
+    # demotes back to gemini-2.5-flash and serves flash traffic directly.
+    await desktop_proxy._proxy(make_request(), "models/gemini-2.5-flash:generateContent", False, "user")
+    assert routed[-1] == ("gemini-2.5-flash", "")
+    assert "gemini-3.1-flash-lite" not in [model for model, _ in routed[2:]]
+
+
+@pytest.mark.asyncio
+async def test_streaming_unreachable_model_falls_back_and_leaks_no_provider_slot(monkeypatch):
+    """The 404 ladder gets the same lifecycle guarantee as the overflow ladder:
+    every refused attempt is closed and its provider slot released."""
+    opened: list[str] = []
+    closed = 0
+
+    class NotFound:
+        status_code = 404
+        text = "Publisher model `.../models/gemini-3.1-flash-lite` was not found or your project does not have access."
+
+        async def aread(self):
+            return self.text.encode()
+
+        async def aiter_bytes(self):
+            yield b""
+
+    class Served:
+        status_code = 200
+        text = ""
+
+        async def aread(self):
+            return b""
+
+        async def aiter_bytes(self):
+            yield b'data: {"usageMetadata":{"totalTokenCount":3}}\r\n\r\n'
+
+    class StreamContext:
+        def __init__(self, response):
+            self._response = response
+
+        async def __aenter__(self):
+            return self._response
+
+        async def __aexit__(self, *_args):
+            nonlocal closed
+            closed += 1
+
+    class Client:
+        def stream(self, _method, url, **_kwargs):
+            opened.append(url)
+            return StreamContext(NotFound() if len(opened) < 2 else Served())
+
+    async def route(path, model, action, query, *, request_type=None):
+        return desktop_proxy.UpstreamRoute(
+            f"https://provider.invalid/{model}",
+            {desktop_proxy.ptr.REQUEST_TYPE_HEADER: request_type or "shared"},
+            {},
+            "vertex_ai",
+            "adc",
+            "us-central1",
+        )
+
+    async def passthrough(_request, awaitable):
+        return await awaitable
+
+    semaphore = asyncio.Semaphore(1)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", passthrough)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: semaphore)
+
+    telemetry = desktop_proxy.ProxyTelemetry(make_request(), streaming=True)
+    primary = await route("p", "gemini-3.1-flash-lite", "streamGenerateContent", {})
+    emitted = [
+        chunk
+        async for chunk in desktop_proxy._stream_provider(
+            make_request(),
+            primary,
+            b'{"generationConfig":{"thinkingConfig":{"thinkingBudget":1024}}}',
+            telemetry,
+            model="gemini-3.1-flash-lite",
+            action="streamGenerateContent",
+            query={},
+        )
+    ]
+
+    assert b"usageMetadata" in b"".join(emitted)
+    assert [url.rsplit("/", 1)[-1] for url in opened] == ["gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]
+    assert closed == 2
+    assert semaphore.locked() is False
+    assert desktop_proxy._model_believed_available("gemini-3.1-flash-lite") is False
+
+
+@pytest.mark.parametrize("target_reachable", [True, False])
+@pytest.mark.parametrize("reservation_promoted", [True, False])
+def test_server_paid_traffic_never_dispatches_gemini_2_5_pro(monkeypatch, target_reachable, reservation_promoted):
+    """gemini-2.5-pro is $10.00/1M out — 6.7x gemini-3.1-flash-lite and 25x
+    gemini-2.5-flash-lite. No combination of reservation state and learned
+    reachability may leave a server-paid request actually being served by it.
+
+    MODEL_FALLBACKS still lists a chain for it because a client may still
+    *request* it (it stays proxy-allowlisted, and BYOK users pay for it
+    themselves), but no server-paid request reaches dispatch as Pro.
+    """
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    if reservation_promoted:
+        desktop_proxy._record_pt_target_observation(True)
+    if not target_reachable:
+        desktop_proxy._record_model_unavailable(desktop_proxy.VERTEX_PT_TARGET_MODEL)
+
+    served = _retarget("models/gemini-2.5-pro:generateContent")
+
+    assert "gemini-2.5-pro" not in served
+    expected = (
+        f"models/{desktop_proxy.VERTEX_PT_TARGET_MODEL}:generateContent"
+        if target_reachable
+        else f"models/{desktop_proxy._QUOTA_DEMOTION_MODEL}:generateContent"
+    )
+    assert served == expected
+
+
+def test_byok_pro_is_still_honoured_because_the_user_pays_for_it(monkeypatch):
+    """The guarantee above is about company-paid spend, not about banning the
+    model: a BYOK user asking for Pro gets Pro on their own key."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    assert _retarget("models/gemini-2.5-pro:generateContent") == ("models/gemini-2.5-pro:generateContent")

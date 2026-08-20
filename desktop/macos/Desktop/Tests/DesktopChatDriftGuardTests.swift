@@ -113,10 +113,10 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     // former as advisory and drew the overlay scroller over the panel's rounded edge.
     XCTAssertTrue(messagesSource.contains(".scrollIndicators(.never)"))
     XCTAssertFalse(messagesSource.contains(".scrollIndicators(.hidden)"))
-    // The prompt rail drew a second vertical bar beside the scroller. It is gone; nothing may
-    // reserve a trailing gutter for one again.
+    // The prompt rail is the one visual scroll affordance: hairline marks overlaid
+    // on the trailing edge. It must not reserve a column that insets the messages.
     XCTAssertFalse(messagesSource.contains("contentColumnWidth"))
-    XCTAssertFalse(messagesSource.contains("PromptTimeline"))
+    XCTAssertTrue(messagesSource.contains("ChatPromptTimelineOverlay"))
   }
 
   func testTheScrollDetectorRebindsAfterSwiftUIReplacesTheTranscriptScrollView() throws {
@@ -184,7 +184,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     let answerThreadSource = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
     let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
 
-    // omi-test-quality: source-inspection -- static contract: the cohort shell must share the modern
+    // omi-test-quality: source-inspection -- static contract: the Chat-first shell must share the modern
     // top-navigation and the single QueryShellHome chat surface, while rich-block capability and
     // visible-transcript lifecycle remain threaded through the shared answer view.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))

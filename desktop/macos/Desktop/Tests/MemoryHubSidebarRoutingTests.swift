@@ -3,6 +3,19 @@ import XCTest
 @testable import Omi_Computer
 
 final class MemoryHubSidebarRoutingTests: XCTestCase {
+  /// The Activity spine — Home's former landing surface — is a hub destination, first in the
+  /// switcher row, and reachable like every other persisted hub view.
+  func testActivityIsAHubDestinationAndLeadsTheSwitcherRow() {
+    XCTAssertEqual(MemoryHubDestination.switcherOrder.first, .activity)
+    XCTAssertEqual(
+      Set(MemoryHubDestination.switcherOrder), Set(MemoryHubDestination.allCases),
+      "every destination is reachable from the switcher")
+    XCTAssertEqual(
+      MemoryHubDestination.destination(
+        for: .conversations, requestedRawValue: MemoryHubDestination.activity.rawValue),
+      .activity)
+  }
+
   func testConversationsSidebarSelectionUpdatesRailAndDestination() {
     var selectedIndex = SidebarNavItem.dashboard.rawValue
     var memoryDestinationRawValue = MemoryHubDestination.memories.rawValue

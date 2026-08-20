@@ -18,7 +18,6 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult, extract_kg_for_promoted_memory
 from utils.memory.canonical_memory_adapter import invalidate_kg_for_memory_retraction
-from utils.memory.memory_system import MemorySystem
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 
@@ -32,7 +31,6 @@ def _refresh_kg_runtime() -> None:
             "CanonicalKgPromotionResult": kg_promotion.CanonicalKgPromotionResult,
             "extract_kg_for_promoted_memory": kg_promotion.extract_kg_for_promoted_memory,
             "invalidate_kg_for_memory_retraction": canonical_adapter.invalidate_kg_for_memory_retraction,
-            "MemorySystem": memory_system.MemorySystem,
         }
     )
 
@@ -54,6 +52,8 @@ def test_set_canonical_memory_kg_extracted_missing_doc_is_idempotent(caplog):
 @pytest.fixture(autouse=True)
 def _refresh_kg_runtime_fixture():
     _refresh_kg_runtime()
+    with patch("utils.memory.canonical_kg_promotion.ensure_canonical_apply_control_state"):
+        yield
 
 
 def _long_term_item(**overrides) -> MemoryItem:
@@ -94,10 +94,7 @@ def _long_term_item(**overrides) -> MemoryItem:
 
 def test_extract_kg_skips_when_already_extracted():
     item = _long_term_item(kg_extracted=True)
-    with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,
-    ):
+    with (patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,):
         result = extract_kg_for_promoted_memory("uid-canonical", item)
         assert result.success is False
         assert result.skipped_reason == "already_extracted"
@@ -108,7 +105,6 @@ def test_extract_kg_on_promotion():
     item = _long_term_item()
     db = MagicMock()
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -133,7 +129,6 @@ def test_extract_kg_can_preserve_item_updated_at():
     item = _long_term_item()
     db = MagicMock()
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [], "edges": []},
@@ -159,7 +154,6 @@ def test_extract_kg_failure_leaves_kg_extracted_false():
     item = _long_term_item(kg_extracted=False)
     db = MagicMock()
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             side_effect=RuntimeError("kg service down"),
@@ -176,7 +170,6 @@ def test_extract_kg_failure_leaves_kg_extracted_false():
 def test_extract_kg_none_result_leaves_kg_extracted_false():
     item = _long_term_item(kg_extracted=False)
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory", return_value=None),
         patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted") as mock_flag,
     ):
@@ -193,7 +186,6 @@ def test_extract_kg_uses_subject_predicate_prefix():
         content="has diabetes",
     )
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -212,7 +204,6 @@ def test_extract_kg_includes_arguments_and_predicate_only_prefix():
         content="builds memory products",
     )
     with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch(
             "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
             return_value={"nodes": [{}], "edges": []},
@@ -226,10 +217,7 @@ def test_extract_kg_includes_arguments_and_predicate_only_prefix():
 
 def test_extract_kg_rejects_negative_user_review_before_projection():
     item = _long_term_item(promotion={"user_review": False})
-    with (
-        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
-        patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,
-    ):
+    with (patch("utils.memory.canonical_kg_promotion.extract_knowledge_from_memory") as mock_extract,):
         result = extract_kg_for_promoted_memory("uid-canonical", item)
 
     assert result.skipped_reason == "user_rejected"
@@ -259,7 +247,6 @@ def test_update_canonical_memory_content_invalidates_kg_until_reprocessed():
         return item, updated
 
     with (
-        patch("utils.memory.canonical_memory_adapter.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction") as mock_prune,
         patch(
             "utils.memory.canonical_memory_adapter._apply_canonical_user_mutation",
@@ -282,10 +269,6 @@ def test_update_canonical_memory_content_invalidates_kg_until_reprocessed():
 
 
 def test_invalidate_kg_prunes_citations(monkeypatch):
-    monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.resolve_memory_system",
-        lambda uid, db_client=None: MemorySystem.CANONICAL,
-    )
     mock_prune = MagicMock(return_value=3)
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.kg_db.prune_memory_citations_from_kg",

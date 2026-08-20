@@ -26,8 +26,9 @@ This handles: pub get, build_runner, gen-l10n, and flavor configuration.
 
 ### Firebase Config
 Never run `flutterfire configure` — it overwrites prod credentials. Config files:
-- Dev: `ios/Config/Dev/`, `android/app/src/dev/`, `lib/firebase_options_dev.dart`
-- Prod: `ios/Config/Prod/`, `android/app/src/prod/`, `lib/firebase_options_prod.dart`
+- Dev: `android/app/src/dev/`
+- Prod: `android/app/src/prod/`
+- Local emulator: `lib/firebase_options_local.dart`
 
 ## Native Bridge
 
@@ -124,7 +125,6 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 ### API Base URLs
 - Dev: configured in `.dev.env` → `Env.apiBaseUrl`
 - Prod: configured in `.prod.env` → `Env.apiBaseUrl`
-- Agent proxy WS: derived from apiBaseUrl (api.omi.me → agent.omi.me)
 
 ## Codegen Rules
 

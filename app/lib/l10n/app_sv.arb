@@ -101,7 +101,7 @@
     "createYourOwnApp": "Skapa din egen app",
     "buildAndShareApp": "Bygg och dela din anpassade app",
     "searchApps": "Sök appar...",
-    "myApps": "Mina appar",
+    "myApps": "Skapad av mig",
     "installedApps": "Installerade appar",
     "unableToFetchApps": "Kunde inte hämta appar :(\n\nKontrollera din internetanslutning och försök igen.",
     "aboutOmi": "Om Omi",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Migrering pågår",
     "accountCutoverMigrationInProgressMessage": "Ditt konto migreras. Produktfunktioner pausas tills migreringen är klar.",
     "accountCutoverMigrationRollbackMessage": "Ditt konto är under underhåll efter en migreringsåterställning. Nyare data kan vara isolerad.",
-    "accountCutoverOpenStore": "Öppna butik"
+    "accountCutoverOpenStore": "Öppna butik",
+    "sendRawAudioToOmi": "Skicka rått ljud till Omi",
+    "sendRawAudioToOmiDescription": "Stäng av för att förhindra att rått ljud skickas till Omi. Transkriptioner och data som molnfunktioner behöver kan fortfarande skickas till Omi.",
+    "findDevice": "Hitta",
+    "diagnosticsShareFailed": "Diagnostiken kunde inte delas. Försök igen."
 }

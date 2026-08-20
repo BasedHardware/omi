@@ -1,172 +1,39 @@
-name: Promote Qualified Desktop Beta
+name: Promote Signed Desktop Candidate
 
+# Manual/reusable retry only. Normal Beta promotion happens inside the
+# successful Codemagic release build; signed-smoke promotion never triggers this.
 on:
-  workflow_run:
-    workflows: ["Qualify Desktop Beta Candidate"]
-    types: [completed]
   workflow_call:
     inputs:
       release_tag:
-        description: 'Qualified v*-macos candidate tag to promote to beta'
-        required: true
-        type: string
-      qualification_run_id:
-        description: 'Trusted qualification run that produced the retained evidence artifact'
-        required: true
-        type: string
-      qualification_run_attempt:
-        description: 'Trusted qualification run attempt that produced the retained evidence artifact'
+        description: 'Signed v*-macos candidate tag to promote to Beta'
         required: true
         type: string
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: desktop-beta-promotion
   cancel-in-progress: false
 
 jobs:
-  resolve-candidate:
-    if: >-
-      github.event_name == 'workflow_call' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
-    runs-on: ubuntu-latest
-    outputs:
-      release_tag: ${{ steps.candidate.outputs.release_tag }}
-    steps:
-      - name: Checkout trusted promotion controls
-        uses: actions/checkout@v7
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Derive and validate immutable candidate tag
-        id: candidate
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GH_TOKEN: ${{ github.token }}
-          QUALIFICATION_RUN_ID: ${{ github.event.workflow_run.id || inputs.qualification_run_id || '' }}
-          QUALIFICATION_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt || inputs.qualification_run_attempt || '' }}
-          REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.release_tag || '' }}
-        run: |
-          set -euo pipefail
-          requested_release_tag="$RELEASE_TAG"
-          if [[ "$EVENT_NAME" == "workflow_run" || "$EVENT_NAME" == "workflow_call" ]]; then
-            artifacts="$RUNNER_TEMP/qualification-artifacts.json"
-            archive="$RUNNER_TEMP/qualification-evidence.zip"
-            evidence="$RUNNER_TEMP/qualification-evidence.json"
-            test -n "$QUALIFICATION_RUN_ID"
-            test -n "$QUALIFICATION_RUN_ATTEMPT"
-            [[ "$QUALIFICATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
-            [[ "$QUALIFICATION_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
-            gh api "repos/$REPO/actions/runs/$QUALIFICATION_RUN_ID/artifacts?per_page=100" > "$artifacts"
-            artifact_id=$(jq -er --arg run_id "$QUALIFICATION_RUN_ID" --arg run_attempt "$QUALIFICATION_RUN_ATTEMPT" '
-              [
-                .artifacts[]
-                | select(
-                    (.name | type == "string")
-                    and (.name | test("^desktop-qualification-evidence-v[0-9]+\\.[0-9]+\\.[0-9]+\\+[1-9][0-9]*-macos-m1-" + $run_id + "-" + $run_attempt + "$"))
-                  )
-              ] as $matches
-              | if ($matches | length) == 1
-                   and $matches[0].expired == false
-                   and ($matches[0].id | type == "number")
-                   and $matches[0].id > 0
-                   and ($matches[0].size_in_bytes | type == "number")
-                   and $matches[0].size_in_bytes > 0
-                   and $matches[0].size_in_bytes <= 1048576
-                then $matches[0].id
-                else error("expected one retained qualification evidence artifact")
-                end
-            ' "$artifacts")
-            gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > "$archive"
-            test "$(unzip -Z1 "$archive")" = qualification-evidence.json
-            unzip -p "$archive" qualification-evidence.json > "$evidence"
-            RELEASE_TAG=$(jq -er '
-              if .schema_version == 1
-                 and (.release_id | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+\\+[1-9][0-9]*-macos$"))
-                then .release_id
-                else error("qualification evidence has no immutable macOS release tag")
-                end
-            ' "$evidence")
-            EVIDENCE_SOURCE_SHA=$(jq -er '
-              if (.source_sha | type == "string" and test("^[0-9a-f]{40}$"))
-                then .source_sha
-                else error("qualification evidence has no immutable source SHA")
-                end
-            ' "$evidence")
-            EVIDENCE_RUN_ID=$(jq -er '
-              if (.qualification_run_id | type == "number" and . > 0)
-                then .qualification_run_id
-                else error("qualification evidence has no run identity")
-                end
-            ' "$evidence")
-            test "$EVIDENCE_RUN_ID" = "$QUALIFICATION_RUN_ID"
-            if jq -e '.artifacts | has("Omi.Beta.zip") and has("omi-beta.dmg")' "$evidence" >/dev/null; then
-              jq -e '
-              .beta_uid_continuity == {
-                schema_version: 1,
-                status: "passed",
-                firebase_auth: {
-                  project: "based-hardware",
-                  release_probe_uid: "omi-release-probe",
-                  token_claims: "production_project_verified"
-                },
-                development_serving_reads: {
-                  python: {
-                    url: "https://api.omiapi.com/",
-                    production_authority_url: "https://api.omi.me/",
-                    operation: "production_sentinel_development_read_cleanup",
-                    status: "passed"
-                  },
-                  desktop_backend: {
-                    url: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/",
-                    operation: "authenticated_proxy_authority_read",
-                    status: "passed"
-                  }
-                },
-                redaction: {customer_content_printed: false, tokens_printed: false}
-              }
-              ' "$evidence" >/dev/null || {
-                echo "qualification evidence lacks production Firebase UID continuity proof" >&2
-                exit 1
-              }
-            fi
-            if [[ -n "$requested_release_tag" && "$requested_release_tag" != "$RELEASE_TAG" ]]; then
-              echo "requested tag $requested_release_tag does not match qualification evidence $RELEASE_TAG" >&2
-              exit 1
-            fi
-          fi
-          if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+-macos$'; then
-            echo "Invalid immutable macOS release tag: $RELEASE_TAG" >&2
-            exit 1
-          fi
-
-          git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
-          TAG_SHA=$(git rev-list -n1 "$RELEASE_TAG")
-          if [[ ( "$EVENT_NAME" == "workflow_run" || "$EVENT_NAME" == "workflow_call" ) && "$TAG_SHA" != "$EVIDENCE_SOURCE_SHA" ]]; then
-            echo "Tag $RELEASE_TAG at $TAG_SHA does not match qualification evidence source $EVIDENCE_SOURCE_SHA." >&2
-            exit 1
-          fi
-          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-
   promote:
-    needs: resolve-candidate
     environment: beta
     runs-on: ubuntu-latest
     steps:
-      - name: Ask the backend to admit and promote the exact qualified candidate
+      - name: Ask the backend to verify and promote the signed candidate
         env:
           BETA_PROMOTION_TOKEN: ${{ secrets.BETA_PROMOTION_TOKEN }}
-          RELEASE_TAG: ${{ needs.resolve-candidate.outputs.release_tag }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
+          printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+\+[1-9][0-9]*-macos$' || {
+            echo 'release_tag must be an exact immutable macOS candidate tag' >&2
+            exit 1
+          }
           curl --fail-with-body --silent --show-error \
-            --request POST https://api.omi.me/v2/desktop/beta/promote-qualified \
+            --request POST https://api.omi.me/v2/desktop/beta/promote-candidate \
             --header "Authorization: Bearer ${BETA_PROMOTION_TOKEN}" \
             --header 'Content-Type: application/json' \
             --data "{\"tag\":\"${RELEASE_TAG}\"}"

@@ -465,9 +465,11 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
-        env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
+        env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
 
     - name: Capture ${{ inputs.service }} revision
@@ -475,6 +477,31 @@ runs:
       shell: bash
       run: |
         echo "revision=backend-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+    # deploy-cloudrun stamps a `commit-sha` label from GITHUB_SHA -- the ref the
+    # workflow was TRIGGERED on, not the release_sha this job checked out and
+    # built. For any pinned deploy (release_sha != main HEAD) that label names a
+    # commit that was never deployed, and it is the marker an operator reaches
+    # for first. On 2026-08-19 it sent an incident responder chasing five
+    # commits that were not in production. The label cannot be corrected here,
+    # so the fix is to publish a marker that is true by construction and then
+    # prove it: read the value back off the revision that was actually created.
+    - name: Verify ${{ inputs.service }} release provenance
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected='${{ inputs.admitted_sha }}'
+        revision='${{ steps.capture-backend-revision.outputs.revision }}'
+        actual="$(gcloud run revisions describe "$revision" \
+          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' --format=json \
+          | jq -r '[.spec.containers[0].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value] | first // ""')"
+        if [[ "$actual" != "$expected" ]]; then
+          echo "ERROR: ${{ inputs.service }} revision $revision reports release sha '$actual'," >&2
+          echo "       but this deploy admitted '$expected'. Refusing to report success:" >&2
+          echo "       an untrue provenance marker is worse than none." >&2
+          exit 1
+        fi
+        echo "$revision publishes OMI_BACKEND_RELEASE_SHA=$actual"
 
     - name: Deploy sync-backfill worker
       id: sync-backfill
@@ -503,7 +530,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -571,7 +598,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}

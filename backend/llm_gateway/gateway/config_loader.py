@@ -241,7 +241,13 @@ def _generated_feature_route_items(
                 'fallbacks': [],
                 'provider_options': provider_options,
                 'output_budget': _output_budget_for_feature(feature, provider),
-                'timeouts': {'request_ms': 120000 if capabilities['streaming'] else 30000},
+                'timeouts': {
+                    'request_ms': (
+                        override.request_timeout_ms
+                        if override is not None and override.request_timeout_ms is not None
+                        else (120000 if capabilities['streaming'] else 30000)
+                    )
+                },
                 'retry': {'max_attempts': 1},
                 'capabilities': capabilities,
                 'evidence': {

@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, qualification, safety, memory_scenarios
+from . import config, providers, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
 
@@ -185,9 +185,36 @@ def _service_health(cfg: config.HarnessConfig, service: str) -> tuple[bool, str]
         return False, detail
     if service == "backend":
         return _http_ok(f"{cfg.backend_url}/docs")
+    if service == "llm-gateway":
+        return _http_ok(f"{cfg.llm_gateway_url}/health")
     if service == "desktop-backend":
         return _http_ok(f"{cfg.desktop_backend_url}/health")
     return False, f"unknown service {service!r}"
+
+
+def _status_health_label(
+    cfg: config.HarnessConfig,
+    service: str,
+    *,
+    alive: bool,
+    port: int,
+) -> str:
+    """Report the same HTTP/auth health checks as startup wait, with a degraded label.
+
+    Port-open alone is not healthy for HTTP services. When the owned process is
+    still alive and the port accepts TCP but the authenticated/HTTP probe fails,
+    surface ``degraded (...)`` so manual QA can tell a wedged service from a
+    clean stop.
+    """
+    ok, detail = _service_health(cfg, service)
+    if ok:
+        return detail
+    port_listening = bool(port) and _port_open("127.0.0.1", port)
+    if alive and port_listening:
+        return f"degraded ({detail})"
+    if port and not port_listening:
+        return "port-closed"
+    return detail
 
 
 def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -> None:
@@ -195,6 +222,7 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
     service = str(record.get("service"))
     if not safety.process_exists(pid):
         return
+    descendants = safety.descendant_pids(pid)
     try:
         safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
         _signal_owned_process_group(pid, service)
@@ -211,6 +239,7 @@ def _stop_single_service(cfg: config.HarnessConfig, record: dict[str, object]) -
             os.killpg(pid, signal.SIGTERM)
         except (ProcessLookupError, PermissionError):
             pass
+    _reap_detached_port_holders(record, descendants)
     remaining = [entry for entry in _process_records(cfg) if entry.get("service") != service]
     _save_manifests(cfg, remaining)
 
@@ -256,6 +285,27 @@ def _python_importable(module: str) -> bool:
     )
 
 
+def _java_runtime_present() -> bool:
+    """Report whether a usable JVM exists, not merely whether `java` is on PATH.
+
+    macOS ships a stub at /usr/bin/java that is always present and exits 1 with
+    "Unable to locate a Java Runtime" when no JDK is installed, so a PATH lookup
+    passes on every Mac. Running the binary is the only check that distinguishes
+    the stub from a real runtime.
+    """
+    if not _which("java"):
+        return False
+    try:
+        return (
+            subprocess.run(
+                ["java", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     warnings: list[str] = []
@@ -265,8 +315,11 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append(
             "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"
         )
-    if not _which("java"):
-        missing.append("java runtime (required by Firestore emulator)")
+    if not _java_runtime_present():
+        missing.append(
+            "java runtime (required by the Firestore and Auth emulators; "
+            "install one with `brew install --cask temurin` or from https://adoptium.net)"
+        )
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")
     runtime = typesense_runtime()
@@ -316,8 +369,11 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
     print(f"typesense: 127.0.0.1:{cfg.typesense_port}")
+    print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
+    if cfg.dev_bind_host != "127.0.0.1":
+        print(f"dev_bind_host: {cfg.dev_bind_host} (set via {config.DEV_BIND_HOST_ENV} or {config.APP_DEV_HOST_ENV})")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
@@ -552,13 +608,20 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     emulators = payload.setdefault("emulators", {})
     for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
         emulator = emulators.setdefault(name, {})
-        emulator["host"] = "127.0.0.1"
+        # The Auth emulator is what a physical device's Firebase SDK connects to
+        # directly (not through the backend), so it must bind wherever the
+        # backend does for device reachability to work at all (#11774).
+        emulator["host"] = cfg.dev_bind_host
         emulator["port"] = port
     firestore = payload.setdefault("firestore", {})
     firestore["rules"] = str(cfg.repo_root / "firestore.rules")
     firestore["indexes"] = str(cfg.repo_root / "firestore.indexes.json")
     _write_json(config_path, payload)
-    base = ["firebase"] if _which("firebase") else ["npx", "firebase-tools"]
+    # `--yes` is required: the emulator runs detached with its output redirected to a
+    # log file, so npx's "Need to install the following packages / Ok to proceed? (y)"
+    # prompt has no terminal to answer it and the process blocks there forever. The
+    # health check then fails on a timeout that says nothing about the real cause.
+    base = ["firebase"] if _which("firebase") else ["npx", "--yes", "firebase-tools"]
     return [
         *base,
         "emulators:start",
@@ -685,11 +748,28 @@ def _start_infrastructure(cfg: config.HarnessConfig) -> None:
 
 
 def _start_app_services(cfg: config.HarnessConfig) -> None:
-    """Start backend and desktop-backend after infrastructure is settling."""
+    """Start the isolated gateway, backend, and desktop-backend."""
+    _start_process(
+        cfg,
+        "llm-gateway",
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "llm_gateway.main:app",
+            "--host",
+            cfg.dev_bind_host,
+            "--port",
+            str(cfg.llm_gateway_port),
+        ],
+        cwd=cfg.repo_root / "backend",
+        log_name="llm-gateway.log",
+        port=cfg.llm_gateway_port,
+    )
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(cfg.backend_port)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host, "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
         port=cfg.backend_port,
@@ -703,7 +783,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "desktop_backend:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.desktop_backend_port),
         ],
@@ -735,6 +815,7 @@ _HEALTH_TIMEOUTS: dict[str, float] = {
     "auth": 90.0,
     "typesense": 45.0,
     "backend": 180.0,
+    "llm-gateway": 60.0,
     "desktop-backend": 60.0,
     "redis": 30.0,
 }
@@ -758,6 +839,7 @@ def _wait_health(
         "auth": (f"http://{cfg.auth_host}/", None),
         "typesense": (f"http://127.0.0.1:{cfg.typesense_port}/collections", typesense_headers),
         "backend": (f"{cfg.backend_url}/docs", None),
+        "llm-gateway": (f"{cfg.llm_gateway_url}/health", None),
         "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
         "redis": (None, None),  # port-based check
     }
@@ -919,11 +1001,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     for record in records:
         pid = int(record.get("pid", -1))
         alive = safety.process_exists(pid)
-        health = "not checked"
         service = str(record.get("service"))
         port = int(record.get("port", 0) or 0)
-        if port:
-            health = "port-open" if _port_open("127.0.0.1", port) else "port-closed"
+        health = _status_health_label(cfg, service, alive=alive, port=port)
         print(f"  - {service}: pid={pid} alive={alive} {health} log={record.get('log')}")
     return 0
 
@@ -950,8 +1030,51 @@ def _signal_owned_process_group(pid: int, service: str) -> None:
         raise safety.SafetyError(f"Cannot signal process group {pid}: {exc}") from exc
 
 
+def _reap_detached_port_holders(record: dict[str, object], descendants: tuple[int, ...]) -> None:
+    """Stop a detached child that survived the group signal and still owns the service port.
+
+    Ownership is proven twice over: the PID was a descendant of the manifest-validated
+    supervisor before any signal was sent, and it is still holding the port this service
+    recorded. Anything else on the port is left alone.
+    """
+
+    service = str(record.get("service"))
+    port = int(record.get("port", 0) or 0)
+    if port <= 0 or not descendants:
+        return
+    try:
+        holders = safety.listening_pids(port)
+    except safety.SafetyError as exc:
+        print(f"{service}: cannot inspect port {port} after stop: {exc}")
+        return
+    owned = [pid for pid in holders if pid in descendants]
+    for pid in holders:
+        if pid not in descendants:
+            print(f"{service}: port {port} held by unowned pid {pid}; leaving it for safety inspection")
+    for pid in owned:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            print(f"{service}: sent SIGTERM to detached child {pid} still holding port {port}")
+        except (ProcessLookupError, PermissionError) as exc:
+            print(f"{service}: cannot stop detached child {pid} on port {port}: {exc}")
+    deadline = time.time() + 5
+    while time.time() < deadline and any(safety.process_exists(pid) for pid in owned):
+        time.sleep(0.25)
+    for pid in owned:
+        if not safety.process_exists(pid):
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+            print(f"{service}: sent SIGKILL to detached child {pid} still holding port {port}")
+        except (ProcessLookupError, PermissionError) as exc:
+            print(f"{service}: detached child {pid} still holds port {port}: {exc}")
+
+
 def _stop_owned(cfg: config.HarnessConfig) -> None:
     records = _process_records(cfg)
+    # Capture the tree while the supervisors are alive; detached children (the
+    # Firestore emulator JVM) are unreachable through the process group.
+    descendants = {int(record.get("pid", -1)): safety.descendant_pids(int(record.get("pid", -1))) for record in records}
     for record in records:
         pid = int(record.get("pid", -1))
         service = str(record.get("service"))
@@ -982,6 +1105,7 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         pid = int(record.get("pid", -1))
         if safety.process_exists(pid):
             print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
+        _reap_detached_port_holders(record, descendants.get(pid, ()))
     _save_manifests(cfg, records)
 
 
@@ -1026,39 +1150,6 @@ def cmd_logs(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_qualification_lease(args: argparse.Namespace) -> int:
-    repo_root = _repo_root()
-    if args.lease_action == "acquire":
-        lease = qualification.acquire(
-            repo_root=repo_root,
-            lease_id=args.lease_id,
-            owner_pid=args.owner_pid,
-            port_offset=args.port_offset,
-            retained_runs=args.retained_runs,
-            retention_age_seconds=args.retention_age_seconds,
-        )
-        print(json.dumps(lease, sort_keys=True))
-        return 0
-    if args.lease_action == "release":
-        qualification.release(
-            repo_root=repo_root,
-            lease_id=args.lease_id,
-            token=args.token,
-            retained_runs=args.retained_runs,
-            retention_age_seconds=args.retention_age_seconds,
-        )
-        return 0
-    if args.lease_action == "preflight-fault-cleanup":
-        qualification.preflight_fault_cleanup(
-            repo_root=repo_root,
-            lease_id=args.lease_id,
-            token=args.token,
-            result_path=Path(args.result),
-        )
-        return 0
-    raise AssertionError(f"Unexpected qualification lease action {args.lease_action!r}")
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dev-harness")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1075,29 +1166,6 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "status":
             command.add_argument("--write-summary", action="store_true", default=False)
         command.set_defaults(func=func)
-    lease = sub.add_parser("qualification-lease", help="Acquire or safely release a local qualification stack lease")
-    lease_sub = lease.add_subparsers(dest="lease_action", required=True)
-    acquire = lease_sub.add_parser("acquire")
-    acquire.add_argument("--lease-id", required=True)
-    acquire.add_argument("--owner-pid", required=True, type=int)
-    acquire.add_argument("--port-offset", required=True, type=int)
-    acquire.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
-    acquire.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
-    acquire.set_defaults(func=cmd_qualification_lease)
-    release = lease_sub.add_parser("release")
-    release.add_argument("--lease-id", required=True)
-    release.add_argument("--token", required=True)
-    release.add_argument("--retained-runs", type=int, default=qualification.DEFAULT_RETAINED_RUNS)
-    release.add_argument("--retention-age-seconds", type=int, default=qualification.DEFAULT_RETENTION_MAX_AGE_SECONDS)
-    release.set_defaults(func=cmd_qualification_lease)
-    fault_preflight = lease_sub.add_parser(
-        "preflight-fault-cleanup",
-        help="Validate and reclaim the exact lease-owned disposable fault listener",
-    )
-    fault_preflight.add_argument("--lease-id", required=True)
-    fault_preflight.add_argument("--token", required=True)
-    fault_preflight.add_argument("--result", required=True)
-    fault_preflight.set_defaults(func=cmd_qualification_lease)
     return parser
 
 
@@ -1105,7 +1173,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     try:
         return int(args.func(args))
-    except (safety.SafetyError, qualification.QualificationLeaseError) as exc:
+    except safety.SafetyError as exc:
         print(f"Safety check failed: {exc}")
         return 2
 

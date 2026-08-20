@@ -101,7 +101,7 @@
     "createYourOwnApp": "Luo oma sovellus",
     "buildAndShareApp": "Rakenna ja jaa oma sovelluksesi",
     "searchApps": "Etsi sovelluksia...",
-    "myApps": "Omat sovellukset",
+    "myApps": "Minun luomani",
     "installedApps": "Asennetut sovellukset",
     "unableToFetchApps": "Sovellusten haku epäonnistui :(\n\nTarkista internet-yhteytesi ja yritä uudelleen.",
     "aboutOmi": "Tietoja Omista",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Siirto käynnissä",
     "accountCutoverMigrationInProgressMessage": "Tiliäsi siirretään. Tuoteominaisuudet on keskeytetty, kunnes siirto valmistuu.",
     "accountCutoverMigrationRollbackMessage": "Tilisi on huollossa siirron peruutuksen jälkeen. Uudempaa dataa voi olla eristettynä.",
-    "accountCutoverOpenStore": "Avaa kauppa"
+    "accountCutoverOpenStore": "Avaa kauppa",
+    "sendRawAudioToOmi": "Lähetä käsittelemätön ääni Omille",
+    "sendRawAudioToOmiDescription": "Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.",
+    "findDevice": "Etsi",
+    "diagnosticsShareFailed": "Diagnostiikan jakaminen epäonnistui. Yritä uudelleen."
 }

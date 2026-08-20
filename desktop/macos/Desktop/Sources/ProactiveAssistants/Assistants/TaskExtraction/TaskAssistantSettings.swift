@@ -113,6 +113,11 @@ class TaskAssistantSettings {
   private let defaultMinConfidence: Double = 0.75
   private let defaultNotificationsEnabled = false
 
+  /// Mirrors the backend request contract. Defaults must remain within this bound so a
+  /// settings sync can never reject an app-shipped prompt; longer user-authored prompts
+  /// remain stored locally and are omitted from sync rather than truncated.
+  static let maximumSyncedAnalysisPromptLength = 10_000
+
   /// Default system prompt for task extraction (loop-based with tool calling)
   static let defaultAnalysisPrompt = """
     You are a task commitment detector. Your ONLY job: find tasks the user has committed to in conversations, or unaddressed requests directed at the user.
@@ -318,6 +323,7 @@ class TaskAssistantSettings {
     set {
       let isCustom = newValue != TaskAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
+      SettingsSyncManager.recordLocalPromptOwner("task", isShippedDefault: !isCustom)
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Task analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")

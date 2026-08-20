@@ -11,7 +11,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
-        type: string
+        type: choice
+        options:
+          - development
+          - prod
       branch:
         description: 'Branch to deploy from'
         required: true
@@ -33,7 +36,7 @@ concurrency:
 
 jobs:
   deploy:
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -80,6 +83,22 @@ jobs:
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
+      - name: Get GKE credentials for gateway serving gate
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify LLM Gateway serving data plane
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Render backend runtime env
         id: runtime-env
         env:
@@ -87,6 +106,7 @@ jobs:
           # exits before notifications_job_* outputs are emitted (same as gcp_backend.yml).
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job >> "$GITHUB_OUTPUT"
 
@@ -119,6 +139,19 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
+      - name: Probe X Flex gateway lane from the Cloud Run VPC
+        run: |
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --lane omi:auto:x-memory-extraction-flex \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
@@ -132,11 +165,71 @@ jobs:
           # Strip retired maintenance/Pusher keys, plus any literal shadowing a
           # Secret Manager binding (no-op on a clean target).
           flags: >-
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+            --task-timeout=3600s
             --remove-env-vars=MEMORY_MODE,MEMORY_ENABLED_USERS,MEMORY_V3_GET_ENABLED,MEMORY_CANONICAL_MAINTENANCE_ENABLED,MEMORY_CANONICAL_CONSOLIDATION_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,TYPESENSE_HOST_PORT,TYPESENSE_API_KEY,HOSTED_PUSHER_API_URL,${{ steps.runtime-env.outputs.notifications_job_secret_names }}
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
+
+      - name: Provision chat-first materialization decision review
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          test -n "$ALERT_CHANNELS"
+          metric='chat_first_materialization_review_due'
+          display_name='Chat-first materialization decision review due'
+          documentation='The weekly read-only materialization verdict is ready. Inspect the notifications-job chat_first_materialization_health log entry for the delivered, dropped, in-flight, undated, and drop-rate aggregates, then run backend/scripts/chat_first_materialization_drop_rate.py --json for the source and block-type breakdown. This signal intentionally routes zero-drop verdicts too so the canonical server-materialization decision cannot disappear into silence.'
+          log_filter='resource.type="cloud_run_job" resource.labels.job_name="notifications-job" "chat_first_materialization_health review=true"'
+
+          if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud logging metrics update "$metric" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" \
+              --log-filter="$log_filter"
+          else
+            gcloud logging metrics create "$metric" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --description="$display_name" \
+              --log-filter="$log_filter"
+          fi
+
+          policy="$(
+            gcloud monitoring policies list \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --filter="displayName=\"${display_name}\"" \
+              --format='value(name)' \
+              --limit=1
+          )"
+          if [[ -z "$policy" ]]; then
+            policy="$(
+              gcloud monitoring policies create \
+                --project="${{ vars.GCP_PROJECT_ID }}" \
+                --display-name="$display_name" \
+                --condition-display-name="$display_name" \
+                --condition-filter="metric.type=\"logging.googleapis.com/user/${metric}\" AND resource.type=\"cloud_run_job\"" \
+                --duration=0s \
+                --if='> 0' \
+                --trigger-count=1 \
+                --combiner=OR \
+                --notification-channels="$ALERT_CHANNELS" \
+                --documentation="$documentation" \
+                --format='value(name)'
+            )"
+          else
+            gcloud monitoring policies update "$policy" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --enabled \
+              --set-notification-channels="$ALERT_CHANNELS" \
+              --documentation="$documentation"
+          fi
+          test -n "$policy"
+          gcloud monitoring policies describe "$policy" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(notificationChannels)' | grep -q .
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

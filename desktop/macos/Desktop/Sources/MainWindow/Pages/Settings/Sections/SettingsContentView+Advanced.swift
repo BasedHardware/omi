@@ -27,7 +27,7 @@ extension SettingsContentView {
       // app did. `advanced.taskassistant` is also where the Tasks page's gear button deep-links.
       advancedCategoryHeader(title: "Task Assistant", icon: "checklist")
       taskAssistantSubsection
-      advancedCategoryHeader(title: "Insight Assistant", icon: "lightbulb.fill")
+      advancedCategoryHeader(title: "Insight Assistant", icon: ProactiveNotificationBadge.insightSystemImage)
       insightAssistantSubsection
       advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
       memoryAssistantSubsection

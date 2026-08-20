@@ -1,6 +1,16 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  ReactNode,
+} from 'react';
+import { useChat as useChatSession } from '@/hooks/useChat';
+
+type SharedChat = ReturnType<typeof useChatSession>;
 
 interface ChatContext {
   // Panel state
@@ -13,8 +23,18 @@ interface ChatContext {
   currentContext: ChatContextInfo | null;
   setContext: (context: ChatContextInfo | null) => void;
 
+  /**
+   * The chat session being read, or `null` for the default shared thread.
+   * Owned here because both the panel and Home render the same transcript;
+   * a selection held by either one alone could not move the other.
+   */
+  selectedChatSessionId: string | null;
+  selectChatSession: (sessionId: string | null) => void;
+  chat: SharedChat;
+
   // App-specific chat (for notification routing)
   selectedAppId: string | null;
+  selectApp: (appId: string | null) => void;
   openChatWithApp: (appId: string) => void;
   clearAppContext: () => void;
 }
@@ -32,6 +52,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentContext, setCurrentContext] = useState<ChatContextInfo | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [selectedChatSessionId, setSelectedChatSessionId] = useState<string | null>(null);
+  const chat = useChatSession({
+    appId: selectedAppId ?? undefined,
+    chatSessionId: selectedChatSessionId,
+  });
 
   const openChat = useCallback(() => setIsOpen(true), []);
   const closeChat = useCallback(() => setIsOpen(false), []);
@@ -39,6 +64,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const setContext = useCallback((context: ChatContextInfo | null) => {
     setCurrentContext(context);
+  }, []);
+
+  const selectChatSession = useCallback((sessionId: string | null) => {
+    setSelectedChatSessionId(sessionId);
+  }, []);
+
+  const selectApp = useCallback((appId: string | null) => {
+    setSelectedAppId(appId);
   }, []);
 
   // Open chat with a specific app context
@@ -61,18 +94,32 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       toggleChat,
       currentContext,
       setContext,
+      selectedChatSessionId,
+      selectChatSession,
+      chat,
       selectedAppId,
+      selectApp,
       openChatWithApp,
       clearAppContext,
     }),
-    [isOpen, openChat, closeChat, toggleChat, currentContext, setContext, selectedAppId, openChatWithApp, clearAppContext]
+    [
+      isOpen,
+      openChat,
+      closeChat,
+      toggleChat,
+      currentContext,
+      setContext,
+      selectedChatSessionId,
+      selectChatSession,
+      chat,
+      selectedAppId,
+      selectApp,
+      openChatWithApp,
+      clearAppContext,
+    ],
   );
 
-  return (
-    <ChatContext.Provider value={value}>
-      {children}
-    </ChatContext.Provider>
-  );
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }
 
 export function useChat() {

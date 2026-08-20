@@ -19,6 +19,49 @@ enum ChatBubbleTruncation {
   }
 }
 
+/// Assistant `text_delta` before the first tool call is commentary, not the answer.
+/// The host still concatenates every delta into `message.text`; this projection is
+/// what the bubble, copy affordance, and truncation must use instead.
+enum ChatAssistantAnswerText {
+  static func visible(
+    contentBlocks: [ChatContentBlock],
+    fallback: String,
+    isStreaming: Bool
+  ) -> String {
+    func texts(in slice: ArraySlice<ChatContentBlock>) -> [String] {
+      slice.compactMap { block in
+        guard case .text(_, let text) = block else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+      }
+    }
+
+    let fallbackText = fallback.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard
+      let lastTool = contentBlocks.lastIndex(where: { block in
+        if case .toolCall = block { return true }
+        return false
+      })
+    else {
+      let fromBlocks = texts(in: contentBlocks[...]).joined(separator: "\n")
+      return fromBlocks.isEmpty ? fallbackText : fromBlocks
+    }
+
+    let afterTools = texts(in: contentBlocks[(lastTool + 1)...])
+    if !afterTools.isEmpty {
+      return afterTools.joined(separator: "\n")
+    }
+    if isStreaming {
+      return ""
+    }
+    let beforeTools = texts(in: contentBlocks[..<lastTool])
+    if !beforeTools.isEmpty {
+      return beforeTools.joined(separator: "\n")
+    }
+    return fallbackText
+  }
+}
+
 /// Shared understated date treatment for a transcript row and its prompt-rail
 /// preview. Keeping this outside the bubble makes the time contextual rather
 /// than part of the message itself.
@@ -44,13 +87,30 @@ struct ChatMessageTimestamp: View {
 /// the message and started reading as page furniture. Today says the time; this
 /// year adds the day; only another year is worth naming.
 enum ChatMessageTimestampFormat {
-  static func text(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-    let time = date.formatted(.dateTime.hour().minute())
+  /// - Parameters:
+  ///   - calendar: decides *and* renders. Which day a message belongs to and which day the stamp
+  ///     says have to be the same question: `Date.FormatStyle` otherwise resolves against
+  ///     `.autoupdatingCurrent`, so a caller passing any other calendar would get "today" decided in
+  ///     one zone and the clock time printed in another — a 1:28 PM stamp on a row the same call
+  ///     just decided was yesterday.
+  ///   - locale: how the stamp is worded; the user's, so the month reads in their language.
+  static func text(
+    for date: Date, now: Date = Date(), calendar: Calendar = .current, locale: Locale = .current
+  ) -> String {
+    func render(_ style: Date.FormatStyle) -> String {
+      var style = style
+      style.calendar = calendar
+      style.timeZone = calendar.timeZone
+      style.locale = locale
+      return date.formatted(style)
+    }
+
+    let time = render(.dateTime.hour().minute())
     if calendar.isDate(date, inSameDayAs: now) { return time }
     if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-      return "\(date.formatted(.dateTime.month(.abbreviated).day())) · \(time)"
+      return "\(render(.dateTime.month(.abbreviated).day())) · \(time)"
     }
-    return "\(date.formatted(.dateTime.year().month(.abbreviated).day())) · \(time)"
+    return "\(render(.dateTime.year().month(.abbreviated).day())) · \(time)"
   }
 }
 
@@ -136,13 +196,29 @@ extension View {
 /// *because* the question above it is its context, and this row has none.
 struct ChatProactivePushRow: View {
   let text: String
+  let kind: ProactiveNotificationKind
+
+  private var badge: ProactiveNotificationBadge {
+    ProactiveNotificationBadge(kind: kind)
+  }
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.sm) {
-      Image(systemName: "bell")
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Image(systemName: badge.systemImage)
         .scaledFont(size: OmiType.caption, weight: .semibold)
+        // Neutral, not accent: a notification badge is ambient history, not the one
+        // actionable element `Ink.accent` is reserved for (see Ink.swift). Blue here made
+        // every past notification shout for attention it does not want.
         .foregroundColor(Ink.secondary)
-      OmiMarkdown(text: text, sender: .ai)
+        .frame(width: 24, height: 24)
+        .background(Ink.rowFill, in: Circle())
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(badge.label)
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundColor(Ink.secondary)
+        OmiMarkdown(text: text, sender: .ai)
+      }
       Spacer(minLength: 0)
     }
     .padding(.horizontal, OmiSpacing.md)
@@ -155,17 +231,38 @@ struct ChatProactivePushRow: View {
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
     .accessibilityElement(children: .combine)
-    .accessibilityLabel("Omi noticed: \(text)")
+    .accessibilityLabel("\(badge.label): \(text)")
   }
 }
 
-/// Visibility rule for the quiet timeline's per-message metadata row
-/// (rating / copy / info / timestamp). Keyboard parity is part of the
-/// contract: focus on any metadata control must reveal the row, otherwise
-/// Tab / Full Keyboard Access ends up on an invisible button.
-enum ChatBubbleMetadataReveal {
-  static func isVisible(hovering: Bool, controlFocused: Bool, transientFeedback: Bool) -> Bool {
-    hovering || controlFocused || transientFeedback
+struct ProactiveNotificationBadge: Equatable {
+  let label: String
+  let systemImage: String
+
+  /// Shared glyph contract: Insight uses `sparkles` everywhere; Focus keeps `lightbulb`.
+  static let insightSystemImage = "sparkles"
+  static let suggestionSystemImage = "lightbulb"
+
+  /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
+  /// Insight, Memory — matching the four toggles in Settings → Notifications. Internal
+  /// kinds stay distinct (their raw values are persisted in chat continuity keys), but
+  /// every one of them presents as one of the four: Focus is the focus-nudge assistant
+  /// alone; generic tips, resurfaced items, and generated goals are all insights;
+  /// meeting action items are tasks. `.general` is reserved for functional system
+  /// alerts, which sit outside the proactive taxonomy.
+  init(kind: ProactiveNotificationKind) {
+    switch kind {
+    case .suggestion:
+      (label, systemImage) = ("Focus", Self.suggestionSystemImage)
+    case .insight, .resurface, .goal:
+      (label, systemImage) = ("Insight", Self.insightSystemImage)
+    case .task, .meetingNotes:
+      (label, systemImage) = ("Task", "checkmark.circle")
+    case .memory:
+      (label, systemImage) = ("Memory", "brain.head.profile")
+    case .general:
+      (label, systemImage) = ("Notification", "bell")
+    }
   }
 }
 
@@ -209,5 +306,50 @@ struct BackgroundAgentSummary: Equatable {
       prompt: remainder.isEmpty ? "Background agent" : remainder,
       output: output
     )
+  }
+}
+
+/// Footer actions for an assistant row. A finished reply is rateable as soon as
+/// it has copyable text; waiting for `isSynced` hid thumbs on the live tail
+/// because completion clears streaming before the journal remote id lands.
+/// Persistence of that rating is `ChatMessageRatingPersistence` — show the
+/// buttons now, PATCH after sync.
+enum ChatBubbleMetadataBand: Equatable {
+  case hidden
+  case timestampOnly
+  case actions
+
+  static func of(_ message: ChatMessage) -> Self {
+    guard message.sender == .ai, !message.isStreaming else { return .hidden }
+    guard !message.copyableText.isEmpty else { return .timestampOnly }
+    return .actions
+  }
+}
+
+/// Visible identity for `ChatBubble`'s Equatable skip. Sync, metadata, and
+/// structured blocks change the footer and tool rail without changing `text`.
+enum ChatBubbleIdentity {
+  static func equal(
+    _ lhs: ChatMessage,
+    _ rhs: ChatMessage,
+    appIDs: (String?, String?),
+    showsOmiMark: (Bool, Bool),
+    isDuplicate: (Bool, Bool)
+  ) -> Bool {
+    guard !lhs.isStreaming && !rhs.isStreaming else { return false }
+    return lhs.id == rhs.id
+      && lhs.text == rhs.text
+      && lhs.rating == rhs.rating
+      && lhs.isSynced == rhs.isSynced
+      && lhs.copyableText == rhs.copyableText
+      && lhs.displayResources == rhs.displayResources
+      && lhs.journalStatus == rhs.journalStatus
+      && lhs.citations.map(\.id) == rhs.citations.map(\.id)
+      && (lhs.metadata != nil) == (rhs.metadata != nil)
+      && ChatContentBlockCodec.comparisonData(lhs.contentBlocks)
+        == ChatContentBlockCodec.comparisonData(rhs.contentBlocks)
+      && appIDs.0 == appIDs.1
+      && showsOmiMark.0 == showsOmiMark.1
+      && isDuplicate.0 == isDuplicate.1
   }
 }

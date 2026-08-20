@@ -33,7 +33,9 @@ export function MergeActionBar({
       initial={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
       animate={inline ? { opacity: 1 } : { y: 0, opacity: 1 }}
       exit={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
-      transition={inline ? { duration: 0.15 } : { type: 'spring', damping: 25, stiffness: 300 }}
+      transition={
+        inline ? { duration: 0.15 } : { type: 'spring', damping: 25, stiffness: 300 }
+      }
       className={cn(
         'flex items-center',
         inline ? 'flex-wrap gap-2' : 'gap-3',
@@ -43,8 +45,8 @@ export function MergeActionBar({
         !inline && [
           'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
           'rounded-2xl backdrop-blur-lg',
-          'shadow-[0_8px_32px_rgba(0,0,0,0.4)]'
-        ]
+          'shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
+        ],
       )}
     >
       {/* Cancel button */}
@@ -57,7 +59,7 @@ export function MergeActionBar({
           'hover:bg-bg-tertiary hover:text-text-primary',
           'transition-colors duration-150',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          inline && 'flex-1'
+          inline && 'flex-1',
         )}
       >
         <X className="w-4 h-4" />
@@ -65,11 +67,13 @@ export function MergeActionBar({
       </button>
 
       {/* Selection count badge */}
-      <div className={cn(
-        'px-3 py-1.5 rounded-full',
-        'bg-purple-primary/20 text-purple-primary',
-        'text-sm font-medium'
-      )}>
+      <div
+        className={cn(
+          'px-3 py-1.5 rounded-full',
+          'bg-white/[0.14] text-text-primary',
+          'text-sm font-medium',
+        )}
+      >
         {selectedCount} selected
       </div>
 
@@ -85,7 +89,7 @@ export function MergeActionBar({
             canMove && !isLoading
               ? 'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary'
               : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-            inline && 'flex-1'
+            inline && 'flex-1',
           )}
         >
           <FolderInput className="w-4 h-4" />
@@ -105,7 +109,7 @@ export function MergeActionBar({
             canDelete && !isLoading
               ? 'bg-error/10 text-error hover:bg-error/20'
               : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-            inline && 'flex-1'
+            inline && 'flex-1',
           )}
         >
           <Trash2 className="w-4 h-4" />
@@ -122,9 +126,9 @@ export function MergeActionBar({
           'text-sm font-medium',
           'transition-all duration-150',
           canMerge && !isLoading
-            ? 'bg-purple-primary text-white hover:bg-purple-primary/90'
+            ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
             : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-          inline && 'flex-1'
+          inline && 'flex-1',
         )}
       >
         {isLoading ? (

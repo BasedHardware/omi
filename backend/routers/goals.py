@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from database import goals as goals_db
 from utils.other import endpoints as auth
 from utils.request_validation import HistoryDays
+from utils.subscription import enforce_chat_quota
 from utils.goals_response import normalize_goal_history_entry, normalize_goal_response
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
@@ -70,7 +71,7 @@ def get_canonical_goals(
     include_ended: bool = Query(False),
     uid: str = Depends(require_canonical_task_user),
 ) -> List[dict]:
-    """List goals for enrolled canonical-memory task-system clients only."""
+    """List goals through the generation-fenced universal task system."""
     goals = goals_db.get_all_goals(uid, include_inactive=include_ended)
     return [normalize_goal_response(goal) for goal in goals]
 
@@ -337,11 +338,14 @@ class ProgressExtractResponse(BaseModel):
 def extract_and_update_progress(
     request: ProgressExtractRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "goals:extract")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ) -> dict:
     """
     Extract goal progress from conversation/chat text and update if found.
     Uses LLM to understand context and extract numeric progress.
     """
+    # User-initiated LLM extraction — same free-tier gate as chat (402 past cap).
+    enforce_chat_quota(uid, platform=x_app_platform)
     result = extract_and_update_goal_progress(uid, request.text)
     if result is None:
         return {'updated': False, 'reason': 'No active goal'}

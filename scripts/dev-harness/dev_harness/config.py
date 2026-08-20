@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +14,7 @@ from . import providers, safety
 FIRESTORE_PORT = 8085
 AUTH_PORT = 9099
 BACKEND_PORT = 8000
+LLM_GATEWAY_PORT = 9080
 DESKTOP_BACKEND_PORT = 10201
 REDIS_PORT = 6380
 TYPESENSE_PORT = 8108
@@ -24,6 +24,7 @@ TYPESENSE_CONTAINER_PORT = 8108
 TYPESENSE_PINNED_VERSION = "27.1"
 LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
+LOCAL_LLM_GATEWAY_SERVICE_TOKEN = "local-dev-llm-gateway-service-token-not-real"
 PORT_OFFSET_ENV = "OMI_HARNESS_PORT_OFFSET"
 PORT_OVERRIDE_ENVS = {
     "firestore": "OMI_HARNESS_FIRESTORE_PORT",
@@ -32,6 +33,7 @@ PORT_OVERRIDE_ENVS = {
     "desktop_backend": "OMI_HARNESS_DESKTOP_BACKEND_PORT",
     "redis": "OMI_HARNESS_REDIS_PORT",
     "typesense": "OMI_HARNESS_TYPESENSE_PORT",
+    "llm_gateway": "OMI_HARNESS_LLM_GATEWAY_PORT",
 }
 PROVIDER_MODES = providers.PROVIDER_MODES
 CORE_PROVIDER_ENV = (
@@ -65,6 +67,8 @@ class HarnessConfig:
     redis_host: str = "127.0.0.1"
     redis_port: int = REDIS_PORT
     typesense_port: int = TYPESENSE_PORT
+    dev_bind_host: str = "127.0.0.1"
+    llm_gateway_port: int = LLM_GATEWAY_PORT
 
     @property
     def firestore_host(self) -> str:
@@ -94,6 +98,16 @@ class HarnessConfig:
     def desktop_backend_url(self) -> str:
         return f"http://{self.desktop_backend_host}"
 
+    @property
+    def llm_gateway_url(self) -> str:
+        return f"http://127.0.0.1:{self.llm_gateway_port}"
+
+    @property
+    def llm_gateway_service_token(self) -> str:
+        # Isolate tokens per harness instance so parallel offsets cannot reuse
+        # the shared local default and accidentally authorize each other.
+        return f"{LOCAL_LLM_GATEWAY_SERVICE_TOKEN}:{self.instance}"
+
 
 def repo_root_from(path: Path) -> Path:
     current = path.resolve()
@@ -105,6 +119,35 @@ def repo_root_from(path: Path) -> Path:
 
 def provider_mode_from_env(env: Mapping[str, str] | None = None) -> str:
     return providers.provider_mode_from_env(env)
+
+
+DEV_BIND_HOST_ENV = "OMI_DEV_BIND_HOST"
+# Falls back to OMI_DEV_HOST (app/setup.sh:53) so a contributor who follows the
+# documented physical-device setup — set OMI_DEV_HOST to the Mac's reachable
+# address — gets a harness that actually listens there too, not just an app
+# built to expect it (#11774). OMI_DEV_BIND_HOST exists for the narrower case
+# of wanting an asymmetric bind (e.g. a different advertise vs. listen address).
+APP_DEV_HOST_ENV = "OMI_DEV_HOST"
+
+
+def dev_bind_host_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Resolve what the harness's HTTP services and Firebase emulators bind to.
+
+    Defaults to loopback-only, preserving today's behavior. Binds all
+    interfaces (0.0.0.0) when a private LAN/CGNAT address is requested, rather
+    than that literal address, so loopback callers (health checks, a booted
+    simulator) keep working alongside the newly reachable LAN/tailnet address.
+    Fails closed (SafetyError) on a publicly routable address.
+    """
+
+    source = os.environ if env is None else env
+    requested = source.get(DEV_BIND_HOST_ENV, "").strip() or source.get(APP_DEV_HOST_ENV, "").strip()
+    if not requested:
+        return "127.0.0.1"
+    safety.validate_dev_bind_host(requested, name=DEV_BIND_HOST_ENV)
+    if safety.is_loopback_host(requested):
+        return "127.0.0.1"
+    return "0.0.0.0"
 
 
 def _port_from_env(source: Mapping[str, str], name: str, default: int, offset: int) -> int:
@@ -136,6 +179,7 @@ def harness_ports_from_env(env: Mapping[str, str] | None = None) -> dict[str, in
         "desktop_backend": DESKTOP_BACKEND_PORT,
         "redis": REDIS_PORT,
         "typesense": TYPESENSE_PORT,
+        "llm_gateway": LLM_GATEWAY_PORT,
     }
     ports = {name: _port_from_env(source, name, default, offset) for name, default in defaults.items()}
     duplicates = sorted(port for port in set(ports.values()) if list(ports.values()).count(port) > 1)
@@ -226,6 +270,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         else safety.layout_for_instance(repo_root, instance, source)
     )
     ports = harness_ports_from_env(source)
+    dev_bind_host = dev_bind_host_from_env(source)
     cfg = HarnessConfig(
         repo_root=repo_root.resolve(),
         instance=instance,
@@ -237,6 +282,8 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         desktop_backend_port=ports["desktop_backend"],
         redis_port=ports["redis"],
         typesense_port=ports["typesense"],
+        llm_gateway_port=ports["llm_gateway"],
+        dev_bind_host=dev_bind_host,
     )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
@@ -252,6 +299,8 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             desktop_backend_port=cfg.desktop_backend_port,
             redis_port=cfg.redis_port,
             typesense_port=cfg.typesense_port,
+            llm_gateway_port=cfg.llm_gateway_port,
+            dev_bind_host=cfg.dev_bind_host,
         )
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,
@@ -261,32 +310,11 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
     return cfg
 
 
-def _canonical_users_for_harness(cfg: HarnessConfig) -> str:
-    manifest_path = cfg.layout.state_root / "manifests" / "canonical-auth-uids.json"
-    if manifest_path.is_file():
-        try:
-            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            payload = {}
-        if isinstance(payload, dict):
-            canonical = payload.get("canonical_users")
-            if isinstance(canonical, list):
-                values = [str(item).strip() for item in canonical if str(item).strip()]
-                if values:
-                    return ",".join(values)
-            users = payload.get("users")
-            if isinstance(users, dict):
-                alice_uid = users.get("alice")
-                if isinstance(alice_uid, str) and alice_uid.strip():
-                    return alice_uid.strip()
-            selected = payload.get("selected_user")
-            if isinstance(selected, str) and selected.strip():
-                return selected.strip()
-    return os.environ.get("MEMORY_CANONICAL_USERS", "alice").strip()
-
-
 def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
-    canonical_users = _canonical_users_for_harness(cfg)
+    # Offline harness uses direct/stub LLM paths. OMI_ENV_STAGE=offline is not a
+    # gateway-local stage, so FEATURE_MODE=gateway would make gateway_client reject
+    # startup while still advertising gateway routing.
+    gateway_feature_mode = "off" if cfg.provider_mode == "offline" else "gateway"
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
@@ -296,9 +324,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "FIREBASE_PROJECT_ID": cfg.project_id,
         "FIRESTORE_DATABASE_ID": cfg.database_id,
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
-        "MEMORY_CANONICAL_USERS": canonical_users,
         "MEMORY_MODE": "read",
-        "MEMORY_ENABLED_USERS": canonical_users,
         "MEMORY_CANONICAL_CONSOLIDATION_ENABLED": "true",
         "REDIS_DB_HOST": cfg.redis_host,
         "REDIS_DB_PORT": str(cfg.redis_port),
@@ -312,6 +338,9 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "TYPESENSE_PROTOCOL": "http",
         "BASE_API_URL": cfg.backend_url,
         "API_BASE_URL": cfg.backend_url,
+        "OMI_LLM_GATEWAY_URL": cfg.llm_gateway_url,
+        "OMI_LLM_GATEWAY_SERVICE_TOKEN": cfg.llm_gateway_service_token,
+        "OMI_LLM_GATEWAY_FEATURE_MODE": gateway_feature_mode,
     }
 
 

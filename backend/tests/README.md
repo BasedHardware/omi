@@ -42,10 +42,12 @@ use `bash test.sh` or a focused `pytest` invocation while iterating, and let CI 
 ### Per-test duration guard
 
 `BACKEND_FAST_UNIT_WARN_SECONDS=<seconds>` (default `0.1`) is the per-test CPU-time target.
-`BACKEND_FAST_UNIT_FAIL_SECONDS=<seconds>` (default `0.12` for direct local `test.sh` and pre-push use; `1.0` in
+`BACKEND_FAST_UNIT_FAIL_SECONDS=<seconds>` (default `0.30` for direct local `test.sh` and pre-push use; `1.0` in
 the CI runner) is the blocking budget. The guard measures
 **CPU time of the call phase only** (`time.process_time`), not wall-clock: wall-clock inflates unpredictably
-under parallel contention and makes a hard limit flake. Native numerical pools are capped as described above so
+under parallel contention and makes a hard limit flake. CPU time is the better signal but still inflates
+(~2x measured on a saturated host, since contention stall cycles are charged to the process), so the failure
+budget keeps headroom over the warning target instead of sitting just above it. Native numerical pools are capped as described above so
 aggregate process CPU remains comparable regardless of `BACKEND_PYTEST_WORKERS`. GitHub Actions keeps the same 100ms warning target but uses a higher
 failure threshold so near-target CPU-accounting differences do not block unrelated PRs. The slowest wall-clock
 times are still printed in the `Backend unit test durations` summary for visibility.

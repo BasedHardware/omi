@@ -11,6 +11,7 @@ compiler the flags run against.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 import unittest
@@ -23,13 +24,27 @@ SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from pre_push_ci_prediction import resolve_impact  # noqa: E402
+from pre_push_ci_prediction import DESKTOP_RELEASE_PATHSPECS, resolve_impact  # noqa: E402
+
+_PLANNER_SPEC = importlib.util.spec_from_file_location(
+    "plan_desktop_release_ci_contract",
+    REPO_ROOT / ".github/scripts/plan-desktop-release.py",
+)
+assert _PLANNER_SPEC and _PLANNER_SPEC.loader
+planner = importlib.util.module_from_spec(_PLANNER_SPEC)
+_PLANNER_SPEC.loader.exec_module(planner)
 
 EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
 EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
+# Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
+# cold-runner ceiling than the narrower release-compile job.
+MACOS_JOB_TIMEOUT_MINUTES = {
+    "desktop-swift-verify": 90,
+    "desktop-swift-release-compile": 60,
+}
 
 
 def _workflow_text() -> str:
@@ -110,31 +125,52 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("fetch-depth: 1", release_job)
 
     def test_release_control_inputs_produce_exact_sha_checks(self):
-        """Candidate-building config must run the checks consumed by the release planner."""
-        for path in (
-            "codemagic.yaml",
-            ".github/scripts/plan-desktop-release.py",
-            ".github/workflows/desktop_auto_release.yml",
-            ".github/workflows/desktop-swift-ci.yml",
-        ):
-            with self.subTest(path=path):
-                self.assertTrue(resolve_impact([path], event="push").includes("desktop-ci-only"))
+        """Every planner releasable pathspec must produce the exact-SHA CI checks."""
+        self.assertEqual(DESKTOP_RELEASE_PATHSPECS, planner.DESKTOP_RELEASE_PATHS)
+        self.assertEqual(set(MACOS_JOBS), set(MACOS_JOB_TIMEOUT_MINUTES))
+        for pathspec in planner.DESKTOP_RELEASE_PATHS:
+            # Directory pathspecs need a concrete file probe under the tree.
+            probe = pathspec if Path(pathspec).suffix else f"{pathspec.rstrip('/')}/Resources/Info.plist"
+            with self.subTest(pathspec=pathspec, probe=probe):
+                plan = resolve_impact([probe], event="push")
+                self.assertTrue(plan.includes("desktop-ci-only"), probe)
+                self.assertTrue(plan.includes("desktop-swift-release-compile"), probe)
 
     def test_macos_jobs_have_a_bounded_runner_budget(self):
         """A stuck Swift invocation must not consume hosted macOS capacity forever."""
-        for job_id in MACOS_JOBS:
-            with self.subTest(job=job_id):
-                self.assertIn("timeout-minutes: 60", self.jobs[job_id])
+        self.assertEqual(set(MACOS_JOBS), set(MACOS_JOB_TIMEOUT_MINUTES))
+        for job_id, timeout_minutes in MACOS_JOB_TIMEOUT_MINUTES.items():
+            with self.subTest(job=job_id, timeout_minutes=timeout_minutes):
+                self.assertIn(f"timeout-minutes: {timeout_minutes}", self.jobs[job_id])
 
-    def test_closed_prs_release_the_same_pr_concurrency_group_without_allocating_a_runner(self):
-        """A close event supersedes its PR run before any macOS job can start."""
+    def test_no_closed_pull_request_runs_exist(self):
+        """No closure run can publish a skipped check onto the merge SHA."""
         workflow = _workflow_text()
-        changes = self.jobs["changes"]
 
-        self.assertRegex(workflow, r"types:\s*\[[^]]*closed[^]]*\]")
-        self.assertIn("github.event.pull_request.number || github.sha", workflow)
-        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
-        self.assertIn("github.event.action != 'closed'", changes)
+        self.assertNotIn("closed", workflow)
+        self.assertNotIn("pull_request.merged", workflow)
+
+    def test_required_release_check_names_are_literals(self):
+        """GitHub does not evaluate `name:` for a skipped job.
+
+        An expression there publishes the raw expression text as the check
+        name, so the check the desktop release planner requires by exact name
+        becomes *absent* instead of skipped on every commit that does not touch
+        desktop paths. Observed Aug 14 2026 on f666ddd4a3/7a79f08329/7d7ed62e5:
+        the published name was the literal
+        "github.event.action == 'closed' && ... || 'Desktop Swift Build & Tests'".
+        Every job name in this workflow must therefore be expression-free.
+        """
+        for job_id, body in self.jobs.items():
+            name_lines = [
+                line for line in body.splitlines() if line.strip().startswith("name:") and "    - name:" not in line
+            ]
+            self.assertTrue(name_lines, f"job {job_id} declares no name")
+            with self.subTest(job=job_id):
+                self.assertNotIn("${{", name_lines[0])
+
+        self.assertIn("name: Desktop Swift Build & Tests", self.jobs["desktop-swift"])
+        self.assertIn("name: Desktop Swift Release Compile", self.jobs["desktop-swift-release-compile"])
 
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-verify"]

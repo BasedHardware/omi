@@ -9,20 +9,91 @@ patches the import-cheap db helper with monkeypatch.setattr, and calls the handl
 
 import os
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from routers import action_items as ai_mod  # noqa: E402
+from database import action_items as action_items_db  # noqa: E402
+from database.firestore_read_metrics import FIRESTORE_READ_OPERATIONS  # noqa: E402
+
+
+class _Doc:
+    def __init__(self, doc_id, data):
+        self.id = doc_id
+        self._data = data
+
+    def to_dict(self):
+        return self._data
+
+
+class _Query:
+    """Fake Firestore query that mimics real equality-filter semantics.
+
+    A ``.where(filter=FieldFilter(field, '==', value))`` only matches documents where
+    ``field`` is present AND equal to ``value`` — a missing field never matches, and this
+    fake enforces that so a test can tell server-side filtering apart from the old
+    Python-side filtering it replaces.
+    """
+
+    def __init__(self, docs):
+        self.docs = docs
+        self.projected_fields = None
+        self.applied_filters = []
+
+    def select(self, fields):
+        self.projected_fields = fields
+        return self
+
+    def where(self, filter):
+        self.applied_filters.append((filter.field_path, filter.op_string, filter.value))
+        return self
+
+    def stream(self):
+        filtered = self.docs
+        for field_path, op_string, value in self.applied_filters:
+            assert op_string == '==', f'fake only supports == filters, got {op_string}'
+            # Real Firestore equality does not conflate int 1/0 with bool True/False, so
+            # match on type as well as value, not just Python's `1 == True`.
+            filtered = [
+                doc
+                for doc in filtered
+                if field_path in doc._data
+                and type(doc._data[field_path]) is type(value)
+                and doc._data[field_path] == value
+            ]
+        return filtered
+
+
+class _CollectionPath:
+    def __init__(self, query):
+        self.query = query
+
+    def document(self, _):
+        return self
+
+    def collection(self, _):
+        return self.query
+
+
+class _Firestore:
+    def __init__(self, docs):
+        self.query = _Query(docs)
+
+    def collection(self, _):
+        return _CollectionPath(self.query)
 
 
 def test_list_action_item_ids_returns_ids(monkeypatch):
     monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid: ['a1', 'a2', 'a3'])
-    assert ai_mod.list_action_item_ids(uid='u1') == {'ids': ['a1', 'a2', 'a3']}
+    assert ai_mod.list_action_item_ids(completed=None, uid='u1') == {'ids': ['a1', 'a2', 'a3']}
 
 
 def test_list_action_item_ids_empty(monkeypatch):
     monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', lambda uid: [])
-    assert ai_mod.list_action_item_ids(uid='u1') == {'ids': []}
+    assert ai_mod.list_action_item_ids(completed=None, uid='u1') == {'ids': []}
 
 
 def test_list_action_item_ids_scopes_to_caller(monkeypatch):
@@ -33,5 +104,141 @@ def test_list_action_item_ids_scopes_to_caller(monkeypatch):
         return []
 
     monkeypatch.setattr(ai_mod.action_items_db, 'get_action_item_ids', fake)
-    ai_mod.list_action_item_ids(uid='user-9')
+    ai_mod.list_action_item_ids(completed=None, uid='user-9')
     assert seen['uid'] == 'user-9'
+
+
+def test_list_action_item_ids_scopes_select_all_to_completion_bucket(monkeypatch):
+    seen = {}
+
+    def fake(uid, *, completed):
+        seen.update(uid=uid, completed=completed)
+        return ['done-1']
+
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_visible_action_item_ids', fake)
+
+    assert ai_mod.list_action_item_ids(completed=True, uid='user-9') == {
+        'ids': ['done-1'],
+        'completed_scope': True,
+    }
+    assert seen == {'uid': 'user-9', 'completed': True}
+
+
+def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted():
+    client = _Firestore(
+        [
+            _Doc('active', {'completed': False}),
+            _Doc('legacy-active', {'completed': None}),
+            _Doc('legacy-status-active', {'status': 'active'}),
+            _Doc('legacy-status-done', {'status': 'completed'}),
+            _Doc('done', {'completed': True}),
+            _Doc('deleted-active', {'completed': False, 'deleted': True}),
+        ]
+    )
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    assert ids == ['active']
+    # `status` is never read in the function body, so it is dropped from the projection.
+    assert client.query.projected_fields == ['completed', 'deleted']
+    # The completion bucket is filtered server-side, not in Python.
+    assert client.query.applied_filters == [('completed', '==', False)]
+
+
+def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
+    client = _Firestore(
+        [
+            _Doc('legacy-done', {'completed': None, 'status': 'completed'}),
+            _Doc('legacy-active', {'completed': None, 'status': 'active'}),
+        ]
+    )
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=True, firestore_client=client)
+
+    assert ids == []
+
+
+def test_visible_action_item_ids_includes_docs_with_absent_deleted_field():
+    """The common case: most rows never had `deleted` set at all. A server-side
+    `.where('deleted', '==', False)` would silently drop these, since Firestore equality
+    filters never match a missing field. This must stay a Python-side check."""
+    client = _Firestore(
+        [
+            _Doc('never-deleted', {'completed': False}),
+            _Doc('explicitly-not-deleted', {'completed': False, 'deleted': False}),
+            _Doc('soft-deleted', {'completed': False, 'deleted': True}),
+        ]
+    )
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    assert sorted(ids) == ['explicitly-not-deleted', 'never-deleted']
+    # No `deleted` filter was pushed to Firestore.
+    assert client.query.applied_filters == [('completed', '==', False)]
+
+
+def test_visible_action_item_ids_records_firestore_read():
+    client = _Firestore(
+        [
+            _Doc('active-1', {'completed': False}),
+            _Doc('active-2', {'completed': False, 'deleted': True}),
+            _Doc('done', {'completed': True}),  # excluded server-side by the `completed` filter
+        ]
+    )
+
+    before = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='unbounded')._value.get()
+
+    action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    after = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='unbounded')._value.get()
+    assert after == before + 1
+
+
+def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'get_action_items_by_ids',
+        lambda uid, ids: [{'id': ids[0], 'is_locked': True}],
+    )
+    delete_calls = []
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'delete_action_items_batch',
+        lambda uid, ids: delete_calls.append((uid, ids)),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        ai_mod.batch_delete_action_items(ai_mod.BatchDeleteActionItemsRequest(ids=['locked-1']), uid='user-9')
+
+    assert error.value.status_code == 402
+    assert delete_calls == []
+
+
+def test_batch_delete_preflight_chunks_large_id_lists(monkeypatch):
+    """Lock preflight must be chunked so large Select All batches don't hit
+    Firestore batch-get limits or load unbounded document data in one RPC."""
+    preflight_chunks: list[list[str]] = []
+
+    def fake_get(uid, ids):
+        preflight_chunks.append(list(ids))
+        return []
+
+    monkeypatch.setattr(ai_mod.action_items_db, 'get_action_items_by_ids', fake_get)
+    monkeypatch.setattr(
+        ai_mod.action_items_db,
+        'delete_action_items_batch',
+        lambda uid, ids: ids,
+    )
+    monkeypatch.setattr(ai_mod, 'delete_action_item_vectors_batch', lambda *a, **kw: None)
+    monkeypatch.setattr(ai_mod, 'send_action_items_batch_deletion_message', lambda *a, **kw: None)
+    monkeypatch.setattr(ai_mod, '_wake_task_changes', lambda *a, **kw: None)
+
+    # 1,200 IDs should be split into 3 chunks: 500 + 500 + 200
+    big_ids = [f'task-{i}' for i in range(1200)]
+    result = ai_mod.batch_delete_action_items(ai_mod.BatchDeleteActionItemsRequest(ids=big_ids), uid='user-9')
+
+    assert len(preflight_chunks) == 3
+    assert len(preflight_chunks[0]) == 500
+    assert len(preflight_chunks[1]) == 500
+    assert len(preflight_chunks[2]) == 200
+    assert result['deleted_count'] == 1200

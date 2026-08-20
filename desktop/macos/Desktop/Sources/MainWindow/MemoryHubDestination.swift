@@ -10,11 +10,14 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
   ///
   /// `allCases` is *not* this order — its raw values are storage identity and start at `memories`,
   /// which is where the persisted default lands, not where the row should start.
-  static let switcherOrder: [MemoryHubDestination] = [.conversations, .memories, .brainMap]
+  static let switcherOrder: [MemoryHubDestination] = [.activity, .conversations, .memories, .brainMap]
 
   case memories
   case conversations
   case brainMap
+  /// The chronological spine that used to be Home's landing surface — everything captured, in the
+  /// order it happened. Home now lands in the chat; the timeline lives here.
+  case activity
 
   enum Presentation: Equatable {
     case standaloneConversations
@@ -28,6 +31,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "Memories"
     case .conversations: return "Conversations"
     case .brainMap: return "Brain Map"
+    case .activity: return "Activity"
     }
   }
 
@@ -36,6 +40,7 @@ enum MemoryHubDestination: Int, CaseIterable, Identifiable {
     case .memories: return "brain.head.profile"
     case .conversations: return "text.bubble"
     case .brainMap: return "point.3.connected.trianglepath.dotted"
+    case .activity: return "clock.arrow.circlepath"
     }
   }
 

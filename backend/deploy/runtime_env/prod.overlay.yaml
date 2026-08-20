@@ -58,12 +58,13 @@ overlay:
         OMI_LLM_GATEWAY_FEATURE_MODE:
           value: gateway
           category: rollout
-        MEMORY_MODE:
-          value: 'off'
-        MEMORY_ENABLED_USERS:
-          value: ''
-        MEMORY_V3_GET_ENABLED:
-          value: 'false'
+        MEMORY_ENABLED:
+          value: 'on'
+        # Canonical graph and /v3/memories first-page cursors fail closed without this HMAC.
+        MEMORY_V3_CURSOR_SECRET:
+          secret:
+            name: prod-omi-backend-secrets
+            key: MEMORY_V3_CURSOR_SECRET
         MCP_OAUTH_CLIENTS_JSON:
           secret:
             name: prod-omi-backend-secrets
@@ -96,7 +97,7 @@ overlay:
           value: parakeet,modulate-velma-2
         STT_SERVICE_MODELS:
           source: literal
-          value: modulate-velma-2,dg-nova-3,parakeet
+          value: dg-nova-3,modulate-velma-2,parakeet
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -192,12 +193,12 @@ overlay:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
+          # `/v1/knowledge-graph` and signed memory cursors fail closed until this binding is present.
+          MEMORY_V3_CURSOR_SECRET_VERSION:
+            value: prod-v1
+            category: memory_rollout
           MCP_OAUTH_CLAUDE_CLIENT_ID:
             env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
             category: oauth_metadata
@@ -208,6 +209,9 @@ overlay:
             env_var: MCP_OAUTH_CLAUDE_REDIRECT_URIS
             category: oauth_metadata
         secrets:
+          MEMORY_V3_CURSOR_SECRET:
+            secret: MEMORY_V3_CURSOR_SECRET
+            version: latest
           DESKTOP_PREVIEW_PUBLISH_KEY:
             secret: DESKTOP_PREVIEW_PUBLISH_KEY
             version: latest
@@ -268,12 +272,8 @@ overlay:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
       backend-sync-backfill:
         env:
           LISTEN_FINALIZATION_DISPATCH_MODE:
@@ -325,12 +325,8 @@ overlay:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
       backend-integration:
         env:
           ACCOUNT_DELETION_DISPATCH_MODE:
@@ -364,18 +360,20 @@ overlay:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
     jobs:
       notifications-job:
+        flags:
+          --task-timeout: 3600s
         env:
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:
+        flags:
+          --task-timeout: 3600s
         env:
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
@@ -383,15 +381,15 @@ overlay:
           OMI_LLM_GATEWAY_FEATURE_MODE:
             value: gateway
             category: rollout
-          MEMORY_MODE:
-            value: 'off'
-          MEMORY_ENABLED_USERS:
-            value: ''
-          MEMORY_V3_GET_ENABLED:
-            value: 'false'
+          MEMORY_ENABLED:
+            value: 'on'
           MEMORY_CANONICAL_MAINTENANCE_ENABLED:
-            value: 'false'
+            value: 'true'
+          MEMORY_CANONICAL_MAINTENANCE_FLEX:
+            value: 'true'
           MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED:
             value: 'false'
+          OMI_BACKGROUND_FLEX_CAPABLE:
+            value: 'true'
           PINECONE_INDEX_NAME:
             value: memories-backend

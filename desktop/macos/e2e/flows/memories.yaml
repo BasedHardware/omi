@@ -1,7 +1,7 @@
 version: 2
 name: memories
 tier: manual
-description: Memory menu — navigate full-width Memories, Conversations, and Brain Map destinations
+description: Memory menu — navigate full-width Activity, Memories, Conversations, and Brain Map destinations
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
@@ -10,6 +10,9 @@ covers:
   # resolves the Brain Map cohort S5 lands on. Extracted from `DesktopHomeView` — these steps walked
   # it before it had its own file.
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  # The Activity destination: the chronological spine that was Home's landing surface, first in the
+  # switcher row, with its own search bar and filter chips.
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
@@ -29,6 +32,9 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasGeometry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSnapshotCache.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasPlayback.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasZoomPolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasSurfacePresentation.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
@@ -89,7 +95,7 @@ steps:
     # The hub resolves which of the two Brain Map surfaces this account gets, and must mount neither
     # until it knows: a one-frame appearance of the legacy graph latches the shared view model and
     # leaves the atlas permanently blank. Watch for the placeholder, not just the end state.
-    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_cohort), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
+    do: "Choose Brain Map in the hub's switcher. Verify that while the cohort is still resolving the page shows only a spinner (accessibility identifier brain_map_resolving_capability), and that exactly one surface then appears: an interactive node graph showing connected entities, or the canonical atlas."
     expect:
       text_visible:
         - Brain Map
@@ -169,7 +175,7 @@ steps:
 
   - id: S13
     name: Escape backs out one layer per press
-    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
+    do: "Press Escape three times with the main window key (not the floating bar). First clears the selection, resets the camera to the whole map, and leaves the island drawn; second leaves the neighbourhood and brings every other coastline back without moving the camera; third closes the Brain Map page back to Memories."
     expect:
       text_visible:
         - Memories

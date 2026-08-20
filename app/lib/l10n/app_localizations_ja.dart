@@ -320,7 +320,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchApps => 'アプリを検索...';
 
   @override
-  String get myApps => 'マイアプリ';
+  String get myApps => '自分で作成';
 
   @override
   String get installedApps => 'インストール済みアプリ';
@@ -9674,4 +9674,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'ストアを開く';
+
+  @override
+  String get sendRawAudioToOmi => '未処理の音声を Omi に送信';
+
+  @override
+  String get sendRawAudioToOmiDescription => 'オフにすると、未処理の音声は Omi に送信されません。文字起こしとクラウド機能に必要なデータは、引き続き Omi に送信される場合があります。';
+
+  @override
+  String get findDevice => '探す';
+
+  @override
+  String get diagnosticsShareFailed => '診断情報を共有できませんでした。もう一度お試しください。';
 }

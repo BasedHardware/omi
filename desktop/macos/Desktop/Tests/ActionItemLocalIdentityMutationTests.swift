@@ -57,10 +57,29 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
     XCTAssertTrue(surfacedId.hasPrefix("local_"), "unsynced row must surface a local_ id")
 
     try await ActionItemStorage.shared.deleteActionItemByBackendId(
-      surfacedId, deletedBy: "user", authorization: .unrestricted)
+      surfacedId, authorization: .unrestricted)
 
     let after = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: surfacedId)
     XCTAssertNil(after, "delete by surfaced local_ id must remove the SQLite row, not no-op")
+  }
+
+  func testBatchDeleteRemovesEverySurfacedLocalIdInOneOperation() async throws {
+    let first = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(description: "first selected task", source: "test"),
+      authorization: .unrestricted)
+    let second = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(description: "second selected task", source: "test"),
+      authorization: .unrestricted)
+    let selectedIDs = [first.toTaskActionItem().id, second.toTaskActionItem().id]
+
+    try await ActionItemStorage.shared.deleteActionItemsByBackendIds(
+      selectedIDs,
+      authorization: .unrestricted)
+
+    for selectedID in selectedIDs {
+      let remaining = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: selectedID)
+      XCTAssertNil(remaining, "batch delete must remove every selected local task")
+    }
   }
 
   func testToggleCompletionResolvesLocalSurfacedId() async throws {
@@ -111,7 +130,7 @@ final class ActionItemLocalIdentityMutationTests: XCTestCase {
 
     // Delete removes the local row (deleteTask hard-deletes for a local_ id).
     try await ActionItemStorage.shared.deleteActionItemByBackendId(
-      surfacedId, deletedBy: "user", authorization: .unrestricted)
+      surfacedId, authorization: .unrestricted)
 
     // Restore via the store's local-only restore record. localOnlyRestoreRecord
     // is a @MainActor static, so the call hops to the main actor (await).

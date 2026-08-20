@@ -179,6 +179,39 @@ enum FloatingControlBarGeometry {
     )
   }
 
+  /// Whether the notch window may treat its ENTIRE fixed frame as clickable. Only content that
+  /// visibly fills the window earns that: an expanded AI response panel or a notification card.
+  /// A conversation that is merely open (ask input, "thinking" shimmer) must keep the
+  /// content-derived hit region, or the oversized fixed window becomes an invisible click sink
+  /// over whatever sits beneath it — the bug where the main window's Tasks/Rewind/Apps pills went
+  /// dead whenever the bar was "thinking".
+  static func notchWholeWindowHitsAllowed(
+    showingAIConversation: Bool,
+    showingAIResponse: Bool,
+    hasNotification: Bool
+  ) -> Bool {
+    if hasNotification { return true }
+    return showingAIConversation && showingAIResponse
+  }
+
+  /// Hit region for surface-filling content states (expanded response panel,
+  /// notification card). The window frame still carries transparent glow
+  /// outsets beside and below the visible surface; content owns exactly the
+  /// surface, so the glow ring keeps passing clicks through to other apps.
+  static func notchSurfaceContentContainsLocal(
+    localPoint: NSPoint,
+    windowSize: NSSize,
+    bottomOutset: CGFloat,
+    horizontalOutset: CGFloat
+  ) -> Bool {
+    notchChromeActivationContainsLocal(
+      localPoint: localPoint,
+      windowSize: windowSize,
+      chromeHeight: max(0, windowSize.height - bottomOutset),
+      horizontalOutset: horizontalOutset
+    )
+  }
+
   static func notchChromeActivationContainsLocal(
     localPoint: NSPoint,
     windowSize: NSSize,

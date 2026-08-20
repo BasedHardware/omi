@@ -60,9 +60,14 @@ dependencies:
   collection: ^1.19.1
   http: ^1.4.0
   pdf: ^3.11.0
-  intl: 0.20.2
+  intl: ^0.20.2
   permission_handler: ^12.0.0+1
-  flutter_contacts: ^1.1.9+2
+  # Must stay >=2.0.0 — 1.x's iOS registration force-unwraps
+  # UIApplication.shared.delegate!.window!!.rootViewController!, which is nil under the
+  # UIScene lifecycle and crashes on launch (EXC_BREAKPOINT), taking every alphabetically
+  # later plugin down with it since GeneratedPluginRegistrant registers synchronously.
+  # 2.x's rewritten registration doesn't touch window at all. See #11568.
+  flutter_contacts: ^2.3.1
   intl_country_data:
     git:
       url: https://github.com/mdmohsin7/intl_country_data.git
@@ -79,14 +84,14 @@ dependencies:
   uuid: ^4.4.0
   tuple: ^2.0.2
   googleapis_auth: 2.0.0
-  envied: 1.1.1
+  envied: 1.3.8
   awesome_notifications_core: ^0.9.3
   awesome_notifications: any
   nordic_dfu: ^6.1.4+hotfix
   mcumgr_flutter: ^0.4.2
   flutter_archive: ^6.0.3
-  json_annotation: ^4.9.0
-  json_serializable: ^6.9.5
+  json_annotation: ^4.12.0
+  json_serializable: ^6.14.1
   package_info_plus: ^8.0.1
   device_info_plus: ^11.5.0
   path_provider: 2.1.5
@@ -160,10 +165,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   fake_async: ^1.3.3
-  envied_generator: 1.1.1
-  build_runner: ^2.4.15
+  envied_generator: 1.3.8
+  build_runner: ^2.15.1
   flutter_flavorizr: ^2.2.3
-  flutter_gen_runner: 5.10.0
+  flutter_gen_runner: 5.15.0
   pigeon: ^26.0.1
 
 flutter_launcher_icons:
@@ -175,6 +180,14 @@ flutter_launcher_icons:
   image_path: "assets/images/app_launcher_icon.png"
 
 flutter:
+  # Flutter 3.44 turned Swift Package Manager on by default for iOS/macOS.
+  # firebase_crashlytics 4.3.2 is built against firebase_core 3.11.0 while
+  # firebase_messaging 15.2.5 is built against 3.13.0, so SPM cannot resolve a
+  # single `flutterfire` package version and every iOS archive fails. CocoaPods
+  # tolerates the skew. Re-enable once the Firebase plugin versions are aligned;
+  # Flutter will eventually stop honouring this. https://github.com/BasedHardware/omi/issues/11676
+  config:
+    enable-swift-package-manager: false
   generate: true
   uses-material-design: true
   assets:

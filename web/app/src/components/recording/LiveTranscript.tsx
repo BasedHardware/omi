@@ -15,7 +15,7 @@ interface LiveTranscriptProps {
 
 // Colors for different speakers - subtle badge styles
 const speakerColors = [
-  { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20' },
+  { bg: 'bg-white/[0.08]', text: 'text-text-secondary', border: 'border-white/20' },
   { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20' },
   { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
   { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20' },
@@ -86,16 +86,16 @@ export function LiveTranscript({
                           'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border',
                           colors.bg,
                           colors.text,
-                          colors.border
+                          colors.border,
                         )}
                       >
-                        {segment.isUser ? (
-                          <User className="w-3 h-3" />
-                        ) : null}
+                        {segment.isUser ? <User className="w-3 h-3" /> : null}
                         {getSpeakerLabel(segment.isUser, segment.speaker)}
                       </span>
                     </div>
-                    <p className="text-sm text-text-primary leading-relaxed pl-0.5">{segment.text}</p>
+                    <p className="text-sm text-text-primary leading-relaxed pl-0.5">
+                      {segment.text}
+                    </p>
                   </div>
                 </motion.div>
               );
@@ -148,7 +148,7 @@ export function LiveTranscriptCompact({
                   'flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border',
                   colors.bg,
                   colors.text,
-                  colors.border
+                  colors.border,
                 )}
               >
                 {segment.isUser ? 'You' : `S${segment.speaker + 1}`}

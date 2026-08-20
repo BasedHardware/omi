@@ -11,16 +11,34 @@ from openai.types.chat import (
     ChatCompletionContentPartParam,
     ChatCompletionMessageParam,
 )
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
 from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.llm.gateway_client import should_route_features_through_gateway
+from utils.llm.gateway_observability import record_direct_exception_surface
 import logging
 
 logger = logging.getLogger(__name__)
+
+_FILE_SEARCH_ASSISTANT_MODEL = "gpt-4.1"
+
+
+class UnsupportedChatFileError(Exception):
+    """A chat attachment this pipeline cannot process.
+
+    The upload routes own the client contract: a file type we cannot handle is bad request
+    input, not a server fault. Without this, PIL (an iPhone .heic photo has no decoder) and
+    OpenAI Files (an .ogg voice note is not an accepted extension) escape as 500s.
+    """
+
+
+def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChatFileError:
+    suffix = Path(file_path).suffix.lstrip('.').lower()
+    label = f"'{suffix}' files are" if suffix else "this file type is"
+    return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
 def _safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
@@ -67,8 +85,17 @@ def _get_async_openai() -> AsyncOpenAI:
     return _async_openai
 
 
-def _assert_direct_file_chat_allowed() -> None:
-    raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files_assistants_vision')
+def _record_direct_file_chat_surface() -> None:
+    """File chat has no gateway lane (OpenAI Files/Assistants/vision), so under gateway
+    feature mode it stays an acknowledged direct surface: counted, never blocked.
+    A misconfigured gateway rollout (should_route_features_through_gateway raising) must
+    not block it either."""
+    try:
+        routed = should_route_features_through_gateway()
+    except RuntimeError:
+        routed = True
+    if routed:
+        record_direct_exception_surface(surface='file_chat.openai_files_assistants_vision')
 
 
 class _StreamingCallbackProtocol:
@@ -140,18 +167,26 @@ class FileChatTool:
 
     @staticmethod
     def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
-        _assert_direct_file_chat_allowed()
+        _record_direct_file_chat_surface()
         result: Dict[str, Any] = {}
         file = File(file_path)
         file.get_mime_type()
 
         if file.is_image():
-            file.generate_thumbnail()
+            try:
+                file.generate_thumbnail()
+            except UnidentifiedImageError as error:
+                # An image mime type Pillow has no decoder for (.heic from an iPhone camera roll).
+                raise _unsupported_chat_file_error(file_path) from error
             file.purpose = "vision"
 
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
-            response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+            try:
+                response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+            except openai.BadRequestError as error:
+                # The provider rejects the extension (audio/video, archives it does not index).
+                raise _unsupported_chat_file_error(file_path) from error
             if response:
                 file.file_id = response.id
                 file.file_name = response.filename
@@ -166,7 +201,7 @@ class FileChatTool:
 
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments"""
-        _assert_direct_file_chat_allowed()
+        _record_direct_file_chat_surface()
         self._ensure_thread_and_assistant()
         answer = self.ask(self.uid, question, file_ids, self.thread_id, self.assistant_id)
         return answer
@@ -178,7 +213,7 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """Process chat with file attachments (streaming)"""
-        _assert_direct_file_chat_allowed()
+        _record_direct_file_chat_surface()
         # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
         # If this pre-stream setup fails, signal the streaming callback's end before propagating
         # (mirrors the _ensure_thread_and_assistant failure path below) so it is not left dangling.
@@ -247,7 +282,9 @@ class FileChatTool:
                 model="gpt-5.6-luna",
                 messages=messages,
                 stream=True,
-                max_tokens=2048,
+                # Luna uses the current Chat Completions output-budget field.
+                # `max_tokens` is rejected by the provider with HTTP 400.
+                max_completion_tokens=2048,
             )
             async for chunk in stream:
                 delta = chunk.choices[0].delta if chunk.choices else None
@@ -297,7 +334,9 @@ class FileChatTool:
                 assistant = openai.beta.assistants.create(  # type: ignore[reportDeprecated]  # Assistants API still in use
                     name="File Reader",
                     instructions="You are a helpful assistant that answers questions about the provided file. Use the file_search tool to search the file contents when needed.",
-                    model="gpt-5.6-luna",
+                    # Luna supports vision Chat Completions but not the
+                    # Assistants API. Keep file search on an Assistants model.
+                    model=_FILE_SEARCH_ASSISTANT_MODEL,
                     tools=[{"type": "file_search"}],
                     timeout=timeout,
                 )

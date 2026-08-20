@@ -101,7 +101,7 @@
     "createYourOwnApp": "Maak je eigen app",
     "buildAndShareApp": "Bouw en deel je aangepaste app",
     "searchApps": "Apps zoeken...",
-    "myApps": "Mijn apps",
+    "myApps": "Door mij gemaakt",
     "installedApps": "Geïnstalleerde apps",
     "unableToFetchApps": "Kan apps niet ophalen :(\n\nControleer je internetverbinding en probeer het opnieuw.",
     "aboutOmi": "Over Omi",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Migratie bezig",
     "accountCutoverMigrationInProgressMessage": "Je account wordt gemigreerd. Productfuncties zijn gepauzeerd tot de migratie klaar is.",
     "accountCutoverMigrationRollbackMessage": "Je account is in onderhoud na een migratie-rollback. Nieuwere data kan geïsoleerd zijn.",
-    "accountCutoverOpenStore": "Store openen"
+    "accountCutoverOpenStore": "Store openen",
+    "sendRawAudioToOmi": "Onbewerkte audio naar Omi sturen",
+    "sendRawAudioToOmiDescription": "Schakel uit om te voorkomen dat onbewerkte audio naar Omi wordt gestuurd. Transcripties en gegevens die cloudfuncties nodig hebben, kunnen nog steeds naar Omi worden gestuurd.",
+    "findDevice": "Zoeken",
+    "diagnosticsShareFailed": "Kon de diagnostiek niet delen. Probeer het opnieuw."
 }

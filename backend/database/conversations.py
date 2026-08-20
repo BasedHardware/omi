@@ -12,7 +12,6 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from database import users as users_db
 from models.audio_file import AudioFile
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -739,7 +738,13 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         offset += batch_size
 
 
-def update_conversation(uid: str, conversation_id: str, update_data: dict):
+def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bool:
+    """Apply ``update_data`` to a conversation.
+
+    Returns False when the conversation no longer exists, so callers that keep
+    producing work for it (e.g. the pusher's private-cloud audio sync) can stop
+    instead of writing into a deleted owner.
+    """
     lifecycle_fields = _LIFECYCLE_FIELDS.intersection(update_data)
     if lifecycle_fields:
         raise ValueError(
@@ -749,11 +754,12 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
-        return
+        return False
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
+    return True
 
 
 def try_claim_conversation_memory_analytics(uid: str, conversation_id: str, firestore_client: Any = None) -> bool:

@@ -101,7 +101,7 @@
     "createYourOwnApp": "अपना खुद का ऐप बनाएं",
     "buildAndShareApp": "अपना खुद का ऐप बनाएं और साझा करें",
     "searchApps": "ऐप्स खोजें...",
-    "myApps": "मेरे ऐप्स",
+    "myApps": "मेरे द्वारा बनाया गया",
     "installedApps": "इंस्टॉल किए गए ऐप्स",
     "unableToFetchApps": "ऐप्स लोड करने में असमर्थ :(\n\nकृपया अपना इंटरनेट कनेक्शन जांचें।",
     "aboutOmi": "Omi के बारे में",
@@ -3215,5 +3215,9 @@
     "accountCutoverMigrationInProgressTitle": "माइग्रेशन जारी है",
     "accountCutoverMigrationInProgressMessage": "आपका खाता माइग्रेट हो रहा है। माइग्रेशन पूरा होने तक उत्पाद सुविधाएँ रुकी रहेंगी।",
     "accountCutoverMigrationRollbackMessage": "माइग्रेशन रोलबैक के बाद आपका खाता रखरखाव में है। कुछ नए डेटा अलग रह सकते हैं।",
-    "accountCutoverOpenStore": "स्टोर खोलें"
+    "accountCutoverOpenStore": "स्टोर खोलें",
+    "sendRawAudioToOmi": "Omi को कच्चा ऑडियो भेजें",
+    "sendRawAudioToOmiDescription": "Omi को कच्चा ऑडियो भेजे जाने से रोकने के लिए इसे बंद करें। ट्रांसक्रिप्ट और क्लाउड सुविधाओं के लिए आवश्यक डेटा अभी भी Omi को भेजा जा सकता है।",
+    "findDevice": "ढूँढें",
+    "diagnosticsShareFailed": "डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।"
 }

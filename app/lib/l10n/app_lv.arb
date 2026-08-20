@@ -101,7 +101,7 @@
     "createYourOwnApp": "Izveidojiet savu lietotni",
     "buildAndShareApp": "Izveidojiet un kopīgojiet savu pielāgoto lietotni",
     "searchApps": "Meklēt lietotnes...",
-    "myApps": "Manas lietotnes",
+    "myApps": "Man radīts",
     "installedApps": "Instalētās lietotnes",
     "unableToFetchApps": "Nevar ielādēt lietotnes :(\n\nLūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
     "aboutOmi": "Par Omi",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Trwa migracja",
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
-    "accountCutoverOpenStore": "Otwórz sklep"
+    "accountCutoverOpenStore": "Otwórz sklep",
+    "sendRawAudioToOmi": "Sūtīt neapstrādātu audio uz Omi",
+    "sendRawAudioToOmiDescription": "Izslēdziet, lai neapstrādāts audio netiktu sūtīts uz Omi. Transkripcijas un mākoņfunkcijām nepieciešamie dati joprojām var tikt sūtīti uz Omi.",
+    "findDevice": "Atrast",
+    "diagnosticsShareFailed": "Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz."
 }

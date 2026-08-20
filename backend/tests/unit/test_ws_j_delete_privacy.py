@@ -62,7 +62,7 @@ def _install_heavy_import_stubs():
 
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
-from models.memories import MemoryCategory
+from models.memories import Memory, MemoryCategory, MemoryDB
 from models.memory_apply import MemoryControlState
 from models.memory_review import build_memory_review_conflict
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryTier, ProcessingState
@@ -81,8 +81,10 @@ from utils.memory.canonical_memory_adapter import (
     update_canonical_memory_product_fields,
     update_canonical_memory_visibility,
     write_canonical_extraction_memory,
+    write_canonical_external_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.required_promotion import required_processing_payload
 
 
 def _refresh_canonical_memory_adapter_runtime() -> None:
@@ -101,16 +103,17 @@ def _refresh_canonical_memory_adapter_runtime() -> None:
             "update_canonical_memory_product_fields": canonical_adapter.update_canonical_memory_product_fields,
             "update_canonical_memory_visibility": canonical_adapter.update_canonical_memory_visibility,
             "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+            "write_canonical_external_memory": canonical_adapter.write_canonical_external_memory,
         }
     )
 
 
 @pytest.fixture(autouse=True)
-def _clear_canonical_env(monkeypatch):
-    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+def _reset_universal_memory_env(monkeypatch):
+    from tests.unit.universal_memory_test_helpers import reset_universal_memory_fixture
 
     _refresh_canonical_memory_adapter_runtime()
-    clear_canonical_cohort(monkeypatch)
+    reset_universal_memory_fixture(monkeypatch)
 
 
 @pytest.fixture(autouse=True)
@@ -123,7 +126,7 @@ LEGACY_UID = "uid-legacy-ws-j"
 
 
 def _legacy_db_with_control(uid: str = LEGACY_UID) -> "_FakeDb":
-    """Default memory_control/state with no ``memory_system=canonical`` — real resolver → LEGACY."""
+    """Universal apply-control fixture used alongside historical-format rows."""
     return _FakeDb(
         {
             f"users/{uid}/memory_state/apply_control": MemoryControlState(
@@ -216,15 +219,22 @@ class _DocRef:
     def update(self, data):
         self._db.docs[self.path].update(data)
 
+    def collection(self, name):
+        return _CollectionRef(self._db, f"{self.path}/{name}")
+
 
 class _CollectionRef:
-    def __init__(self, db, path, *, filters=(), order_fields=(), limit_count=None, cursor=None):
+    def __init__(self, db, path, *, filters=(), order_fields=(), limit_count=None, offset_count=0, cursor=None):
         self._db = db
         self.path = path
         self._filters = tuple(filters)
         self._order_fields = tuple(order_fields)
         self._limit_count = limit_count
+        self._offset_count = offset_count
         self._cursor = cursor
+
+    def document(self, doc_id):
+        return _DocRef(self._db, f"{self.path}/{doc_id}")
 
     def where(self, field_path=None, op_string=None, value=None, *, filter=None):
         if filter is not None:
@@ -237,16 +247,18 @@ class _CollectionRef:
             filters=(*self._filters, (field_path, op_string, value)),
             order_fields=self._order_fields,
             limit_count=self._limit_count,
+            offset_count=self._offset_count,
             cursor=self._cursor,
         )
 
-    def order_by(self, field_path):
+    def order_by(self, field_path, direction=None):
         return _CollectionRef(
             self._db,
             self.path,
             filters=self._filters,
             order_fields=(*self._order_fields, field_path),
             limit_count=self._limit_count,
+            offset_count=self._offset_count,
             cursor=self._cursor,
         )
 
@@ -257,6 +269,18 @@ class _CollectionRef:
             filters=self._filters,
             order_fields=self._order_fields,
             limit_count=limit_count,
+            offset_count=self._offset_count,
+            cursor=self._cursor,
+        )
+
+    def offset(self, offset_count):
+        return _CollectionRef(
+            self._db,
+            self.path,
+            filters=self._filters,
+            order_fields=self._order_fields,
+            limit_count=self._limit_count,
+            offset_count=offset_count,
             cursor=self._cursor,
         )
 
@@ -267,6 +291,7 @@ class _CollectionRef:
             filters=self._filters,
             order_fields=self._order_fields,
             limit_count=self._limit_count,
+            offset_count=self._offset_count,
             cursor=snapshot,
         )
 
@@ -285,6 +310,8 @@ class _CollectionRef:
             cursor_data = self._cursor.to_dict() or {}
             cursor_key = self._sort_key(cursor_data, self._cursor.id)
             rows = [row for row in rows if row[0] > cursor_key]
+        if self._offset_count:
+            rows = rows[self._offset_count :]
         if self._limit_count is not None:
             rows = rows[: self._limit_count]
         return [
@@ -444,15 +471,10 @@ def test_canonical_account_delete_purge_emits_user_scoped_vector_outbox(monkeypa
     conversation_id = "conv-acct"
     content = "Canonical fact for account delete"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
-    _mark_account_deletion_fenced(canonical_db, uid)
 
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
-    )
-    monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.resolve_memory_system",
-        lambda uid, **_: MemorySystem.CANONICAL,
     )
 
     canonical_delete_calls = []
@@ -473,6 +495,7 @@ def test_canonical_account_delete_purge_emits_user_scoped_vector_outbox(monkeypa
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    _mark_account_deletion_fenced(canonical_db, uid)
     memory_id = payload["id"]
     item_path = f"users/{uid}/memory_items/{memory_id}"
     assert canonical_db.docs[item_path]["status"] == MemoryItemStatus.active.value
@@ -500,15 +523,10 @@ def test_canonical_account_delete_purge_raises_when_provider_is_unavailable(monk
     conversation_id = "conv-acct-partial"
     content = "Canonical fact for partial account delete"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
-    _mark_account_deletion_fenced(canonical_db, uid)
 
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
-    )
-    monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.resolve_memory_system",
-        lambda uid, **_: MemorySystem.CANONICAL,
     )
     monkeypatch.setattr(
         "database.vector_db.delete_canonical_memory_vectors",
@@ -517,6 +535,7 @@ def test_canonical_account_delete_purge_raises_when_provider_is_unavailable(monk
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    _mark_account_deletion_fenced(canonical_db, uid)
 
     with pytest.raises(RuntimeError, match="canonical vector purge could not reach the provider"):
         purge_canonical_derived_user_data(uid, db_client=canonical_db)
@@ -545,7 +564,7 @@ def test_canonical_account_delete_purge_waits_for_projection_lease(monkeypatch, 
 def test_account_delete_purges_user_scoped_rows_even_without_canonical_items(monkeypatch):
     db = _legacy_db_with_control()
     _mark_account_deletion_fenced(db, LEGACY_UID)
-    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.CANONICAL
 
     delete_canonical = MagicMock(return_value=True)
     monkeypatch.setattr(
@@ -577,11 +596,11 @@ def test_account_delete_purges_user_scoped_rows_even_without_canonical_items(mon
     assert not _canonical_doc_paths(db, LEGACY_UID)
 
 
-def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch):
-    """Canonical provider purge is inert for a real legacy uid; the legacy batch path stays separate."""
+def test_universal_purge_keeps_historical_provider_batch_cleanup_separate(monkeypatch):
+    """Universal provider purge and historical vector cleanup remain separate idempotent steps."""
     db = _legacy_db_with_control()
     _mark_account_deletion_fenced(db, LEGACY_UID)
-    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
+    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.CANONICAL
 
     delete_canonical = MagicMock(return_value=True)
     legacy_batch = MagicMock()
@@ -616,16 +635,19 @@ def test_legacy_purge_derived_user_data_still_purges_legacy_vectors(monkeypatch)
     legacy_batch.assert_called_once_with(LEGACY_UID, ["legacy-m1"])
 
 
-def test_memory_service_retract_conversation_memories_is_noop_for_legacy():
+def test_memory_service_retract_records_empty_source_replacement():
     db = _legacy_db_with_control()
-    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY
-    before = set(db.docs.keys())
+    assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.CANONICAL
+    service = MemoryService(db_client=db)
+    service.history.iter_all_live = MagicMock(return_value=iter(()))
+    result = service.retract_conversation_memories(LEGACY_UID, "conv-x")
 
-    result = MemoryService(db_client=db).retract_conversation_memories(LEGACY_UID, "conv-x")
-
-    assert result is None
-    assert set(db.docs.keys()) == before
-    assert not _canonical_doc_paths(db, LEGACY_UID)
+    assert result["retracted_memory_ids"] == []
+    assert result["committed_memory_ids"] == []
+    assert result["source_generation"] == 2
+    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
+    assert any(path.startswith(f"users/{LEGACY_UID}/memory_operations/") for path in db.docs)
+    assert any(path.startswith(f"users/{LEGACY_UID}/memory_outbox/") for path in db.docs)
 
 
 def test_conversation_delete_cascade_tombstones_canonical_and_emits_durable_deletes(monkeypatch, canonical_db):
@@ -769,31 +791,6 @@ def test_conversation_delete_cascade_deletes_canonical_vector_immediately(monkey
     assert deleted_vectors == [(uid, memory_id)]
 
 
-def test_delete_canonical_memory_removes_v3_compatibility_projection_immediately(monkeypatch, canonical_db):
-    from database.memory_collections import MemoryCollections
-
-    uid = "uid-canonical-ws-j"
-    payload = _sample_memory_payload(
-        uid=uid,
-        conversation_id="conv-delete-v3-projection",
-        content="Private compatibility projection fact",
-    )
-    memory_id = payload["id"]
-
-    monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
-        lambda **_: _trusted_account_generation(),
-    )
-
-    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
-    projection_path = f"{MemoryCollections(uid=uid).v3_compatibility_projection_items}/{memory_id}"
-    canonical_db.docs[projection_path] = {"uid": uid, "memory_id": memory_id}
-
-    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
-
-    assert projection_path not in canonical_db.docs
-
-
 def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     uid = "uid-canonical-ws-j"
     conversation_id = "conv-kg"
@@ -845,6 +842,79 @@ def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonic
     assert deleted_vectors == [(uid, memory_id)]
     tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+
+
+def _external_memory_payload(uid: str, content: str) -> dict:
+    """The payload POST /v3/memories submits for a manually typed memory."""
+    memory_db = MemoryDB.from_memory(
+        Memory(content=content, category=MemoryCategory.manual),
+        uid,
+        None,
+        True,
+        source_type="manual",
+        source_signal="manual",
+        extractor_id="manual_memory_submission",
+    )
+    return required_processing_payload(memory_db.model_dump(mode="python"), source_surface="v3_manual")
+
+
+def _tombstoned_evidence_paths(db: "_FakeDb", uid: str) -> list[str]:
+    prefix = f"users/{uid}/memory_evidence/"
+    return [
+        path for path, data in db.docs.items() if path.startswith(prefix) and data.get("source_state") == "tombstoned"
+    ]
+
+
+def _stub_delete_side_effects(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.delete_canonical_memory_vector",
+        lambda *args, **kwargs: None,
+    )
+
+
+def test_readding_a_deleted_manual_memory_lands_on_a_fresh_evidence_identity(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    content = "I drink oat milk"
+    _stub_delete_side_effects(monkeypatch)
+
+    first_id = write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
+    delete_canonical_memory(uid, first_id, db_client=canonical_db)
+    retired_evidence = _tombstoned_evidence_paths(canonical_db, uid)
+    assert retired_evidence
+
+    write_canonical_external_memory(uid, _external_memory_payload(uid, content), db_client=canonical_db)
+
+    live = read_canonical_memories(uid, db_client=canonical_db, include_pending_processing=True)
+    assert content in [memory.content for memory in live]
+    # The deleted submission's evidence identity stays retired: the re-add is a
+    # new source artifact, not a resurrection of the deleted one.
+    assert all(canonical_db.docs[path]["source_state"] == "tombstoned" for path in retired_evidence)
+
+
+def test_conversation_sourced_evidence_is_never_reissued_after_delete(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-deleted-source"
+    content = "Deleted conversation fact"
+    _stub_delete_side_effects(monkeypatch)
+
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
+
+    resubmitted = required_processing_payload(
+        _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content),
+        source_surface="v3_api",
+    )
+    with pytest.raises(RuntimeError, match="source_not_active"):
+        write_canonical_external_memory(uid, resubmitted, db_client=canonical_db)
 
 
 def test_delete_canonical_survivor_tombstones_active_alias_lineage(monkeypatch, canonical_db):
@@ -1048,10 +1118,6 @@ def test_delete_remains_durable_when_every_immediate_projection_cleanup_fails(mo
     monkeypatch.setattr("utils.memory.canonical_memory_adapter.delete_canonical_memory_vector", fail)
     monkeypatch.setattr("utils.memory.atom_keyword_index.delete_atom_keyword_doc", fail)
     monkeypatch.setattr(
-        "utils.memory.v3.compatibility_projection_sync.delete_v3_compatibility_projection_item",
-        fail,
-    )
-    monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.purge_stale_review_conflicts_for_memories",
         fail,
     )
@@ -1201,9 +1267,6 @@ def test_update_canonical_content_invalidates_kg_and_returns_to_pending(monkeypa
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
-    )
-    monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.resolve_memory_system", lambda *_, **__: MemorySystem.CANONICAL
     )
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction", lambda *_, **__: None
@@ -1671,20 +1734,6 @@ def test_conversation_delete_cascade_default_is_false():
     source = CONVERSATIONS_ROUTER_PATH.read_text(encoding="utf-8")
     assert re.search(r"cascade:\s*bool\s*=\s*Query\(False\)", source)
     assert "Q8-gated" in source
-
-
-def test_conversation_delete_cascade_branches_memory_delete_by_cohort():
-    """Cascade delete must branch legacy delete vs canonical retract."""
-    source = CONVERSATIONS_ROUTER_PATH.read_text(encoding="utf-8")
-    cascade_start = source.index("if cascade:")
-    cascade_block = source[cascade_start : source.index("return {\"status\": \"Ok\"}", cascade_start)]
-    assert "memory_system = pin_memory_system(uid" in cascade_block
-    assert "memory_system == MemorySystem.CANONICAL" in cascade_block
-    assert ".retract_conversation_memories(uid, conversation_id)" in cascade_block
-    assert "memories_db.delete_memories_for_conversation(uid, conversation_id)" in cascade_block
-    canonical_branch_start = cascade_block.index("memory_system == MemorySystem.CANONICAL")
-    legacy_delete_idx = cascade_block.index("memories_db.delete_memories_for_conversation")
-    assert legacy_delete_idx > canonical_branch_start
 
 
 def test_purge_derived_user_data_wires_canonical_purge_helper():

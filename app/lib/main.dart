@@ -36,6 +36,8 @@ import 'package:omi/env/prod_env.dart';
 import 'package:omi/firebase_options_local.dart' as local;
 import 'package:omi/firebase_options_prod.dart' as prod;
 import 'package:omi/flavors.dart';
+import 'package:omi/startup_auth.dart';
+import 'package:omi/startup_failure_app.dart';
 import 'package:omi/startup_routing.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -154,10 +156,7 @@ Future _init() async {
   }
 
   if (Env.profile.usesFirebaseAuthEmulator) {
-    await FirebaseAuth.instance.useAuthEmulator(
-      Env.firebaseAuthEmulatorHost,
-      Env.firebaseAuthEmulatorPort,
-    );
+    await FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort);
   }
 
   await PlatformManager.initializeServices();
@@ -177,7 +176,7 @@ Future _init() async {
     Env.isTestFlight = await EnvironmentDetector.isTestFlight();
   }
 
-  bool isAuth = (await AuthService.instance.getIdToken()) != null;
+  bool isAuth = await resolveStartupAuth(() => AuthService.instance.getIdToken());
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
@@ -223,16 +222,38 @@ Future _init() async {
 }
 
 void main() {
-  runZonedGuarded(() async {
-    // Ensure
-    if (kDebugMode) {
-      MarionetteBinding.ensureInitialized();
-    } else {
-      WidgetsFlutterBinding.ensureInitialized();
-    }
-    await _init();
-    runApp(const MyApp());
-  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
+  runZonedGuarded(
+    () async {
+      // Ensure
+      if (kDebugMode) {
+        MarionetteBinding.ensureInitialized();
+      } else {
+        WidgetsFlutterBinding.ensureInitialized();
+      }
+      try {
+        await _init();
+      } catch (error, stack) {
+        // Startup failed before the first frame. Without this the launch
+        // storyboard stays on screen forever: runApp() is never reached, and the
+        // zone handler below only calls debugPrint, which goes nowhere in
+        // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
+        // day of investigation for exactly this reason — the app looked hung
+        // when it had in fact thrown a precise, actionable StateError.
+        if (Firebase.apps.isNotEmpty) {
+          FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        }
+        runApp(StartupFailureApp(error: error, stack: stack));
+        return;
+      }
+      runApp(const MyApp());
+    },
+    (error, stack) {
+      debugPrint('Uncaught error: $error\n$stack');
+      if (Firebase.apps.isNotEmpty) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      }
+    },
+  );
 }
 
 class MyApp extends StatefulWidget {
