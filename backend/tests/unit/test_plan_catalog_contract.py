@@ -10,7 +10,6 @@ from config.plan_catalog import (
     PAID_PLAN_IDS,
     PLAN_TYPE_VALUES,
     RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
-    UnresolvedPlanDecision,
     PlanType,
     allocation_limit,
     configured_billing_price_plans,
@@ -133,17 +132,12 @@ def test_configured_price_cannot_be_assigned_to_two_plans():
         )
 
 
-def test_typed_allocations_preserve_open_product_decisions():
-    with pytest.raises(UnresolvedPlanDecision, match='B1'):
-        allocation_limit(PlanType.basic, 'transcription')
-    assert (
-        allocation_limit(
-            PlanType.basic,
-            'transcription',
-            use_legacy_value_for_open_decision=True,
-        )
-        == 0
-    )
+def test_typed_allocations_resolve_owner_policy_without_zero_unlimited_convention():
+    assert allocation_limit(PlanType.basic, 'transcription') == 18_000
+    assert get_plan_allocation(PlanType.basic, 'transcription')['limit'] == {
+        'kind': 'finite',
+        'value': 18_000,
+    }
 
     architect_chat = get_plan_allocation(PlanType.architect, 'chat')
     assert architect_chat['unit'] == 'usd_cent'
@@ -156,6 +150,8 @@ def test_typed_allocations_preserve_open_product_decisions():
     assert not plan_uses_overage(PlanType.basic)
     assert not plan_uses_overage(PlanType.plus)
     assert not plan_uses_overage(PlanType.unlimited_v2)
+    assert get_plan_allocation(PlanType.plus, 'chat')['exhaustion'] == {'kind': 'hard_cap'}
+    assert get_plan_allocation(PlanType.unlimited_v2, 'chat')['exhaustion'] == {'kind': 'hard_cap'}
 
 
 def test_measurement_contract_makes_cost_visibility_explicit():
@@ -163,9 +159,9 @@ def test_measurement_contract_makes_cost_visibility_explicit():
     assert MEASUREMENT_CONTRACTS['transcription']['cost_status'] == 'missing'
 
     errors = validate_publishable_catalog(load_catalog())
-    assert 'publishable: basic.transcription still requires B1' in errors
-    assert 'publishable: plus.chat still requires B3' in errors
-    assert 'publishable: unlimited_v2.chat still requires B3' in errors
+    assert 'publishable: basic.transcription still requires B1' not in errors
+    assert 'publishable: plus.chat still requires B3' not in errors
+    assert 'publishable: unlimited_v2.chat still requires B3' not in errors
     assert 'publishable: chat cost accounting is not complete' in errors
 
 
