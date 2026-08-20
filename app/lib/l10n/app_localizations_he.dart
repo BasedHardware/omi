@@ -321,7 +321,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get searchApps => 'חפש אפליקציות...';
 
   @override
-  String get myApps => 'האפליקציות שלי';
+  String get myApps => 'נוצר על ידי';
 
   @override
   String get installedApps => 'אפליקציות מותקנות';
@@ -9772,4 +9772,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get findDevice => 'איתור';
+
+  @override
+  String get diagnosticsShareFailed => 'לא ניתן היה לשתף את האבחון. נסה שוב.';
 }

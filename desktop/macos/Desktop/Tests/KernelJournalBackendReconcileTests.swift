@@ -41,7 +41,7 @@ final class KernelJournalBackendReconcileTests: XCTestCase {
     XCTAssertNil(KernelJournalBackendSyncDriver.ReconcileRequest(payload: missingSession))
   }
 
-  func testReconcilePageDecodesCanonicalIdentityAndStructuredMetadata() throws {
+  func testReconcilePageDecodesCanonicalIdentityAndLegacyStructuredMetadata() throws {
     let data = Data(
       #"{"messages":[{"id":"turn-canonical","text":"I started an agent.","created_at":0,"sender":"ai","app_id":null,"session_id":"session-1","rating":null,"reported":false,"metadata":"{\"content_blocks\":[{\"type\":\"agent_spawn\"},{\"type\":\"agent_completion\",\"runId\":\"run-1\"}],\"resources\":[{\"id\":\"artifact-1\",\"type\":\"file\",\"name\":\"result.txt\"}]}","client_message_id":"turn-canonical","journal_revision":12}],"next_cursor":"turn-canonical","has_more":true}"#
         .utf8)
@@ -60,6 +60,20 @@ final class KernelJournalBackendReconcileTests: XCTestCase {
     XCTAssertTrue(rollbackProjection.contentBlocksJSON.contains("agent_completion"))
     XCTAssertTrue(rollbackProjection.resourcesJSON.contains("artifact-1"))
     XCTAssertEqual(rollbackProjection.canonicalTurnId, "turn-canonical")
+  }
+
+  func testReconcilePrefersFirstClassContentBlocksOverLegacyMetadata() throws {
+    let data = Data(
+      #"{"messages":[{"id":"turn-rich","text":"Meeting notes ready - Weekly planning","created_at":0,"sender":"ai","reported":false,"content_blocks":[{"type":"conversationLink","summary":"Weekly planning"}],"metadata":"{\"content_blocks\":[{\"type\":\"memoryLink\",\"summary\":\"Legacy\"}]}"}],"next_cursor":null,"has_more":false}"#
+        .utf8
+    )
+    let page = try JSONDecoder().decode(DesktopMessageReconcilePage.self, from: data)
+
+    XCTAssertTrue(page.messages[0].contentBlocksJSON?.contains("conversationLink") == true)
+    let projection = KernelJournalBackendSyncDriver.reconcileProjection(page.messages[0])
+    XCTAssertTrue(projection.contentBlocksJSON.contains("conversationLink"))
+    XCTAssertFalse(projection.contentBlocksJSON.contains("memoryLink"))
+    XCTAssertEqual(projection.content, "Meeting notes ready - Weekly planning")
   }
 
   func testReconcileRejectsOwnerChangeBeforeHTTP() async throws {

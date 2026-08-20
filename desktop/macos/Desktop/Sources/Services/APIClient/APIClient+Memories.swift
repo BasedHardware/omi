@@ -471,11 +471,13 @@ extension APIClient {
     let id: String
     let status: String
     let discarded: Bool
+    let meetingTreatmentEligible: Bool
 
     enum CodingKeys: String, CodingKey {
       case id
       case status
       case discarded
+      case meetingTreatmentEligible = "meeting_treatment_eligible"
     }
 
     init(from decoder: Decoder) throws {
@@ -483,6 +485,7 @@ extension APIClient {
       id = try container.decode(String.self, forKey: .id)
       status = try container.decodeIfPresent(String.self, forKey: .status) ?? ConversationStatus.processing.rawValue
       discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
+      meetingTreatmentEligible = try container.decodeIfPresent(Bool.self, forKey: .meetingTreatmentEligible) ?? false
     }
   }
 

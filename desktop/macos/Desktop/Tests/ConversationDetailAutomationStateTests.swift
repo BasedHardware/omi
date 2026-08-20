@@ -1,9 +1,33 @@
+import OmiTheme
+import SwiftUI
 import XCTest
 
 @testable import Omi_Computer
 
 @MainActor
 final class ConversationDetailAutomationStateTests: XCTestCase {
+  func testProcessingBannerReservesSpaceAboveConversationMetadata() {
+    let idle = ConversationDetailProcessingLayout(isProcessing: false) {
+      Color.red.frame(height: 32)
+    } content: {
+      Color.blue.frame(height: 20)
+    }
+    .frame(width: 200)
+
+    let processing = ConversationDetailProcessingLayout(isProcessing: true) {
+      Color.red.frame(height: 32)
+    } content: {
+      Color.blue.frame(height: 20)
+    }
+    .frame(width: 200)
+
+    let idleHeight = NSHostingView(rootView: idle).fittingSize.height
+    let processingHeight = NSHostingView(rootView: processing).fittingSize.height
+
+    XCTAssertEqual(idleHeight, 20, accuracy: 0.5)
+    XCTAssertEqual(processingHeight - idleHeight, 32 + OmiSpacing.xxl, accuracy: 0.5)
+  }
+
   func testTranscriptUsesAnExclusivePaneInsteadOfCompressingTheSummaryToolbar() {
     XCTAssertEqual(ConversationDetailView.visiblePane(transcriptOpen: false), .summary)
     XCTAssertEqual(ConversationDetailView.visiblePane(transcriptOpen: true), .transcript)

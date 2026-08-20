@@ -407,6 +407,8 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
         'create_action_items_batch',
         lambda *args: pytest.fail('read mode cannot use legacy batch writer'),
     )
+    emitted = []
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **event: emitted.append(event))
 
     process_conversation._save_action_items(
         'user-1',
@@ -429,6 +431,18 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     assert len(records) == 2
     assert accepted == ['candidate-1']
     assert records[1].status == 'pending'
+    assert emitted == [
+        {
+            'uid': 'user-1',
+            'event': 'Task Extracted',
+            'properties': {
+                'task_count': 2,
+                'conversation_id': 'conversation-1',
+                'task_source': 'transcript',
+                'persistence_path': 'canonical_candidate',
+            },
+        }
+    ]
 
 
 def test_off_mode_is_behaviorally_legacy_and_canonical_route_bypasses_legacy_writer(monkeypatch):

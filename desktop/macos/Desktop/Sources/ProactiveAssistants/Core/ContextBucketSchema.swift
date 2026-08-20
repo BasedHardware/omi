@@ -159,6 +159,23 @@ enum ContextBucketSchema {
         on: "proactive_candidates",
         columns: ["state", "expiresAt"])
     }
+    // `get_work_context` now reads the visit index on its default path: a bounded
+    // `startedAt` window filtered by outcome. `idx_context_visits_open` leads with outcome
+    // but continues on `endedAt`, so it can only serve the equality half — the window
+    // degrades to reading every visit with that outcome and sorting them. Measured on 36k
+    // visits that is ~2.8 ms and grows linearly with the profile's age; here it is ~0.02 ms.
+    //
+    // Leading with `outcome` rather than `startedAt` alone is deliberate. A `startedAt`-only
+    // index is never chosen for this query unless the database has been ANALYZEd, and
+    // nothing in the app runs ANALYZE — measured across 0 / 100 / 5k / 36k rows, the
+    // planner kept picking `idx_context_visits_open` every time. The composite is chosen
+    // without statistics.
+    migrator.registerMigration("addContextVisitOutcomeStartedAtIndex") { db in
+      try db.create(
+        index: "idx_context_visits_outcome_startedAt",
+        on: "context_visits",
+        columns: ["outcome", "startedAt"])
+    }
   }
 
   static func removeMigratedLegacyDefaults(

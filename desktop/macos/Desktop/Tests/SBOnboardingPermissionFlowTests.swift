@@ -438,7 +438,7 @@ final class AppStatePermissionProbeTests: XCTestCase {
 
     await appState.refreshAccessibilityPermission(probe: {
       recorder.record(isMainThread: Thread.isMainThread)
-      return AccessibilityProbeSignals(tccTrusted: true, eventTapWorks: true, axCallsWork: false)
+      return AccessibilityProbeSignals(tccTrusted: true, axProbe: .failing)
     })
 
     XCTAssertTrue(appState.hasAccessibilityPermission)
@@ -449,33 +449,69 @@ final class AppStatePermissionProbeTests: XCTestCase {
   }
 
   func testAccessibilityProjectionCoversEveryProbeOutcome() {
-    // TCC trusted is authoritative; only a failing AX call makes it "broken".
+    // TCC trusted is authoritative; only a definitively failing AX call makes it "broken".
     var projection = AppState.accessibilityProjection(
-      AccessibilityProbeSignals(tccTrusted: true, eventTapWorks: true, axCallsWork: true))
+      AccessibilityProbeSignals(tccTrusted: true, axProbe: .working))
     XCTAssertTrue(projection.hasPermission)
     XCTAssertFalse(projection.isBroken)
 
     projection = AppState.accessibilityProjection(
-      AccessibilityProbeSignals(tccTrusted: true, eventTapWorks: false, axCallsWork: false))
+      AccessibilityProbeSignals(tccTrusted: true, axProbe: .failing))
     XCTAssertTrue(projection.hasPermission)
-    XCTAssertTrue(projection.isBroken)
+    XCTAssertTrue(projection.isBroken, "TCC says yes and AX is refused — the stuck grant")
 
-    // AXIsProcessTrusted() can be stale after an update or re-sign; a live event
-    // tap is the tie-breaker.
+    // A probe that could not answer leaves the TCC verdict alone in both directions.
     projection = AppState.accessibilityProjection(
-      AccessibilityProbeSignals(tccTrusted: false, eventTapWorks: true, axCallsWork: true))
+      AccessibilityProbeSignals(tccTrusted: true, axProbe: .indeterminate))
+    XCTAssertTrue(projection.hasPermission)
+    XCTAssertFalse(projection.isBroken, "unable to tell is not broken")
+
+    // AXIsProcessTrusted() can be stale after an update or re-sign. A real AX call working
+    // against another app is the only thing that overrides it.
+    projection = AppState.accessibilityProjection(
+      AccessibilityProbeSignals(tccTrusted: false, axProbe: .working))
     XCTAssertTrue(projection.hasPermission)
     XCTAssertFalse(projection.isBroken)
 
     projection = AppState.accessibilityProjection(
-      AccessibilityProbeSignals(tccTrusted: false, eventTapWorks: true, axCallsWork: false))
-    XCTAssertTrue(projection.hasPermission)
-    XCTAssertTrue(projection.isBroken)
-
-    projection = AppState.accessibilityProjection(
-      AccessibilityProbeSignals(tccTrusted: false, eventTapWorks: false, axCallsWork: false))
+      AccessibilityProbeSignals(tccTrusted: false, axProbe: .failing))
     XCTAssertFalse(projection.hasPermission)
     XCTAssertFalse(projection.isBroken, "not granted is not the same as broken")
+  }
+
+  /// The regression this replaced. The projection used to grant the permission whenever a
+  /// `CGEvent` tap could be created, and a listen-only session tap is satisfied by **Input
+  /// Monitoring**, not Accessibility. On a machine with Input Monitoring granted and the
+  /// Accessibility toggle visibly off, Omi displayed "Granted".
+  ///
+  /// There is no `eventTapWorks` signal any more, so the shape of this test is the assertion:
+  /// with TCC false, nothing short of a working AX call may report a grant.
+  func testUngrantedAccessibilityIsNeverReportedAsGranted() {
+    for probe in [AccessibilityAXProbeResult.failing, .indeterminate] {
+      let projection = AppState.accessibilityProjection(
+        AccessibilityProbeSignals(tccTrusted: false, axProbe: probe))
+      XCTAssertFalse(
+        projection.hasPermission,
+        "TCC says not trusted and AX did not work (\(probe.rawValue)) — this is not a grant")
+    }
+  }
+
+  /// Probing our own process is what made the false positive flip to a clean "Granted" exactly
+  /// when the user opened the Permissions page: a process can always read its own accessibility
+  /// tree, permission or not, and Omi is frontmost while its own settings are on screen.
+  func testProbeCandidatesNeverIncludeThisProcess() {
+    let targets = AppState.accessibilityProbeTargets()
+    let ownPID = ProcessInfo.processInfo.processIdentifier
+    XCTAssertFalse(
+      targets.candidates.contains { $0.processID == ownPID },
+      "self-probe always succeeds and would manufacture a grant")
+  }
+
+  /// No candidate can answer, so the probe must not invent an answer.
+  func testEmptyCandidateListIsIndeterminateNotWorking() {
+    let targets = AccessibilityProbeTargets(
+      candidates: [], frontmostName: "none", finderProcessID: nil)
+    XCTAssertEqual(AppState.axProbeResult(targets: targets), .indeterminate)
   }
 
   func testFirstUnaskedScanAwaitsItsCurrentOffMainProbeBeforeSkipping() async {

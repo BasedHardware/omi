@@ -38,7 +38,7 @@ env:
 
 jobs:
   stage:
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: read
       contents: read
@@ -130,7 +130,7 @@ jobs:
     needs: stage
     # This second protected environment gate gives the operator a pause to set
     # SYNC_LEDGER_FENCE_MODE=active only after the standby barrier is complete.
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: read
       contents: read

@@ -4,8 +4,8 @@ Strategy: the REAL ``pusher.main`` handler functions (``health_check``, ``ready`
 ``drain``) are imported once at module-scope fixture setup and awaited *directly*
 (not via TestClient). Driving the full pusher app through TestClient costs
 ~0.13-0.22s of CPU per request in its portal thread, which the repo's fast-unit
-duration guard (0.12s call-phase CPU) treats as integration-level work; calling
-the handlers directly exercises the real loopback/JSON/gauge logic in microseconds.
+duration guard treats as integration-level work; calling the handlers directly
+exercises the real loopback/JSON/gauge logic in microseconds.
 A structural test additionally verifies the real app wires the routes (paths +
 HTTP methods) and that ``shutdown_event`` calls ``begin_drain``.
 

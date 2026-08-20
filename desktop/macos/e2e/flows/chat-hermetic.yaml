@@ -48,6 +48,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeCredentialPolicy.swift
   - desktop/macos/Desktop/Sources/Chat/ChatComposerDraft.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatDraftScope.swift
+  - desktop/macos/Desktop/Sources/Chat/SQLQueryResultProjection.swift
   # The marker query enters AgentClient.Session through the serialized context
   # admission path before the exact stub reply is asserted below.
   - desktop/macos/Desktop/Sources/Chat/AgentContextAdmissionGate.swift

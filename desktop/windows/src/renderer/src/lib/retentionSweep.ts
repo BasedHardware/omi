@@ -63,10 +63,21 @@ async function deleteConvosPaced(localIds: string[], cloudIds: string[]): Promis
 
 let running = false
 
+// Who asked for this pass. A 'scheduled' pass is the 30-minute background timer;
+// a 'manual' pass is the user pressing Preview in Settings and waiting for output.
+export type SweepTrigger = 'scheduled' | 'manual'
+
 // One sweep pass: identify junk, then log (dry-run) or delete (live).
-export async function runRetentionSweep(): Promise<void> {
+export async function runRetentionSweep(trigger: SweepTrigger = 'manual'): Promise<void> {
   const mode = getPreferences().retentionMode ?? 'dry-run'
   if (mode === 'off' || running) return
+  // A scheduled pass only earns its cost in 'live' mode, where it actually deletes
+  // something. In 'dry-run' the entire pass — a full `/v3/memories` page-through plus
+  // 200 conversations — ends at a console.log, and `retentionMode` is optional, so
+  // EVERY default install was paying that 48x/day to write a line into a DevTools
+  // console that is not open. Dry-run is a preview the user asks for (RewindTab's
+  // Preview button passes 'manual'), not a background job.
+  if (trigger === 'scheduled' && mode !== 'live') return
   running = true
   try {
     const [convos, memories] = await Promise.all([loadConvos(), fetchAllMemories()])
@@ -114,10 +125,12 @@ export async function runRetentionSweep(): Promise<void> {
 let started = false
 
 // Start the periodic sweep once per app session (deferred past startup, then every
-// 30 min). No-op when retentionMode is 'off' (re-checked each pass).
+// 30 min). Each pass re-reads the mode, so the timer stays armed across a settings
+// change and only does work while the user is in 'live' mode — no start/stop
+// lifecycle to keep in sync with the preference.
 export function maybeStartRetentionSweep(): void {
   if (started) return
   started = true
-  setTimeout(() => void runRetentionSweep(), 8000)
-  setInterval(() => void runRetentionSweep(), SWEEP_INTERVAL_MS)
+  setTimeout(() => void runRetentionSweep('scheduled'), 8000)
+  setInterval(() => void runRetentionSweep('scheduled'), SWEEP_INTERVAL_MS)
 }

@@ -320,7 +320,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get searchApps => 'アプリを検索...';
 
   @override
-  String get myApps => 'マイアプリ';
+  String get myApps => '自分で作成';
 
   @override
   String get installedApps => 'インストール済みアプリ';
@@ -9683,4 +9683,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get findDevice => '探す';
+
+  @override
+  String get diagnosticsShareFailed => '診断情報を共有できませんでした。もう一度お試しください。';
 }

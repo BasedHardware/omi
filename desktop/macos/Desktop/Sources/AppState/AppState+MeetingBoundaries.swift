@@ -45,6 +45,13 @@ extension AppState {
       },
       onChange: { [weak self] active in
         Task { @MainActor in
+          if active, SystemCalendarMeetingContextFeature.isEnabled {
+            // Permission and calendar I/O live outside the detector/audio path. This early sync
+            // normally stores the invite before the eventual conversation finalization begins.
+            Task(priority: .utility) {
+              await SystemCalendarMeetingContextService.shared.prepareAroundNow()
+            }
+          }
           await self?.handleMeetingObservation(active: active)
           await self?.reconcileCapture()
         }

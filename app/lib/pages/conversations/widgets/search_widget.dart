@@ -154,27 +154,30 @@ class _SearchWidgetState extends State<SearchWidget> {
           // Calendar button - same height as search bar (48px)
           Consumer<ConversationProvider>(
             builder: (context, convoProvider, _) {
+              final hasSearchQuery = searchController.text.isNotEmpty;
+              final hasActiveFilter =
+                  hasSearchQuery ? convoProvider.searchStartDate != null : convoProvider.selectedStartDate != null;
               return Container(
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: convoProvider.selectedStartDate != null
-                      ? Colors.deepPurple.withValues(alpha: 0.5)
-                      : const Color(0xFF1F1F25),
+                  color: hasActiveFilter ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   icon: FaIcon(
-                    convoProvider.selectedStartDate != null
-                        ? FontAwesomeIcons.calendarDay
-                        : FontAwesomeIcons.calendarDays,
+                    hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     size: 18,
-                    color: convoProvider.selectedStartDate != null ? Colors.white : Colors.white70,
+                    color: hasActiveFilter ? Colors.white : Colors.white70,
                   ),
                   onPressed: () async {
                     HapticFeedback.mediumImpact();
-                    await showConversationDateRangePicker(context);
+                    if (hasSearchQuery) {
+                      await showConversationSearchDateRangePicker(context);
+                    } else {
+                      await showConversationDateRangePicker(context);
+                    }
                   },
                 ),
               );

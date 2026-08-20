@@ -38,6 +38,10 @@ from utils.llm.gateway_client import (
 from utils.llm.gateway_observability import record_gateway_request_result
 from utils.llm.gateway_resilience import gateway_circuit, observe_gateway_first_byte
 from utils.llm.gateway_serving import is_gateway_transport_failure
+from utils.llm.private_context import (
+    flatten_text_blocks,
+    openai_messages_carry_private_tool_output,
+)
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.observability.fallback import record_fallback
 from utils.other import endpoints as auth
@@ -281,15 +285,7 @@ def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
 
 
 def _text(content: object) -> str:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ''
-    return ''.join(
-        block.get('text', '')
-        for block in content
-        if isinstance(block, Mapping) and block.get('type') == 'text' and isinstance(block.get('text'), str)
-    )
+    return flatten_text_blocks(content)
 
 
 def _normalize_policy_text(text: str) -> str:
@@ -379,36 +375,13 @@ def _web_search_requested(body: Mapping[str, object]) -> bool:
 
 
 def _carries_private_tool_output(messages: object) -> bool:
-    if not isinstance(messages, list):
-        return False
-    tool_name_by_call_id: dict[str, object] = {}
-    for message in messages:
-        if not isinstance(message, Mapping):
-            continue
-        tool_calls = message.get('tool_calls')
-        if not isinstance(tool_calls, list):
-            continue
-        for call in tool_calls:
-            if (
-                isinstance(call, Mapping)
-                and isinstance(call.get('id'), str)
-                and isinstance(call.get('function'), Mapping)
-            ):
-                tool_name_by_call_id[call['id']] = call['function'].get('name')
-    for message in messages:
-        if not isinstance(message, Mapping) or message.get('role') != 'tool':
-            continue
-        name = tool_name_by_call_id.get(cast(str, message.get('tool_call_id')))
-        if not isinstance(name, str) or name not in _PUBLIC_SAFE_CLIENT_TOOLS:
-            return True
-    # The desktop hub also inlines tool output into the user turn behind this
+    # The desktop hub also inlines tool output into the user turn behind a
     # literal marker instead of sending an OpenAI `tool` message, so the same
     # private data reaches the request without a tool_call_id to classify.
-    return any(
-        isinstance(message, Mapping)
-        and message.get('role') == 'user'
-        and _UNTRUSTED_TOOL_CONTEXT_DELIMITER in _text(message.get('content'))
-        for message in messages
+    return openai_messages_carry_private_tool_output(
+        messages,
+        public_safe_tools=_PUBLIC_SAFE_CLIENT_TOOLS,
+        inline_private_markers=(_UNTRUSTED_TOOL_CONTEXT_DELIMITER,),
     )
 
 

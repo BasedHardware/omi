@@ -83,11 +83,19 @@ _deepgram_circuit = ProviderCircuitBreaker(
 )
 
 
+_modulate_circuit = ProviderCircuitBreaker(
+    failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
+    cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
+)
+
+
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
     if primary_service == STTService.parakeet:
         return _parakeet_circuit
     if primary_service == STTService.deepgram:
         return _deepgram_circuit
+    if primary_service == STTService.modulate:
+        return _modulate_circuit
     raise ValueError(f'connection fallback is not defined for a {primary_service.value} primary')
 
 
@@ -99,6 +107,23 @@ def _fallback_failure_reason(error: BaseException) -> str:
     if 'limit' in detail or 'quota' in detail:
         return 'quota'
     return 'provider_5xx'
+
+
+# Deepgram and Parakeet refuse at connect time, so a returned socket is proof
+# enough. Velma-2 accepts the upgrade and only then answers "Monthly usage limit
+# reached.", so a Modulate socket is not evidence that the session is served.
+_POST_CONNECT_REJECTING_PRIMARIES: Final = frozenset({STTService.modulate})
+
+
+async def _primary_is_serving(primary_service: STTService, socket: STTSocket) -> bool:
+    """Return whether a connected primary is actually serving the session.
+
+    Only providers that reject after the upgrade pay the liveness grace, so live
+    session setup keeps its hot path for the providers that fail at connect.
+    """
+    if primary_service not in _POST_CONNECT_REJECTING_PRIMARIES:
+        return True
+    return await fallback_socket_is_serving(socket)
 
 
 async def _connect_serving_fallback(
@@ -119,7 +144,8 @@ async def connect_stt_socket_with_fallback(
     *,
     primary_service: STTService,
     connect_primary: Callable[[], Awaitable[Optional[STTSocket]]],
-    connect_modulate: Callable[[], Awaitable[Optional[STTSocket]]],
+    connect_modulate: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
+    connect_deepgram: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     connect_parakeet: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
 ) -> Tuple[STTSocket, STTService]:
     """Connect the selected primary before audio starts, walking the configured fallbacks.
@@ -131,6 +157,9 @@ async def connect_stt_socket_with_fallback(
     (#11695). The chain must not stop at Modulate either: with Deepgram at HTTP
     402 and Modulate answering 500/over quota, an English session died while a
     healthy Parakeet deployment sat idle behind them in the same list (#11752).
+    Modulate is a primary as well as a fallback: a deployment listing
+    ``modulate-velma-2,dg-nova-3,parakeet`` lost 100% of its sessions for ~50
+    minutes because a Modulate primary bypassed this helper entirely (#11752).
 
     The circuit is deliberately process-local and never owns capacity. The
     Parakeet service rejects excess streams at its GPU boundary; this helper
@@ -142,11 +171,19 @@ async def connect_stt_socket_with_fallback(
     if circuit.allow_request():
         try:
             socket = await connect_primary()
-            if socket is not None:
+            if socket is None:
+                reason = 'config_incomplete'
+                circuit.record_failure()
+            elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
                 return socket, primary_service
-            reason = 'config_incomplete'
-            circuit.record_failure()
+            else:
+                # The primary took the session and then refused it. Release the
+                # socket and walk the chain instead of serving a dead stream.
+                detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                close_rejected_socket(socket)
+                reason = _fallback_failure_reason(RuntimeError(detail))
+                circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
             if reason in EXPECTED_REJECTIONS:
@@ -160,11 +197,20 @@ async def connect_stt_socket_with_fallback(
             reason = 'provider_5xx'
             circuit.record_failure()
 
-    candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
-        (STTService.modulate, connect_modulate)
+    # A provider is never offered its own failure as a fallback, so the chain
+    # excludes the primary: a Modulate primary walks Deepgram then Parakeet
+    # (#11752). The relative order of the fallback legs is fixed here and is not
+    # parsed out of STT_SERVICE_MODELS; it matches the declared deployment
+    # config, and callers already gate each leg on whether the deployment can
+    # serve it. Reading the true order off the policy list is a separate change.
+    ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [
+        (STTService.modulate, connect_modulate),
+        (STTService.deepgram, connect_deepgram),
+        (STTService.parakeet, connect_parakeet),
     ]
-    if connect_parakeet is not None and primary_service != STTService.parakeet:
-        candidates.append((STTService.parakeet, connect_parakeet))
+    candidates: List[Tuple[STTService, Callable[[], Awaitable[Optional[STTSocket]]]]] = [
+        (service, connect) for service, connect in ordered if connect is not None and service != primary_service
+    ]
 
     from_mode = primary_service.value
     for service, connect in candidates:
@@ -338,6 +384,27 @@ def modulate_is_configured_fallback(language: Optional[str]) -> bool:
         and provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.STREAMING)
         and modulate_supports_language(language)
     )
+
+
+def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
+    """Return the Deepgram model that may take over a session whose primary failed.
+
+    Same contract as ``modulate_is_configured_fallback``, but it resolves a model
+    rather than answering yes/no: a Modulate primary resolved ``stt_model`` and
+    ``stt_language`` for Velma-2, so the caller has no Deepgram model to reuse and
+    cannot know which ``dg-*`` deployment the runtime actually lists. ``None``
+    means Deepgram must not be offered the session at all.
+    """
+    if not provider_is_enabled(deepgram_provider_for_runtime(is_dg_self_hosted), STTServingSurface.STREAMING):
+        return None
+    if not _deepgram_is_available():
+        return None
+    if language not in deepgram_nova3_multi_languages and language not in deepgram_nova3_languages:
+        return None
+    for model in (model.strip() for model in stt_service_models):
+        if model.startswith('dg-'):
+            return model.replace('dg-', '', 1)
+    return None
 
 
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
@@ -516,7 +583,10 @@ deepgram: Optional[DeepgramClient] = None
 
 
 def _deepgram_options(endpoint: str) -> DeepgramClientOptions:
-    """Build options pinned to an explicit endpoint, never the SDK default."""
+    """Build options per client, pinned to an endpoint, never the SDK default.
+
+    DeepgramClient.__init__ writes its key into what it is handed, so a shared
+    object strands the managed client on whichever BYOK key came last."""
     options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
     options.url = endpoint
     return options
@@ -535,9 +605,6 @@ def _require_self_hosted_deepgram_endpoint(endpoint: str) -> str:
     return endpoint
 
 
-# Built once; also keys the per-request BYOK client below.
-deepgram_cloud_options = _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT)
-
 _managed_deepgram_lock = threading.RLock()
 _managed_deepgram_ready = False
 
@@ -552,7 +619,7 @@ def _build_managed_deepgram_client() -> Optional[DeepgramClient]:
     if not api_key:
         return None
     logger.info('Using Deepgram hosted API')
-    return DeepgramClient(api_key, deepgram_cloud_options)
+    return DeepgramClient(api_key, _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT))
 
 
 def _managed_deepgram_client() -> Optional[DeepgramClient]:
@@ -727,7 +794,7 @@ def _deepgram_client_for_request() -> DeepgramClient:
         return managed
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, deepgram_cloud_options)
+        return DeepgramClient(byok, _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT))
     if managed is None:
         raise RuntimeError('Deepgram is not configured; set DEEPGRAM_API_KEY or provide a BYOK key')
     return managed

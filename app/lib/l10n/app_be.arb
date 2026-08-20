@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Мае дадатыі",
+    "myApps": "Створана мной",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10783,5 +10783,6 @@
     "accountCutoverOpenStore": "Открыть магазин",
     "sendRawAudioToOmi": "Адпраўляць неапрацаванае аўдыя ў Omi",
     "sendRawAudioToOmiDescription": "Выключыце, каб не адпраўляць у Omi неапрацаванае аўдыя. Расшыфроўкі і даныя, патрэбныя воблачным функцыям, усё яшчэ могуць адпраўляцца ў Omi.",
-    "findDevice": "Знайсці"
+    "findDevice": "Знайсці",
+    "diagnosticsShareFailed": "Не ўдалося падзяліцца дыягностыкай. Паспрабуйце яшчэ раз."
 }

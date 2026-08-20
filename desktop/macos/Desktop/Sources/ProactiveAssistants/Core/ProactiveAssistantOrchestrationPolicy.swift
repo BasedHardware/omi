@@ -573,16 +573,15 @@ enum PreviewSimilarityThresholdPolicy {
     "IntelliJ IDEA", "PyCharm", "WebStorm", "GoLand", "CLion", "DataGrip",
   ]
 
-  private static let chatBundleIDs: Set<String> = [
+  private static let chatBundleIDs: Set<String> = Set([
     "com.tinyspeck.slackmacgap",
     "com.hnc.discord",
-    "ru.keepcoder.telegram",
     "net.whatsapp.whatsapp",
     "com.apple.mobilesms",
     "com.microsoft.teams2",
     "com.microsoft.teams",
     "com.apple.facetime",
-  ]
+  ]).union(ConferencingApps.telegramBundleIDs)
   private static let chatAppNames: Set<String> = [
     "Slack", "Discord", "Telegram", "WhatsApp", "Messages",
     "Microsoft Teams", "FaceTime",

@@ -78,61 +78,6 @@ def get_markers(
     )
 
 
-def generate_topics_visualization(
-    topics: List[str], file_path: str = 'embedding_visualization_multi_topic.html'
-) -> None:
-    # context: Tuple = determine_requires_context(conversation)
-    # if not context or not context[0]:
-    #     print('No context is needed')
-    #     return
-    # topics = context[0]
-    # topics = ['Business', 'Entrepreneurship', 'Failures']
-    os.makedirs('visualizations/', exist_ok=True)
-    file_path = os.path.join('visualizations/', file_path)
-
-    data = get_data(topics)
-    all_embeddings = cast(Any, np.array([item[1] for item in data.values()]))
-
-    topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
-    all_embeddings = cast(Any, np.vstack([all_embeddings] + topic_embeddings))
-
-    umap_transform = cast(Any, umap.UMAP(n_components=2, random_state=0, transform_seed=0))
-    umap_embeddings = umap_transform.fit_transform(all_embeddings)
-
-    data_points = umap_embeddings[: -len(topics)]
-    topic_points = umap_embeddings[-len(topics) :]
-
-    fig: Any = make_subplots(rows=1, cols=1)
-
-    colors = ['blue', 'green', 'orange', 'purple', 'cyan', 'magenta']
-
-    # Add all vectors
-    fig.add_trace(get_markers(data, data_points, 'gray', 'All Vectors'))
-
-    # Add vectors for each topic
-    for i, topic in enumerate(topics):
-        color = colors[i % len(colors)]
-        topic_data = {mid: item for mid, item in data.items() if topic in item[2]}
-        topic_data_points = cast(
-            Any, np.array([data_points[list(data.keys()).index(mid)] for mid in topic_data.keys()])
-        )
-
-        fig.add_trace(get_markers(topic_data, topic_data_points, color, f'Top 5 - {topic}'))
-        fig.add_trace(get_query_marker(topic_points[i], topic))
-
-    fig.update_layout(
-        title='Embedding Visualization for Multiple Topics',
-        xaxis_title='UMAP Dimension 1',
-        yaxis_title='UMAP Dimension 2',
-        width=800,
-        height=600,
-        showlegend=True,
-        hovermode='closest',
-    )
-
-    generate_html_visualization(fig, file_name=file_path)
-
-
 def get_data2(topics: List[str], retrieved_memories: List[Conversation]) -> dict[str, List[Any]]:
     # print('get_data2', len(topics), topics)
     # print('retrieved_memories', len(retrieved_memories))
@@ -157,25 +102,59 @@ def get_data2(topics: List[str], retrieved_memories: List[Conversation]) -> dict
 
 
 def generate_visualization(
-    topics: List[str], memories: List[Conversation], file_path: str = 'embedding_visualization_multi_topic.html'
+    topics: List[str],
+    memories: List[Conversation] | None = None,
+    file_path: str = 'embedding_visualization_multi_topic.html',
 ) -> None:
-    # TODO: combine in single function
+    # context: Tuple = determine_requires_context(conversation)
+    # if not context or not context[0]:
+    #     print('No context is needed')
+    #     return
+    # topics = context[0]
+    # topics = ['Business', 'Entrepreneurship', 'Failures']
     print('topics', topics)
     os.makedirs('visualizations/', exist_ok=True)
     file_path = os.path.join('visualizations/', file_path)
 
-    data = get_data2(topics, memories)
+    if memories is not None:
+        data = get_data2(topics, memories)
+    else:
+        data = get_data(topics)
     # print('data', len(data))
-    all_embeddings = cast(Any, np.array([item[1] for item in data.values()]))
 
-    topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
-    all_embeddings = cast(Any, np.vstack([all_embeddings] + topic_embeddings))
+    embedding_values = [item[1] for item in data.values()]
+    if not embedding_values:
+        return
 
-    umap_transform = cast(Any, umap.UMAP(n_components=2, random_state=0, transform_seed=0))
+    all_embeddings = cast(Any, np.array(embedding_values))
+    if all_embeddings.ndim != 2:
+        return
+
+    topic_points: Any = []
+    if topics:
+        topic_embeddings = [openai_embeddings.embed_query(topic) for topic in topics]
+        all_embeddings = cast(Any, np.vstack([all_embeddings] + topic_embeddings))
+
+    if all_embeddings.shape[0] < 3:
+        return
+
+    umap_transform = cast(
+        Any,
+        umap.UMAP(
+            init='random' if all_embeddings.shape[0] == 3 else 'spectral',
+            n_neighbors=min(15, all_embeddings.shape[0] - 1),
+            n_components=2,
+            random_state=0,
+            transform_seed=0,
+        ),
+    )
     umap_embeddings = umap_transform.fit_transform(all_embeddings)
 
-    data_points = umap_embeddings[: -len(topics)]
-    topic_points = umap_embeddings[-len(topics) :]
+    if topics:
+        data_points = umap_embeddings[: -len(topics)]
+        topic_points = umap_embeddings[-len(topics) :]
+    else:
+        data_points = umap_embeddings
 
     fig: Any = make_subplots(rows=1, cols=1)
 
@@ -209,4 +188,4 @@ def generate_visualization(
 
 
 if __name__ == '__main__':
-    generate_topics_visualization([])
+    generate_visualization([])

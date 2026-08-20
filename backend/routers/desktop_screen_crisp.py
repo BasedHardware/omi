@@ -7,12 +7,13 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from database.screen_activity import upsert_screen_activity
+from database.screen_activity import normalize_screen_activity_timestamp, upsert_screen_activity
 from database.vector_db import upsert_screen_activity_vectors
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, get_user
+from utils.subscription import grants_cloud_screen_vectors
 from utils.subscription import is_desktop_trial_paywalled
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 
@@ -34,6 +35,11 @@ class ScreenActivityRow(BaseModel):
     device_name: str | None = Field(default=None, alias="deviceName")
     client_device_id: str | None = Field(default=None, alias="clientDeviceId")
     embedding: list[float] | None = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def canonicalize_timestamp(cls, value: str) -> str:
+        return normalize_screen_activity_timestamp(value)
 
     def storage_id(self) -> str:
         return f"{self.client_device_id}-{self.id}" if self.client_device_id else str(self.id)
@@ -134,7 +140,15 @@ async def sync_screen_activity(
         except Exception as exc:
             logger.exception("Screen activity Firestore write failed for uid=%s", uid)
             raise HTTPException(status_code=500, detail="Firestore write failed") from exc
-        embedded_rows = [row for row in rows if row.get("embedding")]
+        # The vector is the expensive half of a synced row and its only server-side purpose is
+        # semantic screen search, which is a paid desktop capability. Gate it here rather than on
+        # the client: the client cannot be trusted to know its own entitlement, and the row is
+        # still stored either way, so a later upgrade can backfill vectors from the stored text.
+        embedded_rows = (
+            [row for row in rows if row.get("embedding")]
+            if await run_blocking(db_executor, grants_cloud_screen_vectors, uid)
+            else []
+        )
         if embedded_rows:
             try:
                 await run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)

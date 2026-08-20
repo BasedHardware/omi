@@ -38,11 +38,7 @@ void main() {
   }
 
   test('cold start restores Apple Health after a previous successful connect', () async {
-    final backend = <String, bool>{
-      'google_calendar': false,
-      'gmail': false,
-      'apple_health': true,
-    };
+    final backend = <String, bool>{'google_calendar': false, 'gmail': false, 'apple_health': true};
     final prefs = <String, bool>{};
 
     final first = providerWith(backend, prefs: prefs);
@@ -74,10 +70,7 @@ void main() {
 
     await provider.loadFromBackend();
 
-    expect(
-      requested.toSet(),
-      equals(IntegrationApp.values.map((app) => app.key).toSet()),
-    );
+    expect(requested.toSet(), equals(IntegrationApp.values.map((app) => app.key).toSet()));
     for (final app in IntegrationApp.values) {
       expect(
         provider.isAppConnected(app),
@@ -110,11 +103,7 @@ void main() {
 
   test('clearUserData forgets Apple Health as well as Google rows', () async {
     final prefs = <String, bool>{};
-    final provider = providerWith({
-      'google_calendar': true,
-      'gmail': true,
-      'apple_health': true,
-    }, prefs: prefs);
+    final provider = providerWith({'google_calendar': true, 'gmail': true, 'apple_health': true}, prefs: prefs);
     addTearDown(provider.dispose);
 
     await provider.loadFromBackend();

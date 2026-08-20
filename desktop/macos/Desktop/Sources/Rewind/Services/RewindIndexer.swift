@@ -320,7 +320,8 @@ actor RewindIndexer {
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: frame.appName, windowTitle: frame.windowTitle,
+            id: id, timestamp: frame.captureTime, ocrText: ocrText, appName: frame.appName,
+            windowTitle: frame.windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
         }
       }
@@ -420,7 +421,7 @@ actor RewindIndexer {
       if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
         Task(priority: .utility) {
           await OCREmbeddingService.shared.embedScreenshot(
-            id: id, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
+            id: id, timestamp: captureTime, ocrText: ocrText, appName: appName, windowTitle: windowTitle,
             ownerSnapshot: snapshot.ownerSnapshot)
         }
       }

@@ -1,3 +1,14 @@
+"""Orphaned WAV retranscription pipeline (client upload path removed).
+
+Historically reached via ``POST /v1/memories/{id}/post-processing`` and a Flutter
+``memoryPostProcessing`` upload. That router was commented out (2024-09) and
+deleted (2025-05); no ``backend/routers`` caller remains. Short uploads were an
+app-side buffer bug (``createWavFile(removeLastNSeconds=120)`` on quiet-timer
+memory creation), not backend truncation — see module ARCHITECTURE.md.
+
+Keep the transcript-relative duration guard if this util is ever rewired.
+"""
+
 import asyncio
 import os
 import time
@@ -23,12 +34,24 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_MINIMUM_AUDIO_FLOOR_SECONDS = 10.0
+_TRANSCRIPT_DURATION_PADDING_SECONDS = 10.0
+
+
+def _transcript_span_seconds(transcript_segments: List[TranscriptSegment]) -> float:
+    """Wall-clock span covered by segment timestamps (extrema, not list order)."""
+    if not transcript_segments:
+        return 0.0
+    starts = [segment.start for segment in transcript_segments]
+    ends = [segment.end for segment in transcript_segments]
+    return max(ends) - min(starts)
+
 
 def _minimum_audio_duration(transcript_segments: List[TranscriptSegment]) -> float:
     if not transcript_segments:
-        return 10.0
-    transcript_duration = transcript_segments[-1].end - transcript_segments[0].start
-    return max(10.0, transcript_duration - 10.0)
+        return _MINIMUM_AUDIO_FLOOR_SECONDS
+    transcript_duration = _transcript_span_seconds(transcript_segments)
+    return max(_MINIMUM_AUDIO_FLOOR_SECONDS, transcript_duration - _TRANSCRIPT_DURATION_PADDING_SECONDS)
 
 
 # TODO: this pipeline vs groq+pyannote diarization 3.1, probably the latter is better.
@@ -55,11 +78,22 @@ def postprocess_conversation(
         return 400, "Conversation can't be post-processed again"
 
     aseg = AudioSegment.from_wav(file_path)
+    min_required = _minimum_audio_duration(conversation.transcript_segments)
 
-    if aseg.duration_seconds < _minimum_audio_duration(conversation.transcript_segments):
-        # TODO: fix app, sometimes audio uploaded is wrong, is too short.
-        logger.info('postprocess_conversation: Audio duration is too short, seems wrong.')
-        conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.canceled)
+    if aseg.duration_seconds < min_required:
+        # Historical root cause: mobile CaptureProvider built the upload with
+        # createWavFile(removeLastNSeconds=quietSecondsForMemoryCreation=120), so
+        # quiet-timer creations uploaded a truncated WAV while transcript segments
+        # still spanned the full session. Client + router for this path are gone;
+        # keep rejecting short files if the util is ever rewired.
+        fail_reason = (
+            f'Audio duration is too short, seems wrong '
+            f'(audio_s={aseg.duration_seconds:.2f} min_required_s={min_required:.2f}).'
+        )
+        logger.info('postprocess_conversation: %s', fail_reason)
+        conversations_db.set_postprocessing_status(
+            uid, conversation.id, PostProcessingStatus.canceled, fail_reason=fail_reason
+        )
         return 500, "Audio duration is too short, seems wrong."
 
     conversations_db.set_postprocessing_status(uid, conversation.id, PostProcessingStatus.in_progress)

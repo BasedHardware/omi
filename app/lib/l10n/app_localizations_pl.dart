@@ -322,7 +322,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get searchApps => 'Szukaj aplikacji...';
 
   @override
-  String get myApps => 'Moje aplikacje';
+  String get myApps => 'Stworzone przeze mnie';
 
   @override
   String get installedApps => 'Zainstalowane aplikacje';
@@ -9879,4 +9879,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get findDevice => 'Znajdź';
+
+  @override
+  String get diagnosticsShareFailed => 'Nie udało się udostępnić diagnostyki. Spróbuj ponownie.';
 }

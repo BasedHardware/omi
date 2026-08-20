@@ -50,15 +50,21 @@ actor AnalyticsSink {
     private var flushTask: Task<Void, Never>?
     private let spoolURL: URL
     private let transport: AnalyticsTransport
+    /// Injected so a test can drive the *scheduled* path in milliseconds. The scheduled path is not
+    /// a faster version of the direct one — it is the only path production ever takes while the app
+    /// is running, and it was broken in 1.0.13 precisely because nothing exercised it.
+    private let flushInterval: TimeInterval
 
     /// `transport` and `spoolURL` are injected so tests drive the whole path — spool, batch, retry,
     /// drop — without a network and without touching the real support directory.
     init(
         spoolURL: URL = ContextPaths.supportDirectory.appendingPathComponent("analytics-spool.json"),
-        transport: AnalyticsTransport = URLSessionAnalyticsTransport()
+        transport: AnalyticsTransport = URLSessionAnalyticsTransport(),
+        flushInterval: TimeInterval = AnalyticsSink.flushInterval
     ) {
         self.spoolURL = spoolURL
         self.transport = transport
+        self.flushInterval = flushInterval
         self.spool = Self.loadSpool(from: spoolURL)
     }
 
@@ -84,7 +90,24 @@ actor AnalyticsSink {
     /// send and persist re-sends a batch, which PostHog tolerates; the opposite ordering would lose
     /// events silently, which it cannot.
     func flush() async {
+        // Cancels a *pending* timer, never the caller.
+        //
+        // **This is the bug that shipped in 1.0.13.** The scheduled task's body called this method,
+        // whose first line cancelled `flushTask` — itself. `URLSession.data(for:)` honours task
+        // cancellation, so the very next `await` threw, `send` reported the batch unsent, and the
+        // spool grew forever. The app talked to `api.omi.me` all day and delivered no analytics at
+        // all. Nothing caught it because every test called `flush()` directly, where `flushTask` is
+        // nil and the cancel is a no-op — the scheduled path, the only one production takes while
+        // running, had no coverage.
         flushTask?.cancel()
+        flushTask = nil
+        await drain()
+    }
+
+    /// Sends everything queued. Assumes any pending timer has already been dealt with by the caller,
+    /// which is what keeps the scheduled task from cancelling itself.
+    private func drain() async {
+        // Whoever is draining now owns the queue, so a later `enqueue` is free to schedule again.
         flushTask = nil
 
         while !spool.isEmpty {
@@ -106,9 +129,11 @@ actor AnalyticsSink {
     private func scheduleFlush() {
         guard flushTask == nil else { return }
         flushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(Self.flushInterval * 1_000_000_000))
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(await self.flushInterval * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            await self?.flush()
+            // `drain()`, not `flush()`: this *is* the scheduled task, and `flush()` would cancel it.
+            await self.drain()
         }
     }
 

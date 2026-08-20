@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Any, Dict, List, Optional
@@ -46,6 +47,7 @@ from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.retraction_scope import retraction_can_be_skipped
@@ -59,12 +61,13 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
     search_conversations,
 )
-from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.product_telemetry import emit_product_event
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -91,6 +94,45 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
+def _speaker_assignment(segment: TranscriptSegment) -> str:
+    if segment.is_user:
+        return 'self'
+    if segment.person_id:
+        return f"person:{hashlib.sha256(str(segment.person_id).encode('utf-8')).hexdigest()[:16]}"
+    return 'unassigned'
+
+
+def _speaker_assignment_kind(assignment: str) -> str:
+    return 'person' if assignment.startswith('person:') else assignment
+
+
+def _emit_speaker_identity_confirmed(
+    *,
+    uid: str,
+    conversation_id: str,
+    scope: str,
+    before: List[str],
+    after: List[str],
+) -> None:
+    if not after:
+        return
+    assignment_kinds = [_speaker_assignment_kind(value) for value in after]
+    properties = {
+        'conversation_id': conversation_id,
+        'confirmation': 'accepted' if before == after else 'corrected',
+        'assignment': assignment_kinds[0] if len(set(assignment_kinds)) == 1 else 'mixed',
+        'scope': scope,
+        'affected_segment_count': len(after),
+    }
+    if len(set(after)) == 1 and assignment_kinds[0] == 'person':
+        properties['assignment_id'] = after[0]
+    emit_product_event(
+        uid=uid,
+        event='Speaker Identity Confirmed',
+        properties=properties,
+    )
+
+
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
@@ -112,8 +154,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
 
     def _run_enrichment():
         try:
-            from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
-
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
@@ -125,7 +165,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                persist_desktop_meeting_arrival_best_effort(uid, enriched)
+                record_and_persist_finalized_meeting_receipt(uid, enriched)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
@@ -1021,6 +1061,7 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
         conversation.transcript_segments[segment_idx].person_id = None
@@ -1033,6 +1074,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='segment',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -1090,6 +1138,9 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
+    before = [_speaker_assignment(segment) for segment in targeted_segments]
+
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
@@ -1107,6 +1158,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='speaker',
+        before=before,
+        after=[_speaker_assignment(segment) for segment in targeted_segments],
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -1153,6 +1211,7 @@ def assign_segments_bulk(
 
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
+    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1165,6 +1224,13 @@ def assign_segments_bulk(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='bulk',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -1456,7 +1522,18 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
-    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
+    try:
+        summary = generate_summary_with_prompt(
+            full_transcript, request.prompt, language_code=conversation.language or 'en'
+        )
+    except SummaryProviderError as exc:
+        # The provider failed on its own account, so this is an upstream failure and not a fault
+        # of the request: report it as one instead of as a 500 the client cannot act on.
+        logger.warning("test-prompt summary failed upstream: conversation_id=%s", conversation_id)
+        raise HTTPException(
+            status_code=504 if exc.timed_out else 502,
+            detail='summary_provider_timeout' if exc.timed_out else 'summary_provider_unavailable',
+        ) from exc
 
     return {"summary": summary}
 

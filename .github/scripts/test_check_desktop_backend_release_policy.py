@@ -101,34 +101,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                     )
                     self.assertTrue(any(required in error for error in errors), errors)
 
-    def test_requires_production_agent_vm_artifacts(self) -> None:
-        errors = POLICY.validate_deploy_workflow(
-            self.prod.replace("      - name: Build and publish Agent VM image", "      - name: Omitted agent VM", 1),
-            production=True,
-        )
-        self.assertTrue(any("Build and publish Agent VM image" in error for error in errors), errors)
 
-    def test_requires_production_reconciler_deploy_identity_before_traffic(self) -> None:
-        omitted = self.prod.replace(
-            "      - name: Preflight Agent VM reconciler deploy identity",
-            "      - name: Reconciler identity preflight omitted",
-            1,
-        )
-        retargeted = self.prod.replace(
-            "josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com",
-            "other-deployer@based-hardware.iam.gserviceaccount.com",
-            1,
-        )
-        omitted_errors = POLICY.validate_deploy_workflow(omitted, production=True)
-        retargeted_errors = POLICY.validate_deploy_workflow(retargeted, production=True)
-        self.assertTrue(
-            any("Preflight Agent VM reconciler deploy identity" in error for error in omitted_errors),
-            omitted_errors,
-        )
-        self.assertTrue(
-            any("josancamon-mb-pro-2@based-hardware.iam.gserviceaccount.com" in error for error in retargeted_errors),
-            retargeted_errors,
-        )
 
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
@@ -266,19 +239,11 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_desktop_release_gates(mutated)
         self.assertTrue(any("desktop_promote_prod.yml" in error for error in errors), errors)
 
-    def test_rejects_an_agent_vm_job_argument_that_deploy_cloudrun_would_split(self) -> None:
-        mutated = self.dev.replace("'--args=-m,jobs.agent_vm_reconciler'", "--args=-m,jobs.agent_vm_reconciler", 1)
-
-        errors = POLICY.validate_deploy_workflow(mutated, production=False)
-
-        self.assertTrue(any("action-parser-safe" in error for error in errors), errors)
-
-    def test_requires_private_agent_vm_readiness_on_each_request_service(self) -> None:
+    def test_requires_private_network_egress_on_each_request_service(self) -> None:
         contracts = (
-            "--network=default",
-            "--subnet=default",
+            "--network=${{ vars.CLOUD_RUN_VPC_NETWORK }}",
+            "--subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}",
             "--vpc-egress=private-ranges-only",
-            "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
         )
         for workflow, production, step in (
             (self.dev, False, "Deploy desktop-backend to Cloud Run"),
@@ -295,6 +260,41 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         errors = POLICY.validate_deploy_workflow(mutated, production=production)
                         self.assertTrue(any(contract in error and "request service" in error for error in errors), errors)
 
+
+    def test_requires_llm_gateway_wiring_on_each_request_service(self) -> None:
+        """An unset feature mode silently routes managed desktop chat to Anthropic."""
+        contracts = (
+            "OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}",
+            "OMI_LLM_GATEWAY_FEATURE_MODE=gateway",
+            "OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true",
+            "OMI_LLM_CHAT_AGENT_ROUTE=gateway",
+            "OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
+        )
+        for workflow, production, step in (
+            (self.dev, False, "Deploy desktop-backend to Cloud Run"),
+            (self.prod, True, "Deploy production candidate at zero traffic"),
+        ):
+            with self.subTest(production=production):
+                start = workflow.index(f"      - name: {step}\n")
+                end = workflow.find("\n      - ", start + 1)
+                block = workflow[start:] if end < 0 else workflow[start:end]
+                for contract in contracts:
+                    with self.subTest(contract=contract):
+                        mutated_block = block.replace(contract, "", 1)
+                        mutated = workflow[:start] + mutated_block + workflow[start + len(block) :]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                        self.assertTrue(
+                            any(contract in error and "LLM gateway binding" in error for error in errors), errors
+                        )
+
+    def test_requires_the_gateway_serving_gate(self) -> None:
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            with self.subTest(production=production):
+                mutated = workflow.replace("verify-llm-gateway-serving.py", "gateway-gate-omitted.py")
+                errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                self.assertTrue(any("LLM gateway serving gate" in error for error in errors), errors)
+
+
     def test_rejects_development_serving_with_a_development_firebase_project(self) -> None:
         mutated = self.dev.replace(
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
@@ -309,7 +309,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         self.assertTrue(any("production Firebase project" in error for error in errors), errors)
 
     def test_requires_isolated_runtime_env_for_each_development_deployment(self) -> None:
-        for step in ("Deploy desktop-backend to Cloud Run", "Deploy Agent VM reconciler Cloud Run Job"):
+        for step in ("Deploy desktop-backend to Cloud Run",):
             with self.subTest(step=step):
                 start = self.dev.index(f"      - name: {step}\n")
                 end = self.dev.find("\n      - name: ", start + 1)
@@ -323,16 +323,10 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 errors = POLICY.validate_deploy_workflow(mutated, production=False)
                 self.assertTrue(any(step in error and "GOOGLE_CLOUD_PROJECT" in error for error in errors), errors)
 
-                mutated_block = block.replace("GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}", "", 1)
-                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
-                errors = POLICY.validate_deploy_workflow(mutated, production=False)
-                self.assertTrue(any(step in error and "GCE_PROJECT_ID" in error for error in errors), errors)
-
                 for env_var in (
                     "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
                     "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
                     "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-                    "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
                 ):
                     with self.subTest(step=step, env_var=env_var):
                         commented_block = block.replace(env_var, f"# {env_var}", 1)

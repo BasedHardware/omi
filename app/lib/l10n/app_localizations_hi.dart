@@ -321,7 +321,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchApps => 'ऐप्स खोजें...';
 
   @override
-  String get myApps => 'मेरे ऐप्स';
+  String get myApps => 'मेरे द्वारा बनाया गया';
 
   @override
   String get installedApps => 'इंस्टॉल किए गए ऐप्स';
@@ -9829,4 +9829,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get findDevice => 'ढूँढें';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।';
 }

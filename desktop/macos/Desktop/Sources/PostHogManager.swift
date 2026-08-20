@@ -623,6 +623,17 @@ extension PostHogManager {
       ])
   }
 
+  /// Reprocess fired without a specific app (one-tap row affordance for
+  /// untitled/failed conversations). Separate event so we can distinguish
+  /// from the existing "reprocess-with-app" funnel in product metrics.
+  func conversationReprocessedDefault(conversationId: String) {
+    track(
+      "Conversation Reprocessed Default",
+      properties: [
+        "conversation_id": conversationId
+      ])
+  }
+
   // MARK: - Settings Events (Additional)
 
   func settingToggled(setting: String, enabled: Bool) {

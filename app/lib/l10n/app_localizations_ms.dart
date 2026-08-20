@@ -322,7 +322,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get searchApps => 'Cari apl...';
 
   @override
-  String get myApps => 'Aplikasi Saya';
+  String get myApps => 'Dicipta oleh saya';
 
   @override
   String get installedApps => 'Aplikasi Dipasang';
@@ -9875,4 +9875,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get findDevice => 'Cari';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat berkongsi diagnostik. Sila cuba lagi.';
 }

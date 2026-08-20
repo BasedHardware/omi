@@ -19,9 +19,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.windows:
       case TargetPlatform.linux:
       case TargetPlatform.fuchsia:
-        throw UnsupportedError(
-          'Local Firebase options are not configured for this platform.',
-        );
+        throw UnsupportedError('Local Firebase options are not configured for this platform.');
     }
   }
 

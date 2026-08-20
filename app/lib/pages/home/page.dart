@@ -12,7 +12,6 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:upgrader/upgrader.dart';
 
-import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -259,10 +258,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
-      // Stop keepalive when app goes to background
-      if (mounted) {
-        Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
-      }
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
 
@@ -277,13 +272,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
-
-      // Ensure agent VM is running and restart keepalive
-      if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
-        ensureAgentVm();
-        Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
-      }
-
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
         final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -368,17 +356,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _ensurePageInitialized(homePageIdx);
     WidgetsBinding.instance.addObserver(this);
     _prewarmRemainingTabs(homePageIdx);
-
-    // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
-    if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive + preConnectAgent');
-      ensureAgentVm();
-      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-      messageProvider.startVmKeepalive();
-      messageProvider.preConnectAgent();
-    } else {
-      print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
-    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final permission = await Geolocator.checkPermission();
@@ -1147,10 +1124,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Stop VM keepalive timer
-    try {
-      Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
-    } catch (_) {}
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
     // Remove capture provider listener using stored reference

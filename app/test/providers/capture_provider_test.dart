@@ -978,10 +978,7 @@ void main() {
 
     test('keeps native Omi background audio disabled when Custom STT raw forwarding is off', () async {
       await SharedPreferencesUtil().saveCustomSttConfig(
-        const CustomSttConfig(
-          provider: SttProvider.onDeviceWhisper,
-          sendRawAudioToOmi: false,
-        ),
+        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
       );
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
@@ -1085,10 +1082,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       await SharedPreferencesUtil.init();
       await SharedPreferencesUtil().saveCustomSttConfig(
-        const CustomSttConfig(
-          provider: SttProvider.onDeviceWhisper,
-          sendRawAudioToOmi: false,
-        ),
+        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
       );
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
     });

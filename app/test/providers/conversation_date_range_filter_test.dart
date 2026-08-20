@@ -66,10 +66,7 @@ void main() {
 
   test('no range selected shows every conversation', () {
     final provider = makeProvider();
-    provider.conversations = [
-      _conversation('a', DateTime(2026, 1, 1)),
-      _conversation('b', DateTime(2026, 7, 1)),
-    ];
+    provider.conversations = [_conversation('a', DateTime(2026, 1, 1)), _conversation('b', DateTime(2026, 7, 1))];
 
     provider.groupConversationsByDate();
 
