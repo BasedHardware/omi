@@ -1385,7 +1385,10 @@ struct DesktopHomeView: View {
 
       // One panel per destination — see `PageGlassLane`. Settings' own section list rides inside it
       // so the page is one object rather than a panel with its nav stranded on the wallpaper.
-      PageGlassLane(selectedIndex: selectedIndex) {
+      PageGlassLane(
+        selectedIndex: selectedIndex,
+        usesLegacyHomeDesign: useLegacyHomeDesign
+      ) {
         HStack(spacing: 0) {
           if isInSettings && !showsPrimarySidebar { settingsSidebar }
           PageContentView(

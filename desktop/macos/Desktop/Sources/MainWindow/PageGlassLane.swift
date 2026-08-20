@@ -51,9 +51,11 @@ enum PageGlassLanePolicy {
   /// It takes the raw index rather than a `SidebarNavItem` because the router's `switch` sends every
   /// unrecognised index to Home through its `default:` branch. Resolving an unknown index to anything
   /// else here would wrap Home in a second panel on exactly the routes nobody tests.
-  static func ownsItsPanels(selectedIndex: Int) -> Bool {
+  static func ownsItsPanels(selectedIndex: Int, usesLegacyHomeDesign: Bool = false) -> Bool {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
-    case .dashboard, .rewind:
+    case .dashboard:
+      return !usesLegacyHomeDesign
+    case .rewind:
       return true
     default:
       return false
@@ -97,10 +99,24 @@ enum PageGlassLaneLayout {
 struct PageGlassLane<Content: View>: View {
   /// The route being rendered, used only to ask `PageGlassLanePolicy` whether it already has glass.
   let selectedIndex: Int
+  let usesLegacyHomeDesign: Bool
   @ViewBuilder var content: () -> Content
 
+  init(
+    selectedIndex: Int,
+    usesLegacyHomeDesign: Bool = false,
+    @ViewBuilder content: @escaping () -> Content
+  ) {
+    self.selectedIndex = selectedIndex
+    self.usesLegacyHomeDesign = usesLegacyHomeDesign
+    self.content = content
+  }
+
   var body: some View {
-    if PageGlassLanePolicy.ownsItsPanels(selectedIndex: selectedIndex) {
+    if PageGlassLanePolicy.ownsItsPanels(
+      selectedIndex: selectedIndex,
+      usesLegacyHomeDesign: usesLegacyHomeDesign
+    ) {
       // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather
       // than the surface it was given — see `ShellModalScrim`. Published here rather than chosen at
       // each modal, because this is the one place that knows which of the two shapes it just built.

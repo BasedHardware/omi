@@ -38,6 +38,42 @@ final class PageGlassLaneTests: XCTestCase {
     }
   }
 
+  func testTogglingLegacyHomeDesignGivesDashboardTheSharedPanelGround() throws {
+    XCTAssertTrue(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
+        usesLegacyHomeDesign: false))
+    XCTAssertFalse(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
+        usesLegacyHomeDesign: true))
+    XCTAssertFalse(
+      PageGlassLanePolicy.ownsItsPanels(
+        selectedIndex: 2,
+        usesLegacyHomeDesign: true))
+
+    let size = CGSize(width: 1_400, height: 800)
+    let recorder = PageGlassLaneFrameRecorder()
+    let host = NSHostingView(
+      rootView: PageGlassLane(
+        selectedIndex: SidebarNavItem.dashboard.rawValue,
+        usesLegacyHomeDesign: true
+      ) {
+        PageGlassLaneProbe(recorder: recorder) { Color.clear }
+      }
+      .frame(width: size.width, height: size.height)
+    )
+    host.frame = NSRect(origin: .zero, size: size)
+    host.layoutSubtreeIfNeeded()
+
+    let placed = try XCTUnwrap(recorder.frame)
+    XCTAssertEqual(placed.width, PageGlassLaneLayout.laneWidth(for: size.width), accuracy: 0.5)
+    XCTAssertEqual(
+      placed.height,
+      size.height - PageGlassLaneLayout.topGap - PageGlassLaneLayout.bottomGap,
+      accuracy: 0.5)
+  }
+
   /// The router sends every unrecognised index to Home through its `default:` branch. An index the
   /// nav enum does not carry must therefore resolve to Home here too, or those routes wrap Home's
   /// two panels inside a third one.
