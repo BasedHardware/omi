@@ -78,7 +78,7 @@ def test_allow_direct_and_model_route_overrides_resolve_by_name():
         values,
         {
             "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "true",
-            "STT_SERVICE_MODELS": "modulate-velma-2,dg-nova-3,parakeet",
+            "STT_SERVICE_MODELS": "dg-nova-3,modulate-velma-2,parakeet",
             "TRANSLATION_SERVICE_MODELS": "nllb,google",
         },
     )
@@ -86,7 +86,7 @@ def test_allow_direct_and_model_route_overrides_resolve_by_name():
     joined = " ".join(argv)
     assert "].value=true" in joined
     # Helm --set-string treats commas as pair separators unless escaped.
-    assert "].value=modulate-velma-2\\,dg-nova-3\\,parakeet" in joined
+    assert "].value=dg-nova-3\\,modulate-velma-2\\,parakeet" in joined
     assert "].value=nllb\\,google" in joined
 
 
@@ -98,7 +98,7 @@ def test_comma_model_list_survives_helm_set_string_round_trip():
     values = _load_values(PROD_VALUES)
     argv = HELPER.resolve_env_override_argv(
         values,
-        {"STT_SERVICE_MODELS": "modulate-velma-2,dg-nova-3,parakeet"},
+        {"STT_SERVICE_MODELS": "dg-nova-3,modulate-velma-2,parakeet"},
     )
     rendered = subprocess.run(
         [
@@ -116,7 +116,7 @@ def test_comma_model_list_survives_helm_set_string_round_trip():
         capture_output=True,
         text=True,
     ).stdout
-    assert 'name: STT_SERVICE_MODELS\n              value: "modulate-velma-2,dg-nova-3,parakeet"' in rendered
+    assert 'name: STT_SERVICE_MODELS\n              value: "dg-nova-3,modulate-velma-2,parakeet"' in rendered
 
 
 def test_newline_override_is_rejected():

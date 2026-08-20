@@ -68,7 +68,7 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertTrue(manager.blocksProductTraffic)
     XCTAssertFalse(manager.isProductShellAdmitted)
     XCTAssertFalse(manager.allowsOfflineQueueUpload)
-    XCTAssertEqual(manager.overlayDecision, .migrationMaintenance)
+    XCTAssertNil(manager.overlayDecision)
   }
 
   func testManagerAppliesFetchedControl() async {
@@ -91,6 +91,7 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertFalse(manager.allowsOfflineQueueUpload)
     XCTAssertTrue(manager.blocksProductTraffic)
     XCTAssertFalse(manager.isProductShellAdmitted)
+    XCTAssertEqual(manager.overlayDecision, .migrationMaintenance)
   }
 
   func testRefreshFailureRetainsLastConfirmedControl() async throws {
@@ -203,7 +204,20 @@ final class AccountCutoverControlTests: XCTestCase {
     XCTAssertEqual(manager.bootstrapPhase, .pending)
     XCTAssertTrue(manager.blocksProductTraffic)
     XCTAssertFalse(manager.allowsOfflineQueueUpload)
+    XCTAssertNil(manager.overlayDecision)
     XCTAssertEqual(try accountCutoverFallbackCount(), beforeCount)
+  }
+
+  func testAllowingControlDoesNotMountABlockingOverlay() async {
+    let manager = AccountCutoverControlManager(
+      fetchControl: { AccountCutoverControl.legacyDefault },
+      currentOwnerID: { "owner-a" }
+    )
+
+    await manager.bindCurrentOwnerAndRefresh()
+
+    XCTAssertTrue(manager.isProductShellAdmitted)
+    XCTAssertNil(manager.overlayDecision)
   }
 
   func testOfflineUploadAdmissionRequiresReadyAllowingControl() {

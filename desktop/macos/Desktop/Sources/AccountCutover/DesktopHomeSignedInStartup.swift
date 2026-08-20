@@ -42,11 +42,6 @@ enum DesktopHomeSignedInStartup {
 
     restorePersistedCaptureServices("launch")
 
-    CrispManager.shared.start(
-      initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
-      sessionUserId: UserDefaults.standard.string(forKey: .authUserId)
-    )
-
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
     FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
 

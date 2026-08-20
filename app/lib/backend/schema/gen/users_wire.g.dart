@@ -174,6 +174,50 @@ class GeneratedUserLanguageUpdateResponse {
   }
 }
 
+class GeneratedAvailableLanguage {
+  final String code;
+  final String name;
+
+  const GeneratedAvailableLanguage({
+    required this.code,
+    required this.name,
+  });
+
+  factory GeneratedAvailableLanguage.fromJson(Map<String, dynamic> json) {
+    return GeneratedAvailableLanguage(
+      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'code': code,
+      'name': name,
+    };
+  }
+}
+
+class GeneratedAvailableLanguagesResponse {
+  final List<GeneratedAvailableLanguage> languages;
+
+  const GeneratedAvailableLanguagesResponse({
+    required this.languages,
+  });
+
+  factory GeneratedAvailableLanguagesResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedAvailableLanguagesResponse(
+      languages: _required(_readFieldValue<List<GeneratedAvailableLanguage>>(_readField(json, const ["languages"]), "languages", (value) => _readObjectList(value, GeneratedAvailableLanguage.fromJson), requiredField: true, nullable: false), "languages"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'languages': languages.map((value) => value.toJson()).toList(),
+    };
+  }
+}
+
 class GeneratedMemorySummaryRatingResponse {
   final bool hasRating;
   final int? rating;

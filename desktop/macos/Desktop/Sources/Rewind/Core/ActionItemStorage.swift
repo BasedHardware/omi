@@ -66,7 +66,7 @@ actor ActionItemStorage {
   }
 
   /// Ensure database is initialized before use
-  private func ensureInitialized() async throws -> DatabasePool {
+  func ensureInitialized() async throws -> DatabasePool {
     if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
       return db
     }

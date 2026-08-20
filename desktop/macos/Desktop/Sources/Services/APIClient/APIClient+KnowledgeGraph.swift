@@ -442,4 +442,39 @@ extension APIClient {
   func deleteKnowledgeGraphImpl() async throws {
     return try await delete("v1/knowledge-graph")
   }
+
+  /// Return-only SSOT extraction through managed knowledge_graph (OpenRouter Luna).
+  func extractKnowledgeGraphImpl(
+    text: String,
+    includeExisting: Bool = false,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KnowledgeGraphExtractResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let text: String
+      let includeExisting: Bool
+      enum CodingKeys: String, CodingKey {
+        case text
+        case includeExisting = "include_existing"
+      }
+    }
+    return try await post(
+      "v1/knowledge-graph/extract",
+      body: Body(text: text, includeExisting: includeExisting),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
+  }
+}
+
+struct KnowledgeGraphExtractResponse: Codable, Equatable, Sendable {
+  let nodes: [KnowledgeGraphNode]
+  let edges: [KnowledgeGraphEdge]
 }

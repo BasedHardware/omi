@@ -1,7 +1,7 @@
 version: 2
 name: memories
 tier: manual
-description: Memory menu — navigate full-width Memories, Conversations, and Brain Map destinations
+description: Memory menu — navigate full-width Activity, Memories, Conversations, and Brain Map destinations
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
@@ -10,6 +10,9 @@ covers:
   # resolves the Brain Map cohort S5 lands on. Extracted from `DesktopHomeView` — these steps walked
   # it before it had its own file.
   - desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  # The Activity destination: the chronological spine that was Home's landing surface, first in the
+  # switcher row, with its own search bar and filter chips.
+  - desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/HubDestinationSwitcher.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/OmiSearchField.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift

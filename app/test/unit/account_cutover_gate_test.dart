@@ -57,9 +57,6 @@ class _CutoverTestEnv implements EnvFields {
   String? get intercomAndroidApiKey => null;
 
   @override
-  String? get openAIAPIKey => null;
-
-  @override
   String? get posthogApiKey => null;
 
   @override

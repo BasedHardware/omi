@@ -799,6 +799,31 @@ extension SettingsContentView {
         )
       }
 
+      settingsCard(settingId: "about.discord") {
+        HStack(spacing: OmiSpacing.lg) {
+          Image(systemName: "person.2.fill")
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(Ink.secondary)
+
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Community")
+              .scaledFont(size: OmiType.subheading, weight: .medium)
+              .foregroundColor(Ink.primary)
+
+            Text("Get help from the omi community and team")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+
+          Spacer()
+
+          Button("Join Discord") {
+            openURLInDefaultBrowser(SupportLinks.discord)
+          }
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        }
+      }
+
       settingsCard(settingId: "about.reportissue") {
         HStack(spacing: OmiSpacing.lg) {
           Image(systemName: "exclamationmark.bubble.fill")

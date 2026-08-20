@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
-from ._client import db
+from ._client import db, get_firestore_client
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,31 @@ def get_action_item_ids(uid: str) -> List[str]:
     return [doc.id for doc in coll.select([]).stream()]
 
 
+def get_visible_action_item_ids(
+    uid: str,
+    *,
+    completed: bool,
+    firestore_client: Any = None,
+) -> List[str]:
+    """Return IDs in one visible Tasks status bucket.
+
+    The account-wide ID census intentionally includes every document for reconciliation
+    and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
+    rows and include only rows that the explicit ``completed`` list filter can render.
+    """
+    client = firestore_client or get_firestore_client()
+    coll = client.collection('users').document(uid).collection(action_items_collection)
+    visible_ids: List[str] = []
+    for doc in coll.select(['completed', 'status', 'deleted']).stream():
+        data = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        completed_value = data.get('completed')
+        if completed_value is completed:
+            visible_ids.append(doc.id)
+    return visible_ids
+
+
 def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial: bool = False) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     action_item_data = dict(action_item_data)
@@ -127,19 +152,46 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
-    # Normalize any ISO date strings to aware datetimes. These fields can arrive as strings from
-    # tool- and LLM-created action items (not only from validated API models), so a single malformed
-    # string must not raise and 500 the whole create/update. Drop the bad value with a warning and let
-    # the field fall back to its default or stay unset, matching the tolerant date handling on the read
-    # path and in _coerce_utc_datetime.
+    # Normalize date fields to timezone-aware UTC datetimes. These can arrive as
+    # ISO strings or datetime objects from tool-/LLM-created action items (extraction
+    # models use plain ``datetime``, not ``AwareDatetime``). Firestore rejects
+    # tz-naive datetimes, and a failed batch create on the fire-and-forget
+    # postprocess path silently drops extracted tasks. Mirror
+    # ``api_key_metadata._coerce_utc_datetime`` / ``mcp_action_items.parse_due_at``:
+    # parse strings tolerantly, attach UTC to naive values, drop only malformed
+    # / out-of-range values (ValueError or OverflowError from UTC normalization)
+    # so a single bad field cannot 500 the whole create/update or batch.
     for date_field in ('created_at', 'updated_at', 'due_at', 'completed_at'):
         value = action_item_data.get(date_field)
-        if isinstance(value, str) and value:
-            try:
-                action_item_data[date_field] = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+        if value is None or value == '':
+            if date_field in action_item_data and value == '':
                 action_item_data.pop(date_field, None)
+            continue
+        try:
+            if isinstance(value, datetime):
+                parsed = value
+            elif isinstance(value, str):
+                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            else:
+                logger.warning(
+                    "Dropping non-datetime %s type=%s on action item write",
+                    date_field,
+                    type(value).__name__,
+                )
+                action_item_data.pop(date_field, None)
+                continue
+
+            # OverflowError: boundary aware values whose offset conversion leaves
+            # Python's datetime range (same tolerance as api_key_metadata).
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            else:
+                parsed = parsed.astimezone(timezone.utc)
+        except (OverflowError, ValueError):
+            logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+            action_item_data.pop(date_field, None)
+            continue
+        action_item_data[date_field] = parsed
 
     return action_item_data
 

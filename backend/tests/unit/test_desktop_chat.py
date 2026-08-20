@@ -1283,8 +1283,39 @@ def test_specialist_haiku_requests_bypass_managed_chat_agent():
     assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi:auto:chat-agent'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi-luna'})
+    assert desktop_chat._uses_managed_chat_agent({'model': ''})
     assert desktop_chat._uses_managed_chat_agent({})
     assert not desktop_chat._uses_managed_chat_agent({'model': 'client-model'})
+
+
+def test_structured_aliases_route_to_the_structured_lane_not_chat():
+    for alias in ('omi-structured', 'OMI-Structured', 'omi:auto:chat-structured'):
+        assert desktop_chat._uses_managed_chat_agent({'model': alias})
+        assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
+
+    # Conversational and omitted models keep the chat-agent lane.
+    for alias in ('omi-luna', 'omi-auto', 'claude-sonnet-4-6', ''):
+        assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-agent'
+    assert desktop_chat._managed_lane_id({}) == 'omi:auto:chat-agent'
+
+
+def test_structured_lane_traffic_is_attributed_to_its_own_feature():
+    """Structured-lane calls must not land in the ledger as chat-agent traffic."""
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-structured') == 'chat_structured'
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-agent') == 'chat_agent'
+    assert desktop_chat._gateway_request_headers(
+        'req-1', 'omi:auto:chat-structured'
+    ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
+
+
+def test_gateway_body_stamps_the_selected_lane():
+    request = {'model': 'omi-structured', 'messages': [{'role': 'user', 'content': 'plan this'}]}
+    lane = desktop_chat._managed_lane_id(request)
+    assert desktop_chat._gateway_body(request, lane)['model'] == 'omi:auto:chat-structured'
+    # Default stays the chat lane for callers that do not pass one.
+    assert desktop_chat._gateway_body(request)['model'] == 'omi:auto:chat-agent'
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():

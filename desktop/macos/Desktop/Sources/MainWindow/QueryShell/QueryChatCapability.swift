@@ -59,22 +59,3 @@ enum HomeChatTranscript {
       .joined(separator: "\n\n")
   }
 }
-
-/// Whether the results panel offers the way back into the transcript.
-///
-/// **This is the difference between "chat exists" and "chat is reachable".** Asking is a mode of
-/// this query, so the answer thread is entered with `⌘⏎` and left with Escape — which is right
-/// until you navigate to another destination and come back, at which point the mode is gone, the
-/// transcript is still on the provider, and the only way to see it again is to ask something else.
-/// One chip in the panel's corner, mirroring the `‹ Results` chip the answer mode already has,
-/// restores reachability without adding a destination.
-///
-/// It reuses `HomeHistoryPresentationPolicy` rather than restating the rule: Home already decided
-/// once that a loaded, non-empty transcript is worth showing, and one product cannot hold two
-/// opinions about that.
-enum HomeChatReentry {
-  static func isOffered(messageCount: Int, isLoading: Bool) -> Bool {
-    HomeHistoryPresentationPolicy.restingMode(isLoading: isLoading, messageCount: messageCount)
-      == .chat
-  }
-}

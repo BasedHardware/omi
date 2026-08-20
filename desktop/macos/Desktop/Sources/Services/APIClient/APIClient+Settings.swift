@@ -241,6 +241,49 @@ extension APIClient {
   func deleteKnowledgeGraph() async throws {
     try await deleteKnowledgeGraphImpl()
   }
+
+  func extractKnowledgeGraph(
+    text: String,
+    includeExisting: Bool = false,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> KnowledgeGraphExtractResponse {
+    try await extractKnowledgeGraphImpl(
+      text: text,
+      includeExisting: includeExisting,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func extractMemoryLog(
+    text: String,
+    textSource: String,
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryLogExtractResponse {
+    try await extractMemoryLogImpl(
+      text: text,
+      textSource: textSource,
+      existingMemories: existingMemories,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func synthesizeConnectorItems(
+    source: String,
+    items: [String],
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ConnectorSynthesisResponse {
+    try await synthesizeConnectorItemsImpl(
+      source: source,
+      items: items,
+      existingMemories: existingMemories,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
 }
 
 // MARK: - User Settings Models

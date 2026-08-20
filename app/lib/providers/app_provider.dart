@@ -23,6 +23,15 @@ class AppProvider extends BaseProvider {
   @visibleForTesting
   Future<void> Function(String appId)? disableAppOverride;
 
+  @visibleForTesting
+  Future<List<Map<String, dynamic>>> Function()? retrieveAppsGroupedOverride;
+
+  @visibleForTesting
+  Future<List<String>> Function()? getEnabledAppsOverride;
+
+  @visibleForTesting
+  Future<List<App>> Function()? retrievePopularAppsOverride;
+
   List<App> apps = [];
   List<App> popularApps = [];
   // v2 grouped apps: [{ category: {id,title}, data: List<App>, pagination: {...} }]
@@ -43,6 +52,13 @@ class AppProvider extends BaseProvider {
 
   bool isLoading = false;
   bool isSearching = false;
+
+  // Share an in-flight load with callers that arrive while the Apps tab is
+  // being initialized. This prevents a rebuild or deep link from starting a
+  // second catalog request while preserving explicit later refreshes.
+  Future<void>? _appsLoad;
+  Future<void>? _popularAppsLoad;
+  int _activeCatalogLoads = 0;
 
   List<Category> categories = [];
   List<AppCapability> capabilities = [];
@@ -396,6 +412,16 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void _beginCatalogLoad() {
+    _activeCatalogLoads++;
+    if (!isLoading) setIsLoading(true);
+  }
+
+  void _endCatalogLoad() {
+    _activeCatalogLoads--;
+    if (_activeCatalogLoads == 0 && isLoading) setIsLoading(false);
+  }
+
   void setSelectedChatAppId(String? appId) {
     final newAppId = appId ?? "";
     if (selectedChatAppId != newAppId) {
@@ -428,9 +454,28 @@ class AppProvider extends BaseProvider {
     notifyListeners();
   }
 
-  Future getApps() async {
-    if (isLoading) return;
-    setIsLoading(true);
+  Future<void> getApps() {
+    final inFlight = _appsLoad;
+    if (inFlight != null) return inFlight;
+
+    final completer = Completer<void>();
+    final sharedLoad = completer.future;
+    _appsLoad = sharedLoad;
+    unawaited(() async {
+      try {
+        await _loadApps();
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        if (identical(_appsLoad, sharedLoad)) _appsLoad = null;
+      }
+    }());
+    return sharedLoad;
+  }
+
+  Future<void> _loadApps() async {
+    _beginCatalogLoad();
 
     try {
       // Performance optimization: Load from cache first for immediate UI
@@ -440,8 +485,8 @@ class AppProvider extends BaseProvider {
 
       // Fetch grouped apps and user's enabled app IDs in parallel
       final results = await Future.wait([
-        retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
-        getEnabledAppsServer(),
+        retrieveAppsGroupedOverride?.call() ?? retrieveAppsGrouped(offset: 0, limit: 20, includeReviews: true),
+        getEnabledAppsOverride?.call() ?? getEnabledAppsServer(),
       ]);
       final groups = results[0] as List<Map<String, dynamic>>;
       final enabledAppIds = (results[1] as List<String>).toSet();
@@ -472,22 +517,40 @@ class AppProvider extends BaseProvider {
       // Fallback to cached data
       setAppsFromCache();
     } finally {
-      setIsLoading(false);
+      _endCatalogLoad();
     }
   }
 
-  Future getPopularApps() async {
-    if (isLoading) return; // Prevent concurrent operations
+  Future<void> getPopularApps() {
+    final inFlight = _popularAppsLoad;
+    if (inFlight != null) return inFlight;
 
+    final completer = Completer<void>();
+    final sharedLoad = completer.future;
+    _popularAppsLoad = sharedLoad;
+    unawaited(() async {
+      try {
+        await _loadPopularApps();
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      } finally {
+        if (identical(_popularAppsLoad, sharedLoad)) _popularAppsLoad = null;
+      }
+    }());
+    return sharedLoad;
+  }
+
+  Future<void> _loadPopularApps() async {
+    _beginCatalogLoad();
     try {
-      setIsLoading(true);
-      popularApps = await retrievePopularApps();
+      popularApps = await (retrievePopularAppsOverride?.call() ?? retrievePopularApps());
     } catch (e) {
       Logger.debug('Error loading popular apps: $e');
       // Fallback to cached data or empty list
       popularApps = [];
     } finally {
-      setIsLoading(false);
+      _endCatalogLoad();
     }
   }
 

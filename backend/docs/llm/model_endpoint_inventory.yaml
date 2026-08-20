@@ -115,14 +115,14 @@ surfaces:
     current_provider_model: openai/gpt-5.6-luna
     request_shape: streaming vision chat completion
     gateway_lane_capability_needed: gateway-owned vision chat lane or file-chat replacement retrieval path
-    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
+    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: file_chat_assistants
     code_path: backend/utils/other/chat_file.py:FileChatTool
     current_provider_model: openai/gpt-5.6-luna with Assistants, Threads, Files, File Search
     request_shape: file upload, assistants, file_search, streaming run deltas
     gateway_lane_capability_needed: gateway-owned file/assistant lifecycle or replacement retrieval path
-    migration_status: inventoried_direct_file_lifecycle_surface; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and checked-in serving configuration does not permit the exception
+    migration_status: acknowledged_direct_file_lifecycle_surface; intentionally remains direct during OMI_LLM_GATEWAY_FEATURE_MODE=gateway and records direct-exception telemetry without raising (PR #11419)
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: omni_realtime_relay
     code_path: backend/routers/omni_relay.py
@@ -145,3 +145,38 @@ surfaces:
     gateway_lane_capability_needed: generated omi:auto:memories lane
     migration_status: get_llm_routed
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+  - surface: knowledge_graph_extract
+    code_path: backend/routers/knowledge_graph.py:extract_knowledge_graph
+    current_provider_model: openai/gpt-5.6-luna knowledge_graph feature
+    request_shape: return-only entity/edge extraction JSON
+    gateway_lane_capability_needed: generated omi:auto:knowledge-graph lane
+    migration_status: get_llm_routed; desktop onboarding should call this instead of inventing graphs via chat_agent
+    test_guardrail_coverage: backend/tests/unit/test_knowledge_graph_extract_route.py
+  - surface: memories_extract
+    code_path: backend/routers/memories.py:extract_memory_log
+    current_provider_model: openai/gpt-5.6-luna memories feature
+    request_shape: return-only memory-log JSON (memories + profile)
+    gateway_lane_capability_needed: generated omi:auto:memories lane
+    migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_memories_extract_route.py
+  - surface: connector_synthesis
+    code_path: backend/routers/integrations.py:synthesize_connector_data
+    current_provider_model: openai/gpt-5.6-luna memories feature
+    request_shape: return-only calendar/gmail/notes memories + tasks + profile
+    gateway_lane_capability_needed: generated omi:auto:memories lane
+    migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_connector_synthesis_route.py
+  - surface: conversation_topic
+    code_path: backend/routers/conversations.py:generate_conversation_topic_endpoint
+    current_provider_model: openai/gpt-5.6-luna conv_structure feature
+    request_shape: return-only emoji + short title for a finished transcript
+    gateway_lane_capability_needed: generated omi:auto:conv-structure lane
+    migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_conversation_topic_route.py
+  - surface: ai_user_profile_synthesis
+    code_path: backend/routers/users.py:synthesize_ai_profile
+    current_provider_model: openai/gpt-5.6-luna memories feature
+    request_shape: return-only two-stage user profile document from desktop source lines
+    gateway_lane_capability_needed: generated omi:auto:memories lane
+    migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
+    test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py

@@ -281,7 +281,6 @@ struct SpineStream: View {
   }
 
   private func toggleStar(_ conversation: ServerConversation) {
-    OmiUISound.play(.commit)
     Task {
       await appState.setConversationStarred(conversation.id, starred: !conversation.starred)
     }

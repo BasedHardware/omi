@@ -1,0 +1,7 @@
+{
+  "version": "0.12.162",
+  "date": "2026-08-11",
+  "changes": [
+    "Replaced the in-app support chat with a Join Discord button in Settings → About"
+  ]
+}

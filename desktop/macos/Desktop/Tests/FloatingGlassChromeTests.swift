@@ -219,10 +219,9 @@ final class FloatingGlassChromeTests: XCTestCase {
 
   /// Exactly one shadow per floating surface — never zero, never two.
   ///
-  /// The bar's panel is borderless and sized **once** to the maximum hover extent, so AppKit's window
-  /// shadow would trace a transparent rectangle much larger than the pill. `hasShadow = false` is the
-  /// correct half of that pairing, and the panel therefore must not ask for a second one from the
-  /// content either.
+  /// The bar's panel is borderless, so AppKit's rectangular window shadow would not match the pill.
+  /// `hasShadow = false` is the correct half of that pairing, and the panel therefore must not ask
+  /// for a second one from the content either.
   func testTheFloatingPanelAndItsContentAgreeOnWhoDrawsTheShadow() {
     XCTAssertFalse(
       WindowGlass.drawsSystemShadow(.floating),

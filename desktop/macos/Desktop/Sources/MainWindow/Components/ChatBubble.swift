@@ -1284,15 +1284,69 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
-/// Keeps streamed tool groups compact until the reader explicitly asks for the details.
-enum ToolCallsGroupExpansionPolicy {
-  static func initiallyExpanded() -> Bool {
-    false
+struct ToolActivityTimelineItem: Identifiable {
+  let id: String
+  let block: ChatContentBlock
+  let connectsToNext: Bool
+}
+
+enum ToolActivityTimelinePresentation {
+  static func items(from blocks: [ChatContentBlock]) -> [ToolActivityTimelineItem] {
+    let toolCalls = blocks.compactMap { block -> ChatContentBlock? in
+      guard case .toolCall = block else { return nil }
+      return block
+    }
+    var occurrenceByIdentity: [String: Int] = [:]
+    return toolCalls.enumerated().map { position, block in
+      let baseIdentity: String
+      if case .toolCall(let id, let name, _, _, _, _) = block {
+        baseIdentity = [id, name].joined(separator: ":")
+      } else {
+        baseIdentity = block.id
+      }
+      let occurrence = occurrenceByIdentity[baseIdentity, default: 0]
+      occurrenceByIdentity[baseIdentity] = occurrence + 1
+      return ToolActivityTimelineItem(
+        id: "\(baseIdentity):\(occurrence)",
+        block: block,
+        connectsToNext: position < toolCalls.count - 1
+      )
+    }
+  }
+
+  static func animationToken(for items: [ToolActivityTimelineItem]) -> String {
+    items.map { item in
+      guard case .toolCall(_, _, let status, _, _, _) = item.block else { return item.id }
+      return "\(item.id):\(status)"
+    }.joined(separator: "|")
+  }
+
+  static func displayStatus(toolName: String, status: ToolCallStatus) -> ToolCallStatus {
+    if status == .stalled, ChatContentBlock.isSlowExpectedTool(toolName) {
+      return .slow
+    }
+    return status
+  }
+
+  static func accessibilityValue(for status: ToolCallStatus) -> String {
+    switch status {
+    case .running: return "Running"
+    case .slow: return "Still working"
+    case .stalled: return "Taking longer than usual"
+    case .completed: return "Completed"
+    case .failed: return "Failed"
+    }
+  }
+
+  static func hasExpandableContent(input: ToolCallInput?, output: String?) -> Bool {
+    let details = input?.details?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let result = output?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return !details.isEmpty || !result.isEmpty
   }
 }
 
-/// Renders a group of consecutive tool calls as a single summary line with
-/// optional expanded per-step details.
+/// Renders consecutive tool calls as one live activity rail. Each appended call
+/// extends the rail instead of replacing the previous step with a summary.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
@@ -1302,9 +1356,6 @@ struct ToolCallsGroup: View {
   var onCancel: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
-
-  @State private var isExpanded: Bool
-  @State private var showUnavailable = false
 
   init(
     calls: [ChatContentBlock],
@@ -1318,7 +1369,6 @@ struct ToolCallsGroup: View {
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
-    self._isExpanded = State(initialValue: ToolCallsGroupExpansionPolicy.initiallyExpanded())
   }
 
   /// True iff at least one tool in the group is `.stalled` and is not a
@@ -1334,198 +1384,46 @@ struct ToolCallsGroup: View {
     }
   }
 
-  /// Most attention-worthy status across the group. Drives the header
-  /// icon. Priority: stalled > failed > slow > running > completed.
-  private var aggregateStatus: ToolCallStatus {
-    var hasStalled = false
-    var hasFailed = false
-    var hasSlow = false
-    var hasRunning = false
-    for block in calls {
-      if case .toolCall(_, let name, let status, _, _, _) = block {
-        switch status {
-        case .stalled:
-          // Long-by-design tools surface as "slow" (spinner), never the
-          // alarming stalled triangle.
-          if ChatContentBlock.isSlowExpectedTool(name) { hasSlow = true } else { hasStalled = true }
-        case .failed: hasFailed = true
-        case .slow: hasSlow = true
-        case .running: hasRunning = true
-        case .completed: break
-        }
-      }
-    }
-    if hasStalled { return .stalled }
-    if hasFailed { return .failed }
-    if hasSlow { return .slow }
-    if hasRunning { return .running }
-    return .completed
-  }
-
-  /// Display name of the currently in-flight tool (last in-flight one), or last tool if all done.
-  private var currentToolName: String {
-    if let lastRunning = calls.last(where: { block in
-      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-      return false
-    }) {
-      if case .toolCall(_, let name, _, _, _, _) = lastRunning {
-        return ChatContentBlock.displayName(for: name)
-      }
-    }
-    if case .toolCall(_, let name, _, _, _, _) = calls.last {
-      return ChatContentBlock.displayName(for: name)
-    }
-    return "Working"
-  }
-
-  private var currentToolSummary: String? {
-    if let lastRunning = calls.last(where: { block in
-      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-      return false
-    }), case .toolCall(_, let name, _, _, let input, _) = lastRunning {
-      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
-    }
-    if case .toolCall(_, let name, _, _, let input, _) = calls.last {
-      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
-    }
-    return nil
-  }
-
-  private var spawnedAgentOpenRef: AgentTimelineRef? {
-    calls.compactMap(\.agentOpenRef).last
-  }
-
-  private var canOpenSpawnedAgent: Bool {
-    AgentTimelineOpenFeedback.shouldShowLinkOut(
-      hasResolvableAgent: spawnedAgentOpenRef != nil,
-      hasOpenAction: onOpenAgentRef != nil || onOpenAgent != nil,
-      showUnavailable: showUnavailable
-    )
-  }
-
-  private func openSpawnedAgent(completion: @escaping (Bool) -> Void) {
-    guard let ref = spawnedAgentOpenRef else {
-      completion(false)
-      return
-    }
-    if let onOpenAgentRef {
-      onOpenAgentRef(ref, completion)
-      return
-    }
-    if let pillId = ref.pillId, let onOpenAgent {
-      onOpenAgent(pillId, completion)
-      return
-    }
-    completion(false)
+  private var timelineItems: [ToolActivityTimelineItem] {
+    ToolActivityTimelinePresentation.items(from: calls)
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: compact ? 0 : 6) {
+    VStack(alignment: .leading, spacing: compact ? OmiSpacing.xxs : OmiSpacing.xs) {
       if hasStalledTool, let onCancel {
         ToolCallStalledBanner(onCancel: onCancel)
       }
 
-      header
-
-      if isExpanded {
-        expandedToolCalls
-      }
-
-      if showUnavailable {
-        Text("Agent unavailable — it may have been dismissed.")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .padding(.horizontal, OmiSpacing.sm)
-          .padding(.bottom, compact ? OmiSpacing.xs : OmiSpacing.sm)
-      }
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .fixedSize(horizontal: false, vertical: true)
-    .glassCard(cornerRadius: compact ? 14 : 16)
-  }
-
-  private var header: some View {
-    StableChatCardHeader(
-      isExpanded: isExpanded,
-      showsDisclosure: true,
-      horizontalPadding: OmiSpacing.sm,
-      verticalPadding: compact ? 0 : OmiSpacing.xs,
-      minimumHeight: compact ? 34 : nil,
-      onToggle: {
-        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-          isExpanded.toggle()
-        }
-      },
-      onOpen: canOpenSpawnedAgent
-        ? {
-          openSpawnedAgent { succeeded in
-            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
-              showUnavailable = true
-            }
-          }
-        } : nil
-    ) {
-      statusIcon(for: aggregateStatus, size: 12)
-    } content: {
-      HStack(spacing: compact ? 7 : 6) {
-        Text(currentToolName)
-          .scaledFont(size: OmiType.caption, weight: compact ? .semibold : .regular)
-          .foregroundColor(Ink.secondary)
-          .lineLimit(1)
-
-        if let summary = currentToolSummary, !summary.isEmpty {
-          Text(summary)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-        }
-
-        if calls.count > 1 {
-          Text(compact ? "· \(calls.count) steps" : "·")
-            .scaledFont(size: compact ? 11 : 12)
-            .foregroundColor(Ink.secondary)
-            .lineLimit(1)
-          if !compact {
-            Text("\(calls.count) steps")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          }
-        }
-      }
-    }
-  }
-
-  private var expandedToolCalls: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      Divider()
-        .padding(.horizontal, OmiSpacing.sm)
-
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        ForEach(calls) { block in
-          if case .toolCall(_, let name, let status, _, let input, let output) = block {
+      VStack(alignment: .leading, spacing: 0) {
+        ForEach(timelineItems) { item in
+          if case .toolCall(_, let name, let status, _, let input, let output) = item.block {
             ToolCallCard(
               name: name,
               status: status,
               input: input,
               output: output,
-              agentOpenRef: block.agentOpenRef,
+              connectsToNext: item.connectsToNext,
+              agentOpenRef: item.block.agentOpenRef,
               onOpenAgent: onOpenAgent,
               onOpenAgentRef: onOpenAgentRef
+            )
+            .transition(
+              .asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .opacity
+              )
             )
           }
         }
       }
-      .padding(.horizontal, OmiSpacing.xs)
-      .padding(.vertical, OmiSpacing.xs)
-    }
-  }
+      .omiAnimation(
+        .spring(response: 0.36, dampingFraction: 0.86),
+        value: ToolActivityTimelinePresentation.animationToken(for: timelineItems)
+      )
 
-  private static func summaryEmbeddedInToolName(_ name: String) -> String? {
-    guard let separator = name.firstIndex(of: ":") else { return nil }
-    let summary = name[name.index(after: separator)...]
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return summary.isEmpty ? nil : summary
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .fixedSize(horizontal: false, vertical: true)
   }
 }
 
@@ -1536,6 +1434,7 @@ struct ToolCallCard: View {
   let status: ToolCallStatus
   let input: ToolCallInput?
   let output: String?
+  var connectsToNext = false
   var agentOpenRef: AgentTimelineRef? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
@@ -1544,7 +1443,18 @@ struct ToolCallCard: View {
   @State private var showUnavailable = false
 
   private var hasExpandableContent: Bool {
-    input?.details != nil || output != nil
+    ToolActivityTimelinePresentation.hasExpandableContent(input: input, output: output)
+  }
+
+  private var displayStatus: ToolCallStatus {
+    ToolActivityTimelinePresentation.displayStatus(toolName: name, status: status)
+  }
+
+  private var accessibilityTitle: String {
+    [ChatContentBlock.displayName(for: name), input?.summary]
+      .compactMap { $0 }
+      .filter { !$0.isEmpty }
+      .joined(separator: ", ")
   }
 
   private var canOpenSpawnedAgent: Bool {
@@ -1572,101 +1482,142 @@ struct ToolCallCard: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      // Compact header row
-      StableChatCardHeader(
-        isExpanded: isExpanded,
-        showsDisclosure: hasExpandableContent,
-        horizontalPadding: OmiSpacing.sm,
-        verticalPadding: OmiSpacing.xs,
-        onToggle: hasExpandableContent
-          ? {
-            if hasExpandableContent {
-              OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-                isExpanded.toggle()
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      toolActivityIcon(name: name, status: displayStatus, size: 15)
+        .frame(width: 20, height: 20)
+        .background(Ink.surface.opacity(0.94), in: Circle())
+        .accessibilityHidden(true)
+
+      VStack(alignment: .leading, spacing: 0) {
+        toolHeader
+
+        if isExpanded || showUnavailable {
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            if let details = input?.details {
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text("Input")
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
+                  .foregroundColor(Ink.secondary)
+
+                Text(details)
+                  .scaledFont(size: OmiType.caption, design: .monospaced)
+                  .foregroundColor(Ink.secondary)
+                  .lineLimit(10)
               }
             }
-          } : nil,
-        onOpen: canOpenSpawnedAgent
-          ? {
+
+            if let output = output, !output.isEmpty {
+              VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+                Text("Output")
+                  .scaledFont(size: OmiType.micro, weight: .semibold)
+                  .foregroundColor(Ink.secondary)
+
+                Text(output)
+                  .scaledFont(size: OmiType.caption, design: .monospaced)
+                  .foregroundColor(Ink.secondary)
+                  .lineLimit(15)
+              }
+            }
+
+            if showUnavailable {
+              Text("Agent unavailable — it may have been dismissed.")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+            }
+          }
+          .padding(.vertical, OmiSpacing.xs)
+          .padding(.trailing, OmiSpacing.sm)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+    .background(alignment: .topLeading) {
+      if connectsToNext {
+        GeometryReader { proxy in
+          Rectangle()
+            .fill(Ink.secondary.opacity(0.28))
+            .frame(width: 1, height: max(0, proxy.size.height - 9))
+            .offset(x: 9.5, y: 19)
+            .transition(.scale(scale: 0, anchor: .top).combined(with: .opacity))
+        }
+        .accessibilityHidden(true)
+      }
+    }
+    .accessibilityElement(children: .contain)
+  }
+
+  @ViewBuilder
+  private var toolHeader: some View {
+    HStack(alignment: .top, spacing: OmiSpacing.xxs) {
+      if hasExpandableContent {
+        Button(action: {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            isExpanded.toggle()
+          }
+        }) {
+          toolHeaderLabel(showsDisclosure: true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(isExpanded ? "Collapse tool details" : "Expand tool details")
+      } else {
+        toolHeaderLabel(showsDisclosure: false)
+      }
+
+      Group {
+        if canOpenSpawnedAgent {
+          Button(action: {
             openSpawnedAgent { succeeded in
               if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
                 showUnavailable = true
               }
             }
-          } : nil
-      ) {
-        // Status indicator — uses the shared statusIcon helper so
-        // .slow / .stalled / .failed render the same way here as in
-        // the group header.
-        statusIcon(for: status, size: 12)
-      } content: {
-        HStack(spacing: OmiSpacing.xs) {
-          // Tool name
-          Text(ChatContentBlock.displayName(for: name))
-            .scaledFont(size: OmiType.caption, design: .monospaced)
-            .foregroundColor(Ink.secondary)
-
-          // Inline argument summary
-          if let summary = input?.summary {
-            Text("·")
-              .scaledFont(size: OmiType.caption)
+          }) {
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: OmiType.micro)
               .foregroundColor(Ink.secondary)
-
-            Text(summary)
-              .scaledFont(size: OmiType.caption, design: .monospaced)
-              .foregroundColor(Ink.secondary)
-              .lineLimit(1)
-              .truncationMode(.middle)
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+              .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
+          .help("Open agent")
+        } else if agentOpenRef != nil {
+          Color.clear
         }
       }
+      .frame(width: agentOpenRef == nil ? 0 : 28, height: 28)
+    }
+    .textSelection(.disabled)
+  }
 
-      // Expanded content
-      if isExpanded || showUnavailable {
-        Divider()
-          .padding(.horizontal, OmiSpacing.sm)
+  private func toolHeaderLabel(showsDisclosure: Bool) -> some View {
+    HStack(spacing: OmiSpacing.xs) {
+      Text(ChatContentBlock.displayName(for: name))
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(Ink.secondary)
 
-        VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-          // Input details
-          if let details = input?.details {
-            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-              Text("Input")
-                .scaledFont(size: OmiType.micro, weight: .semibold)
-                .foregroundColor(Ink.secondary)
+      if let summary = input?.summary, !summary.isEmpty {
+        Text(summary)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary.opacity(0.72))
+          .lineLimit(1)
+          .truncationMode(.middle)
+      }
 
-              Text(details)
-                .scaledFont(size: OmiType.caption, design: .monospaced)
-                .foregroundColor(Ink.secondary)
-                .lineLimit(10)
-            }
-          }
+      Spacer(minLength: OmiSpacing.xs)
 
-          // Output
-          if let output = output, !output.isEmpty {
-            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-              Text("Output")
-                .scaledFont(size: OmiType.micro, weight: .semibold)
-                .foregroundColor(Ink.secondary)
-
-              Text(output)
-                .scaledFont(size: OmiType.caption, design: .monospaced)
-                .foregroundColor(Ink.secondary)
-                .lineLimit(15)
-            }
-          }
-
-          if showUnavailable {
-            Text("Agent unavailable — it may have been dismissed.")
-              .scaledFont(size: OmiType.caption)
-              .foregroundColor(Ink.secondary)
-          }
-        }
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.sm)
+      if showsDisclosure {
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+          .scaledFont(size: OmiType.micro)
+          .foregroundColor(Ink.secondary)
+          .frame(width: 18, height: 18)
+          .accessibilityHidden(true)
       }
     }
-    .glassCard(cornerRadius: 16)
+    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+    .contentShape(Rectangle())
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(accessibilityTitle)
+    .accessibilityValue(ToolActivityTimelinePresentation.accessibilityValue(for: displayStatus))
   }
 }
 
@@ -1828,13 +1779,10 @@ extension ChatContentBlock {
   }
 }
 
-// MARK: - Tool Call Status Icon (shared by ToolCallsGroup + ToolCallCard)
+// MARK: - Tool Activity Icon
 
-/// Single source of truth for how each `ToolCallStatus` value renders
-/// as a small inline icon. Used in both the group header and individual
-/// tool rows so the visual language is consistent.
 @MainActor @ViewBuilder
-private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View {
+private func toolActivityIcon(name: String, status: ToolCallStatus, size: CGFloat) -> some View {
   switch status {
   case .running:
     ProgressView()
@@ -1850,14 +1798,32 @@ private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View 
       .scaledFont(size: size)
       .foregroundColor(PageGlass.warning)
   case .completed:
-    Image(systemName: "checkmark.circle.fill")
+    Image(systemName: toolActivitySymbol(for: name))
       .scaledFont(size: size)
-      .foregroundColor(Ink.listeningGreen)
+      .foregroundColor(Ink.secondary)
   case .failed:
-    Image(systemName: "xmark.circle.fill")
+    Image(systemName: "xmark.circle")
       .scaledFont(size: size)
       .foregroundColor(Ink.errorRed)
   }
+}
+
+private func toolActivitySymbol(for name: String) -> String {
+  let cleanName = String(name.split(separator: "__").last ?? Substring(name)).lowercased()
+  if cleanName.contains("search") || cleanName.hasPrefix("grep") || cleanName.hasPrefix("glob") {
+    return "magnifyingglass"
+  }
+  if cleanName.contains("read") || cleanName.contains("fetch") { return "doc.text" }
+  if cleanName.contains("write") || cleanName.contains("edit") { return "pencil" }
+  if cleanName.contains("bash") || cleanName.contains("shell") || cleanName.contains("command") {
+    return "terminal"
+  }
+  if cleanName.contains("agent") { return "person.2" }
+  if cleanName.contains("calendar") { return "calendar" }
+  if cleanName.contains("mail") || cleanName.contains("message") { return "envelope" }
+  if cleanName.contains("permission") { return "lock" }
+  if cleanName.contains("screen") || cleanName.contains("capture") { return "rectangle.dashed" }
+  return "sparkles"
 }
 
 // MARK: - Tool Call Stalled Banner

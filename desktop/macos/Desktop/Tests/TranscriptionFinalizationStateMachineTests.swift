@@ -208,10 +208,16 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     XCTAssertNotNil(uploading.finalizationStartedAt)
     XCTAssertNil(uploading.finalizationCompletedAt)
 
-    try await TranscriptionStorage.shared.markSessionCompleted(
+    let firstCompletion = try await TranscriptionStorage.shared.markSessionCompleted(
       id: sessionId,
       backendId: "backend-finalized"
     )
+    let duplicateCompletion = try await TranscriptionStorage.shared.markSessionCompleted(
+      id: sessionId,
+      backendId: "backend-finalized"
+    )
+    XCTAssertTrue(firstCompletion)
+    XCTAssertFalse(duplicateCompletion, "A duplicate backend callback must not emit activation twice")
 
     await RewindDatabase.shared.close()
     await TranscriptionStorage.shared.invalidateCache()

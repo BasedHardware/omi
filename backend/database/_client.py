@@ -7,7 +7,7 @@ from google.api_core.exceptions import InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
-from database.google_credentials import prepare_google_credentials
+from database.google_credentials import customer_data_service_account, prepare_google_credentials
 
 __all__ = [
     "db",
@@ -82,11 +82,12 @@ _firestore_client_lock = Lock()
 
 
 def _build_firestore_client() -> Any:
-    prepare_google_credentials()
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
-    # defer entirely to default resolution so env vars cannot repoint prod Firestore.
+    # never let bare GOOGLE_CLOUD_PROJECT (often the GKE compute project) repoint
+    # the customer-data client away from SERVICE_ACCOUNT_JSON's project_id.
     if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        prepare_google_credentials()
         project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
         database = os.environ.get("FIRESTORE_DATABASE_ID")
         kwargs: dict[str, str] = {}
@@ -95,6 +96,13 @@ def _build_firestore_client() -> Any:
         if database:
             kwargs["database"] = database
         return firestore.Client(**kwargs)
+
+    customer_data = customer_data_service_account()
+    if customer_data is not None:
+        credentials, project_id = customer_data
+        return firestore.Client(credentials=credentials, project=project_id)
+
+    prepare_google_credentials()
     return firestore.Client()
 
 

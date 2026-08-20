@@ -23,6 +23,8 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentBridge+ChatFirst.swift
   - desktop/macos/Desktop/Sources/Chat/AgentClient.swift
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  # save_knowledge_graph discovery_text resolves through backend KG extract SSOT.
+  - desktop/macos/Desktop/Sources/Services/KnowledgeGraphToolSupport.swift
   - desktop/macos/Desktop/Sources/Providers/ChatFirstBlockToolExecutor.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstBlockValidation.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift

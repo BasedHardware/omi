@@ -128,12 +128,20 @@ class PrePushCiPredictionTests(unittest.TestCase):
             with self.subTest(phase=phase):
                 self.assertTrue(plan.includes(phase))
 
-    def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
+    def test_release_compile_runs_on_prs_and_pushes_for_releasable_desktop_changes(self) -> None:
+        # Release-lane-only breaks (whole-module strict concurrency) must die in
+        # PRs: the KG ResolveOutcome Sendable error (#11373/#11374) merged with a
+        # green debug lane and wedged every candidate for three merges.
         paths = ["desktop/macos/Resources/Info.plist"]
-        self.assertFalse(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertTrue(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(self.plan(paths, event="push").includes("desktop-swift-release-compile"))
         self.assertTrue(
             self.plan(["desktop/macos/Desktop/Package.resolved"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
+        )
+        self.assertFalse(
+            self.plan(["backend/routers/updates.py"], event="pull_request").includes(
                 "desktop-swift-release-compile"
             )
         )

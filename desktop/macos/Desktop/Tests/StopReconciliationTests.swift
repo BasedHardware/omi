@@ -401,6 +401,108 @@ final class StopReconciliationTests: XCTestCase {
       ))
   }
 
+  func testUnboundCompletedRecordingIsTelemetryEligibleAndEmitsOnce() {
+    var pending = [
+      FinishedRecordingEnvelope(
+        sessionId: nil,
+        clientConversationId: "recording-conversation",
+        startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+        source: .desktop
+      )
+    ]
+    let acceptedIndex = DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+      memoryId: "recording-conversation",
+      memory: nil,
+      recordingSessionId: "recording-conversation",
+      pending: pending
+    )
+
+    XCTAssertEqual(acceptedIndex, 0, "An exact identity is sufficient without a SQLite session")
+    guard let acceptedIndex else {
+      XCTFail("Expected a matching pending recording")
+      return
+    }
+    pending.remove(at: acceptedIndex)
+    XCTAssertNil(
+      DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+        memoryId: "recording-conversation",
+        memory: nil,
+        recordingSessionId: "recording-conversation",
+        pending: pending
+      ),
+      "A duplicate callback is rejected after the pending recording envelope is consumed"
+    )
+  }
+
+  func testLocalSegmentUploadUsesTheSameConversationCreatedContract() {
+    let startedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let session = TranscriptionSessionRecord(
+      startedAt: startedAt,
+      finishedAt: startedAt.addingTimeInterval(75),
+      source: ConversationSource.desktop.rawValue,
+      finalizationStrategy: .localSegments
+    )
+
+    let telemetry = ConversationFinalizationService.localConversationCreatedTelemetry(
+      session: session,
+      conversationId: "local-uploaded-conversation"
+    )
+
+    XCTAssertEqual(telemetry.conversationId, "local-uploaded-conversation")
+    XCTAssertEqual(telemetry.source, ConversationSource.desktop.rawValue)
+    XCTAssertEqual(telemetry.durationSeconds, 75)
+  }
+
+  func testRapidRecordingRotationsMatchTheirOwnFinishedEnvelopeOutOfOrder() {
+    let first = FinishedRecordingEnvelope(
+      sessionId: 1,
+      clientConversationId: "first-recording",
+      startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+      source: .desktop
+    )
+    let second = FinishedRecordingEnvelope(
+      sessionId: 2,
+      clientConversationId: "second-recording",
+      startedAt: Date(timeIntervalSince1970: 1_700_000_100),
+      source: .desktop
+    )
+
+    XCTAssertEqual(
+      DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+        memoryId: "second-recording",
+        memory: nil,
+        recordingSessionId: "second-recording",
+        pending: [first, second]
+      ),
+      1
+    )
+    XCTAssertEqual(
+      DesktopConversationMatchPolicy.matchingFinishedRecordingIndex(
+        memoryId: "first-recording",
+        memory: nil,
+        recordingSessionId: "first-recording",
+        pending: [first, second]
+      ),
+      0
+    )
+  }
+
+  func testCompletedRemoteEventIsNotTelemetryEligible() {
+    let sessionStart = Date()
+    let remoteEvent = DesktopConversationMatchPolicy.acceptsCompletedLocalRecording(
+      memoryId: "remote-conversation",
+      memory: [
+        "source": "phone",
+        "started_at": sessionStart.iso8601String,
+      ],
+      recordingSessionId: "remote-conversation",
+      expectedBackendId: "local-recording",
+      finishedRecordingStartTime: sessionStart
+    )
+
+    XCTAssertFalse(remoteEvent, "A completion for another recording must not count as local activation")
+  }
+
   func testVersionedLifecycleEnvelopeAcceptsOnlyTheNextSequence() {
     XCTAssertTrue(
       DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
@@ -500,6 +602,16 @@ final class StopReconciliationTests: XCTestCase {
         activeBackendId: nil,
         ignoredRotatedBackendIds: ["previous-conversation"]
       ))
+  }
+
+  func testRepeatedRejectedRolloverDoesNotEvictAnotherGuardEntry() {
+    let ignored = DesktopConversationMatchPolicy.rememberingRotatedBackendId(
+      "previous-conversation",
+      activeBackendId: "active-conversation",
+      ignoredRotatedBackendIds: ["previous-conversation", "other-conversation"],
+      maxCount: 2
+    )
+    XCTAssertEqual(ignored, ["previous-conversation", "other-conversation"])
   }
 
   func testNewBackendConversationIdAfterRotationCanBindFreshSession() {

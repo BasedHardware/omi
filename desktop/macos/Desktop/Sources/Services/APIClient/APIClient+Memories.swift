@@ -598,6 +598,83 @@ extension APIClient {
     )
   }
 
+  /// Managed LLM synthesis takes longer than a normal API call (the profile route runs two
+  /// sequential model calls), so these endpoints override the shared 30s transport timeout.
+  /// Windows budgets the same 60s.
+  static var managedSynthesisTimeout: TimeInterval { 60 }
+
+  /// Return-only SSOT memory-log extraction through managed memories (OpenRouter Luna).
+  func extractMemoryLogImpl(
+    text: String,
+    textSource: String,
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> MemoryLogExtractResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let text: String
+      let textSource: String
+      let existingMemories: [String]
+      enum CodingKeys: String, CodingKey {
+        case text
+        case textSource = "text_source"
+        case existingMemories = "existing_memories"
+      }
+    }
+    return try await post(
+      "v1/memories/extract",
+      body: Body(
+        text: text,
+        textSource: textSource,
+        existingMemories: Array(existingMemories.prefix(200))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
+  }
+
+  /// Return-only connector synthesis (calendar / gmail / notes) through managed memories.
+  func synthesizeConnectorItemsImpl(
+    source: String,
+    items: [String],
+    existingMemories: [String] = [],
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> ConnectorSynthesisResponse {
+    guard
+      let pinnedAuthorization =
+        authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: expectedOwnerId)
+    else {
+      throw AuthError.userChangedDuringRequest
+    }
+    struct Body: Encodable {
+      let source: String
+      let items: [String]
+      let existingMemories: [String]
+      enum CodingKeys: String, CodingKey {
+        case source
+        case items
+        case existingMemories = "existing_memories"
+      }
+    }
+    return try await post(
+      "v1/connectors/synthesize",
+      body: Body(
+        source: source,
+        items: Array(items.prefix(200)).map { String($0.prefix(1000)) },
+        existingMemories: Array(existingMemories.prefix(200))),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: pinnedAuthorization,
+      requestTimeout: Self.managedSynthesisTimeout)
+  }
+
   /// Creates a new memory (manual or extracted)
   func createMemory(
     content: String,
@@ -791,6 +868,32 @@ extension APIClient {
     throw APIError.unsupportedTierScopedBulkMutation("deletion")
   }
 
+}
+
+struct MemoryLogExtractResponse: Codable, Equatable, Sendable {
+  let memories: [String]
+  let profile: String
+}
+
+/// One task returned by the backend connector-synthesis SSOT.
+struct ConnectorSynthesisTask: Codable, Equatable, Sendable {
+  let description: String
+  let priority: String
+  let dueAt: String
+
+  enum CodingKeys: String, CodingKey {
+    case description
+    case priority
+    case dueAt = "due_at"
+  }
+}
+
+/// Response of POST /v1/connectors/synthesize — the backend owns the calendar /
+/// gmail / notes prompts, so readers only send their rows and read this back.
+struct ConnectorSynthesisResponse: Codable, Equatable, Sendable {
+  let memories: [String]
+  let tasks: [ConnectorSynthesisTask]
+  let profile: String
 }
 
 /// The create endpoint returns the stored memory, including its authoritative

@@ -50,6 +50,9 @@ runs:
       env:
         RELEASE_BEFORE: ${{ inputs.before }}
         RELEASE_SHA: ${{ inputs.sha }}
+        # The push lane cannot see PR labels; the release contract is that the
+        # NEXT RELEASE has notes, which fragments already in the tree satisfy.
+        DESKTOP_CHANGELOG_ACCEPT_TREE_FRAGMENTS: "1"
       run: |
         set -euo pipefail
         python3 .github/scripts/run_checks.py \

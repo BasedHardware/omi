@@ -1066,9 +1066,32 @@ const KG_NODE_TYPES = new Set(['person', 'organization', 'place', 'thing', 'conc
 export function createSaveKnowledgeGraphExecutor(
   deps?: Partial<SaveKnowledgeGraphDeps>
 ): ProductToolExecutor {
-  return async (input) => {
-    const rawNodes = Array.isArray(input.nodes) ? input.nodes : []
-    const rawEdges = Array.isArray(input.edges) ? input.edges : []
+  return async (input, ctx) => {
+    let rawNodes = Array.isArray(input.nodes) ? input.nodes : []
+    let rawEdges = Array.isArray(input.edges) ? input.edges : []
+    const discoveryText =
+      typeof input.discovery_text === 'string' ? input.discovery_text.trim() : ''
+    if (discoveryText) {
+      // Network edge: a relay disconnect must abort the request and stop before the
+      // local write, like every other network-touching executor.
+      const { backendJsonFetch } = await import('./backendTools')
+      const extracted = await backendJsonFetch({
+        method: 'POST',
+        path: '/v1/knowledge-graph/extract',
+        body: { text: discoveryText, include_existing: false },
+        timeoutMs: 60_000,
+        signal: ctx?.signal
+      })
+      if (ctx?.signal?.aborted) return 'Error: request was cancelled.'
+      if (!extracted.ok) {
+        return extracted.error.startsWith('Error:')
+          ? extracted.error
+          : `Error: backend knowledge graph extract failed: ${extracted.error}`
+      }
+      const data = extracted.data as { nodes?: unknown; edges?: unknown }
+      rawNodes = Array.isArray(data.nodes) ? data.nodes : []
+      rawEdges = Array.isArray(data.edges) ? data.edges : []
+    }
 
     const nodes: OnboardingGraphNode[] = []
     const nodeIds = new Set<string>()
@@ -1103,7 +1126,11 @@ export function createSaveKnowledgeGraphExecutor(
       edges.push({ id, sourceId, targetId, label: edgeLabel })
     }
 
-    if (nodes.length === 0) return 'Error: no valid nodes to save (each needs id + label).'
+    if (nodes.length === 0) {
+      return discoveryText
+        ? 'Error: backend extract returned no valid nodes to save.'
+        : 'Error: no valid nodes to save (provide discovery_text, or nodes with id + label).'
+    }
 
     const upsert = deps?.upsert ?? (await import('../ipc/db')).upsertLocalGraph
     upsert(nodes, edges)

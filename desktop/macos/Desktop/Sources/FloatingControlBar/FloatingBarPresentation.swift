@@ -1,4 +1,6 @@
 import Foundation
+import OmiTheme
+import SwiftUI
 
 /// Whether a presentation request is allowed to change the user's durable
 /// Floating Bar preference. Onboarding may borrow the real bar for a demo, but
@@ -12,6 +14,35 @@ enum FloatingBarPreferenceMutation: Equatable {
     switch self {
     case .setEnabled(let enabled): return enabled
     case .preserve: return nil
+    }
+  }
+}
+
+extension FloatingControlBarWindow {
+  var shouldOrderOutAfterConversationClose: Bool {
+    !FloatingControlBarManager.shared.isEnabled
+      && state.currentNotification == nil
+      && !state.showingAIConversation
+  }
+
+  /// Starts the token-fenced retraction after presentation eligibility has
+  /// been established. Keeping this boundary independent of `isVisible`
+  /// lets lifecycle tests exercise stale deadlines on headless CI runners.
+  func beginNotchRetraction(then completion: @escaping () -> Void) {
+    notchRetractionCancellation?.cancel()
+    frameAnimationToken += 1
+    notchRetractionGeneration &+= 1
+    let generation = notchRetractionGeneration
+    OmiMotion.withGated(.easeIn(duration: 0.18)) {
+      state.notchRevealProgress = 0.01
+    }
+    notchRetractionCancellation = notchRetractionScheduler.schedule(after: 0.18) { [weak self] in
+      guard let self, self.notchRetractionGeneration == generation else { return }
+      completion()
+      // Leave the island ready to render for show paths that skip the
+      // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
+      self.state.notchRevealProgress = 1
+      self.notchRetractionCancellation = nil
     }
   }
 }

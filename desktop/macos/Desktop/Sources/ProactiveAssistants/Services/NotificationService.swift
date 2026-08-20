@@ -242,8 +242,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(assistantId: assistantId, title: title) {
         case .resetScreenCapture:
           self.handleScreenCaptureResetAction(source: "notification_click")
-        case .openSupportThread:
-          self.openSupportThread(source: "notification_click")
         case .none:
           break
         }
@@ -292,19 +290,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case none
     /// The screen-recording repair, which is an action rather than a page.
     case resetScreenCapture
-    /// The founder/support thread the reply arrived in.
-    case openSupportThread
   }
 
   /// Resolve the tap destination from the notification's provenance.
   ///
-  /// Support replies are matched on `assistantId`, not on their display title, because the title is
-  /// user-visible copy: renaming the banner must not silently disconnect its tap. The
-  /// screen-capture case still matches on title only because that is how its own delivery gates
+  /// The screen-capture case matches on title because that is how its own delivery gates
   /// (`screenCaptureResetShownKey`) already identify it — changing that identity is a separate
   /// change with its own suppression-state migration.
   static func openAction(assistantId: String, title: String) -> OpenAction {
-    if assistantId == SupportThreadRoute.assistantId { return .openSupportThread }
     if title == screenCaptureResetTitle { return .resetScreenCapture }
     return .none
   }
@@ -316,22 +309,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     ScreenCaptureService.resetScreenCapturePermissionAndRestart()
   }
 
-  /// Bring up the support thread the tapped reply belongs to.
-  ///
-  /// The window is revealed first because a banner can arrive with the main window closed, which is
-  /// exactly when a founder reply is worth surfacing. Non-`private` so a test can drive this
-  /// without a real `UNUserNotificationCenter` delivery.
-  func openSupportThread(source: String) {
-    log("Support thread open requested from \(source)")
-    SupportThreadRoute.open()
-  }
-
   /// Send a notification via the floating bar, and optionally as a native macOS system banner.
   ///
   /// `deliverSystemBanner` defaults to `false` because proactive AI notifications are
   /// floating-bar only by default — users who disabled the floating bar reported clicking
   /// the top-right system banner and getting no conversation context, which was confusing.
-  /// Functional notifications (Crisp support replies, screen-recording permission
+  /// Functional notifications (screen-recording permission
   /// prompts with a repair action) must pass `deliverSystemBanner: true` so they
   /// still surface as a system banner — they either have no floating-bar equivalent
   /// or must reach the user even when the floating bar is hidden/snoozed.
@@ -344,6 +327,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// for that explicit opt-out, not by default. Disabling the Floating Bar itself does
   /// *not* force a banner: floating-bar-only notifications stay silent in that case, same
   /// as before this policy existed, per the contentless-banner confusion noted above.
+  /// `insightDeliveryID`, when present, is an opaque Advice correlation key. It records only
+  /// bounded delivery outcomes and never carries notification text or window context.
   func sendNotification(
     ownerID: String,
     title: String,
@@ -353,6 +338,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
     respectFrequency: Bool = true,
@@ -365,6 +351,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("NotificationService: rejecting notification from stale runtime owner")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .staleOwner
+      )
       return
     }
     prepareOwnerScopedState(for: authorizationSnapshot)
@@ -391,6 +382,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // macOS banner — the user opted into "no notifications for 2h".
     if FloatingControlBarManager.shared.isSnoozed {
       log("NotificationService: suppressing notification because floating bar is snoozed")
+      recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .snoozed)
       return
     }
 
@@ -401,6 +393,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // to bypass this, matching the frequency gate below.
     if respectFrequency && !Self.areNotificationsEnabled() {
       log("NotificationService: suppressing \(assistantId) notification because notifications are disabled")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .masterNotificationsDisabled
+      )
       return
     }
 
@@ -414,11 +411,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       )
     {
       log("NotificationService: throttled \(assistantId) notification (frequency=\(Self.currentFrequencyLevel()))")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: Self.currentFrequencyLevel() == 0 ? .frequencyOff : .frequencyThrottled
+      )
       return
     }
 
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       log("NotificationService: owner changed before notification presentation")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .staleOwner
+      )
       return
     }
 
@@ -431,11 +438,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
-
-    if FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+    let floatingBarPreviewEnabled = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
       previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled
-    ) {
-      FloatingControlBarManager.shared.showNotification(
+    )
+
+    var floatingBarMayDeliver = false
+    var floatingBarQueued = false
+    if floatingBarPreviewEnabled {
+      let presentation = FloatingControlBarManager.shared.showNotification(
         ownerID: ownerID,
         title: title,
         message: message,
@@ -444,8 +454,29 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         context: context,
         action: action,
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
+        insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData
       )
+      switch presentation {
+      case .presented:
+        floatingBarMayDeliver = true
+      case .queued:
+        // Queue admission is not user-visible delivery. Leave the identity unresolved so a
+        // later presentation boundary (or a system-banner fallback) can emit the terminal event.
+        floatingBarQueued = true
+      case .suppressed:
+        recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .snoozed)
+        return
+      case .rejectedOwnerChange:
+        recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: .suppressed,
+          reason: .staleOwner
+        )
+        return
+      case .windowUnavailable:
+        break
+      }
     }
 
     // Default path: floating-bar only. Functional callers opt-in via
@@ -453,20 +484,45 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // explicitly muted in-bar previews (bar still enabled), fall back to the
     // system banner so the notification is never fully silenced. Disabling the
     // Floating Bar itself does not force a banner — see the parameter doc.
-    guard
-      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
-        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
-        deliverSystemBanner: deliverSystemBanner
-      )
-    else { return }
+    let shouldDeliverSystemBanner = FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBanner(
+      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+      deliverSystemBanner: deliverSystemBanner
+    )
+    guard shouldDeliverSystemBanner else {
+      if !floatingBarMayDeliver && !floatingBarQueued {
+        recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: floatingBarPreviewEnabled ? .failed : .suppressed,
+          reason: floatingBarPreviewEnabled ? .floatingBarUnavailable : .noDeliverySurface
+        )
+      }
+      return
+    }
 
+    // Freeze the presentation decision before crossing the UserNotifications callback boundary;
+    // @Sendable MainActor closures must not capture mutable local state.
+    let floatingBarDelivered = floatingBarMayDeliver
+    let floatingBarHasQueued = floatingBarQueued
     UserNotificationCallbackBridge.authorizationStatus { [weak self] authorizationStatus in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         log("NotificationService: dropping stale-owner system notification")
+        self?.recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: .suppressed,
+          reason: .staleOwner
+        )
         return
       }
       guard authorizationStatus == .authorized else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
+
+        if !floatingBarDelivered && !floatingBarHasQueued {
+          self?.recordInsightDeliveryOutcome(
+            insightDeliveryID,
+            outcome: .suppressed,
+            reason: .systemAuthorizationDenied
+          )
+        }
 
         // Sending an assistant notification is not consent to change TCC or
         // LaunchServices state. A user can repair notification access from
@@ -479,7 +535,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: message,
         assistantId: assistantId,
         sound: sound,
-        authorizationSnapshot: authorizationSnapshot
+        authorizationSnapshot: authorizationSnapshot,
+        insightDeliveryID: floatingBarDelivered ? nil : insightDeliveryID,
+        insightFailureDeliveryID: (floatingBarDelivered || floatingBarHasQueued) ? nil : insightDeliveryID
       )
     }
   }
@@ -586,9 +644,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     message: String,
     assistantId: String,
     sound: NotificationSound,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    insightDeliveryID: UUID? = nil,
+    insightFailureDeliveryID: UUID? = nil
   ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      recordInsightDeliveryOutcome(insightFailureDeliveryID, outcome: .suppressed, reason: .staleOwner)
+      return
+    }
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = message
@@ -625,10 +688,24 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // Clean up metadata on error
         self?.notificationMetadata.removeValue(forKey: notificationId)
         self?.notificationMetadataOrder.removeAll { $0 == notificationId }
+        self?.recordInsightDeliveryOutcome(
+          insightFailureDeliveryID,
+          outcome: .failed,
+          reason: .systemDeliveryFailed
+        )
       } else {
         print("Notification sent successfully")
         // Track notification sent
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+          self?.recordInsightDeliveryOutcome(insightDeliveryID, outcome: .suppressed, reason: .staleOwner)
+          return
+        }
+        self?.recordInsightDeliveryOutcome(
+          insightDeliveryID,
+          outcome: .delivered,
+          reason: .systemBannerDelivered,
+          surface: .systemNotification
+        )
         AnalyticsManager.shared.notificationSent(
           notificationId: notificationId,
           title: title,
@@ -637,6 +714,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
       }
     }
+  }
+
+  private func recordInsightDeliveryOutcome(
+    _ deliveryID: UUID?,
+    outcome: InsightAssistantTelemetry.Outcome,
+    reason: InsightAssistantTelemetry.Reason,
+    surface: InsightAssistantTelemetry.Surface? = nil
+  ) {
+    guard let deliveryID else { return }
+    AnalyticsManager.shared.insightAssistantDeliveryOutcome(
+      outcome,
+      reason: reason,
+      deliveryID: deliveryID,
+      surface: surface
+    )
   }
 
   // MARK: - Frequency throttle

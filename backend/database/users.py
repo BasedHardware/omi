@@ -25,7 +25,6 @@ from models.users import (
     LocationContextConsent,
     LocationContextConsentStatus,
     Subscription,
-    PlanLimits,
     PlanType,
     SubscriptionStatus,
 )

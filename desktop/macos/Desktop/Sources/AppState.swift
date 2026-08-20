@@ -112,6 +112,27 @@ enum DesktopConversationMatchPolicy {
     return true
   }
 
+  /// Remember a newly observed rollover without allowing duplicate stale
+  /// callbacks to evict a different guard entry.
+  static func rememberingRotatedBackendId(
+    _ backendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>,
+    maxCount: Int
+  ) -> Set<String> {
+    guard let activeBackendId,
+      activeBackendId != backendId,
+      !ignoredRotatedBackendIds.contains(backendId)
+    else { return ignoredRotatedBackendIds }
+
+    var updated = ignoredRotatedBackendIds
+    if updated.count >= maxCount, let evicted = updated.first {
+      updated.remove(evicted)
+    }
+    updated.insert(backendId)
+    return updated
+  }
+
   /// Identified listen sessions may only consume lifecycle events produced by
   /// their own recording. Older backend versions omit `recording_session_id`,
   /// so the matching conversation id remains the compatibility proof.
@@ -123,6 +144,53 @@ enum DesktopConversationMatchPolicy {
     guard let expectedBackendId, !expectedBackendId.isEmpty else { return true }
     guard memoryId == expectedBackendId else { return false }
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
+  }
+
+  /// A completed backend event is telemetry-eligible only when it can be
+  /// attributed to the local recording that just ended. Durable SQLite
+  /// binding is intentionally not required: an exact client conversation id
+  /// or the legacy source/timestamp proof is sufficient.
+  static func acceptsCompletedLocalRecording(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    expectedBackendId: String?,
+    finishedRecordingStartTime: Date?
+  ) -> Bool {
+    guard !memoryId.isEmpty, memoryId != "?" else { return false }
+    guard
+      lifecycleEventBelongsToRecording(
+        memoryId: memoryId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: expectedBackendId
+      )
+    else {
+      return false
+    }
+
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      return memoryId == expectedBackendId
+    }
+
+    guard let finishedRecordingStartTime else { return false }
+    return memoryEventMatchesFinishedSession(memory, sessionStartedAt: finishedRecordingStartTime)
+  }
+
+  static func matchingFinishedRecordingIndex(
+    memoryId: String,
+    memory: [String: Any]?,
+    recordingSessionId: String?,
+    pending: [FinishedRecordingEnvelope]
+  ) -> Int? {
+    pending.firstIndex { envelope in
+      acceptsCompletedLocalRecording(
+        memoryId: memoryId,
+        memory: memory,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: envelope.clientConversationId,
+        finishedRecordingStartTime: envelope.startedAt
+      )
+    }
   }
 
   /// Versioned lifecycle envelopes are an ordered protocol. A client only
@@ -198,6 +266,13 @@ enum DesktopConversationMatchPolicy {
     let formatter = ISO8601DateFormatter()
     return formatter.date(from: string)
   }
+}
+
+struct FinishedRecordingEnvelope: Equatable, Sendable {
+  let sessionId: Int64?
+  let clientConversationId: String?
+  let startedAt: Date
+  let source: ConversationSource
 }
 
 @MainActor
@@ -434,10 +509,11 @@ class AppState: ObservableObject {
   /// Last accepted server event sequence per durable recording session. This
   /// is display state only; Firestore remains the authoritative sequence owner.
   var lifecycleSequenceByRecordingSession: [String: Int] = [:]
+  static let maxLifecycleRecordingSessions = 32
   var ignoredRotatedBackendConversationIds: Set<String> = []
-  var finishedSessionId: Int64?
-  var finishedClientConversationId: String?
-  var finishedRecordingStartTime: Date?
+  static let maxIgnoredRotatedBackendConversationIds = 16
+  var pendingFinishedRecordings: [FinishedRecordingEnvelope] = []
+  static let maxPendingFinishedRecordings = 16
 
   var willTerminateObserver: NSObjectProtocol? {
     get { servicesCoordinator.willTerminateObserver }

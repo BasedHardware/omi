@@ -145,6 +145,7 @@ def _install_router_stubs(monkeypatch, counters):
 
     executors = types.ModuleType("utils.executors")
     executors.db_executor = object()
+    executors.llm_executor = object()
     executors.postprocess_executor = object()
     executors.run_blocking = mark_mutation("run_blocking")
     executors.submit_with_context = mark_mutation("submit_with_context")

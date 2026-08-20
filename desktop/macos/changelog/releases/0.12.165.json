@@ -1,0 +1,7 @@
+{
+  "version": "0.12.165",
+  "date": "2026-08-12",
+  "changes": [
+    "Fixed Select All so it includes every task, not just the currently loaded page"
+  ]
+}

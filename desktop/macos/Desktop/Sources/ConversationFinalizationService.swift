@@ -535,6 +535,30 @@ actor ConversationFinalizationService {
     let startedAtMs = Int64((session.startedAt.timeIntervalSince1970 * 1000).rounded())
     return session.clientConversationId ?? "macos-local-\(sessionId)-\(startedAtMs)"
   }
+
+  /// The default Apple Silicon path creates its backend conversation through
+  /// `/from-segments`, so no cloud-listen `memory_created` event exists. Emit the
+  /// same activation contract at that successful, exactly-once storage transition.
+  static func localConversationCreatedTelemetry(
+    session: TranscriptionSessionRecord,
+    conversationId: String
+  ) -> ConversationCreatedTelemetry {
+    ConversationCreatedTelemetry(session: session, conversationId: conversationId)
+  }
+}
+
+struct ConversationCreatedTelemetry: Equatable, Sendable {
+  let conversationId: String
+  let source: String
+  let durationSeconds: Int?
+
+  init(session: TranscriptionSessionRecord, conversationId: String) {
+    self.conversationId = conversationId
+    source = session.source
+    durationSeconds = session.finishedAt.map {
+      max(0, Int($0.timeIntervalSince(session.startedAt)))
+    }
+  }
 }
 
 struct ReconciliationFailureDiagnostics {

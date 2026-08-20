@@ -484,6 +484,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   func prewarmBackgroundAgentKickoffPhrases() {
+    // Synthesis needs an authenticated backend call; signed out it can only fail — and at launch
+    // it walked the main thread into the auth fence while a restore held it (#11374).
+    guard AuthService.shared.isSignedIn else { return }
     let mode = currentMode ?? resolvePlaybackMode()
     currentMode = mode
     guard case .openAI(let voiceID, let instructions) = mode else { return }

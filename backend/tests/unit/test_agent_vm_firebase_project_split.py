@@ -75,6 +75,26 @@ def test_firestore_client_uses_dev_adc_when_firebase_auth_path_is_separate(monke
     client.assert_called_once_with()
 
 
+def test_firestore_client_pins_service_account_json_over_host_project_adc(monkeypatch) -> None:
+    """Listen must not let GKE compute project / pack WI win customer Firestore."""
+    client = MagicMock()
+    credentials = MagicMock(name="customer-data-sa")
+    monkeypatch.setenv("SERVICE_ACCOUNT_JSON", '{"project_id":"based-hardware"}')
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.delenv("FIRESTORE_EMULATOR_HOST", raising=False)
+    monkeypatch.setattr(firestore_client, "_firestore_client", None)
+    monkeypatch.setattr(firestore_client.firestore, "Client", client)
+    monkeypatch.setattr(
+        firestore_client,
+        "customer_data_service_account",
+        lambda: (credentials, "based-hardware"),
+    )
+
+    assert firestore_client.get_firestore_client() is client.return_value
+
+    client.assert_called_once_with(credentials=credentials, project="based-hardware")
+
+
 def test_reconciler_initializes_production_auth_separately_from_google_cloud_project(monkeypatch) -> None:
     initialize = MagicMock()
     monkeypatch.setattr(firebase_admin, "get_app", MagicMock(side_effect=ValueError()))

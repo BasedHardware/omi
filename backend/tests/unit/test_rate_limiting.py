@@ -503,6 +503,9 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "mcp:memories_read",
             "mcp:memories_write",
             "knowledge_graph:rebuild",
+            "knowledge_graph:extract",
+            "knowledge_graph:canonical",
+            "memories:extract",
             "wrapped:generate",
             "integration:conversations",
             "integration:memories",
@@ -533,8 +536,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_conversations_router_has_rate_limits(self):
         matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
-        # create, reprocess, search, merge, and events = 5 endpoints
-        self.assertEqual(len(matches), 5, f"conversations.py expected 5 rate limits, got {len(matches)}")
+        # create, reprocess, topic, search, merge, and events = 6 endpoints
+        self.assertEqual(len(matches), 6, f"conversations.py expected 6 rate limits, got {len(matches)}")
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
@@ -663,8 +666,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 4 modify endpoints = 12
-        self.assertEqual(len(matches), 12, f"memories.py expected 12 rate limits, got {len(matches)}")
+        # extract, create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 4 modify = 13
+        self.assertEqual(len(matches), 13, f"memories.py expected 13 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")

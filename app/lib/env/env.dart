@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/flavors.dart';
 
 import 'environment_profile.dart';
@@ -40,8 +42,6 @@ abstract class Env {
   static void overrideAgentProxyWsUrl(String url) {
     _agentProxyWsUrlOverride = url;
   }
-
-  static String? get openAIAPIKey => _instance.openAIAPIKey;
 
   static String? get posthogApiKey => _instance.posthogApiKey;
 
@@ -107,6 +107,7 @@ abstract class Env {
     required bool productionFamily,
     String? configuredApiBaseUrl,
     AppEnvironmentProfile? configuredProfile,
+    bool releaseBuild = kReleaseMode,
   }) {
     final effectiveProfile = configuredProfile ?? (productionFamily ? AppEnvironmentProfile.production : profile);
     final normalized = (configuredApiBaseUrl ?? apiBaseUrl ?? '').trim().replaceFirst(RegExp(r'/+$'), '');
@@ -121,6 +122,17 @@ abstract class Env {
           'Profile local_dev requires a loopback or private-network API endpoint; '
           'use mobile_beta for https://api.omiapi.com/.',
         );
+      }
+      return;
+    }
+
+    if (effectiveProfile == AppEnvironmentProfile.localProd) {
+      if (releaseBuild) {
+        throw StateError('Profile local_prod is only available in debug builds.');
+      }
+      final uri = Uri.tryParse(normalized);
+      if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) {
+        throw StateError('Profile local_prod requires a valid http(s) API endpoint.');
       }
       return;
     }
@@ -193,8 +205,6 @@ abstract class Env {
 }
 
 abstract class EnvFields {
-  String? get openAIAPIKey;
-
   String? get posthogApiKey;
 
   String? get apiBaseUrl;

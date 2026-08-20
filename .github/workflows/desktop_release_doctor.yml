@@ -1,6 +1,8 @@
 name: Desktop Release Doctor
 
 on:
+  schedule:
+    - cron: '23 * * * *'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -10,13 +12,15 @@ on:
 permissions:
   contents: read
   id-token: write
+  issues: write
 
 concurrency:
-  group: desktop-release-doctor-${{ inputs.release_tag }}
+  group: desktop-release-doctor-${{ github.event_name }}-${{ inputs.release_tag || 'proactive-health' }}
   cancel-in-progress: false
 
 jobs:
   doctor:
+    if: github.event_name == 'workflow_dispatch'
     environment: prod
     runs-on: ubuntu-latest
     steps:
@@ -38,6 +42,10 @@ jobs:
           GCS_DESKTOP_UPDATES_BUCKET: ${{ vars.GCS_DESKTOP_UPDATES_BUCKET || 'gs://omi_macos_updates' }}
         run: |
           set -euo pipefail
+          POSTHOG_PERSONAL_API_KEY="$(gcloud secrets versions access latest --secret=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY --project "$PROJECT_ID")"
+          POSTHOG_PROJECT_ID="$(gcloud secrets versions access latest --secret=WEB_ADMIN_POSTHOG_PROJECT_ID --project "$PROJECT_ID")"
+          POSTHOG_HOST="$(gcloud secrets versions access latest --secret=WEB_ADMIN_POSTHOG_HOST --project "$PROJECT_ID")"
+          export POSTHOG_PERSONAL_API_KEY POSTHOG_PROJECT_ID POSTHOG_HOST
           python3 .github/scripts/desktop_release_doctor.py doctor \
             --release-tag "$RELEASE_TAG" \
             --project-id "$PROJECT_ID" \
@@ -57,3 +65,79 @@ jobs:
             /tmp/desktop-release-evidence-v1.json
             /tmp/desktop-release-doctor.txt
             /tmp/desktop-release-doctor-snapshot-v1.json
+
+  proactive-health:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release controls
+        uses: actions/checkout@v7
+
+      - name: Measure proactive delivery health
+        id: health
+        env:
+          POSTHOG_PERSONAL_API_KEY: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+          POSTHOG_PROJECT_ID: ${{ vars.POSTHOG_PROJECT_ID }}
+          POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+        run: |
+          set -euo pipefail
+          set +e
+          python3 .github/scripts/desktop_proactive_delivery_health.py \
+            --output /tmp/proactive-delivery-health.json \
+            --summary /tmp/proactive-delivery-health.txt
+          query_exit=$?
+          set -e
+
+          if [[ "$query_exit" -ne 0 ]]; then
+            status=monitor_error
+            printf '%s\n' \
+              'Proactive delivery health: MONITOR_ERROR' \
+              'The bounded PostHog query failed; inspect this workflow run.' \
+              > /tmp/proactive-delivery-health.txt
+          else
+            status="$(python3 -c 'import json; print(json.load(open("/tmp/proactive-delivery-health.json", encoding="utf-8"))["status"])')"
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat /tmp/proactive-delivery-health.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish durable alarm state
+        if: always() && (steps.health.outputs.status == 'unhealthy' || steps.health.outputs.status == 'monitor_error' || steps.health.outputs.status == 'healthy')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='Desktop proactive delivery health alarm'
+          issue_number="$(gh issue list --repo "$REPO" --state open --limit 100 --json number,title --jq '.[] | select(.title == "Desktop proactive delivery health alarm") | .number' | head -n 1)"
+
+          if [[ "$HEALTH_STATUS" == 'healthy' ]]; then
+            if [[ -n "$issue_number" ]]; then
+              gh issue close "$issue_number" --repo "$REPO" --comment "Recovered in $RUN_URL."
+            fi
+            exit 0
+          fi
+
+          {
+            printf 'The PT24H macOS proactive-delivery monitor is **%s**.\n\n' "$HEALTH_STATUS"
+            cat /tmp/proactive-delivery-health.txt
+            printf '\nWorkflow evidence: %s\n' "$RUN_URL"
+          } > /tmp/proactive-delivery-health-issue.md
+          if [[ -n "$issue_number" ]]; then
+            gh issue edit "$issue_number" --repo "$REPO" --body-file /tmp/proactive-delivery-health-issue.md
+          else
+            gh issue create --repo "$REPO" --title "$title" --body-file /tmp/proactive-delivery-health-issue.md
+          fi
+
+      - name: Upload proactive health evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-proactive-delivery-health
+          if-no-files-found: warn
+          path: /tmp/proactive-delivery-health*
+
+      - name: Fail on unhealthy or broken monitoring
+        if: always() && (steps.health.outputs.status == 'unhealthy' || steps.health.outputs.status == 'monitor_error')
+        run: exit 1

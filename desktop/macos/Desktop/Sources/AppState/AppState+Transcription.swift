@@ -284,6 +284,7 @@ extension AppState {
             await sys?.finish()
             await self.flushTranscriptPersistence()
           }
+          self.captureFinishedRecordingForLifecycleIfCloud(wasLocalSTT: wasLocalSTT)
           if let sessionId {
             try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
           }
@@ -872,11 +873,10 @@ extension AppState {
         self.silentMicFallbackInProgress = false
       }
     }
-
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil).
     let capturedSessionId = currentSessionId
     let capturedBackendId = currentBackendConversationId ?? pendingBackendConversationId
-
+    captureCurrentFinishedRecordingForLifecycle()
     stopAudioCapture()
     clearTranscriptionState(
       finalizationReason: .userStop,
@@ -1014,17 +1014,12 @@ extension AppState {
       log("Transcription: No segments to finish")
       return .discarded
     }
-
     log("Transcription: Finishing conversation — reason=\(finalizationReason.rawValue)")
 
-    // Capture state before rotation — memory_created event for this conversation
-    // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
-    finishedSessionId = currentSessionId
-    finishedClientConversationId = currentClientConversationId
-    finishedRecordingStartTime = recordingStartTime
+    // Capture state before rotation; memory_created may arrive on the new WebSocket.
     let finishedUsesLocalSTT = sttSession.useLocalSTT
     let sessionToFinalize = currentSessionId
-
+    captureFinishedRecordingForLifecycleIfCloud(wasLocalSTT: finishedUsesLocalSTT)
     // Local mode: flush both Parakeet instances' final tails to the CURRENT session BEFORE we
     // rotate currentSessionId, so the last sub-window words attach to THIS conversation rather
     // than racing into the next one. `finish()` delivers its segments on the main actor and
@@ -1071,6 +1066,11 @@ extension AppState {
     // fresh local SQLite session to that rotated id.
     recordingStartTime = Date()
     if let currentBackendConversationId {
+      if ignoredRotatedBackendConversationIds.count >= Self.maxIgnoredRotatedBackendConversationIds,
+        let evicted = ignoredRotatedBackendConversationIds.first
+      {
+        ignoredRotatedBackendConversationIds.remove(evicted)
+      }
       ignoredRotatedBackendConversationIds.insert(currentBackendConversationId)
     }
     currentBackendConversationId = nil
@@ -1108,6 +1108,7 @@ extension AppState {
           await sys?.finish()
           await self.flushTranscriptPersistence()
         }
+        self.captureFinishedRecordingForLifecycleIfCloud(wasLocalSTT: wasLocalSTT)
         if let sessionId {
           try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
         }
@@ -1603,6 +1604,5 @@ extension AppState {
       "latest_conversation_id": latestConversationId,
     ]
   }
-
   // MARK: - Conversations
 }
