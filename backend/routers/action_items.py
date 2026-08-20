@@ -352,7 +352,7 @@ def get_action_items(
     end_date: Optional[datetime] = Query(None, description="Filter by creation end date (inclusive)"),
     due_start_date: Optional[datetime] = Query(None, description="Filter by due start date (inclusive)"),
     due_end_date: Optional[datetime] = Query(None, description="Filter by due end date (inclusive)"),
-    uid: str = Depends(auth.get_current_user_uid),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "action_items:list")),
 ):
     """Get action items for the current user."""
     if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
