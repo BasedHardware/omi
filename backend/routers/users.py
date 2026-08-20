@@ -1250,7 +1250,16 @@ def get_user_subscription_endpoint(
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
 
-    # Get limits from subscription (0 means unlimited)
+    # WIRE BRIDGE: the backend has retired the `0 == unlimited` sentinel — the catalog
+    # represents unlimited as typed `{"kind": "unlimited"}`, projected as `None`. The wire
+    # has NOT been migrated: shipped clients still read `0` as unlimited (e.g. web
+    # SettingsPage `limit <= 0`, macOS `decodeIfPresent(...) ?? 0`), so `None -> 0` here is
+    # deliberate and load-bearing, not a leftover coercion.
+    #
+    # Retiring the wire sentinel is a breaking client change and belongs to work item W1
+    # in docs/agents/plan-source-of-truth.md, gated on released tolerant decoders. Do not
+    # "fix" this to emit None/-1 without that sequence: it silently reinterprets every
+    # unlimited plan as a zero allowance on clients already in the field.
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
