@@ -157,3 +157,19 @@ def test_s3_client_via_session_is_flagged():
 
 def test_non_s3_aws_client_is_not_flagged():
     assert _MODULE.count_boundary_violations("import boto3\nboto3.client('sqs')\n") == 0
+
+
+def test_gcs_exception_import_is_flagged():
+    """A dead `except NotFound` is worse than a crash — see utils/speaker_sample_migration.py.
+
+    The port raises the neutral ObjectNotFound and never re-raises a GCS type, so catching
+    google.cloud.exceptions.NotFound silently reclassifies a permanent miss as transient.
+    """
+    assert _MODULE.count_boundary_violations('from google.cloud.exceptions import NotFound\n') == 1
+    assert _MODULE.count_boundary_violations('import google.cloud.exceptions\n') == 1
+
+
+def test_document_facade_google_exceptions_are_not_flagged():
+    """google.api_core.exceptions IS the ADR-0044 facade's documented contract — must stay allowed."""
+    source = 'from google.api_core.exceptions import NotFound, AlreadyExists, Aborted\n'
+    assert _MODULE.count_boundary_violations(source) == 0

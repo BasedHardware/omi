@@ -59,6 +59,16 @@ _FORBIDDEN_OP_METHODS = frozenset(
 def _is_forbidden_import_module(module: str | None) -> bool:
     if not module:
         return False
+    # ``google.cloud.exceptions`` is the GCS exception module, and it is forbidden for the same reason
+    # as the client: the port raises its own neutral ObjectNotFound and — unlike the document-store
+    # facade, which deliberately translates back to google.api_core.exceptions (ADR-0044) — never
+    # re-raises a GCS type. A caller that catches the GCS exception therefore has DEAD except clause,
+    # which is worse than a crash: utils/speaker_sample_migration.py kept `except NotFound` after the
+    # port migration, so a permanently missing sample was classified as a transient failure and the
+    # migration re-ran on every person read, forever. Note this is narrower than banning every google
+    # exception import: google.api_core.exceptions IS the facade's documented contract.
+    if module == 'google.cloud.exceptions':
+        return True
     return module == 'google.cloud.storage' or module.startswith('google.cloud.storage')
 
 
