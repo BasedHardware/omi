@@ -32,6 +32,7 @@ def _log_expiry_disposition_observations(items: List[MemoryItem], *, now: dateti
         if (
             item.tier == MemoryTier.short_term
             and item.status == MemoryItemStatus.active
+            and item.processing_state == ProcessingState.processed
             and effective_short_term_expiry(item) <= now
         ):
             expired_pending_terminal_apply += 1
