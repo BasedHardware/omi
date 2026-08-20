@@ -52,17 +52,24 @@ def run_capture_policy(signals: dict[str, Any]) -> CapturePolicyResult:
         return CapturePolicyResult('propose_update', 'none')
     if signals.get('public_broadcast') and not signals.get('direct_mention'):
         return CapturePolicyResult('ignore', 'none')
+    # Every admitted kind below clears the same floor, because a proposal the
+    # Suggested surface will not show is indistinguishable from a dropped one and
+    # merely accumulates. Admit it and the user sees it, or ignore it outright.
     if signals.get('explicit_command'):
         # A command heard in ambient audio is still a model's reading of speech,
         # not a user gesture against a surface. It proposes; it does not create.
-        return CapturePolicyResult('pending_candidate', 'none')
+        if _meets_user_capture_floor(signals):
+            return CapturePolicyResult('pending_candidate', 'none')
+        return CapturePolicyResult('ignore', 'none')
     if signals.get('clear_commitment') and signals.get('owner') == 'user':
         if signals.get('concrete_deliverable') is not True:
             return CapturePolicyResult('ignore', 'none')
         # A concrete first-person commitment is the strongest signal this policy has, and it
         # still only earns a suggestion. Confidence decides whether the proposal is worth
         # surfacing, never whether it may bypass the user (I1).
-        return CapturePolicyResult('pending_candidate', 'none')
+        if _meets_user_capture_floor(signals):
+            return CapturePolicyResult('pending_candidate', 'none')
+        return CapturePolicyResult('ignore', 'none')
     if signals.get('direct_request') and _meets_user_capture_floor(signals):
         return CapturePolicyResult('pending_candidate', 'none')
     # Inferred work has no weaker path than a directly addressed request. This deliberately rejects

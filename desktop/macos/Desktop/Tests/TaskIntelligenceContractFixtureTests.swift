@@ -13,7 +13,6 @@ private actor LegacyEffectSpy {
 
 private final class FakeCanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
   private var idempotencyKeys: [String] = []
-  private var acceptCalls = 0
 
   func create(
     _ candidate: OmiAPI.CandidateCreate,
@@ -28,17 +27,8 @@ private final class FakeCanonicalScreenCandidateClient: CanonicalScreenCandidate
     )
   }
 
-  func accept(candidateID: String, accountGeneration: Int) async throws -> CanonicalScreenCandidateState {
-    acceptCalls += 1
-    return CanonicalScreenCandidateState(
-      candidateID: candidateID,
-      status: .accepted,
-      taskID: "task-1"
-    )
-  }
-
-  func snapshot() -> (keys: [String], acceptCalls: Int) {
-    (idempotencyKeys, acceptCalls)
+  func snapshot() -> (keys: [String], statuses: [String]) {
+    (idempotencyKeys, [])
   }
 }
 
@@ -145,28 +135,33 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     }
   }
 
-  func testReadModeBehaviorallyBlocksEveryLegacyEffectAndRollbackRestoresIt() async {
+  func testEveryModeBlocksEveryLegacyEffectWithNoRollbackEscapeHatch() async {
     let spy = LegacyEffectSpy()
-    let readGate = TaskLegacyEffectGate { .read }
 
-    for effect in TaskLegacyEffect.allCases {
-      let result = await readGate.perform(effect) {
-        await spy.record()
-        return true
+    // I1: there is no mode that re-enables a legacy effect. The `.off` rollback
+    // hatch is gone on purpose — `.off` is what /v1/candidates/control reports
+    // when its own read fails, so it was a route from a backend hiccup to an
+    // unrequested task.
+    // The mode enum is not Sendable, so each gate closes over a literal.
+    let gates: [(String, TaskLegacyEffectGate)] = [
+      ("read", TaskLegacyEffectGate { .read }),
+      ("off", TaskLegacyEffectGate { .off }),
+      ("shadow", TaskLegacyEffectGate { .shadow }),
+      ("write", TaskLegacyEffectGate { .write }),
+      ("unknown", TaskLegacyEffectGate { ._unknown }),
+    ]
+    for (name, gate) in gates {
+      for effect in TaskLegacyEffect.allCases {
+        let result = await gate.perform(effect) {
+          await spy.record()
+          return true
+        }
+        XCTAssertNil(result, "\(name) must not permit \(effect)")
       }
-      XCTAssertNil(result)
     }
-    let readCallCount = await spy.callCount()
-    XCTAssertEqual(readCallCount, 0)
 
-    let rollbackGate = TaskLegacyEffectGate { .off }
-    let result = await rollbackGate.perform(.promotion) {
-      await spy.record()
-      return true
-    }
-    XCTAssertEqual(result, true)
-    let rollbackCallCount = await spy.callCount()
-    XCTAssertEqual(rollbackCallCount, 1)
+    let callCount = await spy.callCount()
+    XCTAssertEqual(callCount, 0)
   }
 
   func testTaskAttributionUsesFrozenBoundedPrivacySafeShape() throws {
@@ -417,7 +412,11 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
     XCTAssertEqual(beforeCrash?.candidateID, "candidate-1")
     XCTAssertEqual(afterRestart?.candidateID, "candidate-1")
     XCTAssertEqual(snapshot.keys, ["screen:device-hash:42", "screen:device-hash:42"])
-    XCTAssertEqual(snapshot.acceptCalls, 2)
+    // I1: delivery leaves the proposal pending on both attempts. The capture
+    // pipeline has no way to accept — the client protocol no longer offers one.
+    XCTAssertEqual(beforeCrash?.status, .pending)
+    XCTAssertEqual(afterRestart?.status, .pending)
+    XCTAssertNil(afterRestart?.taskID)
   }
 
   func testRepeatedParaphrasesReconcileButDistinctTasksRemainSeparate() {

@@ -123,7 +123,7 @@
     {
       "id": "recurrence",
       "policy_class": "direct_command",
-      "owner_paths": ["desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift"],
+      "owner_paths": ["desktop/macos/Desktop/Sources/Stores/TasksStore.swift"],
       "test_adapter": "direct_command_contract",
       "writer_anchors": []
     },

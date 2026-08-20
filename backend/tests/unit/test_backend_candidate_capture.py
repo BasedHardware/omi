@@ -155,7 +155,8 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
     assert accepted.policy.outcome == 'pending_candidate'
     assert accepted.policy.interruption == 'none'
     assert accepted.candidate.capture_confidence == 0.95
-    assert low_confidence.policy.outcome == 'pending_candidate'
+    # Below the floor the Suggested surface would hide it, so it is not admitted.
+    assert low_confidence.policy.outcome == 'ignore'
     assert low_confidence.policy.interruption == 'none'
     assert without_deliverable.policy.outcome == 'ignore'
     assert without_deliverable.policy.interruption == 'none'
@@ -198,7 +199,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
             ),
             'conversation-1',
         ).policy.outcome
-        == 'pending_candidate'
+        == 'ignore'
     )
     assert (
         conversation_capture._capture_decision(

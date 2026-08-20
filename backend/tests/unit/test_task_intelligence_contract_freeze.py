@@ -68,6 +68,7 @@ def test_capture_fixture_freezes_cross_modality_semantics():
     assert {case['expected']['outcome'] for case in fixture['cases']}.isdisjoint(
         {'auto_accept_silent', 'create_direct'}
     )
+    assert by_id['clear_commitment_low_confidence']['outcome'] == 'ignore'
     assert by_id['unaccepted_request']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_at_confidence_floors']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_below_ownership_floor']['outcome'] == 'ignore'

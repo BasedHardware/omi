@@ -179,8 +179,6 @@ enum ScreenCandidateReconciliation {
 
 enum ScreenCaptureOutcome: String, Codable {
   case ignore
-  case createDirect = "create_direct"
-  case autoAcceptSilent = "auto_accept_silent"
   case pendingCandidate = "pending_candidate"
   case proposeEnrichment = "propose_enrichment"
   case proposeUpdate = "propose_update"
@@ -223,11 +221,14 @@ enum ScreenCapturePolicy {
     if facts.publicBroadcast && !facts.directMention { return .ignore }
     // I1: no outcome here may create a task. A command read off the screen is
     // still a model's reading of pixels, and a high-confidence commitment is
-    // still an inference. Both propose.
-    if facts.explicitCommand { return .pendingCandidate }
+    // still an inference. Both propose, and both clear the same floor the
+    // Suggested surface applies — a proposal it would hide is not worth storing.
+    if facts.explicitCommand {
+      return meetsUserCaptureFloor(facts) ? .pendingCandidate : .ignore
+    }
     if facts.clearCommitment && facts.owner == "user" {
       guard facts.concreteDeliverable else { return .ignore }
-      return .pendingCandidate
+      return meetsUserCaptureFloor(facts) ? .pendingCandidate : .ignore
     }
     if facts.directRequest && meetsUserCaptureFloor(facts) { return .pendingCandidate }
     if facts.inferredNextStep && meetsUserCaptureFloor(facts) { return .pendingCandidate }
@@ -312,10 +313,6 @@ extension OmiAPI.CandidateCreate: @unchecked Sendable {}
 struct ScreenCandidateDecision {
   let outcome: ScreenCaptureOutcome
   let candidate: OmiAPI.CandidateCreate?
-
-  var shouldAutoAccept: Bool {
-    outcome == .autoAcceptSilent || outcome == .createDirect
-  }
 }
 
 struct CanonicalScreenCandidateState: @unchecked Sendable {
@@ -330,8 +327,6 @@ protocol CanonicalScreenCandidateClient {
     idempotencyKey: String,
     accountGeneration: Int
   ) async throws -> CanonicalScreenCandidateState
-
-  func accept(candidateID: String, accountGeneration: Int) async throws -> CanonicalScreenCandidateState
 }
 
 struct APICanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
@@ -351,18 +346,6 @@ struct APICanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
       taskID: record.resultTaskId
     )
   }
-
-  func accept(candidateID: String, accountGeneration: Int) async throws -> CanonicalScreenCandidateState {
-    let receipt = try await APIClient.shared.acceptCanonicalCandidate(
-      candidateID: candidateID,
-      accountGeneration: accountGeneration
-    )
-    return CanonicalScreenCandidateState(
-      candidateID: receipt.candidateId,
-      status: receipt.status,
-      taskID: receipt.taskId
-    )
-  }
 }
 
 struct CanonicalScreenCandidateDelivery {
@@ -375,17 +358,13 @@ struct CanonicalScreenCandidateDelivery {
     accountGeneration: Int
   ) async throws -> CanonicalScreenCandidateState? {
     guard let candidate = decision.candidate else { return nil }
-    var state = try await client.create(
+    let state = try await client.create(
       candidate,
       idempotencyKey: ScreenCandidateAdapter.idempotencyKey(deviceID: deviceID, localID: localID),
       accountGeneration: accountGeneration
     )
-    if decision.shouldAutoAccept && state.status == .pending {
-      state = try await client.accept(
-        candidateID: state.candidateID,
-        accountGeneration: accountGeneration
-      )
-    }
+    // I1: delivery creates the pending Candidate and stops. Acceptance is a
+    // user gesture ("Add to Tasks"), never a step in the capture pipeline.
     return state
   }
 }
