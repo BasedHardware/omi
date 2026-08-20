@@ -111,7 +111,6 @@ from utils.other.hume import (
 from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
-from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
@@ -1418,6 +1417,11 @@ def _save_action_items(uid: str, conversation: Conversation):
             'persistence_path': 'canonical_candidate',
         },
     )
+
+
+# Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
+# retrieval over raw transcript text, which the summary-only conversation vectors miss.
+TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
 
 
 def save_transcript_chunk_vectors(uid: str, conversation: Conversation):

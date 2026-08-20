@@ -88,6 +88,42 @@ final class NotchMomentsCoordinator {
 
   // MARK: live suggestions
 
+  nonisolated static let suggestedMomentFreshness: TimeInterval = 120
+
+  /// Parse a backend `createdAt` timestamp. The backend emits ISO 8601 with or
+  /// without fractional seconds depending on the value; `ISO8601DateFormatter`
+  /// pins its behavior to the presence of `.withFractionalSeconds`, so try both.
+  /// Returns nil on anything unparseable — callers fail closed (not fresh).
+  nonisolated static func suggestedCandidateCreatedAt(_ raw: String) -> Date? {
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    return fractional.date(from: raw) ?? plain.date(from: raw)
+  }
+
+  /// The proposal worth surfacing: one not announced before AND created within
+  /// the freshness window. The window is what keeps a store load or
+  /// cross-device sync (new ids, stale `createdAt`) from announcing an old
+  /// suggestion mid-conversation as if Omi had just proposed it.
+  nonisolated static func suggestedMomentCandidate(
+    candidates: [SuggestedCandidate],
+    knownIDs: Set<String>,
+    now: Date
+  ) -> SuggestedCandidate? {
+    let freshCutoff = now.addingTimeInterval(-suggestedMomentFreshness)
+    return
+      candidates
+      .compactMap { candidate -> (SuggestedCandidate, Date)? in
+        guard !knownIDs.contains(candidate.id),
+          let createdAt = suggestedCandidateCreatedAt(candidate.createdAt),
+          createdAt >= freshCutoff
+        else { return nil }
+        return (candidate, createdAt)
+      }
+      .max(by: { $0.1 < $1.1 })?.0
+  }
+
   /// Surface a task Omi proposed while listening. INVARIANT I1: this is a
   /// proposal, not a save. The card and its chat row both carry "Add to Tasks";
   /// nothing enters the task list until the user presses it. This replaces the
@@ -98,9 +134,10 @@ final class NotchMomentsCoordinator {
     defer { knownSuggestionIDs = currentIDs }
     // Only while listening: a backfilled load is not a "just now" moment.
     guard appState?.isTranscribing == true else { return }
-    let newIDs = currentIDs.subtracting(knownSuggestionIDs)
-    guard !newIDs.isEmpty, !knownSuggestionIDs.isEmpty || sessionStartedAt != nil else { return }
-    guard let candidate = candidates.first(where: { newIDs.contains($0.id) }) else { return }
+    guard
+      let candidate = Self.suggestedMomentCandidate(
+        candidates: candidates, knownIDs: knownSuggestionIDs, now: Date())
+    else { return }
     let title = candidate.title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !title.isEmpty else { return }
     post(
@@ -110,10 +147,6 @@ final class NotchMomentsCoordinator {
   }
 
   // MARK: actions from the cards
-
-  /// Nothing was written, so there is nothing to retract. Kept because the
-  /// floating-bar card still offers the affordance for other moment kinds.
-  func undoLastReceipt() {}
 
   func reviewFollowUps() {
     AppDelegate.openMainWindow?()
