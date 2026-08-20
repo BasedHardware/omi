@@ -3,6 +3,23 @@ import Combine
 import CoreGraphics
 import Foundation
 
+enum SBOnboardingScreenProofPolicy {
+  static func completedAnswer(
+    in messages: [ChatMessage],
+    activeClientTurnId: String?
+  ) -> String? {
+    guard let turnId = activeClientTurnId?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !turnId.isEmpty,
+      let answer = messages.last(where: {
+        $0.clientTurnId == turnId && $0.sender == .ai && !$0.isStreaming
+      }),
+      answer.journalStatus != .failed
+    else { return nil }
+    let text = answer.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return text.isEmpty ? nil : text
+  }
+}
+
 // MARK: - Permissions (one at a time)
 
 extension SBOnboardingModel {
@@ -795,26 +812,21 @@ extension SBOnboardingModel {
       bar.$showingAIResponse.filter { $0 }.map { _ in () },
       bar.$voiceProjection.dropFirst().filter { $0.isResponseActive }.map { _ in () }
     )
-    .compactMap { [weak self, weak bar] _ -> String? in
-      guard let self, let answer = bar?.aiResponseText(from: self.chatProvider), !answer.isEmpty else {
-        return nil
-      }
-      return answer
-    }
-    let responseTextUpdated = chatProvider.$messages
+    .map { _ -> String? in nil }
+    let completedAnswerUpdated = chatProvider.$messages
       .dropFirst()
-      .compactMap { [weak self, weak bar] _ -> String? in
-        guard let self, let answer = bar?.aiResponseText(from: self.chatProvider), !answer.isEmpty else {
-          return nil
-        }
-        return answer
+      .compactMap { [weak bar] messages in
+        SBOnboardingScreenProofPolicy.completedAnswer(
+          in: messages,
+          activeClientTurnId: bar?.chatViewport.activeClientTurnId)
       }
-    voiceCancellable = Publishers.Merge(responseBecameVisible, responseTextUpdated)
+      .map(Optional.some)
+    voiceCancellable = Publishers.Merge(responseBecameVisible, completedAnswerUpdated)
       .receive(on: DispatchQueue.main)
       .sink { [weak self] answer in
         guard let self else { return }
         self.screenDemoDone = true
-        self.voiceAnswer = answer
+        if let answer { self.voiceAnswer = answer }
       }
     screenDemoPTTReady = true
     FloatingControlBarManager.shared.showForOnboardingDemo()
