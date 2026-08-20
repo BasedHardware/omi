@@ -1193,10 +1193,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              warningText,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-            ),
+            child: Text(warningText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
           ),
         ],
       ),

@@ -73,8 +73,10 @@ actor MemoryAssistant: ProactiveAssistant {
   // MARK: - Initialization
 
   init(apiKey: String? = nil) throws {
-    // Use Gemini Flash for memory extraction (text+vision, no tool loop — Flash-safe)
-    self.geminiClient = try GeminiClient(apiKey: apiKey)
+    // Flash-Lite: vision-capable, off the Vertex PT reservation, and measurably more
+    // prompt-compliant than Flash on this lane (see ModelQoS.Gemini.lightweight).
+    self.geminiClient = try GeminiClient(
+      apiKey: apiKey, model: ModelQoS.Gemini.lightweight, workload: .extraction)
     self.extractionOverride = nil
     self.durabilityPipeline = MemoryAssistantDurabilityPipeline(
       runner: MemoryAssistantProductionDurability(operations: MemoryAssistantLiveDurabilityOperations())
@@ -285,7 +287,9 @@ actor MemoryAssistant: ProactiveAssistant {
     result: MemoryExtractionResult,
     windowTitle: String?
   ) async {
-    let title = memory.category == .interesting ? "Wisdom Captured" : "Memory Saved"
+    // One category, one name: every memory notification presents as "Memory" — the
+    // "Wisdom Captured" variant read as an unclassifiable notification type.
+    let title = "Memory Saved"
     let message = "New memory: \(memory.content)"
     let context = FloatingBarNotificationContext(
       sourceTitle: title,

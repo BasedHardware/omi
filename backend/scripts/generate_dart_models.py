@@ -24,6 +24,7 @@ SCHEMA_GROUPS = {
             'AppResult',
             'PluginResult',
             'Event',
+            'Section',
             'Structured',
             'Geolocation',
             'ConversationPhoto',
@@ -156,13 +157,6 @@ SCHEMA_GROUPS = {
             'DevApiKeyCreated',
             'McpApiKey',
             'McpApiKeyCreated',
-        ),
-    },
-    'agent': {
-        'output': DEFAULT_OUTPUT_DIR / 'agent_wire.g.dart',
-        'schemas': (
-            'AgentVmInfo',
-            'AgentKeepaliveResponse',
         ),
     },
     'phone_calls': {

@@ -1,6 +1,8 @@
 import json
 import re
 from datetime import datetime, timezone
+
+_MAX_WORDS_HINT = "Use a maximum of 3 words per item."
 from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
@@ -10,6 +12,7 @@ from pydantic import BaseModel, Field, ValidationError
 import database.users as users_db
 import database.notifications as notification_db
 import database.goals as goals_db
+import database.apps as apps_db
 from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
@@ -34,16 +37,20 @@ def _content_str(response: Any) -> str:
     return cast(str, response.content)
 
 
+def resolve_app_display_name(app_id: str) -> Optional[str]:
+    """App-record -> display name. Lives here, not in models/chat.py: this layer already owns
+    the database import, so the model stays free of it. Bound as a module (like users_db /
+    goals_db above) rather than `from database.apps import ...`, so suites that stub
+    database.apps can still import this module."""
+    app = apps_db.get_app_by_id_db(app_id)
+    return app.get('name') if app else None
+
+
 def normalize_filter(value: str) -> str:
-    # Convert to lowercase and strip whitespace
-    value = value.lower().strip()
-
-    # Remove special characters and extra spaces
-    value = re.sub(r'[^\w\s-]', '', value)
+    value = re.sub(r'[^\w\s-]', '', value.lower()).strip()
     value = re.sub(r'\s+', ' ', value)
-
     # Remove common filler words
-    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'of'}
     value = ' '.join(word for word in value.split() if word not in filler_words)
 
     # Standardize common variations
@@ -51,7 +58,11 @@ def normalize_filter(value: str) -> str:
     value = value.replace('machine learning', 'ml')
     value = value.replace('natural language processing', 'nlp')
 
-    return value.strip()
+    words = value.split()
+    # After filler/abbrev, cap at 3 words by keeping first two + last so 3-word names stay intact.
+    if len(words) > 3:
+        return f'{words[0]} {words[1]} {words[-1]}'
+    return value
 
 
 # ****************************************
@@ -266,7 +277,10 @@ def chunk_extraction(
 
 def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
     conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+        messages,
+        use_user_name_if_available=True,
+        use_plugin_name_if_available=True,
+        app_name_resolver=resolve_app_display_name,
     )
     user_name, memories_str = get_prompt_memories(uid)
 
@@ -306,7 +320,10 @@ def answer_simple_message_stream(
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
     conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+        messages,
+        use_user_name_if_available=True,
+        use_plugin_name_if_available=True,
+        app_name_resolver=resolve_app_display_name,
     )
 
     return f"""
@@ -1057,17 +1074,17 @@ class ExtractedInformation(BaseModel):
     people: List[str] = Field(
         default=[],
         examples=[['John Doe', 'Jane Doe']],
-        description='Identify all the people names who were mentioned during the conversation.',
+        description=f'Identify all the people names who were mentioned during the conversation. {_MAX_WORDS_HINT}',
     )
     topics: List[str] = Field(
         default=[],
         examples=[['Artificial Intelligence', 'Machine Learning']],
-        description='List all the main topics and subtopics that were discussed.',
+        description=f'List all the main topics and subtopics that were discussed. {_MAX_WORDS_HINT}',
     )
     entities: List[str] = Field(
         default=[],
         examples=[['OpenAI', 'GPT-4']],
-        description='List any products, technologies, places, or other entities that are relevant to the conversation.',
+        description=f'List any products, technologies, places, or other entities that are relevant to the conversation. {_MAX_WORDS_HINT}',
     )
     dates: List[str] = Field(
         default=[],
@@ -1194,11 +1211,10 @@ def retrieve_metadata_fields_from_transcript(
     full_context = "\n\n".join(context_parts)
     today = date_in_tz(created_at, tz)
 
-    # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
     You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
 
-    Your task is to extract the most accurate information from the content in the output object indicated below.
+    Your task is to extract the most accurate information from the content in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
@@ -1243,6 +1259,23 @@ def retrieve_metadata_fields_from_transcript(
     return metadata
 
 
+def retrieve_metadata_fields_from_structured(
+    uid: str,
+    created_at: datetime,
+    structured: Any,
+    tz: str,
+) -> dict[str, Any]:
+    """Extract vector filters from the canonical note, not a second raw-transcript pass."""
+    parts = [
+        str(getattr(structured, 'title', '') or '').strip(),
+        str(getattr(structured, 'overview', '') or '').strip(),
+    ]
+    content = '\n\n'.join(part for part in parts if part)
+    if not content:
+        return {'people': [], 'topics': [], 'entities': [], 'dates': []}
+    return retrieve_metadata_fields_from_transcript(uid, created_at, [{'text': content}], tz)
+
+
 def retrieve_metadata_from_message(
     uid: str, created_at: datetime, message_text: str, tz: str, source_spec: Optional[str] = None
 ) -> dict[str, Any]:
@@ -1253,7 +1286,7 @@ def retrieve_metadata_from_message(
     prompt = f'''
     You will be given the content of a message or conversation {source_context}.
 
-    Your task is to extract the most accurate information from the message in the output object indicated below.
+    Your task is to extract the most accurate information from the message in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the message (sender, recipients, and anyone referenced)
@@ -1288,7 +1321,7 @@ def retrieve_metadata_from_text(
     prompt = f'''
     You will be given the content of a text {source_context}.
 
-    Your task is to extract the most accurate information from the text in the output object indicated below.
+    Your task is to extract the most accurate information from the text in the output object indicated below. {_MAX_WORDS_HINT} to have more standardization possibilities.
 
     Focus on identifying:
     1. People mentioned in the text (author, recipients, and anyone referenced)

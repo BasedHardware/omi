@@ -19,6 +19,7 @@ from database.firestore_index_registry import (
     EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
     INDEX_ONLY_REQUIREMENTS,
+    POLICY_EXPIRED_SHORT_TERM_QUERY,
     REVIEW_QUEUE_BY_CONFLICT_QUERY,
     REVIEW_QUEUE_BY_FACT_QUERY,
     REVIEW_QUEUE_BY_STATUS_QUERY,
@@ -194,6 +195,23 @@ def test_registered_attention_override_query_builds_the_real_filter_chain():
                 ("status", "==", "active"),
                 ("processing_state", "==", "processed"),
                 ("expires_at", "<=", "2026-07-28T12:00:00+00:00"),
+            ],
+        ),
+        (
+            POLICY_EXPIRED_SHORT_TERM_QUERY,
+            {
+                "tier": "short_term",
+                "status": "active",
+                "processing_state": "processed",
+                "source_state": "active",
+                "captured_at": "2026-07-26T12:00:00+00:00",
+            },
+            [
+                ("tier", "==", "short_term"),
+                ("status", "==", "active"),
+                ("processing_state", "==", "processed"),
+                ("source_state", "==", "active"),
+                ("captured_at", "<=", "2026-07-26T12:00:00+00:00"),
             ],
         ),
         (
@@ -390,6 +408,7 @@ def test_query_inventory_registers_the_migrated_query_shapes():
         SUPERSEDED_MEMORY_BY_CANONICAL_TARGET_QUERY,
         SUPERSEDED_MEMORY_BY_LEGACY_TARGET_QUERY,
         EXPIRED_SHORT_TERM_LIFECYCLE_QUERY,
+        POLICY_EXPIRED_SHORT_TERM_QUERY,
         ACTIVE_ATTENTION_OVERRIDE_QUERY,
         STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
         UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -482,6 +501,15 @@ class _StreamRecordingQuery:
 
     def order_by(self, field_path, direction):
         return _StreamRecordingQuery(self._recorder, self._filters, (*self._orders, (field_path, direction)))
+
+    def select(self, _fields):
+        return self
+
+    def offset(self, _n):
+        return self
+
+    def limit(self, _n):
+        return self
 
     def stream(self):
         self._recorder.append((self._filters, self._orders))

@@ -33,7 +33,7 @@ export function ResizeHandle({
       startXRef.current = e.clientX;
       onResize(delta);
     },
-    [isDragging, onResize]
+    [isDragging, onResize],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -69,7 +69,7 @@ export function ResizeHandle({
       className={cn(
         'relative w-1 cursor-col-resize group',
         'flex items-center justify-center',
-        className
+        className,
       )}
       role="separator"
       aria-orientation="vertical"
@@ -82,11 +82,7 @@ export function ResizeHandle({
       <div
         className={cn(
           'w-0.5 h-full transition-all duration-150',
-          isDragging
-            ? 'bg-purple-primary'
-            : isHovered
-            ? 'bg-purple-primary/50'
-            : 'bg-bg-quaternary'
+          isDragging ? 'bg-text-primary' : isHovered ? 'bg-white/50' : 'bg-bg-quaternary',
         )}
       />
 
@@ -95,7 +91,7 @@ export function ResizeHandle({
         className={cn(
           'absolute top-1/2 -translate-y-1/2',
           'flex flex-col gap-1 transition-opacity duration-150',
-          isHovered || isDragging ? 'opacity-100' : 'opacity-0'
+          isHovered || isDragging ? 'opacity-100' : 'opacity-0',
         )}
       >
         {[...Array(3)].map((_, i) => (
@@ -103,7 +99,7 @@ export function ResizeHandle({
             key={i}
             className={cn(
               'w-1 h-1 rounded-full',
-              isDragging ? 'bg-purple-primary' : 'bg-purple-primary/60'
+              isDragging ? 'bg-text-primary' : 'bg-white/60',
             )}
           />
         ))}

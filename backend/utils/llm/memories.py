@@ -5,8 +5,9 @@ from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
 from models.memories import Memory, MemoryCategory
-from models.memory_contracts import L1MemoryArchiveClass
+from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
+from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
@@ -88,14 +89,6 @@ class CanonicalL1MemoryCandidate(BaseModel):
     risk_flags: List[str] = Field(default_factory=list)
 
 
-class MemoryExtractionError(RuntimeError):
-    """A strict memory extraction failed before producing a valid batch."""
-
-    def __init__(self, extractor: str):
-        self.extractor = extractor
-        super().__init__(f"{extractor} failed before producing a valid extraction result")
-
-
 class MemoriesByTexts(BaseModel):
     facts: List[ExtractedMemory] = Field(
         description="List of **new** facts. If any",
@@ -131,6 +124,7 @@ def extract_canonical_l1_memory_candidates(
     user_name: Optional[str] = None,
     language: Optional[str] = None,
     strict: bool = False,
+    prompt_prefix: Optional[ConversationPromptPrefix] = None,
 ) -> List[CanonicalL1MemoryCandidate]:
     """Run the broad, source-aware L1 extractor without persisting archive routes.
 
@@ -166,6 +160,8 @@ def extract_canonical_l1_memory_candidates(
         language_instruction=_get_language_instruction(uid, language),
         persist_route_outcomes=False,
         strict=strict,
+        prompt_prefix=prompt_prefix,
+        prompt_cache_enabled=bool(prompt_prefix and shared_conversation_cache_supported()),
     )
     return [
         CanonicalL1MemoryCandidate(

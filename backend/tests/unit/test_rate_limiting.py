@@ -489,6 +489,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "goals:advice",
             "goals:extract",
             "dev:conversations",
+            "dev:conversation_reads_total",
             "dev:conversations_read",
             "dev:conversation_detail_read",
             "dev:conversation_transcript_read",
@@ -561,6 +562,7 @@ class TestRouterWiring(unittest.TestCase):
         for policy in [
             "dev:memories_read",
             "dev:action_items_read",
+            "dev:conversation_reads_total",
             "dev:conversations_read",
             "dev:conversation_detail_read",
             "dev:conversation_transcript_read",
@@ -591,6 +593,62 @@ class TestRouterWiring(unittest.TestCase):
         self.assertNotIn('request.headers.get("Authorization"', developer_source)
         self.assertNotIn("request.headers.get('Authorization'", dependencies_source)
         self.assertNotIn('request.headers.get("Authorization"', dependencies_source)
+
+    def test_conversation_reads_share_an_aggregate_ceiling(self):
+        """Per-route read policies must not raise the total reads a key can make.
+
+        Before list and detail were split into separate policies they shared one
+        60/hr bucket. Giving detail its own 60/hr policy without a shared ceiling
+        would let one key make 120 conversation reads an hour -- a loosening of the
+        exact limit #8713 asked to tighten. The shared ceiling is what prevents that,
+        so this drives both routes and asserts the aggregate, not the per-route, cap
+        is what stops the caller.
+        """
+        dependencies = importlib.import_module("dependencies")
+
+        auth = dependencies.ApiKeyAuth(
+            uid="uid1",
+            scopes=["conversations:read"],
+            app_id="test-app",
+            key_id="test-key",
+        )
+
+        counters: dict[str, int] = {}
+
+        def counting_limiter(*, prefix, uid, app_id, key_id, policy_name):
+            max_requests, _window = RATE_POLICIES[policy_name]
+            counters[policy_name] = counters.get(policy_name, 0) + 1
+            if counters[policy_name] > max_requests:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+        async def drive() -> int:
+            served = 0
+            # Alternate routes so neither per-route bucket can be what stops us.
+            for i in range(500):
+                dep = (
+                    dependencies.get_auth_with_conversations_read
+                    if i % 2 == 0
+                    else dependencies.get_auth_with_conversation_detail_read
+                )
+                try:
+                    await dep(auth)
+                except HTTPException as exc:
+                    self.assertEqual(exc.status_code, 429)
+                    break
+                served += 1
+            return served
+
+        with patch.object(dependencies, "check_api_key_rate_limit", counting_limiter):
+            served = asyncio.run(drive())
+
+        umbrella_max, _window = RATE_POLICIES["dev:conversation_reads_total"]
+        split_total = RATE_POLICIES["dev:conversations_read"][0] + RATE_POLICIES["dev:conversation_detail_read"][0]
+
+        self.assertEqual(served, umbrella_max)
+        self.assertLess(served, split_total, "per-route budgets must not sum into a higher effective ceiling")
+        # The shared ceiling, not a per-route budget, is what rejected the caller.
+        self.assertLessEqual(counters["dev:conversations_read"], RATE_POLICIES["dev:conversations_read"][0])
+        self.assertLessEqual(counters["dev:conversation_detail_read"], RATE_POLICIES["dev:conversation_detail_read"][0])
 
     def test_developer_rate_limit_failures_log_without_request(self):
         dependencies = importlib.import_module("dependencies")

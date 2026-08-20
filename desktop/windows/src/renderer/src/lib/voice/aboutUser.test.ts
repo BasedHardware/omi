@@ -206,3 +206,73 @@ describe('getAboutUserCard / refreshAboutUserCard — cache', () => {
     currentUser!.displayName = 'Ada'
   })
 })
+
+describe('refreshAboutUserCard — rebuild floor', () => {
+  // The hub calls this on every warm, and it deliberately re-warms all session long
+  // (hubController's aliveFor>60 strike reset — Gemini idle-closes around every two
+  // minutes). Each rebuild is a `GET /v3/memories`, so an unthrottled refresh
+  // re-downloaded the card's memories hundreds of times a day to produce the same card.
+  it('reuses a fresh card instead of rebuilding on every warm', async () => {
+    get.mockResolvedValue({ data: [] })
+    refreshAboutUserCard()
+    await whenAboutUserCardSettled()
+    expect(get).toHaveBeenCalledTimes(1)
+
+    for (let i = 0; i < 10; i++) {
+      refreshAboutUserCard()
+      await whenAboutUserCardSettled()
+    }
+    expect(get).toHaveBeenCalledTimes(1)
+  })
+
+  it('rebuilds once the card has aged past the floor', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_700_000_000_000)
+    try {
+      get.mockResolvedValue({ data: [] })
+      refreshAboutUserCard()
+      await whenAboutUserCardSettled()
+      expect(get).toHaveBeenCalledTimes(1)
+
+      vi.setSystemTime(1_700_000_000_000 + 5 * 60_000 - 1)
+      refreshAboutUserCard()
+      await whenAboutUserCardSettled()
+      expect(get).toHaveBeenCalledTimes(1)
+
+      vi.setSystemTime(1_700_000_000_000 + 5 * 60_000)
+      refreshAboutUserCard()
+      await whenAboutUserCardSettled()
+      expect(get).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('never holds back an account switch', async () => {
+    // The floor must not outrank the uid check, or a returning user would be greeted
+    // with the other account's card for up to five minutes.
+    get.mockResolvedValue({ data: [] })
+    refreshAboutUserCard()
+    await whenAboutUserCardSettled()
+    expect(get).toHaveBeenCalledTimes(1)
+
+    currentUser!.uid = 'u2'
+    refreshAboutUserCard()
+    await whenAboutUserCardSettled()
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(getAboutUserCard()).toContain('<about_user>')
+    currentUser!.uid = 'u1'
+  })
+
+  it('rebuilds immediately after a reset', async () => {
+    get.mockResolvedValue({ data: [] })
+    refreshAboutUserCard()
+    await whenAboutUserCardSettled()
+    expect(get).toHaveBeenCalledTimes(1)
+
+    resetAboutUserCard()
+    refreshAboutUserCard()
+    await whenAboutUserCardSettled()
+    expect(get).toHaveBeenCalledTimes(2)
+  })
+})

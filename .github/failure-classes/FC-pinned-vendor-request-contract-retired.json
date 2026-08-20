@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-pinned-vendor-request-contract-retired",
+  "violated_contract": "A hardcoded vendor model name and its optional request parameters are a contract the vendor retires on its own schedule. A caller that pins them and is exercised only by the live provider call turns that retirement into a 100% outage of its feature, visible solely as a provider 400 in production logs.",
+  "canonical_prevention": "Pin the caller to a model/size/quality tuple the repository already declares in-tree (the gateway cost rate card), keep parameters the provider no longer accepts out of the client signature so they cannot be passed at all, and assert the outgoing request shape in a unit test.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_llm_gateway_client_config.py"
+  ],
+  "evidence_prs": [
+    11907
+  ],
+  "scope_hints": [
+    "backend/utils/llm/**",
+    "llm_gateway/config/cost_rate_cards.yaml"
+  ],
+  "status": "open"
+}

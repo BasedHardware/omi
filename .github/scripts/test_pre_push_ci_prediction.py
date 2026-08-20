@@ -134,19 +134,62 @@ class PrePushCiPredictionTests(unittest.TestCase):
     def test_selector_change_exercises_broad_resolver_fixtures(self) -> None:
         plan = self.plan(["scripts/pre_push_ci_prediction.py"])
         for phase in (
-            "flutter-codegen",
-            "flutter-l10n",
             "desktop-flow-lint",
             "desktop-swift-tests",
             "app-analysis-tests",
+            "app-compile-smoke",
         ):
             with self.subTest(phase=phase):
                 self.assertTrue(plan.includes(phase))
 
-    def test_release_compile_runs_on_prs_and_pushes_for_releasable_desktop_changes(self) -> None:
-        # Release-lane-only breaks (whole-module strict concurrency) must die in
-        # PRs: the KG ResolveOutcome Sendable error (#11373/#11374) merged with a
-        # green debug lane and wedged every candidate for three merges.
+    def test_routing_only_diff_does_not_wake_flutter_regeneration(self) -> None:
+        for path in (".github/checks-manifest.yaml", "scripts/pre_push_ci_prediction.py"):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertFalse(plan.includes("flutter-codegen"))
+                self.assertFalse(plan.includes("flutter-l10n"))
+                self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
+
+    def test_manifest_only_diff_still_skips_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/checks-manifest.yaml"])
+
+        self.assertFalse(plan.includes("flutter-codegen"))
+        self.assertFalse(plan.includes("flutter-l10n"))
+        self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
+
+    def test_mobile_workflow_change_wakes_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/workflows/mobile-app-checks.yml"])
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_flutter_generated"], "true")
+        self.assertEqual(outputs["has_app_codegen"], "true")
+        self.assertEqual(outputs["has_app_l10n"], "true")
+
+    def test_detect_changes_action_change_wakes_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/actions/detect-changes/action.yml"])
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_flutter_generated"], "true")
+        self.assertEqual(outputs["has_app_codegen"], "true")
+        self.assertEqual(outputs["has_app_l10n"], "true")
+
+    def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
+        codegen = self.plan(["app/build.yaml"])
+        self.assertTrue(codegen.includes("flutter-codegen"))
+        annotated = self.plan(
+            ["app/lib/models/thing.dart"],
+            {"app/lib/models/thing.dart": "@JsonSerializable()\nclass Thing {}"},
+        )
+        self.assertTrue(annotated.includes("flutter-codegen"))
+        l10n = self.plan(["app/lib/l10n/app_en.arb"])
+        self.assertTrue(l10n.includes("flutter-l10n"))
+        self.assertEqual(github_outputs(l10n)["has_flutter_generated"], "true")
+
+    def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
         paths = ["desktop/macos/Resources/Info.plist"]
         self.assertTrue(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(self.plan(paths, event="push").includes("desktop-swift-release-compile"))

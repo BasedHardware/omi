@@ -213,10 +213,46 @@ final class RewindTrackTests: XCTestCase {
     XCTAssertFalse(RewindTimelinePresentation.showsTimeline(screenshotCount: 0, historyRange: nil))
   }
 
-  func testLiveRefreshRequiresAViewportContainingNow() {
+  func testLiveRefreshRequiresAViewportContainingNowOrParkedAtTheLiveEdge() {
     let now = Date(timeIntervalSince1970: 1_000)
-    XCTAssertTrue(RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: 900...1_100, now: now))
-    XCTAssertFalse(RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: 100...200, now: now))
+    XCTAssertTrue(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: 900...1_100, newestLoadedTimestamp: nil, now: now))
+    XCTAssertFalse(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: 100...200, newestLoadedTimestamp: nil, now: now))
+    // Parked at the live edge: the viewport ends at the newest loaded frame, which trails now.
+    XCTAssertTrue(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: 800...950, newestLoadedTimestamp: 950, now: now))
+    // Panned into older history: the newest loaded frame lies beyond the viewport's end.
+    XCTAssertFalse(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: 100...200, newestLoadedTimestamp: 950, now: now))
+    XCTAssertFalse(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: nil, newestLoadedTimestamp: 950, now: now))
+    // The player sitting on the newest loaded frame is the live edge even when the track
+    // viewport is panned into older history (e.g. a restored viewport from a prior session).
+    XCTAssertTrue(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: 100...200, newestLoadedTimestamp: 950, now: now,
+        isPlayerParkedOnNewestFrame: true))
+    XCTAssertTrue(
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: nil, newestLoadedTimestamp: nil, now: now,
+        isPlayerParkedOnNewestFrame: true))
+  }
+
+  func testPlayerFollowsAppendsOnlyWhenParkedOnTheNewestFrame() {
+    // Parked on the newest frame and the array grew → follow to the new newest.
+    XCTAssertEqual(RewindTimelineNavigation.sameFrameIndex(old: 10, new: 12, current: 9, found: 9), 11)
+    // Scrubbed back → keep the viewed frame even though the array grew.
+    XCTAssertEqual(RewindTimelineNavigation.sameFrameIndex(old: 10, new: 12, current: 5, found: 5), 5)
+    // Sampled-window replacement moved the viewed frame → track it, no live-edge jump.
+    XCTAssertEqual(RewindTimelineNavigation.sameFrameIndex(old: 10, new: 12, current: 9, found: 4), 4)
+    // Same-size reload with the frame still last → stay put.
+    XCTAssertEqual(RewindTimelineNavigation.sameFrameIndex(old: 10, new: 10, current: 9, found: 9), 9)
   }
 
   func testNewCaptureExtendsTheRetainedHistoryUpperBound() {

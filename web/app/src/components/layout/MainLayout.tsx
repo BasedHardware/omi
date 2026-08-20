@@ -1,26 +1,39 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
+import { motion } from 'framer-motion';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
-import { ChatBubble } from '@/components/chat/ChatBubble';
 import { BottomNavigation } from './BottomNavigation';
-import { NotificationProvider, useNotificationContext } from '@/components/notifications/NotificationContext';
+import {
+  NotificationProvider,
+  useNotificationContext,
+} from '@/components/notifications/NotificationContext';
 import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
+import { ChatBubble } from '@/components/chat/ChatBubble';
 
 // Dynamic imports for panels - not visible on initial load
-const ChatPanel = dynamic(() => import('@/components/chat/ChatPanel').then(mod => ({ default: mod.ChatPanel })), {
-  ssr: false,
-});
+const ChatPanel = dynamic(
+  () => import('@/components/chat/ChatPanel').then((mod) => ({ default: mod.ChatPanel })),
+  {
+    ssr: false,
+  },
+);
 
-const NotificationCenter = dynamic(() => import('@/components/notifications/NotificationCenter').then(mod => ({ default: mod.NotificationCenter })), {
-  ssr: false,
-});
+const NotificationCenter = dynamic(
+  () =>
+    import('@/components/notifications/NotificationCenter').then((mod) => ({
+      default: mod.NotificationCenter,
+    })),
+  {
+    ssr: false,
+  },
+);
 
 /**
  * Handles routing from notification clicks to the appropriate panel.
@@ -78,6 +91,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children, title, hideHeader = false }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <ChatProvider>
@@ -88,10 +102,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <MemoriesPrefetcher />
         <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
-          <Sidebar
-            isOpen={sidebarOpen}
-            onClose={() => setSidebarOpen(false)}
-          />
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
           {/* Main content area - flex row to support push/slide panels */}
           <div className="flex-1 flex min-w-0 h-full overflow-hidden">
@@ -104,7 +115,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'flex-shrink-0',
                     'flex items-center gap-4 px-4 py-4 lg:px-8',
                     'bg-bg-primary/80 backdrop-blur-md',
-                    'border-b border-bg-tertiary'
+                    'border-b border-bg-tertiary',
                   )}
                 >
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />
@@ -124,9 +135,41 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                 </div>
               )}
 
-              {/* Content */}
-              <div className="flex-1 overflow-hidden">
-                {children}
+              {/* Content pane. Desktop insets the pane from the window edge by
+                  OmiSpacing.md (12) and rounds it to OmiChrome.windowRadius
+                  (26), so the shell reads as a card floating over the window
+                  rather than a full-bleed page. */}
+              <div className="flex-1 min-h-0 p-0 sm:p-3">
+                <div
+                  className={cn(
+                    'h-full w-full overflow-hidden',
+                    'bg-bg-pane sm:rounded-window sm:border sm:border-stroke/[0.22]',
+                    'sm:shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
+                  )}
+                >
+                  {/* Keyed on the pathname so each destination fades and lifts
+                      in.
+
+                      Deliberately not wrapped in `AnimatePresence
+                      initial={false}`: every route registers its own copy of
+                      this layout, so navigating remounts the whole shell. That
+                      makes each navigation look like a first render, and
+                      `initial={false}` exists precisely to suppress the enter
+                      animation on a first render — so the transition never
+                      played on any page. A plain keyed `initial` animates on
+                      both a remount and an in-place key change. There is no
+                      exit animation for the same reason: the outgoing tree is
+                      already gone by the time the new one mounts. */}
+                  <motion.div
+                    key={pathname}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className="h-full"
+                  >
+                    {children}
+                  </motion.div>
+                </div>
               </div>
             </main>
 
@@ -135,10 +178,8 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
 
             {/* Notification center - push/slide from right */}
             <NotificationCenter />
+            {pathname !== '/home' && <ChatBubble />}
           </div>
-
-          {/* Chat bubble - floating button */}
-          <ChatBubble />
 
           {/* Bottom navigation - mobile only */}
           <BottomNavigation onOpenSidebar={() => setSidebarOpen(true)} />

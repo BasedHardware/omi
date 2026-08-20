@@ -2,6 +2,96 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.190",
+      "date": "2026-08-20",
+      "changes": [
+        "Fixed Omi quitting by itself during first-run permission setup",
+        "Fixed the Save button turning blank in the Add Memory dialog as soon as you typed",
+        "Automatically deletes leftover agent tool-output files older than a week so they stop filling the Mac",
+        "Made each hourly macOS update start its Codemagic release build without waiting for GitHub's macOS queue",
+        "Fixed the screenshot embedding backfill failing to find the entries it needed to re-index",
+        "Notifications now come in exactly four types — Focus, Task, Insight, Memory — each controlled by its own toggle in Settings (the toggle formerly called Live Suggestions is now Focus Notifications)",
+        "Fixed macOS updates getting stuck before release when new changes kept landing during the hourly release train",
+        "Fixed the conversation processing banner overlapping source and duration details",
+        "Fixed longer push-to-talk questions losing the screenshot Omi answers from, so it can still see your screen"
+      ]
+    },
+    {
+      "version": "0.12.189",
+      "date": "2026-08-20",
+      "changes": [
+        "Fixed the desktop Home view's new-item state initialization",
+        "Omi now offers to connect an integration when you open an app it works with — Gmail, Google Calendar, Apple Notes, Notion, Obsidian, ChatGPT, Claude, Gemini, X, or your local files — with what the integration would do for you and what Omi would read; every connector's sheet now shows the same 'What you get' detail, and you can turn the suggestions off or reset them in Settings → Notifications",
+        "Proactive notifications now wait for something that changed, like a new blocker or approaching deadline, instead of repeating a standing status",
+        "Added environmental speaker context analysis to detect multi-party calls and meetings from ambient speech",
+        "Added voice barge-in interruption to halt playback immediately when the user begins speaking",
+        "Made \"where was that doc?\" answer from the document itself — recent-work questions now resolve to the URL or file you were in, without decoding screen history first",
+        "Added Accessibility to Settings → Permissions, so the permission Omi needs to identify the page or file you are in can finally be granted — and granting it now takes effect immediately instead of after a restart",
+        "Fixed a crash that could quit Omi while you were using its own window, once Accessibility was granted",
+        "Beta builds now use the improved meeting notes pipeline and calendar-aware participant identity by default",
+        "Fixed screen search vectors never backfilling for accounts on the new lossless screen history",
+        "Live suggestions and other AI features no longer fail silently when a pooled network connection goes stale",
+        "Fixed gaps in synced screen activity when OCR or search indexing finishes after capture",
+        "Fixed named development bundles keeping shortcuts that differ from Omi Dev",
+        "Fixed Permissions showing Accessibility as granted when it was switched off, and added the Bluetooth, Full Disk Access, and Automation permissions the page never displayed",
+        "Improved proactive notifications so work updates carry the exact on-screen name or handle when available",
+        "Recent-work answers now say how long ago each visit was, in a form that costs a fraction of the previous timestamps",
+        "Recent-work questions now answer from the document, page, or file you were actually in, instead of searching raw screen text",
+        "Fixed recent-work answers misreporting how long ago you were in an app, and made an in-progress visit say that it is still open"
+      ]
+    },
+    {
+      "version": "0.12.188",
+      "date": "2026-08-18",
+      "changes": [
+        "Improved internal Gemini usage reporting so AI capacity and costs can be tracked by workload without collecting request content",
+        "Conversation summaries now show the selected summarization app's output (e.g. General Summary) as the main summary, with a picker to switch apps and set your default — falling back to Omi's own summary when no app result is available",
+        "Improved the efficiency of automatic task extraction without changing which tasks are captured",
+        "Capped very large window captures so high-resolution external displays send smaller images to the assistant"
+      ]
+    },
+    {
+      "version": "0.12.187",
+      "date": "2026-08-17",
+      "changes": [
+        "Tuned which AI model each background assistant uses and slowed the memory-extraction timer to reduce noise; fixed a screen-change detector bug that caused unnecessary captures",
+        "Stopped creating a new cloud agent computer on every app launch"
+      ]
+    },
+    {
+      "version": "0.12.185",
+      "date": "2026-08-17",
+      "changes": [
+        "Made Brain Map replay skip quiet stretches, finish in about four seconds, zoom to a selected entity and its connections, and keep Escape from leaving the map while something is selected",
+        "Fixed Rewind capture ownership checks dropping frames right after sign-in",
+        "While downloading an update, the loading spinner now sits right next to the version instead of leaving a blank gap",
+        "Fixed a memory leak where each window kept its mouse-tracking helper alive for as long as the app was running."
+      ]
+    },
+    {
+      "version": "0.12.183",
+      "date": "2026-08-17",
+      "changes": [
+        "Proactive notifications now surface timely connections to your open and overdue tasks instead of staying silent, and no longer discard facts that lack a ticket number or a name."
+      ]
+    },
+    {
+      "version": "0.12.182",
+      "date": "2026-08-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.181",
+      "date": "2026-08-16",
+      "changes": [
+        "Long-running work contexts now reuse their cached prompt history instead of rebuilding it on every visit",
+        "Fixed a task prompt customised on one Mac never reaching your other Macs, and reappearing after you reset it to the default",
+        "A workstream label now stays attached to the work it was earned from, so a label no longer shows up on another workstream's tasks"
+      ]
+    },
+    {
       "version": "0.12.180",
       "date": "2026-08-16",
       "changes": [

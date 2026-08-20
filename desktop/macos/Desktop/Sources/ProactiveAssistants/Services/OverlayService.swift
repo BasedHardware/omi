@@ -124,6 +124,9 @@ class OverlayService {
 
   /// Get focused window frame using Accessibility API
   private func getWindowFrameViaAccessibility(pid: pid_t) -> NSRect? {
+    // See `AccessibilityProcessBoundary`: never against ourselves. The window-list fallback
+    // handles our own windows.
+    guard AccessibilityProcessBoundary.isForeignProcess(pid) else { return nil }
     let appElement = AXUIElementCreateApplication(pid)
 
     // Get the focused window

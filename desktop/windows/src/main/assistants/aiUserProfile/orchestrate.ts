@@ -5,6 +5,7 @@
 // these seams — the same pure-core / electron-wiring split as synthesis.ts (and
 // the taskEmbeddingVector pattern the parity audit references).
 import type { AiUserProfileInput, AiUserProfileRecord } from '../../../shared/types'
+import { recordFallback, type FallbackComponent } from '../../observability/fallback'
 import { enforceCharCap, totalSourceItems, usedSourceNames, type ProfileSources } from './synthesis'
 
 /** A source fetch hit an expired/invalid session (HTTP 401/403). Distinct from a
@@ -37,18 +38,19 @@ export function describeError(e: unknown): string {
 
 // The two branches below are fail-open: they continue with a UX hit (degraded
 // correctness) rather than aborting. Per AGENTS.md ("silent UX healing is allowed;
-// silent ops is not") the degraded outcome must be named loudly. There is no
-// main-process fallback/telemetry emitter yet (the renderer's PostHog is
-// unreachable from main, and Sentry is for hard errors, not fail-open degrades),
-// so this is a single structured console.warn for now.
-// TODO(#10240 track3): route through a Windows recordFallback emitter once one exists.
+// silent ops is not") the degraded outcome must be named loudly, so they route through
+// the shared main-process fallback emitter rather than an ad-hoc warn string.
 export function warnDegraded(reason: string, detail: Record<string, unknown> = {}): void {
-  console.warn('[ai-profile] fallback', {
-    component: 'ai_profile',
-    outcome: 'degraded',
-    reason,
-    ...detail
-  })
+  // aiUserProfile degrades in two shapes: a source fetch that failed (that source is
+  // dropped) and a backend sync that failed (the local profile is kept). Map each onto the
+  // closest canonical component; anything else buckets to 'other' (AGENTS.md closed set).
+  const route: { component: FallbackComponent; from: string; to: string } =
+    reason === 'source_fetch_failed'
+      ? { component: 'backend_fetch', from: 'source', to: 'skipped' }
+      : reason === 'backend_sync_failed'
+        ? { component: 'sync_dispatch', from: 'backend', to: 'local' }
+        : { component: 'other', from: 'ai_profile', to: 'none' }
+  recordFallback({ ...route, reason, outcome: 'degraded', ...detail })
 }
 
 /** Per-source fetchers, each returning already-formatted display lines. A fetcher

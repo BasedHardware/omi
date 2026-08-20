@@ -31,6 +31,8 @@ def _empty_historical_store(monkeypatch):
     import utils.memory.memory_service as memory_service
 
     monkeypatch.setattr(memory_service.memories_db, 'get_memories', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memory_service.memories_db, 'list_memory_updated_or_created_index', lambda *args, **kwargs: [])
+    monkeypatch.setattr(memory_service.memories_db, 'get_memories_by_ids', lambda *args, **kwargs: [])
 
 
 def _developer_source() -> str:

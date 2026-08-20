@@ -318,24 +318,16 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     backend_checks = (repo / ".github/workflows/backend-checks.yml").read_text(encoding="utf-8")
     repo_checks = (repo / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
     desktop_checks = (repo / ".github/workflows/desktop-checks.yml").read_text(encoding="utf-8")
-    agent_proxy_auto_deploy = (repo / ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml").read_text(
-        encoding="utf-8"
-    )
+
     swift_test_suites = (repo / "desktop/macos/scripts/swift-test-suites.sh").read_text(encoding="utf-8")
     pre_push = (repo / "scripts/pre-push").read_text(encoding="utf-8")
 
     assert 'FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)' in detect_changes
     assert "has_backend_isolation_gate" in detect_changes
     assert "has_desktop_rust" not in desktop_checks
-    assert "- 'backend/utils/__init__.py'" in agent_proxy_auto_deploy
-    assert "- 'backend/utils/executors.py'" in agent_proxy_auto_deploy
-    assert "- 'backend/database/__init__.py'" in agent_proxy_auto_deploy
-    assert "- 'backend/database/account_deletion_policy.py'" in agent_proxy_auto_deploy
-    assert "^backend/agent-proxy/Dockerfile$" in detect_changes
     assert "scan_import_time_side_effects.py" in manifest
     assert "check_module_stub_pollution.py" in manifest
     assert '"--check-allowlist-monotonic", "{base}"' in manifest
-    assert "backend/agent-proxy" in manifest
     assert "backend/dependencies.py" in manifest
     assert "unmanaged_thread_offload" in manifest
     assert "scan_import_time_side_effects.py" not in backend_checks

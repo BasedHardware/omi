@@ -164,18 +164,17 @@ class MCPAuthContext:
     memory_context: Optional[ProductAuthorizationContext] = None
 
 
-def _mcp_memory_context_from_api_key_user_data(user_data: Dict[str, Any]) -> ProductAuthorizationContext:
+def _mcp_memory_context_from_auth_data(user_data: Dict[str, Any]) -> ProductAuthorizationContext:
     verified_auth = McpVerifiedAuth(
-        uid=user_data["user_id"],
-        app_id=user_data.get("app_id"),
-        key_id=user_data.get("key_id"),
+        uid=user_data.get("user_id") or user_data["uid"],
+        app_id=user_data.get("app_id") or user_data.get("client_id"),
+        key_id=user_data.get("key_id") or user_data.get("grant_id"),
         scopes=tuple(user_data.get("scopes") or ()),
     )
     return build_mcp_default_memory_read_context(verified_auth)
 
 
 def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:
-    """Validate an MCP API key and return its memory product auth context."""
     if not authorization:
         return None
 
@@ -193,7 +192,7 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
         return None
     enforce_account_deletion_http_access(user_data["user_id"])
     _enforce_mcp_cutover_access(user_data["user_id"])
-    return _mcp_memory_context_from_api_key_user_data(user_data)
+    return _mcp_memory_context_from_auth_data(user_data)
 
 
 def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
@@ -219,7 +218,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
             scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
             app_id=user_data.get("app_id"),
             key_id=user_data.get("key_id"),
-            memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
+            memory_context=_mcp_memory_context_from_auth_data(user_data),
         )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
@@ -234,6 +233,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         client_id=oauth_context.get("client_id"),
         resource=oauth_context.get("resource"),
         grant_id=oauth_context.get("grant_id"),
+        memory_context=_mcp_memory_context_from_auth_data(oauth_context),
     )
 
 

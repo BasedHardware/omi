@@ -82,4 +82,132 @@ void main() {
       expect(bestAnnualDiscountPercent(const []), isNull);
     });
   });
+
+  group('shouldShowPlanContinueButton', () {
+    test('hides when plans are loading, cancelled, or a change is already scheduled', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: false,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: true,
+          plansLoaded: true,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: true,
+          isCancelled: false,
+          plansLoaded: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('shows for monthly users, including same-tier monthly→annual', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'plus',
+          currentTierId: 'plus',
+        ),
+        isTrue,
+      );
+    });
+
+    test('hides for annual users already on the selected tier', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: true,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'plus',
+          currentTierId: 'plus',
+        ),
+        isFalse,
+      );
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: true,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('shows for annual Plus selecting Unlimited — do not restore !isOnAnnualPlan', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: true,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'unlimited_v2',
+          currentTierId: 'plus',
+        ),
+        isTrue,
+      );
+    });
+
+    test('hides desktop-plan Continue onto a mobile tier (manage-only)', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'plus',
+          currentTierId: 'architect',
+          currentGrantsDesktop: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('still shows monthly→annual Continue on a desktop plan', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: false,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'architect',
+          currentTierId: 'architect',
+          currentGrantsDesktop: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('hides same-tier annual Continue on a desktop plan', () {
+      expect(
+        shouldShowPlanContinueButton(
+          isOnAnnualPlan: true,
+          hasScheduledUpgrade: false,
+          isCancelled: false,
+          plansLoaded: true,
+          selectedTierId: 'architect',
+          currentTierId: 'architect',
+          currentGrantsDesktop: true,
+        ),
+        isFalse,
+      );
+    });
+  });
 }

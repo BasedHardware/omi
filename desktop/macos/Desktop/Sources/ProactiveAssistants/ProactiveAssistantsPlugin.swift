@@ -967,11 +967,11 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         frameCount += 1
         let captureTime = Date()
-        // A full-screen `CGImage` redrawn into a 9x8 grayscale context — a real decode and
-        // downscale, and it was on the main actor for every captured frame. `CGImage` is immutable,
-        // and the hash is a pure function of it, so nothing about this needed the main thread.
+        // Off the main actor on purpose: `CGImage` is immutable and the hash is a pure function.
+        // Hashed at preview scale: this enters the same history the ≤80px preview grabs are
+        // compared against, and a full-resolution dHash aliases differently (see previewScaleDHash).
         let fullHash = await Task.detached(priority: .userInitiated) {
-          RewindOCRService.dHash(of: cgImage)
+          RewindOCRService.previewScaleDHash(of: cgImage)
         }.value
         captureTrigger.markCaptured(
           app: appName, windowTitle: currentWindowTitle, at: captureTime, frameHash: fullHash)
@@ -1710,6 +1710,11 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// Attempt automatic recovery (soft first, then hard reset as last resort)
   private func attemptAutoReset() {
     let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+    // A restart cannot fix a grant that is not live in this process, and must never happen
+    // while the user is still walking through onboarding — see mayRestartToRecoverCapture.
+    let mayRestart = ScreenRecordingPermissionPolicy.mayRestartToRecoverCapture(
+      grantedAtLaunch: ScreenCaptureService.grantedAtProcessStart,
+      onboardingComplete: UserDefaults.standard.bool(forKey: .hasCompletedOnboarding))
     // Step 1: Try soft recovery first (lsregister + SCK re-request, no TCC wipe)
     if !Self.hasSoftRecoveryThisSession {
       Self.hasSoftRecoveryThisSession = true
@@ -1729,8 +1734,15 @@ public class ProactiveAssistantsPlugin: NSObject {
           } else {
             // Soft recovery failed in-process, restart app to refresh permission state
             // This still avoids wiping TCC — the restart itself often fixes stale caches
-            log("ProactiveAssistantsPlugin: Soft recovery failed in-process, restarting to refresh state")
+            log("ProactiveAssistantsPlugin: Soft recovery failed in-process")
             AnalyticsManager.shared.screenCaptureBrokenDetected()
+            guard mayRestart else {
+              log(
+                "ProactiveAssistantsPlugin: not restarting to recover capture "
+                  + "(grantedAtLaunch=\(ScreenCaptureService.grantedAtProcessStart) "
+                  + "onboardingComplete=\(UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)))")
+              return
+            }
             ScreenCaptureService.softRecoveryAndRestart()
           }
         }

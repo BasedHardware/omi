@@ -466,6 +466,8 @@ extension RealtimeHubController {
   /// pixels are captured only by the kernel-authorized screenshot tool; voice
   /// commits themselves never attach an ambient frame.
   func prepareAcceptedCommit(preservingContextPreparation: Bool = false) {
+    // PTT-up: the utterance is over, so the screen-evidence budget starts now.
+    screenEvidenceSpeechEndedAt = Date()
     let candidates = AssistantSettings.shared.voiceBaseLanguages
     if !preservingContextPreparation {
       turnPreparationTask?.cancel()

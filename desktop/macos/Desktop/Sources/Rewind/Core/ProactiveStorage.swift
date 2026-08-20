@@ -269,11 +269,12 @@ actor ProactiveStorage {
 
   // MARK: - Focus Session Operations
 
-  /// Get total count of all focus sessions
+  /// Count leftover `focus_sessions` rows for Settings. macOS no longer writes
+  /// this table; the query stays so any historical rows remain visible.
   func getTotalFocusSessionCount() async throws -> Int {
     let db = try await ensureInitialized()
     return try await db.read { database in
-      try FocusSessionRecord.fetchCount(database)
+      try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM focus_sessions") ?? 0
     }
   }
 
@@ -319,27 +320,6 @@ actor ProactiveStorage {
 
       try database.execute(
         sql: "DELETE FROM proactive_extractions WHERE createdAt < ?",
-        arguments: [date]
-      )
-
-      return count
-    }
-  }
-
-  /// Delete old focus sessions (for data retention)
-  func deleteFocusSessionsOlderThan(_ date: Date) async throws -> Int {
-    let db = try await ensureInitialized()
-
-    return try await db.write { database in
-      let count =
-        try Int.fetchOne(
-          database,
-          sql: "SELECT COUNT(*) FROM focus_sessions WHERE createdAt < ?",
-          arguments: [date]
-        ) ?? 0
-
-      try database.execute(
-        sql: "DELETE FROM focus_sessions WHERE createdAt < ?",
         arguments: [date]
       )
 

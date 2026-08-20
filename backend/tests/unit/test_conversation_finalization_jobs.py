@@ -9,6 +9,7 @@ from google.api_core.exceptions import Aborted
 
 from database import conversation_finalization_jobs as jobs
 from database import firestore_transaction_retry
+from utils.listen_pusher_session import FINALIZATION_IN_FLIGHT_ERROR
 
 
 class _PhotoCollection:
@@ -424,6 +425,29 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     assert duplicate.updates == []
 
 
+def test_live_lease_rejection_matches_the_listen_in_flight_wire_error():
+    """Pin the string the live session keys its in-flight branch on.
+
+    pusher reports a rejected claim as `job_<status>`; listen must recognise the
+    live-lease rejection as healthy in-flight work rather than a failed attempt.
+    """
+    now = _now()
+    ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'attempt_count': 1,
+            'lease_expires_at': now + timedelta(seconds=300),
+        },
+    )
+
+    claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 2, False, 1500, now)
+
+    assert f"job_{claim['status']}" == FINALIZATION_IN_FLIGHT_ERROR
+    assert claim['status'] not in jobs.TERMINAL_JOB_STATUSES
+
+
 def test_expired_worker_lease_can_be_safely_reclaimed():
     now = _now()
     ref = _Ref(
@@ -470,11 +494,80 @@ def test_finalization_completion_requires_durable_fanout_completion():
 
     completed_fanout = _Transaction()
     assert jobs._mark_finalization_fanout_completed_txn(completed_fanout, ref, 1, 4, now) is True
+    assert 'meeting_treatment_eligible' not in completed_fanout.updates[0][1]
     ref.data = ref.data | completed_fanout.updates[0][1]
 
     completed = _Transaction()
     assert jobs._mark_finalization_completed_txn(completed, ref, 1, 4, now) is True
     assert completed.updates[0][1]['terminal_outcome'] == 'success'
+
+
+def test_meeting_receipt_is_created_once_on_existing_job_and_projected_to_conversation():
+    now = _now()
+    conversation_ref = _completed_finalization_conversation()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'status': 'leased',
+            'dispatch_generation': 1,
+            'lease_epoch': 4,
+        },
+    )
+    jobs_collection = _Collection({'job-1': job_ref})
+
+    first = _Transaction()
+    receipt = jobs._record_meeting_receipt_txn(
+        first,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        True,
+        'eligible',
+        1720.0,
+        1719.8,
+        now,
+    )
+
+    assert receipt['job_id'] == 'job-1'
+    assert first.updates[0][0] is job_ref
+    assert first.updates[0][1]['meeting_treatment_reason'] == 'eligible'
+    assert first.updates[1][0] is conversation_ref
+    assert first.updates[1][1]['meeting_treatment_eligible'] is True
+
+    job_ref.data = job_ref.data | first.updates[0][1]
+    replay = _Transaction()
+    replayed = jobs._record_meeting_receipt_txn(
+        replay,
+        conversation_ref,
+        jobs_collection,
+        'uid-1',
+        'conversation-1',
+        'job-1',
+        False,
+        'too_short',
+        1.0,
+        1.0,
+        now + timedelta(minutes=1),
+    )
+
+    assert replayed['meeting_treatment_eligible'] is True
+    assert replayed['meeting_treatment_reason'] == 'eligible'
+    assert replay.updates == [
+        (
+            conversation_ref,
+            {
+                'finalization_job_id': 'job-1',
+                'meeting_treatment_eligible': True,
+                'meeting_treatment_reason': 'eligible',
+                'meeting_duration_s': 1720.0,
+                'meeting_dedup_speech_s': 1719.8,
+            },
+        )
+    ]
 
 
 def test_admitted_terminal_replay_updates_its_shard_once():

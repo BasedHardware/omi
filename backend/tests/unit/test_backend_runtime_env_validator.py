@@ -76,6 +76,38 @@ def with_backend_pusher_env(payload: str) -> str:
     )
 
 
+def with_conversation_notes_v2_env(payload: str) -> str:
+    """The summary rollout flags are declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flags on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_meeting_receipt_reconciler_env(payload: str) -> str:
+    """The meeting-receipt reconciler flag is declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flag on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "MEETING_RECEIPT_RECONCILER_ENABLED", "value": "false"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -137,10 +169,14 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_meeting_receipt_reconciler_env(
+            with_conversation_notes_v2_env(
+                with_backend_pusher_env(
+                    with_parity_pack_env(
+                        with_listen_finalization_orphan_env(
+                            with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                        )
+                    )
                 )
             )
         )
@@ -188,6 +224,10 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> d
             'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
             'MEMORY_ENABLED': {'value': 'off' if mode == 'off' else 'on', 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
+            'MEMORY_CANONICAL_MAINTENANCE_FLEX': {
+                'value': 'true' if cron == 'true' else 'false',
+                'category': 'memory_rollout',
+            },
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
             'OMI_BACKGROUND_FLEX_CAPABLE': {'value': 'false', 'category': 'memory_rollout'},
         },
@@ -1788,6 +1828,32 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_desktop_backend_compose_requires_vertex_pt_env(env):
+    validator = load_validator()
+    errors = validator.validate_runtime_env(env=env)
+    assert errors == []
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    desktop_env = manifest['environments'][env]['desktop_backend']['env']
+    expected_project = 'based-hardware' if env == 'prod' else 'based-hardware-dev'
+    assert desktop_env['USE_VERTEX_AI']['value'] == 'true'
+    assert desktop_env['GOOGLE_CLOUD_PROJECT']['value'] == expected_project
+    assert desktop_env['GCP_LOCATION']['value'] == 'us-central1'
+
+
+def test_desktop_backend_vertex_pt_omission_fails_loud(tmp_path):
+    validator = load_validator()
+    manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
+    del manifest['environments']['prod']['desktop_backend']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    messages = [error.message for error in errors if error.scope == 'prod/desktop_backend']
+    assert messages
+    assert any('Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28' in message for message in messages)
+
+
 def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_contract_is_present():
     validator = load_validator()
     retired = {
@@ -1899,6 +1965,7 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
         'MEMORY_MODE',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -1951,10 +2018,11 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
 
 def test_memory_maintenance_job_contract_allows_write_without_job_cron():
     validator = load_validator()
-    errors = validator._validate_memory_maintenance_job_contract(
-        'prod',
-        validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'],
-    )
+    env_config = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'])
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
     assert errors == []
 
 
@@ -2033,6 +2101,28 @@ def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_en
             'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
         )
         in errors
+    )
+
+
+def test_memory_maintenance_job_contract_allows_prod_on_with_job_cron():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod']
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
+    assert errors == []
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED']['value'] == 'true'
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX']['value'] == 'true'
+
+
+def test_memory_maintenance_job_contract_requires_flex_when_cron_enabled():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['dev']
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('dev', env_config)
+    assert any(
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled' in error.message
+        for error in errors
     )
 
 

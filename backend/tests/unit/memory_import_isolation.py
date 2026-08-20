@@ -149,9 +149,13 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     langchain_core.output_parsers.PydanticOutputParser = MagicMock()
     langchain_core.prompts = types.ModuleType("langchain_core.prompts")
     langchain_core.prompts.ChatPromptTemplate = MagicMock()
+    langchain_core.messages = types.ModuleType("langchain_core.messages")
+    langchain_core.messages.HumanMessage = MagicMock()
+    langchain_core.messages.SystemMessage = MagicMock()
     _set("langchain_core", langchain_core)
     _set("langchain_core.output_parsers", langchain_core.output_parsers)
     _set("langchain_core.prompts", langchain_core.prompts)
+    _set("langchain_core.messages", langchain_core.messages)
 
     langchain_core.callbacks = types.ModuleType("langchain_core.callbacks")
     langchain_core.callbacks.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
@@ -296,6 +300,7 @@ WS_I_HEAVY_STUB_MODULE_NAMES = (
     "langchain_core",
     "langchain_core.output_parsers",
     "langchain_core.prompts",
+    "langchain_core.messages",
     "langchain_core.callbacks",
     "langchain_core.runnables",
     "utils.llm.usage_tracker",

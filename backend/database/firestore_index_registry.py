@@ -284,6 +284,28 @@ CANONICAL_CONSOLIDATION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+POLICY_EXPIRED_SHORT_TERM_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_policy_expired_short_term_by_capture',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('source_state', '==', 'source_state'),
+        FirestoreQueryFilter('captured_at', '<=', 'captured_at'),
+    ),
+    index_fields=(
+        _asc('tier'),
+        _asc('status'),
+        _asc('processing_state'),
+        _asc('source_state'),
+        _asc('captured_at'),
+        _asc('memory_id'),
+        _asc('__name__'),
+    ),
+)
+
 CANONICAL_GRAPH_READ_QUERY = FirestoreQuerySpec(
     identifier='memory_items_canonical_graph_read',
     collection_group='memory_items',
@@ -329,8 +351,9 @@ CANONICAL_MEMORY_ATLAS_READ_QUERY = FirestoreQuerySpec(
 # Collection-scoped newest-first scan for universal mixed list cursor paging.
 # Equality filters are intentionally empty: access/device/pending/archive are
 # applied after each bounded raw page so filtered rows still advance the keyset.
-# Firestore manages the single-field updated_at index (plus automatic __name__
-# tie-break) itself — this spec records the serving query contract only.
+# Firestore auto single-field indexes only cover field+__name__ in the *same*
+# direction (DESC+DESC / ASC+ASC). updated_at DESC + __name__ ASC is a real
+# composite and must be declared (#11684).
 UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     identifier='memory_items_universal_list_scan',
     collection_group='memory_items',
@@ -341,8 +364,8 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
 
 # Historical dual-stream keysets for effective updated_at-or-created_at order.
 # Docs with updated_at ride the updated stream; created stream skips those
-# duplicates in Python so each document is emitted once. Single-field+__name__
-# indexes stay out of the composite manifest.
+# duplicates in Python so each document is emitted once. Opposite-direction
+# __name__ tie-breaks need composite indexes (same class as #11684).
 UNIVERSAL_HISTORICAL_UPDATED_LIST_SCAN_QUERY = FirestoreQuerySpec(
     identifier='memories_universal_list_scan_updated_at',
     collection_group='memories',
@@ -561,6 +584,43 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_current_by_app',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    # No `created_at` ordering: Firestore omits documents that lack the ordered
+    # field, and a chat session with no timestamp is representable, so ordering
+    # in the query would hide a user's existing sessions. The caller reads this
+    # filter and picks the newest itself.
+    index_fields=(_asc('plugin_id'), _asc('__name__')),
+)
+
+CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_current_by_app_created_at',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
+MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
+    identifier='conversation_finalization_jobs_meeting_receipts_due',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('meeting_treatment_eligible', '==', 'meeting_treatment_eligible'),
+        FirestoreQueryFilter('meeting_receipt_intent_id', '==', 'meeting_receipt_intent_id'),
+        FirestoreQueryFilter('meeting_receipt_reconcile_after_at', '<=', 'meeting_receipt_reconcile_after_at'),
+    ),
+    index_fields=(
+        _asc('meeting_treatment_eligible'),
+        _asc('meeting_receipt_intent_id'),
+        _asc('meeting_receipt_reconcile_after_at'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -572,6 +632,7 @@ QUERY_SPECS = (
     REVIEW_QUEUE_BY_STATUS_ID_QUERY,
     REQUIRED_MEMORY_PROCESSING_QUERY,
     CANONICAL_CONSOLIDATION_QUERY,
+    POLICY_EXPIRED_SHORT_TERM_QUERY,
     CANONICAL_GRAPH_READ_QUERY,
     CANONICAL_MEMORY_ATLAS_READ_QUERY,
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
@@ -586,22 +647,80 @@ QUERY_SPECS = (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
+    CURRENT_CHAT_SESSION_ORDERED_QUERY,
+    MEETING_RECEIPTS_DUE_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
 
+
+def _index_fields_need_composite_manifest(index_fields: tuple[FirestoreIndexField, ...]) -> bool:
+    """Return True when Firestore will not serve this order from automatic indexes.
+
+    Automatic single-field indexes cover ``field ASC, __name__ ASC`` and
+    ``field DESC, __name__ DESC`` only. A lone ordered field with an opposite
+    ``__name__`` direction is a composite Firestore must be given explicitly
+    (#11684). Multi-field orders always need the composite manifest.
+    Array-contains (+ ``__name__``) stays out of the composite manifest — the
+    existing unified-memory index contract keeps those automatic.
+    """
+
+    non_name = [field for field in index_fields if field.field_path != '__name__']
+    name_fields = [field for field in index_fields if field.field_path == '__name__']
+    if len(non_name) > 1:
+        return True
+    if len(non_name) != 1 or len(name_fields) != 1:
+        return False
+    ordered = non_name[0]
+    name = name_fields[0]
+    if ordered.order is None or name.order is None:
+        return False
+    return ordered.order != name.order
+
+
+def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
+    """One composite index per signature, even when two serving queries share it."""
+    seen = set(_INDEX_ONLY_REQUIREMENT_SIGNATURES)
+    requirements: list[FirestoreIndexRequirement] = []
+    for spec in QUERY_SPECS:
+        if not _index_fields_need_composite_manifest(spec.index_fields):
+            continue
+        signature = spec.index_requirement.signature
+        if signature in seen:
+            continue
+        seen.add(signature)
+        requirements.append(spec.index_requirement)
+    return tuple(requirements)
+
+
 INDEX_REQUIREMENTS = (
     *INDEX_ONLY_REQUIREMENTS,
-    *(
-        spec.index_requirement
-        for spec in QUERY_SPECS
-        # Firestore manages one-field indexes (including document-ID ordering)
-        # itself and rejects them in the composite-index manifest.
-        if len([field for field in spec.index_fields if field.field_path != '__name__']) > 1
-        # Explicit requirements own legacy manifests while their callers migrate
-        # to query specs. Avoid declaring the same composite index twice.
-        and spec.index_requirement.signature not in _INDEX_ONLY_REQUIREMENT_SIGNATURES
-    ),
+    *_query_spec_index_requirements(),
+)
+
+
+# Firestore auto-indexes every field of every document in both directions unless a field is
+# explicitly exempted. For text fields that no query ever filters or orders on, that index is pure
+# storage cost: measured on prod `screen_activity` (964,964 documents, mean 1,052 B), the four
+# originally declared fields carried roughly 2.75x the document bytes in index entries, matching
+# the earlier "about three times" estimate.
+#
+# Only the two text fields are exempted, and the split is deliberate. `ocrText` (mean 899 B, capped
+# at 1,000 characters on write) is ~71% of that index cost and `windowTitle` ~10%; both are only
+# ever read back and rendered, since semantic search runs on Pinecone vectors rather than Firestore.
+# `deviceName` (11 B) and `clientDeviceId` (14 B) are together ~19% of an already small number --
+# under ten cents a month at current volume -- and are the one plausible future filter here:
+# utils/memory/device_scope_filter.py already scopes by device in Python, and pushing that down to
+# a Firestore filter would fail with FAILED_PRECONDITION against a disabled index. Re-enabling has
+# no scripted path (the reconcile workflow is disable-only) and forces a full collection-group
+# backfill, so they stay indexed.
+#
+# Exempting a field only removes single-field indexes — composite indexes declared above are
+# unaffected, so a field named in a composite index can still appear here.
+FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('screen_activity', 'ocrText'),
+    ('screen_activity', 'windowTitle'),
 )
 
 
@@ -615,4 +734,13 @@ def firebase_index_manifest() -> dict[str, list[dict[str, Any]]]:
             raise ValueError(f'duplicate Firestore index requirement: {requirement.identifier}')
         signatures.add(requirement.signature)
         indexes.append(requirement.to_manifest())
-    return {'indexes': indexes, 'fieldOverrides': []}
+    field_overrides = [
+        {
+            'collectionGroup': collection_group,
+            'fieldPath': field_path,
+            'ttl': False,
+            'indexes': [],
+        }
+        for collection_group, field_path in FIELD_INDEXING_EXEMPTIONS
+    ]
+    return {'indexes': indexes, 'fieldOverrides': field_overrides}
