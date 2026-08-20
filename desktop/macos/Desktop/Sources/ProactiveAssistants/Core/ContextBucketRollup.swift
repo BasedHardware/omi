@@ -542,6 +542,7 @@ enum ContextProactivityPromptBuilder {
     frame: CapturedFrame,
     recentDeliveries: [ContextBucketRecentDelivery] = [],
     visitCount: Int = 0,
+    environmentalSignal: EnvironmentalSpeakerSignal? = nil,
     timeZone: TimeZone = .current
   ) -> String {
     let actionableCutoff = frame.captureTime.addingTimeInterval(
@@ -567,6 +568,9 @@ enum ContextProactivityPromptBuilder {
       """
     if visitCount > 0 {
       prompt += "\nQualifying visits to this context: \(visitCount)"
+    }
+    if let envSignal = environmentalSignal, let envSection = EnvironmentalSpeakerAnalyzer.promptSection(envSignal) {
+      prompt += "\n\n\(envSection)"
     }
     if let recent = recentDeliveriesSection(recentDeliveries, timeZone: timeZone) {
       prompt += "\n\n\(recent)"
