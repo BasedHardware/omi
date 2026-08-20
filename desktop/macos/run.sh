@@ -351,26 +351,155 @@ rm -f $AUTH_DEBUG_LOG
 auth_debug() { echo "[AUTH DEBUG][$(date +%H:%M:%S)] $1" >> $AUTH_DEBUG_LOG; }
 touch $AUTH_DEBUG_LOG
 
+# The local self-signed identity, created without a GUI and without a password prompt.
+#
+# The documented way to make this identity is Keychain Access -> Certificate Assistant, which
+# is a wizard: unusable from CI, from an agent, and from anyone who has not read the doc. The
+# ingredients are all stock, so the wizard is not actually required -- /usr/bin/openssl is
+# LibreSSL on every Mac and supports the legacy PKCS#12 encoding Apple's importer accepts
+# (OpenSSL 3's AES/SHA256 default is rejected with "MAC verification failed").
+#
+# It lives in its own keychain rather than in login.keychain on purpose. We own that
+# keychain's password, so we can unlock it and grant codesign a partition non-interactively --
+# which is the entire point, since the login keychain is exactly what we cannot do that to.
+# The password protects a throwaway self-signed certificate and nothing else, so it is a
+# constant rather than a secret.
+OMI_LOCAL_SIGN_KEYCHAIN="$HOME/Library/Keychains/omi-local-dev-signing.keychain-db"
+OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD="omi-local-dev"
+
+# Whether an identity can actually be USED here, which is not the same question as whether it
+# exists. `security find-identity` lists identities whose private key the keychain may still
+# refuse to hand over -- and refuse instantly, with no prompt, in any session that cannot draw
+# one. Probing costs one signature on a temp file and turns a failure that used to surface
+# after the whole build into a fact known before it starts.
+signing_identity_usable() {
+    local identity="$1" probe status
+    [ -n "$identity" ] || return 1
+    probe="$(mktemp "${TMPDIR:-/tmp}/omi-sign-probe.XXXXXX")" || return 1
+    cp /usr/bin/true "$probe" 2>/dev/null || { rm -f "$probe"; return 1; }
+    codesign --force --sign "$identity" "$probe" >/dev/null 2>&1
+    status=$?
+    rm -f "$probe"
+    return $status
+}
+
+# Make the keychain visible to codesign without disturbing the user's search list.
+#
+# `security list-keychains -s` REPLACES the list rather than appending, so the existing entries
+# have to be read and passed back verbatim. They come back one per line, quoted and indented,
+# and each path may contain spaces -- so they are collected into an array and re-quoted by the
+# shell. Word-splitting them instead corrupts the list, which is not a theoretical concern:
+# an earlier version of this function did exactly that and rewrote the user's login keychain
+# entry into a nested-quoted path that no longer resolved.
+add_keychain_to_search_list() {
+    local keychain="$1" line
+    local -a current=()
+    while IFS= read -r line; do
+        line="${line#"${line%%[![:space:]]*}"}"   # strip leading whitespace
+        line="${line#\"}"
+        line="${line%\"}"
+        [ -n "$line" ] || continue
+        [ "$line" = "$keychain" ] && return 0     # already present, nothing to do
+        current+=("$line")
+    done < <(security list-keychains -d user)
+    security list-keychains -d user -s "${current[@]}" "$keychain" 2>/dev/null
+}
+
+ensure_local_dev_signing_identity() {
+    if signing_identity_usable "$OMI_LOCAL_DEV_SIGN_IDENTITY"; then
+        return 0
+    fi
+    if [ -f "$OMI_LOCAL_SIGN_KEYCHAIN" ]; then
+        # Present but unusable almost always means "locked since reboot".
+        security unlock-keychain -p "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null
+        add_keychain_to_search_list "$OMI_LOCAL_SIGN_KEYCHAIN"
+        signing_identity_usable "$OMI_LOCAL_DEV_SIGN_IDENTITY" && return 0
+    fi
+
+    step "Creating local signing identity ($OMI_LOCAL_DEV_SIGN_IDENTITY)..."
+    local work
+    work="$(mktemp -d "${TMPDIR:-/tmp}/omi-local-sign.XXXXXX")" || return 1
+
+    # codeSigning EKU and CA:false are both required, or codesign declines the identity.
+    cat > "$work/openssl.cnf" <<EOF
+[req]
+distinguished_name = dn
+x509_extensions = v3
+prompt = no
+[dn]
+CN = $OMI_LOCAL_DEV_SIGN_IDENTITY
+[v3]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+EOF
+
+    if ! /usr/bin/openssl req -x509 -newkey rsa:2048 -keyout "$work/key.pem" -out "$work/cert.pem" \
+            -days 3650 -nodes -config "$work/openssl.cnf" >/dev/null 2>&1; then
+        rm -rf "$work"; return 1
+    fi
+    if ! /usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
+            -out "$work/identity.p12" -passout "pass:$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" \
+            -name "$OMI_LOCAL_DEV_SIGN_IDENTITY" \
+            -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 >/dev/null 2>&1; then
+        rm -rf "$work"; return 1
+    fi
+
+    if [ ! -f "$OMI_LOCAL_SIGN_KEYCHAIN" ]; then
+        security create-keychain -p "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null || { rm -rf "$work"; return 1; }
+        # No idle timeout and no lock-on-sleep: a keychain that relocks mid-build reintroduces
+        # exactly the interactive prompt this exists to avoid.
+        security set-keychain-settings "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null
+    fi
+    security unlock-keychain -p "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null
+    security import "$work/identity.p12" -k "$OMI_LOCAL_SIGN_KEYCHAIN" \
+        -P "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null 2>&1
+    # The partition list is what lets codesign use the key with no dialog. We can set it here
+    # only because this keychain's password is ours.
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+        -k "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" >/dev/null 2>&1
+    add_keychain_to_search_list "$OMI_LOCAL_SIGN_KEYCHAIN"
+    rm -rf "$work"
+
+    if signing_identity_usable "$OMI_LOCAL_DEV_SIGN_IDENTITY"; then
+        substep "Created $OMI_LOCAL_DEV_SIGN_IDENTITY (self-signed, stable, no prompt)"
+        return 0
+    fi
+    return 1
+}
+
 resolve_signing_identity() {
     if [ -n "$SIGN_IDENTITY" ]; then
         return
     fi
-    # Prefer the development identity so local permissions remain stable.
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    if [ -z "$SIGN_IDENTITY" ]; then
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    fi
-    if [ -z "$SIGN_IDENTITY" ]; then
-        # A stable self-signed identity keeps this bundle's own TCC grants,
-        # because its designated requirement pins that certificate. Ad-hoc
-        # signing has no such requirement and silently drops Screen Recording,
-        # so prefer this over ad-hoc whenever it exists.
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep -F "\"$OMI_LOCAL_DEV_SIGN_IDENTITY\"" | head -1 | sed 's/.*"\(.*\)"/\1/')
-        if [ -n "$SIGN_IDENTITY" ]; then
-            substep "Using local self-signed identity: $SIGN_IDENTITY"
+    local candidate
+    # Prefer a real Apple identity so local permissions stay stable AND the bundle carries a
+    # Team ID. Each candidate is probed rather than merely found: an Apple Development identity
+    # whose key the keychain will not release is worse than useless, because picking it makes
+    # the build fail an hour of work later instead of falling back now.
+    for candidate in \
+        "$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')" \
+        "$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')"
+    do
+        [ -n "$candidate" ] || continue
+        if signing_identity_usable "$candidate"; then
+            SIGN_IDENTITY="$candidate"
+            return
         fi
+        substep "Skipping unusable identity: $candidate (keychain refused the key in this session)"
+    done
+
+    # A stable self-signed identity keeps this bundle's own TCC grants, because its designated
+    # requirement pins that certificate. Ad-hoc signing has no such requirement and silently
+    # drops Screen Recording, so this is preferred over ad-hoc always -- and created on demand
+    # rather than waiting for someone to run a GUI wizard.
+    if [ "${OMI_SKIP_LOCAL_SIGN_IDENTITY:-0}" != "1" ] && ensure_local_dev_signing_identity; then
+        SIGN_IDENTITY="$OMI_LOCAL_DEV_SIGN_IDENTITY"
+        substep "Using local self-signed identity: $SIGN_IDENTITY"
+        return
     fi
-    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+
+    if [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
         SIGN_IDENTITY="-"
         substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi

@@ -11,25 +11,45 @@ generates depend on the signing identity's Team ID. The one-line rule lives in
 1. `OMI_SIGN_IDENTITY` — explicit override.
 2. `Apple Development` — preferred, because local permissions stay stable.
 3. `Developer ID Application`.
-4. `Omi Local Dev Signing` — the stable self-signed local identity.
+4. `Omi Local Dev Signing` — the stable self-signed local identity, **created
+   automatically** if it does not exist.
 5. Ad-hoc (`-`) — only with **both** a named bundle and `OMI_ALLOW_ADHOC_SIGN=1`.
 
-### Creating `Omi Local Dev Signing`
+Each candidate is **probed, not merely found**: the script signs a throwaway file
+with it before committing. An identity can be listed and still be unusable — see
+§`errSecInternalComponent` — and choosing one on the strength of its existence
+turns a two-second fallback into a build that fails a minute later, after the
+compile and a 265 MB bundle copy.
 
-Do this once on a machine with no Apple certificate; `run.sh` then finds it with
-no environment variable:
+### `Omi Local Dev Signing` is created automatically
 
-Keychain Access → Certificate Assistant → *Create a Certificate…*
+`run.sh` creates it on demand when no Apple identity is usable. Nothing to do, no
+GUI, no password, and it works in CI and over ssh where the wizard below cannot.
+It is generated with `/usr/bin/openssl` (LibreSSL, stock on every Mac) into its
+own keychain — `~/Library/Keychains/omi-local-dev-signing.keychain-db`, whose
+password the script owns, which is what lets it grant `codesign` a partition
+without a prompt. Set `OMI_SKIP_LOCAL_SIGN_IDENTITY=1` to opt out.
 
-- **Name**: `Omi Local Dev Signing` (exact — `run.sh` matches on this)
-- **Identity Type**: Self Signed Root
-- **Certificate Type**: Code Signing
+Two details worth knowing if you touch that code:
 
-Confirm it is visible to codesign:
+- The PKCS#12 must use the legacy encoding (`-certpbe PBE-SHA1-3DES -keypbe
+  PBE-SHA1-3DES -macalg sha1`). OpenSSL 3's AES/SHA256 default imports as
+  `MAC verification failed during PKCS12 import (wrong password?)`, which is
+  not a password problem at all.
+- The certificate needs `extendedKeyUsage = codeSigning` and `CA:false`, or
+  `codesign` declines the identity.
+
+**A self-signed identity does not appear in `security find-identity -v -p
+codesigning`** — that list filters on policy trust — yet `codesign -s "Omi Local
+Dev Signing"` works fine. Check usability by signing something, not by listing:
 
 ```bash
-security find-identity -v -p codesigning
+cp /usr/bin/true /tmp/probe && codesign --force --sign "Omi Local Dev Signing" /tmp/probe
 ```
+
+To create it by hand instead (Keychain Access → Certificate Assistant → *Create a
+Certificate…*): name `Omi Local Dev Signing` exactly, Identity Type *Self Signed
+Root*, Certificate Type *Code Signing*.
 
 ## The entitlement decision keys on the Team ID
 
