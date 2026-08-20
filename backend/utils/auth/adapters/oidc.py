@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import threading
 from typing import Any, Dict, Optional
+from urllib.parse import quote
 
 from utils.auth import errors
 from utils.auth.ports import Principal, UserProfile
@@ -32,6 +33,24 @@ from utils.auth.ports import Principal, UserProfile
 # Outbound admin-API calls pin an explicit timeout so a hung IdP never blocks a worker thread
 # indefinitely (the utils outbound-timeout guard enforces this).
 _HTTP_TIMEOUT_SECONDS = 10.0
+
+
+def _admin_path_segment(uid: str) -> str:
+    """Encode a uid so it can only ever be ONE path segment of an Admin API URL.
+
+    The uid reaches these methods from callers, and one of them is a request parameter:
+    ``POST /v1/apps/migrate-owner`` passes ``old_id`` to ``get_user`` *before* its
+    ``source_uid != old_id`` eligibility check. Interpolated raw, a value containing ``/`` or ``..``
+    reshapes the request — httpx normalises dot segments (RFC 3986), so ``../groups`` turns a user
+    lookup into ``GET /admin/realms/{realm}/groups`` carried by the admin client's bearer token. The
+    response is never returned to the caller, so this was a blind request-forgery primitive rather
+    than a data leak, but it is one that does not exist under Firebase (its SDK takes a uid, not a
+    URL). Encoding belongs here, at the boundary that owns the URL: a check bolted onto one router
+    would leave the other two verbs exposed. A Keycloak uid is a UUID, so the normal case is
+    unchanged — ``safe=''`` also escapes any reserved character rather than trusting the provider's
+    id format.
+    """
+    return quote(uid, safe='')
 
 _jwks_lock = threading.Lock()
 _jwks_client: Any = None
@@ -221,7 +240,7 @@ class OIDCAuthProvider:
 
         resp = _oidc_http(
             lambda: httpx.get(
-                f"{self._admin_api()}/users/{uid}",
+                f"{self._admin_api()}/users/{_admin_path_segment(uid)}",
                 headers={"Authorization": f"Bearer {self._admin_token()}"},
                 timeout=_HTTP_TIMEOUT_SECONDS,
             )
@@ -252,7 +271,7 @@ class OIDCAuthProvider:
         first, _, last = display_name.partition(" ")
         resp = _oidc_http(
             lambda: httpx.put(
-                f"{self._admin_api()}/users/{uid}",
+                f"{self._admin_api()}/users/{_admin_path_segment(uid)}",
                 headers={"Authorization": f"Bearer {self._admin_token()}"},
                 json={"firstName": first, "lastName": last},
                 timeout=_HTTP_TIMEOUT_SECONDS,
@@ -266,7 +285,7 @@ class OIDCAuthProvider:
 
         resp = _oidc_http(
             lambda: httpx.delete(
-                f"{self._admin_api()}/users/{uid}",
+                f"{self._admin_api()}/users/{_admin_path_segment(uid)}",
                 headers={"Authorization": f"Bearer {self._admin_token()}"},
                 timeout=_HTTP_TIMEOUT_SECONDS,
             )

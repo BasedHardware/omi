@@ -1748,7 +1748,11 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
 async def migrate_app_owner(
-    old_id,
+    # Annotated so FastAPI validates it as a string query parameter rather than accepting Any. The
+    # traversal defence for the value itself lives in the OIDC adapter, which owns the Admin API URL
+    # (utils/auth/adapters/oidc.py::_admin_path_segment) — this parameter reaches auth.get_user before
+    # the source_uid != old_id eligibility check below can reject it.
+    old_id: str,
     source_token: Optional[str] = Body(default=None, embed=True),
     uid: str = Depends(auth.get_current_user_uid),
 ):
