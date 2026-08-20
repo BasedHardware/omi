@@ -121,22 +121,6 @@ extension SettingsContentView {
                 .toggleStyle(OmiToggleStyle())
                 .labelsHidden()
             }
-
-            if integrationNudgesEnabled {
-              GlassSeparator()
-
-              settingRow(
-                title: "Reset all suggestion history",
-                subtitle:
-                  "Clears every integration's suggestion history, including ones you hid, so Omi can offer them again",
-                settingId: "notifications.integrationsuggestions.reset"
-              ) {
-                Button("Reset") {
-                  IntegrationNudgeStore.shared.resetAll()
-                }
-                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
-              }
-            }
           }
         }
       }

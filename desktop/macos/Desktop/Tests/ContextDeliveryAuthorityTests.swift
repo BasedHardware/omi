@@ -4,9 +4,10 @@ import XCTest
 @testable import Omi_Computer
 
 final class ContextDeliveryAuthorityTests: XCTestCase {
-  /// Context-director decisions ride the same four category toggles the Settings pane
-  /// shows (Focus, Task, Insight, Memory). Each internal kind must be gated by exactly
-  /// its category's toggle; `.general` (functional alerts) is never category-gated.
+  /// Context-director decisions ride the same five category toggles the Settings pane
+  /// shows (Focus, Task, Insight, Memory, Integration). Each internal kind must be
+  /// gated by exactly its category's toggle; `.general` (functional alerts) is never
+  /// category-gated.
   func testDirectorDecisionsAreGatedByTheirCategoryToggle() {
     func allows(
       _ kind: ProactiveNotificationKind, focus: Bool = true, task: Bool = true, insight: Bool = true,

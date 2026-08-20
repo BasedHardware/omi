@@ -345,10 +345,11 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
   }
 
-  /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
-  /// Insight, Memory — matching the four toggles in Settings → Notifications. Focus is
-  /// the focus-nudge assistant alone; tips, resurfaced items, and generated goals are
-  /// insights. `.general` is reserved for functional system alerts outside the taxonomy.
+  /// The user-facing taxonomy is exactly five proactive categories — Focus, Task,
+  /// Insight, Memory, Integration — matching the five toggles in Settings →
+  /// Notifications. Focus is the focus-nudge assistant alone; tips, resurfaced items,
+  /// and generated goals are insights; connect-an-app offers are integrations.
+  /// `.general` is reserved for functional system alerts outside the taxonomy.
   func testEveryProactiveKindPresentsAsOneOfTheFourCategories() {
     XCTAssertEqual(ProactiveNotificationBadge(kind: .suggestion).label, "Focus")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .task).label, "Task")

@@ -433,8 +433,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Every proactive notification belongs to one of the four user-facing categories
-    // (Focus, Task, Insight, Memory), and this shared boundary is where a category's
+    // Every proactive notification belongs to one of the five user-facing categories
+    // (Focus, Task, Insight, Memory, Integration), and this shared boundary is where a category's
     // Settings toggle binds every producer — goals and meeting action items included,
     // not just the assistants that consult their own toggle before generating.
     // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
@@ -685,10 +685,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .suppressed
     }
-    // The director's decisions ride the same four category toggles as the dedicated
-    // assistants. Settings promises exactly four notification types — Focus, Task,
-    // Insight, Memory — and a toggle that silences only some producers of its
-    // category would make that promise a lie.
+    // The director's decisions ride the same category toggles as the dedicated
+    // assistants. Settings promises exactly five notification types — Focus, Task,
+    // Insight, Memory, Integration — and a toggle that silences only some producers
+    // of its category would make that promise a lie.
     guard
       Self.categoryToggleAllows(
         kind: ProactiveNotificationKind.from(decisionType: decisionType),
