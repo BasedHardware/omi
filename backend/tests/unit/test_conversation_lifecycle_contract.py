@@ -152,6 +152,14 @@ def test_generic_lifecycle_field_write_fails_closed(lifecycle_store):
     assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed.value
 
 
+def test_update_conversation_reports_a_deleted_owner(lifecycle_store):
+    """Callers that keep producing work for a conversation must be able to see it is gone (#11742)."""
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert conversations_db.update_conversation('uid', 'conversation', {'language': 'en'}) is True
+    assert conversations_db.update_conversation('uid', 'missing', {'language': 'en'}) is False
+
+
 def test_concurrent_finalizers_have_one_service_admission(lifecycle_store):
     lifecycle_store.put_conversation(
         'uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False
