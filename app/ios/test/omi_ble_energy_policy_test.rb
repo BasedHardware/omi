@@ -44,6 +44,15 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     level: 79,
                     nowMs: 14 * minute
                 ))
+                // A process relaunch rehydrates the last persisted sample into
+                // this same baseline; an unchanged first notification must
+                // remain throttled rather than rewriting the history ring.
+                precondition(!OmiBleEnergyPolicy.shouldPersistBatteryReading(
+                    previousLevel: 72,
+                    previousTimestampMs: 10 * minute,
+                    level: 72,
+                    nowMs: 11 * minute
+                ))
                 precondition(OmiBleEnergyPolicy.shouldPersistBatteryReading(
                     previousLevel: 80,
                     previousTimestampMs: 0,
