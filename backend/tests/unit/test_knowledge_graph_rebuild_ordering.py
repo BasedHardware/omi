@@ -16,7 +16,7 @@ both observed through the same seam production writes through.
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import nullcontext
 from typing import Any, Dict, List, Optional
 
@@ -79,6 +79,21 @@ class _FakeKgStore:
     def get_knowledge_graph(self, uid: str, *, db_client: Any = None) -> Dict[str, Any]:
         self.calls.append('get_knowledge_graph')
         return {'nodes': list(self.nodes.values()), 'edges': list(self.edges.values())}
+
+
+class _InlineExecutor:
+    """Runs each memory inline, in submission order.
+
+    A worker thread left running past the end of a test calls `kg.get_llm` again
+    after the next test has repatched it, so its extraction lands in that test's
+    recorder — order-dependent, and only on a loaded runner. Nothing here needs
+    real concurrency, so nothing here starts a thread.
+    """
+
+    def submit(self, fn: Any, *args: Any, **kwargs: Any) -> "Future[Any]":
+        future: Future[Any] = Future()
+        future.set_result(fn(*args, **kwargs))
+        return future
 
 
 def _response(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> Any:
@@ -146,18 +161,17 @@ def test_rebuild_interrupted_before_the_swap_leaves_the_old_graph_intact(rebuild
 
     monkeypatch.setattr(kg, 'get_llm', lambda *_args, **_kwargs: type('LLM', (), {'invoke': staticmethod(invoke)}))
 
-    class _DyingExecutor:
+    class _DyingExecutor(_InlineExecutor):
         """Stands in for the serving process going away: submission stops working."""
 
         def __init__(self) -> None:
-            self._inner = ThreadPoolExecutor(max_workers=1)
             self._submitted = 0
 
-        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
+        def submit(self, fn: Any, *args: Any, **kwargs: Any) -> "Future[Any]":
             self._submitted += 1
             if self._submitted > 1:
                 raise RuntimeError('cannot schedule new futures after shutdown')
-            return self._inner.submit(fn, *args, **kwargs)
+            return super().submit(fn, *args, **kwargs)
 
     monkeypatch.setattr(kg, 'llm_executor', _DyingExecutor())
 
@@ -198,7 +212,7 @@ def test_rebuilt_graph_still_merges_entities_across_memories(rebuild_harness):
     monkeypatch.setattr(kg, 'get_llm', lambda *_args, **_kwargs: type('LLM', (), {'invoke': staticmethod(invoke)}))
 
     # Serial so m2 observes m1's staged nodes, matching the ordering this asserts.
-    monkeypatch.setattr(kg, 'llm_executor', ThreadPoolExecutor(max_workers=1))
+    monkeypatch.setattr(kg, 'llm_executor', _InlineExecutor())
 
     graph = kg.rebuild_knowledge_graph(
         'uid-1',
@@ -242,7 +256,7 @@ def test_edges_follow_the_ids_their_nodes_actually_landed_on(rebuild_harness):
         return scripted['m1' if 'Neo woke up.' in prompt else 'm2']
 
     monkeypatch.setattr(kg, 'get_llm', lambda *_args, **_kwargs: type('LLM', (), {'invoke': staticmethod(invoke)}))
-    monkeypatch.setattr(kg, 'llm_executor', ThreadPoolExecutor(max_workers=1))
+    monkeypatch.setattr(kg, 'llm_executor', _InlineExecutor())
 
     graph = kg.rebuild_knowledge_graph(
         'uid-1',
