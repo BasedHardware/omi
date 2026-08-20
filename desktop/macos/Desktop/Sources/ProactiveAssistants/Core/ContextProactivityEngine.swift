@@ -73,11 +73,26 @@ enum ContextDirectorGrounding {
   /// task_candidate make new claims about bucket content and keep the full
   /// anti-hallucination invariant (at least one entry ref and one fact ref).
   /// Resurface requires at least one citation of either kind — never zero.
+  ///
+  /// Retrieved refs are the one exception, for insight and suggest only. A
+  /// retrieved ref validates against the allowlist of items the retrieval hop
+  /// quoted to this very call, so it carries the same anti-hallucination
+  /// guarantee as a bucket citation — but for content that by construction has
+  /// no bucket entry or fact (the answer to a question the user is writing
+  /// lives in their history, not in this screen's bucket). Before this
+  /// exception, every retrieval-hop answer was structurally undeliverable:
+  /// 10 of 10 hop evaluations in one 48h dogfood window ended suppressed,
+  /// including one whose reasoning said the retrieved context "directly helps".
+  /// task_candidate stays bucket-only: creating a task from retrieved history
+  /// is not the answer-delivery case and keeps the strict invariant.
   static func permitsNonSilence(
-    decision: String, entryRefs: [String], factIDs: [String]
+    decision: String, entryRefs: [String], factIDs: [String], retrievedRefs: [String] = []
   ) -> Bool {
     if decision == "resurface" {
-      return !entryRefs.isEmpty || !factIDs.isEmpty
+      return !entryRefs.isEmpty || !factIDs.isEmpty || !retrievedRefs.isEmpty
+    }
+    if decision == "insight" || decision == "suggest", !retrievedRefs.isEmpty {
+      return true
     }
     return !entryRefs.isEmpty && !factIDs.isEmpty
   }
@@ -548,15 +563,17 @@ actor ContextProactivityEngine {
           message: nil, state: "suppressed")
         return
       }
-      // Deliberately evaluated on bucket refs alone: retrieved refs are additive
-      // citations and can never substitute for bucket grounding. When the guard
+      // Retrieved refs are hop-allowlist-validated above, so an insight or
+      // suggest citing one is grounded in content actually quoted to the model
+      // — the answer-delivery case bucket refs cannot cover. When the guard
       // vetoes, the row records what the model actually decided and why it was
       // suppressed — a forced silence was previously indistinguishable from a
       // model-chosen one, which made the veto rate invisible until it was
       // recovered from the fact_ids side effect.
       guard
         ContextDirectorGrounding.permitsNonSilence(
-          decision: decision.decision, entryRefs: entryRefs, factIDs: factIDs)
+          decision: decision.decision, entryRefs: entryRefs, factIDs: factIDs,
+          retrievedRefs: retrievedRefs)
       else {
         provenance["suppression_reason"] = "grounding_veto"
         provenance["model_decision"] = decision.decision

@@ -409,6 +409,11 @@ enum ContextProactivityPromptBuilder {
     CONTEXT section appended, and when that section is already present below, any further
     lookup_query is ignored. Refs from that section (conversation:…, memory:…) may be cited in
     bucket_entry_refs only when the section supplies them.
+    A question the user is writing is not "already visible" content: the question is on screen,
+    its answer is not. When the RETRIEVED CONTEXT section supplies that answer, deliver it as
+    insight or suggest — put the answer itself (the link, name, date, or value) in the message
+    exactly as the retrieved text spells it, and cite the refs that contain it. Stay silent as
+    usual when the retrieved items do not actually answer the question.
     """
 
   /// Same rules as before, restructured as an ordered decision procedure: the
