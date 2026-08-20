@@ -18,6 +18,7 @@
 // (never persisted to disk), and never logged.
 import { byokEnvVars } from '../../shared/byok'
 import { ByokKeyStore } from '../agentKernel/byokStore'
+import { requestFreshSession } from '../assistants/core/session'
 
 /** The relayed Firebase session the adapter reads at spawn. */
 export interface PiMonoSession {
@@ -37,6 +38,10 @@ export interface PiMonoAuthTarget {
   /** Rotate the subprocess's auth token — restarts when idle, defers otherwise.
    *  Returns true if the restart happened immediately, false if deferred. */
   updateAuthToken(token: string): Promise<boolean>
+  /** Rotate the subprocess's BYOK env — restarts when idle, defers otherwise.
+   *  The extension bakes `OMI_BYOK_*` at spawn, so a Settings save is a no-op
+   *  until this restarts the worker. Empty `{}` means fall back to managed billing. */
+  updateByokEnv(env: Record<string, string>): Promise<boolean>
 }
 
 let session: PiMonoSession | null = null
@@ -116,6 +121,61 @@ export function piMonoManagedApiBaseUrl(session: PiMonoSession): string {
  */
 export function getPiMonoByokEnv(): Record<string, string> {
   return byokEnvVars(getByokStore().getAllKeys())
+}
+
+/** Credentials the pi-mono factory / spawn path should bake into the subprocess.
+ *  Force-refreshes the Firebase token via the renderer pull (Mac #9116 parity:
+ *  a locally-unexpired JWT can still be a ghost/stale session the backend 401s)
+ *  and re-reads BYOK from disk so a Settings save is not stuck on a snapshot. */
+export async function resolvePiMonoSpawnCredentials(): Promise<{
+  authToken: string
+  omiApiBaseUrl: string
+  byokEnv: Record<string, string>
+} | null> {
+  const current = await ensureFreshPiMonoSession()
+  if (!current) return null
+  return {
+    authToken: current.token,
+    omiApiBaseUrl: piMonoManagedApiBaseUrl(current),
+    byokEnv: getPiMonoByokEnv()
+  }
+}
+
+/**
+ * Force-refresh the cached pi-mono Firebase token from the renderer, IN PLACE.
+ * Does not restart the adapter — `PiMonoAdapter.start()` applies the new token
+ * at spawn. A failed/absent pull leaves the cached session untouched.
+ *
+ * Identity: `configurePiMonoSession` owns sign-out / account switch. A pull that
+ * started under user A must not resurrect A's token after a sign-out, or clobber
+ * user B's just-pushed session. Object identity is the seam — every configure
+ * assigns a new `session` value.
+ */
+export async function ensureFreshPiMonoSession(): Promise<PiMonoSession | null> {
+  const previous = session
+  if (!previous) return null
+  const pulled = await requestFreshSession()
+  if (session !== previous) return session
+  if (!pulled?.token) return previous
+  session = {
+    token: pulled.token,
+    desktopApiBase: pulled.desktopApiBase || previous.desktopApiBase
+  }
+  return session
+}
+
+/**
+ * Settings just wrote `byok-keys.json`. Restart the live pi-mono worker so the
+ * next ask does not keep using BYOK env baked at the previous spawn. No-op when
+ * no adapter is registered. Never logs key material.
+ */
+export function notifyPiMonoByokChanged(): void {
+  if (!adapter) return
+  const target = adapter
+  const env = getPiMonoByokEnv()
+  void target.updateByokEnv(env).catch((e) => {
+    console.warn('[pi-mono-session] BYOK env restart failed', (e as Error).message)
+  })
 }
 
 /** Register the live adapter instance so a subsequent token refresh can restart

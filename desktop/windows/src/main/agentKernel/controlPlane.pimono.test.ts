@@ -31,6 +31,7 @@ vi.mock('../codingAgent/piMono', () => ({
   PiMonoAdapter: vi.fn(function (this: Record<string, unknown>, config: unknown) {
     this.config = config
     this.updateAuthToken = vi.fn(() => Promise.resolve(true))
+    this.updateByokEnv = vi.fn(() => Promise.resolve(true))
   }),
   PiMonoRuntimeAdapter: vi.fn(function (this: Record<string, unknown>, harness: unknown) {
     this.harness = harness
@@ -139,6 +140,15 @@ describe('ensurePiMonoAdapterRegistered', () => {
     })
     buildPiMonoRuntimeAdapter()
     expect(lastPiMonoBaseUrl()).toBe('https://desktop-backend-hhibjajaja-uc.a.run.app/v2')
+  })
+
+  it('passes a spawn-time credential resolver so start() can force-refresh', () => {
+    configurePiMonoSession({ token: 'tok1', desktopApiBase: 'https://api.omi.me' })
+    buildPiMonoRuntimeAdapter()
+    const cfg = vi.mocked(PiMonoAdapter).mock.calls.at(-1)?.[0] as {
+      resolveSpawnCredentials?: unknown
+    }
+    expect(typeof cfg.resolveSpawnCredentials).toBe('function')
   })
 
   it('does not double up the slash when the relayed base has a trailing slash', () => {

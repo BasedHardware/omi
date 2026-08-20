@@ -623,6 +623,106 @@ describe('PiMonoAdapter restart lifecycle', () => {
     expect(spawn).toHaveBeenCalledTimes(2)
     await adapter.stop()
   })
+
+  it('prefers resolveSpawnCredentials over the construction-time snapshot', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'stale-token',
+        byokEnv: { OMI_BYOK_OPENAI: 'old' },
+        resolveSpawnCredentials: async () => ({
+          authToken: 'fresh-token',
+          omiApiBaseUrl: 'https://api.example/v2',
+          byokEnv: {
+            OMI_BYOK_OPENAI: 'sk-openai',
+            OMI_BYOK_ANTHROPIC: 'sk-ant',
+            OMI_BYOK_GEMINI: 'gm-key',
+            OMI_BYOK_DEEPGRAM: 'dg-key'
+          }
+        })
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_API_KEY).toBe('fresh-token')
+    expect(options.env.OMI_BYOK_ANTHROPIC).toBe('sk-ant')
+
+    await adapter.stop()
+  })
+
+  it('keeps the snapshot when resolveSpawnCredentials fails', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'snapshot-token',
+        resolveSpawnCredentials: async () => {
+          throw new Error('renderer hung')
+        }
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_API_KEY).toBe('snapshot-token')
+
+    await adapter.stop()
+  })
+
+  it('updateByokEnv restarts an idle subprocess with the new env', async () => {
+    const adapter = new PiMonoAdapter(
+      { authToken: 'firebase-id-token-xyz' },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    await adapter.updateByokEnv({
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key',
+      OMI_BYOK_DEEPGRAM: 'dg-key'
+    })
+
+    expect(spawn).toHaveBeenCalledTimes(1)
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_BYOK_ANTHROPIC).toBe('sk-ant')
+
+    await adapter.stop()
+  })
+
+  it('updateByokEnv is a no-op when the env is unchanged', async () => {
+    const byokEnv = {
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key',
+      OMI_BYOK_DEEPGRAM: 'dg-key'
+    }
+    const adapter = new PiMonoAdapter(
+      { authToken: 'firebase-id-token-xyz', byokEnv },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    const restarted = await adapter.updateByokEnv({ ...byokEnv })
+    expect(restarted).toBe(true)
+    expect(spawn).not.toHaveBeenCalled()
+
+    await adapter.stop()
+  })
 })
 
 describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
