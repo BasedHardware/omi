@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ChatUsageQuota } from './omiApi.generated'
-import { createChatQuotaGate, isLimitReached, limitMessage } from './chatQuotaGate'
+import {
+  createChatQuotaGate,
+  isLimitReached,
+  limitMessage,
+  COLD_START_SYNC_TIMEOUT_MS
+} from './chatQuotaGate'
 
 // The bar's pre-send chat-quota gate (port of macOS FloatingBarUsageLimiter).
 // The bug it closes: the bar's send path had NO gate, so a user over their
@@ -122,6 +127,46 @@ describe('createChatQuotaGate', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('uses the exported time box when the caller names none — the path production takes', async () => {
+    // Every case above passes an explicit 5_000, so none of them reads
+    // COLD_START_SYNC_TIMEOUT_MS. Production does the opposite: barSend.ts calls
+    // createChatQuotaGate() with no arguments and therefore runs entirely on the
+    // default. A mutation audit confirmed the gap — setting the constant to 0
+    // left this whole file green while defeating the cold-start gate in the
+    // shipped app, because the box would fire before the first sync could land
+    // and an over-cap user would get a free send.
+    vi.useFakeTimers()
+    try {
+      let land!: (q: ChatUsageQuota) => void
+      const fetchQuota = vi.fn(
+        () =>
+          new Promise<ChatUsageQuota>((resolve) => {
+            land = resolve
+          })
+      )
+      const gate = createChatQuotaGate(fetchQuota)
+
+      const verdict = gate.check()
+      // Just inside the box: the send is still waiting, so a verdict that lands
+      // here still gates.
+      await vi.advanceTimersByTimeAsync(COLD_START_SYNC_TIMEOUT_MS - 1)
+      land(quota({ allowed: false }))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(await verdict).toMatchObject({ blocked: true })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('pins the cold-start box, which the cases above cannot', () => {
+    // Five seconds is chosen against a real bound rather than picked: apiClient
+    // retries 429/503 with backoff over five tries up to 16s apart, so an
+    // unbounded await would hold a send — and a voice turn — for roughly 30s
+    // with no feedback. The box has to be short enough to stay under a user's
+    // patience and long enough for a healthy round trip.
+    expect(COLD_START_SYNC_TIMEOUT_MS).toBe(5_000)
   })
 
   it('fails OPEN when the quota fetch errors — the server stays the real enforcer', async () => {
