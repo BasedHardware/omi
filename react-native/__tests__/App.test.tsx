@@ -1397,6 +1397,45 @@ test('keeps successful reads visible and reports each unavailable domain', async
   expect(JSON.stringify(renderer.toJSON())).toContain('Tasks are incomplete.');
 });
 
+test('explains local backend configuration failure with one retryable Home state', async () => {
+  const configurationError = Object.assign(
+    new Error('Native HTTP configuration is unavailable'),
+    {code: 'OMI_HTTP_UNCONFIGURED'},
+  );
+  mockBackend.request.mockRejectedValue(configurationError);
+
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search Home')
+      .props.onChangeText('missing');
+  });
+
+  const unavailable = JSON.stringify(renderer.toJSON());
+  expect(unavailable).toContain(
+    'Trusted local Omi service configuration is missing.',
+  );
+  expect(unavailable).toContain('OMI_LOCAL_API_CLIENT_ID');
+  expect(unavailable).not.toContain('Conversations are unavailable.');
+  expect(unavailable).not.toContain('Memories are unavailable.');
+
+  const retry = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Retry saved data',
+  );
+  expect(retry.props.onPress).toEqual(expect.any(Function));
+
+  mockBackend.request.mockImplementation(async request =>
+    mockBackendResponse(request),
+  );
+  await ReactTestRenderer.act(async () => {
+    await retry.props.onPress();
+  });
+
+  expect(JSON.stringify(renderer.toJSON())).not.toContain(
+    'Trusted local Omi service configuration is missing.',
+  );
+});
+
 test('uses a full, navigation-free pane on mobile', async () => {
   mockViewportWidth = 390;
   const renderer = await renderApp();
@@ -1472,6 +1511,17 @@ test('uses transparent separated macOS desktop chrome', async () => {
       node => node.props.accessibilityLabel === 'Desktop material panel',
     ),
   ).toBeDefined();
+  expect(
+    renderer.root.find(
+      node => node.props.accessibilityLabel === 'Home search dock',
+    ).props.style,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        backgroundColor: 'rgba(255, 255, 255, 0.62)',
+      }),
+    ]),
+  );
   expect(
     renderer.root.find(
       node => node.props.accessibilityLabel === 'Desktop navigation material',

@@ -8,6 +8,7 @@ static const CGFloat OmiGlassScrimAlpha = 0.46;
 @interface OmiGlassPanelView ()
 
 @property (nonatomic, strong) NSVisualEffectView *material;
+@property (nonatomic, strong) NSView *fallback;
 @property (nonatomic, strong) CALayer *scrim;
 @property (nonatomic, strong) CALayer *sheen;
 @property (nonatomic, strong, nullable) id accessibilityObserver;
@@ -43,6 +44,13 @@ static const CGFloat OmiGlassScrimAlpha = 0.46;
   self.material.layer.cornerCurve = kCACornerCurveContinuous;
   self.material.layer.masksToBounds = YES;
   [self addSubview:self.material];
+
+  self.fallback = [[NSView alloc] initWithFrame:self.bounds];
+  self.fallback.wantsLayer = YES;
+  self.fallback.layer.cornerRadius = OmiGlassCornerRadius;
+  self.fallback.layer.cornerCurve = kCACornerCurveContinuous;
+  self.fallback.layer.masksToBounds = YES;
+  [self addSubview:self.fallback];
 
   self.scrim = [CALayer layer];
   self.scrim.cornerRadius = OmiGlassCornerRadius;
@@ -82,6 +90,7 @@ static const CGFloat OmiGlassScrimAlpha = 0.46;
 {
   [super layout];
   self.material.frame = self.bounds;
+  self.fallback.frame = self.bounds;
   self.scrim.frame = self.bounds;
   self.sheen.frame = NSMakeRect(0.0, NSMaxY(self.bounds) - 1.0, NSWidth(self.bounds), 1.0);
   self.layer.shadowPath = [NSBezierPath bezierPathWithRoundedRect:self.bounds
@@ -94,6 +103,8 @@ static const CGFloat OmiGlassScrimAlpha = 0.46;
 {
   BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
   self.material.hidden = reduceTransparency;
+  self.fallback.hidden = !reduceTransparency;
+  self.fallback.layer.backgroundColor = NSColor.whiteColor.CGColor;
   CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;
   self.scrim.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:alpha].CGColor;
 }

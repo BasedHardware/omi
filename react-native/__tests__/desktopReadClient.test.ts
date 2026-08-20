@@ -1,5 +1,8 @@
 import {
   conversationGroupLabel,
+  desktopBackendConfigurationCopy,
+  desktopBackendServiceCopy,
+  desktopReadErrorCopy,
   loadConversations,
   loadDesktopReads,
   loadMemories,
@@ -83,6 +86,18 @@ function backendFor(
     cancelGenerationEvents: async () => {},
   };
 }
+
+test('maps native local backend failures to actionable, credential-safe copy', () => {
+  expect(desktopReadErrorCopy({code: 'OMI_HTTP_UNCONFIGURED'})).toBe(
+    desktopBackendConfigurationCopy,
+  );
+  expect(desktopReadErrorCopy({code: 'OMI_HTTP_TRANSPORT'})).toBe(
+    desktopBackendServiceCopy,
+  );
+  expect(desktopReadErrorCopy(new Error('response rejected'))).toBe(
+    'response rejected',
+  );
+});
 
 test('loads and normalizes all three exact desktop read routes', async () => {
   const paths: string[] = [];
