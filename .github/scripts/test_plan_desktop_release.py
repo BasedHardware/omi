@@ -419,6 +419,34 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("::warning::required check is in_progress", stdout.getvalue())
         self.assertIn("should_release=false", outputs)
 
+    def test_codemagic_source_gate_never_waits_for_github_compile_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "github-output"
+            stdout = io.StringIO()
+            with (
+                patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
+                patch.object(planner, "releasable_desktop_changes_since", return_value=[RELEASABLE_PATH]),
+                patch.object(planner, "latest_releasable_desktop_sha", return_value=SOURCE_SHA),
+                patch.object(planner, "latest_change_age_seconds", return_value=601),
+                patch.object(planner, "existing_source_candidate_reason", return_value=None),
+                patch.object(planner, "evaluate_source_checks") as github_checks,
+                patch.object(planner, "active_release_reason", return_value=None),
+                patch.object(
+                    sys,
+                    "argv",
+                    [str(SCRIPT), "--repository", REPOSITORY, "--codemagic-source-gate"],
+                ),
+                patch.dict(os.environ, {"GITHUB_OUTPUT": str(output_path)}, clear=False),
+                redirect_stdout(stdout),
+            ):
+                self.assertEqual(planner.main(), 0)
+            outputs = output_path.read_text(encoding="utf-8")
+
+        github_checks.assert_not_called()
+        self.assertIn("Codemagic owns candidate compile", stdout.getvalue())
+        self.assertIn(f"source_sha={SOURCE_SHA}", outputs)
+        self.assertIn("should_release=true", outputs)
+
     def test_planner_main_blocks_with_error_and_exit_one_when_no_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"
@@ -603,7 +631,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("ref: ${{ steps.plan.outputs.source_sha }}", workflow)
         self.assertLess(
             workflow.index("Create and regular-merge PR to sync changelog back to main"),
-            workflow.index("Publish immutable tag from merged green source"),
+            workflow.index("Publish immutable tag from merged release source"),
         )
         self.assertNotIn("Replan release source after changelog sync", workflow)
         self.assertNotIn("Select final release plan", workflow)
@@ -611,12 +639,13 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
         self.assertIn("if: steps.plan.outputs.should_release == 'true'", workflow)
         self.assertIn("python3 .github/scripts/publish-desktop-candidate-tag.py", workflow)
         self.assertIn("python3 .github/scripts/check-codemagic-tag-intake.py", workflow)
-        self.assertIn("--timeout-seconds 600", workflow)
+        self.assertIn("--timeout-seconds 0", workflow)
         self.assertIn('test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"', workflow)
         self.assertIn('CANDIDATE_SHA="$CHANGELOG_COMMIT"', workflow)
         self.assertIn('CANDIDATE_SHA="$PLANNED_SOURCE_SHA"', workflow)
         self.assertNotIn('CANDIDATE_SHA="$MAIN_SHA"', workflow)
         self.assertIn('BRANCH="${BRANCH}-recovery-${GITHUB_RUN_ID}"', workflow)
+        self.assertIn("--codemagic-source-gate", workflow)
         self.assertNotIn("wait_for_required_source_checks", Path(SCRIPT).read_text(encoding="utf-8"))
 
     def test_auto_release_is_an_hourly_train_plus_manual_dispatch(self) -> None:

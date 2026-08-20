@@ -677,6 +677,11 @@ def main() -> int:
             "(the hourly release train's throttle; 0 disables it)"
         ),
     )
+    parser.add_argument(
+        "--codemagic-source-gate",
+        action="store_true",
+        help="Let the tag-bound Codemagic compile, signing, and smoke workflow gate the candidate",
+    )
     parser.add_argument("--watch-source-sha")
     parser.add_argument("--watch-max-polls", type=int, default=1)
     parser.add_argument("--watch-poll-seconds", type=int, default=WATCH_POLL_SECONDS)
@@ -759,35 +764,38 @@ def main() -> int:
         )
         return 0
 
-    source_check_gate = evaluate_source_checks(args.repository, source_sha)
-    if source_check_gate.state == "defer":
-        print(f"::warning::{source_check_gate.reason}")
-        set_output("should_release", "false")
-        set_output("reason", f"Waiting for required exact-SHA checks: {source_check_gate.reason}.")
-        return 0
-    if source_check_gate.state == "blocked":
-        # Prefer a green SHA ABOVE the blocked one — it proves the same desktop
-        # tree and ships newer code — before falling back to an older green SHA.
-        fallback = newest_green_source_ahead(args.repository, source_sha) or newest_green_fallback_source(
-            args.repository, latest_tag, source_sha
-        )
-        if fallback is None:
-            print(f"::error::{source_check_gate.reason}")
+    if args.codemagic_source_gate:
+        print("Codemagic owns candidate compile, signing, notarization, and signed-smoke admission.")
+    else:
+        source_check_gate = evaluate_source_checks(args.repository, source_sha)
+        if source_check_gate.state == "defer":
+            print(f"::warning::{source_check_gate.reason}")
             set_output("should_release", "false")
-            set_output("reason", f"Desktop candidate source gate blocked: {source_check_gate.reason}.")
-            return 1
-        fallback_sha, fallback_note = fallback
-        print(
-            f"::warning::Newest releasable SHA {source_sha} is blocked "
-            f"({source_check_gate.reason}); falling back to {fallback_note}."
-        )
-        source_sha = fallback_sha
-        set_output("source_sha", source_sha)
-        existing_candidate = existing_source_candidate_reason(args.repository, source_sha)
-        if existing_candidate:
-            set_output("should_release", "false")
-            set_output("reason", f"Desktop candidate already exists for fallback source: {existing_candidate}")
+            set_output("reason", f"Waiting for required exact-SHA checks: {source_check_gate.reason}.")
             return 0
+        if source_check_gate.state == "blocked":
+            # Prefer a green SHA ABOVE the blocked one — it proves the same desktop
+            # tree and ships newer code — before falling back to an older green SHA.
+            fallback = newest_green_source_ahead(args.repository, source_sha) or newest_green_fallback_source(
+                args.repository, latest_tag, source_sha
+            )
+            if fallback is None:
+                print(f"::error::{source_check_gate.reason}")
+                set_output("should_release", "false")
+                set_output("reason", f"Desktop candidate source gate blocked: {source_check_gate.reason}.")
+                return 1
+            fallback_sha, fallback_note = fallback
+            print(
+                f"::warning::Newest releasable SHA {source_sha} is blocked "
+                f"({source_check_gate.reason}); falling back to {fallback_note}."
+            )
+            source_sha = fallback_sha
+            set_output("source_sha", source_sha)
+            existing_candidate = existing_source_candidate_reason(args.repository, source_sha)
+            if existing_candidate:
+                set_output("should_release", "false")
+                set_output("reason", f"Desktop candidate already exists for fallback source: {existing_candidate}")
+                return 0
 
     active_reason = active_release_reason(args.repository, latest_tag)
     if active_reason:
