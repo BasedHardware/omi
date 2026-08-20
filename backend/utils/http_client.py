@@ -181,6 +181,10 @@ class WebhookCircuitBreaker:
         self._state = 'closed'
         self._half_open_in_flight = 0
 
+    def release_probe(self):
+        if self._state == 'half_open' and self._half_open_in_flight:
+            self._half_open_in_flight -= 1
+
     def record_failure(self):
         self._failures += 1
         self._last_failure_time = time.monotonic()

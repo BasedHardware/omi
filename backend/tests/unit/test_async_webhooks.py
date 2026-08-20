@@ -5,12 +5,16 @@ use httpx.AsyncClient instead of blocking requests.post.
 """
 
 import ast
+import asyncio
+from contextlib import asynccontextmanager
 import os
 import re
+import time
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
+import database.redis_db as redis_db_module
 import utils.webhooks as webhooks_module
 from models.users import WebhookType
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
@@ -24,6 +28,10 @@ def _stub_webhook_db_helpers(monkeypatch):
     etc. Individual tests override specific names via ``with patch(...)`` as needed.
     """
     monkeypatch.setattr(webhooks_module, "user_webhook_status_db", MagicMock(return_value=True))
+    redis_helpers = MagicMock()
+    redis_helpers.try_acquire_audio_bytes_webhook_lock = MagicMock(return_value="lock-token")
+    redis_helpers.release_audio_bytes_webhook_lock = MagicMock()
+    monkeypatch.setattr(webhooks_module, "redis_db", redis_helpers)
     monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
     monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
     monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())
@@ -165,6 +173,19 @@ class TestSendAudioBytesDeveloperWebhook:
         assert ",10" not in call_url
 
     @pytest.mark.asyncio
+    async def test_url_whitespace_is_normalized(self):
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(
+            webhooks_module, "get_user_webhook_db", return_value=" https://example.com/audio,10 "
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
+
+        assert mock_client.post.call_args.args[0].startswith("https://example.com/audio?")
+
+    @pytest.mark.asyncio
     async def test_disabled_webhook_skips(self):
         """Verify disabled webhook returns early."""
         mock_client = AsyncMock()
@@ -174,6 +195,381 @@ class TestSendAudioBytesDeveloperWebhook:
         ):
             await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
             mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_contention_skips_delivery_while_first_request_is_in_flight(self):
+        first_post_started = asyncio.Event()
+        allow_first_post_to_finish = asyncio.Event()
+        mock_response = MagicMock(status_code=200)
+
+        async def post(*_args, **_kwargs):
+            first_post_started.set()
+            await allow_first_post_to_finish.wait()
+            return mock_response
+
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = post
+        lock = MagicMock(side_effect=["first-token", None])
+
+        with patch.object(webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", lock), patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=MagicMock(allow_request=MagicMock(return_value=True)),
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            first_delivery = asyncio.create_task(
+                send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
+            )
+            await first_post_started.wait()
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100))
+            allow_first_post_to_finish.set()
+            await first_delivery
+
+        assert mock_client.post.call_count == 1
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "first-token")
+
+    @pytest.mark.asyncio
+    async def test_invalid_url_skips_lock_and_delivery(self):
+        mock_client = AsyncMock()
+
+        with patch.object(
+            webhooks_module, "get_user_webhook_db", return_value="ftp://example.com/audio,10"
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
+
+        mock_client.post.assert_not_called()
+        webhooks_module.redis_db.try_acquire_audio_bytes_webhook_lock.assert_not_called()
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_retry_backoff_releases_webhook_semaphore(self):
+        first_post_started = asyncio.Event()
+        allow_first_post_to_finish = asyncio.Event()
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock()
+        events = []
+
+        async def post(*_args, **_kwargs):
+            if mock_client.post.call_count == 1:
+                first_post_started.set()
+                await allow_first_post_to_finish.wait()
+                raise RuntimeError('retry')
+            return mock_response
+
+        mock_client.post.side_effect = post
+
+        @asynccontextmanager
+        async def tracked_semaphore():
+            events.append('semaphore-enter')
+            yield
+            events.append('semaphore-exit')
+
+        def acquire_lock(*_args, **_kwargs):
+            events.append('lock-acquire')
+            return 'lock-token'
+
+        with patch.object(
+            webhooks_module, "get_webhook_semaphore", side_effect=lambda: tracked_semaphore()
+        ), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ) as acquire_lock, patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=MagicMock(allow_request=MagicMock(return_value=True)),
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * 100)))
+            await first_post_started.wait()
+            acquire_lock.assert_called_once()
+            allow_first_post_to_finish.set()
+            await delivery
+
+        assert mock_client.post.call_count == 2
+        assert events[0] == 'lock-acquire'
+        assert events.index('semaphore-enter') > events.index('lock-acquire')
+        assert events.count('semaphore-enter') == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_semaphore_wait_is_bounded_by_audio_lock_lease(self):
+        semaphore_started = asyncio.Event()
+        release_semaphore = asyncio.Event()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=RuntimeError("retry"))
+        semaphore_calls = 0
+
+        @asynccontextmanager
+        async def blocked_semaphore():
+            nonlocal semaphore_calls
+            semaphore_calls += 1
+            if semaphore_calls > 1:
+                semaphore_started.set()
+                await release_semaphore.wait()
+            yield
+
+        with patch.object(
+            webhooks_module, "get_webhook_semaphore", side_effect=lambda: blocked_semaphore()
+        ), patch.object(
+            webhooks_module,
+            "_get_dev_webhook_retry_delays",
+            return_value=(0,),
+        ), patch.object(
+            webhooks_module,
+            "_WEBHOOK_REQUEST_TIMEOUT_SECONDS",
+            0.01,
+        ), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
+        ), patch.object(
+            webhooks_module.redis_db, "release_audio_bytes_webhook_lock"
+        ), patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=MagicMock(allow_request=MagicMock(return_value=True)),
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        await semaphore_started.wait()
+        assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_cancellation_releases_half_open_probe(self):
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=asyncio.CancelledError)
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+        mock_cb.state = 'half_open'
+
+        with patch.object(webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value="lock-token"
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            with pytest.raises(asyncio.CancelledError):
+                await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_cb.release_probe.assert_called_once()
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
+
+    @pytest.mark.asyncio
+    async def test_lock_contention_releases_a_half_open_probe_once(self):
+        mock_client = AsyncMock()
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+        mock_cb.state = 'half_open'
+
+        with patch.object(webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", return_value=None
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_cb.release_probe.assert_called_once()
+        mock_client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_admission_timeout_preserves_prior_endpoint_failure(self):
+        mock_response = MagicMock(status_code=500)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        semaphore_calls = 0
+
+        @asynccontextmanager
+        async def semaphore():
+            nonlocal semaphore_calls
+            semaphore_calls += 1
+            if semaphore_calls > 1:
+                await asyncio.Event().wait()
+            yield
+
+        mock_cb = MagicMock(allow_request=MagicMock(return_value=True))
+        with patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=(0,)), patch.object(
+            webhooks_module, "_WEBHOOK_REQUEST_TIMEOUT_SECONDS", 0.01
+        ), patch.object(webhooks_module, "get_webhook_semaphore", side_effect=lambda: semaphore()), patch.object(
+            webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_client.post.assert_called_once()
+        mock_cb.record_failure.assert_called_once()
+        webhooks_module.record_dev_webhook_failure.assert_called_once_with(
+            "uid-1", webhooks_module.WebhookType.audio_bytes, 500, "HTTP 500"
+        )
+
+    @pytest.mark.asyncio
+    async def test_lock_acquisition_is_not_cancelled_by_request_timeout(self):
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        def acquire_lock(*_args, **_kwargs):
+            time.sleep(0.05)
+            return "lock-token"
+
+        with patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=()), patch.object(
+            webhooks_module, "_WEBHOOK_REQUEST_TIMEOUT_SECONDS", 0.01
+        ), patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
+
+        mock_client.post.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cancellation_during_lock_acquisition_releases_late_token(self):
+        acquisition_started = asyncio.Event()
+        mock_client = AsyncMock()
+
+        def acquire_lock(*_args, **_kwargs):
+            acquisition_started.set()
+            time.sleep(0.05)
+            return "late-lock-token"
+
+        with patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00")))
+            await acquisition_started.wait()
+            delivery.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await delivery
+
+            for _ in range(20):
+                if webhooks_module.redis_db.release_audio_bytes_webhook_lock.called:
+                    break
+                await asyncio.sleep(0.01)
+
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
+
+    @pytest.mark.asyncio
+    async def test_repeated_cancellation_during_lock_acquisition_releases_late_token(self):
+        acquisition_started = asyncio.Event()
+        mock_client = AsyncMock()
+
+        def acquire_lock(*_args, **_kwargs):
+            acquisition_started.set()
+            time.sleep(0.05)
+            return "late-lock-token"
+
+        with patch.object(
+            webhooks_module.redis_db, "try_acquire_audio_bytes_webhook_lock", side_effect=acquire_lock
+        ), patch.object(webhooks_module, "get_webhook_client", return_value=mock_client):
+            delivery = asyncio.create_task(send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00')))
+            await acquisition_started.wait()
+            delivery.cancel()
+            await asyncio.sleep(0)
+            delivery.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await delivery
+
+            for _ in range(20):
+                if webhooks_module.redis_db.release_audio_bytes_webhook_lock.called:
+                    break
+                await asyncio.sleep(0.01)
+
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "late-lock-token")
+
+    def test_non_finite_retry_delays_use_default_schedule(self, monkeypatch):
+        monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "1,nan,inf")
+
+        assert webhooks_module._get_dev_webhook_retry_delays() == webhooks_module._DEV_WEBHOOK_RETRY_DELAYS
+
+    @pytest.mark.asyncio
+    async def test_semaphore_admission_timeout_does_not_record_endpoint_failure(self):
+        mock_client = AsyncMock()
+        mock_cb = MagicMock(allow_request=MagicMock(return_value=True))
+
+        @asynccontextmanager
+        async def blocked_semaphore():
+            await asyncio.Event().wait()
+            yield
+
+        with patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=()), patch.object(
+            webhooks_module, "_WEBHOOK_REQUEST_TIMEOUT_SECONDS", 0.01
+        ), patch.object(webhooks_module, "get_webhook_semaphore", return_value=blocked_semaphore()), patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=mock_cb,
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b"\x00"))
+
+        mock_client.post.assert_not_called()
+        mock_cb.record_failure.assert_not_called()
+        webhooks_module.record_dev_webhook_failure.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_configured_duration_controls_payload_truncation(self):
+        mock_response = MagicMock(status_code=200)
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch.object(
+            webhooks_module, "get_user_webhook_db", return_value="https://example.com/audio,10"
+        ), patch.object(
+            webhooks_module,
+            "get_webhook_circuit_breaker",
+            return_value=MagicMock(allow_request=MagicMock(return_value=True)),
+        ), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00' * (8000 * 2 * 15)))
+
+        sent_content = mock_client.post.call_args.kwargs["content"]
+        assert len(sent_content) == 8000 * 2 * 10
+
+    @pytest.mark.asyncio
+    async def test_delivery_failure_records_failure_and_releases_lock(self):
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=RuntimeError("delivery failed"))
+
+        with patch.object(webhooks_module, "get_webhook_circuit_breaker", return_value=mock_cb), patch.object(
+            webhooks_module, "get_webhook_client", return_value=mock_client
+        ), patch.object(webhooks_module, "_get_dev_webhook_retry_delays", return_value=()):
+            await send_audio_bytes_developer_webhook("uid-1", 8000, bytearray(b'\x00'))
+
+        mock_cb.record_failure.assert_called_once()
+        webhooks_module.record_dev_webhook_failure.assert_called_once_with(
+            "uid-1", webhooks_module.WebhookType.audio_bytes, 0, "RuntimeError"
+        )
+        webhooks_module.redis_db.release_audio_bytes_webhook_lock.assert_called_once_with("uid-1", "lock-token")
+
+
+class TestAudioBytesWebhookRedisLock:
+    def test_redis_outage_preserves_fail_open_delivery_decision(self, monkeypatch):
+        mock_redis = MagicMock()
+        mock_redis.set.side_effect = ConnectionError("redis unavailable")
+        monkeypatch.setattr(redis_db_module, "r", mock_redis)
+
+        token = redis_db_module.try_acquire_audio_bytes_webhook_lock("uid-1", ttl=181)
+
+        assert token
+        mock_redis.set.assert_called_once_with("users:uid-1:audio_bytes_webhook_lock", token, ex=181, nx=True)
+
+    def test_release_only_deletes_matching_lock_token(self, monkeypatch):
+        mock_redis = MagicMock()
+        monkeypatch.setattr(redis_db_module, "r", mock_redis)
+
+        redis_db_module.release_audio_bytes_webhook_lock("uid-1", "lock-token")
+
+        script, key_count, key, token = mock_redis.eval.call_args.args
+        assert key_count == 1
+        assert key == "users:uid-1:audio_bytes_webhook_lock"
+        assert token == "lock-token"
+        assert "redis.call('get', KEYS[1]) == ARGV[1]" in script
+
+    def test_release_redis_failure_is_best_effort(self, monkeypatch):
+        mock_redis = MagicMock()
+        mock_redis.eval.side_effect = [ConnectionError("redis unavailable"), 1]
+        monkeypatch.setattr(redis_db_module, "r", mock_redis)
+
+        redis_db_module.release_audio_bytes_webhook_lock("uid-1", "lock-token")
+        assert mock_redis.eval.call_count == 2
 
 
 class TestConversationAndSummaryWebhooksStructural:

@@ -131,6 +131,17 @@ class TestWebhookCircuitBreaker:
         assert cb.allow_request() is True  # first probe
         assert cb.allow_request() is False  # second blocked
 
+    def test_half_open_probe_can_be_released_after_lock_contention(self):
+        cb = WebhookCircuitBreaker("test-host")
+        for _ in range(_CIRCUIT_BREAKER_FAILURE_THRESHOLD):
+            cb.record_failure()
+        cb._last_failure_time = time.monotonic() - _CIRCUIT_BREAKER_RECOVERY_TIMEOUT - 1
+
+        assert cb.state == 'half_open'
+        assert cb.allow_request() is True
+        cb.release_probe()
+        assert cb.allow_request() is True
+
     def test_half_open_success_closes(self):
         cb = WebhookCircuitBreaker("test-host")
         for _ in range(_CIRCUIT_BREAKER_FAILURE_THRESHOLD):

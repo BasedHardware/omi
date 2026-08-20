@@ -27,6 +27,7 @@ from utils.pusher_protocol import (
     frame_header,
     json_object,
     pusher_session_outcome,
+    take_bounded_chunk,
 )
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
@@ -627,7 +628,7 @@ async def _websocket_util_trigger(
                         trigger_audiobuffer = bytearray()
                     if (
                         audio_bytes_webhook_delay_seconds is not None
-                        and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2
+                        and len(audiobuffer) >= sample_rate * audio_bytes_webhook_delay_seconds * 2
                     ):
                         if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                             logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
@@ -636,14 +637,15 @@ async def _websocket_util_trigger(
                             {
                                 'type': 'webhook',
                                 'sample_rate': sample_rate,
-                                'data': audiobuffer.copy(),
+                                'data': bytearray(
+                                    take_bounded_chunk(audiobuffer, sample_rate * audio_bytes_webhook_delay_seconds * 2)
+                                ),
                             },
                             'audio_bytes',
                             byte_budget=audio_budget,
                             size_of=lambda item: len(item['data']),
                         )
                         audio_bytes_event.set()  # Wake consumer immediately
-                        audiobuffer = bytearray()
                     continue
 
         except (ValueError, struct.error, UnicodeDecodeError) as exc:

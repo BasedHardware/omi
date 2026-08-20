@@ -104,6 +104,13 @@ def test_audio_budget_rejects_bytes_above_shared_limit(monkeypatch):
     dropped_bytes.labels.return_value.inc.assert_called_once_with(1)
 
 
+def test_take_bounded_chunk_preserves_audio_remainder():
+    buffer = bytearray(b'abcdef')
+
+    assert pusher_protocol.take_bounded_chunk(buffer, 4) == b'abcd'
+    assert buffer == b'ef'
+
+
 def test_private_pending_evicts_oldest_and_releases_bytes(monkeypatch):
     monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
     monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())

@@ -2,6 +2,7 @@ import ast
 import base64
 import json
 import os
+import uuid
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
@@ -1018,6 +1019,36 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_audio_bytes_webhook_lock(uid: str, ttl: int = 180) -> Optional[str]:
+    """Atomically try to acquire audio bytes webhook rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
+    token = str(uuid.uuid4())
+    try:
+        result = r.set(f'users:{uid}:audio_bytes_webhook_lock', token, ex=ttl, nx=True)
+    except Exception as e:
+        logger.warning('audio bytes webhook lock unavailable; proceeding without lock error=%s', type(e).__name__)
+        return token
+    return token if result is not None else None
+
+
+_RELEASE_AUDIO_BYTES_WEBHOOK_LOCK_SCRIPT = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+_AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS = 3
+
+
+def release_audio_bytes_webhook_lock(uid: str, token: str) -> None:
+    for attempt in range(_AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS):
+        try:
+            r.eval(_RELEASE_AUDIO_BYTES_WEBHOOK_LOCK_SCRIPT, 1, f'users:{uid}:audio_bytes_webhook_lock', token)
+            return
+        except Exception as e:
+            if attempt == _AUDIO_BYTES_WEBHOOK_LOCK_RELEASE_ATTEMPTS - 1:
+                logger.warning('release audio bytes webhook lock failed error=%s', type(e).__name__)
 
 
 def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
