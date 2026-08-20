@@ -917,6 +917,99 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     return .queued
   }
 
+  /// The gated path for a proactive card whose point is its action button.
+  ///
+  /// `sendNotification` returns `Void` and keeps the presentation result to
+  /// itself. A caller that must know whether the card actually reached the
+  /// screen — because it spends a bounded, lifetime offer budget from
+  /// `onPresented` rather than from the call returning — cannot use it, and
+  /// `IntegrationNudgeCoordinator` reached straight for
+  /// `FloatingControlBarManager.showNotification` for exactly that reason,
+  /// skipping every control the user has along the way.
+  ///
+  /// Mirrors `presentContextDirectorNotification`: same gate order, same result
+  /// type, same callback contract. It differs only in carrying a
+  /// `FloatingBarNotificationAction`, and in throttling against the caller's own
+  /// `assistantId` instead of the context-director budget.
+  ///
+  /// A suppressed card composes correctly with a bounded budget: `onPresented`
+  /// never fires, so the offer stays unspent and the same nudge is free to be
+  /// made again once the user is no longer silenced or in company.
+  @discardableResult
+  func presentActionableProactiveNotification(
+    ownerID: String,
+    title: String,
+    message: String,
+    assistantId: String,
+    action: FloatingBarNotificationAction,
+    sound: NotificationSound = .none,
+    onPresented: (() -> Void)? = nil,
+    onDropped: (() -> Void)? = nil
+  ) -> OwnerBoundNotificationPresentationResult {
+    guard !ownerID.isEmpty,
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+    else {
+      onDropped?()
+      return .rejectedOwnerChange
+    }
+
+    guard Self.areNotificationsEnabled() else {
+      onDropped?()
+      return .suppressed
+    }
+
+    guard
+      isProactiveNotificationEligible(
+        assistantId: assistantId,
+        now: Date(),
+        authorizationSnapshot: authorizationSnapshot)
+    else {
+      onDropped?()
+      return .suppressed
+    }
+
+    // Hard-codes `respectFrequency: true`: this entry point is proactive by
+    // construction. A functional notice goes through `sendNotification` with
+    // `respectFrequency: false`.
+    if Self.shouldSuppressForSnooze(
+      respectFrequency: true,
+      snoozedUntil: Self.currentSnoozeExpiry(),
+      now: Date())
+    {
+      log("NotificationService: withholding \(assistantId) card — user silenced notifications")
+      onDropped?()
+      return .suppressed
+    }
+
+    if Self.shouldSuppressForPresence(
+      respectFrequency: true,
+      presenceDetected: Self.currentPresenceDetected())
+    {
+      log("NotificationService: withholding \(assistantId) card — other people are present")
+      onDropped?()
+      return .suppressed
+    }
+
+    let recordPresented = { [weak self] in
+      self?.recordProactiveNotificationPresented(
+        assistantId: assistantId,
+        authorizationSnapshot: authorizationSnapshot)
+      onPresented?()
+    }
+
+    return FloatingControlBarManager.shared.showNotification(
+      ownerID: ownerID,
+      title: title,
+      message: message,
+      assistantId: assistantId,
+      sound: sound,
+      action: action,
+      authorizationSnapshot: authorizationSnapshot,
+      onPresented: recordPresented,
+      onDropped: onDropped)
+  }
+
   private func contextDirectorMayPresent(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     now: Date
