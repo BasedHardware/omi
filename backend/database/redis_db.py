@@ -87,9 +87,11 @@ def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> Non
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    payload = json.dumps(data, default=str)
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.set(f'cache:{key}', payload, ex=ttl)
+    else:
+        r.set(f'cache:{key}', payload)
 
 
 @try_catch_decorator
@@ -328,13 +330,11 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
+    r.set(f'users:{uid}:name', name, ex=ttl)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:

@@ -123,6 +123,12 @@ class TestSleepPatternRemoved:
         for rel in ('routers/sync.py', 'utils/chat.py'):
             assert 'time.sleep(480)' not in _read_source(rel), f'{rel} still parks threads as deletion timers'
 
+    def test_postprocess_uses_deferred_deleter_not_sleep(self):
+        src = _read_source('utils/conversations/postprocess_conversation.py')
+        assert 'time.sleep(300)' not in src
+        assert 'schedule_postprocessing_audio_deletion(file_path)' in src
+        assert 'POSTPROCESSING_AUDIO_DELETE_DELAY_SECONDS = 300' in src
+
     def test_sync_uses_scheduler(self):
         pipeline_src = _read_source('utils/sync/pipeline.py')
         assert 'schedule_syncing_temporal_file_deletion(path)' in pipeline_src

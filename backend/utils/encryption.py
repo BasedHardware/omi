@@ -1,7 +1,9 @@
 import base64
 import os
 import struct
+import threading
 
+from cachetools import TTLCache
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -16,18 +18,34 @@ if not ENCRYPTION_SECRET or len(ENCRYPTION_SECRET) < 32:
         "ENCRYPTION_SECRET environment variable not set or is too short. " "It must be a securely managed 32-byte key."
     )
 
+_DERIVED_KEY_CACHE: TTLCache[str, bytes] = TTLCache(maxsize=10_000, ttl=86_400)
+_DERIVED_KEY_LOCK = threading.Lock()
+
 
 def derive_key(uid: str) -> bytes:
     """
     Derives a user-specific 32-byte key from the master secret and user ID (salt).
     """
+    with _DERIVED_KEY_LOCK:
+        cached = _DERIVED_KEY_CACHE.get(uid)
+        if cached is not None:
+            return cached
+
     hkdf = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=uid.encode('utf-8'),
         info=b'user-data-encryption',
     )
-    return hkdf.derive(ENCRYPTION_SECRET)
+    key = hkdf.derive(ENCRYPTION_SECRET)
+    with _DERIVED_KEY_LOCK:
+        _DERIVED_KEY_CACHE[uid] = key
+    return key
+
+
+def clear_derived_key_cache() -> None:
+    with _DERIVED_KEY_LOCK:
+        _DERIVED_KEY_CACHE.clear()
 
 
 def encrypt(data: str, uid: str) -> str:
