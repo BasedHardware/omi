@@ -96,13 +96,13 @@ void main() {
       DateTime? capturedEnd;
       String? capturedQuery;
       final provider = makeProvider(
-        conversationSearchFetcher:
-            (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
-              capturedQuery = query;
-              capturedStart = startDate;
-              capturedEnd = endDate;
-              return (<ServerConversation>[], 1, 1);
-            },
+        conversationSearchFetcher: (query,
+            {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+          capturedQuery = query;
+          capturedStart = startDate;
+          capturedEnd = endDate;
+          return (<ServerConversation>[], 1, 1);
+        },
       );
 
       provider.setSearchDateRange(DateTime(2026, 6, 1, 9), DateTime(2026, 6, 30, 17));
@@ -117,12 +117,12 @@ void main() {
       DateTime? capturedStart;
       DateTime? capturedEnd;
       final provider = makeProvider(
-        conversationSearchFetcher:
-            (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
-              capturedStart = startDate;
-              capturedEnd = endDate;
-              return (<ServerConversation>[], page ?? 1, 2);
-            },
+        conversationSearchFetcher: (query,
+            {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+          capturedStart = startDate;
+          capturedEnd = endDate;
+          return (<ServerConversation>[], page ?? 1, 2);
+        },
       );
 
       provider.setSearchDateRange(DateTime(2026, 6, 1), DateTime(2026, 6, 2));
