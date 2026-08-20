@@ -43,9 +43,7 @@ def request_tools_after_private_taint(
 ) -> tuple[list, bool]:
     """Return the tool list for this provider request and the latched withhold flag."""
     schemas = tool_schemas if isinstance(tool_schemas, list) else []
-    offers = any(
-        isinstance(schema, Mapping) and schema.get("name") == SERVER_WEB_SEARCH_NAME for schema in schemas
-    )
+    offers = any(isinstance(schema, Mapping) and schema.get("name") == SERVER_WEB_SEARCH_NAME for schema in schemas)
     if (
         offers
         and not withheld
