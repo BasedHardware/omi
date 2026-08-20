@@ -134,10 +134,14 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
     return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data)
 
 
-def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
-    """Persist an externally completed immutable import through the lifecycle owner."""
+def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+    """Persist an externally completed immutable import through the lifecycle owner.
+
+    Create-if-absent: returns True when the conversation was created, False when it
+    already existed. Re-imports must not overwrite user edits (first import wins).
+    """
     _require_status(conversation_data, ConversationStatus.completed)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
+    return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
 
 
 def transition(

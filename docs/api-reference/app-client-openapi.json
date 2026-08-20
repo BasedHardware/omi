@@ -13153,6 +13153,17 @@
             ],
             "title": "Conversations Created"
           },
+          "conversations_skipped": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversations Skipped"
+          },
           "created_at": {
             "anyOf": [
               {
