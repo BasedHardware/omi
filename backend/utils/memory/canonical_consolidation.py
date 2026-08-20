@@ -964,7 +964,8 @@ Rules:
 - review/archive/reject are terminal outcomes and must never silently promote.
 - sensitivity_labels are authoritative. A source with any restricted label
   ({restricted_sensitivity_labels}) MUST NOT route promote.
-- aboutness=third_party or unclear MUST NOT route promote.
+- aboutness=third_party MUST NOT route promote. aboutness=unclear is not a veto;
+  apply the relationship, usefulness, and authoritative source-attribution rules.
 - relationship_to_user asking_about, encountered, or unclear MUST NOT route
   promote. other_speaker is promotable only for recurring user_relationship
   context; otherwise route archive/review/reject.
@@ -1120,7 +1121,7 @@ def _validate_agent_batch(
         if decision.route == "promote":
             if set(source.sensitivity_labels).intersection(RESTRICTED_SENSITIVITY_LABELS):
                 return f"output_invalid:restricted_sensitivity_promotion:{source.memory_id}"
-            if decision.aboutness in {"third_party", "unclear"}:
+            if decision.aboutness == "third_party":
                 return f"output_invalid:unsafe_aboutness_promotion:{source.memory_id}"
             relationship_is_durable = decision.relationship_to_user in {
                 "self",
@@ -1155,10 +1156,16 @@ def _validate_agent_batch(
                     return f"output_invalid:unknown_source_subject_promotion:{source.memory_id}"
                 if source_subject_id and decision.subject_entity_id != source_subject_id:
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
-                if attribution == "user" and not (
-                    (decision.relationship_to_user == "self" and decision.aboutness == "primary_user")
-                    or (decision.relationship_to_user == "owned_work" and decision.aboutness == "user_owned_project")
-                    or (decision.relationship_to_user == "adopted" and decision.aboutness == "user_relationship")
+                if (
+                    attribution == "user"
+                    and decision.aboutness != "unclear"
+                    and not (
+                        (decision.relationship_to_user == "self" and decision.aboutness == "primary_user")
+                        or (
+                            decision.relationship_to_user == "owned_work" and decision.aboutness == "user_owned_project"
+                        )
+                        or (decision.relationship_to_user == "adopted" and decision.aboutness == "user_relationship")
+                    )
                 ):
                     return f"output_invalid:source_subject_contradiction:{source.memory_id}"
                 third_party_is_person = attribution == "third_party" and subject_kind in {

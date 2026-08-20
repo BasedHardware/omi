@@ -452,7 +452,8 @@ def test_llm_prompt_exposes_candidate_sensitivity_and_promotion_safety_rules():
     blob = _llm_payload_text(prompts[0])
     assert '"sensitivity_labels":["credential"]' in blob
     assert "MUST NOT route promote" in blob
-    assert "aboutness=third_party or unclear MUST NOT route promote" in blob
+    assert "aboutness=third_party MUST NOT route promote" in blob
+    assert "aboutness=unclear is not a veto" in blob
     assert "ambient media dialogue, quoted characters" in blob
     assert "adopted user preference or commitment" in blob
     assert "requires_normalization=true" in blob
@@ -795,7 +796,7 @@ def test_batch_user_asserted_known_third_party_cannot_become_user():
     assert error == "output_invalid:source_subject_contradiction:mem_a"
 
 
-def test_batch_rejects_unclear_aboutness_promotion():
+def test_batch_allows_unclear_aboutness_when_other_authority_is_durable():
     item = _item("mem_a", "A")
 
     error = _validate_agent_batch(
@@ -803,7 +804,7 @@ def test_batch_rejects_unclear_aboutness_promotion():
         ConsolidationAgentBatch(decisions=[_promote(item, aboutness="unclear")]),
     )
 
-    assert error == "output_invalid:unsafe_aboutness_promotion:mem_a"
+    assert error is None
 
 
 @pytest.mark.parametrize("relationship", ["asking_about", "encountered", "unclear"])
