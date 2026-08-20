@@ -164,6 +164,7 @@ def router():
         "utils.conversations.factory": _pkg("utils.conversations.factory"),
         "utils.conversations.render": _pkg("utils.conversations.render"),
         "utils.conversations.process_conversation": _pkg("utils.conversations.process_conversation"),
+        "utils.conversations.meeting_receipt": _pkg("utils.conversations.meeting_receipt"),
         "utils.conversations.search": _pkg("utils.conversations.search"),
         "utils.conversations.calendar_linking": _pkg("utils.conversations.calendar_linking"),
         "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
