@@ -24,6 +24,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
+  - id: workflow-apt-network-bounds
+    command: ["python3", ".github/scripts/tests/run_apt_network_bounds_tests.py"]
+    triggers: [".github/workflows/**", ".github/scripts/check_workflow_apt_network_bounds.py", ".github/scripts/tests/test_workflow_apt_network_bounds.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "apt has no built-in timeout; a stalled Azure mirror burns the job ceiling and reports an opaque cancellation. #11872 bounded two workflows by hand and still left an install line unbounded under a comment claiming otherwise"
   - id: pre-push-hatch-disclosure
     command: ["python3", ".github/scripts/check_pre_push_hatch_disclosure.py"]
     triggers: ["scripts/pre-push", ".github/scripts/check_pre_push_hatch_disclosure.py", ".github/checks-manifest.yaml"]
