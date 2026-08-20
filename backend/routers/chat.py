@@ -27,8 +27,7 @@ from multipart.multipart import shutil
 from pydantic import BaseModel
 
 import database.chat as chat_db
-from utils.chat_session_target import resolve_chat_session, resolve_chat_target
-import database.conversations as conversations_db
+from utils.chat_session_target import resolve_chat_target
 import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
