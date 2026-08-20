@@ -193,6 +193,12 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["upgrade", "buy", "pricing", "checkout", "architect", "operator", "unlimited"], section: .planUsage,
       icon: "creditcard", settingId: "planusage.purchase"),
 
+    // Referral
+    SettingsSearchItem(
+      name: "Refer a Friend", subtitle: "Share one free month of Omi Pro",
+      keywords: ["refer", "referral", "friend", "gift", "free month", "share link"],
+      section: .referral, icon: "gift", settingId: "referral.link"),
+
     // About
     SettingsSearchItem(
       name: "Software Updates", subtitle: "Check for and manage app updates",
@@ -391,6 +397,7 @@ enum SettingsSidebarRoutes {
     .permissions,
     .shortcuts,
     .advanced,
+    .referral,
     .about,
   ]
 }
@@ -597,6 +604,7 @@ struct SettingsSidebarItem: View {
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
+    case .referral: return "gift"
     case .about: return "info.circle"
     case .permissions: return PermissionNavSymbol.outline
     }
