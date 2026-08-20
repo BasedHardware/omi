@@ -15,6 +15,7 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     File,
@@ -722,6 +723,8 @@ def get_messages(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     compat_app_id = app_id or plugin_id
@@ -733,7 +736,12 @@ def get_messages(
     chat_session_id = target.session_id
 
     messages = chat_db.get_messages(
-        uid, limit=100, include_conversations=True, app_id=compat_app_id, chat_session_id=chat_session_id
+        uid,
+        limit=limit,
+        offset=offset,
+        include_conversations=True,
+        app_id=compat_app_id,
+        chat_session_id=chat_session_id,
     )
     logger.info(f'get_messages {len(messages)} {compat_app_id}')
 
@@ -747,7 +755,7 @@ def get_messages(
     if not messages:
         # The greeting belongs to the session that was read, not to whatever
         # session `acquire_chat_session` would pick for the app.
-        return [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
+        return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
     return messages
 
 
