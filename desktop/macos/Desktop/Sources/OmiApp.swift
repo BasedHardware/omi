@@ -317,6 +317,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     publishNamedBundleRuntimeManifest()
 
     runStartupSystemMaintenance()
+    pruneExpiredAgentToolOutputs()
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
@@ -760,6 +761,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
           executable: command.executable,
           arguments: command.arguments
         )
+      }
+    }
+  }
+
+  /// Expire leftover agent `tool-output` JSON so existing installs reclaim disk
+  /// on the next launch, without waiting for a chat that starts the Node runtime.
+  private func pruneExpiredAgentToolOutputs() {
+    let artifactsDirectory = URL(
+      fileURLWithPath: AgentRuntimeProcess.defaultArtifactsDirectory())
+    DispatchQueue.global(qos: .utility).async {
+      let deleted = AgentArtifactRetention.pruneExpiredToolOutputs(in: artifactsDirectory)
+      if deleted > 0 {
+        log("AppDelegate: pruned \(deleted) expired agent tool-output files")
       }
     }
   }
