@@ -1,6 +1,5 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoriesPage } from '@/components/memories/MemoriesPage';
 
@@ -156,16 +155,12 @@ describe('MemoriesPage list layout', () => {
     );
   });
 
-  it('loads category pages only after an explicit request', async () => {
+  it('keeps pagination enabled while filtering categories client-side', () => {
     mocks.hasMore = true;
     mocks.activeCategories = ['system'];
     render(<MemoriesPage />);
 
-    expect(screen.getByTestId('memory-list')).toHaveAttribute('data-has-more', 'false');
+    expect(screen.getByTestId('memory-list')).toHaveAttribute('data-has-more', 'true');
     expect(mocks.loadMore).not.toHaveBeenCalled();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Search older memories' }));
-
-    expect(mocks.loadMore).toHaveBeenCalledOnce();
   });
 });

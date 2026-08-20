@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Memory } from '@/types/conversation';
 import { MemoryList, MemoryListSkeleton } from '@/components/memories/MemoryList';
@@ -21,6 +21,25 @@ const memory = {
 } as Memory;
 
 describe('MemoryList layout', () => {
+  it('loads another page when filtering leaves the current page empty', async () => {
+    const onLoadMore = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <MemoryList
+        memories={[]}
+        loading={false}
+        hasMore
+        onLoadMore={onLoadMore}
+        onEdit={vi.fn().mockResolvedValue(true)}
+        onDelete={vi.fn().mockResolvedValue(true)}
+        onToggleVisibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    await waitFor(() => expect(onLoadMore).toHaveBeenCalledOnce());
+    expect(screen.queryByText('No memories yet')).not.toBeInTheDocument();
+  });
+
   it('fills the remaining desktop height while retaining the mobile viewport cap', () => {
     render(
       <MemoryList
