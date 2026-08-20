@@ -624,8 +624,8 @@ export type NewDesktopAttentionOverride = Partial<DesktopAttentionOverride> &
 //   for local files; adapter:// or provider-specific schemes for native refs
 // - metadataJson carries adapter/provider ids and projection hints
 // - contentHash is preferably sha256:<hex>; sizeBytes is advisory metadata
-// - retention is currently local SQLite metadata only; blob retention/sync is
-//   deferred to the artifact storage layer.
+// - tool_output blobs under Artifacts/<bundle>/tool-output expire after 7 days
+//   via pruneExpiredToolOutputs. User-facing run artifacts are retained.
 export type NewAgentArtifact = Partial<AgentArtifact> &
   Pick<AgentArtifact, "sessionId" | "kind" | "role" | "uri">;
 
