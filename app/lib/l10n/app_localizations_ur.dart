@@ -322,7 +322,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchApps => 'ایپلیکیشنز تلاش کریں...';
 
   @override
-  String get myApps => 'میری ایپلیکیشنز';
+  String get myApps => 'میری بنائی ہوئی';
 
   @override
   String get installedApps => 'انسٹال شدہ ایپلیکیشنز';
@@ -9862,4 +9862,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get findDevice => 'تلاش کریں';
+
+  @override
+  String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
 }

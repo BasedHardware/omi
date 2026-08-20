@@ -76,16 +76,41 @@ void main() {
       'created_at': DateTime(2026, 8, 1, 21, 0).toUtc().toIso8601String(),
     });
 
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: Builder(
-        builder: (context) =>
-            Text(formatImportJobTimestamp(context.l10n, job.createdAt!, now: DateTime(2026, 8, 1, 22))),
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(
+          builder: (context) =>
+              Text(formatImportJobTimestamp(context.l10n, job.createdAt!, now: DateTime(2026, 8, 1, 22))),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Today at 21:00'), findsOneWidget);
+  });
+
+  test('fromGenerated keeps conversations_skipped from the wire model', () {
+    final job = ImportJobResponse.fromJson({
+      'job_id': 'job-1',
+      'status': 'completed',
+      'conversations_created': 0,
+      'conversations_skipped': 4,
+    });
+
+    expect(job.conversationsCreated, 0);
+    expect(job.conversationsSkipped, 4);
+    expect(job.toGenerated().conversationsSkipped, 4);
+  });
+
+  test('import history shows a skipped-only job instead of hiding the count', () {
+    expect(importJobCountChips(created: 0, skipped: 4).single.skipped, isTrue);
+    expect(importJobCountChips(created: 0, skipped: 4).single.count, 4);
+    expect(importJobCountChips(created: 2, skipped: 3).map((chip) => (chip.count, chip.skipped)).toList(), [
+      (2, false),
+      (3, true),
+    ]);
+    expect(importJobCountChips(created: 0, skipped: 0), isEmpty);
   });
 }

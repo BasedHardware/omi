@@ -16,7 +16,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "suggestion"
-  nonisolated let displayName = "Live Suggestions"
+  nonisolated let displayName = "Focus Notifications"
 
   var isEnabled: Bool {
     get async {
@@ -598,7 +598,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   ) async {
     let context = FloatingBarNotificationContext(
-      sourceTitle: "Suggestion",
+      sourceTitle: "Focus",
       assistantId: identifier,
       sourceApp: nil,
       windowTitle: nil,
@@ -613,7 +613,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
-        title: "Suggestion",
+        title: "Focus",
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,

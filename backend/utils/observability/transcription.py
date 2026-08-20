@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 import re
 from time import monotonic
-from typing import Literal
+from typing import Any, Callable, Literal, Mapping
 
+from models.conversation_enums import ConversationSource
 from utils.metrics import (
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
@@ -18,6 +19,7 @@ from utils.metrics import (
     OMI_TRANSCRIPTION_LATENCY_SECONDS,
 )
 from utils.env_loader import resolve_stage_from_env
+from utils.product_telemetry import emit_product_event
 from utils.stt.outcomes import TranscriptionOutcome, bounded_provider
 
 _ROUTES = {'voice_chat_sse', 'voice_rest_multipart', 'voice_rest_pcm', 'sync'}
@@ -39,6 +41,11 @@ def _bounded_route(route: str) -> str:
 def _bounded_platform(platform: str | None) -> str:
     normalized = (platform or '').strip().lower()
     return normalized if normalized in _PLATFORMS else 'unknown'
+
+
+def _bounded_source(source: str | None) -> str:
+    normalized = (source or '').strip()
+    return ConversationSource(normalized).value if normalized else ConversationSource.unknown.value
 
 
 def _deployment_version() -> str:
@@ -96,16 +103,39 @@ class TranscriptionAttempt:
 class LiveSTTAttempt:
     """One listener-local accepted live-STT attempt and at most one terminal outcome."""
 
-    def __init__(self, *, provider: str | None, platform: str | None) -> None:
+    def __init__(
+        self,
+        *,
+        provider: str | None,
+        platform: str | None,
+        uid: str | None = None,
+        recording_id: str | None = None,
+        conversation_id: str | None = None,
+        source: str | None = None,
+        model: str | None = None,
+        language: str | None = None,
+        emitter: Callable[..., None] = emit_product_event,
+        clock: Callable[[], float] = monotonic,
+    ) -> None:
         self.provider = bounded_provider(provider)
         self.platform = _bounded_platform(platform)
         self.deployment_environment = _deployment_environment()
+        self.uid = uid
+        self.recording_id = recording_id
+        self.conversation_id = conversation_id
+        self.source = _bounded_source(source)
+        self.model = model or 'unknown'
+        self.language = language or 'unknown'
+        self._emitter = emitter
+        self._clock = clock
+        self._started_at = clock()
         self._finished = False
         OMI_LIVE_STT_ACCEPTED_TOTAL.labels(
             provider=self.provider,
             client_platform=self.platform,
             deployment_environment=self.deployment_environment,
         ).inc()
+        self._emit('Transcript Started', self._base_properties())
 
     @property
     def finished(self) -> bool:
@@ -126,6 +156,37 @@ class LiveSTTAttempt:
             deployment_environment=self.deployment_environment,
             phase=phase,
         ).inc()
+        properties = {
+            **self._base_properties(),
+            'duration_seconds': max(0.0, self._clock() - self._started_at),
+            'phase': phase,
+        }
+        event = {
+            'success': 'Transcript Completed',
+            'failure': 'Transcript Failed',
+            'cancelled': 'Transcript Cancelled',
+        }[outcome]
+        self._emit(event, properties)
+
+    def _base_properties(self) -> dict[str, Any]:
+        return {
+            'recording_id': self.recording_id,
+            'conversation_id': self.conversation_id,
+            'transcription_source': self.source,
+            'stt_provider': self.provider,
+            'stt_model': self.model,
+            'transcript_language': self.language,
+            'app_platform': self.platform,
+        }
+
+    def _emit(self, event: str, properties: Mapping[str, Any]) -> None:
+        if not self.uid:
+            return
+        try:
+            self._emitter(uid=self.uid, event=event, properties=properties)
+        except Exception:
+            # Product analytics is subordinate to the transcription contract.
+            return
 
 
 def record_sync_transcription_outcome(

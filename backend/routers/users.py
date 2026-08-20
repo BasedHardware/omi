@@ -87,6 +87,7 @@ from utils.apps import get_available_app_by_id
 from utils.subscription import (
     enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -613,7 +614,7 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 # ****************************************
 
 
-# TODO: consider adding person photo.
+# Person photo deferred — see models.other.Person (no photo field / storage yet).
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new person or return existing one with same name (idempotent by name).

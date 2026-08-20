@@ -33,8 +33,9 @@ from __future__ import annotations
 
 import sys
 from contextlib import contextmanager
+from pathlib import Path
 from types import ModuleType
-from typing import Iterator
+from typing import Iterable, Iterator
 from unittest.mock import MagicMock
 
 
@@ -258,4 +259,131 @@ def fake_firestore_transactional(func):
     return wrapper
 
 
-__all__ = ["AutoMockModule", "stub_modules", "load_module_fresh", "fake_firestore_transactional"]
+def _dotted_parts(package: str) -> list[str]:
+    """Split a dotted package name, rejecting path-escape and non-identifier segments."""
+
+    parts = package.split(".")
+    if not parts or any(not part.isidentifier() for part in parts):
+        raise LookupError(f"package_submodule_stubs: {package!r} is not a dotted package name")
+    return parts
+
+
+def _package_directory(package: str) -> Path:
+    """Resolve a dotted package to its directory on disk, ignoring ``sys.modules``.
+
+    Deliberately does NOT use ``importlib.util.find_spec``: inside a ``stub_modules``
+    block the package may already be a stub whose ``__spec__`` is ``None``, so spec
+    lookup would report the fake instead of the real tree. This file lives at
+    ``backend/testing/import_isolation.py``, so ``parent.parent`` is the backend root
+    and joining the dotted name is the honest source — independent of cwd and of
+    whatever is currently in ``sys.modules``.
+    """
+
+    backend_root = Path(__file__).resolve().parent.parent
+    return backend_root.joinpath(*_dotted_parts(package))
+
+
+def _skip_directory_entry(name: str) -> bool:
+    """Skip hidden and dunder entries; keep ``_``-prefixed modules.
+
+    A router can ``from pkg._private import X``. Treating an underscore as an opt-out
+    would recreate the hand-list failure for those modules. ``__init__.py`` and
+    ``__pycache__`` still drop out because they start with ``__``.
+    """
+
+    return name.startswith(".") or name.startswith("__")
+
+
+def _enumerate_submodules(package: str, directory: Path) -> dict[str, bool]:
+    """Map dotted child names to ``is_package``, walking nested packages.
+
+    Sub-packages are included so a later ``from pkg.child.leaf import X`` can resolve
+    against stubs in ``sys.modules``. They must present as packages (empty ``__path__``)
+    *and* have their children stubbed: empty ``__path__`` prevents the import system
+    from loading the real nested module off disk.
+    """
+
+    found: dict[str, bool] = {}
+    for entry in sorted(directory.iterdir(), key=lambda path: path.name):
+        if _skip_directory_entry(entry.name):
+            continue
+        if entry.is_dir():
+            child = f"{package}.{entry.name}"
+            nested = _enumerate_submodules(child, entry)
+            if nested or (entry / "__init__.py").is_file():
+                found[child] = True
+                found.update(nested)
+        elif entry.is_file() and entry.suffix == ".py":
+            found[f"{package}.{entry.stem}"] = False
+    return found
+
+
+def package_submodule_stubs(
+    package: str,
+    *,
+    extra: Iterable[str] = (),
+    include_package: bool = True,
+    directory: Path | None = None,
+) -> dict[str, ModuleType]:
+    """Derive a stub set from a package's real submodules instead of hand-listing them.
+
+    WHY this exists: a hand-maintained list of module names drifts silently. The next
+    module added to the package is absent from the list, and every suite that stubs
+    that package fails at *collection* with ``ModuleNotFoundError`` — which reads as a
+    product bug rather than a stale fixture, and which the module's author discovers in
+    CI rather than the fixture's owner discovering it locally. This is
+    ``FC-hand-listed-test-isolation-membership`` in the backend.
+
+    The membership is derived from the source signal — what actually sits in the
+    package directory — and then unioned with ``extra``, so naming something
+    explicitly is still allowed but omitting it is not an opt-out.
+
+    Submodules are enumerated from disk and never imported, so no package side effect
+    runs. Sub-packages are stubbed with an empty ``__path__`` so they present as
+    packages and can themselves parent further stubs, without the import system
+    searching the real tree.
+
+    ``directory`` overrides the on-disk location (tests); the dotted ``package`` is
+    still the stub identity. The default resolves under the backend root without
+    consulting ``sys.modules``.
+
+    Example::
+
+        fakes = package_submodule_stubs("utils.conversations")
+        with stub_modules(fakes):
+            from routers.conversations import router
+    """
+
+    _dotted_parts(package)
+    package_dir = directory if directory is not None else _package_directory(package)
+    if not package_dir.is_dir():
+        raise LookupError(f"package_submodule_stubs: {package!r} is not a package directory ({package_dir})")
+
+    stubs: dict[str, ModuleType] = {}
+
+    def _stub(name: str, *, is_package: bool) -> ModuleType:
+        module = AutoMockModule(name)
+        if is_package:
+            module.__path__ = []  # type: ignore[attr-defined]
+        return module
+
+    if include_package:
+        stubs[package] = _stub(package, is_package=True)
+
+    for name, is_package in _enumerate_submodules(package, package_dir).items():
+        stubs[name] = _stub(name, is_package=is_package)
+
+    for name in extra:
+        if name not in stubs:
+            stubs[name] = _stub(name, is_package=False)
+
+    return stubs
+
+
+__all__ = [
+    "AutoMockModule",
+    "stub_modules",
+    "load_module_fresh",
+    "fake_firestore_transactional",
+    "package_submodule_stubs",
+]

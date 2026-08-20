@@ -792,11 +792,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ),
                                       if (app.official) ...[
                                         const SizedBox(width: 4),
-                                        const FaIcon(
-                                          FontAwesomeIcons.solidCircleCheck,
-                                          size: 14,
-                                          color: Colors.white,
-                                        ),
+                                        const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: Colors.white),
                                       ],
                                     ],
                                   ),

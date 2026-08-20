@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import Link from 'next/link';
+import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
+import Link from '@tschk/moonshine-next/link';
 import {
   User,
   Bell,
@@ -56,6 +56,13 @@ import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
+  CLAUDE_CONNECTOR_OAUTH,
+  SECTION_INFO,
+  SIGNED_OUT_DESTINATION,
+  isSettingsSectionId,
+  type SettingsSectionId,
+} from '@/lib/settingsSections';
+import {
   getUserLanguage,
   setUserLanguage,
   getDailySummarySettings,
@@ -82,9 +89,6 @@ import {
   deleteMcpApiKey,
   exportAllData,
   deleteKnowledgeGraph,
-  getIntegrations,
-  getIntegrationOAuthUrl,
-  disconnectIntegration,
   getAvailablePlans,
   createCheckoutSession,
   upgradeSubscription,
@@ -100,7 +104,6 @@ import type {
   DeveloperWebhooks,
   DeveloperApiKey,
   McpApiKey,
-  Integration,
   UsageHistoryPoint,
   PricingOption,
 } from '@/types/user';
@@ -109,7 +112,7 @@ import type {
 // Types
 // ============================================================================
 
-type SettingsSection = 'profile' | 'privacy' | 'integrations' | 'developer' | 'account';
+type SettingsSection = SettingsSectionId;
 
 // ============================================================================
 // Reusable Components
@@ -132,7 +135,7 @@ function Toggle({
       className={cn(
         'relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0',
         enabled
-          ? 'bg-purple-500 shadow-[0_0_12px_rgba(139,92,246,0.4)]'
+          ? 'bg-text-primary shadow-[0_0_12px_rgba(255,255,255,0.25)]'
           : 'bg-white/[0.08]',
         disabled && 'opacity-50 cursor-not-allowed',
       )}
@@ -260,12 +263,14 @@ function Dropdown({
               className={cn(
                 'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between text-sm',
                 option.value === value
-                  ? 'bg-purple-500/15 text-white'
+                  ? 'bg-white/[0.08] text-white'
                   : 'text-white/70 hover:bg-white/[0.04] hover:text-white/90',
               )}
             >
               <span>{option.label}</span>
-              {option.value === value && <Check className="w-4 h-4 text-purple-400" />}
+              {option.value === value && (
+                <Check className="w-4 h-4 text-text-secondary" />
+              )}
             </button>
           ))}
         </div>
@@ -330,13 +335,13 @@ function ConfirmDialog({
           <div
             className={cn(
               'p-2 rounded-full',
-              isDestructive ? 'bg-red-500/10' : 'bg-purple-500/10',
+              isDestructive ? 'bg-red-500/10' : 'bg-white/[0.08]',
             )}
           >
             <AlertTriangle
               className={cn(
                 'w-6 h-6',
-                isDestructive ? 'text-red-400' : 'text-purple-400',
+                isDestructive ? 'text-red-400' : 'text-text-secondary',
               )}
             />
           </div>
@@ -365,7 +370,7 @@ function ConfirmDialog({
               'px-4 py-2 rounded-xl font-medium flex items-center gap-2',
               isDestructive
                 ? 'bg-red-500 text-white hover:bg-red-600'
-                : 'bg-purple-500 text-white hover:bg-purple-600',
+                : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
               'transition-colors disabled:opacity-50',
             )}
           >
@@ -435,7 +440,7 @@ function ProfileSection({
         </h3>
         <Card>
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-full overflow-hidden bg-bg-tertiary ring-2 ring-purple-500/30 flex-shrink-0">
+            <div className="w-20 h-20 rounded-full overflow-hidden bg-bg-tertiary ring-2 ring-white/25 flex-shrink-0">
               {user?.photoURL ? (
                 <Image
                   src={user.photoURL}
@@ -526,7 +531,7 @@ function ProfileSection({
                   'flex-1 px-4 py-2.5 rounded-xl',
                   'bg-bg-tertiary border border-white/[0.06]',
                   'text-text-primary placeholder:text-text-quaternary',
-                  'focus:outline-none focus:border-purple-500',
+                  'focus:outline-none focus:border-white/25',
                 )}
               />
               <button
@@ -534,8 +539,8 @@ function ProfileSection({
                 disabled={!newWord.trim()}
                 className={cn(
                   'px-4 py-2.5 rounded-xl font-medium',
-                  'bg-purple-500 text-white',
-                  'hover:bg-purple-600 transition-colors',
+                  'bg-text-primary text-bg-primary',
+                  'hover:bg-text-primary/90 transition-colors',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
@@ -631,10 +636,10 @@ function PrivacySection({
         </SettingRow>
       </Card>
 
-      <Card className="border-purple-500/20">
+      <Card className="border-white/25">
         <div className="flex items-start gap-4">
-          <div className="p-2 rounded-lg bg-purple-500/10">
-            <Shield className="w-5 h-5 text-purple-400" />
+          <div className="p-2 rounded-lg bg-white/[0.08]">
+            <Shield className="w-5 h-5 text-text-secondary" />
           </div>
           <div>
             <h3 className="text-text-primary font-medium">Your Privacy Matters</h3>
@@ -646,7 +651,7 @@ function PrivacySection({
               href="https://omi.me/privacy"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-purple-400 hover:underline mt-2"
+              className="inline-flex items-center gap-1 text-sm text-text-secondary hover:underline mt-2"
             >
               Learn more about our privacy policy
               <ExternalLink className="w-3.5 h-3.5" />
@@ -1079,7 +1084,7 @@ function UsageSectionContent({
           className={cn(
             'px-4 py-2 rounded-lg text-sm font-medium transition-all',
             activeTab === 'plan'
-              ? 'bg-purple-500 text-white shadow-md'
+              ? 'bg-text-primary text-bg-primary shadow-md'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
           )}
         >
@@ -1090,7 +1095,7 @@ function UsageSectionContent({
           className={cn(
             'px-4 py-2 rounded-lg text-sm font-medium transition-all',
             activeTab === 'usage'
-              ? 'bg-purple-500 text-white shadow-md'
+              ? 'bg-text-primary text-bg-primary shadow-md'
               : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
           )}
         >
@@ -1110,8 +1115,8 @@ function UsageSectionContent({
                 {/* Header */}
                 <div className="flex items-start justify-between mb-6">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-purple-400" />
+                    <div className="w-12 h-12 rounded-2xl bg-white/[0.08] flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-text-secondary" />
                     </div>
                     <div>
                       <h3 className="text-xl font-semibold text-text-primary">
@@ -1123,7 +1128,7 @@ function UsageSectionContent({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowUpgradeOptions(true)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-500/20"
+                      className="px-5 py-2.5 bg-text-primary hover:bg-text-primary/90 text-bg-primary text-sm font-semibold rounded-xl transition-all shadow-lg shadow-black/40"
                     >
                       Upgrade to Unlimited
                     </button>
@@ -1232,7 +1237,7 @@ function UsageSectionContent({
 
               {/* Upgrade Options (shown when clicked) */}
               {showUpgradeOptions && (
-                <Card className="border-purple-500/20">
+                <Card className="border-white/25">
                   <div className="flex items-center justify-between mb-5">
                     <div>
                       <h4 className="text-lg font-semibold text-text-primary">
@@ -1266,12 +1271,12 @@ function UsageSectionContent({
                             className={cn(
                               'relative p-5 rounded-2xl border-2 text-left transition-all',
                               isSelected
-                                ? 'border-purple-500 bg-purple-500/5 shadow-lg shadow-purple-500/10'
-                                : 'border-bg-tertiary hover:border-purple-500/30 bg-bg-tertiary/30',
+                                ? 'border-white/25 bg-white/[0.08] shadow-lg shadow-black/40'
+                                : 'border-bg-tertiary hover:border-white/25 bg-bg-tertiary/30',
                             )}
                           >
                             {isAnnual && (
-                              <span className="absolute -top-2.5 right-3 px-3 py-1 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-[10px] font-bold rounded-full uppercase tracking-wide">
+                              <span className="absolute -top-2.5 right-3 px-3 py-1 bg-text-primary text-bg-primary text-[10px] font-bold rounded-full uppercase tracking-wide">
                                 Best Value
                               </span>
                             )}
@@ -1292,7 +1297,7 @@ function UsageSectionContent({
                     </div>
                   ) : (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                      <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                     </div>
                   )}
 
@@ -1309,9 +1314,9 @@ function UsageSectionContent({
                     disabled={isLoading || !selectedPriceId}
                     className={cn(
                       'w-full py-3.5 rounded-xl font-semibold transition-all',
-                      'bg-gradient-to-r from-purple-500 to-purple-600 text-white',
-                      'hover:from-purple-600 hover:to-purple-700',
-                      'shadow-lg shadow-purple-500/20',
+                      'bg-text-primary text-bg-primary',
+                      'hover:bg-text-primary/90',
+                      'shadow-lg shadow-black/40',
                       'disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none',
                     )}
                   >
@@ -1363,10 +1368,10 @@ function UsageSectionContent({
                     <p className="text-xs text-text-quaternary">Insights</p>
                   </div>
                   <div className="text-center">
-                    <div className="w-10 h-10 mx-auto rounded-xl bg-purple-500/10 flex items-center justify-center mb-2">
-                      <Brain className="w-5 h-5 text-purple-400" />
+                    <div className="w-10 h-10 mx-auto rounded-xl bg-white/[0.08] flex items-center justify-center mb-2">
+                      <Brain className="w-5 h-5 text-text-secondary" />
                     </div>
-                    <p className="text-xl font-bold text-purple-400">
+                    <p className="text-xl font-bold text-text-secondary">
                       {monthlyUsage?.memories_created || 0}
                     </p>
                     <p className="text-xs text-text-quaternary">Memories</p>
@@ -1379,8 +1384,8 @@ function UsageSectionContent({
             <>
               {/* Header */}
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                  <Crown className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 rounded-full bg-white/[0.14] flex items-center justify-center">
+                  <Crown className="w-5 h-5 text-text-secondary" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold text-text-primary">
@@ -1415,7 +1420,7 @@ function UsageSectionContent({
                         className={cn(
                           'relative p-4 rounded-xl border-2 text-left transition-all',
                           isSelected
-                            ? 'border-purple-500 bg-purple-500/5'
+                            ? 'border-white/25 bg-white/[0.08]'
                             : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
                           isCancelingSubscription &&
                             !isCurrent &&
@@ -1423,7 +1428,7 @@ function UsageSectionContent({
                         )}
                       >
                         {isAnnual && (
-                          <span className="absolute -top-2 right-2 px-2 py-0.5 bg-purple-500 text-white text-[10px] font-medium rounded-full">
+                          <span className="absolute -top-2 right-2 px-2 py-0.5 bg-text-primary text-bg-primary text-[10px] font-medium rounded-full">
                             POPULAR
                           </span>
                         )}
@@ -1452,7 +1457,7 @@ function UsageSectionContent({
                 </div>
               ) : (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin" />
+                  <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                 </div>
               )}
 
@@ -1469,7 +1474,7 @@ function UsageSectionContent({
                 <ul className="space-y-2">
                   {defaultFeatures.map((feature, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                      <Check className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
                       <span className="text-sm text-text-tertiary">{feature}</span>
                     </li>
                   ))}
@@ -1498,8 +1503,8 @@ function UsageSectionContent({
                 }
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
-                  'bg-purple-500 text-white',
-                  'hover:bg-purple-600',
+                  'bg-text-primary text-bg-primary',
+                  'hover:bg-text-primary/90',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
@@ -1554,7 +1559,7 @@ function UsageSectionContent({
                 className={cn(
                   'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all',
                   selectedPeriod === period
-                    ? 'bg-purple-500 text-white shadow-md'
+                    ? 'bg-text-primary text-bg-primary shadow-md'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-quaternary',
                 )}
               >
@@ -1594,10 +1599,10 @@ function UsageSectionContent({
                 <p className="text-xs text-text-quaternary">Insights</p>
               </div>
               <div className="text-center">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-purple-500/10 flex items-center justify-center mb-2">
-                  <Brain className="w-5 h-5 text-purple-400" />
+                <div className="w-10 h-10 mx-auto rounded-xl bg-white/[0.08] flex items-center justify-center mb-2">
+                  <Brain className="w-5 h-5 text-text-secondary" />
                 </div>
-                <p className="text-xl font-bold text-purple-400">
+                <p className="text-xl font-bold text-text-secondary">
                   {usage?.memories_created || 0}
                 </p>
                 <p className="text-xs text-text-quaternary">Memories</p>
@@ -1625,155 +1630,6 @@ function UsageSectionContent({
         isDestructive={true}
         isLoading={isCanceling}
       />
-    </div>
-  );
-}
-
-// ============================================================================
-// Integrations Section
-// ============================================================================
-
-function IntegrationsSection({
-  integrations,
-  onRefresh,
-}: {
-  integrations: Integration[];
-  onRefresh: () => Promise<void>;
-}) {
-  const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState<string | null>(null);
-
-  const handleConnect = async (integration: Integration) => {
-    if (integration.coming_soon || loadingId) return;
-
-    setLoadingId(integration.id);
-    try {
-      const authUrl = await getIntegrationOAuthUrl(integration.id);
-      if (authUrl) {
-        // Open OAuth URL in new window
-        window.open(authUrl, '_blank', 'width=600,height=700');
-        // Note: User will complete OAuth in the popup, then we need to refresh
-        // Set up a listener for when they return
-        const checkConnection = setInterval(async () => {
-          await onRefresh();
-        }, 3000);
-        // Stop checking after 2 minutes
-        setTimeout(() => clearInterval(checkConnection), 120000);
-      }
-    } catch (error) {
-      console.error('Failed to get OAuth URL:', error);
-    } finally {
-      setLoadingId(null);
-    }
-  };
-
-  const handleDisconnect = async (integration: Integration) => {
-    if (loadingId) return;
-
-    setLoadingId(integration.id);
-    setShowDisconnectConfirm(null);
-    try {
-      await disconnectIntegration(integration.id);
-      await onRefresh();
-    } catch (error) {
-      console.error('Failed to disconnect:', error);
-    } finally {
-      setLoadingId(null);
-    }
-  };
-
-  const handleToggle = (integration: Integration) => {
-    if (integration.connected) {
-      setShowDisconnectConfirm(integration.id);
-    } else {
-      handleConnect(integration);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {integrations.map((integration) => (
-          <Card
-            key={integration.id}
-            className={cn(integration.coming_soon && 'opacity-60')}
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl overflow-hidden bg-bg-tertiary flex items-center justify-center">
-                {integration.icon.startsWith('/') ? (
-                  <img
-                    src={integration.icon}
-                    alt={integration.name}
-                    className="w-10 h-10 object-contain"
-                  />
-                ) : (
-                  <Puzzle className="w-6 h-6" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-text-primary font-medium">{integration.name}</h3>
-                  {integration.coming_soon && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-bg-tertiary text-text-tertiary">
-                      Soon
-                    </span>
-                  )}
-                  {integration.connected && !integration.coming_soon && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-green-500/20 text-green-400">
-                      Connected
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-text-tertiary truncate">
-                  {integration.description}
-                </p>
-              </div>
-              {!integration.coming_soon &&
-                (loadingId === integration.id ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
-                ) : (
-                  <Toggle
-                    enabled={integration.connected}
-                    onChange={() => handleToggle(integration)}
-                  />
-                ))}
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Disconnect Confirmation Dialog */}
-      {showDisconnectConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bg-secondary rounded-2xl p-6 max-w-md mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-text-primary mb-2">
-              Disconnect {integrations.find((i) => i.id === showDisconnectConfirm)?.name}?
-            </h3>
-            <p className="text-text-secondary mb-6">
-              This will remove the connection. You can reconnect anytime.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setShowDisconnectConfirm(null)}
-                className="px-4 py-2 rounded-lg bg-bg-tertiary text-text-primary hover:bg-bg-tertiary/80 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  const integration = integrations.find(
-                    (i) => i.id === showDisconnectConfirm,
-                  );
-                  if (integration) handleDisconnect(integration);
-                }}
-                className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-              >
-                Disconnect
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1900,7 +1756,7 @@ function CreateApiKeyDialog({
                   'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
                   copied
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-purple-500 text-white hover:bg-purple-600',
+                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
                 )}
               >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -1936,7 +1792,7 @@ function CreateApiKeyDialog({
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
                   placeholder="e.g., My App Integration"
-                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                 />
               </div>
 
@@ -1951,7 +1807,7 @@ function CreateApiKeyDialog({
                       className={cn(
                         'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                         isReadOnly
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-text-primary text-bg-primary'
                           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                       )}
                     >
@@ -1962,7 +1818,7 @@ function CreateApiKeyDialog({
                       className={cn(
                         'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                         isFullAccess
-                          ? 'bg-purple-500 text-white'
+                          ? 'bg-text-primary text-bg-primary'
                           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
                       )}
                     >
@@ -2002,7 +1858,7 @@ function CreateApiKeyDialog({
                             className={cn(
                               'px-3 py-1.5 text-xs font-semibold transition-colors',
                               scopes[writeKey]
-                                ? 'bg-purple-500 text-white'
+                                ? 'bg-text-primary text-bg-primary'
                                 : 'text-text-quaternary hover:text-text-secondary',
                             )}
                           >
@@ -2024,7 +1880,7 @@ function CreateApiKeyDialog({
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
                   keyName.trim() && !isCreating
-                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
                     : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
                 )}
               >
@@ -2117,7 +1973,7 @@ function CreateMcpKeyDialog({
                   'flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors',
                   copied
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-purple-500 text-white hover:bg-purple-600',
+                    : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
                 )}
               >
                 {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
@@ -2152,7 +2008,7 @@ function CreateMcpKeyDialog({
                   value={keyName}
                   onChange={(e) => setKeyName(e.target.value)}
                   placeholder="e.g., Claude Desktop"
-                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                  className="w-full px-4 py-3 rounded-xl bg-bg-tertiary border border-white/[0.06] text-text-primary placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                 />
               </div>
               <button
@@ -2161,7 +2017,7 @@ function CreateMcpKeyDialog({
                 className={cn(
                   'w-full py-3 rounded-xl font-medium transition-colors',
                   keyName.trim() && !isCreating
-                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
                     : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
                 )}
               >
@@ -2208,13 +2064,15 @@ function DeveloperSection({
   const [copiedClaudeName, setCopiedClaudeName] = useState(false);
   const [copiedClaudeUrl, setCopiedClaudeUrl] = useState(false);
   const [copiedClaudeClientId, setCopiedClaudeClientId] = useState(false);
+  const [copiedClaudeSecret, setCopiedClaudeSecret] = useState(false);
 
   const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
 
   // Claude connector values — mirror the 4 fields in Claude's "Add custom connector" form
   const claudeConnectorName = 'Omi Memory';
   const claudeConnectorUrl = mcpServerUrl;
-  const claudeConnectorClientId = 'omi-claude-prod';
+  const claudeConnectorClientId = CLAUDE_CONNECTOR_OAUTH.clientId;
+  const claudeConnectorSecret: string = CLAUDE_CONNECTOR_OAUTH.clientSecret;
 
   // Experimental features (stored in localStorage)
   const [experimentalFeatures, setExperimentalFeatures] = useState({
@@ -2341,7 +2199,7 @@ function DeveloperSection({
           </h3>
           <button
             onClick={() => setShowApiKeyDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.08] text-text-secondary text-xs font-medium hover:bg-white/[0.14] transition-colors"
           >
             <Plus className="w-3 h-3" />
             Create Key
@@ -2364,7 +2222,7 @@ function DeveloperSection({
                         {apiKey.key_prefix}...
                       </code>
                       {apiKey.scopes && apiKey.scopes.length > 0 && (
-                        <span className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded">
+                        <span className="text-xs text-text-secondary bg-white/[0.08] px-2 py-0.5 rounded">
                           {apiKey.scopes.length} scopes
                         </span>
                       )}
@@ -2403,14 +2261,14 @@ function DeveloperSection({
               href="https://docs.omi.me/doc/developer/MCP"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+              className="text-xs text-text-secondary hover:text-text-secondary transition-colors"
             >
               Docs ↗
             </a>
           </div>
           <button
             onClick={() => setShowMcpKeyDialog(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-500/10 text-purple-400 text-xs font-medium hover:bg-purple-500/20 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.08] text-text-secondary text-xs font-medium hover:bg-white/[0.14] transition-colors"
           >
             <Plus className="w-3 h-3" />
             Create Key
@@ -2510,7 +2368,7 @@ function DeveloperSection({
               </p>
               <button
                 onClick={copyUrl}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors"
               >
                 <code className="text-sm text-text-primary font-mono truncate mr-2">
                   {mcpServerUrl}
@@ -2537,12 +2395,20 @@ function DeveloperSection({
 
             <div className="border-t border-white/[0.06] pt-4">
               <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                Cloud OAuth
+                OAuth
               </p>
-              <p className="text-sm text-text-tertiary">
-                Cloud connector OAuth is provider-specific. Use the Claude setup card
-                below; do not use an MCP API key as an OAuth client secret.
-              </p>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-4">
+                  <span className="text-text-tertiary w-24">Client ID</span>
+                  <code className="text-text-primary font-mono">omi</code>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-text-tertiary w-24">Client Secret</span>
+                  <span className="text-text-quaternary italic text-xs">
+                    Use your MCP API key
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </Card>
@@ -2561,7 +2427,7 @@ function DeveloperSection({
 
           <p className="text-sm text-text-secondary mb-4">
             Connect over MCP so Claude reads your memories live, or copy a memory pack.
-            Each field below maps to Claude's{' '}
+            Each field below maps to Claude&rsquo;s{' '}
             <span className="text-text-tertiary">
               Settings → Connectors → Add custom connector
             </span>{' '}
@@ -2573,7 +2439,9 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 1. Name{' '}
-                <span className="text-purple-400/60 font-normal">→ Claude "Name"</span>
+                <span className="text-text-secondary font-normal">
+                  → Claude &quot;Name&quot;
+                </span>
               </p>
               <button
                 onClick={() => {
@@ -2581,7 +2449,7 @@ function DeveloperSection({
                   setCopiedClaudeName(true);
                   setTimeout(() => setCopiedClaudeName(false), 2000);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
               >
                 <code className="text-sm text-text-primary font-mono">
                   {claudeConnectorName}
@@ -2598,8 +2466,8 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 2. Remote MCP server URL{' '}
-                <span className="text-purple-400/60 font-normal">
-                  → Claude "Remote MCP server URL"
+                <span className="text-text-secondary font-normal">
+                  → Claude &quot;Remote MCP server URL&quot;
                 </span>
               </p>
               <button
@@ -2608,7 +2476,7 @@ function DeveloperSection({
                   setCopiedClaudeUrl(true);
                   setTimeout(() => setCopiedClaudeUrl(false), 2000);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
               >
                 <code className="text-sm text-text-primary font-mono truncate mr-2">
                   {claudeConnectorUrl}
@@ -2625,8 +2493,8 @@ function DeveloperSection({
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 3. OAuth Client ID{' '}
-                <span className="text-purple-400/60 font-normal">
-                  → Claude Advanced "OAuth Client ID"
+                <span className="text-text-secondary font-normal">
+                  → Claude Advanced &quot;OAuth Client ID&quot;
                 </span>
               </p>
               <button
@@ -2635,7 +2503,7 @@ function DeveloperSection({
                   setCopiedClaudeClientId(true);
                   setTimeout(() => setCopiedClaudeClientId(false), 2000);
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors group"
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
               >
                 <code className="text-sm text-text-primary font-mono">
                   {claudeConnectorClientId}
@@ -2648,17 +2516,37 @@ function DeveloperSection({
               </button>
             </div>
 
-            {/* Field 4: OAuth Client Secret must be blank for Claude's public PKCE client. */}
+            {/* Field 4: OAuth Client Secret → pastes into Claude's Advanced "OAuth Client Secret" */}
             <div>
               <p className="text-xs font-medium text-text-tertiary mb-1.5">
                 4. OAuth Client Secret{' '}
-                <span className="text-purple-400/60 font-normal">
-                  → Claude Advanced "OAuth Client Secret"
+                <span className="text-text-secondary font-normal">
+                  → Claude Advanced &quot;OAuth Client Secret&quot;
                 </span>
               </p>
-              <div className="w-full flex items-center p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06]">
-                <span className="text-sm text-text-quaternary italic">Leave blank</span>
-              </div>
+              {claudeConnectorSecret ? (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(claudeConnectorSecret);
+                    setCopiedClaudeSecret(true);
+                    setTimeout(() => setCopiedClaudeSecret(false), 2000);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-white/25 transition-colors group"
+                >
+                  <code className="text-sm text-text-primary font-mono truncate mr-2">
+                    {claudeConnectorSecret.slice(0, 8)}…{claudeConnectorSecret.slice(-4)}
+                  </code>
+                  {copiedClaudeSecret ? (
+                    <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-text-quaternary group-hover:text-text-secondary transition-colors flex-shrink-0" />
+                  )}
+                </button>
+              ) : (
+                <div className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] opacity-60">
+                  <span className="text-sm text-text-quaternary italic">Leave blank</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2676,7 +2564,7 @@ function DeveloperSection({
               </li>
               <li>
                 Under <span className="text-text-secondary">Advanced settings</span>,
-                paste the OAuth Client ID and leave OAuth Client Secret blank
+                paste OAuth Client ID + Secret
               </li>
               <li>
                 Click <span className="text-text-secondary">Add</span>, then{' '}
@@ -2697,7 +2585,7 @@ function DeveloperSection({
             href="https://docs.omi.me/doc/developer/apps/Introduction"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            className="text-xs text-text-secondary hover:text-text-secondary transition-colors"
           >
             Docs ↗
           </a>
@@ -2759,7 +2647,7 @@ function DeveloperSection({
                             )
                           }
                           placeholder="https://your-server.com/webhook"
-                          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                          className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                         />
                         {webhook.hasDelay && (
                           <input
@@ -2775,7 +2663,7 @@ function DeveloperSection({
                               )
                             }
                             placeholder="Interval (seconds)"
-                            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-purple-500"
+                            className="w-full px-3 py-2 rounded-lg bg-bg-tertiary border border-white/[0.06] text-text-primary text-sm placeholder:text-text-quaternary focus:outline-none focus:border-white/25"
                           />
                         )}
                       </div>
@@ -2801,7 +2689,7 @@ function DeveloperSection({
               'w-full flex items-center gap-4 py-3 transition-colors',
               isExporting
                 ? 'text-text-tertiary cursor-not-allowed'
-                : 'text-text-primary hover:text-purple-400',
+                : 'text-text-primary hover:text-text-secondary',
             )}
           >
             <div className="p-2 rounded-lg bg-bg-tertiary">
@@ -2849,7 +2737,7 @@ function DeveloperSection({
           <h3 className="text-sm font-semibold text-text-tertiary uppercase tracking-wider">
             Experimental
           </h3>
-          <FlaskConical className="w-4 h-4 text-purple-400" />
+          <FlaskConical className="w-4 h-4 text-text-secondary" />
         </div>
         <Card>
           <div className="space-y-1">
@@ -2944,7 +2832,7 @@ function DeveloperSection({
           href="https://docs.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center justify-between py-3 text-text-primary hover:text-purple-400 transition-colors"
+          className="flex items-center justify-between py-3 text-text-primary hover:text-text-secondary transition-colors"
         >
           <div className="flex items-center gap-3">
             <BookOpen className="w-5 h-5 text-text-tertiary" />
@@ -3049,7 +2937,7 @@ function AccountSection({
         <Card>
           <Link
             href="/fair-use"
-            className="flex items-center justify-between py-2 text-text-primary hover:text-purple-400 transition-colors"
+            className="flex items-center justify-between py-2 text-text-primary hover:text-text-secondary transition-colors"
           >
             <div className="flex items-center gap-3">
               <Scale className="w-5 h-5 text-text-tertiary" />
@@ -3073,7 +2961,7 @@ function AccountSection({
         <Card>
           <button
             onClick={onSignOut}
-            className="w-full flex items-center gap-3 py-3 text-text-primary hover:text-purple-400 transition-colors"
+            className="w-full flex items-center gap-3 py-3 text-text-primary hover:text-text-secondary transition-colors"
           >
             <LogOut className="w-5 h-5" />
             <span className="font-medium">Sign Out</span>
@@ -3106,7 +2994,7 @@ function AccountSection({
             href="https://feedback.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between py-3 border-b border-white/[0.06] text-text-primary hover:text-purple-400 transition-colors"
+            className="flex items-center justify-between py-3 border-b border-white/[0.06] text-text-primary hover:text-text-secondary transition-colors"
           >
             <span>Feedback & Bug Reports</span>
             <ExternalLink className="w-4 h-4" />
@@ -3115,7 +3003,7 @@ function AccountSection({
             href="https://help.omi.me"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-between py-3 text-text-primary hover:text-purple-400 transition-colors"
+            className="flex items-center justify-between py-3 text-text-primary hover:text-text-secondary transition-colors"
           >
             <span>Help Center</span>
             <ExternalLink className="w-4 h-4" />
@@ -3131,16 +3019,6 @@ function AccountSection({
 // ============================================================================
 
 // Section titles and descriptions for the header
-const SECTION_INFO: Record<SettingsSection, { title: string; description: string }> = {
-  profile: {
-    title: 'Profile',
-    description: 'Account details, language, and notifications',
-  },
-  privacy: { title: 'Privacy', description: 'Data permissions and training settings' },
-  integrations: { title: 'Integrations', description: 'Connected services and apps' },
-  developer: { title: 'Developer', description: 'API keys, webhooks, and data export' },
-  account: { title: 'Account', description: 'Plan, usage, and account management' },
-};
 
 export function SettingsPage() {
   const router = useRouter();
@@ -3149,12 +3027,10 @@ export function SettingsPage() {
   const { showToast } = useToast();
   const [isExporting, setIsExporting] = useState(false);
 
-  // Get section from URL, default to 'profile'
+  // Get section from URL, default to 'account'
   const sectionParam = searchParams.get('section');
   const activeSection: SettingsSection =
-    sectionParam && sectionParam in SECTION_INFO
-      ? (sectionParam as SettingsSection)
-      : 'profile';
+    sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : 'account';
 
   // Track which sections have been loaded (using ref to avoid dependency issues)
   const loadedSectionsRef = useRef<Set<SettingsSection>>(new Set());
@@ -3172,7 +3048,6 @@ export function SettingsPage() {
   const [allUsage, setAllUsage] = useState<AllUsageData | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [cachedPlans, setCachedPlans] = useState<PricingOption[] | null>(null);
-  const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
   const [mcpKeys, setMcpKeys] = useState<McpApiKey[]>([]);
   const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
@@ -3191,16 +3066,6 @@ export function SettingsPage() {
       setSectionLoading(section);
       try {
         switch (section) {
-          case 'profile':
-            const [lang, vocab, summary] = await Promise.all([
-              getUserLanguage().catch(() => 'en'),
-              getCustomVocabulary().catch(() => []),
-              getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
-            ]);
-            setLanguage(lang);
-            setVocabulary(vocab);
-            setDailySummary(summary);
-            break;
           case 'privacy':
             const [recording, training] = await Promise.all([
               getRecordingPermission().catch(() => ({ enabled: false })),
@@ -3210,20 +3075,24 @@ export function SettingsPage() {
             setTrainingDataOptInState(training.opted_in);
             break;
           case 'account':
-            const [usageData, sub, plansData] = await Promise.all([
+            // The merged Account section renders the former Profile and Account
+            // groups together, so it loads both sets in one pass.
+            const [lang, vocab, summary, usageData, sub, plansData] = await Promise.all([
+              getUserLanguage().catch(() => 'en'),
+              getCustomVocabulary().catch(() => []),
+              getDailySummarySettings().catch(() => ({ enabled: true, hour: 22 })),
               getAllUsageData().catch(() => null),
               getUserSubscription().catch(() => null),
               getAvailablePlans().catch(() => null),
             ]);
+            setLanguage(lang);
+            setVocabulary(vocab);
+            setDailySummary(summary);
             setAllUsage(usageData);
             setSubscription(sub);
             if (plansData?.plans) {
               setCachedPlans(plansData.plans);
             }
-            break;
-          case 'integrations':
-            const integ = await getIntegrations().catch(() => []);
-            setIntegrations(integ);
             break;
           case 'developer':
             // Fetch API keys, MCP keys, webhook status, and individual webhook URLs in parallel
@@ -3272,7 +3141,7 @@ export function SettingsPage() {
               },
             });
             break;
-          // 'profile' and 'account' don't need API calls
+          // sections not listed here don't need API calls
         }
         loadedSectionsRef.current.add(section);
       } catch (error) {
@@ -3484,7 +3353,7 @@ export function SettingsPage() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.push('/');
+    router.push(SIGNED_OUT_DESTINATION);
   };
 
   const handleDeleteAccount = async () => {
@@ -3492,7 +3361,7 @@ export function SettingsPage() {
     try {
       await deleteAccount();
       await signOut();
-      router.push('/');
+      router.push(SIGNED_OUT_DESTINATION);
     } catch {
       setIsDeleting(false);
     }
@@ -3503,27 +3372,12 @@ export function SettingsPage() {
     if (sectionLoading === activeSection) {
       return (
         <div className="h-64 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
         </div>
       );
     }
 
     switch (activeSection) {
-      case 'profile':
-        return (
-          <ProfileSection
-            user={user}
-            onCopyUserId={handleCopyUserId}
-            language={language}
-            vocabulary={vocabulary}
-            onLanguageChange={handleLanguageChange}
-            onAddWord={handleAddWord}
-            onRemoveWord={handleRemoveWord}
-            dailySummary={dailySummary}
-            onDailySummaryToggle={handleDailySummaryToggle}
-            onDailySummaryHourChange={handleDailySummaryHourChange}
-          />
-        );
       case 'privacy':
         return (
           <PrivacySection
@@ -3533,15 +3387,30 @@ export function SettingsPage() {
             onTrainingDataChange={handleTrainingDataChange}
           />
         );
-      case 'integrations':
+      case 'account':
         return (
-          <IntegrationsSection
-            integrations={integrations}
-            onRefresh={async () => {
-              const integ = await getIntegrations().catch(() => []);
-              setIntegrations(integ);
-            }}
-          />
+          <div className="space-y-10">
+            <ProfileSection
+              user={user}
+              onCopyUserId={handleCopyUserId}
+              language={language}
+              vocabulary={vocabulary}
+              onLanguageChange={handleLanguageChange}
+              onAddWord={handleAddWord}
+              onRemoveWord={handleRemoveWord}
+              dailySummary={dailySummary}
+              onDailySummaryToggle={handleDailySummaryToggle}
+              onDailySummaryHourChange={handleDailySummaryHourChange}
+            />
+            <AccountSection
+              allUsage={allUsage}
+              subscription={subscription}
+              cachedPlans={cachedPlans}
+              onSubscriptionUpdate={refreshSubscription}
+              onSignOut={() => setShowSignOutDialog(true)}
+              onDeleteAccount={() => setShowDeleteDialog(true)}
+            />
+          </div>
         );
       case 'developer':
         return (
@@ -3559,17 +3428,6 @@ export function SettingsPage() {
             onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
           />
         );
-      case 'account':
-        return (
-          <AccountSection
-            allUsage={allUsage}
-            subscription={subscription}
-            cachedPlans={cachedPlans}
-            onSubscriptionUpdate={refreshSubscription}
-            onSignOut={() => setShowSignOutDialog(true)}
-            onDeleteAccount={() => setShowDeleteDialog(true)}
-          />
-        );
       default:
         return null;
     }
@@ -3580,15 +3438,12 @@ export function SettingsPage() {
   // Quick nav sections for each settings section
   const getQuickNavSections = () => {
     switch (activeSection) {
-      case 'profile':
+      case 'account':
         return [
           { id: 'account-info', label: 'Account' },
           { id: 'language', label: 'Language' },
           { id: 'vocabulary', label: 'Vocabulary' },
           { id: 'notifications', label: 'Notifications' },
-        ];
-      case 'account':
-        return [
           { id: 'plan-usage', label: 'Plan & Usage' },
           { id: 'fair-use', label: 'Fair Use' },
           { id: 'actions', label: 'Actions' },
@@ -3617,8 +3472,8 @@ export function SettingsPage() {
           <div className="absolute inset-0 bg-black/60" />
           <div className="relative bg-bg-secondary rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl border border-white/[0.06]">
             <div className="flex flex-col items-center text-center gap-4">
-              <div className="p-3 rounded-full bg-purple-500/10">
-                <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+              <div className="p-3 rounded-full bg-white/[0.08]">
+                <Loader2 className="w-8 h-8 text-text-secondary animate-spin" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-text-primary">

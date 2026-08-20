@@ -247,6 +247,11 @@ _load_module_from_file("utils.retrieval.safety", BACKEND_DIR / "utils" / "retrie
 # Real (import-light) fallback telemetry: agentic.py imports record_fallback from it.
 _load_module_from_file("utils.observability.fallback", BACKEND_DIR / "utils" / "observability" / "fallback.py")
 
+# Real (import-light) web_search gate. agentic.py now imports WEB_SEARCH_TOOL and
+# request_tools_after_private_taint from this sibling. utils.retrieval is stubbed
+# with an empty __path__, so the module must be loaded from file like safety.
+_load_module_from_file("utils.retrieval.web_search_gate", BACKEND_DIR / "utils" / "retrieval" / "web_search_gate.py")
+
 # Stub firebase_admin (used by endpoints.py and auth)
 firebase_mod = _stub_module("firebase_admin")
 firebase_mod.auth = MagicMock()

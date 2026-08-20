@@ -7,7 +7,6 @@ from pathlib import Path
 import re
 
 WORKFLOWS = (
-    Path(".github/workflows/gcp_backend_agent_proxy.yml"),
     Path(".github/workflows/gcp_backend_listen_helm.yml"),
     Path(".github/workflows/gcp_backend_pusher.yml"),
     Path(".github/workflows/gcp_llm_gateway.yml"),

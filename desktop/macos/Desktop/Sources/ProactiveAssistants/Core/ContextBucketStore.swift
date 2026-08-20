@@ -849,6 +849,11 @@ actor ContextBucketStore {
         """,
       arguments: [bucketID]
     ).reversed()
+    // `identifiersJson` is deliberately absent, and adding it would be a no-op:
+    // `BucketFactValidator.acceptedIdentifiers` only stores an identifier that the
+    // row's own (already truncated) `evidenceText` contains, and `evidenceText` is
+    // emitted verbatim right here. See the `Ceiling` note on
+    // `ContextBucketRollup.directorStablePrompt`.
     let facts = try String.fetchAll(
       db,
       sql: """

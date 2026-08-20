@@ -101,7 +101,7 @@
     "createYourOwnApp": "Loo oma rakendus",
     "buildAndShareApp": "Looge ja jagage oma kohandatud rakendust",
     "searchApps": "Otsi rakendusi...",
-    "myApps": "Minu rakendused",
+    "myApps": "Minu loodud",
     "installedApps": "Paigaldatud rakendused",
     "unableToFetchApps": "Rakenduste laadimine ebaõnnestus :(\n\nPalun kontrollige oma internetiühendust ja proovige uuesti.",
     "aboutOmi": "Omi kohta",
@@ -3217,5 +3217,6 @@
     "accountCutoverOpenStore": "Avaa kauppa",
     "sendRawAudioToOmi": "Saada töötlemata heli Omisse",
     "sendRawAudioToOmiDescription": "Lülita välja, et töötlemata heli Omisse ei saadetaks. Transkriptsioone ja pilvefunktsioonide jaoks vajalikke andmeid võidakse endiselt Omisse saata.",
-    "findDevice": "Leia"
+    "findDevice": "Leia",
+    "diagnosticsShareFailed": "Diagnostikat ei õnnestunud jagada. Proovi uuesti."
 }

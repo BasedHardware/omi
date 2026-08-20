@@ -248,6 +248,9 @@ def get_canonical_knowledge_graph(
 
 
 def _rebuild_graph_task(uid: str, user_name: str) -> None:
+    # The gate is re-checked here because it was last answered before the response
+    # was returned. Bailing out must leave the graph exactly as it was, so nothing
+    # upstream of `rebuild_knowledge_graph` may delete it.
     if _legacy_graph_mutation_decision(uid) is not LegacyGraphMutation.ALLOWED:
         return
     memories: MemoryPayloads = [
@@ -265,7 +268,10 @@ def rebuild_graph(
 ):
     _require_legacy_graph_mutation(uid)
     user_name = get_user_name(uid) or ""
-    kg_db.delete_knowledge_graph(uid)
+    # No eager delete here: `rebuild_knowledge_graph` clears the graph itself as its
+    # first step, so deleting before scheduling only widens the window where the user
+    # has no graph and nothing is rebuilding one — a task that never runs, or one that
+    # bails on the re-checked gate, would leave them with nothing.
     background_tasks.add_task(_rebuild_graph_task, uid, user_name)
     return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 

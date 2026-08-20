@@ -322,7 +322,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get searchApps => 'Iskanje aplikacij...';
 
   @override
-  String get myApps => 'Moje aplikacije';
+  String get myApps => 'Ustvarjeno od mene';
 
   @override
   String get installedApps => 'Nameščene aplikacije';
@@ -9880,4 +9880,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get findDevice => 'Poišči';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostike ni bilo mogoče deliti. Poskusi znova.';
 }

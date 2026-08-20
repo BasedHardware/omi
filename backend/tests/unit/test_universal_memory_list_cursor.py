@@ -429,6 +429,50 @@ def test_fully_suppressed_historical_set_stops_at_the_scan_row_budget(service_mo
     assert scanned < total
 
 
+def test_scan_budget_stops_on_the_wall_clock_deadline_before_the_row_budget(service_mod, monkeypatch):
+    """Prod 2026-08-18T08:09Z+: first pages still 504'd after the row budget shipped.
+
+    4000 skipped rows is ~80 sequential Firestore round trips, so a slow account
+    burned the whole 30s edge budget inside the bound and left the offset-read
+    fallback no time to answer. The walk must stop on elapsed seconds too, well
+    before the row budget is spent.
+    """
+    from fastapi import HTTPException
+    from models.product_memory import MemoryItemStatus
+
+    monkeypatch.setattr(service_mod, "MEMORY_LIST_SCAN_DEADLINE_SECONDS", 0.0)
+    service = service_mod.MemoryService(db_client=_Db())
+    total = 400
+    historical = [_dated_historical(service_mod, f"h-{index:05d}", day=9000 - index) for index in range(total)]
+    statuses = {f"h-{index:05d}": MemoryItemStatus.tombstoned for index in range(total)}
+    _, updated_mock, _ = _install_streams(service, service_mod, canonical=[], historical=historical, statuses=statuses)
+
+    with pytest.raises(HTTPException) as exc_info:
+        service.read_page("uid-test", limit=8, cursor=None)
+
+    assert exc_info.value.status_code == 503
+    # Same detail the route's first-page fallback already keys on.
+    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+    # Time stopped the walk, not rows: far fewer rows were scanned than the row budget allows.
+    scanned = sum(call.kwargs["limit"] for call in updated_mock.call_args_list)
+    assert scanned < service_mod.MEMORY_LIST_SCAN_ROW_BUDGET
+
+
+def test_scan_budget_charges_within_the_deadline_do_not_raise(service_mod):
+    """The deadline is elapsed-time, not per-charge: charges before it are free."""
+    from fastapi import HTTPException
+
+    ticks = iter([100.0, 101.0, 105.9, 106.0])
+    budget = service_mod._ScanRowBudget(deadline_seconds=6.0, clock=lambda: next(ticks))
+
+    budget.charge()
+    budget.charge()
+
+    with pytest.raises(HTTPException) as exc_info:
+        budget.charge()
+    assert exc_info.value.detail == service_mod.MEMORY_LIST_SCAN_BUDGET_DETAIL
+
+
 def test_suppressed_prefix_under_the_budget_still_serves_the_page(service_mod, monkeypatch):
     """The budget bounds pathological accounts only — ordinary skips still page."""
     from models.product_memory import MemoryItemStatus

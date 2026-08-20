@@ -14,6 +14,18 @@ extension AppState {
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
       let speakerId = segment.speaker_id ?? 0
 
+      // Barge-in interruption: if the user speaks while voice playback is active,
+      // halt playback immediately so Omi never talks over the user.
+      if VoiceBargeInPolicy.shouldInterrupt(
+        isUser: segment.is_user,
+        speaker: speakerId,
+        text: segment.text,
+        isSpeaking: FloatingBarVoicePlaybackService.shared.isSpeaking
+      ) {
+        log("Transcription [BARGE-IN]: User spoke mid-playback; interrupting voice output")
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+      }
+
       // Convert backend segment to local SpeakerSegment
       let translations = (segment.translations ?? []).map {
         SegmentTranslation(lang: $0.lang, text: $0.text)

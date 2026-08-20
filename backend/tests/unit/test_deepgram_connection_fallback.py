@@ -371,11 +371,6 @@ def test_parakeet_is_a_configured_fallback_only_when_the_deployment_can_serve_it
         assert streaming.parakeet_is_configured_fallback('en') is False
 
 
-@pytest.mark.anyio
-async def test_modulate_primary_is_still_rejected():
-    with pytest.raises(ValueError, match='modulate'):
-        await streaming.connect_stt_socket_with_fallback(
-            primary_service=STTService.modulate,
-            connect_primary=AsyncMock(),
-            connect_modulate=AsyncMock(),
-        )
+# A Modulate primary is no longer rejected by the helper — it walks the chain like
+# its siblings. That contract, including the "never falls back to itself" guard this
+# assertion used to provide, now lives in test_modulate_connection_fallback.py (#11752).

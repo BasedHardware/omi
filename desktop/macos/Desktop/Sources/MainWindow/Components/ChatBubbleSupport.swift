@@ -239,24 +239,27 @@ struct ProactiveNotificationBadge: Equatable {
   let label: String
   let systemImage: String
 
-  /// Shared glyph contract: Insight uses `sparkles` everywhere; Suggestion keeps `lightbulb`.
+  /// Shared glyph contract: Insight uses `sparkles` everywhere; Focus keeps `lightbulb`.
   static let insightSystemImage = "sparkles"
   static let suggestionSystemImage = "lightbulb"
 
+  /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
+  /// Insight, Memory — matching the four toggles in Settings → Notifications. Internal
+  /// kinds stay distinct (their raw values are persisted in chat continuity keys), but
+  /// every one of them presents as one of the four: Focus is the focus-nudge assistant
+  /// alone; generic tips, resurfaced items, and generated goals are all insights;
+  /// meeting action items are tasks. `.general` is reserved for functional system
+  /// alerts, which sit outside the proactive taxonomy.
   init(kind: ProactiveNotificationKind) {
     switch kind {
     case .suggestion:
-      (label, systemImage) = ("Suggestion", Self.suggestionSystemImage)
-    case .insight:
+      (label, systemImage) = ("Focus", Self.suggestionSystemImage)
+    case .insight, .resurface, .goal:
       (label, systemImage) = ("Insight", Self.insightSystemImage)
-    case .task:
+    case .task, .meetingNotes:
       (label, systemImage) = ("Task", "checkmark.circle")
     case .memory:
       (label, systemImage) = ("Memory", "brain.head.profile")
-    case .goal:
-      (label, systemImage) = ("Goal", "target")
-    case .resurface:
-      (label, systemImage) = ("Resurfaced", "clock.arrow.circlepath")
     case .general:
       (label, systemImage) = ("Notification", "bell")
     }

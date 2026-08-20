@@ -254,7 +254,6 @@ def main() -> int:
         except RuntimeError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
-        labels = metadata.labels if metadata else ()
         head_branch = args.head_branch or os.getenv("GITHUB_HEAD_REF", "")
         if not head_branch:
             head_branch = subprocess.run(
@@ -264,11 +263,7 @@ def main() -> int:
                 stdout=subprocess.PIPE,
                 text=True,
             ).stdout.strip()
-        skip_changelog = (
-            "no-changelog-needed" in labels
-            or head_branch.startswith("changelog/v")
-            or os.getenv("PRE_PUSH_SKIP_DESKTOP_CHANGELOG") == "1"
-        )
+        skip_changelog = head_branch.startswith("changelog/v") or os.getenv("PRE_PUSH_SKIP_DESKTOP_CHANGELOG") == "1"
         if metadata:
             print(f"PR metadata: {metadata.source}, updated_at={metadata.updated_at}")
         elif any(check.name == "product-invariants" for check in checks):

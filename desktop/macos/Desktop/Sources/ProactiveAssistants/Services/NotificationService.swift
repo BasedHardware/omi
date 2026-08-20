@@ -26,6 +26,18 @@ enum NotificationSound {
 
 }
 
+/// Named delivery intent for notifications that must not become Chat rows.
+/// The default preserves the existing floating-bar presentation and journaling
+/// path; system-banner-only callers still pass every owner, toggle, and
+/// frequency gate in `NotificationService` before reaching UserNotifications.
+enum NotificationDeliveryMode: Equatable {
+  case standard
+  case systemBannerOnly
+
+  var presentsInFloatingBar: Bool { self == .standard }
+  var requiresSystemBanner: Bool { self == .systemBannerOnly }
+}
+
 @MainActor
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static let shared = NotificationService(registerWithSystemNotificationCenter: true)
@@ -363,6 +375,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
     deliverSystemBanner: Bool = false,
+    deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
@@ -420,6 +433,28 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
+    // Every proactive notification belongs to one of the four user-facing categories
+    // (Focus, Task, Insight, Memory), and this shared boundary is where a category's
+    // Settings toggle binds every producer — goals and meeting action items included,
+    // not just the assistants that consult their own toggle before generating.
+    // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
+    if respectFrequency,
+      !Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+    {
+      log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .assistantNotificationsDisabled
+      )
+      return
+    }
+
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
@@ -467,10 +502,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
-    let floatingBarPreviewEnabled = FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
-      previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
-      deliverSystemBanner: deliverSystemBanner
-    )
+    let floatingBarPreviewEnabled =
+      deliveryMode.presentsInFloatingBar
+      && FloatingBarNotificationPreviewPolicy.shouldShowInBarPreview(
+        previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
+        deliverSystemBanner: deliverSystemBanner
+      )
 
     var floatingBarMayDeliver = false
     var floatingBarQueued = false
@@ -518,7 +555,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // doc above). When the user explicitly muted in-bar previews (bar still enabled),
     // fall back to the system banner so the notification is never fully silenced.
     let shouldDeliverSystemBanner =
-      FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
+      deliveryMode.requiresSystemBanner
+      || FloatingBarNotificationPreviewPolicy.shouldDeliverSystemBannerAfterFloatingBar(
         previewsEnabled: previewsEnabled, floatingBarEnabled: floatingBarEnabled,
         deliverSystemBanner: deliverSystemBanner,
         floatingBarAccepted: floatingBarMayDeliver || floatingBarQueued
@@ -646,6 +684,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .suppressed
     }
+    // The director's decisions ride the same four category toggles as the dedicated
+    // assistants. Settings promises exactly four notification types — Focus, Task,
+    // Insight, Memory — and a toggle that silences only some producers of its
+    // category would make that promise a lie.
+    guard
+      Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(decisionType: decisionType),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+    else {
+      onDropped?()
+      return .suppressed
+    }
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
@@ -705,6 +758,28 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       )
     }
     return .queued
+  }
+
+  /// Maps every proactive notification kind to its user-facing category — Focus, Task,
+  /// Insight, or Memory — and answers whether that category's Settings toggle allows
+  /// delivery. Focus is the focus-nudge assistant alone; generic tips, resurfaced
+  /// items, and generated goals are all insights; meeting action items are tasks.
+  /// `.general` is functional system alerting outside the taxonomy and is never
+  /// category-gated.
+  nonisolated static func categoryToggleAllows(
+    kind: ProactiveNotificationKind,
+    focusEnabled: Bool,
+    taskEnabled: Bool,
+    insightEnabled: Bool,
+    memoryEnabled: Bool
+  ) -> Bool {
+    switch kind {
+    case .suggestion: return focusEnabled
+    case .task, .meetingNotes: return taskEnabled
+    case .insight, .resurface, .goal: return insightEnabled
+    case .memory: return memoryEnabled
+    case .general: return true
+    }
   }
 
   private func contextDirectorMayPresent(
@@ -925,7 +1000,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// notifications-off-by-default migration (`48239de8`) turned off. A user at Off — or a
   /// fresh install with no stored level — moves to Balanced; a user who opted in to any
   /// other level keeps it. Per-assistant toggles are not touched, so only the categories
-  /// that default on (Live Suggestions, Insight) fire; Task and Memory stay opt-in.
+  /// that default on (Focus, Insight) fire; Task and Memory stay opt-in.
   /// Because it is guarded by `balancedByDefaultMigrationKey`, a user who turns
   /// notifications off after the migration is never re-enabled on subsequent launches.
   /// Call early at launch, before any proactive assistant can fire.

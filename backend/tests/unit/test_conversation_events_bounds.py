@@ -33,7 +33,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from testing.import_isolation import (
+    AutoMockModule,
+    load_module_fresh,
+    package_submodule_stubs,
+    stub_modules,
+)
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -142,7 +147,6 @@ def router():
         "database.webhook_health": _pkg("database.webhook_health"),
         "database.mem_db": _pkg("database.mem_db"),
         "utils.apps": _pkg("utils.apps"),
-        "utils.conversations.merge_conversations": _pkg("utils.conversations.merge_conversations"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         # firebase
@@ -160,15 +164,9 @@ def router():
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": endpoints,
         "utils.other.storage": _pkg("utils.other.storage"),
-        "utils.conversations": _pkg("utils.conversations"),
-        "utils.conversations.factory": _pkg("utils.conversations.factory"),
-        "utils.conversations.render": _pkg("utils.conversations.render"),
-        "utils.conversations.process_conversation": _pkg("utils.conversations.process_conversation"),
-        "utils.conversations.search": _pkg("utils.conversations.search"),
-        "utils.conversations.calendar_linking": _pkg("utils.conversations.calendar_linking"),
-        "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
-        "utils.conversations.location": _pkg("utils.conversations.location"),
-        "utils.conversations.analytics": _pkg("utils.conversations.analytics"),
+        # utils.conversations.* is DERIVED, not listed: a new module in that package
+        # must not break this suite at collection. See package_submodule_stubs.
+        **package_submodule_stubs("utils.conversations"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
         "utils.speaker_identification": _pkg("utils.speaker_identification"),
@@ -310,14 +308,43 @@ def test_segment_assign_valid_index_still_updates(router):
     """Sanity: an in-range index still applies the assignment (fix must not break the happy path)."""
     convo, segments = _fake_conversation_with_segments(2)
     handler = _segment_assign_handler(router.conv)
+    emitted = []
     with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
         router.conv, "deserialize_conversation", return_value=convo
-    ):
+    ), patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)):
         result = handler("c1", 1, "is_user", value="true", uid="u1")
 
     assert segments[1].is_user is True
     assert segments[0].is_user is False  # untouched
     assert result is convo
+    assert emitted == [
+        {
+            "uid": "u1",
+            "event": "Speaker Identity Confirmed",
+            "properties": {
+                "conversation_id": "c1",
+                "confirmation": "corrected",
+                "assignment": "self",
+                "scope": "segment",
+                "affected_segment_count": 1,
+            },
+        }
+    ]
+
+
+def test_segment_assign_repeating_the_same_identity_is_an_acceptance(router):
+    convo, segments = _fake_conversation_with_segments(1)
+    segments[0].is_user = True
+    handler = _segment_assign_handler(router.conv)
+    emitted = []
+
+    with patch.object(router.conv, "_get_valid_conversation_by_id", return_value={"id": "c1"}), patch.object(
+        router.conv, "deserialize_conversation", return_value=convo
+    ), patch.object(router.conv, "emit_product_event", side_effect=lambda **event: emitted.append(event)):
+        handler("c1", 0, "is_user", value="true", uid="u1")
+
+    assert len(emitted) == 1
+    assert emitted[0]["properties"]["confirmation"] == "accepted"
 
 
 def test_bulk_assign_resolves_legacy_positional_target_and_persists_canonical_id(router):

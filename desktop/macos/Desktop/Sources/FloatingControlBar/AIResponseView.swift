@@ -114,7 +114,7 @@ struct AIResponseView: View {
         return ["chatFirstGoal", id].joined(separator: "\u{1E}")
       case .captureLink(let id, _, _, _):
         return ["chatFirstCapture", id].joined(separator: "\u{1E}")
-      case .conversationLink(let id, _, _):
+      case .conversationLink(let id, _, _, _):
         return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
