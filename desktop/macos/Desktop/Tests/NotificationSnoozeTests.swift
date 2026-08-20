@@ -86,40 +86,42 @@ final class NotificationSnoozeTests: XCTestCase {
 
   /// "Until tomorrow" is a wall-clock boundary, not an offset, so the interesting cases are
   /// the ones either side of the resume hour.
-  func testUntilTomorrowResumesAtTheNextWorkdayStart() {
+  func testUntilTomorrowResumesAtTheNextWorkdayStart() throws {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = try! XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
 
-    func at(_ hour: Int, _ minute: Int = 0) -> Date {
-      calendar.date(from: DateComponents(year: 2026, month: 8, day: 19, hour: hour, minute: minute))!
+    func at(_ hour: Int, _ minute: Int = 0) throws -> Date {
+      try XCTUnwrap(
+        calendar.date(from: DateComponents(year: 2026, month: 8, day: 19, hour: hour, minute: minute)))
     }
 
     // Late evening: resumes 9am the following calendar day, not in an hour at midnight.
     let fromEvening = NotificationService.snoozeUntilTomorrowExpiry(
-      now: at(23, 30), calendar: calendar)
+      now: try at(23, 30), calendar: calendar)
     XCTAssertEqual(calendar.component(.hour, from: fromEvening), 9)
     XCTAssertEqual(calendar.component(.day, from: fromEvening), 20)
 
     // Small hours: already "tomorrow" by the clock, so it resumes this morning rather
     // than waiting 31 hours.
     let fromSmallHours = NotificationService.snoozeUntilTomorrowExpiry(
-      now: at(2, 15), calendar: calendar)
+      now: try at(2, 15), calendar: calendar)
     XCTAssertEqual(calendar.component(.hour, from: fromSmallHours), 9)
     XCTAssertEqual(
       calendar.component(.day, from: fromSmallHours), 19,
       "silencing at 2am should resume the same morning, not the next one")
 
     // Exactly at the boundary counts as passed, so it moves to the next day.
-    let fromNine = NotificationService.snoozeUntilTomorrowExpiry(now: at(9, 0), calendar: calendar)
+    let fromNine = NotificationService.snoozeUntilTomorrowExpiry(now: try at(9, 0), calendar: calendar)
     XCTAssertEqual(calendar.component(.day, from: fromNine), 20)
   }
 
-  func testUntilTomorrowAlwaysProducesAFutureExpiry() {
+  func testUntilTomorrowAlwaysProducesAFutureExpiry() throws {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = try! XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
+    calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
     for hour in 0...23 {
-      let now = calendar.date(
-        from: DateComponents(year: 2026, month: 8, day: 19, hour: hour, minute: 30))!
+      let now = try XCTUnwrap(
+        calendar.date(
+          from: DateComponents(year: 2026, month: 8, day: 19, hour: hour, minute: 30)))
       let expiry = NotificationService.snoozeUntilTomorrowExpiry(now: now, calendar: calendar)
       XCTAssertGreaterThan(expiry, now, "a snooze that expires in the past silences nothing (hour \(hour))")
     }
