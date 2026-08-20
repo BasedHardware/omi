@@ -662,6 +662,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .suppressed
     }
+    // The director's decisions ride the same four category toggles as the dedicated
+    // assistants. Settings promises exactly four notification types — Focus, Task,
+    // Insight, Memory — and a toggle that silences only some producers of its
+    // category would make that promise a lie.
+    guard
+      Self.categoryToggleAllows(
+        kind: ProactiveNotificationKind.from(decisionType: decisionType),
+        focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
+        taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
+        insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+    else {
+      onDropped?()
+      return .suppressed
+    }
 
     let previewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     let floatingBarEnabled = FloatingControlBarManager.shared.isEnabled
@@ -721,6 +736,27 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       )
     }
     return .queued
+  }
+
+  /// Maps every proactive notification kind to its user-facing category — Focus, Task,
+  /// Insight, or Memory — and answers whether that category's Settings toggle allows
+  /// delivery. Goals feed the focus system, meeting action items are tasks, and a
+  /// resurfaced item is an insight about relevance. `.general` is functional system
+  /// alerting outside the taxonomy and is never category-gated.
+  nonisolated static func categoryToggleAllows(
+    kind: ProactiveNotificationKind,
+    focusEnabled: Bool,
+    taskEnabled: Bool,
+    insightEnabled: Bool,
+    memoryEnabled: Bool
+  ) -> Bool {
+    switch kind {
+    case .suggestion, .goal: return focusEnabled
+    case .task, .meetingNotes: return taskEnabled
+    case .insight, .resurface: return insightEnabled
+    case .memory: return memoryEnabled
+    case .general: return true
+    }
   }
 
   private func contextDirectorMayPresent(
@@ -941,7 +977,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// notifications-off-by-default migration (`48239de8`) turned off. A user at Off — or a
   /// fresh install with no stored level — moves to Balanced; a user who opted in to any
   /// other level keeps it. Per-assistant toggles are not touched, so only the categories
-  /// that default on (Live Suggestions, Insight) fire; Task and Memory stay opt-in.
+  /// that default on (Focus, Insight) fire; Task and Memory stay opt-in.
   /// Because it is guarded by `balancedByDefaultMigrationKey`, a user who turns
   /// notifications off after the migration is never re-enabled on subsequent launches.
   /// Call early at launch, before any proactive assistant can fire.
