@@ -1,3 +1,0 @@
-{
-  "change": "Live suggestions and other AI features no longer fail silently when a pooled network connection goes stale"
-}

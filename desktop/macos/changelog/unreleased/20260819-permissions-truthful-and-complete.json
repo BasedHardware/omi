@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Permissions showing Accessibility as granted when it was switched off, and added the Bluetooth, Full Disk Access, and Automation permissions the page never displayed"
-}
