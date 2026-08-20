@@ -122,6 +122,17 @@ def test_reimport_same_export_creates_no_duplicates(tmp_path, store):
     assert set(store.docs) == set(after_first), "re-import must not add or change document IDs"
 
 
+def test_skipped_lifelog_log_does_not_include_title_slug(tmp_path, store, caplog):
+    zip_data = _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()})
+    _run_import(tmp_path, zip_data)
+    with caplog.at_level("INFO"):
+        _run_import(tmp_path, zip_data)
+
+    skip_logs = [rec.message for rec in caplog.records if "Skipped already-imported" in rec.message]
+    assert skip_logs, "re-import should log that the lifelog was skipped"
+    assert all("Morning-standup" not in message and FN_A not in message for message in skip_logs)
+
+
 def test_reimport_preserves_user_edits(tmp_path, store):
     zip_data = _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()})
 

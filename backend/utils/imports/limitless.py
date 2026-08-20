@@ -367,7 +367,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         conversations_created += 1
                     else:
                         conversations_skipped += 1
-                        logger.info(f"[Limitless Import] Skipped already-imported lifelog: {filename}")
+                        logger.info("[Limitless Import] Skipped already-imported lifelog")
 
                 except Exception as e:
                     error_msg = f"Error processing {lifelog_path}: {str(e)}"
