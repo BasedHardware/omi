@@ -380,13 +380,15 @@ final class MemoryExportStatusTests: XCTestCase {
         nextCursor: "cursor-a",
         canonicalLifecycleExposed: true,
         deviceScopeSupported: true,
-        defaultMemoryDeleteSupported: true),
+        defaultMemoryDeleteSupported: true,
+        truncated: false),
       APIClient.MemoryListPage(
         memories: [Self.sampleMemory(id: "m3")],
         nextCursor: nil,
         canonicalLifecycleExposed: true,
         deviceScopeSupported: true,
-        defaultMemoryDeleteSupported: true),
+        defaultMemoryDeleteSupported: true,
+        truncated: false),
     ]
     var pageIndex = 0
     let values = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, cursor in
@@ -405,7 +407,8 @@ final class MemoryExportStatusTests: XCTestCase {
       nextCursor: "cursor-a",
       canonicalLifecycleExposed: true,
       deviceScopeSupported: true,
-      defaultMemoryDeleteSupported: true)
+      defaultMemoryDeleteSupported: true,
+      truncated: false)
 
     do {
       _ = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, _ in page }
@@ -415,6 +418,26 @@ final class MemoryExportStatusTests: XCTestCase {
         return XCTFail("Unexpected export error: \(error)")
       }
       XCTAssertTrue(message.contains("repeated a continuation token"))
+    }
+  }
+
+  func testExportCursorPaginationRejectsTruncatedPage() async throws {
+    let page = APIClient.MemoryListPage(
+      memories: [Self.sampleMemory(id: "m1")],
+      nextCursor: nil,
+      canonicalLifecycleExposed: true,
+      deviceScopeSupported: true,
+      defaultMemoryDeleteSupported: true,
+      truncated: true)
+
+    do {
+      _ = try await MemoryExportService.fetchAllCursorPages(pageSize: 2) { _, _ in page }
+      XCTFail("A truncated page must not produce a successful complete export")
+    } catch let error as MemoryExportError {
+      guard case .requestFailed(let message) = error else {
+        return XCTFail("Unexpected export error: \(error)")
+      }
+      XCTAssertTrue(message.contains("truncated"))
     }
   }
 

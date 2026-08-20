@@ -1361,6 +1361,12 @@ actor MemoryExportService {
     var seenCursors = Set<String>()
     while true {
       let page = try await fetch(boundedPageSize, cursor)
+      // A truncated page is explicitly incomplete and carries no resumable
+      // cursor; an export cannot claim completeness from it.
+      if page.truncated {
+        throw MemoryExportError.requestFailed(
+          "Memory export stopped because the server returned a truncated list.")
+      }
       result.append(contentsOf: page.memories)
       guard let nextCursor = page.nextCursor, !nextCursor.isEmpty else {
         return result
