@@ -35,6 +35,31 @@ def is_langsmith_enabled() -> bool:
     return False
 
 
+def is_offline_deployment() -> bool:
+    """True when this deployment declares itself offline/on-prem.
+
+    LangSmith is a SaaS: the traces it exports carry the prompts themselves plus uid/app_id metadata,
+    so on an on-prem deployment they are conversation content leaving the premises. The tracer path
+    below was gated on ONE condition — "is an API key present?" — and the module's own startup log
+    spells out the consequence: "Global tracing off but API key present -> per-request tracing
+    enabled". So LANGCHAIN_TRACING_V2=false plus an inherited key still exported chat traces.
+
+    The tracing flag is deliberately NOT the gate: upstream ships exactly that combination in its
+    cloud values and relies on per-request tracing, so honouring the flag here would change upstream
+    product behaviour rather than add the abstraction this fork carries. The deployment's own
+    declaration is the gate instead — PROVIDER_MODE=offline / OMI_ENV_STAGE=offline, which both
+    deploy/onprem/backend.env.base.example and the Helm values already set — resolved through the
+    existing env-loader stage helper rather than a parallel notion of "on-prem". Cloud behaviour is
+    unchanged; on-prem stops depending on nobody having configured a key.
+    """
+    try:
+        from utils.env_loader import resolve_stage_from_env
+
+        return resolve_stage_from_env() == "offline"
+    except Exception:  # pragma: no cover - a stage helper failure must not enable egress
+        return False
+
+
 def get_langsmith_project() -> str:
     """
     Get the configured LangSmith project name.
@@ -117,6 +142,8 @@ def get_chat_tracer_callbacks(
     Returns:
         List containing LangChainTracer callback if API key is set, else empty list
     """
+    if is_offline_deployment():
+        return []
     if not has_langsmith_api_key():
         return []
 
