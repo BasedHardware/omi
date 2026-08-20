@@ -51,6 +51,11 @@ enum WorkHistoryHandleExtractor {
     )
     guard AXIsProcessTrusted() else { return snapshot }
     guard let front = NSWorkspace.shared.frontmostApplication else { return snapshot }
+    // Reading our own accessibility tree from the capture tick crashes the app — see
+    // `AccessibilityProcessBoundary`. The visit still records its `app_window` handle.
+    guard AccessibilityProcessBoundary.isForeignProcess(front.processIdentifier) else {
+      return snapshot
+    }
     let nameMatches = front.localizedName == appName
     let bundleMatches = expectedBundleID.map { $0 == front.bundleIdentifier } ?? false
     guard nameMatches || bundleMatches else { return snapshot }

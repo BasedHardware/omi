@@ -550,6 +550,12 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/tests/test-launch-env-forwarding.sh"]
     lanes: ["local", "ci"]
     reason: "`open` launches from launchd, so a documented run.sh env override that is not passed with `open --env` silently does nothing; caught OMI_FORCE_CANONICAL_MEMORY_ATLAS being documented but never forwarded"
+  - id: desktop-settings-seed
+    command: ["bash", "desktop/macos/tests/test-settings-seed.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/omi-settings-seed.sh", "desktop/macos/tests/test-settings-seed.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "the Swift-only fast bundle path bypassed Omi Dev preference seeding, while overlay semantics retained target hotkeys absent from the source; exact domain mirroring plus common prelaunch wiring must stay guarded"
   - id: desktop-agent-runtime-payload
     command: ["bash", "desktop/macos/tests/test-fast-dev-bundle.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]

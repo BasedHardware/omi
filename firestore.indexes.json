@@ -749,6 +749,28 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "conversation_finalization_jobs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "meeting_treatment_eligible",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "meeting_receipt_intent_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "meeting_receipt_reconcile_after_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

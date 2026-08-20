@@ -2,6 +2,7 @@ import pytest
 from unittest import mock
 from services import conversation_finalization
 from services.conversation_finalization import reconcile_listen_finalization_jobs
+from services.conversation_finalization import reconcile_meeting_receipts
 
 
 @pytest.fixture
@@ -115,3 +116,60 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
     mock_dependencies["record_reconciliation"].assert_called_once_with('requeued')
     mock_dependencies["inc_retries"].assert_called_once()
     mock_dependencies["publish_metrics"].assert_called_once()
+
+
+def _stub_meeting_backfill(monkeypatch, candidates=None):
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'get_meeting_receipt_backfill_cursor',
+        lambda **kwargs: {'resume_after_path': None, 'generation': 0},
+    )
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'get_meeting_receipt_backfill_candidates',
+        lambda **kwargs: {'candidates': candidates or [], 'resume_after_path': None, 'exhausted': True},
+    )
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'advance_meeting_receipt_backfill_cursor',
+        lambda *args, **kwargs: True,
+    )
+
+
+def test_meeting_receipt_reconciler_redrives_one_missing_intent(monkeypatch):
+    candidate = {'job_id': 'job-1', 'uid': 'uid-1', 'conversation_id': 'conversation-1'}
+    monkeypatch.setattr(conversation_finalization, 'is_meeting_receipt_reconciler_enabled', lambda: True)
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'get_meeting_receipt_reconcile_candidates',
+        lambda **kwargs: [candidate],
+    )
+    repair = mock.Mock(return_value=True)
+    monkeypatch.setattr(conversation_finalization, 'repair_meeting_receipt_intent', repair)
+    _stub_meeting_backfill(monkeypatch)
+
+    result = reconcile_meeting_receipts()
+
+    assert result == {'repaired': 1, 'backfilled': 0, 'skipped': 0, 'error': 0}
+    repair.assert_called_once_with(candidate)
+
+
+def test_meeting_receipt_backfill_repairs_two_2026_08_19_shaped_rows(monkeypatch):
+    candidates = [
+        {'uid': 'uid-1', 'conversation': {'id': 'meeting-1'}},
+        {'uid': 'uid-1', 'conversation': {'id': 'meeting-2'}},
+    ]
+    monkeypatch.setattr(conversation_finalization, 'is_meeting_receipt_reconciler_enabled', lambda: True)
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
+        'get_meeting_receipt_reconcile_candidates',
+        lambda **kwargs: [],
+    )
+    _stub_meeting_backfill(monkeypatch, candidates)
+    record = mock.Mock(return_value={'status': 'recorded'})
+    monkeypatch.setattr(conversation_finalization, 'record_and_persist_finalized_meeting_receipt', record)
+
+    result = reconcile_meeting_receipts()
+
+    assert result == {'repaired': 0, 'backfilled': 2, 'skipped': 0, 'error': 0}
+    assert record.call_count == 2

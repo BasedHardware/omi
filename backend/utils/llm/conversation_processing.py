@@ -1085,6 +1085,16 @@ def render_sections_markdown(sections: List[Any]) -> str:
     return '\n\n'.join(rendered)
 
 
+# Whole-transcript structuring produces the title and summary a conversation cannot be finalized
+# without, so like the test-prompt summary above it must not inherit the shared gateway transport
+# deadline (15s to first response byte), which is sized for background feature calls. In prod on
+# 2026-08-19 every `Error processing conversation` 500 on /v1/conversations, /from-segments and
+# /reprocess ended at 15.2-15.8s of request latency chained from `openai.APITimeoutError`, leaving
+# the conversation with no summary; successful requests on those routes already run to ~55s, inside
+# the route's own 120s TimeoutMiddleware budget.
+CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = 60.0
+
+
 def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
@@ -1188,7 +1198,12 @@ DATE CONTEXT
     messages = [*prefix.messages(cache_enabled=cache_enabled), SystemMessage(content=task_instructions)]
     cache_key = prefix.cache_key if cache_enabled else None
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if cache_enabled else None
-    model = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+    model = get_llm(
+        'conv_structure',
+        cache_key=cache_key,
+        prompt_cache_options=cache_options,
+        request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+    )
     response = extraction_parser.parse(_content_str(model.invoke(messages)))
     structured = response.to_structured()
 
@@ -1312,7 +1327,12 @@ def get_transcript_structure(
         else:
             cache_key = 'omi-transcript-structure'
         cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
-        structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+        structure_llm = get_llm(
+            'conv_structure',
+            cache_key=cache_key,
+            prompt_cache_options=cache_options,
+            request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+        )
         chain = prompt | structure_llm | parser
         response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
@@ -1401,7 +1421,12 @@ def get_reprocess_transcript_structure(
     # requests back into implicit, billable cache writes.
     cache_key = None if gateway_mode_enabled else 'omi-transcript-structure'
     cache_options = GPT56_EXPLICIT_CACHE_OPTIONS if explicit_cache_enabled else None
-    structure_llm = get_llm('conv_structure', cache_key=cache_key, prompt_cache_options=cache_options)
+    structure_llm = get_llm(
+        'conv_structure',
+        cache_key=cache_key,
+        prompt_cache_options=cache_options,
+        request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
+    )
     chain = prompt | structure_llm | parser
 
     response = _coerce_structured(

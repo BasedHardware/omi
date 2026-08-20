@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import utils.task_intelligence.proactive_engine as engine
+from utils.conversations import meeting_receipt
 from models.chat_first import (
     ChatFirstSubject,
     ConversationLinkSpec,
@@ -241,8 +242,35 @@ def test_meeting_recommendations_keep_bounded_open_user_commitments():
 
 
 def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotation(monkeypatch):
-    persist = MagicMock()
-    monkeypatch.setattr(engine, 'persist_capture_arrival_intent', persist)
+    recorded = []
+
+    def _record(_uid, _conversation_id, **kwargs):
+        recorded.append(kwargs)
+        return {
+            'status': 'recorded',
+            'job_id': f'job-{len(recorded)}',
+            'meeting_treatment_eligible': kwargs['eligible'],
+        }
+
+    created = []
+    monkeypatch.setattr(meeting_receipt.jobs_db, 'record_meeting_receipt', _record)
+    monkeypatch.setattr(
+        engine.intent_db,
+        'create_intent',
+        lambda *args, **kwargs: created.append(kwargs) or (SimpleNamespace(intent_id='intent-meeting-1'), True),
+    )
+    monkeypatch.setattr(engine, '_meter', lambda *args: None)
+
+    def _persist_capture(*args, **kwargs):
+        return engine.persist_capture_arrival_intent(
+            *args,
+            **kwargs,
+            eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+        )
+
+    monkeypatch.setattr(meeting_receipt, 'persist_capture_arrival_intent', _persist_capture)
+    mark = MagicMock(return_value=True)
+    monkeypatch.setattr(meeting_receipt.jobs_db, 'mark_meeting_receipt_intent_persisted', mark)
     ambient = {
         'id': 'ambient-1',
         'source': 'desktop',
@@ -261,19 +289,34 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'external_data': {'conversation_role': 'meeting'},
     }
 
-    engine.persist_desktop_meeting_arrival('user-1', ambient)
-    persist.assert_not_called()
+    assert meeting_receipt.record_and_persist_finalized_meeting_receipt('user-1', ambient) is None
+    assert recorded == []
 
-    engine.persist_desktop_meeting_arrival('user-1', meeting)
-    persist.assert_called_once_with(
-        'user-1',
-        conversation_id='meeting-1',
-        summary='Design review',
-        is_desktop_meeting=True,
-        recommended_action_items=[],
-    )
+    receipt = meeting_receipt.record_and_persist_finalized_meeting_receipt('user-1', meeting)
 
-    persist.reset_mock()
+    assert receipt == {'status': 'recorded', 'job_id': 'job-1', 'meeting_treatment_eligible': True}
+    assert recorded == [
+        {
+            'finalization_job_id': None,
+            'eligible': True,
+            'reason': 'eligible',
+            'duration_s': MIN_MEETING_DURATION_SECONDS,
+            'dedup_speech_s': MIN_TRANSCRIBED_SPEECH_SECONDS,
+            'firestore_client': None,
+        }
+    ]
+    assert len(created) == 1
+    assert created[0]['continuity_key'] == 'capture:meeting-1'
+    assert [block.model_dump() for block in created[0]['blocks']] == [
+        {
+            'type': 'conversationLink',
+            'conversation_id': 'meeting-1',
+            'summary': 'Design review',
+            'recommended_action_items': [],
+        }
+    ]
+    mark.assert_called_once_with('job-1', 'intent-meeting-1')
+
     rotation = {
         **meeting,
         'id': 'meeting-rotation',
@@ -282,8 +325,13 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
             'conversation_finalization_reason': 'max_duration_rotation',
         },
     }
-    engine.persist_desktop_meeting_arrival('user-1', rotation)
-    persist.assert_not_called()
+    rotation_receipt = meeting_receipt.record_and_persist_finalized_meeting_receipt('user-1', rotation)
+
+    assert rotation_receipt == {'status': 'recorded', 'job_id': 'job-2', 'meeting_treatment_eligible': False}
+    assert recorded[1]['eligible'] is False
+    assert recorded[1]['reason'] == 'rotation'
+    assert len(created) == 1
+    mark.assert_called_once_with('job-1', 'intent-meeting-1')
 
 
 def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():

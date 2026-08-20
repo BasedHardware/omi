@@ -604,6 +604,22 @@ CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
 )
 
+MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
+    identifier='conversation_finalization_jobs_meeting_receipts_due',
+    collection_group='conversation_finalization_jobs',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('meeting_treatment_eligible', '==', 'meeting_treatment_eligible'),
+        FirestoreQueryFilter('meeting_receipt_intent_id', '==', 'meeting_receipt_intent_id'),
+        FirestoreQueryFilter('meeting_receipt_reconcile_after_at', '<=', 'meeting_receipt_reconcile_after_at'),
+    ),
+    index_fields=(
+        _asc('meeting_treatment_eligible'),
+        _asc('meeting_receipt_intent_id'),
+        _asc('meeting_receipt_reconcile_after_at'),
+        _asc('__name__'),
+    ),
+)
 
 QUERY_SPECS = (
     CANDIDATES_COMPATIBILITY_QUERY,
@@ -633,6 +649,7 @@ QUERY_SPECS = (
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
+    MEETING_RECEIPTS_DUE_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

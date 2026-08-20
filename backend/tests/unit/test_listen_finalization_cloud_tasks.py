@@ -1207,6 +1207,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
     capture_arrival = MagicMock()
     monkeypatch.setattr(persisted_finalizer, 'persist_capture_arrival_intent', capture_arrival)
+    receipt_writer = MagicMock(return_value=None)
+    monkeypatch.setattr(persisted_finalizer, 'record_and_persist_finalized_meeting_receipt', receipt_writer)
 
     disposition = await persisted_finalizer.finalize_persisted_conversation(
         'uid-1',
@@ -1228,13 +1230,9 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     else:
         extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
-    completed.assert_called_once_with(
-        'job-1',
-        2,
-        3,
-        meeting_treatment_eligible=(source == 'desktop' and expected_intent_kwargs is not None),
-    )
-    if expected_intent_kwargs is None:
+    completed.assert_called_once_with('job-1', 2, 3)
+    receipt_writer.assert_called_once_with('uid-1', conversation, finalization_job_id='job-1')
+    if source != 'omi' or expected_intent_kwargs is None:
         capture_arrival.assert_not_called()
     else:
         capture_arrival.assert_called_once_with('uid-1', **expected_intent_kwargs)
@@ -1576,7 +1574,7 @@ async def test_finalizer_runs_derived_effects_only_after_winning_claim(monkeypat
     assert disposition == ConversationFinalizationDisposition.completed
     derived_runner.assert_called_once()
     integrations.assert_awaited_once()
-    complete.assert_called_once_with('job-1', 2, 3, meeting_treatment_eligible=False)
+    complete.assert_called_once_with('job-1', 2, 3)
 
 
 @pytest.mark.anyio
@@ -1656,7 +1654,7 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     )
 
     assert disposition == ConversationFinalizationDisposition.completed
-    complete.assert_called_once_with('job-1', 2, 3, meeting_treatment_eligible=False)
+    complete.assert_called_once_with('job-1', 2, 3)
     safe_target.assert_called_once_with('https://app.test/hook?uid=uid-1')
     webhook_client.post.assert_awaited_once_with(
         pinned_url,

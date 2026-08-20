@@ -390,6 +390,10 @@ class AppState: ObservableObject {
   @Published var hasAccessibilityPermission = false
   // TCC says yes but AX calls actually fail (common after macOS updates/app re-signs).
   @Published var isAccessibilityBroken = false
+
+  /// Token for the `com.apple.accessibility.api` observer, so the live permission refresh is
+  /// installed exactly once. See `startAccessibilityChangeObserver()`.
+  var accessibilityChangeObserver: NSObjectProtocol?
   @Published var hasFullDiskAccess = false
 
   /// Usage-limit popup state. Set by `triggerUsageLimitPopup(reason:)` when the

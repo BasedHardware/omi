@@ -133,6 +133,8 @@ env:
     value: "true"
   - name: CONVERSATION_NOTES_V2_ENABLED
     value: "false"
+  - name: MEETING_RECEIPT_RECONCILER_ENABLED
+    value: "false"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED

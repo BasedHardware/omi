@@ -67,6 +67,9 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'true'
             category: rollout
+          MEETING_RECEIPT_RECONCILER_ENABLED:
+            value: 'false'
+            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
             category: rollout
@@ -384,6 +387,9 @@ environments:
           env:
             CONVERSATION_NOTES_V2_ENABLED:
               value: 'true'
+              category: rollout
+            MEETING_RECEIPT_RECONCILER_ENABLED:
+              value: 'false'
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
               value: 'true'
@@ -1073,6 +1079,9 @@ environments:
           CONVERSATION_NOTES_V2_ENABLED:
             value: 'false'
             category: rollout
+          MEETING_RECEIPT_RECONCILER_ENABLED:
+            value: 'false'
+            category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
             category: rollout
@@ -1318,6 +1327,9 @@ environments:
               version: latest
           env:
             CONVERSATION_NOTES_V2_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_RECEIPT_RECONCILER_ENABLED:
               value: 'false'
               category: rollout
             CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:

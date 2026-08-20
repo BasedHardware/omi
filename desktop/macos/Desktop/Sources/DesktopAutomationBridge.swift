@@ -3086,6 +3086,10 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
+    register(name: "permissions_snapshot", summary: "Every permission row the Permissions page shows") {
+      _ in await PermissionsSnapshot.capture()
+    }
+
     register(
       name: "create_test_folder",
       summary: "Create a hermetic conversation folder via the real API",
