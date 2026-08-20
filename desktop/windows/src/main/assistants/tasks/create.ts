@@ -421,6 +421,14 @@ export async function promoteIfNeeded(opts?: { bypassDebounce?: boolean }): Prom
   }
 }
 
+/** When the last SUCCESSFUL promote landed (0 = never this launch). Read by the
+ *  promotion safety net to tell "a tick that promoted something" from "a tick that
+ *  found nothing", which is what its backoff ladder keys on. Exposed as a getter
+ *  rather than the binding so the single-writer rule above still holds. */
+export function getLastPromotedAt(): number {
+  return lastPromotedAt
+}
+
 /** Reset the module-level promotion debounce/lock. Test-only seam so a suite can
  *  exercise the debounce deterministically without a shared-state carryover. */
 export function __resetPromotionStateForTests(): void {

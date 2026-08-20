@@ -145,9 +145,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     } catch (e) {
       Logger.debug('Failed to export diagnostics: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.diagnosticsShareFailed)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.diagnosticsShareFailed)));
     }
   }
 

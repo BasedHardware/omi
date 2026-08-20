@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 import type {
   OmiNotification,
   NotificationType,
@@ -105,18 +105,19 @@ function getNotificationRoute(notification: OmiNotification): string {
     return taskId ? `/tasks?highlight=${taskId}` : '/tasks';
   }
 
+  // Recaps merged into Timeline: a recap is a tile in the day it summarises.
   if (navigateTo.startsWith('/daily-summary')) {
     const recapId = navigateTo.split('/').pop();
-    return recapId ? `/recaps?id=${recapId}` : '/recaps';
+    return recapId ? `/conversations?recap=${recapId}` : '/conversations';
   }
 
   if (navigateTo.startsWith('/recaps')) {
     const recapId = navigateTo.split('/').pop();
-    return recapId ? `/recaps?id=${recapId}` : '/recaps';
+    return recapId ? `/conversations?recap=${recapId}` : '/conversations';
   }
 
   if (navigateTo.startsWith('/conversations')) {
-    return navigateTo;
+    return navigateTo.replace('/conversations', '/conversations');
   }
 
   if (navigateTo.startsWith('/apps')) {
@@ -130,7 +131,7 @@ function getNotificationRoute(notification: OmiNotification): string {
   // - If no: open notification center (notification-only apps like Bitcoin)
   if (navigateTo.startsWith('/chat/')) {
     const appId = navigateTo.split('/').pop();
-    return appId ? `/?chatApp=${appId}` : '/';
+    return appId ? `/home?chatApp=${appId}` : '/home';
   }
 
   return navigateTo;
@@ -178,31 +179,34 @@ export function useNotifications(): UseNotificationsReturn {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   // Handle foreground message (defined before useEffect that uses it)
-  const handleForegroundMessage = useCallback((payload: MessagePayload) => {
-    const notification = payloadToNotification(payload);
+  const handleForegroundMessage = useCallback(
+    (payload: MessagePayload) => {
+      const notification = payloadToNotification(payload);
 
-    setNotifications((prev) => {
-      const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);
-      saveNotifications(updated);
-      return updated;
-    });
-
-    // Show browser notification for foreground messages
-    if (Notification.permission === 'granted') {
-      const browserNotif = new Notification(notification.title, {
-        body: notification.body,
-        icon: '/logo.png',
-        tag: notification.id,
+      setNotifications((prev) => {
+        const updated = [notification, ...prev].slice(0, MAX_NOTIFICATIONS);
+        saveNotifications(updated);
+        return updated;
       });
 
-      browserNotif.onclick = () => {
-        window.focus();
-        const route = getNotificationRoute(notification);
-        router.push(route);
-        browserNotif.close();
-      };
-    }
-  }, [router]);
+      // Show browser notification for foreground messages
+      if (Notification.permission === 'granted') {
+        const browserNotif = new Notification(notification.title, {
+          body: notification.body,
+          icon: '/logo.png',
+          tag: notification.id,
+        });
+
+        browserNotif.onclick = () => {
+          window.focus();
+          const route = getNotificationRoute(notification);
+          router.push(route);
+          browserNotif.close();
+        };
+      }
+    },
+    [router],
+  );
 
   // Initialize on mount
   useEffect(() => {
@@ -214,9 +218,10 @@ export function useNotifications(): UseNotificationsReturn {
       setNotifications(stored);
 
       // Check basic browser support (without triggering Firebase initialization)
-      const hasNotificationSupport = typeof window !== 'undefined'
-        && 'Notification' in window
-        && 'serviceWorker' in navigator;
+      const hasNotificationSupport =
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        'serviceWorker' in navigator;
       setIsSupported(hasNotificationSupport);
 
       // Get current permission status
@@ -309,7 +314,7 @@ export function useNotifications(): UseNotificationsReturn {
   const markAsRead = useCallback((notificationId: string) => {
     setNotifications((prev) => {
       const updated = prev.map((n) =>
-        n.id === notificationId ? { ...n, read: true } : n
+        n.id === notificationId ? { ...n, read: true } : n,
       );
       saveNotifications(updated);
       return updated;
@@ -347,7 +352,7 @@ export function useNotifications(): UseNotificationsReturn {
       const route = getNotificationRoute(notification);
       router.push(route);
     },
-    [router, markAsRead]
+    [router, markAsRead],
   );
 
   // Unregister token (for logout)

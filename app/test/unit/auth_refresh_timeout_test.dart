@@ -65,18 +65,12 @@ void main() {
     final gateway = _StallingGateway(neverCompletes: true);
     final service = _service(gateway, timeout: const Duration(milliseconds: 20));
 
-    await expectLater(
-      service.refreshIdToken().timeout(const Duration(seconds: 5)),
-      completes,
-    );
+    await expectLater(service.refreshIdToken().timeout(const Duration(seconds: 5)), completes);
   });
 }
 
-AuthService _service(_StallingGateway gateway, {required Duration timeout}) => AuthService.forTesting(
-      tokenGateway: gateway,
-      refreshDelay: (_) async {},
-      refreshAttemptTimeout: timeout,
-    );
+AuthService _service(_StallingGateway gateway, {required Duration timeout}) =>
+    AuthService.forTesting(tokenGateway: gateway, refreshDelay: (_) async {}, refreshAttemptTimeout: timeout);
 
 final class _StallingGateway implements AuthTokenGateway {
   _StallingGateway({this.neverCompletes = false, this.latency});
@@ -86,11 +80,8 @@ final class _StallingGateway implements AuthTokenGateway {
   int refreshCalls = 0;
 
   @override
-  AuthUserSnapshot? get currentUser => const AuthUserSnapshot(
-        uid: 'user-1',
-        email: 'person@example.com',
-        displayName: 'Person Example',
-      );
+  AuthUserSnapshot? get currentUser =>
+      const AuthUserSnapshot(uid: 'user-1', email: 'person@example.com', displayName: 'Person Example');
 
   @override
   Future<RefreshedAuthToken?> forceRefresh() {

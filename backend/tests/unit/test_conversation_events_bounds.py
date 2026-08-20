@@ -33,7 +33,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from testing.import_isolation import (
+    AutoMockModule,
+    load_module_fresh,
+    package_submodule_stubs,
+    stub_modules,
+)
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -142,7 +147,6 @@ def router():
         "database.webhook_health": _pkg("database.webhook_health"),
         "database.mem_db": _pkg("database.mem_db"),
         "utils.apps": _pkg("utils.apps"),
-        "utils.conversations.merge_conversations": _pkg("utils.conversations.merge_conversations"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         # firebase
@@ -160,16 +164,9 @@ def router():
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": endpoints,
         "utils.other.storage": _pkg("utils.other.storage"),
-        "utils.conversations": _pkg("utils.conversations"),
-        "utils.conversations.factory": _pkg("utils.conversations.factory"),
-        "utils.conversations.render": _pkg("utils.conversations.render"),
-        "utils.conversations.process_conversation": _pkg("utils.conversations.process_conversation"),
-        "utils.conversations.meeting_receipt": _pkg("utils.conversations.meeting_receipt"),
-        "utils.conversations.search": _pkg("utils.conversations.search"),
-        "utils.conversations.calendar_linking": _pkg("utils.conversations.calendar_linking"),
-        "utils.conversations.calendar_utils": _pkg("utils.conversations.calendar_utils"),
-        "utils.conversations.location": _pkg("utils.conversations.location"),
-        "utils.conversations.analytics": _pkg("utils.conversations.analytics"),
+        # utils.conversations.* is DERIVED, not listed: a new module in that package
+        # must not break this suite at collection. See package_submodule_stubs.
+        **package_submodule_stubs("utils.conversations"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),
         "utils.speaker_identification": _pkg("utils.speaker_identification"),

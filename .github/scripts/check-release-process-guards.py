@@ -745,7 +745,7 @@ def check_desktop_codemagic_release() -> list[str]:
 
 
 def check_desktop_candidate_trigger_authority() -> list[str]:
-    """Keep the normal candidate lane on Codemagic's native immutable-tag trigger."""
+    """Keep the normal candidate lane on one exact-tag API dispatch."""
     errors: list[str] = []
     codemagic = ROOT / "codemagic.yaml"
     candidate_workflow = ROOT / ".github/workflows/desktop_auto_release.yml"
@@ -759,16 +759,20 @@ def check_desktop_candidate_trigger_authority() -> list[str]:
         codemagic_text,
         flags=re.DOTALL,
     )
-    required_trigger = (
-        "    triggering:\n"
-        "      events:\n"
-        "        - tag\n"
-        "      tag_patterns:\n"
-        '        - pattern: "v*-macos"\n'
-        "          include: true"
-    )
-    if match is None or required_trigger not in match.group("body"):
-        errors.append("normal omi-desktop-swift-release candidate lane must natively trigger on v*-macos tags")
+    if match is None:
+        errors.append("normal omi-desktop-swift-release candidate lane is missing")
+    elif re.search(r"^    triggering:\s*$", match.group("body"), flags=re.MULTILINE):
+        errors.append("normal omi-desktop-swift-release must not race direct dispatch with a native trigger")
+
+    candidate_text = candidate_workflow.read_text(encoding="utf-8")
+    for required_fragment in (
+        "check-codemagic-tag-intake.py",
+        '--workflow-id "omi-desktop-swift-release"',
+        "--timeout-seconds 0",
+        "--dispatch-fallback-on-absence",
+    ):
+        if required_fragment not in candidate_text:
+            errors.append(f"normal desktop candidate lane is missing direct Codemagic dispatch: {required_fragment}")
 
     direct_build_endpoint = "https://api.codemagic.io/builds"
     for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):

@@ -4,6 +4,45 @@ import XCTest
 @testable import Omi_Computer
 
 final class ContextDeliveryAuthorityTests: XCTestCase {
+  /// Context-director decisions ride the same five category toggles the Settings pane
+  /// shows (Focus, Task, Insight, Memory, Integration). Each internal kind must be
+  /// gated by exactly its category's toggle; `.general` (functional alerts) is never
+  /// category-gated.
+  func testDirectorDecisionsAreGatedByTheirCategoryToggle() {
+    func allows(
+      _ kind: ProactiveNotificationKind, focus: Bool = true, task: Bool = true, insight: Bool = true,
+      memory: Bool = true, integration: Bool = true
+    ) -> Bool {
+      NotificationService.categoryToggleAllows(
+        kind: kind, focusEnabled: focus, taskEnabled: task,
+        insightEnabled: insight, memoryEnabled: memory, integrationEnabled: integration)
+    }
+    // Focus toggle owns the focus-nudge assistant alone.
+    XCTAssertFalse(allows(.suggestion, focus: false))
+    XCTAssertTrue(allows(.suggestion, task: false, insight: false, memory: false))
+    // Task toggle owns task candidates and meeting action items.
+    XCTAssertFalse(allows(.task, task: false))
+    XCTAssertFalse(allows(.meetingNotes, task: false))
+    XCTAssertTrue(allows(.task, focus: false, insight: false, memory: false))
+    // Insight toggle owns insights, tips, resurfaced items, and generated goals.
+    XCTAssertFalse(allows(.insight, insight: false))
+    XCTAssertFalse(allows(.resurface, insight: false))
+    XCTAssertFalse(allows(.goal, insight: false))
+    // Memory toggle owns memory extraction.
+    XCTAssertFalse(allows(.memory, memory: false))
+    // Integration toggle owns connect-an-app offers.
+    XCTAssertFalse(allows(.integration, integration: false))
+    XCTAssertTrue(allows(.integration, focus: false, task: false, insight: false, memory: false))
+    // Functional alerts sit outside the taxonomy.
+    XCTAssertTrue(
+      allows(.general, focus: false, task: false, insight: false, memory: false, integration: false))
+    // The director's decision strings resolve into the gated kinds; "suggest" is a
+    // generic tip, which the taxonomy files under Insight.
+    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "suggest"), .insight)
+    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "task_candidate"), .task)
+    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "resurface"), .resurface)
+  }
+
   @MainActor
   func testProactiveBudgetMultiplierUsesCachedServerPlan() throws {
     let suiteName = "ContextDeliveryAuthorityTests.plan.\(UUID().uuidString)"

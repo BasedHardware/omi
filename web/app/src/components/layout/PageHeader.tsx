@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, LucideIcon } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@tschk/moonshine-next/navigation';
 
 interface PageHeaderProps {
   title: string;

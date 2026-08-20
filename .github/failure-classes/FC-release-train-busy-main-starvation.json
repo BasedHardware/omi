@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-release-train-busy-main-starvation",
+  "violated_contract": "Each green macOS update must enter an immutable candidate no more than once per hour; later main merges must queue for the next train instead of invalidating or starving the current candidate.",
+  "canonical_prevention": "Bind the candidate to the exact green planner source or a mechanically verified changelog-only child, require that candidate to be reachable from authoritative main, recover stale changelog branches without terminal retries, and age freshness from the oldest unshipped update.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_desktop_release_source_identity.py",
+    ".github/scripts/test_publish_desktop_candidate_tag.py",
+    ".github/scripts/test_resolve_desktop_changelog_sync.py",
+    ".github/scripts/test_check_desktop_beta_freshness.py"
+  ],
+  "evidence_prs": [11930],
+  "scope_hints": [
+    ".github/workflows/desktop_auto_release.yml",
+    ".github/scripts/desktop-release-source-identity.py",
+    ".github/scripts/publish-desktop-candidate-tag.py",
+    ".github/scripts/resolve-desktop-changelog-sync.py",
+    ".github/scripts/check-desktop-beta-freshness.py"
+  ],
+  "status": "open"
+}

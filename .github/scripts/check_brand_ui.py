@@ -11,6 +11,7 @@ Allowlist: paths in ALLOWLIST_FILES are skipped (document why in a comment here)
 from __future__ import annotations
 
 import argparse
+import colorsys
 import re
 import subprocess
 import sys
@@ -57,6 +58,11 @@ PURPLE_PATTERNS = [
     re.compile(r"--purple-"),
     re.compile(r"""['"]Purple['"]"""),
     re.compile(r"""\bpurple\b""", re.I),  # CSS: color: purple; also catches bare "purple" references
+    # Tailwind's other purple ramps. `violet` and `indigo` read as purple on
+    # screen but spell nothing like it, so they slipped past every pattern
+    # above: the web marketplace shipped a violet promo card and two violet
+    # category themes while this check reported OK.
+    re.compile(r"\b(?:violet|indigo|fuchsia)-\d{2,4}\b"),
 ]
 
 
@@ -85,8 +91,34 @@ def is_ui_source(path: str) -> bool:
     return True
 
 
+# Any six-digit hex literal, so the hue test below sees every colour rather
+# than only the ones someone remembered to enumerate.
+HEX_LITERAL = re.compile(r"(?<![0-9A-Za-z_])(?:#|0x(?:[0-9A-Fa-f]{2})?)([0-9A-Fa-f]{6})\b")
+
+# HSV hue degrees that read as purple, between blue and magenta.
+PURPLE_HUE_RANGE = (235.0, 320.0)
+# Below these a colour is grey or near-black and reads as neutral whatever its
+# hue: #1A1A1A computes a hue but nobody perceives it as purple.
+MIN_SATURATION = 0.25
+MIN_VALUE = 0.20
+
+
+def is_purple_hex(digits: str) -> bool:
+    r, g, b = (int(digits[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    if s < MIN_SATURATION or v < MIN_VALUE:
+        return False
+    low, high = PURPLE_HUE_RANGE
+    return low <= h * 360 <= high
+
+
 def count_purple(text: str) -> int:
-    return sum(len(p.findall(text)) for p in PURPLE_PATTERNS)
+    hits = sum(len(p.findall(text)) for p in PURPLE_PATTERNS)
+    # The enumerated hex list missed #6C2BD9 -- one digit from #6D28D9, which
+    # was listed -- so the app-store developer banner shipped a purple gradient
+    # past a green check. Judge hex by hue instead of by membership.
+    hits += sum(1 for m in HEX_LITERAL.finditer(text) if is_purple_hex(m.group(1)))
+    return hits
 
 
 def git_show(ref: str, path: str) -> str | None:

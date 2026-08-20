@@ -1251,7 +1251,9 @@ async def promote_beta_candidate(
         logger.info("beta_candidate_promotion tag=%s result=conflict", request.tag)
         raise HTTPException(status_code=409, detail="Beta candidate promotion conflict") from None
     # A prior successful commit can lose its cache deletion. Every committed
-    # receipt, including an idempotent retry, repairs only this Beta projection.
+    # receipt, including an idempotent retry, repairs the Beta pointer and the
+    # raw GitHub release projection used to resolve Omi.Beta.zip.
+    await run_blocking(db_executor, delete_generic_cache, "github_releases_desktop")
     await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
     logger.info(
         "beta_candidate_promotion tag=%s result=%s", request.tag, "idempotent" if receipt["idempotent"] else "promoted"

@@ -605,7 +605,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                         key: _shareButtonKey,
                         icon: const FaIcon(FontAwesomeIcons.share, size: 20),
                         onPressed: _shareGraph,
-                      )
+                      ),
                     ]
                   : null,
             )

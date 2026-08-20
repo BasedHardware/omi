@@ -827,33 +827,20 @@ class TestAcquireChatSession:
 
     def test_reuses_existing_session(self):
         """acquire_chat_session returns existing session ID when one exists."""
-        mock_doc = MagicMock()
-        mock_doc.id = 'existing-session-id'
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = [mock_doc]
-
-        with patch.object(chat_db, 'db') as patched_db:
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
+        with patch.object(chat_db, 'get_chat_session', return_value={'id': 'existing-session-id'}) as mock_get_session:
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'existing-session-id'
+        mock_get_session.assert_called_once_with('uid', app_id='my-app')
 
     def test_creates_new_session_when_none_exists(self):
         """acquire_chat_session creates a new session when no matching session found."""
-        mock_query = MagicMock()
-        mock_query.limit.return_value = mock_query
-        mock_query.stream.return_value = []  # No existing sessions
-
         with (
-            patch.object(chat_db, 'db') as patched_db,
-            patch.object(chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}) as mock_create,
+            patch.object(chat_db, 'get_chat_session', return_value=None),
+            patch.object(  # No existing sessions
+                chat_db, 'create_chat_session', return_value={'id': 'new-session-id'}
+            ) as mock_create,
         ):
-            patched_db.collection.return_value.document.return_value.collection.return_value.where.return_value = (
-                mock_query
-            )
             result = chat_db.acquire_chat_session('uid', app_id='my-app')
 
         assert result == 'new-session-id'

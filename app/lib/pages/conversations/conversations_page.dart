@@ -316,18 +316,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     if (isSearch) {
       unawaited(provider.searchMoreConversations());
     } else {
-      unawaited(provider.getMoreConversationsFromServer().then((succeeded) {
-        if (mounted &&
-            shouldReleaseConversationLoadMoreLatch(
-              currentRequestKey: _lastLoadMoreRequestKey,
-              requestKey: requestKey,
-              succeeded: succeeded,
-            )) {
-          // A failed page fetch leaves the server cursor unchanged; release
-          // the latch so the next scroll can retry the same offset.
-          _lastLoadMoreRequestKey = null;
-        }
-      }));
+      unawaited(
+        provider.getMoreConversationsFromServer().then((succeeded) {
+          if (mounted &&
+              shouldReleaseConversationLoadMoreLatch(
+                currentRequestKey: _lastLoadMoreRequestKey,
+                requestKey: requestKey,
+                succeeded: succeeded,
+              )) {
+            // A failed page fetch leaves the server cursor unchanged; release
+            // the latch so the next scroll can retry the same offset.
+            _lastLoadMoreRequestKey = null;
+          }
+        }),
+      );
     }
     return true;
   }

@@ -425,4 +425,54 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: replacementTurn,
         invocationIsCurrent: false))
   }
+  // MARK: - The user's own speech must not expire the evidence
+
+  /// Reproduces the reported failure: a 6-second PTT question lost screen grounding while a
+  /// 4.5-second one kept it. The image is frozen at PTT-down, but the model cannot request it
+  /// until the user stops talking, so counting the utterance against a 5s budget made every
+  /// longer question ungrounded ("I couldn't verify the current screen").
+  func testALongSpokenQuestionDoesNotExpireThePTTScreenshot() {
+    let captured = evidence()
+    // PTT-down at t=1000, the user speaks for 6s, the model asks 0.5s after release.
+    let speechEndedAt = Date(timeIntervalSince1970: 1_006)
+    let modelAskedAt = Date(timeIntervalSince1970: 1_006.5)
+
+    XCTAssertFalse(
+      RealtimeScreenEvidenceFreshnessPolicy.isFresh(captured, now: modelAskedAt),
+      "precondition: measured from capture, a 6s question is already expired")
+    XCTAssertTrue(
+      RealtimeScreenEvidenceFreshnessPolicy.isFresh(
+        captured, now: modelAskedAt, speechEndedAt: speechEndedAt),
+      "the user's own speaking time must not consume the image's lifetime")
+  }
+
+  /// The budget still bounds real screen drift: time after the utterance ends is exactly the
+  /// window in which the user can switch apps behind the frozen pixels.
+  func testEvidenceStillExpiresWhenTheProviderIsSlowAfterTheUtterance() {
+    let captured = evidence()
+    let speechEndedAt = Date(timeIntervalSince1970: 1_006)
+
+    XCTAssertFalse(
+      RealtimeScreenEvidenceFreshnessPolicy.isFresh(
+        captured,
+        now: speechEndedAt.addingTimeInterval(RealtimeScreenEvidenceFreshnessPolicy.maximumAge + 0.1),
+        speechEndedAt: speechEndedAt))
+  }
+
+  /// A short question is unchanged: speech that ends before the capture instant (or a turn with
+  /// no recorded release) keeps the original capture-anchored budget.
+  func testShortQuestionAndMissingSpeechEndKeepCaptureAnchoredBudget() {
+    let captured = evidence()
+    let askedAt = Date(timeIntervalSince1970: 1_004.5)
+
+    XCTAssertTrue(RealtimeScreenEvidenceFreshnessPolicy.isFresh(captured, now: askedAt))
+    XCTAssertEqual(
+      RealtimeScreenEvidenceFreshnessPolicy.referenceInstant(captured, speechEndedAt: nil),
+      captured.capturedAt)
+    XCTAssertEqual(
+      RealtimeScreenEvidenceFreshnessPolicy.referenceInstant(
+        captured, speechEndedAt: Date(timeIntervalSince1970: 999)),
+      captured.capturedAt,
+      "a release stamp older than the capture must never shorten the budget")
+  }
 }

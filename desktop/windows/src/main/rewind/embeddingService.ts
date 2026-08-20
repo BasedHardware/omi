@@ -27,6 +27,7 @@ import {
 import { embedBatch, embedOne, type EmbedSession } from './embeddingClient'
 import { linkRewindEmbedding, rewindFramesNeedingEmbedding, upsertRewindEmbedding } from '../ipc/db'
 import { requestFreshSession, tokenLooksExpired } from '../assistants/core/session'
+import { recordFallback } from '../observability/fallback'
 
 /** How often the flush timer checks the queue (the 60s deadline lives in the queue). */
 const TICK_MS = 5_000
@@ -281,10 +282,9 @@ async function drain(current: EmbedSession, force: boolean): Promise<void> {
     try {
       await flushBatch(batch, live, mine)
     } catch (caught) {
-      // Degrade quietly: these frames stay unembedded (keyword search still
-      // finds them) and the sweep moves on. There is no Windows recordFallback
-      // emitter to route this through yet (#10240; see the Track 3 TODO in
-      // assistants/aiUserProfile/orchestrate.ts), so a log is the honest option.
+      // Degrade quietly for the user: these frames stay unembedded (keyword search
+      // still finds them) and the sweep moves on — but name the degrade for ops
+      // through the shared fallback emitter rather than only a local log.
       if (generation !== mine) return // torn down mid-request; not the new session's failure
       let error = caught
       if (!retriedAuth && isProxyAuthExpired(error)) {
@@ -301,7 +301,15 @@ async function drain(current: EmbedSession, force: boolean): Promise<void> {
         }
       }
       for (const item of batch) failedThisLaunch.add(item.frameId)
-      console.warn(`[rewind-embed] batch of ${batch.length} failed: ${(error as Error).message}`)
+      recordFallback({
+        component: 'other',
+        from: 'semantic_search',
+        to: 'keyword_search',
+        reason: 'embed_batch_failed',
+        outcome: 'degraded',
+        batchSize: batch.length,
+        message: (error as Error).message
+      })
       return
     }
     if (!force && !queue.shouldFlush(Date.now())) return

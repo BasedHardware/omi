@@ -775,6 +775,26 @@ def test_historical_missing_updated_at_uses_created_at_for_sort_and_validation(s
     assert record.memory.updated_at == expected
 
 
+def test_historical_missing_uid_falls_back_to_the_owning_path(service_mod):
+    raw = _sample_memory_dict("missing-uid")
+    raw.pop("uid")
+
+    record = service_mod.HistoricalMemoryAdapter._adapt("uid-test", raw)
+
+    assert record is not None
+    assert record.memory.uid == "uid-test"
+
+
+def test_historical_stored_uid_wins_over_the_path_fallback(service_mod):
+    raw = _sample_memory_dict("stored-uid")
+    raw["uid"] = "uid-stored"
+
+    record = service_mod.HistoricalMemoryAdapter._adapt("uid-test", raw)
+
+    assert record is not None
+    assert record.memory.uid == "uid-stored"
+
+
 def test_device_scope_keeps_device_neutral_historical_rows(service_mod):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)
