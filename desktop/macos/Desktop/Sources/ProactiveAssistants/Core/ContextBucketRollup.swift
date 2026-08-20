@@ -503,10 +503,13 @@ enum ContextProactivityPromptBuilder {
       Check the reasons for silence first, in this order:
       - No validated fact supports a specific, timely action: silence.
       - The point is already visible on the user's screen: silence. Speak only when you add
-        something the user cannot currently see: a commitment, a deadline, a conflict, or a
-        connection to other work.
+        something the user cannot currently see: a commitment, a deadline, a conflict, a
+        connection to other work — or the answer to a question the user is writing. The
+        question is on screen; its answer is not.
       - The point repeats anything in the recently-delivered list, even reworded: silence.
-        That list is a prohibition, not background.
+        That list is a prohibition, not background. One exception: a question the user is
+        writing or asking right now is always answered, even when the answer repeats a
+        recent delivery — a direct question is a fresh request, never nagging.
       - The point announces that meeting notes, a transcript, or a call summary are ready:
         silence. The conversation-finalization lane owns that claim and attaches the exact
         conversation link.
