@@ -4,7 +4,7 @@
 
 ## Flow
 
-`graph.py` selects the chat path and streams the response. `agentic.py` owns the stable core-tool registry, tool schema conversion, and agentic execution. `rag.py`, `hybrid.py`, and `safety.py` provide retrieval, ranking, and response-safety boundaries.
+`graph.py` selects the chat path and streams the response. `agentic.py` owns the stable core-tool registry, tool schema conversion, and agentic execution. `web_search_gate.py` re-decides the Anthropic server-side web_search offer on each agent-loop request once private tool output is in the transcript. `rag.py`, `hybrid.py`, and `safety.py` provide retrieval, ranking, and response-safety boundaries.
 
 ## Tool boundaries
 
