@@ -51,7 +51,7 @@ def normalized_recipient_emails(values: List[str]) -> List[str]:
     Request payloads can repeat an address; without dedup one request would
     send the same participant duplicate emails.
     """
-    seen: set = set()
+    seen: set[str] = set()
     result: List[str] = []
     for value in values:
         email = _normalized_email(value)
@@ -96,7 +96,7 @@ def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[st
 
     owner_set = {email for email in (_normalized_email(e) for e in owner_emails) if email}
     recipients: List[Dict[str, Optional[str]]] = []
-    seen: set = set()
+    seen: set[str] = set()
     for participant in participants:
         email = _normalized_email(participant.get('email'))
         if not email or email in owner_set or email in seen:
@@ -111,7 +111,8 @@ def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[st
 
 def get_share_recipients(uid: str, conversation: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
     owner = get_user_from_uid(uid) or {}
-    owner_emails = [owner.get('email')] if owner.get('email') else []
+    owner_email = owner.get('email')
+    owner_emails: List[str] = [owner_email] if isinstance(owner_email, str) and owner_email else []
     return extract_share_recipients(conversation, owner_emails)
 
 
