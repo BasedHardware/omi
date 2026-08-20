@@ -1006,11 +1006,15 @@ public class ProactiveAssistantsPlugin: NSObject {
               dwellLastEvaluatedHash = fullHash
             } else if let anchor = dwellContextAnchor,
               ContextDwellRefreshPolicy.shouldRefresh(
-                dwellSeconds: captureTime.timeIntervalSince(anchor),
-                completedRefreshes: dwellRefreshCount,
+                secondsSinceAnchor: captureTime.timeIntervalSince(anchor),
+                firedRefreshesThisContext: dwellRefreshCount,
                 lastEvaluatedHash: dwellLastEvaluatedHash,
                 currentHash: fullHash)
             {
+              // The anchor moves to this refresh so the repeat cooldown is
+              // measured refresh-to-refresh; the count only chooses the
+              // initial-vs-repeat threshold and resets on a real switch.
+              dwellContextAnchor = captureTime
               dwellRefreshCount += 1
               dwellLastEvaluatedHash = fullHash
               log(

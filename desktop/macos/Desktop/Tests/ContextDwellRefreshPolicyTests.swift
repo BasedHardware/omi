@@ -6,59 +6,55 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
   private let changedHash: UInt64 = 0xFFFF_FFFF_0000_0000
   private let anchorHash: UInt64 = 0x0000_0000_0000_0000
 
-  func testNoRefreshBeforeFirstMilestone() {
+  func testNoRefreshBeforeInitialDwell() {
     XCTAssertFalse(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 19, completedRefreshes: 0,
+        secondsSinceAnchor: 19, firedRefreshesThisContext: 0,
         lastEvaluatedHash: anchorHash, currentHash: changedHash))
   }
 
-  func testRefreshAtFirstMilestoneWhenContentChanged() {
+  func testFirstRefreshAtInitialDwellWhenContentChanged() {
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 20, completedRefreshes: 0,
+        secondsSinceAnchor: 20, firedRefreshesThisContext: 0,
         lastEvaluatedHash: anchorHash, currentHash: changedHash))
   }
 
   func testStaticScreenNeverRefreshes() {
-    // Identical hash and a 1-bit flicker both stay under the change bar.
+    // Identical hash and a 1-bit flicker both stay under the change bar,
+    // however long the dwell.
     XCTAssertFalse(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 120, completedRefreshes: 0,
+        secondsSinceAnchor: 3600, firedRefreshesThisContext: 0,
         lastEvaluatedHash: anchorHash, currentHash: anchorHash))
     XCTAssertFalse(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 120, completedRefreshes: 0,
+        secondsSinceAnchor: 3600, firedRefreshesThisContext: 5,
         lastEvaluatedHash: anchorHash, currentHash: 0x1))
   }
 
-  func testSecondMilestoneRequiresLongerDwell() {
+  func testRepeatRefreshRequiresCooldownSincePreviousRefresh() {
+    // A single-page app never switches context, so repeats must stay possible —
+    // but only after the refresh-to-refresh cooldown, not the initial dwell.
     XCTAssertFalse(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 30, completedRefreshes: 1,
+        secondsSinceAnchor: 45, firedRefreshesThisContext: 1,
         lastEvaluatedHash: anchorHash, currentHash: changedHash))
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 45, completedRefreshes: 1,
+        secondsSinceAnchor: 90, firedRefreshesThisContext: 1,
         lastEvaluatedHash: anchorHash, currentHash: changedHash))
-  }
-
-  func testRefreshBudgetIsExhaustible() {
-    XCTAssertFalse(
+    XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 3600, completedRefreshes: 2,
+        secondsSinceAnchor: 90, firedRefreshesThisContext: 40,
         lastEvaluatedHash: anchorHash, currentHash: changedHash),
-      "a dwell never buys more than the milestone count of refreshes")
-    XCTAssertFalse(
-      ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 3600, completedRefreshes: -1,
-        lastEvaluatedHash: anchorHash, currentHash: changedHash))
+      "repeats never exhaust while the screen keeps changing")
   }
 
   func testMissingAnchorHashAllowsRefresh() {
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        dwellSeconds: 20, completedRefreshes: 0,
+        secondsSinceAnchor: 20, firedRefreshesThisContext: 0,
         lastEvaluatedHash: nil, currentHash: changedHash))
   }
 }
