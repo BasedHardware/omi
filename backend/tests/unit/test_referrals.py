@@ -5,7 +5,6 @@ from types import ModuleType
 from typing import Iterator
 
 import pytest
-from starlette.requests import Request
 
 from routers import auth
 from testing.import_isolation import load_module_fresh, stub_modules
@@ -96,26 +95,17 @@ def test_referral_link_captures_secure_cookie_and_opens_existing_desktop_downloa
     assert 'SameSite=lax' in cookie
 
 
-def test_authenticated_referrer_receives_a_stable_unique_link(monkeypatch):
+def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch):
     monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
-    request = Request(
-        {
-            'type': 'http',
-            'scheme': 'https',
-            'server': ('api.omiapi.com', 443),
-            'path': '/',
-            'headers': [(b'host', b'api.omiapi.com')],
-        }
-    )
 
     with _loaded_referrals_router() as referrals:
-        first = referrals.get_referral_link(request, 'referrer-123').referral_url
-        second = referrals.get_referral_link(request, 'referrer-123').referral_url
-        other = referrals.get_referral_link(request, 'another-user').referral_url
+        first = referrals.get_referral_link('referrer-123').referral_url
+        second = referrals.get_referral_link('referrer-123').referral_url
+        other = referrals.get_referral_link('another-user').referral_url
 
     assert first == second
     assert first != other
-    assert first.startswith('https://api.omiapi.com/r/ref1.')
+    assert first.startswith('https://api.omi.me/r/ref1.')
 
 
 @pytest.mark.asyncio
