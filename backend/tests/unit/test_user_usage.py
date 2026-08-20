@@ -120,6 +120,34 @@ def test_counts_nested_desktop_chat_plus_flat_backend_chat(mock_db):
     assert r["cost_usd"] == 1.5, r
 
 
+def test_monthly_usage_exposes_plan_cost_status_without_zero_filling(mock_db):
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-23": {
+                "plan_usage": {
+                    "operator": {
+                        "desktop_chat": {"quota_questions": 2, "input_tokens": 10},
+                        "_metadata": {
+                            "cost_status_counts": {"missing": 1},
+                            "cost_exclusions": {"provider_token_cost_not_recorded": 1},
+                        },
+                    }
+                },
+                "desktop_chat": {"quota_questions": 2},
+            }
+        },
+    )
+
+    usage = user_usage.get_monthly_chat_usage("uid", now=NOW)
+
+    assert usage["usage_by_plan"]["operator"]["questions"] == 2
+    assert usage["usage_by_plan"]["operator"]["cost_usd"] is None
+    assert usage["cost_by_plan"]["operator"] is None
+    assert usage["cost_status_by_plan"]["operator"] == "missing"
+    assert usage["usage_by_plan"]["operator"]["cost_exclusions"] == {"provider_token_cost_not_recorded": 1}
+
+
 def test_realtime_ptt_included_via_grand_total(mock_db):
     # A pure-PTT month: only realtime turns. record_llm_usage always bumps the grand-total
     # desktop_chat too, so it must be counted even with zero typed chat.
@@ -196,6 +224,71 @@ def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, mon
 
     assert usage['transcription_seconds'] == 40
     assert observed == [(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.UNBOUNDED, 2)]
+
+
+def test_hourly_transcription_writer_keeps_plan_and_missing_cost_explicit(mock_db, monkeypatch):
+    monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *_args, **_kwargs: 'plus')
+    hourly_ref = MagicMock()
+    mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = hourly_ref
+
+    user_usage.update_hourly_usage(
+        'uid',
+        datetime(2026, 6, 23, 10, tzinfo=timezone.utc),
+        {'transcription_seconds': 12},
+    )
+
+    update = hourly_ref.set.call_args.args[0]
+    assert getattr(update['plan_usage.plus.transcription_seconds'], '_value', None) == 12
+    assert getattr(update['plan_usage.plus._metadata.cost_status_counts.missing'], '_value', None) == 1
+    assert all('cost_usd' not in key for key in update)
+
+
+def test_usage_by_plan_joins_chat_and_hourly_rows_without_cost_zero(monkeypatch):
+    monthly = {
+        'usage_by_plan': {
+            'plus': {
+                'questions': 2,
+                'input_tokens': 10,
+                'output_tokens': 5,
+                'total_tokens': 0,
+                'cost_usd': None,
+                'cost_status': 'missing',
+                'cost_exclusions': {'provider_token_cost_not_recorded': 1},
+            }
+        }
+    }
+    monkeypatch.setattr(user_usage, 'get_monthly_chat_usage', lambda *_args, **_kwargs: monthly)
+    query = MagicMock()
+    query.where.return_value = query
+    query.stream.return_value = iter(
+        [
+            _Snap(
+                {
+                    'plan_usage': {
+                        'plus': {
+                            'transcription_seconds': 120,
+                            '_metadata': {
+                                'cost_status_counts': {'missing': 1},
+                                'cost_exclusions': {'provider_cost_not_recorded': 1},
+                            },
+                        }
+                    }
+                }
+            )
+        ]
+    )
+    user_ref = MagicMock()
+    user_ref.collection.return_value = query
+    client = MagicMock()
+    client.collection.return_value.document.return_value = user_ref
+
+    report = user_usage.get_usage_by_plan('uid', now=NOW, firestore_client=client)
+
+    assert report['plus']['questions'] == 2
+    assert report['plus']['transcription_seconds'] == 120
+    assert report['plus']['cost_usd'] is None
+    assert report['plus']['cost_status'] == 'missing'
+    assert report['plus']['cost_exclusions']['provider_cost_not_recorded'] == 1
 
 
 # ---------------------------------------------------------------------------

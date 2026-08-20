@@ -161,6 +161,15 @@ def test_typed_allocations_preserve_open_product_decisions():
 def test_measurement_contract_makes_cost_visibility_explicit():
     assert MEASUREMENT_CONTRACTS['chat']['cost_status'] == 'partial'
     assert MEASUREMENT_CONTRACTS['transcription']['cost_status'] == 'missing'
+    assert (
+        'backend/database/llm_usage.py:plan_usage.<plan_id>.*.cost_usd' in MEASUREMENT_CONTRACTS['chat']['cost_source']
+    )
+    assert (
+        'backend/database/llm_gateway_accounting.py:estimated_cost_micro_usd'
+        in MEASUREMENT_CONTRACTS['chat']['cost_source']
+    )
+    assert 'BYOK provider cost is explicitly excluded' in MEASUREMENT_CONTRACTS['chat']['limitation']
+    assert 'BYOK cost are explicitly excluded' in MEASUREMENT_CONTRACTS['transcription']['limitation']
 
     errors = validate_publishable_catalog(load_catalog())
     assert 'publishable: basic.transcription still requires B1' in errors
