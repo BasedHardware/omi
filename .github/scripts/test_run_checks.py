@@ -198,12 +198,14 @@ class ManifestContractTests(unittest.TestCase):
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
-        # #9744: main pushes must pass the merge-commit body through
-        # --pr-body-file (not --skip-pr-body-checks), so product-invariants can
-        # see the citations GitHub folds into the merge commit message. This
-        # assertion is the wiring regression guard for that path.
+        # #9744: main pushes must pass a body through --pr-body-file (not
+        # --skip-pr-body-checks). #11835: the body must be the squash commit
+        # message PLUS the live merged PR body, because this repo squashes
+        # with the commit list rather than the PR description.
         self.assertNotIn("--skip-pr-body-checks", workflow)
         self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
+        self.assertRegex(workflow, r"pr_metadata\.py")
+        self.assertRegex(workflow, r"--from-commit-body-file")
         self.assertRegex(workflow, r"--pr-body-file")
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
