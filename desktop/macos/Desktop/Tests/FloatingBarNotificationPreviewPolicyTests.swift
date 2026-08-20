@@ -172,8 +172,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       DefaultsKey.automationOwnerOverride.rawValue,
       NotificationService.masterEnabledDefaultsKey,
       NotificationService.frequencyDefaultsKey,
-      "desktop_isPaywalled",
-      "askOmiBarEnabled",
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      DefaultsKey.askOmiBarEnabled.rawValue,
     ]
     let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
     let savedFocusEnabled = SuggestionAssistantSettings.shared.isEnabled
@@ -195,8 +195,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
-    defaults.set(false, forKey: "desktop_isPaywalled")
-    defaults.set(true, forKey: "askOmiBarEnabled")
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
     ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
     SuggestionAssistantSettings.shared.isEnabled = false
     let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
@@ -234,8 +234,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       DefaultsKey.automationOwnerOverride.rawValue,
       NotificationService.masterEnabledDefaultsKey,
       NotificationService.frequencyDefaultsKey,
-      "desktop_isPaywalled",
-      "askOmiBarEnabled",
+      DefaultsKey.desktopIsPaywalled.rawValue,
+      DefaultsKey.askOmiBarEnabled.rawValue,
     ]
     let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
     let savedFocusEnabled = SuggestionAssistantSettings.shared.isEnabled
@@ -259,8 +259,8 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     defaults.removeObject(forKey: DefaultsKey.automationOwnerOverride.rawValue)
     defaults.set(true, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(5, forKey: NotificationService.frequencyDefaultsKey)
-    defaults.set(false, forKey: "desktop_isPaywalled")
-    defaults.set(true, forKey: "askOmiBarEnabled")
+    defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
+    defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
     ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
     SuggestionAssistantSettings.shared.isEnabled = false
     TaskAssistantSettings.shared.notificationsEnabled = false

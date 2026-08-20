@@ -2619,7 +2619,7 @@ enum OwnerBoundNotificationPresentationResult: Equatable {
 class FloatingControlBarManager {
   static let shared = FloatingControlBarManager()
 
-  private static let kAskOmiEnabled = "askOmiBarEnabled"
+  private static let kAskOmiEnabled = DefaultsKey.askOmiBarEnabled.rawValue
   private static let kSnoozedUntil = "floatingBar_snoozedUntil"
   private static let recentNotificationReuseInterval: TimeInterval = 60
   private static let durableProvenanceReuseInterval: TimeInterval = 30 * 24 * 60 * 60
