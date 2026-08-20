@@ -753,11 +753,9 @@ def get_messages(
             logger.info(f"  - Message {m.get('id')}: rating={m.get('rating')}")
 
     if not messages:
-        if offset > 0:
-            return []
         # The greeting belongs to the session that was read, not to whatever
         # session `acquire_chat_session` would pick for the app.
-        return [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
+        return [] if offset > 0 else [initial_message_util(uid, compat_app_id, chat_session_id=chat_session_id)]
     return messages
 
 
