@@ -469,6 +469,14 @@ extension APIClient {
       body: EmptyBody())
   }
 
+  /// Reprocess a conversation through the default pipeline (no specific app).
+  /// Returns the refreshed conversation, which now has a regenerated title
+  /// and structured payload.
+  func reprocessConversation(conversationId: String) async throws -> ServerConversation {
+    return try await post(
+      "v1/conversations/\(conversationId)/reprocess", body: EmptyBody())
+  }
+
   private struct EmptyBody: Encodable {}
 
   /// Sets the user's preferred summarization app; the backend keys future

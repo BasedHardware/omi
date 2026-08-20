@@ -23,10 +23,7 @@ const Duration startupAuthTimeout = Duration(seconds: 10);
 ///
 /// Not test-only: called from [main] to gate the first frame, and directly by
 /// startup_auth_timeout_test.dart.
-Future<bool> resolveStartupAuth(
-  Future<String?> Function() getIdToken, {
-  Duration timeout = startupAuthTimeout,
-}) async {
+Future<bool> resolveStartupAuth(Future<String?> Function() getIdToken, {Duration timeout = startupAuthTimeout}) async {
   // A race rather than Future.timeout(onTimeout:). `onTimeout` must return the
   // *concrete* future's type, so if the supplied callback happens to produce a
   // Future<String> rather than Future<String?>, `() => null` throws a TypeError

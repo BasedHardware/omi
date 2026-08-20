@@ -549,8 +549,9 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
-        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)],
-            sharePositionOrigin: shareSheetOrigin(_shareButtonKey));
+        await Share.shareXFiles([
+          XFile(file.path, mimeType: mimeType),
+        ], sharePositionOrigin: shareSheetOrigin(_shareButtonKey));
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;

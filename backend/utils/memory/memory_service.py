@@ -457,11 +457,22 @@ class HistoricalMemoryAdapter:
         return value
 
     @staticmethod
-    def _historical_memory(raw: MemoryPayload, *, include_locked_content: bool = False) -> MemoryDB:
+    def _historical_memory(
+        raw: MemoryPayload,
+        *,
+        include_locked_content: bool = False,
+        uid: Optional[str] = None,
+    ) -> MemoryDB:
         # Missing visibility is a compatibility case.  Public is the released
         # legacy default and is therefore retained for old documents.
         payload = memory_api_payload(raw, MemoryApiExposure.LEGACY)
         payload.setdefault("visibility", "public")
+        # Historical rows live under ``users/{uid}/memories/{id}`` and a legacy
+        # cohort never stored the redundant ``uid`` field, which ``MemoryDB``
+        # requires.  The owning path is the authority for it, so fall back to
+        # it instead of dropping the row during Pydantic validation.
+        if uid is not None:
+            payload.setdefault("uid", uid)
         # A few early historical documents predate ``updated_at``.  Keep those
         # rows readable and let every sort surface use the same creation-time
         # fallback instead of dropping the row during Pydantic validation.
@@ -487,7 +498,7 @@ class HistoricalMemoryAdapter:
         if not isinstance(memory_id, str) or not memory_id.strip():
             return None
         try:
-            memory = cls._historical_memory(raw, include_locked_content=include_locked_content)
+            memory = cls._historical_memory(raw, include_locked_content=include_locked_content, uid=uid)
         except ValidationError as exc:
             # Never log ValidationError.__str__ — it embeds input_value (memory content).
             logger.warning(
@@ -1346,6 +1357,13 @@ class MemoryService:
     apply is the sole write authority; historical documents are a bounded,
     protected read adapter and only a cleanup target after canonical commit.
     """
+
+    def _invalidate_prompt_cache(self, uid: str) -> None:
+        try:
+            from utils.llms.memory import clear_prompt_data_cache
+        except ImportError:
+            return
+        clear_prompt_data_cache(uid)
 
     def __init__(self, *, db_client: Any = None):
         self.db_client = db_client
@@ -2319,11 +2337,15 @@ class MemoryService:
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
-        return self._canonical.write(uid, data)
+        result = self._canonical.write(uid, data)
+        self._invalidate_prompt_cache(uid)
+        return result
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
         self.ensure_canonical_mutation_ready(uid)
-        return self._canonical.write_batch(uid, items)
+        result = self._canonical.write_batch(uid, items)
+        self._invalidate_prompt_cache(uid)
+        return result
 
     def _materialize_legacy(self, uid: str, memory_id: str) -> MemoryDB:
         status = self._canonical_status(uid, memory_id)
@@ -2382,6 +2404,7 @@ class MemoryService:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
         return updated
 
     def refine(self, uid: str, memory_id: str, arg_changes: Dict[str, Any]) -> MemoryDB:
@@ -2393,6 +2416,7 @@ class MemoryService:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
         return memory_item_to_memorydb(updated)
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
@@ -2401,6 +2425,7 @@ class MemoryService:
         self._canonical.update_visibility(uid, memory_id, visibility)
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:
         self.ensure_canonical_mutation_ready(uid)
@@ -2408,6 +2433,7 @@ class MemoryService:
         self._canonical.review(uid, memory_id, value)
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
 
     def update_product_fields(
         self,
@@ -2433,6 +2459,7 @@ class MemoryService:
         )
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
         return updated
 
     def update_read_status(
@@ -2488,6 +2515,7 @@ class MemoryService:
             # is the authoritative privacy tombstone.
         self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
         HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
 
     def delete_batch(self, uid: str, memory_ids: List[str]) -> None:
         """Delete canonical and historical memories with all-or-nothing validation.
@@ -2561,6 +2589,8 @@ class MemoryService:
         for memory_id in historical_ids:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
 
+        self._invalidate_prompt_cache(uid)
+
     def delete_all(self, uid: str) -> None:
         historical_ids = self.history.ids(uid, db_client=self.db_client)
         # Commit the historical privacy fence before canonical cleanup. A retry
@@ -2570,12 +2600,14 @@ class MemoryService:
         # Cleanup is intentionally after canonical tombstones and is never the
         # success condition.  The protected adapter remains read-only.
         self.history.cleanup_all(uid, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
 
     def delete_default(self, uid: str) -> None:
         historical_ids = self.history.ids(uid, db_client=self.db_client)
         self._write_historical_overrides(uid, historical_ids, MemoryItemStatus.tombstoned)
         self._canonical.delete_default(uid)
         self.history.cleanup_all(uid, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
 
     def retract_conversation_memories(
         self,
@@ -2638,7 +2670,9 @@ class MemoryService:
         require_canonical_promotion: bool = True,
     ) -> MemoryDB:
         del memory_system, operation, upsert_vector, require_canonical_promotion
-        return self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        self._invalidate_prompt_cache(uid)
+        return result
 
     def create_external_memory_batch(
         self,
@@ -2668,6 +2702,7 @@ class MemoryService:
                 )
             results.append(memory_item_to_memorydb(item))
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
+        self._invalidate_prompt_cache(uid)
         return results
 
     def delete_external_memory(
@@ -2711,6 +2746,7 @@ class MemoryService:
                 )
         self._write_historical_override(uid, memory_id, MemoryItemStatus.tombstoned)
         HistoricalMemoryAdapter.cleanup(uid, memory_id, delete_vector=False, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
 
     def update_external_memory_content(
         self,
@@ -2732,4 +2768,5 @@ class MemoryService:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if materialized:
             HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
+        self._invalidate_prompt_cache(uid)
         return updated

@@ -21,6 +21,8 @@ typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)>
   int? page,
   int? limit,
   required bool includeDiscarded,
+  DateTime? startDate,
+  DateTime? endDate,
   String? speakerId,
 });
 typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
@@ -53,6 +55,9 @@ class ConversationProvider extends ChangeNotifier {
   DateTime? selectedEndDate;
   String? selectedFolderId;
   String? selectedSpeakerId;
+
+  DateTime? searchStartDate;
+  DateTime? searchEndDate;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -181,6 +186,8 @@ class ConversationProvider extends ChangeNotifier {
     selectedEndDate = null;
     selectedFolderId = null;
     selectedSpeakerId = null;
+    searchStartDate = null;
+    searchEndDate = null;
     previousQuery = '';
     totalSearchPages = 1;
     currentSearchPage = 1;
@@ -229,6 +236,8 @@ class ConversationProvider extends ChangeNotifier {
     var (convos, current, total) = await _conversationSearchFetcher(
       query,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
@@ -263,6 +272,8 @@ class ConversationProvider extends ChangeNotifier {
       previousQuery,
       page: currentSearchPage + 1,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
       speakerId: selectedSpeakerId,
     );
     if (generation != _sessionGeneration || !_isSignedIn()) return;
@@ -614,8 +625,10 @@ class ConversationProvider extends ChangeNotifier {
             .map((conversation) => conversation.id)
             .toSet();
         conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations)
-            .where((conversation) =>
-                !activeProcessingIds.contains(conversation.id) && _matchesActiveConversationFilters(conversation))
+            .where(
+              (conversation) =>
+                  !activeProcessingIds.contains(conversation.id) && _matchesActiveConversationFilters(conversation),
+            )
             .toList();
       }
       if (searchedConversations.isEmpty) {
@@ -701,8 +714,10 @@ class ConversationProvider extends ChangeNotifier {
           .map((conversation) => conversation.id)
           .toSet();
       conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations)
-          .where((conversation) =>
-              !activeProcessingIds.contains(conversation.id) && _matchesActiveConversationFilters(conversation))
+          .where(
+            (conversation) =>
+                !activeProcessingIds.contains(conversation.id) && _matchesActiveConversationFilters(conversation),
+          )
           .toList();
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
@@ -802,6 +817,25 @@ class ConversationProvider extends ChangeNotifier {
 
       return true;
     }).toList();
+  }
+
+  /// Set search date range (start and end). Null = no limit on that side.
+  ///
+  /// Dates are normalized to day boundaries so the selected final calendar day
+  /// is included: [start] is set to the start of its day (00:00:00) and [end]
+  /// is set to the end of its day (23:59:59.999), matching how the server
+  /// interprets the ISO-8601 bounds.
+  void setSearchDateRange(DateTime? start, DateTime? end) {
+    searchStartDate = start != null ? DateTime(start.year, start.month, start.day) : null;
+    searchEndDate = end != null ? DateTime(end.year, end.month, end.day, 23, 59, 59, 999) : null;
+    notifyListeners();
+  }
+
+  /// Clear the search date range filter
+  void clearSearchDateRange() {
+    searchStartDate = null;
+    searchEndDate = null;
+    notifyListeners();
   }
 
   /// Filter conversations by a date range (inclusive of both start and end day)
@@ -1090,7 +1124,8 @@ class ConversationProvider extends ChangeNotifier {
     _conversationServerLoadedIds.addAll(newConversations.map((conversation) => conversation.id));
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     conversations.addAll(
-        _filterPendingDeletes(newConversations).where((conversation) => !existingIds.contains(conversation.id)));
+      _filterPendingDeletes(newConversations).where((conversation) => !existingIds.contains(conversation.id)),
+    );
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     setLoadingConversations(false);
@@ -1256,43 +1291,48 @@ class ConversationProvider extends ChangeNotifier {
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
     final deleteFuture =
         conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId);
-    unawaited(deleteFuture.then((succeeded) {
-      // A DELETE can outlive sign-out/account switching. Its result belongs
-      // to the session that started it; never let an old account mutate the
-      // new provider's tombstones, cursor, revision, or loading state.
-      if (generation != _sessionGeneration) return;
-      // Only rebase the server cursor after the backend confirms deletion. A
-      // failed DELETE leaves the row in the server sequence and must not make
-      // the next page skip an item.
-      if (succeeded && wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
-        if (_conversationServerOffset > 0) _conversationServerOffset--;
-      }
-      if (succeeded) {
-        final invalidatedRevision = _conversationFetchRevision;
-        _conversationFetchRevision++;
-        if (_conversationLoadingRevision == invalidatedRevision) {
-          setLoadingConversations(false);
-        }
-      }
-      // Keep the tombstone in place until the request settles so a concurrent
-      // refresh cannot reinsert the server row before DELETE completes.
-      if (succeeded) {
-        conversations.removeWhere((conversation) => conversation.id == conversationId);
-        searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
-        for (final group in groupedConversations.values) {
-          group.removeWhere((conversation) => conversation.id == conversationId);
-        }
-        groupedConversations.removeWhere((_, group) => group.isEmpty);
-      }
-      _clearDeleteTombstone(conversationId);
-      notifyListeners();
-    }, onError: (Object _, StackTrace __) {
-      // Match the prior behavior on a failed request: release the local
-      // tombstone, but do not rebase the server cursor.
-      if (generation != _sessionGeneration) return;
-      _clearDeleteTombstone(conversationId);
-      notifyListeners();
-    }));
+    unawaited(
+      deleteFuture.then(
+        (succeeded) {
+          // A DELETE can outlive sign-out/account switching. Its result belongs
+          // to the session that started it; never let an old account mutate the
+          // new provider's tombstones, cursor, revision, or loading state.
+          if (generation != _sessionGeneration) return;
+          // Only rebase the server cursor after the backend confirms deletion. A
+          // failed DELETE leaves the row in the server sequence and must not make
+          // the next page skip an item.
+          if (succeeded && wasLoadedFromServer && _conversationServerLoadedIds.remove(conversationId)) {
+            if (_conversationServerOffset > 0) _conversationServerOffset--;
+          }
+          if (succeeded) {
+            final invalidatedRevision = _conversationFetchRevision;
+            _conversationFetchRevision++;
+            if (_conversationLoadingRevision == invalidatedRevision) {
+              setLoadingConversations(false);
+            }
+          }
+          // Keep the tombstone in place until the request settles so a concurrent
+          // refresh cannot reinsert the server row before DELETE completes.
+          if (succeeded) {
+            conversations.removeWhere((conversation) => conversation.id == conversationId);
+            searchedConversations.removeWhere((conversation) => conversation.id == conversationId);
+            for (final group in groupedConversations.values) {
+              group.removeWhere((conversation) => conversation.id == conversationId);
+            }
+            groupedConversations.removeWhere((_, group) => group.isEmpty);
+          }
+          _clearDeleteTombstone(conversationId);
+          notifyListeners();
+        },
+        onError: (Object _, StackTrace __) {
+          // Match the prior behavior on a failed request: release the local
+          // tombstone, but do not rebase the server cursor.
+          if (generation != _sessionGeneration) return;
+          _clearDeleteTombstone(conversationId);
+          notifyListeners();
+        },
+      ),
+    );
   }
 
   void _clearDeleteTombstone(String conversationId) {

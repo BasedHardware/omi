@@ -68,10 +68,10 @@ extension SettingsContentView {
 
             // Sits under the master toggle and the frequency slider because both gate it:
             // frequency caps how often any proactive card is delivered, and this decides
-            // whether live suggestions are generated at all.
+            // whether focus nudges are generated at all.
             settingRow(
-              title: "Live Suggestions",
-              subtitle: "Suggest things in the notch, using what Omi already knows",
+              title: "Focus Notifications",
+              subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
               settingId: "notifications.livesuggestions"
             ) {
               Toggle("", isOn: $liveSuggestionsEnabled)

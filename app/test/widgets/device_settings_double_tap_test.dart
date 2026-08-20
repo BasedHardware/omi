@@ -51,10 +51,7 @@ Widget _app(DeviceProvider provider) {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: AppLocalizations.supportedLocales,
-    home: ChangeNotifierProvider<DeviceProvider>.value(
-      value: provider,
-      child: const DeviceSettings(),
-    ),
+    home: ChangeNotifierProvider<DeviceProvider>.value(value: provider, child: const DeviceSettings()),
   );
 }
 

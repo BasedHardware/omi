@@ -25,9 +25,6 @@ let package = Package(
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
-    // FluidAudio removed the v0.14.8+ tags that its semantic requirement used.
-    // Keep the audited Package.resolved source revision without re-resolving it
-    // against the now-truncated upstream tag set.
     .package(
       url: "https://github.com/FluidInference/FluidAudio.git",
       revision: "19600a485baa4998812e4654b70d2bab8f2c9949"

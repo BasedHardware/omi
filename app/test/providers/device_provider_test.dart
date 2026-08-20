@@ -164,6 +164,8 @@ void main() {
             rssiTrend: 'falling',
           ),
         ],
+        nativeBackgroundBytesConsumed: 0,
+        nativeBackgroundPacketsConsumed: 0,
         reconnectionCount: 0,
         connectedAt: 0,
         failToConnectCount: 0,

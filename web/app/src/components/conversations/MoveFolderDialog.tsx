@@ -49,7 +49,7 @@ export function MoveFolderDialog({
               'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
               'w-full max-w-sm p-6 rounded-2xl',
               'bg-bg-secondary border border-bg-tertiary',
-              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
+              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
             )}
           >
             {/* Close button */}
@@ -60,18 +60,20 @@ export function MoveFolderDialog({
                 'absolute top-4 right-4 p-2 rounded-lg',
                 'text-text-quaternary hover:text-text-primary',
                 'hover:bg-bg-tertiary transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <X className="w-4 h-4" />
             </button>
 
             {/* Icon */}
-            <div className={cn(
-              'w-12 h-12 rounded-xl mb-4',
-              'bg-purple-primary/20 flex items-center justify-center'
-            )}>
-              <FolderInput className="w-6 h-6 text-purple-primary" />
+            <div
+              className={cn(
+                'w-12 h-12 rounded-xl mb-4',
+                'bg-white/[0.14] flex items-center justify-center',
+              )}
+            >
+              <FolderInput className="w-6 h-6 text-text-primary" />
             </div>
 
             {/* Title */}
@@ -95,7 +97,7 @@ export function MoveFolderDialog({
                       'w-full flex items-center gap-3 px-4 py-3 rounded-xl',
                       'bg-bg-tertiary hover:bg-bg-quaternary',
                       'transition-colors duration-150',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     <span className="text-xl">{folder.emoji || '📁'}</span>
@@ -108,7 +110,7 @@ export function MoveFolderDialog({
                       </span>
                     )}
                     {loadingFolderId === folder.id && (
-                      <Loader2 className="w-4 h-4 animate-spin text-purple-primary" />
+                      <Loader2 className="w-4 h-4 animate-spin text-text-primary" />
                     )}
                   </button>
                 ))
@@ -124,10 +126,10 @@ export function MoveFolderDialog({
               disabled={isLoading}
               className={cn(
                 'w-full flex items-center gap-3 px-4 py-3 rounded-xl',
-                'bg-purple-primary/10 hover:bg-purple-primary/20',
-                'text-purple-primary',
+                'bg-white/[0.08] hover:bg-white/[0.14]',
+                'text-text-primary',
                 'transition-colors duration-150',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               <Plus className="w-5 h-5" />
@@ -143,7 +145,7 @@ export function MoveFolderDialog({
                 'text-sm font-medium text-text-secondary',
                 'bg-bg-tertiary hover:bg-bg-quaternary',
                 'transition-colors duration-150',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
               Cancel

@@ -7,6 +7,32 @@ enum ConversationDetailPane: Equatable {
   case transcript
 }
 
+struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
+  let isProcessing: Bool
+  let banner: Banner
+  let content: Content
+
+  init(
+    isProcessing: Bool,
+    @ViewBuilder banner: () -> Banner,
+    @ViewBuilder content: () -> Content
+  ) {
+    self.isProcessing = isProcessing
+    self.banner = banner()
+    self.content = content()
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+      if isProcessing {
+        banner
+      }
+      content
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
   let conversation: ServerConversation
@@ -148,20 +174,16 @@ struct ConversationDetailView: View {
               .padding(.vertical, OmiSpacing.sm)
               .background(Ink.rowFillHover.opacity(0.4))
 
-              VStack(alignment: .leading, spacing: OmiSpacing.xxl) {
+              ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+                deferredProcessingSection
+                  .allowsHitTesting(false)
+              } content: {
                 summaryContent
               }
               .padding(OmiSpacing.xxl)
             }
             .glassCard(cornerRadius: OmiChrome.controlRadius)
             .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius))
-            .overlay(alignment: .top) {
-              if isEnrichingDeferred {
-                deferredProcessingSection
-                  .padding(OmiSpacing.xxl)
-                  .allowsHitTesting(false)
-              }
-            }
             .padding(OmiSpacing.xxl)
           }
           .glassScrollFade()
@@ -331,10 +353,12 @@ struct ConversationDetailView: View {
       // Title + timestamp subtitle
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(displayConversation.title)
+          Text(displayConversation.displayTitle)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(Ink.primary)
+            .foregroundColor(detailTitleColor)
             .lineLimit(1)
+
+          ConversationStatusBadge(state: displayConversation.displayState)
 
           // Edit title button (inline with title)
           Button(action: {
@@ -355,11 +379,6 @@ struct ConversationDetailView: View {
       }
 
       Spacer()
-
-      // Status badge
-      if displayConversation.status != .completed {
-        statusBadge
-      }
 
       // View Transcript pill button
       viewTranscriptButton
@@ -560,30 +579,13 @@ struct ConversationDetailView: View {
     }
   }
 
-  private var statusBadge: some View {
-    Text(displayConversation.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(statusColor)
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xxs)
-      .background(
-        Capsule()
-          .fill(statusColor.opacity(0.2))
-      )
-  }
-
-  private var statusColor: Color {
-    switch displayConversation.status {
-    case .completed:
-      return Ink.listeningGreen
-    case .processing, .merging:
-      // Neutral: "working" is not a state with something to do about it, and the accent is
-      // already spent. Green/orange/red carry the states that are.
-      return Ink.secondary
-    case .inProgress:
-      return PageGlass.warning
-    case .failed:
-      return Ink.errorRed
+  /// Title color in the header — dim placeholder titles (Processing /
+  /// Locked / Untitled) so they read as secondary text rather than as the
+  /// real title of the conversation.
+  private var detailTitleColor: Color {
+    switch displayConversation.displayState {
+    case .titled: return Ink.primary
+    default: return Ink.secondary
     }
   }
 

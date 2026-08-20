@@ -34,5 +34,5 @@ def test_external_memory_surfaces_use_exposure_aware_projection_before_returning
     # compatibility adapter; external writes must enter canonical authority.
     external_writes = memory_service_source[memory_service_source.index('def create_external_memory(') :]
     assert 'memory_write_payload(' not in external_writes
-    assert 'return self._canonical_write(' in external_writes
+    assert '_canonical_write(' in external_writes
     assert 'self._canonical.write_batch(' in external_writes

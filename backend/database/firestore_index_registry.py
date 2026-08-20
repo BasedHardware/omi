@@ -584,6 +584,26 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CURRENT_CHAT_SESSION_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_current_by_app',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    # No `created_at` ordering: Firestore omits documents that lack the ordered
+    # field, and a chat session with no timestamp is representable, so ordering
+    # in the query would hide a user's existing sessions. The caller reads this
+    # filter and picks the newest itself.
+    index_fields=(_asc('plugin_id'), _asc('__name__')),
+)
+
+CURRENT_CHAT_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
+    identifier='chat_sessions_current_by_app_created_at',
+    collection_group='chat_sessions',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
+    index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_meeting_receipts_due',
     collection_group='conversation_finalization_jobs',
@@ -627,6 +647,8 @@ QUERY_SPECS = (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
+    CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
 
@@ -679,17 +701,26 @@ INDEX_REQUIREMENTS = (
 
 
 # Firestore auto-indexes every field of every document in both directions unless a field is
-# explicitly exempted. For large text fields that no query ever filters or orders on, that index
-# is pure storage cost: measured on `screen_activity`, single-field index bytes were roughly three
-# times the document bytes, and the `ocrText` index alone was the majority of the collection.
-# `ocrText` is only ever read back and rendered; semantic search runs on Pinecone vectors, not on
-# Firestore. Exempting a field only removes single-field indexes — composite indexes declared
-# above are unaffected, so a field named in a composite index can still appear here.
+# explicitly exempted. For text fields that no query ever filters or orders on, that index is pure
+# storage cost: measured on prod `screen_activity` (964,964 documents, mean 1,052 B), the four
+# originally declared fields carried roughly 2.75x the document bytes in index entries, matching
+# the earlier "about three times" estimate.
+#
+# Only the two text fields are exempted, and the split is deliberate. `ocrText` (mean 899 B, capped
+# at 1,000 characters on write) is ~71% of that index cost and `windowTitle` ~10%; both are only
+# ever read back and rendered, since semantic search runs on Pinecone vectors rather than Firestore.
+# `deviceName` (11 B) and `clientDeviceId` (14 B) are together ~19% of an already small number --
+# under ten cents a month at current volume -- and are the one plausible future filter here:
+# utils/memory/device_scope_filter.py already scopes by device in Python, and pushing that down to
+# a Firestore filter would fail with FAILED_PRECONDITION against a disabled index. Re-enabling has
+# no scripted path (the reconcile workflow is disable-only) and forces a full collection-group
+# backfill, so they stay indexed.
+#
+# Exempting a field only removes single-field indexes — composite indexes declared above are
+# unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
-    ('screen_activity', 'deviceName'),
-    ('screen_activity', 'clientDeviceId'),
 )
 
 

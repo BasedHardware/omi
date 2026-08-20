@@ -27,6 +27,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDirectorRetrieval.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextFactWritePolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/EnvironmentalSpeakerContext.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextSubjectBindingService.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextTitleNormalizer.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextVisitCoordinator.swift
