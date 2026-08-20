@@ -347,13 +347,10 @@ def send_message(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    # Hard cap: Free by question count, Architect by cost_usd. Operator enters
-    # overage mode silently. If exceeded, instead of raising 402 (which mobile
-    # clients render as a generic "having issues with the server" error), save
-    # a canned AI reply and emit it as an SSE `done:` chunk — matching the
-    # streaming contract this endpoint already uses — so mobile parses it like
-    # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
-    # never reaches here when over.
+    # Catalog hard-cap exhaustion is returned as a canned AI reply instead of a
+    # raw 402 (which older mobile clients render as a generic server error).
+    # Catalog overage plans return normally. Desktop pre-checks via
+    # /v1/users/me/usage-quota and never reaches this path when over.
     try:
         enforce_chat_quota(uid, platform=x_app_platform)
     except HTTPException as exc:

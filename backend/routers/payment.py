@@ -17,6 +17,7 @@ from database import (
     action_items as action_items_db,
 )
 from database.redis_db import set_credits_invalidation_signal
+from config.plan_catalog import plan_uses_overage
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -57,7 +58,6 @@ from utils.overage import (
     PROVIDER_REFERENCE_RATES,
     build_explainer_text,
     get_user_overage,
-    is_overage_plan,
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -544,7 +544,7 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     return OverageInfoResponse(
         plan=subscription_utils.get_plan_display_name(plan),
         plan_type=plan.value,
-        is_overage_plan=is_overage_plan(plan),
+        is_overage_plan=plan_uses_overage(plan),
         included_questions=snapshot['included_questions'],
         included_cost_usd=snapshot.get('included_cost_usd'),
         used_questions=snapshot['used_questions'],

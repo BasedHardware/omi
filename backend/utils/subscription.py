@@ -20,6 +20,7 @@ from config.plan_catalog import (
     PRIMARY_BILLING_ENV_VARS,
     RECOGNIZED_STRIPE_PRICE_INTERVALS,
     allocation_limit,
+    get_plan_allocation,
     plan_uses_overage,
     resolve_stripe_price_plan,
 )
@@ -439,8 +440,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "plan_type": PlanType.unlimited,
             "plan_id": "unlimited",
             "title": "Neo",
-            "subtitle": f"{NEO_CHAT_QUESTIONS_PER_MONTH} questions per month",
-            "description": f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
+            "subtitle": f"{_chat_allowance_text(PlanType.unlimited)}",
+            "description": f"{_chat_allowance_text(PlanType.unlimited)}. Shared with mobile and web.",
             "eyebrow": "Starter",
             "monthly_price_id": _configured_plan_price_id(PlanType.unlimited, 'month'),
             "annual_price_id": _configured_plan_price_id(PlanType.unlimited, 'year'),
@@ -451,8 +452,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "plan_type": PlanType.operator,
             "plan_id": "operator",
             "title": "Operator",
-            "subtitle": f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} questions per month",
-            "description": f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
+            "subtitle": f"{_chat_allowance_text(PlanType.operator)}",
+            "description": f"{_chat_allowance_text(PlanType.operator)}. Shared with mobile and web.",
             "eyebrow": "Most popular",
             "monthly_price_id": _configured_plan_price_id(PlanType.operator, 'month'),
             "annual_price_id": _configured_plan_price_id(PlanType.operator, 'year'),
@@ -475,8 +476,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "plan_type": PlanType.plus,
             "plan_id": "plus",
             "title": "Plus",
-            "subtitle": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
-            "description": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month.",
+            "subtitle": f"{_transcription_allowance_text(PlanType.plus)}",
+            "description": f"{_transcription_allowance_text(PlanType.plus)}.",
             "eyebrow": "For everyday use",
             "monthly_price_id": _configured_plan_price_id(PlanType.plus, 'month'),
             "annual_price_id": _configured_plan_price_id(PlanType.plus, 'year'),
@@ -815,25 +816,34 @@ def validate_stripe_price_ids():
                 )
 
 
-_BASIC_TIER_SECONDS_DEFAULT = allocation_limit(
-    PlanType.basic,
-    'transcription',
-    use_legacy_value_for_open_decision=True,
-)
+_BASIC_TIER_SECONDS_DEFAULT = allocation_limit(PlanType.basic, 'transcription')
 BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(
-    os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', str((_BASIC_TIER_SECONDS_DEFAULT or 0) // 60))
+    os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', str(_BASIC_TIER_SECONDS_DEFAULT // 60))
 )
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
-BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(
-    os.getenv(
-        'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', str(allocation_limit(PlanType.basic, 'words_transcribed') or 0)
-    )
-)
-BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(
-    os.getenv(
-        'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', str(allocation_limit(PlanType.basic, 'insights_gained') or 0)
-    )
-)
+
+
+def _catalog_or_legacy_basic_limit(allocation: str) -> Optional[int]:
+    """Return a catalog limit, preserving the temporary Basic env overlays.
+
+    D2 removes these per-service plan quota overlays. Until then, the catalog
+    remains the default and a configured overlay remains effective at runtime.
+    ``None`` is the only unlimited representation; zero is a finite zero.
+    """
+    catalog_value = allocation_limit(PlanType.basic, allocation)
+    legacy_env_names = {
+        'words_transcribed': 'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH',
+        'insights_gained': 'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH',
+    }
+    env_name = legacy_env_names.get(allocation)
+    if env_name is None:
+        return catalog_value
+    raw_value = os.getenv(env_name)
+    return int(raw_value) if raw_value is not None else catalog_value
+
+
+BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = _catalog_or_legacy_basic_limit('words_transcribed')
+BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = _catalog_or_legacy_basic_limit('insights_gained')
 
 # Fixed non-human UID the desktop-backend release probe signs in as
 # (`PROBE_UID` in backend/scripts/firebase_release_probe_token.py). Its chat turns
@@ -842,32 +852,86 @@ BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(
 # exhaust the Free allowance and every desktop-backend deploy fails with 402.
 RELEASE_PROBE_UID = 'omi-release-probe'
 
-# Chat caps per plan. Env-overridable for ops.
-FREE_CHAT_QUESTIONS_PER_MONTH = int(
-    os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.basic, 'chat')))
-)
-NEO_CHAT_QUESTIONS_PER_MONTH = int(
-    os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.unlimited, 'chat')))
-)
-OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(
-    os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.operator, 'chat')))
-)
-_ARCHITECT_CHAT_COST_CENTS_DEFAULT = allocation_limit(PlanType.architect, 'chat')
-ARCHITECT_CHAT_COST_USD_PER_MONTH = float(
-    os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', str((_ARCHITECT_CHAT_COST_CENTS_DEFAULT or 0) / 100))
-)
+def _effective_plan_limit(plan: PlanType, allocation: str) -> Optional[int]:
+    """Resolve a typed allocation from the catalog plus temporary legacy overlays."""
+    catalog_value = allocation_limit(plan, allocation)
+    if plan == PlanType.basic:
+        if allocation == 'transcription':
+            return BASIC_TIER_MONTHLY_SECONDS_LIMIT
+        return _catalog_or_legacy_basic_limit(allocation)
+    if plan == PlanType.plus and allocation == 'transcription':
+        raw_minutes = os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH')
+        return int(raw_minutes) * 60 if raw_minutes is not None else catalog_value
+    return catalog_value
 
-_PLUS_TIER_SECONDS_DEFAULT = allocation_limit(PlanType.plus, 'transcription')
-PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(
-    os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', str((_PLUS_TIER_SECONDS_DEFAULT or 0) // 60))
+
+def _legacy_chat_env_name(plan: PlanType, unit: str) -> str:
+    """Return the historical chat overlay name for a catalog plan/unit."""
+    prefix = {'basic': 'FREE', 'unlimited': 'NEO'}.get(plan.value, plan.value.upper())
+    if unit == 'question':
+        return f'{prefix}_CHAT_QUESTIONS_PER_MONTH'
+    if unit == 'usd_cent':
+        return 'ARCHITECT_CHAT_COST_USD_PER_MONTH'
+    raise ValueError(f'{plan.value}.chat has unsupported catalog unit {unit!r}')
+
+
+def _effective_chat_limit(plan: PlanType) -> Optional[int]:
+    """Return the catalog chat limit in its declared unit.
+
+    Chat env overlays are retained only as a migration bridge until D2 removes
+    plan quota values from service configuration. Reporting and admission both
+    call this helper, so an overlay cannot recreate the old B3 disagreement.
+    """
+    allocation = get_plan_allocation(plan, 'chat')
+    unit = allocation['unit']
+    catalog_value = allocation_limit(plan, 'chat')
+    env_name = _legacy_chat_env_name(plan, unit)
+    raw_value = os.getenv(env_name)
+    if raw_value is None:
+        return catalog_value
+    if unit == 'question':
+        return int(raw_value)
+    if unit == 'usd_cent':
+        return int(round(float(raw_value) * 100))
+    raise ValueError(f'{plan.value}.chat has unsupported catalog unit {unit!r}')
+
+
+def _chat_allowance_text(plan: PlanType) -> str:
+    allocation = get_plan_allocation(plan, 'chat')
+    limit = _effective_chat_limit(plan)
+    if allocation['unit'] == 'question':
+        if limit is None:
+            return 'Unlimited chat questions per month'
+        return f'{limit} questions per month'
+    if allocation['unit'] == 'usd_cent':
+        if limit is None:
+            return 'Unlimited AI compute per month'
+        return f'~${limit / 100:g} of monthly AI compute included'
+    raise ValueError(f'{plan.value}.chat has unsupported catalog unit {allocation["unit"]!r}')
+
+
+def _transcription_allowance_text(plan: PlanType) -> str:
+    limit = _effective_plan_limit(plan, 'transcription')
+    if limit is None:
+        return 'Unlimited transcription'
+    return f'{limit // 60:,} minutes of transcription per month'
+
+
+# Compatibility names for callers and fixtures still importing the old
+# projections. These are derived values, not plan policy sources; all runtime
+# decisions below resolve the catalog allocation through the helpers above.
+FREE_CHAT_QUESTIONS_PER_MONTH = _effective_chat_limit(PlanType.basic)
+NEO_CHAT_QUESTIONS_PER_MONTH = _effective_chat_limit(PlanType.unlimited)
+OPERATOR_CHAT_QUESTIONS_PER_MONTH = _effective_chat_limit(PlanType.operator)
+_architect_chat_cents = _effective_chat_limit(PlanType.architect)
+ARCHITECT_CHAT_COST_USD_PER_MONTH = None if _architect_chat_cents is None else _architect_chat_cents / 100.0
+PLUS_TIER_MONTHLY_SECONDS_LIMIT = _effective_plan_limit(PlanType.plus, 'transcription')
+PLUS_TIER_MINUTES_LIMIT_PER_MONTH = (
+    None if PLUS_TIER_MONTHLY_SECONDS_LIMIT is None else PLUS_TIER_MONTHLY_SECONDS_LIMIT // 60
 )
-PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
-PLUS_CHAT_QUESTIONS_PER_MONTH = int(
-    os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.plus, 'chat')))
-)
-UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(
-    os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.unlimited_v2, 'chat')))
-)
+PLUS_CHAT_QUESTIONS_PER_MONTH = _effective_chat_limit(PlanType.plus)
+UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = _effective_chat_limit(PlanType.unlimited_v2)
+
 
 # Features available during the 3-day desktop trial (matches paid-plan behavior).
 TRIAL_FEATURES = [
@@ -875,7 +939,7 @@ TRIAL_FEATURES = [
     'unlimited_transcription',
     'unlimited_memories',
     'unlimited_insights',
-    f'{FREE_CHAT_QUESTIONS_PER_MONTH}_chat_questions_per_month',
+    f'{_effective_chat_limit(PlanType.basic)}_chat_questions_per_month',
 ]
 
 
@@ -902,11 +966,14 @@ def get_chat_quota_snapshot(
     # past 30/mo.
     if is_trial_paywalled(uid, platform, firestore_client=firestore_client, provision=provision):
         usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
+        free_chat_limit = _effective_chat_limit(PlanType.basic)
+        if free_chat_limit is None:
+            raise ValueError('basic.chat must declare a finite question allowance for trial paywalling')
         return {
             'plan': PlanType.basic,
             'unit': 'questions',
-            'used': float(FREE_CHAT_QUESTIONS_PER_MONTH),
-            'limit': float(FREE_CHAT_QUESTIONS_PER_MONTH),
+            'used': float(free_chat_limit),
+            'limit': float(free_chat_limit),
             'allowed': False,
             'reset_at': usage['reset_at'],
         }
@@ -916,17 +983,22 @@ def get_chat_quota_snapshot(
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
 
-    if limits.chat_cost_usd_per_month is not None:
+    chat_unit = get_plan_allocation(plan, 'chat')['unit']
+    if chat_unit == 'usd_cent':
         unit = 'cost_usd'
         used = float(usage['cost_usd'])
-        limit_value = float(limits.chat_cost_usd_per_month)
-    else:
+        limit_value = (
+            None if limits.chat_cost_usd_per_month is None else float(limits.chat_cost_usd_per_month)
+        )
+    elif chat_unit == 'question':
         unit = 'questions'
         used = float(usage['questions'])
         limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+    else:
+        raise ValueError(f'{plan.value}.chat has unsupported catalog unit {chat_unit!r}')
 
     allowed = True
-    if limit_value is not None and limit_value > 0:
+    if limit_value is not None:
         allowed = used < limit_value
 
     return {
@@ -952,8 +1024,8 @@ def enforce_chat_quota(
     - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
       served and the excess accrues a charge. See ``utils.overage``.
     - Hard-capped plans: blocked → 402, which the chat endpoint converts into
-      a canned AI reply for mobile UX. B3 keeps Plus/Unlimited-v2 on this legacy
-      behavior until the owner decides their policy.
+      a canned AI reply for mobile UX. Plus and Unlimited-v2 are explicitly
+      hard-capped by the catalog.
     """
     # Release-probe traffic is the deploy gate proving the candidate can chat at
     # all — never paywall it, or the gate hard-blocks its own deploys once the
@@ -1049,12 +1121,7 @@ def is_desktop_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
 
 def get_basic_plan_limits() -> PlanLimits:
     """Returns the PlanLimits object for the basic (Free) tier."""
-    return PlanLimits(
-        transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-        words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-        insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-        chat_questions_per_month=FREE_CHAT_QUESTIONS_PER_MONTH,
-    )
+    return get_plan_limits(PlanType.basic)
 
 
 def get_default_basic_subscription() -> Subscription:
@@ -1063,50 +1130,30 @@ def get_default_basic_subscription() -> Subscription:
 
 
 def get_plan_limits(plan: PlanType) -> PlanLimits:
-    """Returns the PlanLimits object for the given plan.
+    """Return typed limits projected from the catalog allocation row.
 
-    Chat caps:
-      - Free: question count
-      - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
-      - Unlimited (legacy): question count (NEO_CHAT_QUESTIONS_PER_MONTH, default 200)
-      - Architect: dollar cap ($400/mo default)
+    ``None`` means the catalog explicitly declared ``kind=unlimited``. A
+    finite zero remains zero and is therefore enforced as exhausted.
     """
-    if plan == PlanType.operator:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_questions_per_month=OPERATOR_CHAT_QUESTIONS_PER_MONTH,
-        )
-    if plan == PlanType.unlimited:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_questions_per_month=NEO_CHAT_QUESTIONS_PER_MONTH,
-        )
-    if plan == PlanType.architect:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
-        )
-    if plan == PlanType.plus:
-        return PlanLimits(
-            transcription_seconds=PLUS_TIER_MONTHLY_SECONDS_LIMIT,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
-        )
-    if plan == PlanType.unlimited_v2:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_questions_per_month=UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH,
-        )
-    return get_basic_plan_limits()
+    plan = PlanType(plan)
+    chat_allocation = get_plan_allocation(plan, 'chat')
+    chat_limit = _effective_chat_limit(plan)
+    chat_questions: Optional[int] = None
+    chat_cost_usd: Optional[float] = None
+    if chat_allocation['unit'] == 'question':
+        chat_questions = chat_limit
+    elif chat_allocation['unit'] == 'usd_cent':
+        chat_cost_usd = None if chat_limit is None else chat_limit / 100.0
+    else:
+        raise ValueError(f'{plan.value}.chat has unsupported catalog unit {chat_allocation["unit"]!r}')
+
+    return PlanLimits(
+        transcription_seconds=_effective_plan_limit(plan, 'transcription'),
+        words_transcribed=_effective_plan_limit(plan, 'words_transcribed'),
+        insights_gained=_effective_plan_limit(plan, 'insights_gained'),
+        chat_questions_per_month=chat_questions,
+        chat_cost_usd_per_month=chat_cost_usd,
+    )
 
 
 def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
@@ -1118,87 +1165,67 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
                     omitting items already shown in the top-level highlights section.
                     If False, returns the full feature list (for desktop).
     """
-    if plan == PlanType.architect:
+    chat_feature = _chat_allowance_text(plan)
+    transcription_feature = _transcription_allowance_text(plan)
+    definition = get_plan_allocation(plan, 'transcription')
+
+    if get_plan_allocation(plan, 'chat')['unit'] == 'usd_cent':
         if simplified:
             return [
                 "Automations and vibe coding",
                 "Priority desktop AI features",
-                f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included",
+                chat_feature,
             ]
         return [
             "Automations and vibe coding",
             "Unlimited listening, memories, and insights",
             "Priority desktop AI features",
-            f"~${int(ARCHITECT_CHAT_COST_USD_PER_MONTH)} of monthly AI compute included",
+            chat_feature,
         ]
 
-    if plan == PlanType.operator:
+    if plan in (PlanType.operator, PlanType.unlimited):
         if simplified:
-            return [
-                f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-            ]
+            return [chat_feature]
         return [
-            f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            chat_feature,
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Available on Mac, mobile, and web",
+            "Available on Mac, mobile, and web"
+            if plan == PlanType.operator
+            else "Desktop capture with Free-tier allowance",
         ]
 
-    if plan == PlanType.unlimited:
-        if simplified:
-            return [
-                f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-            ]
+    if plan == PlanType.basic:
         return [
-            f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-            "Unlimited listening and transcription",
-            "Unlimited memories and insights",
-            "Desktop capture with Free-tier allowance",
+            f'{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month',
+            (
+                f'{BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH:,} words transcribed per month'
+                if BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH is not None
+                else 'Unlimited words transcribed'
+            ),
+            (
+                f'{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights per month'
+                if BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH is not None
+                else 'Unlimited insights'
+            ),
+            'Unlimited memories',
         ]
 
-    if plan == PlanType.plus:
+    if definition['limit']['kind'] == 'finite':
         if simplified:
             return [
-                f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
-                f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+                transcription_feature,
+                chat_feature,
             ]
         return [
-            f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
-            f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-            "Unlimited memories and insights",
-        ]
-
-    if plan == PlanType.unlimited_v2:
-        if simplified:
-            return [
-                "Unlimited transcription",
-                f"{UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
-            ]
-        return [
-            "Unlimited transcription",
-            f"{UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            transcription_feature,
+            chat_feature,
             "Unlimited memories and insights",
         ]
 
-    # Basic plan
-    return [
-        (
-            f"{BASIC_TIER_MINUTES_LIMIT_PER_MONTH} minutes of listening per month"
-            if BASIC_TIER_MINUTES_LIMIT_PER_MONTH > 0
-            else "Unlimited listening time"
-        ),
-        (
-            f"{BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH:,} words transcribed per month"
-            if BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH > 0
-            else "Unlimited words transcribed"
-        ),
-        (
-            f"{BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH:,} insights per month"
-            if BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH > 0
-            else "Unlimited insights"
-        ),
-        "Unlimited memories",
-    ]
+    if simplified:
+        return [transcription_feature, chat_feature]
+    return [transcription_feature, chat_feature, "Unlimited memories and insights"]
 
 
 def _has_active_stripe_subscription(uid: str) -> bool:
@@ -1425,8 +1452,9 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
 
     limits = get_plan_limits(subscription.plan)
 
-    # Paid and other unlimited-transcription plans do not need a monthly usage scan.
-    if not limits.transcription_seconds or limits.transcription_seconds <= 0:
+    # The catalog's explicit unlimited marker projects to None. A finite zero
+    # is a real zero allowance and must therefore fail closed.
+    if limits.transcription_seconds is None:
         return True
 
     usage = get_monthly_usage_for_subscription(uid)
@@ -1462,13 +1490,13 @@ def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) 
     else:
         # Resolve the plan's limits and let the transcription_seconds check below decide
         # unlimited-ness. Do NOT short-circuit on is_paid_plan(): Plus is a paid plan that
-        # still carries a bounded monthly transcription cap (PLUS_TIER_MONTHLY_SECONDS_LIMIT),
+        # still carries a bounded monthly transcription cap,
         # so treating every paid plan as unlimited leaked its cap and never triggered the
         # freemium on-device switch. This mirrors has_transcription_credits().
         limits = get_plan_limits(subscription.plan)
 
-    if not limits.transcription_seconds or limits.transcription_seconds <= 0:
-        return None  # Unlimited (limit is 0 or not set — operator/architect/neo/unlimited_v2)
+    if limits.transcription_seconds is None:
+        return None  # The catalog explicitly declared this allocation unlimited.
 
     usage = get_monthly_usage_for_subscription(uid)
     used_seconds = usage.get('transcription_seconds', 0)
