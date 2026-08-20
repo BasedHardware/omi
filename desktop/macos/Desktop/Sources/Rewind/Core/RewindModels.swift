@@ -525,8 +525,10 @@ class RewindSettings: ObservableObject {
     RewindPendingContextBucketPurgeJournal.enqueue(appName: appName, ownerID: ownerID)
     Task { @MainActor in
       do {
+        await Self.journalRetraction(appName: appName, ownerID: ownerID)
         _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
         RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+        await Self.retractPublishedBuckets(ownerID: ownerID)
       } catch {
         logError("RewindSettings: purge-on-exclude failed", error: error)
       }
@@ -537,8 +539,11 @@ class RewindSettings: ObservableObject {
   static func rearmPendingContextBucketPurgesForCurrentOwner() async {
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     let pending = RewindPendingContextBucketPurgeJournal.pending(ownerID: ownerID)
-    guard !pending.isEmpty else { return }
-    await retryPendingContextBucketPurges(pending, ownerID: ownerID)
+    if !pending.isEmpty {
+      await retryPendingContextBucketPurges(pending, ownerID: ownerID)
+    }
+    // A launch may inherit a retraction whose local purge already succeeded.
+    await retractPublishedBuckets(ownerID: ownerID)
   }
 
   private static func retryPendingContextBucketPurges(_ pending: Set<String>, ownerID: String) async {
@@ -547,11 +552,43 @@ class RewindSettings: ObservableObject {
     for appName in pending {
       guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
       do {
+        await Self.journalRetraction(appName: appName, ownerID: ownerID)
         _ = try await ContextBucketStore.shared.purgeExcludedApp(appName)
         RewindPendingContextBucketPurgeJournal.complete(appName: appName, ownerID: ownerID)
+        await Self.retractPublishedBuckets(ownerID: ownerID)
       } catch {
         logError("RewindSettings: deferred purge-on-exclude failed", error: error)
       }
+    }
+  }
+
+  /// Record which buckets will need retracting, before the local delete runs.
+  ///
+  /// The delete is irreversible and destroys the app-to-bucket mapping, so ids
+  /// captured after it are unrecoverable if the process dies in between. Only
+  /// journal when sync can actually drain the record: publishing is
+  /// dogfood-only, and an entry nothing will ever retract is a leak.
+  private static func journalRetraction(appName: String, ownerID: String) async {
+    guard await MainActor.run(body: { ContextBucketsFeature.isBackendSyncEnabled }) else { return }
+    let bucketIDs = await ContextBucketStore.shared.bucketIDsForExcludedApp(appName)
+    RewindPendingBucketRetractionJournal.enqueue(bucketIDs: bucketIDs, ownerID: ownerID)
+  }
+
+  /// Delete the backend's copies of buckets this device purged locally.
+  ///
+  /// Excluding an app is a privacy action, so it has to reach every copy. The
+  /// journal is cleared only once the server confirms the delete, so a failure
+  /// leaves work the next launch picks up rather than stranding the copies.
+  static func retractPublishedBuckets(ownerID: String) async {
+    guard await MainActor.run(body: { ContextBucketsFeature.isBackendSyncEnabled }) else { return }
+    let pending = RewindPendingBucketRetractionJournal.pending(ownerID: ownerID)
+    guard !pending.isEmpty else { return }
+    guard let fence = RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: ownerID) else { return }
+    do {
+      try await ContextBucketSyncClient.shared.purge(bucketIDs: Array(pending), authorizedBy: fence)
+      RewindPendingBucketRetractionJournal.complete(bucketIDs: pending, ownerID: ownerID)
+    } catch {
+      logError("RewindSettings: backend bucket retraction failed", error: error)
     }
   }
 
@@ -651,6 +688,72 @@ enum RewindPendingContextBucketPurgeJournal {
     guard !pending.isEmpty,
       let data = try? JSONEncoder().encode(pending)
     else {
+      defaults.removeObject(forKey: defaultsKey)
+      return
+    }
+    defaults.set(data, forKey: defaultsKey)
+  }
+}
+
+/// Bucket ids whose backend copies still need deleting after a local purge.
+///
+/// The local delete destroys the only record of which buckets an excluded app
+/// owned, so the ids have to outlive it. Owner-scoped for the same reason the
+/// purge journal is: a retraction belongs to the account that published it.
+enum RewindPendingBucketRetractionJournal {
+  private static let defaultsKey = "rewindPendingBucketRetractions"
+
+  private final class State: @unchecked Sendable {
+    let lock = NSLock()
+  }
+
+  private static let state = State()
+
+  static func enqueue(bucketIDs: Set<String>, ownerID: String) {
+    let ids = bucketIDs.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    guard !ids.isEmpty, !ownerID.isEmpty else { return }
+    withLock {
+      var pending = load()
+      pending[ownerID] = Array(Set(pending[ownerID] ?? []).union(ids)).sorted()
+      save(pending)
+    }
+  }
+
+  static func pending(ownerID: String) -> Set<String> {
+    withLock { Set(load()[ownerID] ?? []) }
+  }
+
+  static func complete(bucketIDs: Set<String>, ownerID: String) {
+    guard !bucketIDs.isEmpty, !ownerID.isEmpty else { return }
+    withLock {
+      var pending = load()
+      guard let ownerPending = pending[ownerID] else { return }
+      let remaining = Array(Set(ownerPending).subtracting(bucketIDs)).sorted()
+      if remaining.isEmpty {
+        pending.removeValue(forKey: ownerID)
+      } else {
+        pending[ownerID] = remaining
+      }
+      save(pending)
+    }
+  }
+
+  private static func withLock<T>(_ body: () -> T) -> T {
+    state.lock.lock()
+    defer { state.lock.unlock() }
+    return body()
+  }
+
+  private static func load() -> [String: [String]] {
+    guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+      let pending = try? JSONDecoder().decode([String: [String]].self, from: data)
+    else { return [:] }
+    return pending
+  }
+
+  private static func save(_ pending: [String: [String]]) {
+    let defaults = UserDefaults.standard
+    guard !pending.isEmpty, let data = try? JSONEncoder().encode(pending) else {
       defaults.removeObject(forKey: defaultsKey)
       return
     }

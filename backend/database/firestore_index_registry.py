@@ -584,6 +584,14 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
     ),
 )
 
+CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY = FirestoreQuerySpec(
+    identifier='context_bucket_facts_generation_updated',
+    collection_group='context_bucket_facts',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('account_generation', '==', 'account_generation'),),
+    index_fields=(_asc('account_generation'), _desc('updated_at'), _asc('__name__')),
+)
+
 QUERY_SPECS = (
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -610,6 +618,7 @@ QUERY_SPECS = (
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CONTEXT_BUCKET_FACTS_BY_GENERATION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)

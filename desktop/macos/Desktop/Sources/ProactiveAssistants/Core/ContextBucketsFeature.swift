@@ -157,5 +157,26 @@ enum ContextBucketsFeature {
     return false
   }
 
+  /// Publishes validated facts to the backend so chat, the phone app, and other
+  /// devices can read the same work memory this Mac captured.
+  ///
+  /// Only validated facts and bucket labels are published. Screenshots, quoted
+  /// screen text, narratives, and window titles never leave the device, so the
+  /// flag gates a projection of local state rather than the capture itself.
+  ///
+  /// Non-production dogfood defaults to on with the same inverted env override
+  /// as the flags above (`OMI_FORCE_BUCKET_SYNC=0` turns it off). Production
+  /// and beta stay off until sync is validated in dogfood — like the flags
+  /// above there is deliberately no remote stop yet, because nothing ships
+  /// dark to users this way.
+  @MainActor static var isBackendSyncEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localBackendSyncOverrideName] != "0"
+    }
+    return false
+  }
+
   private static let localFactWritePolicyOverrideName = "OMI_FORCE_FACT_WRITE_POLICY"
+  private static let localBackendSyncOverrideName = "OMI_FORCE_BUCKET_SYNC"
 }

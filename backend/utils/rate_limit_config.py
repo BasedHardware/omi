@@ -53,6 +53,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "file:upload": (40, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
+    # Context bucket sync — one 30-minute pass per device, so a handful an hour
+    # covers several machines with room for retries. Each request can carry 50
+    # buckets and their facts, one transaction per bucket, so the cost per call
+    # is far above a plain write.
+    "context_buckets:sync": (30, 3600),
+    "context_buckets:purge": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # Platform tools — backend RAG endpoints
