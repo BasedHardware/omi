@@ -417,8 +417,11 @@ enum ContextProactivityPromptBuilder {
     insight or suggest — put the answer itself (the link, name, date, or value) in the message
     exactly as the retrieved text spells it, and cite the refs that contain it. Stay silent as
     usual when the retrieved items do not actually answer the question. A question the user is
-    writing NOW is a fresh request, not repetition: answer it even when a recent delivery
-    already carried the same answer.
+    writing NOW is a fresh request, not repetition, and this exception OUTRANKS the
+    recently-delivered prohibition above: when the current context contains the user's own
+    unanswered question, answer it — request the lookup and deliver — even if an identical
+    answer appears in the recently-delivered list. The prohibition exists to stop unprompted
+    nagging; refusing to answer a direct question is not restraint, it is failure.
     """
 
   /// Same rules as before, restructured as an ordered decision procedure: the
