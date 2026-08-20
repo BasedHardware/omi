@@ -30,6 +30,7 @@ from utils.llm.desktop_llm_stub import (
 from utils.llm.gateway_client import (
     CHAT_AGENT_AUTO_LANE_ID,
     CHAT_STRUCTURED_AUTO_LANE_ID,
+    feature_auto_lane_id,
     get_llm_gateway_base_url,
     get_llm_gateway_client,
     llm_gateway_headers,
@@ -52,10 +53,12 @@ _RATE_LIMIT_PER_MINUTE = 120
 _MAX_PAUSE_TURN_CONTINUATIONS = 3
 _WEB_SEARCH_COST_PER_REQUEST = 10.0 / 1_000.0
 
-# Anthropic's direct server-side web search. The desktop OpenAI-compatible
-# client never sees or executes this tool; Anthropic owns the lookup and returns
-# the grounded answer in the same completion contract. Keep the basic direct
-# tool contract: the newer version defaults to code-execution callers.
+# Kill-switch / BYOK Anthropic path only. Managed public-web turns use the
+# gateway `omi:auto:web-search` lane (Perplexity sonar-pro) instead. The desktop
+# OpenAI-compatible client never sees or executes this tool; Anthropic owns the
+# lookup and returns the grounded answer in the same completion contract. Keep
+# the basic direct tool contract: the newer version defaults to code-execution
+# callers.
 _WEB_SEARCH_TOOL = {
     'type': 'web_search_20250305',
     'name': 'web_search',
@@ -70,9 +73,10 @@ _PUBLIC_WEB_ROUTING_INSTRUCTION = (
     'the user explicitly asks for it.</omi_retrieval_policy>'
 )
 
-# Anthropic runs `web_search` on its own servers, so its query strings escape the
-# `fetch_url` allowlist and SSRF guard entirely. Any client tool result already in
-# the request is private context the search query could carry out, so server-side
+# Both Anthropic (direct/kill-switch) and Perplexity (managed `omi:auto:web-search`)
+# run search on their own servers, so query strings escape the `fetch_url`
+# allowlist and SSRF guard entirely. Any client tool result already in the
+# request is private context the search query could carry out, so server-side
 # search is only offered when every tool result in the transcript comes from this
 # allowlist of write/permission tools that return no user data. Unknown tool names
 # are treated as private.
@@ -236,6 +240,9 @@ _MANAGED_CHAT_ALIASES = {
     'omi-sonnet',
     'claude-sonnet-4-6',
     'claude-sonnet-4-20250514',
+    'omi-opus',
+    'claude-opus-4-6',
+    'claude-opus-4-20250514',
     'omi-luna',
     'omi-auto',
     CHAT_AGENT_AUTO_LANE_ID,
@@ -247,6 +254,7 @@ _MANAGED_STRUCTURED_ALIASES = {
     'omi-structured',
     CHAT_STRUCTURED_AUTO_LANE_ID,
 }
+WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
 
 
@@ -263,11 +271,11 @@ def _uses_managed_chat_agent(body: Mapping[str, object]) -> bool:
     """Route managed conversational traffic to Luna, but preserve specialist calls.
 
     Desktop conversational traffic uses the managed Luna chat agent for Sonnet
-    legacy aliases and explicit auto/Luna lane ids. Extraction jobs use Haiku and
-    some callers explicitly request Opus; those legacy Anthropic calls must not
-    inherit the chat-agent personality/system prompt or have their requested model
-    rewritten to Luna. An omitted model uses the managed chat-agent default; an
-    explicit unknown model fails closed in the normal request validation path.
+    and leftover Opus aliases plus explicit auto/Luna lane ids. Extraction jobs
+    still use Haiku; those legacy Anthropic calls must not inherit the chat-agent
+    personality/system prompt or have their requested model rewritten to Luna.
+    An omitted model uses the managed chat-agent default; an explicit unknown
+    model fails closed in the normal request validation path.
     """
     if 'model' not in body:
         return True
@@ -348,16 +356,6 @@ def _has_public_web_routing_instruction(messages: object) -> bool:
     return bool(latest_user and _text(latest_user.get('content')).lstrip().startswith(_PUBLIC_WEB_ROUTING_INSTRUCTION))
 
 
-def _direct_web_search_requested(body: Mapping[str, object]) -> bool:
-    messages = body.get('messages')
-    return bool(
-        body.get('tool_choice') != 'none'
-        and _last_message_is_user(messages)
-        and not _public_web_is_prohibited(messages)
-        and (body.get('omi_web_search') is True or _has_public_web_routing_instruction(messages))
-    )
-
-
 def _web_search_requested(body: Mapping[str, object]) -> bool:
     messages = body.get('messages')
     client_tools = _anthropic_client_tools(body.get('tools'))
@@ -372,6 +370,85 @@ def _web_search_requested(body: Mapping[str, object]) -> bool:
         and not required_client_tools
         and (body.get('omi_web_search') is True or _has_public_web_routing_instruction(messages))
     )
+
+
+# Web-search authorization outcome. ``denied`` is a stored per-user decision;
+# ``unavailable`` means the lookup failed closed and must not also be reported
+# as an explicit denial. Keeps the two fallback reasons mutually exclusive.
+WebSearchAuthorization = Literal['authorized', 'denied', 'unavailable']
+
+
+def _web_search_supported_for_upstream(upstream_model: str) -> bool:
+    return not upstream_model.startswith('claude-haiku')
+
+
+def _web_search_eligible(
+    body: Mapping[str, object],
+    *,
+    authorization: WebSearchAuthorization,
+    web_search_supported: bool = True,
+) -> bool:
+    messages = body.get('messages')
+    return bool(
+        web_search_supported
+        and not _public_web_is_prohibited(messages)
+        and _web_search_requested(body)
+        and authorization == 'authorized'
+        and not _carries_private_tool_output(messages)
+    )
+
+
+def _record_web_search_withheld(
+    body: Mapping[str, object],
+    *,
+    authorization: WebSearchAuthorization,
+    web_search_supported: bool,
+    from_mode: str,
+) -> None:
+    messages = body.get('messages')
+    if not _web_search_requested(body) or _public_web_is_prohibited(messages):
+        return
+    if not web_search_supported:
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='capability_mismatch',
+            outcome='degraded',
+        )
+        return
+    if _carries_private_tool_output(messages):
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='private_tool_output_in_context',
+            outcome='degraded',
+        )
+    elif authorization == 'denied':
+        record_fallback(
+            component='other',
+            from_mode=from_mode,
+            to_mode='model_knowledge',
+            reason='not_authorized',
+            outcome='degraded',
+        )
+
+
+def _with_public_web_routing_instruction(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    if _has_public_web_routing_instruction(messages):
+        return messages
+    updated = [dict(message) for message in messages]
+    for message in updated:
+        if message.get('role') in {'system', 'developer'}:
+            existing = _text(message.get('content'))
+            message['content'] = (
+                f'{existing.rstrip()}\n\n{_PUBLIC_WEB_ROUTING_INSTRUCTION}'
+                if existing.strip()
+                else _PUBLIC_WEB_ROUTING_INSTRUCTION
+            )
+            return updated
+    return [{'role': 'system', 'content': _PUBLIC_WEB_ROUTING_INSTRUCTION}, *updated]
 
 
 def _carries_private_tool_output(messages: object) -> bool:
@@ -486,7 +563,14 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
             updated['content'] = ''
         translated.append(updated)
     gateway_body = {key: value for key, value in body.items() if key != 'omi_web_search'}
-    return {**gateway_body, 'model': lane_id, 'messages': translated}
+    result = {**gateway_body, 'model': lane_id, 'messages': translated}
+    if lane_id == WEB_SEARCH_AUTO_LANE_ID:
+        # The Perplexity web-search lane has tools: false. Public-web turns
+        # are a live lookup, not a client-tool continuation.
+        result.pop('tools', None)
+        result.pop('tool_choice', None)
+        result['messages'] = _with_public_web_routing_instruction(translated)
+    return result
 
 
 def _tool_choice(choice: object) -> dict[str, str] | None:
@@ -518,12 +602,6 @@ def _anthropic_client_tools(tools: object) -> list[dict[str, object]]:
         and isinstance(tool.get('function'), Mapping)
         and isinstance(tool['function'].get('name'), str)
     ]
-
-
-# Web-search authorization outcome. ``denied`` is a stored per-user decision;
-# ``unavailable`` means the lookup failed closed and must not also be reported
-# as an explicit denial. Keeps the two fallback reasons mutually exclusive.
-WebSearchAuthorization = Literal['authorized', 'denied', 'unavailable']
 
 
 def _request(
@@ -597,42 +675,17 @@ def _request(
     choice = _tool_choice(body.get('tool_choice'))
     client_tools = _anthropic_client_tools(tools)
     upstream_model = cast(str, result['model'])
-    public_web_prohibited = _public_web_is_prohibited(messages)
-    web_search_requested = _web_search_requested(body)
-    web_search_supported = not upstream_model.startswith('claude-haiku')
-    if web_search_requested and not web_search_supported and not public_web_prohibited:
-        record_fallback(
-            component='other',
-            from_mode='anthropic_web_search',
-            to_mode='model_knowledge',
-            reason='capability_mismatch',
-            outcome='degraded',
-        )
-    private_context_present = _carries_private_tool_output(messages)
-    if web_search_requested and web_search_supported and not public_web_prohibited:
-        if private_context_present:
-            record_fallback(
-                component='other',
-                from_mode='anthropic_web_search',
-                to_mode='model_knowledge',
-                reason='private_tool_output_in_context',
-                outcome='degraded',
-            )
-        elif web_search_authorization == 'denied':
-            record_fallback(
-                component='other',
-                from_mode='anthropic_web_search',
-                to_mode='model_knowledge',
-                reason='not_authorized',
-                outcome='degraded',
-            )
-    inject_web_search = (
-        web_search_supported
-        and body.get('tool_choice') != 'none'
-        and not public_web_prohibited
-        and web_search_requested
-        and web_search_authorization == 'authorized'
-        and not private_context_present
+    web_search_supported = _web_search_supported_for_upstream(upstream_model)
+    _record_web_search_withheld(
+        body,
+        authorization=web_search_authorization,
+        web_search_supported=web_search_supported,
+        from_mode='anthropic_web_search',
+    )
+    inject_web_search = _web_search_eligible(
+        body,
+        authorization=web_search_authorization,
+        web_search_supported=web_search_supported,
     )
     if inject_web_search:
         existing_system = result.get('system')
@@ -1147,11 +1200,15 @@ def _sse_json_payloads(frame_buffer: bytearray, chunk: bytes) -> list[dict[str, 
 def _gateway_feature_for_lane(lane_id: str) -> str:
     """Accounting feature for a managed lane.
 
-    Structured-lane traffic must not be written to the ledger and reliability metrics as
-    chat-agent traffic, or per-feature cost and failure signals for the new lane vanish
-    into chat.
+    Structured-lane and web-search traffic must not be written to the ledger and
+    reliability metrics as chat-agent traffic, or per-feature cost and failure
+    signals for those lanes vanish into chat.
     """
-    return 'chat_structured' if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID else 'chat_agent'
+    if lane_id == CHAT_STRUCTURED_AUTO_LANE_ID:
+        return 'chat_structured'
+    if lane_id == WEB_SEARCH_AUTO_LANE_ID:
+        return 'web_search'
+    return 'chat_agent'
 
 
 def _gateway_request_headers(request_id: str, lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, str]:
@@ -1297,13 +1354,13 @@ async def _meter_server_request(uid: str) -> None:
         )
 
 
-async def _web_search_authorized(uid: str) -> WebSearchAuthorization:
+async def _web_search_authorized(uid: str, *, from_mode: str = 'anthropic_web_search') -> WebSearchAuthorization:
     try:
         settings = await run_blocking(db_executor, users_db.get_assistant_settings, uid)
     except Exception:
         record_fallback(
             component='other',
-            from_mode='anthropic_web_search',
+            from_mode=from_mode,
             to_mode='model_knowledge',
             reason='authorization_unavailable',
             outcome='degraded',
@@ -1343,12 +1400,7 @@ async def chat_completions(
         return JSONResponse(stub_chat_completions_json(body), headers=stub_headers)
     payload: dict[str, object] = {}
     try:
-        direct_web_search_requested = _direct_web_search_requested(body)
-        gateway_mode = (
-            should_route_chat_agent_through_gateway()
-            and _uses_managed_chat_agent(body)
-            and not direct_web_search_requested
-        )
+        gateway_mode = should_route_chat_agent_through_gateway() and _uses_managed_chat_agent(body)
         if gateway_mode and get_byok_key('anthropic'):
             record_fallback(
                 component='llm_gateway',
@@ -1360,6 +1412,19 @@ async def chat_completions(
             gateway_mode = False
         if gateway_mode:
             public_model = _managed_lane_id(body)
+            # Structured single-shot callers must not inherit the web-search
+            # lane even if a leftover client still sets omi_web_search.
+            if public_model == CHAT_AGENT_AUTO_LANE_ID and _web_search_requested(body):
+                web_search_authorization = await _web_search_authorized(uid, from_mode='managed_web_search')
+                if _web_search_eligible(body, authorization=web_search_authorization):
+                    public_model = WEB_SEARCH_AUTO_LANE_ID
+                else:
+                    _record_web_search_withheld(
+                        body,
+                        authorization=web_search_authorization,
+                        web_search_supported=True,
+                        from_mode='managed_web_search',
+                    )
             gateway_payload = _gateway_body(body, public_model)
         else:
             web_search_authorization = 'authorized' if _web_search_requested(body) else 'unavailable'
