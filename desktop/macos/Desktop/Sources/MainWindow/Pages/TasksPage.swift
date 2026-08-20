@@ -3381,7 +3381,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
   @ObservedObject var viewModel: TasksViewModel
-  @StateObject private var suggestedStore = SuggestedTasksStore()
+  @ObservedObject private var suggestedStore = SuggestedTasksStore.shared
   var chatProvider: ChatProvider?
 
   // Chat panel state
