@@ -456,26 +456,46 @@ function ProjectionList({
     (item: DesktopReadProjection) => `${item.kind}:${item.id}`,
     [],
   );
+  const spine = rowVariant === 'spine';
+  const contentContainerStyle = spine
+    ? styles.homeSpineList
+    : styles.resultList;
   const empty = suppressEmpty ? null : loading ? (
-    <View style={styles.projectionEmpty}>
-      <ActivityIndicator color="#888888" />
-      <Text style={styles.projectionEmptyCopy}>Loading…</Text>
+    <View style={[styles.projectionEmpty, spine && styles.homeSpineEmpty]}>
+      <ActivityIndicator color={spine ? '#505050' : '#888888'} />
+      <Text
+        style={[
+          styles.projectionEmptyCopy,
+          spine && styles.homeSpineEmptyCopy,
+        ]}>
+        Loading…
+      </Text>
     </View>
   ) : (
-    <View style={styles.projectionEmpty}>
-      <Text style={styles.projectionEmptyTitle}>
+    <View style={[styles.projectionEmpty, spine && styles.homeSpineEmpty]}>
+      <Text
+        style={[
+          styles.projectionEmptyTitle,
+          spine && styles.homeSpineEmptyTitle,
+        ]}>
         {error === null
           ? emptyTitle ?? 'Nothing to show yet'
           : 'Unable to load'}
       </Text>
-      <Text style={styles.projectionEmptyCopy}>{error ?? emptyCopy}</Text>
+      <Text
+        style={[
+          styles.projectionEmptyCopy,
+          spine && styles.homeSpineEmptyCopy,
+        ]}>
+        {error ?? emptyCopy}
+      </Text>
     </View>
   );
 
   return (
     <FlatList
       accessibilityLabel={accessibilityLabel}
-      contentContainerStyle={styles.resultList}
+      contentContainerStyle={contentContainerStyle}
       data={items}
       keyExtractor={keyExtractor}
       ListEmptyComponent={empty}
@@ -542,7 +562,11 @@ function HomeSearchField({
         placeholderTextColor={desktop ? '#505050' : '#777777'}
         ref={inputRef}
         showSoftInputOnFocus={searchArmed}
-        style={[styles.searchInput, desktop && styles.macPrimaryText]}
+        style={[
+          styles.searchInput,
+          desktop && styles.macPrimaryText,
+          desktop && styles.macSearchInput,
+        ]}
         value={query}
       />
       <FocusPressable
@@ -1669,7 +1693,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     );
   }, [reads, searchQuery]);
   const homeSearching = searchQuery.trim() !== '';
-
+  // An unavailable local service is a single truthful empty state, not a result row. Keeping the
+  // results panel content-sized here preserves the upstream two-island hierarchy instead of
+  // turning an error into a window-filling modal.
+  const homeSpineHasRows = homeResults.length > 0 && !allHomeReadsUnavailable;
   useEffect(() => {
     homeResultsOpacity.setValue(0);
     if (!homeSearching) {
@@ -2162,18 +2189,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     <View style={styles.macHomeReadStatuses}>
       {readsPhase !== 'ready' && readsPhase !== 'initial-loading' && (
         <View style={styles.macHomeReadStatus}>
-          <Text style={styles.macHomeReadStatusText}>
-            {readsPhase === 'refreshing'
-              ? 'Refreshing saved data…'
-              : readsPhase === 'saved-but-refresh-failed'
-              ? 'Showing saved data. Could not refresh.'
-              : 'Saved data is unavailable.'}
-          </Text>
-          {allHomeReadsUnavailable && (
-            <Text style={styles.macHomeReadStatusCopy}>
-              {readOutcomes?.conversations.status === 'error'
-                ? readOutcomes.conversations.error
-                : desktopBackendConfigurationCopy}
+          {readsPhase !== 'unavailable' && (
+            <Text style={styles.macHomeReadStatusText}>
+              {readsPhase === 'refreshing'
+                ? 'Refreshing saved data…'
+                : 'Showing saved data. Could not refresh.'}
             </Text>
           )}
           {(readsPhase === 'saved-but-refresh-failed' ||
@@ -2266,6 +2286,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     readsPhase === 'unavailable'
       ? readOutcomes?.conversations.status === 'error'
         ? readOutcomes.conversations.error
+        : readOutcomes?.memories.status === 'error'
+        ? readOutcomes.memories.error
         : desktopBackendConfigurationCopy
       : homeSearching
       ? 'Filter covers loaded conversations and memories only.'
@@ -2300,7 +2322,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         </View>
         <View
           accessibilityLabel="Home results panel"
-          style={styles.macHomeResultsPanel}>
+          style={[
+            styles.macHomeResultsPanel,
+            homeSpineHasRows
+              ? styles.macHomeResultsPanelFilled
+              : styles.macHomeResultsPanelResting,
+          ]}>
           <OmiGlassPanel
             accessibilityLabel="Home results material"
             pointerEvents="none"
@@ -2315,7 +2342,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             items={homeResults}
             loading={readsPhase === 'initial-loading'}
             rowVariant="spine"
-            style={styles.macHomeResultsList}
+            style={
+              homeSpineHasRows
+                ? styles.macHomeResultsList
+                : styles.macHomeResultsListResting
+            }
           />
         </View>
         {homeDesktopDeviceAffordance}
@@ -3065,9 +3096,10 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  macHomeSurface: {alignSelf: 'stretch', flex: 1},
+  macHomeSurface: {alignSelf: 'stretch', flex: 1, paddingTop: 12},
   macHomeLane: {
     alignSelf: 'center',
+    gap: 12,
     flex: 1,
     maxWidth: 900,
     width: '100%',
@@ -3079,29 +3111,36 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: '100%',
   },
+  // Horizontal inset only: the row owns vertical centering for the icon, text baseline, and action.
   macHomeQueryField: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
     borderWidth: 0,
+    gap: 14,
     marginBottom: 0,
     marginTop: 0,
     maxWidth: 900,
     minHeight: 64,
     paddingLeft: 18,
     paddingRight: 18,
-    paddingVertical: 12,
+  },
+  macSearchInput: {
+    fontSize: 21,
+    height: 26,
+    minHeight: 0,
+    paddingVertical: 0,
   },
   macHomeResultsPanel: {
     borderRadius: 22,
-    flex: 1,
-    maxHeight: 470,
-    marginTop: 12,
     minHeight: 120,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
   },
+  macHomeResultsPanelFilled: {flex: 1, maxHeight: 470},
+  macHomeResultsPanelResting: {flex: 0, flexGrow: 0, flexShrink: 0},
   macHomeResultsList: {flex: 1},
+  macHomeResultsListResting: {alignSelf: 'stretch', flexGrow: 0},
   paneCompact: {borderRadius: 0, borderWidth: 0},
   paneCompactSurface: {backgroundColor: '#1c1c1a'},
   stageMotion: {flex: 1},
@@ -3268,6 +3307,17 @@ const styles = StyleSheet.create({
   homeSpineMeta: {color: '#626262'},
   homeSpineTitle: {color: '#141414', fontSize: 15, marginTop: 5},
   homeSpineSummary: {color: '#5a5a5a', marginTop: 3},
+  homeSpineEmpty: {
+    alignItems: 'flex-start',
+    flex: 0,
+    justifyContent: 'flex-start',
+    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+  },
+  homeSpineEmptyTitle: {color: '#141414'},
+  homeSpineEmptyCopy: {color: '#5a5a5a', textAlign: 'left'},
+  homeSpineList: {flexGrow: 0, paddingBottom: 0},
   homeResults: {flex: 1},
   macHomeReadStatuses: {gap: 8},
   macHomeReadStatus: {
@@ -3276,7 +3326,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   macHomeReadStatusText: {color: '#343434', fontSize: 12, fontWeight: '600'},
-  macHomeReadStatusCopy: {color: '#5a5a5a', fontSize: 12, lineHeight: 17},
   macHomeRetryButton: {
     alignSelf: 'flex-start',
     minHeight: 32,

@@ -1567,6 +1567,7 @@ test('uses transparent separated macOS Home islands with a centered query lane',
   expect(queryLane.props.style).toEqual(
     expect.objectContaining({
       alignSelf: 'center',
+      gap: 12,
       maxWidth: 900,
       width: '100%',
     }),
@@ -1575,7 +1576,9 @@ test('uses transparent separated macOS Home islands with a centered query lane',
     expect.objectContaining({minHeight: 64}),
   );
   expect(resultsPanel.props.style).toEqual(
-    expect.objectContaining({marginTop: 12}),
+    expect.arrayContaining([
+      expect.objectContaining({flex: 1, maxHeight: 470}),
+    ]),
   );
   expect(
     renderer.root.find(
@@ -1595,7 +1598,23 @@ test('uses transparent separated macOS Home islands with a centered query lane',
   const homeSearch = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search Home',
   );
+  expect(homeSearch.parent?.props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({alignItems: 'center'}),
+      expect.objectContaining({gap: 14, minHeight: 64}),
+    ]),
+  );
   expect(homeSearch.props.placeholder).toBe('Filter saved…');
+  expect(homeSearch.props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        fontSize: 21,
+        height: 26,
+        minHeight: 0,
+        paddingVertical: 0,
+      }),
+    ]),
+  );
   await ReactTestRenderer.act(async () => {
     homeSearch.props.onFocus();
   });

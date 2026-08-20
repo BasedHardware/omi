@@ -30,6 +30,7 @@
     [weakSelf dressOmiWindow];
   }];
   [self installDesktopSearchCommand];
+  [self installOmiWindowDragMonitor];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification
@@ -37,6 +38,10 @@
   if (self.omiWindowUpdateObserver != nil) {
     [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowUpdateObserver];
     self.omiWindowUpdateObserver = nil;
+  }
+  if (self.omiWindowDragMonitor != nil) {
+    [NSEvent removeMonitor:self.omiWindowDragMonitor];
+    self.omiWindowDragMonitor = nil;
   }
   [super applicationWillTerminate:notification];
 }
@@ -59,7 +64,10 @@
   window.titlebarAppearsTransparent = YES;
   window.titleVisibility = NSWindowTitleHidden;
   window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
-  window.movableByWindowBackground = NO;
+  // The app uses a transparent full-size titlebar, so the uncovered window ground is the drag
+  // region. Controls continue to receive their normal input; this restores ordinary macOS window
+  // movement without creating a React Native gesture layer.
+  window.movableByWindowBackground = YES;
   window.level = NSNormalWindowLevel;
   window.hidesOnDeactivate = NO;
   window.contentMinSize = NSMakeSize(800.0, 680.0);
@@ -75,6 +83,51 @@
   [window standardWindowButton:NSWindowCloseButton].hidden = YES;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;
   [window standardWindowButton:NSWindowZoomButton].hidden = YES;
+}
+
+- (void)installOmiWindowDragMonitor
+{
+  if (self.omiWindowDragMonitor != nil) {
+    return;
+  }
+  __weak AppDelegate *weakSelf = self;
+  self.omiWindowDragMonitor =
+      [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskLeftMouseDown
+                                            handler:^NSEvent *(NSEvent *event) {
+    AppDelegate *strongSelf = weakSelf;
+    if (strongSelf == nil || ![strongSelf omiWindowGroundDragEvent:event]) {
+      return event;
+    }
+    [strongSelf.window performWindowDragWithEvent:event];
+    return nil;
+  }];
+}
+
+- (BOOL)omiWindowGroundDragEvent:(NSEvent *)event
+{
+  NSWindow *window = self.window;
+  if (window == nil || event.window != window || event.clickCount > 1) {
+    return NO;
+  }
+  NSView *contentView = window.contentView;
+  NSView *frameView = contentView.superview;
+  if (contentView == nil || frameView == nil) {
+    return NO;
+  }
+  NSView *hitView = [frameView hitTest:event.locationInWindow];
+  if (hitView == nil || ![hitView isDescendantOf:contentView]) {
+    return NO;
+  }
+  for (NSView *view = hitView; view != nil; view = view.superview) {
+    if ([view isKindOfClass:NSControl.class] || [view isKindOfClass:NSText.class] ||
+        [view isKindOfClass:NSScrollView.class] || !view.mouseDownCanMoveWindow) {
+      return NO;
+    }
+    if (view == contentView) {
+      break;
+    }
+  }
+  return YES;
 }
 
 - (void)installDesktopSearchCommand

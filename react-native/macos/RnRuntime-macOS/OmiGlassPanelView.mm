@@ -3,7 +3,7 @@
 #import <React/RCTViewManager.h>
 
 static const CGFloat OmiGlassCornerRadius = 22.0;
-static const CGFloat OmiGlassScrimAlpha = 0.46;
+static const CGFloat OmiGlassScrimAlpha = 0.14;
 
 @interface OmiGlassPanelView ()
 
@@ -104,9 +104,9 @@ static const CGFloat OmiGlassScrimAlpha = 0.46;
   BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
   self.material.hidden = reduceTransparency;
   self.fallback.hidden = !reduceTransparency;
-  self.fallback.layer.backgroundColor = NSColor.whiteColor.CGColor;
+  self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
   CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;
-  self.scrim.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:alpha].CGColor;
+  self.scrim.backgroundColor = [NSColor.controlBackgroundColor colorWithAlphaComponent:alpha].CGColor;
 }
 
 @end
