@@ -39,8 +39,15 @@ WORKSTREAM_CANDIDATE_SEMANTIC_VERSION = 'workstream-create.v1'
 MAX_CANDIDATE_EVIDENCE_REFS = 20
 PENDING_CANDIDATE_REUSE_WINDOW = timedelta(days=14)
 # A suggestion the user does not act on expires and is gone. This is a real
-# stored deadline, not a display filter: reads below treat a lapsed pending
-# Candidate as expired, and a Firestore TTL policy on `expires_at` reclaims it.
+# stored deadline, not a display filter: every read treats a lapsed pending
+# Candidate as expired.
+#
+# Storage is not reclaimed yet. A Firestore TTL policy on `expires_at` would do
+# it, but `firebase_index_manifest` can only express `ttl: false` indexing
+# exemptions, so a TTL policy cannot be declared through the generated manifest
+# today — and enabling auto-deletion on a live collection group is not a change
+# to smuggle in through a generated file. Expired Candidates therefore remain
+# stored but unreadable until that is addressed separately.
 SUGGESTION_TTL = timedelta(days=2)
 TASK_PRIORITY_RANK = {
     TaskPriority.low: 0,
