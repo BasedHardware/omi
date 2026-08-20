@@ -1275,6 +1275,54 @@ def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
     assert conv.apps_results == []
 
 
+def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypatch):
+    monkeypatch.setenv('CONVERSATION_NOTES_V2_ENABLED', 'true')
+    selected = _make_mock_app('selected-app', 'SelectedApp')
+    _setup_trigger_apps_mocks(preferred_app_id=None)
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    with p1, p2, p3, p4, p5 as record_usage, p6:
+        process_conversation._trigger_apps(
+            'user-explicit',
+            conv,
+            is_reprocess=True,
+            app_id=selected.id,
+            explicit_app=selected,
+            usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
+        )
+
+    suggestion_mock.assert_not_called()
+    app_result_mock.assert_called_once()
+    record_usage.assert_called_once_with(
+        'user-explicit',
+        selected.id,
+        process_conversation.UsageHistoryType.memory_created_prompt,
+        conversation_id=conv.id,
+    )
+
+
+@pytest.mark.parametrize('is_reprocess', [True, False], ids=['plain-regenerate', 'lazy-enrichment'])
+def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
+    preferred = _make_mock_app('preferred-app', 'PreferredApp')
+    _setup_trigger_apps_mocks(preferred_app_id=preferred.id, available_apps=[preferred])
+    conv = _make_trigger_conversation()
+
+    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
+    with p1, p2, p3, p4, p5 as record_usage, p6:
+        process_conversation._trigger_apps(
+            'user-non-selection',
+            conv,
+            is_reprocess=is_reprocess,
+            usage_attribution=process_conversation.AppUsageAttribution.NON_USER_REPROCESS,
+        )
+
+    suggestion_mock.assert_not_called()
+    app_result_mock.assert_called_once()
+    record_usage.assert_not_called()
+
+
 def test_summary_pipeline_mode_cannot_reach_the_regressing_combination(monkeypatch):
     """Legacy notes must never be paired with opt-in apps.
 

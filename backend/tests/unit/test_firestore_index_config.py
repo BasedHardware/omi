@@ -150,3 +150,22 @@ def test_reconcile_workflow_keeps_the_typed_confirmation_on_the_manual_path():
     assert 'APPLY_FIRESTORE_INDEXES' in workflow
     # Any trigger other than the two authorized ones must fail closed.
     assert 'elif [[ "$EVENT_NAME" != "push" ]]; then' in workflow
+
+
+def test_reconcile_workflow_detects_but_never_automatically_applies_field_exemptions():
+    workflow = _reconcile_workflow()
+    automatic = workflow.split('\n  reconcile_composite_indexes:', 1)[1].split(
+        '\n  reject_nonprod_field_exemptions:', 1
+    )[0]
+    destructive = workflow.split('\n  apply_field_exemptions:', 1)[1]
+
+    assert 'reconcile_firestore_field_exemptions.py' in automatic
+    assert '--check-only' in automatic
+    assert '--apply' not in automatic
+    assert "github.event_name == 'workflow_dispatch'" in destructive
+    assert "github.event.inputs.operation == 'field-exemptions'" in destructive
+    assert "github.event.inputs.environment == 'prod'" in destructive
+    assert 'environment: prod' in destructive
+    assert '--dry-run' in destructive
+    assert '--apply' in destructive
+    assert '--confirmation APPLY_FIRESTORE_FIELD_EXEMPTIONS' in destructive
