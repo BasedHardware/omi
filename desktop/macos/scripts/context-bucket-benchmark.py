@@ -50,6 +50,7 @@ DIRECTOR_CASES = {
     "referent-file-build-failure",
     "referent-visible-on-screen",
     "referent-no-identifier",
+    "answer-question-from-retrieval",
 }
 
 # Cases whose point is that a spoken message must name the thing it is about.
@@ -183,6 +184,10 @@ def validate(deck: dict) -> tuple[int, int]:
                 "bucket_id", "version", "header", "frozen", "tail", "validated_facts",
                 "tasks", "app", "window", "captured_at", "notify_worthiness",
             }
+            # A retrieval case replays the visit's second director call, so its
+            # mapping carries exactly the two extra hop parameters.
+            if case["synthetic"].get("retrieved"):
+                required = required | {"retrieved", "lookup_query"}
             if set(params) != required:
                 raise ValueError(f"{case['id']}: probe ABI mapping drift")
     return len(cases), len(DIRECTOR_CASES)

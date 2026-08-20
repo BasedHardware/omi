@@ -1937,6 +1937,7 @@
         "lookupQuery": "Omi latest version download link"
       },
       "expectedAction": "notify",
+      "referentTokens": ["omi.me/desktop"],
       "expectedEvidenceRefs": ["evidence:email:question-001"],
       "expectedSubject": {"kind": "context", "id": "context-email-question-001", "workstreamId": "workstream-comms"},
       "expectedMaxAge": 3600,
