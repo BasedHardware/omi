@@ -1,0 +1,3 @@
+{
+  "change": "Added Accessibility to Settings → Permissions, so the permission Omi needs to identify the page or file you are in can finally be granted — and granting it now takes effect immediately instead of after a restart"
+}
