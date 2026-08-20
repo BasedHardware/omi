@@ -510,6 +510,7 @@ test('renders the collapsed reference rail and search-first desktop Home', async
     renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
       .props.autoFocus,
   ).toBeUndefined();
+  expect(mockSearchFocus).not.toHaveBeenCalled();
   expect(output).not.toContain('Omi connection');
   expect(output).not.toContain('No nearby devices');
   expect(tabs.map(tab => tab.props.children[1].props.children)).toEqual([
@@ -786,6 +787,27 @@ test('routes the native macOS search command to Home and focuses search', async 
     renderer.root.find(node => node.props.accessibilityLabel === 'Home stage'),
   ).toBeDefined();
   expect(mockSearchFocus).toHaveBeenCalled();
+});
+
+test('does not steal keyboard focus to Home search after returning from Chat', async () => {
+  const renderer = await renderApp();
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Open Chat')
+      .props.onPress();
+  });
+  mockSearchFocus.mockClear();
+
+  await ReactTestRenderer.act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Back to Home')
+      .props.onPress();
+  });
+
+  expect(
+    renderer.root.find(node => node.props.accessibilityLabel === 'Home stage'),
+  ).toBeDefined();
+  expect(mockSearchFocus).not.toHaveBeenCalled();
 });
 
 test('shows a visible focus ring for keyboard-focused controls and search', async () => {

@@ -1314,6 +1314,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchArmed, setSearchArmed] = useState(false);
+  const [homeSearchFocusNonce, setHomeSearchFocusNonce] = useState(0);
   const [composerFocused, setComposerFocused] = useState(false);
   const projectionFilter: ProjectionFilter = 'all';
   const [nativeSnapshot, setNativeSnapshot] =
@@ -1566,18 +1567,19 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   }, [homeResultsOpacity, homeSearching, reduceMotion]);
 
   useEffect(() => {
-    if (route === 'Home') {
-      searchRef.current?.focus();
-    }
-  }, [route]);
-
-  useEffect(() => {
     const subscription = subscribeDesktopSearchCommand(() => {
       setRoute('Home');
-      searchRef.current?.focus();
+      setHomeSearchFocusNonce(current => current + 1);
     });
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    if (homeSearchFocusNonce === 0) {
+      return;
+    }
+    searchRef.current?.focus();
+  }, [homeSearchFocusNonce]);
 
   useEffect(() => {
     let active = true;
