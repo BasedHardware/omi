@@ -133,7 +133,8 @@ async function fetchIosReleases(days: number): Promise<{ dates: string[]; latest
       `
         SELECT v, min(d) AS release_day
         FROM (
-          SELECT properties.$app_version AS v, toDate(timestamp) AS d,
+          SELECT properties.$app_version AS v,
+                 toDate(toTimeZone(timestamp, 'America/New_York')) AS d,
                  uniq(distinct_id) AS u
           FROM events
           WHERE event = 'Memory Created'

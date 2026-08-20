@@ -101,3 +101,26 @@ describe("dau-trends response cache", () => {
     expect(captured[captured.length - 1]).toContain(MOBILE_FILTER);
   });
 });
+
+describe("releases route", () => {
+  it("buckets the iOS release timeline by New York calendar day", async () => {
+    // GitHub + iTunes calls are irrelevant here; the assertion is that the
+    // PostHog rollout-crossing query follows the boards' NYC-day contract
+    // (UTC toDate would push evening releases onto the next day).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => [] }) as any),
+    );
+    try {
+      const queries = await capture(
+        () => import("@/app/api/omi/stats/releases/route"),
+        "/api/omi/stats/releases?days=30",
+      );
+      const ios = queries.find((q) => q.includes("$app_version"));
+      expect(ios).toBeTruthy();
+      expect(ios).toContain("toTimeZone(timestamp, 'America/New_York')");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
