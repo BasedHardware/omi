@@ -1229,9 +1229,14 @@ export interface ConversationSearchItem {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
   match_snippets?: Array<TranscriptMatchSnippet>;
+  meeting_dedup_speech_s?: number | null;
+  meeting_duration_s?: number | null;
+  meeting_treatment_eligible?: boolean;
+  meeting_treatment_reason?: string | null;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
@@ -1246,6 +1251,7 @@ export interface ConversationSearchItem {
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
+  uses_custom_stt?: boolean;
   visibility?: ConversationVisibility;
 }
 

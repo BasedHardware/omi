@@ -804,9 +804,14 @@ class GeneratedConversationSearchItem {
   final String? folderId;
   final GeneratedGeolocation? geolocation;
   final String id;
+  final bool imported;
   final bool isLocked;
   final String? language;
   final List<GeneratedTranscriptMatchSnippet> matchSnippets;
+  final double? meetingDedupSpeechS;
+  final double? meetingDurationS;
+  final bool meetingTreatmentEligible;
+  final String? meetingTreatmentReason;
   final List<GeneratedConversationPhoto> photos;
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
@@ -821,6 +826,7 @@ class GeneratedConversationSearchItem {
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
   final DateTime? updatedAt;
+  final bool usesCustomStt;
   final String visibility;
 
   const GeneratedConversationSearchItem({
@@ -841,9 +847,14 @@ class GeneratedConversationSearchItem {
     this.folderId,
     this.geolocation,
     required this.id,
+    this.imported = false,
     this.isLocked = false,
     this.language,
     this.matchSnippets = const [],
+    this.meetingDedupSpeechS,
+    this.meetingDurationS,
+    this.meetingTreatmentEligible = false,
+    this.meetingTreatmentReason,
     this.photos = const [],
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
@@ -858,6 +869,7 @@ class GeneratedConversationSearchItem {
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
     this.updatedAt,
+    this.usesCustomStt = false,
     this.visibility = "private",
   });
 
@@ -880,9 +892,14 @@ class GeneratedConversationSearchItem {
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
       geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      imported: _required(_readFieldValue<bool>(_readField(json, const ["imported"]), "imported", _readBool, requiredField: false, nullable: false, defaultValue: false), "imported"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
       matchSnippets: _required(_readFieldValue<List<GeneratedTranscriptMatchSnippet>>(_readField(json, const ["match_snippets"]), "match_snippets", (value) => _readObjectList(value, GeneratedTranscriptMatchSnippet.fromJson), requiredField: false, nullable: false, defaultValue: const []), "match_snippets"),
+      meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
+      meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
+      meetingTreatmentEligible: _required(_readFieldValue<bool>(_readField(json, const ["meeting_treatment_eligible"]), "meeting_treatment_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "meeting_treatment_eligible"),
+      meetingTreatmentReason: _readFieldValue<String>(_readField(json, const ["meeting_treatment_reason"]), "meeting_treatment_reason", _readString, requiredField: false, nullable: true),
       photos: _required(_readFieldValue<List<GeneratedConversationPhoto>>(_readField(json, const ["photos"]), "photos", (value) => _readObjectList(value, GeneratedConversationPhoto.fromJson), requiredField: false, nullable: false, defaultValue: const []), "photos"),
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
@@ -897,6 +914,7 @@ class GeneratedConversationSearchItem {
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
       updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
+      usesCustomStt: _required(_readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool, requiredField: false, nullable: false, defaultValue: false), "uses_custom_stt"),
       visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
   }
@@ -920,9 +938,14 @@ class GeneratedConversationSearchItem {
       'folder_id': folderId,
       'geolocation': geolocation?.toJson(),
       'id': id,
+      'imported': imported,
       'is_locked': isLocked,
       'language': language,
       'match_snippets': matchSnippets.map((value) => value.toJson()).toList(),
+      'meeting_dedup_speech_s': meetingDedupSpeechS,
+      'meeting_duration_s': meetingDurationS,
+      'meeting_treatment_eligible': meetingTreatmentEligible,
+      'meeting_treatment_reason': meetingTreatmentReason,
       'photos': photos.map((value) => value.toJson()).toList(),
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
@@ -937,6 +960,7 @@ class GeneratedConversationSearchItem {
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
       'updated_at': updatedAt?.toUtc().toIso8601String(),
+      'uses_custom_stt': usesCustomStt,
       'visibility': visibility,
     };
   }
