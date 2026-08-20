@@ -341,7 +341,7 @@ def latest_release_stat(panel_id: int, scope: str) -> dict:
             "colorMode": "value",
             "graphMode": "none",
             "justifyMode": "auto",
-            "text": {"valueSize": 20, "titleSize": 11},
+            "text": {"valueSize": 16, "titleSize": 11},
         },
         "targets": [{
             "refId": "A",
