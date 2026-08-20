@@ -5,6 +5,7 @@
     "Fixed the desktop Home view's new-item state initialization",
     "Omi now offers to connect an integration when you open an app it works with — Gmail, Google Calendar, Apple Notes, Notion, Obsidian, ChatGPT, Claude, Gemini, X, or your local files — with what the integration would do for you and what Omi would read; every connector's sheet now shows the same 'What you get' detail, and you can turn the suggestions off or reset them in Settings → Notifications",
     "Proactive notifications now wait for something that changed, like a new blocker or approaching deadline, instead of repeating a standing status",
+    "Added environmental speaker context analysis to detect multi-party calls and meetings from ambient speech",
     "Added voice barge-in interruption to halt playback immediately when the user begins speaking",
     "Made \"where was that doc?\" answer from the document itself — recent-work questions now resolve to the URL or file you were in, without decoding screen history first",
     "Added Accessibility to Settings → Permissions, so the permission Omi needs to identify the page or file you are in can finally be granted — and granting it now takes effect immediately instead of after a restart",
