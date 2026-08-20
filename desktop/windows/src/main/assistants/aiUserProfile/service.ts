@@ -24,7 +24,7 @@ import {
 } from '../../ipc/db'
 import { getAppSettings } from '../../appSettings'
 import type { AiUserProfileRecord } from '../../../shared/types'
-import { shouldGenerate, type ProfileSources } from './synthesis'
+import { shouldGenerate, type ChatMessage } from './synthesis'
 import {
   getAbortSignal,
   getBackendSession,
@@ -44,6 +44,10 @@ import {
 /** Credentials the renderer hands the main process to reach the backend.
  *  Now just the shared session — the alias keeps the IPC layer's import stable. */
 export type AiProfileSession = BackendSession
+
+// ModelQoS.Claude.synthesis on desktop — the cheap synthesis tier Windows
+// already uses for memory-log/calendar/gmail import (src/renderer/.../memoryExtract.ts).
+const SYNTHESIS_MODEL = 'claude-haiku-4-5-20251001'
 
 const CONVERSATIONS_LOOKBACK_MS = 7 * 86_400_000
 // Re-check every 6h (not exactly 24h) so a session that arrives after startup
@@ -245,29 +249,30 @@ function makeFetchers(session: AiProfileSession, signal?: AbortSignal): SourceFe
 
 // --- LLM + backend sync -----------------------------------------------------
 
-async function runSynthesis(
+async function runChat(
   session: AiProfileSession,
-  sources: ProfileSources,
-  pastProfilesOldestFirst: string[],
+  messages: ChatMessage[],
   external?: AbortSignal
 ): Promise<string> {
   return withTimeout(
     LLM_TIMEOUT_MS,
     async (signal) => {
-      const res = await net.fetch(`${session.apiBase}/v1/users/ai-profile/synthesize`, {
+      const res = await net.fetch(`${session.desktopApiBase}/v2/chat/completions`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ ...sources, past_profiles: pastProfilesOldestFirst }),
+        body: JSON.stringify({ model: SYNTHESIS_MODEL, stream: false, messages }),
         signal
       })
-      if (!res.ok) throw new Error(`ai-profile/synthesize HTTP ${res.status}`)
-      const json = (await res.json()) as { profile_text?: string }
-      const content = (json?.profile_text ?? '').trim()
-      if (!content) throw new Error('ai-profile/synthesize returned empty content')
-      return content
+      if (!res.ok) throw new Error(`chat/completions HTTP ${res.status}`)
+      const json = (await res.json()) as {
+        choices?: { message?: { content?: string } }[]
+      }
+      const content = json?.choices?.[0]?.message?.content ?? ''
+      if (!content.trim()) throw new Error('chat/completions returned empty content')
+      return content.trim()
     },
     external
   )
@@ -339,8 +344,7 @@ export async function generateNow(session?: AiProfileSession): Promise<AiUserPro
     // (orchestrate.ts) — the only place that touches the event loop / DB.
     return await generateProfile({
       fetchers: makeFetchers(active, signal),
-      synthesize: (sources, pastProfilesOldestFirst) =>
-        runSynthesis(active, sources, pastProfilesOldestFirst, signal),
+      chat: (messages) => runChat(active, messages, signal),
       listPastProfiles: (n) => listAiUserProfiles(n).map((r) => r.profileText),
       insertProfile: insertAiUserProfile,
       syncProfile: (id, text, generatedAtMs, itemCount) =>

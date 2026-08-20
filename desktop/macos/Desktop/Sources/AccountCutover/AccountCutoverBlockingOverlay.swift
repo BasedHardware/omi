@@ -67,12 +67,10 @@ private struct AccountCutoverBlockingOverlayHost: View {
   let onOpenDownload: (DesktopUpdatePolicyResponse) -> Void
 
   var body: some View {
-    if let decision = manager.overlayDecision {
-      AccountCutoverBlockingOverlay(
-        decision: decision,
-        strandedNewData: manager.control.strandedNewData,
-        onOpenDownload: onOpenDownload
-      )
-    }
+    AccountCutoverBlockingOverlay(
+      decision: manager.overlayDecision,
+      strandedNewData: manager.control.strandedNewData,
+      onOpenDownload: onOpenDownload
+    )
   }
 }

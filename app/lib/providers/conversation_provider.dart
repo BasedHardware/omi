@@ -22,7 +22,6 @@ typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)>
   required bool includeDiscarded,
   String? speakerId,
 });
-typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
 ///
@@ -99,9 +98,6 @@ class ConversationProvider extends ChangeNotifier {
   final ConversationSearchFetcher _conversationSearchFetcher;
   final bool Function() _isSignedIn;
 
-  @visibleForTesting
-  ConversationDetailsFetcher? conversationDetailsFetcherOverride;
-
   ConversationProvider({
     ConversationListFetcher? conversationListFetcher,
     DailySummariesChecker? dailySummariesChecker,
@@ -163,13 +159,19 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateSearchedConvoDetails(String id) async {
-    final convo = await (conversationDetailsFetcherOverride?.call(id) ?? getConversationById(id));
+  Future updateSearchedConvoDetails(String id, DateTime date, int idx) async {
+    var convo = await getConversationById(id);
     if (convo != null) {
-      updateConversationInSortedList(convo);
-    } else {
-      notifyListeners();
+      updateSpecificGroupedConvo(convo, date, idx);
     }
+    notifyListeners();
+  }
+
+  void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
+    final group = groupedConversations[date];
+    if (group == null || idx < 0 || idx >= group.length) return;
+    group[idx] = convo;
+    notifyListeners();
   }
 
   Future<void> searchConversations(String query, {bool showShimmer = false}) async {
@@ -262,30 +264,9 @@ class ConversationProvider extends ChangeNotifier {
   void onConversationTap(String conversationId) {
     final idx = conversations.indexWhere((c) => c.id == conversationId);
     if (idx == -1) return;
-    var changed = false;
     if (conversations[idx].isNew) {
       conversations[idx].isNew = false;
-      changed = true;
-    }
-    for (final conversation in searchedConversations) {
-      if (conversation.id == conversationId && conversation.isNew) {
-        conversation.isNew = false;
-        changed = true;
-      }
-    }
-    for (final group in groupedConversations.values) {
-      for (final conversation in group) {
-        if (conversation.id == conversationId && conversation.isNew) {
-          conversation.isNew = false;
-          changed = true;
-        }
-      }
-    }
-    if (changed) {
-      // A sync refresh can replace the grouped object while the canonical
-      // list still holds the old instance. Update every view by ID without
-      // rebuilding and sorting the entire list on a tap.
-      notifyListeners();
+      groupConversationsByDate();
     }
   }
 
@@ -806,18 +787,12 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {
-    final canonicalIndex = conversations.indexWhere((element) => element.id == conversation.id);
-    if (canonicalIndex != -1) {
-      conversations[canonicalIndex] = conversation;
-    }
-    final searchedIndex = searchedConversations.indexWhere((element) => element.id == conversation.id);
-    if (searchedIndex != -1) {
-      searchedConversations[searchedIndex] = conversation;
-    }
-    for (final group in groupedConversations.values) {
-      final groupedIndex = group.indexWhere((element) => element.id == conversation.id);
-      if (groupedIndex != -1) {
-        group[groupedIndex] = conversation;
+    var effectiveDate = conversation.startedAt ?? conversation.createdAt;
+    var date = conversationLocalDayKey(effectiveDate);
+    if (groupedConversations.containsKey(date)) {
+      int idx = groupedConversations[date]!.indexWhere((element) => element.id == conversation.id);
+      if (idx != -1) {
+        groupedConversations[date]![idx] = conversation;
       }
     }
     notifyListeners();

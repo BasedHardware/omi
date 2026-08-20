@@ -3,10 +3,8 @@ import { desktopApi, omiApi } from './apiClient'
 import { parseMessagesSse } from './messagesSse'
 
 // Non-streaming single-shot completion used by the action planner & intent gate.
-// Mirrors the lane + endpoint localAgent.ts uses for its agent loop. This is not a
-// chat turn, so it selects the managed structured lane explicitly rather than the
-// conversational chat-agent lane (backend routers/desktop_chat.py _managed_lane_id).
-const AGENT_MODEL = 'omi-structured'
+// Mirrors the model + endpoint localAgent.ts uses for its agent loop.
+const AGENT_MODEL = 'claude-haiku-4-5-20251001'
 const CALL_TIMEOUT_MS = 8000
 const FALLBACK_TIMEOUT_MS = 30000
 

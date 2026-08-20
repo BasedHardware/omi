@@ -374,15 +374,16 @@ enum GeneratedToolCapabilities {
     Capability(
       toolName: "save_knowledge_graph",
       title: "Save Knowledge Graph",
-      latency: .fastNetwork,
+      latency: .fastLocal,
       surfaces: Set([.desktopChat]),
       summary: "Save a knowledge graph of entities and relationships extracted from the user's data.",
       bullets: [
-      "Prefer discovery_text (raw notes/findings). Backend extract via knowledge_graph SSOT builds nodes/edges; nodes/edges remain accepted for compatibility.",
+      "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
       "node_type must be one of: person, organization, place, thing, concept.",
       "Use when exploring the user's files during onboarding to build their knowledge graph.",
       "Deduplication is handled automatically; provide all entities you find.",
-      "Use when exploring the user's files during onboarding or knowledge-graph building."
+      "Use when exploring the user's files during onboarding or knowledge-graph building.",
+      "Deduplication is handled automatically; include all meaningful entities and relationships you found."
     ]
     ),
     Capability(

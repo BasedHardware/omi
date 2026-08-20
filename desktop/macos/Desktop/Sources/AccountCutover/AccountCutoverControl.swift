@@ -167,12 +167,9 @@ final class AccountCutoverControlManager: ObservableObject {
     bootstrapPhase == .ready && decision == .allowProductTraffic
   }
 
-  /// A blocking overlay is user-facing evidence of an authoritative server decision.
-  /// Bootstrap remains fail-closed for product traffic, but an unconfirmed pending
-  /// state must not masquerade as a migration or intercept the shell while control loads.
-  var overlayDecision: AccountCutoverGateDecision? {
-    guard bootstrapPhase == .ready else { return nil }
-    return decision == .allowProductTraffic ? nil : decision
+  /// Overlay decision while bootstrap is pending: fail closed into maintenance.
+  var overlayDecision: AccountCutoverGateDecision {
+    bootstrapPhase == .ready ? decision : .migrationMaintenance
   }
 
   /// Install activation / owner observers once and bind+refresh the current owner.

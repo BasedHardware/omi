@@ -379,6 +379,7 @@ struct ShellStatusIcons: View {
   // MARK: Actions — the shared logic, never a second copy
 
   private func toggleListening() {
+    OmiUISound.play(appState.isTranscribing ? .captureEnd : .captureStart)
     CaptureListeningLogic.toggleListening(
       appState: appState,
       transcriptionEnabled: $transcriptionEnabled,
@@ -386,6 +387,7 @@ struct ShellStatusIcons: View {
   }
 
   private func toggleCapture() {
+    OmiUISound.play(captureState == .active ? .captureEnd : .captureStart)
     CaptureListeningLogic.toggleCapture(
       appState: appState, screenAnalysisEnabled: $screenAnalysisEnabled,
       isCaptureMonitoring: $isCaptureMonitoring, isTogglingCapture: $isTogglingCapture)

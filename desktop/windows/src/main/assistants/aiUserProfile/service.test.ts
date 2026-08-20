@@ -12,7 +12,7 @@ import {
   type OrchestratorDeps,
   type SourceFetchers
 } from './orchestrate'
-import type { ProfileSources } from './synthesis'
+import type { ChatMessage } from './synthesis'
 
 // A fetcher set that returns nothing anywhere (the "no data" case).
 function emptyFetchers(): SourceFetchers {
@@ -27,25 +27,23 @@ function emptyFetchers(): SourceFetchers {
 
 function makeDeps(over: Partial<OrchestratorDeps> = {}): {
   deps: OrchestratorDeps
-  synthesize: ReturnType<typeof vi.fn>
+  chat: ReturnType<typeof vi.fn>
   insertProfile: ReturnType<typeof vi.fn>
   syncProfile: ReturnType<typeof vi.fn>
 } {
-  const synthesize = vi.fn(
-    async (_sources: ProfileSources, _past: string[]) => '- User is an engineer'
-  )
+  const chat = vi.fn(async (_messages: ChatMessage[]) => '- User is an engineer')
   const insertProfile = vi.fn(() => 42)
   const syncProfile = vi.fn(async () => undefined)
   const deps: OrchestratorDeps = {
     fetchers: emptyFetchers(),
-    synthesize,
+    chat,
     listPastProfiles: vi.fn(() => []),
     insertProfile,
     syncProfile,
     now: () => 1_700_000_000_000,
     ...over
   }
-  return { deps, synthesize, insertProfile, syncProfile }
+  return { deps, chat, insertProfile, syncProfile }
 }
 
 // Let the fire-and-forget syncProfile().catch() microtasks settle.
@@ -55,9 +53,9 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('generateProfile (orchestrator core)', () => {
   it('(a) throws "not enough data" and never calls the LLM when every source is empty', async () => {
-    const { deps, synthesize, insertProfile, syncProfile } = makeDeps()
+    const { deps, chat, insertProfile, syncProfile } = makeDeps()
     await expect(generateProfile(deps)).rejects.toThrow(/not enough data/)
-    expect(synthesize).not.toHaveBeenCalled()
+    expect(chat).not.toHaveBeenCalled()
     expect(insertProfile).not.toHaveBeenCalled()
     expect(syncProfile).not.toHaveBeenCalled()
   })
@@ -73,12 +71,12 @@ describe('generateProfile (orchestrator core)', () => {
       // …another returns real data.
       tasks: vi.fn(async () => ['[todo] Ship the Windows profile feature'])
     }
-    const { deps, synthesize, insertProfile } = makeDeps({ fetchers })
+    const { deps, chat, insertProfile } = makeDeps({ fetchers })
 
     const record = await generateProfile(deps)
 
     // Generation proceeded on the surviving source.
-    expect(synthesize).toHaveBeenCalledTimes(1)
+    expect(chat).toHaveBeenCalledTimes(1)
     expect(insertProfile).toHaveBeenCalledTimes(1)
     expect(record.id).toBe(42)
     // The failed source was named as a degraded (not silent) outcome.
@@ -134,11 +132,11 @@ describe('generateProfile (orchestrator core)', () => {
         throw new AuthExpiredError()
       })
     }
-    const { deps, synthesize, insertProfile } = makeDeps({ fetchers })
+    const { deps, chat, insertProfile } = makeDeps({ fetchers })
 
     await expect(generateProfile(deps)).rejects.toBeInstanceOf(AuthExpiredError)
     await expect(generateProfile(deps)).rejects.toThrow(/auth expired/)
-    expect(synthesize).not.toHaveBeenCalled()
+    expect(chat).not.toHaveBeenCalled()
     expect(insertProfile).not.toHaveBeenCalled()
   })
 
@@ -154,13 +152,13 @@ describe('generateProfile (orchestrator core)', () => {
     }
     // Session is live while the sources/LLM run, gone by the time we would write.
     let stale = false
-    const synthesize = vi.fn(async (_sources: ProfileSources, _past: string[]) => {
+    const chat = vi.fn(async (_messages: ChatMessage[]) => {
       stale = true // the user signs out during synthesis
       return '- User is an engineer'
     })
     const { deps, insertProfile, syncProfile } = makeDeps({
       fetchers,
-      synthesize,
+      chat,
       isStale: () => stale
     })
 
@@ -185,25 +183,25 @@ describe('generateProfile (orchestrator core)', () => {
     expect(syncProfile).toHaveBeenCalledTimes(1)
   })
 
-  it('hands the backend its sources plus past profiles oldest→newest', async () => {
+  it('runs stage-2 consolidation when past profiles exist (oldest→newest)', async () => {
     const fetchers: SourceFetchers = {
       ...emptyFetchers(),
       memories: vi.fn(async () => ['[work] engineer'])
     }
-    const synthesize = vi
-      .fn<(s: ProfileSources, past: string[]) => Promise<string>>()
-      .mockResolvedValue('- consolidated fact')
+    const chat = vi
+      .fn<(m: ChatMessage[]) => Promise<string>>()
+      .mockResolvedValueOnce('- stage1 fact')
+      .mockResolvedValueOnce('- consolidated fact')
     const listPastProfiles = vi.fn(() => ['- newest past', '- oldest past'])
-    const { deps } = makeDeps({ fetchers, synthesize, listPastProfiles })
+    const { deps } = makeDeps({ fetchers, chat, listPastProfiles })
 
     const record = await generateProfile(deps)
 
-    expect(synthesize).toHaveBeenCalledTimes(1)
-    const [sources, past] = synthesize.mock.calls[0]
-    expect(sources.memories).toEqual(['[work] engineer'])
-    // The stored list is newest-first; the core reverses it for the backend's
-    // consolidation stage.
-    expect(past).toEqual(['- oldest past', '- newest past'])
+    expect(chat).toHaveBeenCalledTimes(2)
+    // Stage 2 prompt renders past profiles oldest→newest (list is newest-first,
+    // reversed by the core).
+    const stage2User = chat.mock.calls[1][0][1].content
+    expect(stage2User.indexOf('- oldest past')).toBeLessThan(stage2User.indexOf('- newest past'))
     expect(record.profileText).toBe('- consolidated fact')
   })
 })

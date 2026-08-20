@@ -77,7 +77,7 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     XCTAssertNil(ChatWorkingStatus.motion(for: ChatMessage(text: "Answer", sender: .ai)))
   }
 
-  func testToolProgressHasOneTimelineGroupWithAllChildDetails() {
+  func testToolProgressHasOneExpandableGroupWithAllChildDetails() {
     let blocks: [ChatContentBlock] = [
       .toolCall(
         id: "search",
@@ -101,13 +101,10 @@ final class ChatWorkingIndicatorTests: XCTestCase {
     guard let visibleGroup = visibleGroups.first,
       case .toolCalls(_, let childCalls) = visibleGroup
     else {
-      return XCTFail("Expected one tool-call timeline")
+      return XCTFail("Expected one expandable tool-call pill")
     }
     XCTAssertEqual(childCalls.map(\.id), ["search", "fetch"])
-    XCTAssertEqual(
-      ToolActivityTimelinePresentation.items(from: childCalls).map(\.connectsToNext),
-      [true, false]
-    )
+    XCTAssertFalse(ToolCallsGroupExpansionPolicy.initiallyExpanded())
   }
 
   @MainActor

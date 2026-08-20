@@ -89,9 +89,7 @@ struct DesktopTopBar: View {
         .frame(width: laneWidth, height: TopNavigationLayoutMetrics.barHeight)
         .inkGlassPanel(
           cornerRadius: TopNavigationLayoutMetrics.barCornerRadius,
-          shadow: TopNavigationLayoutMetrics.barShadow
-        )
-        .shellWindowDragHandle()
+          shadow: TopNavigationLayoutMetrics.barShadow)
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -148,16 +146,19 @@ struct DesktopTopBar: View {
     }
   }
 
-  /// Every nav press on this bar: the brand, the pills and the settings gear. Keeping the transition
-  /// in one place prevents those entry points from drifting apart.
+  /// Every nav press on this bar: the brand, the pills and the settings gear. They were four copies of
+  /// the same two lines; being one place is also what makes the cue fire once per press instead of
+  /// once per call site that remembered to fire it.
   ///
   /// `Rewind` is the one destination the shell does not reach by index — each shell hands the bar its
   /// own way in (an overlay here, a `More` route in chat-first), so the pill calls that.
   private func navigate(to index: Int) {
     guard index != SidebarNavItem.rewind.rawValue else {
+      OmiUISound.play(.navigate)
       onRewind()
       return
     }
+    OmiUISound.play(.navigate)
     OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
   }
 }

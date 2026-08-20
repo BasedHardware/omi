@@ -59,9 +59,7 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   /// The whole corpus, for the resting sentence. Nil while it is still being counted, which reads as
   /// "counting…" rather than as a confident zero.
   let total: Int?
-  /// Nil when the host has no results surface to go back to — Home is a chat only, so it mounts the
-  /// panel without the `‹ Results` chip. The Activity hub tab never enters answer mode at all.
-  let onExitAnswer: (() -> Void)?
+  let onExitAnswer: () -> Void
   /// **How tall the body is allowed to be — the panel's decision, not the body's.**
   ///
   /// Each body used to pin its own height against a window it could not see, which is how the panel
@@ -116,9 +114,7 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
   private var header: some View {
     HStack(alignment: .center, spacing: OmiSpacing.md) {
       if mode == .answer {
-        if let onExitAnswer {
-          backToResultsButton(onExitAnswer)
-        }
+        backToResultsButton
       } else {
         filterControl
       }
@@ -172,8 +168,8 @@ struct QueryResultsPanel<Content: View, Accessory: View, Footer: View>: View {
 
   /// In answer mode the same corner carries the way back, because asking is a mode of this query and
   /// not a page you navigated to — there is no back button anywhere else to reach for.
-  private func backToResultsButton(_ action: @escaping () -> Void) -> some View {
-    Button(action: action) {
+  private var backToResultsButton: some View {
+    Button(action: onExitAnswer) {
       HStack(spacing: 6) {
         Image(systemName: "chevron.left")
           .scaledFont(size: OmiType.micro, weight: .semibold)

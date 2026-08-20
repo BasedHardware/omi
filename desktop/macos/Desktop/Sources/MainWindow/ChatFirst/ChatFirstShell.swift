@@ -190,10 +190,7 @@ struct ChatFirstShell: View {
         viewModelContainer: viewModelContainer,
         memoriesViewModel: viewModelContainer.memoriesViewModel,
         destinationRawValue: $memoryDestinationRawValue,
-        onSelectDestination: selectHubDestination,
-        // The Activity spine's screenshot rows leave for Rewind through the
-        // shell that owns the route — without this the rows are inert here.
-        onOpenRewind: { navigation.selectMore(.rewind) }
+        onSelectDestination: selectHubDestination
       )
       .accessibilityIdentifier("chat-first-route-memories")
       .onAppear { navigation.markRouteVisible(.memories) }
@@ -318,6 +315,8 @@ struct ChatFirstShell: View {
       )
     case .permissions:
       PermissionsPage(appState: appState)
+    case .help:
+      HelpPage()
     case .settings:
       HStack(spacing: 0) {
         SettingsSidebar(
@@ -363,6 +362,7 @@ struct ChatFirstShell: View {
       case .rewind: return .rewind
       case .apps: return .apps
       case .permissions: return .permissions
+      case .help: return .help
       case .settings: return .settings
       }
     }
@@ -377,7 +377,7 @@ enum ChatFirstPageGlassLanePolicy {
     case .chat, .more(.dashboard), .more(.rewind):
       return false
     case .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.permissions), .more(.settings):
+      .more(.apps), .more(.permissions), .more(.help), .more(.settings):
       return true
     }
   }
@@ -393,6 +393,7 @@ enum ChatFirstPageGlassLanePolicy {
     case .more(.rewind): return SidebarNavItem.rewind.rawValue
     case .more(.apps): return SidebarNavItem.apps.rawValue
     case .more(.permissions): return SidebarNavItem.permissions.rawValue
+    case .more(.help): return SidebarNavItem.help.rawValue
     case .more(.settings): return SidebarNavItem.settings.rawValue
     }
   }

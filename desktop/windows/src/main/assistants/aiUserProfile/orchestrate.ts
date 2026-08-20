@@ -5,7 +5,15 @@
 // these seams — the same pure-core / electron-wiring split as synthesis.ts (and
 // the taskEmbeddingVector pattern the parity audit references).
 import type { AiUserProfileInput, AiUserProfileRecord } from '../../../shared/types'
-import { enforceCharCap, totalSourceItems, usedSourceNames, type ProfileSources } from './synthesis'
+import {
+  buildStage1Messages,
+  buildStage2Messages,
+  enforceCharCap,
+  totalSourceItems,
+  usedSourceNames,
+  type ChatMessage,
+  type ProfileSources
+} from './synthesis'
 
 /** A source fetch hit an expired/invalid session (HTTP 401/403). Distinct from a
  *  transient/empty source so generation can surface "auth expired" instead of the
@@ -101,10 +109,8 @@ export class SessionChangedError extends Error {
 /** Injected seams for generateProfile — every side effect lives here. */
 export type OrchestratorDeps = {
   fetchers: SourceFetchers
-  /** Run backend two-stage synthesis (POST /v1/users/ai-profile/synthesize).
-   *  The prompts, the model and the consolidation live in the backend; this seam
-   *  only ships the collected source lines and the past profiles it should merge. */
-  synthesize: (sources: ProfileSources, pastProfilesOldestFirst: string[]) => Promise<string>
+  /** Run the synthesis LLM (stage 1, then stage 2 if history exists). */
+  chat: (messages: ChatMessage[]) => Promise<string>
   /** Past profile texts, newest-first (up to `limit`), for stage-2 consolidation. */
   listPastProfiles: (limit: number) => string[]
   /** Persist the new profile locally; returns its row id. */
@@ -126,8 +132,8 @@ export type OrchestratorDeps = {
 
 /**
  * Core generation flow (pure-ish; all impurity injected via `deps`):
- *   fetch sources → guard "no data" → backend two-stage synthesis → char-cap →
- *   insert local row → fire-and-forget backend sync.
+ *   fetch sources → guard "no data" → stage-1 LLM → stage-2 consolidation (if
+ *   history) → char-cap → insert local row → fire-and-forget backend sync.
  *
  * Throws AuthExpiredError when the session is expired, or a "not enough data"
  * Error when every source is empty — in both cases the LLM is never called. A
@@ -142,10 +148,16 @@ export async function generateProfile(deps: OrchestratorDeps): Promise<AiUserPro
   )
   if (total === 0) throw new Error('AI profile: not enough data to generate a profile')
 
-  // Past profiles are stored newest-first; the backend consolidation stage wants
-  // them oldest-first. An empty history skips consolidation backend-side.
+  const stage1 = await deps.chat(buildStage1Messages(sources))
+
+  // Stage 2: consolidate with up to 5 past profiles (stored newest-first →
+  // reverse to oldest-first for the prompt). Skip when there is no history.
   const pastNewestFirst = deps.listPastProfiles(5)
-  const finalText = enforceCharCap(await deps.synthesize(sources, [...pastNewestFirst].reverse()))
+  let finalText = stage1
+  if (pastNewestFirst.length > 0) {
+    finalText = await deps.chat(buildStage2Messages(stage1, [...pastNewestFirst].reverse()))
+  }
+  finalText = enforceCharCap(finalText)
 
   const generatedAt = deps.now ? deps.now() : Date.now()
 

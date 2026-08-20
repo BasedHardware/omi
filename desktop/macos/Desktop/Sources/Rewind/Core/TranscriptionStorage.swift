@@ -207,24 +207,18 @@ actor TranscriptionStorage {
   ) async throws -> Bool {
     let db = try await ensureInitialized()
 
-    let result = try await db.write { database -> (accepted: Bool, telemetry: ConversationCreatedTelemetry?) in
+    let completed = try await db.write { database -> Bool in
       guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
         throw TranscriptionStorageError.sessionNotFound
-      }
-
-      if record.status == .completed, record.backendSynced, record.backendId == backendId {
-        log("TranscriptionStorage: Skipping duplicate completion for session \(id)")
-        return (false, nil)
       }
 
       guard allowBackendIdOverride || record.canAcceptCompletion(backendId: backendId) else {
         log(
           "TranscriptionStorage: Skipping conflicting completion for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))"
         )
-        return (false, nil)
+        return false
       }
 
-      let wasAlreadyCompleted = record.status == .completed && record.backendSynced
       let completedAt = Date()
       record.status = .completed
       record.conversationStatus = conversationStatus
@@ -236,23 +230,13 @@ actor TranscriptionStorage {
       record.finalizationCompletedAt = completedAt
       record.updatedAt = completedAt
       try record.update(database)
-      let telemetry =
-        wasAlreadyCompleted
-        ? nil : ConversationCreatedTelemetry(session: record, conversationId: backendId)
-      return (true, telemetry)
+      return true
     }
 
-    if result.accepted {
+    if completed {
       log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
     }
-    if let telemetry = result.telemetry {
-      await AnalyticsManager.shared.conversationCreated(
-        conversationId: telemetry.conversationId,
-        source: telemetry.source,
-        durationSeconds: telemetry.durationSeconds
-      )
-    }
-    return result.accepted
+    return completed
   }
 
   /// Mark session as failed with error.

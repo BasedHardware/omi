@@ -154,17 +154,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     rawValue: Int(CGWindowLevelForKey(.assistiveTechHighWindow))
   )
   static let notchExpandedWidth: CGFloat = 382
-  private static let notificationWidth: CGFloat = 508
-  private static let notificationHeight: CGFloat = 128
+  private static let notificationWidth: CGFloat = 430
+  private static let notificationHeight: CGFloat = 108
   private static let notificationSpacing: CGFloat = 8
   /// Vertical room for the readable PTT status banner under chrome/pill.
   static var pttStatusBannerBudget: CGFloat { notificationSpacing + pttHintRowHeight }
   private static let askOmiAnimationDuration: TimeInterval = 0.14
   private static let askOmiSettleDelay: TimeInterval = 0.16
-  /// Hover-menu (agent switcher) motion. SwiftUI owns the per-frame content
-  /// morph; AppKit only snaps the panel once to the entering or settled size.
-  /// This avoids WindowServer work during the animation without reserving a
-  /// transparent maximum-size window over unrelated controls.
+  /// Hover-menu (agent switcher) motion.
+  ///
+  /// Notch mode uses the fixed-window architecture (DynamicNotchKit /
+  /// boring.notch): the NSPanel is sized ONCE to the maximum hover-menu
+  /// surface for the idle ↔ hover lifecycle and never animates its frame —
+  /// per-frame window resizes are synchronous WindowServer round-trips plus
+  /// an NSHostingView re-layout, which is what made hover expansion janky.
+  /// The entire visible expand/collapse is the SwiftUI content morph
+  /// (`notchSwitcherProgress`) driven by the two animations below.
   ///
   /// Pill mode still resizes its panel; it keeps the duration constants
   /// below shared with its content transitions so both finish together.
@@ -199,12 +204,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private var draggableBarCancellable: AnyCancellable?
   private let cursorScreenTracker = CursorScreenTracker()
   private var pttHintCancellable: AnyCancellable?
-  var mouseInterceptionReconciler: FloatingBarMouseInterceptionReconciler?
   private var previousVoiceResponseGlowActive = false
   private var resizeWorkItem: DispatchWorkItem?
-  var notchRetractionScheduler: DelayedActionScheduling = TaskDelayedActionScheduler()
-  var notchRetractionCancellation: DelayedActionCancellation?
-  var notchRetractionGeneration = 0
   /// Saved center point from before chat opened, used to restore position on close.
   private var preChatCenter: NSPoint?
   /// Token incremented each time a windowDidResignKey dismiss animation starts.
@@ -222,7 +223,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// The idle pill frame captured just before morphing into the active island
   /// on a non-notch display, so the pill returns to the exact same spot.
   private var savedPillFrame: NSRect?
-  var frameAnimationToken: Int = 0
+  private var frameAnimationToken: Int = 0
   private var pendingFrameAnimationTarget: NSRect?
   private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
   /// In-process NSMenus (bar context menus, the model picker) render at
@@ -325,24 +326,39 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         + Self.notchHoverMenuHeight(agentCount: agentCount)
     )
   }
-  private func notchHoverMenuSurfaceSize(agentCount: Int, for screen: NSScreen) -> NSSize {
+  /// The constant notch window surface for the whole idle ↔ hover-menu
+  /// lifecycle: the maximum hover-menu surface at the visible-agent ceiling.
+  /// The panel is sized to this once (entering notch mode / screen change)
+  /// and the visible expand/collapse is carried entirely by the SwiftUI
+  /// content morph — never by an NSPanel frame animation.
+  private func notchFixedIdleSurfaceSize() -> NSSize {
+    notchHoverMenuSurfaceSize(agentCount: Self.notchAgentListMaxVisibleAgents)
+  }
+  private func notchFixedIdleSurfaceSize(for screen: NSScreen) -> NSSize {
     NSSize(
       width: max(notchCollapsedSize(for: screen).width, Self.notchExpandedWidth),
-      height: Self.notchChromeHeight(for: screen) + Self.notchHoverMenuHeight(agentCount: agentCount)
+      height: Self.notchChromeHeight(for: screen)
+        + Self.notchHoverMenuHeight(agentCount: Self.notchAgentListMaxVisibleAgents)
     )
   }
-  private func notchIdleOrHoverSurfaceSize() -> NSSize {
-    state.isNotchHoverMenuVisible
-      ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
-      : notchCollapsedSize
+  /// Re-assert the fixed idle/hover window frame. A no-op when the panel is
+  /// already there (the common case for every hover expand/collapse); only
+  /// transitions returning from a differently-sized state (chat, voice,
+  /// notification, PTT hint) actually move the frame.
+  private func assertNotchFixedHoverSurfaceFrame(animated: Bool = true) {
+    guard notchModeEnabled else { return }
+    resizeAnchored(
+      to: notchFixedIdleSurfaceSize(),
+      makeResizable: false,
+      animated: animated,
+      animationDuration: Self.notchHoverMenuCollapseDuration,
+      anchorTop: true
+    )
   }
-  private func notchIdleOrHoverSurfaceSize(for screen: NSScreen) -> NSSize {
-    state.isNotchHoverMenuVisible
-      ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count, for: screen)
-      : notchCollapsedSize(for: screen)
-  }
-  /// Height of the visible notch content (chrome band, plus the open hover
-  /// menu sized to the current agent count).
+  /// Height of the VISIBLE notch content (chrome band, plus the open hover
+  /// menu sized to the CURRENT agent count). The window frame stays at the
+  /// maximum hover surface for the whole idle ↔ hover lifecycle, so pointer
+  /// math must derive from content, not from `frame`.
   private var notchVisibleContentHeight: CGFloat {
     var height = notchChromeHeightForCurrentScreen
     if state.isNotchHoverMenuVisible {
@@ -356,7 +372,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       ? max(notchCollapsedSize.width, Self.notchExpandedWidth)
       : notchCollapsedSize.width
   }
-  /// Horizontal transparent margin reserved for the rendered glow.
+  /// Horizontal transparent margin between the fixed window edge and the
+  /// visible content. With the constantly-large window this is wider than
+  /// the glow outset while the menu is closed — hover/click activation must
+  /// hug the visible chrome, not the window frame.
   private var notchVisibleContentHorizontalOutset: CGFloat {
     max(Self.notchGlowOutsetX, (frame.width - notchVisibleContentWidth) / 2)
   }
@@ -446,7 +465,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     setupViews()
     updateNotchIslandState()
     registerMenuTrackingObservers()
-    installMouseInterceptionSync()
 
     if ShortcutSettings.shared.draggableBarEnabled,
       !notchModeEnabled,
@@ -467,33 +485,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     } else {
       centerOnMainScreen()
     }
-    syncMouseInterception()
     scheduleStartupDisplayRevalidation()
   }
 
   deinit {
     menuTrackingObservers.forEach(NotificationCenter.default.removeObserver)
-  }
-
-  override func makeKeyAndOrderFront(_ sender: Any?) {
-    cancelPendingRetraction()
-    super.makeKeyAndOrderFront(sender)
-    syncMouseInterception()
-  }
-
-  override func orderFrontRegardless() {
-    cancelPendingRetraction()
-    super.orderFrontRegardless()
-    syncMouseInterception()
-  }
-
-  override func orderOut(_ sender: Any?) {
-    notchRetractionGeneration &+= 1
-    notchRetractionCancellation?.cancel()
-    notchRetractionCancellation = nil
-    state.notchRevealProgress = 1
-    super.orderOut(sender)
-    syncMouseInterception()
   }
 
   // MARK: - Window Level
@@ -826,7 +822,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.notificationHeight
       )
     } else {
-      size = notchModeEnabled ? notchIdleOrHoverSurfaceSize() : collapsedBarSize
+      // Idle ↔ hover-menu lifecycle: notch mode holds one fixed frame.
+      size = notchModeEnabled ? notchFixedIdleSurfaceSize() : collapsedBarSize
     }
     let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
     return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
@@ -865,7 +862,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         height: barHeight + Self.notificationSpacing + Self.notificationHeight
       )
     }
-    return usesNotchIsland ? notchIdleOrHoverSurfaceSize() : Self.minBarSize
+    // Idle ↔ hover-menu lifecycle: notch mode holds one fixed frame sized
+    // to the maximum hover-menu surface; the content morph does the rest.
+    return usesNotchIsland ? notchFixedIdleSurfaceSize() : Self.minBarSize
   }
 
   private func currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: Bool? = nil) -> NSSize {
@@ -898,7 +897,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         height: barHeight + Self.notificationSpacing + Self.notificationHeight
       )
     } else {
-      size = usesNotchIsland ? notchIdleOrHoverSurfaceSize(for: screen) : Self.minBarSize
+      // Idle ↔ hover-menu lifecycle: the notch island keeps one fixed
+      // frame (sized here on entry/screen change) so hover never resizes.
+      size = usesNotchIsland ? notchFixedIdleSurfaceSize(for: screen) : Self.minBarSize
     }
     let windowSize = responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: usesNotchIsland)
     return NSRect(
@@ -954,8 +955,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func notchPointerContains(localPoint point: NSPoint, mode: NotchPointerMode) -> Bool {
-    // Activation and retention zones follow the visible content, excluding
-    // the transparent glow margin around the panel.
+    // The window frame is the fixed maximum hover surface, so activation
+    // and retention zones must come from the VISIBLE content geometry —
+    // deriving them from `frame` would trigger hover from far below the
+    // collapsed chrome.
     let chromeHeight: CGFloat
     switch mode {
     case .activationOnly:
@@ -1009,62 +1012,34 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let allowed = visible && state.canShowNotchHoverMenu
     guard state.notchHoverMenuOpen != allowed else { return }
 
-    // The SwiftUI content carries the spring animation. The NSPanel changes
-    // size once at each boundary so its transparent remainder cannot cover
-    // unrelated controls in windows underneath it.
+    // The NSPanel frame is fixed for the idle ↔ hover lifecycle; flipping
+    // this state drives the SwiftUI content morph (`notchSwitcherProgress`)
+    // that carries the entire visible expand/collapse. The resize call only
+    // re-asserts the fixed frame (a no-op unless returning from a
+    // differently-sized state).
     state.setNotchHoverMenuOpen(allowed)
-    if allowed {
-      resizeForAgentSwitcher(visible: true)
-    }
+    resizeForAgentSwitcher(visible: allowed)
   }
 
-  // MARK: - Mouse interception sync
-  //
-  // A view-level `hitTest` nil CANNOT make a window click-through: the window server routes the
-  // click to whichever window is under the cursor, and the window's frame view (NSNextStepFrame)
-  // swallows anything its content view declined. So any transparent notch-panel margin can become
-  // an invisible click sink over everything beneath it — other apps, and Omi's own centered shell
-  // (dead top-bar pills). The window-level mechanism is `ignoresMouseEvents`, kept in sync with
-  // the pointer: ignored while the pointer is over dead margin, interactive over visible content.
-  /// Non-production diagnostics seam for the `debug_hit_probe` bridge action.
-  func automationAcceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
-    acceptsMouseHit(inContentPoint: point)
-  }
-
-  func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
+  fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
     guard notchModeEnabled else { return true }
-    // Only content that visibly fills the window may own the whole frame: an expanded
-    // response panel or a notification card. A conversation that is merely open (ask input,
-    // "thinking" shimmer) draws chrome plus at most the input panel — treating it as
-    // whole-window can turn transparent margins into an invisible click sink over the main
-    // window's top navigation (dead Tasks/Rewind/Apps pills).
-    guard
-      FloatingControlBarGeometry.notchWholeWindowHitsAllowed(
-        showingAIConversation: state.showingAIConversation,
-        showingAIResponse: state.showingAIResponse,
-        hasNotification: state.currentNotification != nil)
-    else {
-      // Content-derived hit region: the window includes glow/content margins outside the
-      // visible chrome/menu, and those transparent margins must keep passing
-      // clicks through to windows below (hitTest returns nil outside this).
-      var chromeHeight =
-        state.isNotchHoverMenuVisible
-        ? max(Self.notchActivationHeight, notchVisibleContentHeight)
-        : notchChromeHeightForCurrentScreen
-      var horizontalOutset = notchVisibleContentHorizontalOutset
-      if state.showingAIConversation {
-        // Conversation without an expanded response: chrome plus the ask-input panel.
-        chromeHeight = max(chromeHeight, notchChromeHeightForCurrentScreen + inputPanelHeight)
-        horizontalOutset = Self.notchGlowOutsetX
-      }
-      return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
-        localPoint: point,
-        windowSize: frame.size,
-        chromeHeight: chromeHeight,
-        horizontalOutset: horizontalOutset
-      )
-    }
-    return true
+    guard !state.showingAIConversation,
+      state.currentNotification == nil
+    else { return true }
+
+    // Content-derived hit region: the fixed window is larger than the
+    // visible chrome/menu, and its transparent margins must keep passing
+    // clicks through to windows below (hitTest returns nil outside this).
+    let chromeHeight =
+      state.isNotchHoverMenuVisible
+      ? max(Self.notchActivationHeight, notchVisibleContentHeight)
+      : notchChromeHeightForCurrentScreen
+    return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+      localPoint: point,
+      windowSize: frame.size,
+      chromeHeight: chromeHeight,
+      horizontalOutset: notchVisibleContentHorizontalOutset
+    )
   }
 
   private func observeNotchAgentPills() {
@@ -1111,7 +1086,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // response waiting and a status hint after recording has stopped.
         guard !self.state.isVoicePresentationActive
         else { return }
-        self.resizeForAgentSwitcher(visible: self.state.isNotchHoverMenuVisible)
+        // Idle ↔ hover lifecycle: pills appearing or disappearing must
+        // not resize the panel — the fixed frame already fits the
+        // agent-count ceiling and the content morph handles the rest.
+        self.assertNotchFixedHoverSurfaceFrame(animated: false)
       }
   }
 
@@ -1325,7 +1303,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // so the window center shifts — anchoring from center would land in the wrong spot).
     // Draggable + preChatCenter set: restore to where the bar was before chat opened.
     // Draggable + no preChatCenter: fall back to current center-anchor (best effort).
-    let surfaceSize = notchModeEnabled ? notchCollapsedSize : collapsedBarSize
+    // Notch mode restores the FIXED idle/hover surface frame, not the bare
+    // collapsed chrome — hover expansion never resizes the panel again.
+    let surfaceSize = notchModeEnabled ? notchFixedIdleSurfaceSize() : collapsedBarSize
     let size = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: surfaceSize)
     let restoreOrigin: NSPoint
     if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
@@ -1372,7 +1352,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       // AI conversation instead of leaving the compact pill visible — unless a
       // queued notification was just flushed; hiding now would swallow it, and
       // its dismissal re-hides the bar anyway.
-      if self.shouldOrderOutAfterConversationClose {
+      if !FloatingControlBarManager.shared.isEnabled && self.state.currentNotification == nil {
         self.orderOut(nil)
       }
     }
@@ -1817,9 +1797,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     return (min(Self.defaultBaseResponseHeight, defaultCap), defaultCap)
   }
 
-  /// Hover expand/collapse. The SwiftUI content owns animation while the
-  /// panel snaps once to the current visible surface; the pill resize is
-  /// anchored from center so the circle grows outward.
+  /// Hover expand/collapse. Notch mode never resizes the panel here (fixed
+  /// window, animated content); the pill resize is anchored from center so
+  /// the circle grows outward.
   /// Returns false when a guard skipped the expansion; the view must not
   /// render expanded hover content in that case, or the oversized SwiftUI
   /// content force-grows the window with the origin pinned (a rightward
@@ -1833,7 +1813,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // exits must not collapse it out from under the list.
     guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return false }
     guard !notchModeEnabled else {
-      resizeForAgentSwitcher(visible: expanded)
+      // Fixed window, animated content: hover expand/collapse never
+      // touches the NSPanel frame. Re-assert the fixed idle/hover
+      // surface (a no-op in steady state) and let the SwiftUI content
+      // morph carry the visible transition.
+      assertNotchFixedHoverSurfaceFrame()
       return true
     }
     resizeWorkItem?.cancel()
@@ -1909,7 +1893,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   /// Gives the subagent switcher enough room to unfurl into a centered
-  /// stacked list without opening the full chat surface.
+  /// stacked list without opening the full chat surface. In notch mode the
+  /// window already holds the fixed maximum hover surface, so this only
+  /// re-asserts that frame; the pill window still resizes, skipping glow
+  /// outsets.
   func resizeForAgentSwitcher(visible: Bool) {
     guard !state.showingAIConversation,
       !state.isVoicePresentationActive,
@@ -1918,20 +1905,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     else { return }
 
     if notchModeEnabled {
-      resizeWorkItem?.cancel()
-      resizeWorkItem = nil
-      let targetSize =
-        visible
-        ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
-        : notchCollapsedSize
-      resizeSurfaceTransition(
-        .agentSwitcher(visible: visible),
-        toSurfaceSize: targetSize,
-        animated: false,
-        animationDuration: visible
-          ? Self.notchHoverMenuExpandDuration
-          : Self.notchHoverMenuCollapseDuration
-      )
+      // Fixed window, animated content — the switcher open/close is a
+      // pure SwiftUI morph; the frame move below is a no-op unless we
+      // are returning from a differently-sized surface (e.g. chat).
+      assertNotchFixedHoverSurfaceFrame()
       return
     }
 
@@ -1951,11 +1928,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         animationDuration: Self.notchHoverMenuCollapseDuration
       )
     }
-  }
-
-  func settleNotchAgentSwitcherCollapse() {
-    guard notchModeEnabled, !state.isNotchHoverMenuVisible else { return }
-    resizeForAgentSwitcher(visible: false)
   }
 
   /// Window size for the pill-mode agent list. No chrome band and no glow
@@ -2013,12 +1985,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   /// Resize window for PTT state (expanded when listening, compact circle when idle)
   func resizeForPTTState(expanded: Bool) {
-    if expanded { cancelPendingRetraction() }
     if notchModeEnabled {
       if state.showingAIConversation {
         return
       }
-      let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
+      // Collapse returns to the FIXED idle/hover surface frame (not the
+      // bare collapsed island) so the next hover expand stays a pure
+      // content morph with no window resize.
+      let targetSize = expanded ? notchSize(active: true) : notchFixedIdleSurfaceSize()
       resizeSurfaceTransition(
         .pushToTalk(expanded: expanded),
         toSurfaceSize: targetSize,
@@ -2038,6 +2012,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       animationDuration: 0.18
     )
   }
+
   /// Size the notch to fit the "thinking" indicator (active width) while a PTT
   /// query is being processed, then collapse it back once the response takes
   /// over. Voice listening and the open conversation surface own sizing while
@@ -2091,7 +2066,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Answering (voice-response glow) — collapsed island.
         base = notchCollapsedSize(for: screen)
       } else {
-        base = notchCollapsedSize(for: screen)
+        // Active lifecycle over — restore the fixed idle/hover surface
+        // frame so the next hover expand needs no window resize.
+        base = notchFixedIdleSurfaceSize(for: screen)
       }
       size = responseGlowWindowSize(forSurfaceSize: base, usesNotchIsland: true)
     } else {
@@ -2121,19 +2098,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       completion()
       return
     }
-    beginNotchRetraction(then: completion)
-  }
-
-  private func cancelPendingRetraction() {
-    notchRetractionGeneration &+= 1
-    notchRetractionCancellation?.cancel()
-    notchRetractionCancellation = nil
-    state.notchRevealProgress = 1
+    frameAnimationToken += 1
+    let token = frameAnimationToken
+    OmiMotion.withGated(.easeIn(duration: 0.18)) {
+      state.notchRevealProgress = 0.01
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+      guard let self, self.frameAnimationToken == token else { return }
+      completion()
+      // Leave the island ready to render for show paths that skip the
+      // reveal (e.g. showTemporarily) — the next reveal re-zeroes it.
+      self.state.notchRevealProgress = 1
+    }
   }
 
   func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
     guard !state.showingAIConversation else { return }
-    cancelPendingRetraction()
     state.currentNotification = notification
     let barHeight =
       notchModeEnabled
@@ -2154,7 +2134,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     if state.isVoiceListening && !notchModeEnabled {
       targetSize = Self.voiceBarSize
     } else if notchModeEnabled && !state.isVoiceListening {
-      targetSize = notchCollapsedSize
+      // Return to the fixed idle/hover surface frame.
+      targetSize = notchFixedIdleSurfaceSize()
     } else {
       targetSize = state.isHoveringBar && !notchModeEnabled ? Self.expandedBarSize : collapsedBarSize
     }
@@ -2168,7 +2149,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       return
     }
     resizeAnchored(
-      to: notchModeEnabled ? notchCollapsedSize : collapsedBarSize,
+      to: notchModeEnabled ? notchFixedIdleSurfaceSize() : collapsedBarSize,
       makeResizable: false,
       animated: false,
       anchorTop: true
@@ -2177,7 +2158,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
   var hasSettledClosedForAutomation: Bool {
     let settledSize = responseGlowWindowSizeForCurrentScreen(
-      forSurfaceSize: notchModeEnabled ? notchCollapsedSize : collapsedBarSize
+      forSurfaceSize: notchModeEnabled ? notchFixedIdleSurfaceSize() : collapsedBarSize
     )
     return !state.showingAIConversation
       && !suppressHoverResize
@@ -2417,7 +2398,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   @objc func windowDidMove(_ notification: Notification) {
-    syncMouseInterception()
     // Only persist position when the user is physically dragging the bar.
     // Programmatic moves (resize animations, chat open/close) should not
     // overwrite the saved position — that causes silent drift.
@@ -2448,7 +2428,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   func windowDidResize(_ notification: Notification) {
-    syncMouseInterception()
     // Response size persistence is committed when the user finishes dragging
     // the resize grip. Persisting ordinary resize notifications here records
     // programmatic min-height transitions as user preferences because AppKit
@@ -2706,7 +2685,6 @@ class FloatingControlBarManager {
     snoozedUntil = until
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .snoozed)
     pendingNotifications.removeAll()
     if let window, window.state.currentNotification != nil {
       window.dismissNotification(animated: false)
@@ -2740,6 +2718,7 @@ class FloatingControlBarManager {
     }
     snoozeTimer = timer
   }
+
   private init() {
     ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
       .sink { [weak self] _ in
@@ -2753,7 +2732,6 @@ class FloatingControlBarManager {
     activeQueryGeneration &+= 1
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    Self.recordQueuedInsightOutcomes(pendingNotifications, reason: .staleOwner)
     pendingNotifications.removeAll()
     pendingNotificationJournalWrites.removeAll()
     storedNotificationMessages.removeAll()
@@ -2764,6 +2742,7 @@ class FloatingControlBarManager {
     }
     window?.state.clearVisibleConversation()
   }
+
   var notificationProjectionSnapshot: NotificationProjectionSnapshot {
     NotificationProjectionSnapshot(
       queuedCount: pendingNotifications.count,
@@ -3224,7 +3203,6 @@ class FloatingControlBarManager {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
-    insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil
   ) -> OwnerBoundNotificationPresentationResult {
     guard !ownerID.isEmpty, RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
@@ -3239,7 +3217,6 @@ class FloatingControlBarManager {
       context: context,
       action: action,
       suggestionTelemetryIdentity: suggestionTelemetryIdentity,
-      insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData
     )
     guard let window else {
@@ -3259,7 +3236,7 @@ class FloatingControlBarManager {
     }
 
     if window.state.currentNotification != nil || window.state.showingAIConversation {
-      Self.appendAdviceNotification(notification, to: &pendingNotifications)
+      pendingNotifications.append(notification)
       return .queued
     }
 
@@ -3276,13 +3253,17 @@ class FloatingControlBarManager {
   func flushQueuedNotificationsIfPossible() {
     guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation
     else { return }
-    if let nextNotification = Self.dequeueCurrentOwnerAdviceNotification(
-      from: &pendingNotifications,
-      currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()
-    ) {
+    while !pendingNotifications.isEmpty {
+      let nextNotification = pendingNotifications.removeFirst()
+      guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
+        log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
+        continue
+      }
       presentNotification(nextNotification, in: window)
+      return
     }
   }
+
   /// Detach the floating UI from any in-flight chat streaming.
   func cancelChat(keepVoiceAlive: Bool = false, stopProvider: Bool = false) {
     activeQueryGeneration += 1
@@ -3847,7 +3828,6 @@ class FloatingControlBarManager {
   private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
     guard notification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
       log("FloatingControlBarManager: refusing to present stale-owner notification")
-      Self.recordInsightDeliveryOutcome(for: notification, outcome: .suppressed, reason: .staleOwner)
       return
     }
     persistNotificationMessageIfNeeded(notification)
@@ -3882,7 +3862,6 @@ class FloatingControlBarManager {
     if let suggestionIdentity = notification.suggestionTelemetryIdentity {
       AnalyticsManager.shared.suggestionAssistantDeliveryOutcome(.delivered, identity: suggestionIdentity)
     }
-    Self.recordAdvicePresentation(notification)
     AnalyticsManager.shared.notificationSent(
       notificationId: notification.id.uuidString,
       title: notification.title,
@@ -3915,10 +3894,12 @@ class FloatingControlBarManager {
     }
 
     if !window.state.showingAIConversation {
-      if let nextNotification = Self.dequeueCurrentOwnerAdviceNotification(
-        from: &pendingNotifications,
-        currentOwnerID: RuntimeOwnerIdentity.currentOwnerId()
-      ) {
+      while !pendingNotifications.isEmpty {
+        let nextNotification = pendingNotifications.removeFirst()
+        guard nextNotification.ownerID == RuntimeOwnerIdentity.currentOwnerId() else {
+          log("FloatingControlBarManager: dropping queued notification from stale runtime owner")
+          continue
+        }
         presentNotification(nextNotification, in: window)
         return
       }
@@ -4187,8 +4168,6 @@ class FloatingControlBarManager {
     }
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    let cancelledNotifications = pendingNotifications.filter { $0.id == notificationID }
-    Self.recordQueuedInsightOutcomes(cancelledNotifications, reason: .queueCancelled)
     pendingNotifications.removeAll { $0.id == notificationID }
     if window.state.currentNotification != nil {
       window.dismissNotification()
@@ -4871,10 +4850,12 @@ extension FloatingControlBarWindow {
       // Non-draggable: always snap to the default pill position before saving.
       // This ensures preChatCenter is always the canonical default, not a
       // mid-animation frame or drifted position from a previous session.
+      // Notch mode snaps to its fixed idle/hover surface frame instead
+      // (usually a no-op — the frame never left it).
       let snapFrame: NSRect
       if notchModeEnabled {
         snapFrame = defaultTopCenteredFrame(
-          for: responseGlowWindowSizeForCurrentScreen(forSurfaceSize: notchCollapsedSize)
+          for: responseGlowWindowSizeForCurrentScreen(forSurfaceSize: notchFixedIdleSurfaceSize())
         )
       } else {
         snapFrame = NSRect(origin: defaultPillOrigin(), size: size)

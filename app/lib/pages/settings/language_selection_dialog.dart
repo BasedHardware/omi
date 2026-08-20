@@ -32,7 +32,9 @@ class LanguageSelectionDialog {
 
     // Preset the selected language if the user has one
     String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null ? homeProvider.getLanguageName(selectedLanguage) : null;
+    String? selectedLanguageName = selectedLanguage != null
+        ? homeProvider.availableLanguages.entries.firstWhere((element) => element.value == selectedLanguage).key
+        : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
     final ScrollController scrollController = ScrollController();

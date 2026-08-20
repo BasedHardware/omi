@@ -63,7 +63,6 @@ APP_CLIENT_PREFIXES = (
     '/v1/calendar',
     '/v1/candidates',
     '/v1/chat',
-    '/v1/connectors',
     '/v1/conversations',
     '/v1/dev',
     '/v1/fair-use',
@@ -125,10 +124,6 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
         'GET',
         '/v1/conversations/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
-    (
-        'POST',
-        '/v1/conversations/topic',
-    ): 'Firebase-authenticated first-party desktop route for provisional titling; not part of the Developer API key contract.',
     (
         'GET',
         '/v1/conversations/{conversation_id}',

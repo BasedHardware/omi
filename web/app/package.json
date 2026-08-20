@@ -7,9 +7,7 @@
     "dev": "npm run generate-sw && next dev --turbopack",
     "build": "npm run generate-sw && next build",
     "start": "next start",
-    "lint": "next lint",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "lint": "next lint"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",
@@ -59,8 +57,7 @@
     "postcss": "~8.5.18",
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.7",
-    "vitest": "^4.1.10"
+    "typescript": "^5.7"
   },
   "overrides": {
     "postcss": "$postcss",

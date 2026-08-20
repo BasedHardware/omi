@@ -112,11 +112,10 @@ class OmiBleForegroundService : Service() {
             val inst = instance
             if (inst != null) {
                 // Service already running — any startService call is effectively a
-                // "please (re)connect this device" signal. onConnectRequest either
-                // re-emits ready (link already up) or forces a fresh attempt so a
-                // stuck autoConnect=true passive scan doesn't silently swallow it.
-                Log.d(TAG, "startService($caller): service running, routing connect request for $deviceAddress")
-                inst.onConnectRequest(deviceAddress, requiresBond, caller)
+                // "please (re)connect this device" signal. Always force a fresh attempt
+                // so a stuck autoConnect=true passive scan doesn't silently swallow it.
+                Log.d(TAG, "startService($caller): service running, forcing reconnect for $deviceAddress")
+                inst.forceReconnect(deviceAddress, requiresBond, caller)
                 return
             }
 
@@ -282,10 +281,9 @@ class OmiBleForegroundService : Service() {
     }
 
     private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>) {
+        if (OmiBleManager.isFlutterAlive) return
         // Subscribe for background streaming OR batch capture (whichever is configured)
-        // so native keeps receiving audio after the Flutter engine is gone. Never deferred
-        // to Dart: enabling notifications is idempotent, and waiting on an engine that is
-        // gone left the characteristic subscribed by nobody (issue #10847).
+        // so native keeps receiving audio after the Flutter engine is gone.
         val target = backgroundAudioStreamer.configuredAudioTargetFor(address)
             ?: batchAudioWriter.configuredAudioTargetFor(address)
             ?: return
@@ -345,12 +343,18 @@ class OmiBleForegroundService : Service() {
             return
         }
 
-        if (bleManager.isPeripheralConnected(addr)) {
-            adoptConnectedDevice(addr, requiresBond)
+        val existing = managedDevices[addr]
+        if (existing != null && bleManager.isPeripheralConnected(addr)) {
+            if (requiresBond && !existing.requiresBond) existing.requiresBond = true
+            existing.retryCount = 0
+            existing.currentGattHash = bleManager.connectedGatts[addr]?.hashCode()
+            existing.hasEverConnected = true
+            existing.currentAttemptEstablished = true
+            updateNotification("Connected to Omi")
+            notifyReadyForConnectedGatt(addr)
             return
         }
 
-        val existing = managedDevices[addr]
         if (existing != null) {
             if (requiresBond && !existing.requiresBond) existing.requiresBond = true
             // Don't interfere with pending GATT connection or scheduled retry
@@ -435,47 +439,13 @@ class OmiBleForegroundService : Service() {
     }
 
     /**
-     * Every "please connect this device" request that arrives while the service is already
-     * running: Dart's manageDevice on app start, a CompanionDeviceManager EVENT_BLE_APPEARED,
-     * or a user-initiated reconnect. Background Mode keeps the link alive past the Flutter
-     * engine, so an already-connected request must re-emit ready — onDeviceReady is Dart's
-     * only "connected" signal — instead of being swallowed (issue #10847).
-     */
-    fun onConnectRequest(address: String, requiresBond: Boolean, source: String) {
-        val addr = address.uppercase()
-        when (routeConnectRequest(serviceRunning = true, peripheralConnected = bleManager.isPeripheralConnected(addr))) {
-            ConnectRequestAction.ResyncReady -> {
-                Log.i(TAG, "onConnectRequest($source): $addr already connected, re-emitting ready")
-                adoptConnectedDevice(addr, requiresBond)
-            }
-            else -> forceReconnect(addr, requiresBond, source)
-        }
-    }
-
-    /**
-     * Take ownership of a link that is already up and re-emit device-ready so Dart
-     * adopts it. Deliberately does not touch the managed-device or user-disconnected
-     * prefs — only manageDevice() owns those, so a CompanionDeviceManager appear
-     * event can never resurrect a device the user explicitly disconnected.
-     */
-    private fun adoptConnectedDevice(address: String, requiresBond: Boolean) {
-        val addr = address.uppercase()
-        val managed = managedDevices.getOrPut(addr) { ManagedDevice(address = addr, requiresBond = requiresBond) }
-        if (requiresBond && !managed.requiresBond) managed.requiresBond = true
-        managed.retryCount = 0
-        managed.currentGattHash = bleManager.connectedGatts[addr]?.hashCode()
-        managed.hasEverConnected = true
-        managed.currentAttemptEstablished = true
-        updateNotification("Connected to Omi")
-        notifyReadyForConnectedGatt(addr)
-    }
-
-    /**
+     * Called from startService() when CompanionDeviceManager fires EVENT_BLE_APPEARED.
      * The OS has confirmed the device is in range right now, so abandon any stuck
      * autoConnect=true passive scan and force a fresh connection attempt.
      */
-    private fun forceReconnect(address: String, requiresBond: Boolean, source: String) {
+    fun forceReconnect(address: String, requiresBond: Boolean, source: String) {
         val addr = address.uppercase()
+        if (bleManager.isPeripheralConnected(addr)) return
 
         synchronized(syncLock) {
             val managed = managedDevices[addr] ?: run {

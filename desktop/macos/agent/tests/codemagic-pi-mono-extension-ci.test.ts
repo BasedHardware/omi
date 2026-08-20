@@ -13,16 +13,14 @@ describe("macOS release CI", () => {
     expect(toolSurfaceScript).not.toContain("tests/runtime-adapter.test.ts");
   });
 
-  it("keeps the shared tool-surface guardrail on PR CI instead of the signed release runner", () => {
+  it("runs the shared desktop tool-surface guardrail before packaging", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
-    const desktopChecks = readFileSync(
-      new URL("../../../../.github/workflows/desktop-checks.yml", import.meta.url),
-      "utf8"
-    );
+    const stepStart = codemagic.indexOf("name: Test desktop tool surfaces");
+    expect(stepStart).toBeGreaterThanOrEqual(0);
 
-    expect(desktopChecks).toContain("desktop/macos/scripts/test-tool-surfaces.sh");
-    expect(codemagic).not.toContain("name: Test desktop tool surfaces");
-    expect(codemagic).not.toContain("scripts/test-tool-surfaces.sh");
+    const step = codemagic.slice(stepStart, codemagic.indexOf("- name:", stepStart + 1));
+    expect(step).toContain("scripts/test-tool-surfaces.sh");
+    expect(stepStart).toBeLessThan(codemagic.indexOf("name: Prepare universal ffmpeg"));
   });
 
   it("bundles pi-mono-extension dependencies into release and local app resources", () => {

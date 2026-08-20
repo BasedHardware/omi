@@ -335,6 +335,7 @@ final class ChatFirstShellTests: XCTestCase {
 
   func testAutomationNavigationVisibilityAcceptsTheMountedShellForSharedNames() {
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "settings"), .more(.settings))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "help"), .more(.help))
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .chat)
     XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "dashboard"), .chat)
 
@@ -479,7 +480,7 @@ final class ChatFirstShellTests: XCTestCase {
   func testChatFirstGlassBoundaryWrapsOnlyRoutesWithoutTheirOwnPanels() {
     let wrapped: [ChatFirstRoute] = [
       .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.permissions), .more(.settings),
+      .more(.apps), .more(.permissions), .more(.help), .more(.settings),
     ]
     let selfContained: [ChatFirstRoute] = [.chat, .more(.dashboard), .more(.rewind)]
 
@@ -508,7 +509,7 @@ final class ChatFirstShellTests: XCTestCase {
 
     for route: ChatFirstRoute in [
       .conversations, .tasks, .goals, .memories,
-      .more(.apps), .more(.rewind), .more(.settings), .more(.permissions),
+      .more(.apps), .more(.rewind), .more(.settings), .more(.permissions), .more(.help),
     ] {
       XCTAssertFalse(
         HomeStageAutomationPolicy.mountsHomeStage(route),

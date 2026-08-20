@@ -100,9 +100,6 @@ actor APIClient {
       authPolicy: authPolicy)
   }
 
-  /// - Parameter requestTimeout: overrides the shared 30s transport timeout. Managed LLM
-  ///   endpoints need a longer budget than a normal API call; without it a slow synthesis
-  ///   is cancelled client-side while the backend is still producing the answer.
   func post<T: Decodable, B: Encodable>(
     _ endpoint: String,
     body: B,
@@ -111,8 +108,7 @@ actor APIClient {
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
-    allowsAuthRetry: Bool = true,
-    requestTimeout: TimeInterval? = nil
+    allowsAuthRetry: Bool = true
   ) async throws -> T {
     var authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -127,9 +123,6 @@ actor APIClient {
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    if let requestTimeout {
-      request.timeoutInterval = requestTimeout
-    }
     request.allHTTPHeaderFields = try await buildHeaders(
       requireAuth: requireAuth,
       includeBYOK: includeBYOK,

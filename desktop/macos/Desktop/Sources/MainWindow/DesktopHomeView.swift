@@ -265,7 +265,7 @@ struct DesktopHomeView: View {
           "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
         )
         chatFirstCapabilitySample.ownerDidChange(to: nil)
-        resetSessionScopedStartupWarmups()
+        resetSessionScopedStartupWarmups(preserveCrispReadState: false)
         appState.conversationRepository.reset()
         appState.folders = []
         appState.selectedFolderId = nil
@@ -282,7 +282,7 @@ struct DesktopHomeView: View {
         log(
           "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
         )
-        resetSessionScopedStartupWarmups()
+        resetSessionScopedStartupWarmups(preserveCrispReadState: false)
         appState.hasCompletedOnboarding = false
         onboardingStep = 0
         onboardingFurthestStep = 0
@@ -291,7 +291,7 @@ struct DesktopHomeView: View {
       }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
         log("DesktopHomeView: app terminating — cancelling startup warmups")
-        resetSessionScopedStartupWarmups()
+        resetSessionScopedStartupWarmups(preserveCrispReadState: true)
       }
       // Handle transcription toggle from menu bar
       .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
@@ -388,7 +388,7 @@ struct DesktopHomeView: View {
       }
     }
     .environment(\.colorScheme, .light)  // No window ground since `ShellWindowChrome`; each panel is its own glass.
-    .background(ShellWindowAttachment().frame(width: 0, height: 0))
+    .background(ShellWindowAttachment().frame(width: 0, height: 0)).shellWindowDragSurface()
     .frame(minWidth: DesktopWindowLayoutPolicy.width, minHeight: DesktopWindowLayoutPolicy.height)
     .preferredColorScheme(.light)  // Glass is pinned light — see `InkGlass`. Deliberate, not a bug.
     .tint(Ink.accent)
@@ -451,7 +451,7 @@ struct DesktopHomeView: View {
       enforceMainWindowMinimumSize()
       reportAutomationState()
       // First-run seed so the counter doesn't count the entire backlog as "new".
-      if topBarNewSinceRaw.isZero { topBarNewSinceRaw = Date().timeIntervalSince1970 }
+      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
@@ -584,9 +584,10 @@ struct DesktopHomeView: View {
     guard !usesChatFirstShell else { return }
     // Tier 0 or tier 6+ shows everything — no redirect needed
     guard currentTierLevel > 0 && currentTierLevel < 6 else { return }
-    // Don't redirect from settings/permissions pages
+    // Don't redirect from settings/permissions/help pages
     let nonMainPages: Set<Int> = [
       SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue,
+      SidebarNavItem.help.rawValue,
     ]
     guard !nonMainPages.contains(selectedIndex) else { return }
 
@@ -615,12 +616,12 @@ struct DesktopHomeView: View {
   /// The constant floating top bar (nav + new-item counts + Capture/Listening)
   /// replaces the old left nav rail. It shows on every main content page —
   /// including Settings, whose page has no back button, so the bar's nav pills
-  /// are the way out. Permissions is a full-screen utility flow with its own
-  /// chrome and stays bar-less — the Memory atlas is the same: it has its
+  /// are the way out. Permissions/help are full-screen utility flows with their
+  /// own chrome and stay bar-less — the Memory atlas is the same: it has its
   /// own back affordance and header, so the redundant top bar hides while it's open.
   private var showsTopBar: Bool {
     guard !useLegacyHomeDesign, let item = SidebarNavItem(rawValue: selectedIndex) else { return false }
-    return item != .permissions
+    return ![.permissions, .help].contains(item)
   }
 
   /// Reference instant for the top bar's "new since you were last here" counts.
@@ -799,12 +800,13 @@ struct DesktopHomeView: View {
     }
   }
 
-  private func resetSessionScopedStartupWarmups() {
+  private func resetSessionScopedStartupWarmups(preserveCrispReadState: Bool) {
     viewModelContainer.resetStartupState()
     didScheduleConversationWarmup = false
     didScheduleAgentVMProvisioning = false
     proactiveMonitoringStartGate.finishAttempt()
     initialFileIndexingBackfill.releaseReservation()
+    CrispManager.shared.stop(preserveReadState: preserveCrispReadState)
   }
 
   private func scheduleAgentVMProvisioning() {
@@ -1205,8 +1207,8 @@ struct DesktopHomeView: View {
             memoryDestinationRawValue = destination.rawValue
           }
           // Settings owns pages now, not only preference rows, so a caller that names Settings can
-          // name the row it means. Without it a banner could only drop the user on whichever
-          // section they last had open.
+          // name the row it means (`SupportThreadRoute`). Without it a "Help from Founder" banner
+          // could only drop the user on whichever section they last had open.
           if let sectionRaw = notification.userInfo?["settingsSection"] as? String,
             let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw)
           {
@@ -1502,8 +1504,7 @@ private struct PageContentView: View {
         ConversationsDestinationView(
           appState: appState,
           viewModelContainer: viewModelContainer,
-          memoryDestinationRawValue: $memoryDestinationRawValue,
-          onOpenRewind: { selectedTabIndex = SidebarNavItem.rewind.rawValue }
+          memoryDestinationRawValue: $memoryDestinationRawValue
         )
       case 3:
         // Same rule as the hub's Memories destination: the readable-width
@@ -1540,6 +1541,8 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
+      case 12:
+        HelpPage()
       default:
         QueryShellHome(
           viewModel: viewModelContainer.dashboardViewModel,

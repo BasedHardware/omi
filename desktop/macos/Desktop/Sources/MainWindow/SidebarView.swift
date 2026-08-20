@@ -10,6 +10,7 @@ struct SidebarView: View {
   @ObservedObject var appState: AppState
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
+  @ObservedObject private var crispManager = CrispManager.shared
 
   // Tier gating (0 = show all, 1-6 = sequential tiers)
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
@@ -260,6 +261,7 @@ struct SidebarView: View {
         newTier != 0 && newTier < currentItem.requiredTier,
         selectedIndex != SidebarNavItem.settings.rawValue
           && selectedIndex != SidebarNavItem.permissions.rawValue
+          && selectedIndex != SidebarNavItem.help.rawValue
       {
         selectedIndex = SidebarNavItem.dashboard.rawValue
       }
