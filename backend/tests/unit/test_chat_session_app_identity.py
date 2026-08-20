@@ -104,7 +104,7 @@ def test_reading_an_empty_named_session_greets_that_session(monkeypatch, session
     monkeypatch.setattr(
         chat_router.chat_db,
         'get_messages',
-        lambda uid, limit=100, include_conversations=False, app_id=None, chat_session_id=None: [],
+        lambda uid, limit=100, offset=0, include_conversations=False, app_id=None, chat_session_id=None: [],
     )
 
     def _initial(uid, app_id=None, chat_session_id=None):
@@ -114,7 +114,7 @@ def test_reading_an_empty_named_session_greets_that_session(monkeypatch, session
 
     monkeypatch.setattr(chat_router, 'initial_message_util', _initial)
 
-    chat_router.get_messages(plugin_id=None, app_id=None, chat_session_id='sess-app', uid='uid-1')
+    chat_router.get_messages(plugin_id=None, app_id=None, chat_session_id='sess-app', limit=100, offset=0, uid='uid-1')
 
     # Without the session id the greeting is written into the *current* session.
     assert recorded['chat_session_id'] == 'sess-app'
@@ -124,16 +124,23 @@ def test_reading_an_empty_named_session_greets_that_session(monkeypatch, session
 def test_reading_a_named_session_scopes_history_to_its_app(monkeypatch, sessions):
     recorded = {}
 
-    def _get_messages(uid, limit=100, include_conversations=False, app_id=None, chat_session_id=None):
+    def _get_messages(uid, limit=100, offset=0, include_conversations=False, app_id=None, chat_session_id=None):
         recorded['app_id'] = app_id
         recorded['chat_session_id'] = chat_session_id
+        recorded['limit'] = limit
+        recorded['offset'] = offset
         return [{'id': 'm1'}]
 
     monkeypatch.setattr(chat_router.chat_db, 'get_messages', _get_messages)
 
-    chat_router.get_messages(plugin_id=None, app_id=None, chat_session_id='sess-app', uid='uid-1')
+    chat_router.get_messages(plugin_id=None, app_id=None, chat_session_id='sess-app', limit=100, offset=0, uid='uid-1')
 
-    assert recorded == {'app_id': 'app-9', 'chat_session_id': 'sess-app'}
+    assert recorded == {
+        'app_id': 'app-9',
+        'chat_session_id': 'sess-app',
+        'limit': 100,
+        'offset': 0,
+    }
 
 
 def test_over_quota_turn_in_a_named_session_carries_session_and_app(monkeypatch, sessions):
