@@ -51,6 +51,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
@@ -1325,6 +1326,91 @@ def set_conversation_visibility(
         redis_db.add_public_conversation(conversation_id)
 
     return {"status": "Ok"}
+
+
+class ShareRecipient(BaseModel):
+    name: Optional[str] = None
+    email: str
+
+
+class ShareRecipientsResponse(BaseModel):
+    recipients: List[ShareRecipient]
+
+
+class SendShareEmailRequest(BaseModel):
+    recipient_emails: List[str] = Field(min_length=1, max_length=share_email.MAX_RECIPIENTS)
+
+
+class SendShareEmailResponse(BaseModel):
+    sent_to: List[str]
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/share-recipients',
+    tags=['conversations'],
+    response_model=ShareRecipientsResponse,
+)
+def get_conversation_share_recipients(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Who the meeting summary could be sent to: calendar-detected participants minus the owner."""
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    recipients = share_email.get_share_recipients(uid, conversation)
+    return {'recipients': recipients}
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/share-email',
+    tags=['conversations'],
+    response_model=SendShareEmailResponse,
+)
+def send_conversation_share_email(
+    conversation_id: str, request: SendShareEmailRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    """One-click send of the meeting summary to detected participants.
+
+    Recipients are validated against the calendar-detected set so this can
+    never relay to arbitrary addresses. Sending makes the conversation
+    link-visible first (same contract as copying the share link) so the
+    emailed link resolves.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    detected = {recipient['email'] for recipient in share_email.get_share_recipients(uid, conversation)}
+    requested = [email.strip().lower() for email in request.recipient_emails]
+    unknown = [email for email in requested if email not in detected]
+    if unknown:
+        raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
+
+    # Publish before dispatching (the emailed link must never race a private
+    # conversation), and roll the publish back if the send fails so a failed
+    # send cannot leave a never-shared conversation link-visible. A
+    # previously-shared conversation stays shared either way.
+    was_shared = conversation.get('visibility') in (
+        ConversationVisibility.shared,
+        ConversationVisibility.public,
+        'shared',
+        'public',
+    )
+
+    def _publish():
+        conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.shared)
+        redis_db.store_conversation_to_uid(conversation_id, uid)
+        redis_db.add_public_conversation(conversation_id)
+
+    def _unpublish():
+        if was_shared:
+            return
+        conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.private)
+        redis_db.remove_conversation_to_uid(conversation_id)
+        redis_db.remove_public_conversation(conversation_id)
+
+    def _send():
+        return share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=requested)
+
+    try:
+        return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.patch(
