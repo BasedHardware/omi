@@ -165,8 +165,7 @@ class CaptureController extends ChangeNotifier
     ConversationLocationCapture? conversationLocationCapture,
     Future<void> Function()? inProgressConversationLoader,
     Future<BleAudioCodec> Function(String deviceId)? audioCodecLoader,
-  })
-      : externalActions = externalActions ?? const NoopCaptureExternalActions(),
+  })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
         _audioCodecLoader = audioCodecLoader {
@@ -1200,10 +1199,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveString('batchAudioDir', docsDir.path);
 
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil().saveBool(
-      'nativeBleStreamingEnabled',
-      _shouldEnableNativeBackgroundStreaming,
-    );
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', _shouldEnableNativeBackgroundStreaming);
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
       'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}',
@@ -1260,10 +1256,7 @@ class CaptureController extends ChangeNotifier
       _nativeOmiRawAudioAllowed;
 
   Future<void> _reconcileNativeBackgroundStreamingPolicy() async {
-    await SharedPreferencesUtil().saveBool(
-      'nativeBleStreamingEnabled',
-      _shouldEnableNativeBackgroundStreaming,
-    );
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', _shouldEnableNativeBackgroundStreaming);
   }
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
@@ -1713,10 +1706,8 @@ class CaptureController extends ChangeNotifier
   }
 
   bool get _shouldReconnectTranscriptionSocket {
-    final activeDeviceCapture =
-        _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
-    final activePhoneOrSystemCapture =
-        recordingState == RecordingState.record ||
+    final activeDeviceCapture = _recordingDevice != null && recordingState == RecordingState.deviceRecord && !_isPaused;
+    final activePhoneOrSystemCapture = recordingState == RecordingState.record ||
         recordingState == RecordingState.interrupted ||
         recordingState == RecordingState.systemAudioRecord;
     return activeDeviceCapture || activePhoneOrSystemCapture;

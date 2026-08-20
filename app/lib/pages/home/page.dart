@@ -325,12 +325,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       try {
         final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
         final startMs = backgroundStartedAt.millisecondsSinceEpoch;
-        final recentEvents = diagnostics.disconnectHistory
-            .where((event) => event.timestamp >= startMs && !event.isManual)
-            .toList();
-        final backgroundEvents = recentEvents
-            .where((event) => event.appState == 'background' || event.appState == 'inactive')
-            .toList();
+        final recentEvents =
+            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
+        final backgroundEvents =
+            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
         backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
         failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
         connectionTimeoutCount =
