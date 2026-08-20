@@ -115,7 +115,28 @@ def map_case(case: dict) -> dict[str, str]:
         "window": frame["windowTitle"],
         "captured_at": frame["capturedAt"],
         "notify_worthiness": str(bucket.get("notifyWorthiness", 0)),
-    }
+    } | (
+        # A case with retrieved items replays the visit's second director call:
+        # the probe quotes them in a RETRIEVED CONTEXT section and switches to
+        # the lookup-enabled prompt and schema.
+        {
+            "retrieved": json.dumps(
+                [
+                    {
+                        "ref": item["ref"],
+                        "title": item.get("title", ""),
+                        "preview": item["preview"],
+                        "created_at": item.get("createdAt"),
+                    }
+                    for item in synthetic["retrieved"]
+                ],
+                separators=(",", ":"),
+            ),
+            "lookup_query": synthetic.get("lookupQuery", ""),
+        }
+        if synthetic.get("retrieved")
+        else {}
+    )
 
 
 def validate(deck: dict) -> tuple[int, int]:

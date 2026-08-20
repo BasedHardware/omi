@@ -8,7 +8,7 @@
         summary: "Replay a synthetic context bucket through the director model boundary without delivery",
         params: [
           "bucket_id", "version", "header", "frozen", "tail", "validated_facts", "tasks", "app", "window",
-          "captured_at", "notify_worthiness", "visit_count",
+          "captured_at", "notify_worthiness", "visit_count", "retrieved", "lookup_query",
         ],
         safety: "network_or_model",
         sideEffects: [

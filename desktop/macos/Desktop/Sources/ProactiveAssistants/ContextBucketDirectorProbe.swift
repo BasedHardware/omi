@@ -88,10 +88,23 @@
         windowTitle: input.window,
         frameNumber: 0,
         captureTime: input.capturedAt)
-      let prompt = ContextProactivityPromptBuilder.directorStablePrompt(snapshot: snapshot)
-      let uncachedPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
+      // A probe with retrieved items replays the *second* director call of a
+      // visit exactly as `performRetrievalHop` builds it: lookup instruction in
+      // the stable prompt, RETRIEVED CONTEXT section appended to the uncached
+      // suffix, and the lookup-enabled schema. Without them it stays the exact
+      // first-call replay it always was.
+      let retrievedSection =
+        input.retrieved.isEmpty
+        ? nil
+        : ContextDirectorRetrievalHop.promptSection(
+          query: input.lookupQuery, items: input.retrieved)
+      let allowLookup = retrievedSection != nil
+      let prompt = ContextProactivityPromptBuilder.directorStablePrompt(
+        snapshot: snapshot, allowLookup: allowLookup)
+      let volatilePrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
         tasks: input.tasks, frame: frame, recentDeliveries: input.recentDeliveries,
         visitCount: input.visitCount)
+      let uncachedPrompt = retrievedSection.map { volatilePrompt + "\n\n" + $0 } ?? volatilePrompt
       let cacheKey = ContextPromptCacheKey.director
       let started = DispatchTime.now().uptimeNanoseconds
       let result = try await completion(
@@ -99,7 +112,7 @@
         prompt,
         uncachedPrompt,
         nil,
-        ContextProactivityEngine.schema,
+        ContextProactivityEngine.schema(allowLookup: allowLookup),
         cacheKey,
         800,
         nil)
@@ -115,13 +128,18 @@
         throw ContextBucketDirectorProbeError.invalidModelResponse
       }
 
+      let citedRefs = ContextDirectorRetrievalHop.partitionCitedRefs(decision.bucketEntryRefs)
+      let validRetrieved = ContextDirectorRetrievalHop.validatedRetrievedRefs(
+        citedRefs.retrieved, allowed: Set(input.retrieved.map(\.ref)))
       return [
         "decision": String(decision.decision.prefix(32)),
         "title": decision.title,
         "message": decision.message,
         "reasoning": decision.reasoning,
-        "bucket_entry_ref_count": "\(decision.bucketEntryRefs.count)",
+        "bucket_entry_ref_count": "\(citedRefs.bucket.count)",
         "fact_ref_count": "\(decision.factIDs.count)",
+        "retrieved_ref_count": "\(validRetrieved.count)",
+        "lookup_query": decision.lookupQuery ?? "",
         "model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "latency_ms": "\(max(0, latencyMs))",
       ]
@@ -145,6 +163,12 @@
       /// Optional. Lets a probe exercise the recent-delivery prompt section, which is
       /// otherwise only reachable from the live ledger.
       let recentDeliveries: [ContextBucketRecentDelivery]
+      /// Optional. Non-empty turns the replay into the visit's *second* director
+      /// call, with these items quoted in a RETRIEVED CONTEXT section.
+      let retrieved: [ContextRetrievedItem]
+      /// Optional. The lookup query echoed into the retrieved section; ignored
+      /// when `retrieved` is empty.
+      let lookupQuery: String
 
       init(params: [String: String]) throws {
         bucketID = try Self.requiredString(params, key: "bucket_id", maxLength: 200)
@@ -183,6 +207,39 @@
         recentDeliveries = try Self.optionalRecentDeliveryList(
           params, key: "recent_deliveries",
           maxCount: ContextBucketRecentDelivery.promptCap)
+        retrieved = try Self.optionalRetrievedList(
+          params, key: "retrieved",
+          maxCount: ContextDirectorRetrievalHop.maximumPromptItems)
+        lookupQuery = params["lookup_query"].map { String($0.prefix(200)) } ?? ""
+      }
+
+      /// Absent means "first-call replay", so existing probe callers keep their
+      /// exact prompt, schema, and behaviour.
+      private static func optionalRetrievedList(
+        _ params: [String: String],
+        key: String,
+        maxCount: Int
+      ) throws -> [ContextRetrievedItem] {
+        guard let raw = params[key], !raw.isEmpty else { return [] }
+        guard let data = raw.data(using: .utf8),
+          let values = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+          values.count <= maxCount
+        else {
+          throw ContextBucketDirectorProbeError.invalidParams(key)
+        }
+        return try values.map { value in
+          guard let ref = value["ref"] as? String, !ref.isEmpty, ref.count <= 200,
+            let preview = value["preview"] as? String, !preview.isEmpty, preview.count <= 2_400
+          else {
+            throw ContextBucketDirectorProbeError.invalidParams(key)
+          }
+          let title = (value["title"] as? String) ?? ""
+          let createdAt = value["created_at"] as? String
+          guard title.count <= 400, (createdAt?.count ?? 0) <= 40 else {
+            throw ContextBucketDirectorProbeError.invalidParams(key)
+          }
+          return ContextRetrievedItem(ref: ref, title: title, preview: preview, createdAt: createdAt)
+        }
       }
 
       /// Absent means "no recent deliveries", so existing probe callers keep their behaviour.
