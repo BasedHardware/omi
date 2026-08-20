@@ -350,7 +350,7 @@ final class ChatRowPresentationTests: XCTestCase {
   /// Notifications. Focus is the focus-nudge assistant alone; tips, resurfaced items,
   /// and generated goals are insights; connect-an-app offers are integrations.
   /// `.general` is reserved for functional system alerts outside the taxonomy.
-  func testEveryProactiveKindPresentsAsOneOfTheFourCategories() {
+  func testEveryProactiveKindPresentsAsOneOfTheFiveCategories() {
     XCTAssertEqual(ProactiveNotificationBadge(kind: .suggestion).label, "Focus")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .task).label, "Task")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
