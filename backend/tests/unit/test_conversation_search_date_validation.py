@@ -60,6 +60,7 @@ _stubs = [
     'utils.conversations.analytics',
     'utils.conversations.render',
     'utils.conversations.process_conversation',
+    'utils.conversations.meeting_receipt',
     'utils.conversations.search',
     'utils.conversations.calendar_linking',
     'utils.conversations.calendar_utils',

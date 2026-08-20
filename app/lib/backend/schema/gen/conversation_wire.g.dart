@@ -586,6 +586,10 @@ class GeneratedConversation {
   final String id;
   final bool isLocked;
   final String? language;
+  final double? meetingDedupSpeechS;
+  final double? meetingDurationS;
+  final bool meetingTreatmentEligible;
+  final String? meetingTreatmentReason;
   final List<GeneratedConversationPhoto> photos;
   final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
@@ -622,6 +626,10 @@ class GeneratedConversation {
     required this.id,
     this.isLocked = false,
     this.language,
+    this.meetingDedupSpeechS,
+    this.meetingDurationS,
+    this.meetingTreatmentEligible = false,
+    this.meetingTreatmentReason,
     this.photos = const [],
     this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
@@ -660,6 +668,10 @@ class GeneratedConversation {
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
+      meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
+      meetingTreatmentEligible: _required(_readFieldValue<bool>(_readField(json, const ["meeting_treatment_eligible"]), "meeting_treatment_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "meeting_treatment_eligible"),
+      meetingTreatmentReason: _readFieldValue<String>(_readField(json, const ["meeting_treatment_reason"]), "meeting_treatment_reason", _readString, requiredField: false, nullable: true),
       photos: _required(_readFieldValue<List<GeneratedConversationPhoto>>(_readField(json, const ["photos"]), "photos", (value) => _readObjectList(value, GeneratedConversationPhoto.fromJson), requiredField: false, nullable: false, defaultValue: const []), "photos"),
       pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
@@ -699,6 +711,10 @@ class GeneratedConversation {
       'id': id,
       'is_locked': isLocked,
       'language': language,
+      'meeting_dedup_speech_s': meetingDedupSpeechS,
+      'meeting_duration_s': meetingDurationS,
+      'meeting_treatment_eligible': meetingTreatmentEligible,
+      'meeting_treatment_reason': meetingTreatmentReason,
       'photos': photos.map((value) => value.toJson()).toList(),
       'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,

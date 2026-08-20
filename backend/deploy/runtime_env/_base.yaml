@@ -74,6 +74,9 @@ environment_shared:
         CONVERSATION_NOTES_V2_ENABLED:
           value: 'false'
           category: rollout
+        MEETING_RECEIPT_RECONCILER_ENABLED:
+          value: 'false'
+          category: rollout
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
           category: rollout
@@ -258,6 +261,9 @@ environment_shared:
           # inline for POST /v1/conversations/{id}/reprocess. Declaring the rollout
           # flags on only one of them makes regenerate disagree with live capture.
           CONVERSATION_NOTES_V2_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_RECEIPT_RECONCILER_ENABLED:
             value: 'false'
             category: rollout
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:

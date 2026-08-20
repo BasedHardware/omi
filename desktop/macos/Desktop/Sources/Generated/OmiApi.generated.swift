@@ -1375,6 +1375,10 @@ public enum OmiAPI {
     public let id: String
     public let isLocked: Bool?
     public let language: String?
+    public let meetingDedupSpeechS: Double?
+    public let meetingDurationS: Double?
+    public let meetingTreatmentEligible: Bool?
+    public let meetingTreatmentReason: String?
     public let photos: [ConversationPhoto]?
     public let pluginsResults: [PluginResult]?
     public let privateCloudSyncEnabled: Bool?
@@ -1411,6 +1415,10 @@ public enum OmiAPI {
       case id
       case isLocked = "is_locked"
       case language
+      case meetingDedupSpeechS = "meeting_dedup_speech_s"
+      case meetingDurationS = "meeting_duration_s"
+      case meetingTreatmentEligible = "meeting_treatment_eligible"
+      case meetingTreatmentReason = "meeting_treatment_reason"
       case photos
       case pluginsResults = "plugins_results"
       case privateCloudSyncEnabled = "private_cloud_sync_enabled"
@@ -1449,6 +1457,10 @@ public enum OmiAPI {
       id = try c.decode(String.self, forKey: .id)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
       language = try c.decodeIfPresent(String.self, forKey: .language)
+      meetingDedupSpeechS = try c.decodeIfPresent(Double.self, forKey: .meetingDedupSpeechS)
+      meetingDurationS = try c.decodeIfPresent(Double.self, forKey: .meetingDurationS)
+      meetingTreatmentEligible = try c.decodeIfPresent(Bool.self, forKey: .meetingTreatmentEligible)
+      meetingTreatmentReason = try c.decodeIfPresent(String.self, forKey: .meetingTreatmentReason)
       photos = try c.decodeIfPresent([ConversationPhoto].self, forKey: .photos)
       pluginsResults = try c.decodeIfPresent([PluginResult].self, forKey: .pluginsResults)
       privateCloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .privateCloudSyncEnabled)
@@ -1466,7 +1478,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1486,6 +1498,10 @@ public enum OmiAPI {
       self.id = id
       self.isLocked = isLocked
       self.language = language
+      self.meetingDedupSpeechS = meetingDedupSpeechS
+      self.meetingDurationS = meetingDurationS
+      self.meetingTreatmentEligible = meetingTreatmentEligible
+      self.meetingTreatmentReason = meetingTreatmentReason
       self.photos = photos
       self.pluginsResults = pluginsResults
       self.privateCloudSyncEnabled = privateCloudSyncEnabled

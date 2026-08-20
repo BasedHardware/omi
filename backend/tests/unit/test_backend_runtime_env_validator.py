@@ -93,6 +93,21 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     )
 
 
+def with_meeting_receipt_reconciler_env(payload: str) -> str:
+    """The meeting-receipt reconciler flag is declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flag on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "MEETING_RECEIPT_RECONCILER_ENABLED", "value": "false"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_backend_public_shared_chat_auth_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
@@ -154,11 +169,13 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_conversation_notes_v2_env(
-            with_backend_pusher_env(
-                with_parity_pack_env(
-                    with_listen_finalization_orphan_env(
-                        with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_meeting_receipt_reconciler_env(
+            with_conversation_notes_v2_env(
+                with_backend_pusher_env(
+                    with_parity_pack_env(
+                        with_listen_finalization_orphan_env(
+                            with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                        )
                     )
                 )
             )
