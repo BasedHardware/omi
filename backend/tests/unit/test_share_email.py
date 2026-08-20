@@ -104,3 +104,25 @@ def test_publish_then_send_keeps_publish_on_success():
     )
     assert calls == ['publish']
     assert result == {'sent_to': ['a@b.co']}
+
+
+def test_publish_then_send_rolls_back_partial_publish_failure():
+    from utils.conversations.share_email import publish_then_send
+
+    calls = []
+
+    def partially_failing_publish():
+        calls.append('publish-db-write')
+        raise ConnectionError('redis down')
+
+    try:
+        publish_then_send(
+            publish=partially_failing_publish,
+            unpublish=lambda: calls.append('unpublish'),
+            send=lambda: calls.append('send'),
+        )
+    except ConnectionError:
+        pass
+    else:
+        raise AssertionError('expected ConnectionError to propagate')
+    assert calls == ['publish-db-write', 'unpublish']

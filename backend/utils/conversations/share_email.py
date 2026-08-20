@@ -142,10 +142,14 @@ def publish_then_send(
     publicly link-visible — so: publish, send, and roll the publish back if
     the send raises. Injected callables keep this unit-testable.
     """
-    publish()
     try:
+        publish()
         return send()
     except Exception:
+        # publish() can fail after partially mutating state (e.g. the database
+        # visibility write lands but the Redis registration raises), so the
+        # rollback boundary covers it too; unpublish is idempotent for a
+        # conversation that never became visible.
         try:
             unpublish()
         except Exception:
