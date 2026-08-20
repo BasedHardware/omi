@@ -74,6 +74,7 @@ from models.users import (
     Subscription,
     SubscriptionPlan,
     SubscriptionStatus,
+    PlanLimits,
     PlanType,
     PricingOption,
     PhoneCallQuota,
@@ -86,6 +87,7 @@ from utils.apps import get_available_app_by_id
 from utils.subscription import (
     enforce_chat_quota,
     get_chat_quota_snapshot,
+    get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -95,7 +97,6 @@ from utils.subscription import (
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
-    has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     wire_plan_for_client,
@@ -613,7 +614,7 @@ def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
 # ****************************************
 
 
-# TODO: consider adding person photo.
+# Person photo deferred — see models.other.Person (no photo field / storage yet).
 @router.post('/v1/users/people', tags=['v1'], response_model=Person)
 def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new person or return existing one with same name (idempotent by name).
@@ -1260,10 +1261,7 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    ever_purchased = has_ever_purchased(uid, raw_subscription)
-    definitions_for_user = filter_plans_for_user(
-        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
-    )
+    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]

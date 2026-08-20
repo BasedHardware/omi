@@ -73,4 +73,57 @@ final class PermissionsPagePresentationTests: XCTestCase {
     XCTAssertEqual(PermissionsPageChrome.statusChipText(granted: false), "Not Granted")
     XCTAssertEqual(PermissionsPageChrome.missingStatusText, "Not Granted")
   }
+
+  // MARK: - Accessibility
+
+  /// The page must offer a row for every permission the app counts as required. These two sets
+  /// diverged once: `AppState.missingPermissions` has counted Accessibility since before this
+  /// page existed, but the page had no section for it, so the sidebar wore a warning triangle
+  /// that no visible control could clear and "All permissions granted" was unreachable.
+  func testPageActsOnEveryPermissionTheAppRequires() {
+    let required: Set<String> = [
+      "Microphone", "Screen Recording", "System Audio", "Notifications", "Accessibility",
+    ]
+    XCTAssertEqual(
+      PermissionsPageChrome.requiredKinds, required,
+      "a permission the app can report missing must have a row that can fix it")
+    XCTAssertTrue(
+      required.isSubset(of: PermissionsPageChrome.actionableKinds),
+      "every required permission must be actionable on the page")
+  }
+
+  /// Bluetooth, Full Disk Access, and Automation are probed at every launch and were displayed
+  /// nowhere, so a grant revoked after onboarding was invisible until the feature quietly failed.
+  func testSupportingPermissionsAreShownButNotRequired() {
+    let supporting: Set<String> = ["Bluetooth", "Full Disk Access", "Automation"]
+    XCTAssertEqual(PermissionsPageChrome.supportingKinds, supporting)
+    XCTAssertTrue(supporting.isSubset(of: PermissionsPageChrome.actionableKinds))
+    XCTAssertTrue(
+      PermissionsPageChrome.requiredKinds.isDisjoint(with: supporting),
+      "a feature-scoped permission must not block the all-granted state or warn the sidebar")
+  }
+
+  func testSupportingPermissionsNeedActionOnlyWhenUngranted() {
+    XCTAssertTrue(PermissionsPageChrome.bluetoothNeedsAction(granted: false))
+    XCTAssertFalse(PermissionsPageChrome.bluetoothNeedsAction(granted: true))
+    XCTAssertTrue(PermissionsPageChrome.fullDiskAccessNeedsAction(granted: false))
+    XCTAssertFalse(PermissionsPageChrome.fullDiskAccessNeedsAction(granted: true))
+    XCTAssertTrue(PermissionsPageChrome.automationNeedsAction(granted: false))
+    XCTAssertFalse(PermissionsPageChrome.automationNeedsAction(granted: true))
+  }
+
+  func testAccessibilityNeedsActionWhenUngranted() {
+    XCTAssertTrue(PermissionsPageChrome.accessibilityNeedsAction(granted: false, broken: false))
+  }
+
+  /// The state this machine was actually in: the toggle reads enabled, the AX calls fail. If a
+  /// working grant and a stuck one look the same, the page tells the user to do the one thing
+  /// that cannot help.
+  func testAccessibilityNeedsActionWhenGrantedButBroken() {
+    XCTAssertTrue(PermissionsPageChrome.accessibilityNeedsAction(granted: true, broken: true))
+  }
+
+  func testAccessibilitySettlesOnlyWhenGrantedAndWorking() {
+    XCTAssertFalse(PermissionsPageChrome.accessibilityNeedsAction(granted: true, broken: false))
+  }
 }

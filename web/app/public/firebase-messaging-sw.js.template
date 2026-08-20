@@ -65,14 +65,13 @@ self.addEventListener('notificationclick', (event) => {
       // Action item notifications
       const taskId = pathParts.length > 2 ? pathParts.pop() : null;
       targetUrl = `${self.location.origin}/tasks${taskId ? `?highlight=${taskId}` : ''}`;
-    } else if (navigateTo.startsWith('/daily-summary')) {
-      // Daily summary notifications (backend sends /daily-summary/{id})
+    } else if (navigateTo.startsWith('/daily-summary') || navigateTo.startsWith('/recaps')) {
+      // Recaps merged into Timeline: a recap is a tile in the day it summarises,
+      // so both the backend path (/daily-summary/{id}) and the legacy /recaps
+      // path open the conversations timeline. /recaps was removed, not
+      // redirected — sending a click there lands on a 404.
       const recapId = pathParts.length > 2 ? pathParts.pop() : null;
-      targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
-    } else if (navigateTo.startsWith('/recaps')) {
-      // Daily summary notifications (alternative path)
-      const recapId = pathParts.length > 2 ? pathParts.pop() : null;
-      targetUrl = `${self.location.origin}/recaps${recapId ? `?id=${recapId}` : ''}`;
+      targetUrl = `${self.location.origin}/conversations${recapId ? `?recap=${recapId}` : ''}`;
     } else if (navigateTo.startsWith('/conversations')) {
       // Merge completed notifications
       targetUrl = `${self.location.origin}${navigateTo}`;
@@ -86,7 +85,7 @@ self.addEventListener('notificationclick', (event) => {
       // - If yes: open chat panel with that app
       // - If no: open notification center (notification-only apps like Bitcoin)
       const appId = pathParts.pop();
-      targetUrl = `${self.location.origin}/?chatApp=${appId}`;
+      targetUrl = `${self.location.origin}/home?chatApp=${appId}`;
     } else {
       // Default: use the navigate_to path directly
       targetUrl = `${self.location.origin}${navigateTo}`;

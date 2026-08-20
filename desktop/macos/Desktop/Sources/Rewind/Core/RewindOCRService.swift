@@ -192,6 +192,36 @@ actor RewindOCRService {
     return hash
   }
 
+  /// dHash computed through an intermediate downscale to the preview-capture envelope.
+  ///
+  /// The proactive capture pipeline compares hashes of ≤80px preview grabs against a
+  /// history that also receives the hash of every full capture. Hashing a
+  /// full-resolution frame straight into dHash's 9x8 grid aliases differently than
+  /// hashing an 80px preview of the same screen, so cross-scale comparisons read as
+  /// "changed", defeat the preview-similarity skip, and trigger unnecessary full
+  /// captures (and the Gemini calls behind them). Downscaling to the same ≤80px
+  /// envelope first keeps both sides of the comparison in one representation.
+  static func previewScaleDHash(of cgImage: CGImage, maxSize: Int = 80) -> UInt64 {
+    let width = cgImage.width
+    let height = cgImage.height
+    guard width > maxSize || height > maxSize else { return dHash(of: cgImage) }
+    let scale = Double(maxSize) / Double(max(width, height))
+    let w = max(1, Int((Double(width) * scale).rounded()))
+    let h = max(1, Int((Double(height) * scale).rounded()))
+    guard
+      let ctx = CGContext(
+        data: nil, width: w, height: h,
+        bitsPerComponent: 8, bytesPerRow: w,
+        space: CGColorSpaceCreateDeviceGray(),
+        bitmapInfo: CGImageAlphaInfo.none.rawValue
+      )
+    else { return dHash(of: cgImage) }
+    ctx.interpolationQuality = .medium
+    ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: w, height: h))
+    guard let downscaled = ctx.makeImage() else { return dHash(of: cgImage) }
+    return dHash(of: downscaled)
+  }
+
   /// Check if a frame should skip OCR because it's perceptually identical to the previous frame.
   /// Uses dHash with Hamming distance — small changes (cursor blink, spinners) produce
   /// distance 1-4 and are skipped, while real content changes produce distance 10+ and trigger OCR.

@@ -254,7 +254,7 @@ export function SpeakerTagSheet({
                   Tag Speaker {(segment.speaker_id ?? 0) + 1}
                 </h2>
                 <p className="text-sm text-text-tertiary truncate mt-0.5">
-                  "{segment.text.slice(0, 50)}..."
+                  &quot;{segment.text.slice(0, 50)}...&quot;
                 </p>
               </div>
               <button
@@ -291,7 +291,7 @@ export function SpeakerTagSheet({
                         'flex-1 px-3 py-2 rounded-lg',
                         'bg-bg-secondary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleCreatePerson();
@@ -303,7 +303,7 @@ export function SpeakerTagSheet({
                       disabled={!newPersonName.trim() || creatingPerson}
                       className={cn(
                         'px-4 py-2 rounded-lg text-sm font-medium',
-                        'bg-purple-primary hover:bg-purple-secondary text-white',
+                        'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
                         'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors',
                       )}
@@ -373,7 +373,7 @@ export function SpeakerTagSheet({
                         type="checkbox"
                         checked={tagOtherSegments}
                         onChange={() => {}}
-                        className="w-4 h-4 rounded border-bg-quaternary text-purple-primary focus:ring-purple-primary"
+                        className="w-4 h-4 rounded border-bg-quaternary text-text-primary focus:ring-white/25"
                       />
                       <div>
                         <p className="text-sm font-medium text-text-primary">
@@ -402,15 +402,14 @@ export function SpeakerTagSheet({
                           className={cn(
                             'flex items-start gap-3 p-3 rounded-lg cursor-pointer',
                             'bg-bg-tertiary hover:bg-bg-quaternary transition-colors',
-                            selectedSegmentIds.has(s.id!) &&
-                              'ring-1 ring-purple-primary/50',
+                            selectedSegmentIds.has(s.id!) && 'ring-1 ring-white/25',
                           )}
                         >
                           <input
                             type="checkbox"
                             checked={selectedSegmentIds.has(s.id!)}
                             onChange={() => handleToggleSegment(s.id!)}
-                            className="mt-0.5 w-4 h-4 rounded border-bg-quaternary text-purple-primary focus:ring-purple-primary"
+                            className="mt-0.5 w-4 h-4 rounded border-bg-quaternary text-text-primary focus:ring-white/25"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-text-primary line-clamp-2">
@@ -458,7 +457,7 @@ export function SpeakerTagSheet({
                 className={cn(
                   'w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl',
                   'text-sm font-medium transition-all duration-150',
-                  'bg-purple-primary hover:bg-purple-secondary text-white',
+                  'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >

@@ -8,12 +8,14 @@ import ctypes
 import hashlib
 import json
 import os
+import select
 import shutil
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import TextIO
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
@@ -36,6 +38,40 @@ WINDOWS_ERROR_ACCESS_DENIED = 5
 WINDOWS_JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 WINDOWS_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 WINDOWS_CHILD_BOOTSTRAP_FLAG = "--windows-child-bootstrap"
+
+
+def wait_for_stream_writable(stream: TextIO) -> None:
+    """Wait for a temporarily full inherited output pipe without changing its flags."""
+    if IS_WINDOWS:
+        # Windows select() accepts sockets only. A short retry is the portable
+        # fallback; Windows pipes are not normally inherited in non-blocking mode.
+        time.sleep(POLL_SECONDS)
+        return
+    try:
+        select.select([], [stream.fileno()], [])
+    except InterruptedError:
+        return
+    except (OSError, ValueError):
+        # Streams without a selectable descriptor are rare here, but retrying is
+        # still safer than turning successful validation into a failed push.
+        time.sleep(POLL_SECONDS)
+
+
+def flush_output(stream: TextIO) -> None:
+    """Flush buffered output, waiting through a non-blocking pipe's EAGAIN.
+
+    Git and IDE hosts may expose stdout as a non-blocking pipe. Large child
+    output can fill it between a write and flush; the buffered bytes remain
+    pending, so retry the same flush once the consumer has capacity.
+    """
+    while True:
+        try:
+            stream.flush()
+            return
+        except BlockingIOError:
+            wait_for_stream_writable(stream)
+        except InterruptedError:
+            continue
 
 
 class WindowsJob:
@@ -397,8 +433,8 @@ def join_existing(state_dir: Path, wanted_fingerprint: str) -> int | None:
             elapsed = max(0.0, time.time() - float(status.get("started_at_epoch") or time.time()))
             print(
                 f"  active phase={status.get('phase', 'starting')} elapsed={elapsed:.1f}s",
-                flush=True,
             )
+            flush_output(sys.stdout)
             next_status = now + STATUS_INTERVAL_SECONDS
         time.sleep(POLL_SECONDS)
     result = read_json(state_dir / "result.json")
@@ -449,8 +485,8 @@ def run_owned(
             f"FAIL: preflight runner received signal {signal.Signals(signum).name} "
             f"during phase={phase}; forwarding it to the child.",
             file=sys.stderr,
-            flush=True,
         )
+        flush_output(sys.stderr)
         write_status()
         if child is None:
             return
@@ -489,7 +525,7 @@ def run_owned(
         with log_path.open("a", encoding="utf-8") as log:
             for line in child.stdout:
                 sys.stdout.write(line)
-                sys.stdout.flush()
+                flush_output(sys.stdout)
                 log.write(line)
                 log.flush()
                 if line.startswith("==> "):
@@ -510,8 +546,8 @@ def run_owned(
             print(
                 f"FAIL: preflight {child_failure} during phase={last_phase}{signal_note}; inspect {log_path}",
                 file=sys.stderr,
-                flush=True,
             )
+            flush_output(sys.stderr)
         atomic_json(
             result_path,
             {

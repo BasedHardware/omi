@@ -34,6 +34,9 @@ export type {
   CreateConversationResponse,
   ActionItemsResponse,
 };
+import type { Goal, GoalHistoryEntry } from '@/types/goals';
+import type { ChatSession } from '@/types/chatSessions';
+import type { Scores } from '@/types/scores';
 import type {
   App,
   AppCategory,
@@ -71,10 +74,13 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
 
   const url = `${API_BASE_URL}${endpoint}`;
   const deviceIdHash = await getWebDeviceIdHash();
-  const headers = new Headers({
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  });
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  // FormData must set its own Content-Type so fetch can add the multipart
+  // boundary; forcing application/json here produces a body the server cannot
+  // parse.
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   new Headers(options.headers).forEach((value, name) => headers.set(name, value));
   headers.set('X-App-Platform', 'web');
   if (deviceIdHash) {
@@ -408,17 +414,22 @@ export interface GetMemoriesParams {
   categories?: MemoryCategory[];
 }
 
+/**
+ * Read memories.
+ *
+ * Category selection is deliberately not a parameter: `/v3/memories` accepts
+ * limit, offset, cursor, and device scope only. Sending `categories` looked
+ * like a filter but FastAPI drops the unknown query param, so the server
+ * returned everything. Categories are applied client-side — see
+ * `@/lib/memoryCategory`, which mirrors how the desktop clients do it.
+ */
 export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
-  const { limit = 100, offset = 0, categories } = params;
+  const { limit = 100, offset = 0 } = params;
 
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
   });
-
-  if (categories && categories.length > 0) {
-    queryParams.set('categories', categories.join(','));
-  }
 
   return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
 }
@@ -521,6 +532,234 @@ export async function rebuildKnowledgeGraph(): Promise<void> {
 }
 
 // ============================================================================
+// Chat sessions API
+// ============================================================================
+
+interface ChatSessionWire {
+  id: string;
+  title?: string | null;
+  preview?: string | null;
+  created_at: string;
+  updated_at: string;
+  app_id?: string | null;
+  message_count?: number | null;
+  starred?: boolean | null;
+}
+
+function toChatSession(wire: ChatSessionWire): ChatSession {
+  return {
+    id: wire.id,
+    title: wire.title ?? undefined,
+    preview: wire.preview ?? undefined,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+    appId: wire.app_id ?? undefined,
+    messageCount: wire.message_count ?? 0,
+    starred: Boolean(wire.starred),
+  };
+}
+
+export async function getChatSessions(appId?: string): Promise<ChatSession[]> {
+  const query = appId ? `?app_id=${encodeURIComponent(appId)}` : '';
+  const sessions = await fetchWithAuth<ChatSessionWire[]>(`/v2/chat-sessions${query}`);
+  return Array.isArray(sessions) ? sessions.map(toChatSession) : [];
+}
+
+export async function createChatSession(
+  params: { title?: string; app_id?: string } = {},
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>('/v2/chat-sessions', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  );
+}
+
+export async function updateChatSession(
+  id: string,
+  updates: { title?: string; starred?: boolean },
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>(`/v2/chat-sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+  );
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  await fetchWithAuth(`/v2/chat-sessions/${id}`, { method: 'DELETE' });
+}
+
+export interface RealtimeSessionToken {
+  provider: 'gemini';
+  token: string;
+  expires_at?: string;
+}
+
+export interface RealtimeUsageReport {
+  input_text_tokens: number;
+  input_audio_tokens: number;
+  input_cached_tokens: number;
+  output_text_tokens: number;
+  output_audio_tokens: number;
+}
+
+interface SavedRealtimeMessage {
+  id: string;
+  created_at: string;
+  session_id?: string | null;
+}
+
+export async function createGeminiLiveSession(): Promise<RealtimeSessionToken> {
+  return fetchWithAuth<RealtimeSessionToken>('/v2/realtime/session', {
+    method: 'POST',
+    body: JSON.stringify({ provider: 'gemini' }),
+  });
+}
+
+export async function saveRealtimeMessage(params: {
+  text: string;
+  sender: 'human' | 'ai';
+  clientMessageId: string;
+  appId?: string;
+  sessionId?: string | null;
+}): Promise<SavedRealtimeMessage> {
+  return fetchWithAuth<SavedRealtimeMessage>('/v2/desktop/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      text: params.text,
+      sender: params.sender,
+      app_id: params.appId,
+      session_id: params.sessionId,
+      client_message_id: params.clientMessageId,
+      message_source: 'realtime_voice',
+    }),
+  });
+}
+
+export async function reportGeminiLiveUsage(usage: RealtimeUsageReport): Promise<void> {
+  await fetchWithAuth('/v2/realtime/usage', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'gemini',
+      model: 'gemini-3.1-flash-live-preview',
+      ...usage,
+    }),
+  });
+}
+
+// ============================================================================
+// Goals & Scores API
+// ============================================================================
+
+/**
+ * Get all goals.
+ *
+ * Uses `/v1/goals/all` rather than `/v1/goals/canonical/list` so the page works
+ * for every signed-in user; the canonical route is gated on task-system
+ * enrollment and 403s for everyone else.
+ */
+export async function getGoals(includeEnded = false): Promise<Goal[]> {
+  const goals = await fetchWithAuth<Goal[]>(
+    `/v1/goals/all?include_ended=${includeEnded}`,
+  );
+  return Array.isArray(goals) ? goals : [];
+}
+
+/**
+ * Create body, matching what the desktop apps send
+ * (`desktop/windows/src/renderer/src/pages/Goals.tsx` saveNew): title, a
+ * required positive target, and unit only when the user gave one.
+ *
+ * `target_value` is required — the backend 422s without it — so a title-only
+ * goal defaults to 1, which completes on a single tick.
+ */
+export interface CreateGoalParams {
+  title: string;
+  target_value: number;
+  unit?: string;
+}
+
+export async function createGoal(params: CreateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>('/v1/goals', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+/**
+ * Update only a goal's progress value.
+ *
+ * The backend takes `current_value` as a query parameter on this route, not in
+ * the body.
+ */
+export async function updateGoalProgress(
+  id: string,
+  currentValue: number,
+): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(
+    `/v1/goals/${id}/progress?current_value=${encodeURIComponent(currentValue)}`,
+    { method: 'PATCH' },
+  );
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export interface UpdateGoalParams {
+  title?: string;
+  target_value?: number;
+  current_value?: number;
+  unit?: string | null;
+}
+
+export async function updateGoal(id: string, updates: UpdateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(`/v1/goals/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export async function deleteGoal(id: string): Promise<void> {
+  await fetchWithAuth(`/v1/goals/${id}`, { method: 'DELETE' });
+  invalidateCache(invalidationPatterns.goals);
+}
+
+/**
+ * Recorded progress values for a goal, newest window first.
+ *
+ * Uses `/v1/goals/{id}/history`, not `/v1/goals/{id}/detail`. The detail
+ * projection and the progress-events feed both sit behind
+ * `require_canonical_task_user`, which 404s for anyone not enrolled in the
+ * canonical task system — most web users.
+ */
+export async function getGoalHistory(id: string, days = 30): Promise<GoalHistoryEntry[]> {
+  const history = await fetchWithAuth<GoalHistoryEntry[]>(
+    `/v1/goals/${id}/history?days=${days}`,
+  );
+  return Array.isArray(history) ? history : [];
+}
+
+/** AI-generated advice for a goal. Rate limited server-side. */
+export async function getGoalAdvice(id: string): Promise<string> {
+  const response = await fetchWithAuth<{ advice: string }>(`/v1/goals/${id}/advice`);
+  return response.advice;
+}
+
+// ============================================================================
+
+/** Daily, weekly, and overall task-completion scores. */
+export async function getScores(date?: string): Promise<Scores> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return fetchWithAuth<Scores>(`/v1/scores${query}`);
+}
+
+// ============================================================================
 // Chat/Messages API
 // ============================================================================
 
@@ -606,10 +845,18 @@ export function parseStreamLine(line: string): MessageChunk | null {
 /**
  * Get message history
  */
-export async function getMessages(appId?: string): Promise<ServerMessage[]> {
+export async function getMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<ServerMessage[]> {
   const queryParams = new URLSearchParams();
   if (appId) {
     queryParams.set('app_id', appId);
+  }
+  // Omitted entirely for the default shared thread; naming a session targets
+  // that one specific thread.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
@@ -624,6 +871,8 @@ export async function sendMessageStream(
   onChunk: (chunk: MessageChunk) => void,
   options?: {
     appId?: string;
+    /** Target one specific thread; omit for the default shared thread. */
+    chatSessionId?: string | null;
     fileIds?: string[];
     context?: {
       type: string;
@@ -649,6 +898,11 @@ export async function sendMessageStream(
   const queryParams = new URLSearchParams();
   if (options?.appId) {
     queryParams.set('app_id', options.appId);
+  }
+  // Without this the reply is persisted to the default shared thread while the
+  // UI shows it under the selected one.
+  if (options?.chatSessionId) {
+    queryParams.set('chat_session_id', options.chatSessionId);
   }
 
   const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
@@ -716,10 +970,17 @@ export async function sendMessageStream(
 /**
  * Clear message history
  */
-export async function clearMessages(appId?: string): Promise<void> {
+export async function clearMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<void> {
   const queryParams = new URLSearchParams();
   if (appId) {
     queryParams.set('app_id', appId);
+  }
+  // Clearing must delete the thread the reader is looking at, not the shared one.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;

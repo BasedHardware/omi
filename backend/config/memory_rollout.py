@@ -6,8 +6,9 @@ to ``off`` when it is unset. ``MEMORY_MODE`` and ``MEMORY_V3_GET_ENABLED``
 remain one-deploy aliases so old revisions do not explode; they are not
 written in overlays or charts.
 
-``on`` enables intake and list. It maps to write-mode intake, not Gate 3
-``MEMORY_MODE=read`` / ST→LT maintenance.
+``on`` enables intake and list. It maps to write-mode intake, not scheduled
+ST→LT maintenance (that remains ``MEMORY_CANONICAL_MAINTENANCE_ENABLED`` on
+``memory-maintenance-job``).
 """
 
 import os

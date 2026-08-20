@@ -6,6 +6,8 @@ on:
     paths:
       - 'web/admin/**'
       - 'config/public-build-*.json'
+      - '.github/workflows/gcp_admin.yml'
+      - '.github/scripts/check_admin_deploy_scope.py'
       - '.github/actions/deploy-public-build/**'
       - '.github/actions/prepare-public-build/**'
       - '.github/actions/public-build-candidate-promotion/**'
@@ -26,7 +28,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  scope:
+    name: Decide admin deployment scope
+    # Unprivileged decision before the prod GitHub Environment, GCP creds,
+    # image build, or Cloud Run mutate. Generated OpenAPI clients under
+    # web/admin/ can match the path filter without changing admin runtime.
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    outputs:
+      applies: ${{ steps.scope.outputs.applies }}
+    steps:
+      - name: Checkout triggering commit for scope decision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Decide whether the triggering commit can affect the admin deployment
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ADMIN_SCOPE_SHA: ${{ github.sha }}
+          ADMIN_SCOPE_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          before="${ADMIN_SCOPE_BEFORE:-}"
+          if [ -n "$before" ] && ! [[ "$before" =~ ^0+$ ]] && ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+            git fetch --no-tags --depth=1 origin "$before" || true
+          fi
+          python3 .github/scripts/check_admin_deploy_scope.py --github-output
+
   deploy:
+    needs: scope
+    if: needs.scope.outputs.applies == 'true'
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     permissions:
       actions: read
@@ -48,3 +82,32 @@ jobs:
           subnet: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           runtime_env_vars: OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
           require_gateway_url: true
+
+      # The live boards are edited in the Grafana UI (drag/resize persists in
+      # its DB). Only overwrite them when this push actually changes the
+      # checked-in dashboard JSONs — an unconditional apply stomps UI edits on
+      # every unrelated admin deploy.
+      - name: Detect dashboard JSON changes
+        id: dashboards_diff
+        run: |
+          # The deploy job checks out at depth 1, so the push's `before` commit
+          # must be fetched or the diff fails — and a failed diff must NOT
+          # count as "changed" (an unconditional apply stomps UI-edited board
+          # layouts). Round-7 regression: silent grep-on-error skipped a real
+          # dashboard apply.
+          BEFORE="${{ github.event.before || 'HEAD~1' }}"
+          git fetch --no-tags --depth=1 origin "$BEFORE" 2>/dev/null || true
+          if ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "::warning::cannot resolve $BEFORE; dashboards not auto-applied — run workflow_dispatch if boards changed"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'web/admin/grafana/dashboards/*.json' | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Apply checked-in omi-tv dashboard
+        if: github.event_name == 'workflow_dispatch' || steps.dashboards_diff.outputs.changed == 'true'
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+        run: python3 web/admin/grafana/apply_omi_tv_dashboard.py

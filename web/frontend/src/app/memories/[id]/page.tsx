@@ -54,7 +54,7 @@ export async function generateMetadata(
 
   const ogUrl = prevData.metadataBase
     ? new URL(`/conversations/${params.id}`, prevData.metadataBase).toString()
-    : `https://h.omi.me/conversations/${params.id}`;
+    : `${envConfig.WEB_URL}/conversations/${params.id}`;
 
   return {
     title,

@@ -154,7 +154,7 @@ class SectionAppItemCard extends StatelessWidget {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Icon(Icons.star, color: Colors.deepPurple.shade300, size: 14),
+                              const Icon(Icons.star, color: Colors.white, size: 14),
                               const SizedBox(width: 3),
                               Text(app.getRatingAvg()!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
                             ],

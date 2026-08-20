@@ -52,6 +52,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Bun for manifest-selected web/app checks
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
       - name: Run current PR metadata preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -116,6 +121,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Bun for manifest-selected web/app checks
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
       - name: Save changed files
         run: |
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
@@ -134,7 +144,26 @@ jobs:
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
+        env:
+          PR_BODY_FILE: /tmp/main-push-commit-body.txt
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # On main pushes there is no PR event payload. #10965 / #9744 pass
+          # the merge-commit body through --pr-body-file so product-invariants
+          # and failure-class-protocol still run. That is necessary but not
+          # sufficient here: this repo squashes with the commit list, not the
+          # PR description, so INV-* citations that already made PR Hygiene
+          # green disappear on the main push (see #11835). Recover the live
+          # (#NNNN) PR body and append it. Fail-closed is preserved: a direct
+          # push with no PR number still uses only the commit message.
+          git log -1 --format=%B HEAD > /tmp/main-push-commit-message.txt
+          python3 .github/scripts/pr_metadata.py \
+            --repository "${{ github.repository }}" \
+            --from-commit-body-file /tmp/main-push-commit-message.txt \
+            --output "$PR_BODY_FILE"
+          python3 .github/scripts/run_checks.py --lane ci \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --pr-body-file "$PR_BODY_FILE"
 
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py

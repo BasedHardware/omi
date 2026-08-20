@@ -150,14 +150,33 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
-  func testNonSilenceGroundingRequiresBothValidatedEntryAndFactCitations() {
+  func testNonSilenceGroundingIsPerDecisionType() {
+    // insight/suggest/task_candidate make new claims about bucket content and
+    // keep the full anti-hallucination invariant: one entry ref AND one fact ref.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: []))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: ["fact:one"]))
+    }
+    // A resurface grounds on an open task connected to current context; its
+    // citable half is the validated fact evidencing the connection. Nine of
+    // these were vetoed in one dogfood window by the old unconditional AND.
     XCTAssertTrue(
       ContextDirectorGrounding.permitsNonSilence(
-        entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+        decision: "resurface", entryRefs: [], factIDs: ["fact:one"]))
+    XCTAssertTrue(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: ["entry:one"], factIDs: []))
     XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: ["entry:one"], factIDs: []))
-    XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: [], factIDs: ["fact:one"]))
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: []),
+      "a resurface with no citation of either kind stays vetoed")
   }
 
   @MainActor
@@ -888,8 +907,10 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.6),
-          // Higher worthiness, but no identifier: needs_review, so it must not
-          // count toward the departure-evaluation admission signal.
+          // No identifier, but resolvable evidence: validates under
+          // evidence-only validity, so its 0.9 IS the admission signal. (The
+          // old identifier gate demoted this shape to needs_review and zeroed
+          // it — measured at zero discriminative value on live data.)
           BucketExtraction.Fact(
             statement: "unidentified claim",
             identifiers: [],
@@ -897,6 +918,14 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.9),
+          // Unresolvable evidence still demotes and must not count.
+          BucketExtraction.Fact(
+            statement: "evidence-free claim",
+            identifiers: ["handle"],
+            evidenceText: " ",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 1.0),
         ]),
       for: fence,
       appName: "Test App",
@@ -905,7 +934,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       now: now)
 
     let writeResult = try XCTUnwrap(result)
-    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.6, accuracy: 0.000_001)
+    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.9, accuracy: 0.000_001)
     XCTAssertTrue(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness, flagEnabled: true))
@@ -992,6 +1021,86 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     let encoded = try XCTUnwrap(rows.first?["identifiersJson"] as String?)
     let identifiers = try JSONDecoder().decode([String].self, from: Data(encoded.utf8))
     XCTAssertEqual(identifiers, ["Nik"])
+  }
+
+  func testWriteExtractionAppliesWritePolicyOnlyWhenEnabled() async throws {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    let pool = try XCTUnwrap(database)
+    try await seedBucket(in: pool, now: now)
+    try await pool.write { db in
+      try Self.insertVisit(
+        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
+        startedAt: now.addingTimeInterval(-13), endedAt: now)
+    }
+    let fence = ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
+      startedAt: now.addingTimeInterval(-13))
+    let extraction = BucketExtraction(
+      narrative: "narrative",
+      facts: [
+        // Machinery echo: must not be stored at all when the policy applies.
+        BucketExtraction.Fact(
+          statement: "The destination is unknown/.",
+          identifiers: ["unknown"],
+          evidenceText: "The destination is unknown/.",
+          evidenceRefs: ["visit:1"],
+          confidence: 1,
+          notifyWorthiness: 0.6),
+        // Scenery: stored, worthiness capped to 0 so it can never arm.
+        BucketExtraction.Fact(
+          statement: "A Google Sheets document named Combined_Cap_Table is open in a tab.",
+          identifiers: ["Combined_Cap_Table"],
+          evidenceText: "Combined_Cap_Table is open in a tab.",
+          evidenceRefs: ["visit:1"],
+          confidence: 1,
+          notifyWorthiness: 0.8),
+        // Named-person speech act: floored to arming eligibility from nano's 0.0.
+        BucketExtraction.Fact(
+          statement: "Mihir Malde thanked flagging the issue and said the team is fixing it.",
+          identifiers: ["Mihir Malde"],
+          evidenceText: "Mihir Malde thanked flagging the issue and said the team is fixing it.",
+          evidenceRefs: ["visit:1"],
+          confidence: 1,
+          notifyWorthiness: 0.0),
+      ])
+
+    let result = try await ContextBucketStore.shared.writeExtraction(
+      extraction, for: fence, appName: "Test App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", applyWritePolicy: true, now: now)
+    let rows = try await pool.read { db in
+      try Row.fetchAll(
+        db, sql: "SELECT statement, notifyWorthiness FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(rows.count, 2, "the machinery echo must not be stored")
+    XCTAssertEqual(
+      rows.first?["statement"] as String?,
+      "A Google Sheets document named Combined_Cap_Table is open in a tab.")
+    XCTAssertEqual(rows.first?["notifyWorthiness"] as Double? ?? -1, 0, "scenery must not arm")
+    XCTAssertEqual(
+      rows.last?["notifyWorthiness"] as Double? ?? -1,
+      ContextFactWritePolicy.humanEventWorthinessFloor,
+      "a named-person speech act must reach arming eligibility")
+    // The floored human event is what departure evaluation should key on.
+    XCTAssertEqual(
+      try XCTUnwrap(result).maximumValidatedWorthiness,
+      ContextFactWritePolicy.humanEventWorthinessFloor, accuracy: 0.000_001)
+
+    // Policy off: the same extraction stores all three facts with nano's raw
+    // scores — byte-identical to the pre-policy write path.
+    try await pool.write { db in
+      try db.execute(sql: "DELETE FROM bucket_facts")
+      try db.execute(sql: "DELETE FROM bucket_entries")
+    }
+    _ = try await ContextBucketStore.shared.writeExtraction(
+      extraction, for: fence, appName: "Test App", rawContextKey: "raw",
+      normalizedContextKey: "normalized", now: now.addingTimeInterval(1))
+    let unfiltered = try await pool.read { db in
+      try Row.fetchAll(
+        db, sql: "SELECT statement, notifyWorthiness FROM bucket_facts ORDER BY statement")
+    }
+    XCTAssertEqual(unfiltered.count, 3)
+    XCTAssertEqual(unfiltered.map { $0["notifyWorthiness"] as Double? ?? -1 }, [0.8, 0.0, 0.6])
   }
 
   private func seedBucket(in pool: DatabasePool, now: Date) async throws {

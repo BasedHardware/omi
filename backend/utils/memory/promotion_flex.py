@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, cast
 
 from utils.llm.clients import feature_auto_lane_id, get_or_create_omi_gateway_llm
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +41,20 @@ _TRANSIENT_FLEX_EXCEPTION_NAMES = frozenset(
 )
 
 
+CONSOLIDATION_FLEX_CACHE_KEY = "omi-canonical-consolidation-v1"
+
+
 def _get_gateway_flex_llm(feature: str, *, request_timeout: float) -> Any:
-    return get_or_create_omi_gateway_llm(
+    llm = get_or_create_omi_gateway_llm(
         feature_auto_lane_id(feature),
         options={"request_timeout": request_timeout, "max_retries": 0},
         feature=feature,
+    )
+    if feature != "memory_conflict_flex":
+        return llm
+    return llm.bind(
+        prompt_cache_key=CONSOLIDATION_FLEX_CACHE_KEY,
+        extra_body={"prompt_cache_options": EXPLICIT_CACHE_OPTIONS},
     )
 
 
@@ -149,6 +159,7 @@ class PromotionFlexRunRouter:
         flex_llm_factory: Callable[..., Any] = _get_gateway_flex_llm,
         monotonic: Callable[[], float] = time.monotonic,
         started_at: Optional[float] = None,
+        force_enabled: bool = False,
     ) -> None:
         self._db_client = db_client
         self._control_reader = control_reader
@@ -156,6 +167,10 @@ class PromotionFlexRunRouter:
         self._monotonic = monotonic
         self._started_at = monotonic() if started_at is None else started_at
         self.control = control_reader(db_client=db_client)
+        self._forced = bool(force_enabled) and promotion_flex_capable()
+        if self._forced:
+            generation = self.control.generation if self.control.generation >= 1 else 1
+            self.control = PromotionFlexControl(enabled=True, generation=generation)
         self._flex_calls_started = 0
 
     def llm_for_uid(
@@ -176,7 +191,7 @@ class PromotionFlexRunRouter:
             workload=workload,
         )
 
-    def llm_invoke_for_uid(self, uid: str) -> Optional[Callable[[str], str]]:
+    def llm_invoke_for_uid(self, uid: str) -> Optional[Callable[[Any], str]]:
         model = self.llm_for_uid(
             uid,
             standard_feature="memory_conflict",
@@ -191,6 +206,8 @@ class PromotionFlexRunRouter:
         return self._control_reader(db_client=self._db_client)
 
     def assert_control_current(self) -> None:
+        if self._forced:
+            return
         if self._read_current_control() != self.control:
             raise PromotionFlexControlChanged("background Flex control changed before result apply")
 

@@ -17,6 +17,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from routers import action_items as ai_mod  # noqa: E402
 from database import action_items as action_items_db  # noqa: E402
+from database.firestore_read_metrics import FIRESTORE_READ_OPERATIONS  # noqa: E402
 
 
 class _Doc:
@@ -29,16 +30,41 @@ class _Doc:
 
 
 class _Query:
+    """Fake Firestore query that mimics real equality-filter semantics.
+
+    A ``.where(filter=FieldFilter(field, '==', value))`` only matches documents where
+    ``field`` is present AND equal to ``value`` — a missing field never matches, and this
+    fake enforces that so a test can tell server-side filtering apart from the old
+    Python-side filtering it replaces.
+    """
+
     def __init__(self, docs):
         self.docs = docs
         self.projected_fields = None
+        self.applied_filters = []
 
     def select(self, fields):
         self.projected_fields = fields
         return self
 
+    def where(self, filter):
+        self.applied_filters.append((filter.field_path, filter.op_string, filter.value))
+        return self
+
     def stream(self):
-        return self.docs
+        filtered = self.docs
+        for field_path, op_string, value in self.applied_filters:
+            assert op_string == '==', f'fake only supports == filters, got {op_string}'
+            # Real Firestore equality does not conflate int 1/0 with bool True/False, so
+            # match on type as well as value, not just Python's `1 == True`.
+            filtered = [
+                doc
+                for doc in filtered
+                if field_path in doc._data
+                and type(doc._data[field_path]) is type(value)
+                and doc._data[field_path] == value
+            ]
+        return filtered
 
 
 class _CollectionPath:
@@ -113,7 +139,10 @@ def test_visible_action_item_ids_matches_explicit_bucket_and_excludes_deleted():
     ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
 
     assert ids == ['active']
-    assert client.query.projected_fields == ['completed', 'status', 'deleted']
+    # `status` is never read in the function body, so it is dropped from the projection.
+    assert client.query.projected_fields == ['completed', 'deleted']
+    # The completion bucket is filtered server-side, not in Python.
+    assert client.query.applied_filters == [('completed', '==', False)]
 
 
 def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
@@ -127,6 +156,42 @@ def test_visible_action_item_ids_excludes_legacy_null_completion_rows():
     ids = action_items_db.get_visible_action_item_ids('user-9', completed=True, firestore_client=client)
 
     assert ids == []
+
+
+def test_visible_action_item_ids_includes_docs_with_absent_deleted_field():
+    """The common case: most rows never had `deleted` set at all. A server-side
+    `.where('deleted', '==', False)` would silently drop these, since Firestore equality
+    filters never match a missing field. This must stay a Python-side check."""
+    client = _Firestore(
+        [
+            _Doc('never-deleted', {'completed': False}),
+            _Doc('explicitly-not-deleted', {'completed': False, 'deleted': False}),
+            _Doc('soft-deleted', {'completed': False, 'deleted': True}),
+        ]
+    )
+
+    ids = action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    assert sorted(ids) == ['explicitly-not-deleted', 'never-deleted']
+    # No `deleted` filter was pushed to Firestore.
+    assert client.query.applied_filters == [('completed', '==', False)]
+
+
+def test_visible_action_item_ids_records_firestore_read():
+    client = _Firestore(
+        [
+            _Doc('active-1', {'completed': False}),
+            _Doc('active-2', {'completed': False, 'deleted': True}),
+            _Doc('done', {'completed': True}),  # excluded server-side by the `completed` filter
+        ]
+    )
+
+    before = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='unbounded')._value.get()
+
+    action_items_db.get_visible_action_item_ids('user-9', completed=False, firestore_client=client)
+
+    after = FIRESTORE_READ_OPERATIONS.labels(family='action_items_visible_ids', mode='unbounded')._value.get()
+    assert after == before + 1
 
 
 def test_batch_delete_rejects_locked_items_before_any_delete(monkeypatch):

@@ -339,12 +339,29 @@ def _require_conversations_read_scope(auth: ApiKeyAuth):
         )
 
 
+async def _check_conversation_read_budgets_async(
+    *,
+    request: Optional[Request],
+    auth: ApiKeyAuth,
+    route_policy_name: str,
+) -> None:
+    """Charge a conversation read against the shared ceiling, then its per-route budget.
+
+    The shared ceiling is checked first so sustained polling is rejected on the
+    aggregate budget regardless of which read route it targets. Without it, adding a
+    per-route policy would hand each key a fresh bucket and raise the total number of
+    conversation reads it can make -- the opposite of what these limits are for.
+    """
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name=route_policy_name)
+
+
 async def get_auth_with_conversations_read(
     auth: ApiKeyAuth = Depends(get_api_key_auth),
     request: Request = None,
 ) -> ApiKeyAuth:
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversations_read")
+    await _check_conversation_read_budgets_async(request=request, auth=auth, route_policy_name="dev:conversations_read")
     return auth
 
 
@@ -353,7 +370,9 @@ async def get_auth_with_conversation_detail_read(
     request: Request = None,
 ) -> ApiKeyAuth:
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_detail_read")
+    await _check_conversation_read_budgets_async(
+        request=request, auth=auth, route_policy_name="dev:conversation_detail_read"
+    )
     return auth
 
 

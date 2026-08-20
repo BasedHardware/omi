@@ -38,10 +38,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Tools to enhance your productivity and organization',
     icon: Briefcase,
     theme: {
-      primary: 'text-indigo-500',
-      secondary: 'text-indigo-400',
-      accent: 'bg-indigo-500/15',
-      background: 'bg-indigo-500/5',
+      primary: 'text-amber-500',
+      secondary: 'text-amber-400',
+      accent: 'bg-amber-500/15',
+      background: 'bg-amber-500/5',
     },
   },
   'conversation-analysis': {
@@ -50,10 +50,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Analyze and improve your conversations',
     icon: MessageSquare,
     theme: {
-      primary: 'text-violet-500',
-      secondary: 'text-violet-400',
-      accent: 'bg-violet-500/15',
-      background: 'bg-violet-500/5',
+      primary: 'text-teal-500',
+      secondary: 'text-teal-400',
+      accent: 'bg-teal-500/15',
+      background: 'bg-teal-500/5',
     },
   },
   'education-and-learning': {
@@ -158,10 +158,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Support for emotional and mental health',
     icon: Heart,
     theme: {
-      primary: 'text-purple-500',
-      secondary: 'text-purple-400',
-      accent: 'bg-purple-500/15',
-      background: 'bg-purple-500/5',
+      primary: 'text-text-primary',
+      secondary: 'text-text-secondary',
+      accent: 'bg-white/[0.08]',
+      background: 'bg-white/[0.08]',
     },
   },
   integration: {
@@ -182,10 +182,10 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
     description: 'Other useful applications',
     icon: Sparkles,
     theme: {
-      primary: 'text-purple-500',
-      secondary: 'text-purple-400',
-      accent: 'bg-purple-500/15',
-      background: 'bg-purple-500/5',
+      primary: 'text-text-primary',
+      secondary: 'text-text-secondary',
+      accent: 'bg-white/[0.08]',
+      background: 'bg-white/[0.08]',
     },
   },
 };

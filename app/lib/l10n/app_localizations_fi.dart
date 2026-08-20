@@ -321,7 +321,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get searchApps => 'Etsi sovelluksia...';
 
   @override
-  String get myApps => 'Omat sovellukset';
+  String get myApps => 'Minun luomani';
 
   @override
   String get installedApps => 'Asennetut sovellukset';
@@ -9847,4 +9847,10 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get sendRawAudioToOmiDescription =>
       'Poista käytöstä, jotta käsittelemätöntä ääntä ei lähetetä Omille. Litterointeja ja pilviominaisuuksien tarvitsemia tietoja voidaan silti lähettää Omille.';
+
+  @override
+  String get findDevice => 'Etsi';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiikan jakaminen epäonnistui. Yritä uudelleen.';
 }

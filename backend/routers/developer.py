@@ -66,6 +66,10 @@ from utils.conversations.mcp_transcript_search import (
 import database.vector_db as vector_db
 from utils.conversations.factory import deserialize_conversations
 from utils.llm.chat import qa_rag
+from utils.conversations.meeting_receipt import (
+    projected_meeting_treatment_eligible,
+    record_and_persist_finalized_meeting_receipt,
+)
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -77,7 +81,6 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
-from utils.task_intelligence.proactive_engine import persist_desktop_meeting_arrival_best_effort
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1094,6 +1097,7 @@ class ConversationResponse(BaseModel):
     id: str
     status: str
     discarded: bool
+    meeting_treatment_eligible: bool = False
 
 
 class UpdateConversationRequest(BaseModel):
@@ -1592,6 +1596,7 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
         id=conversation['id'],
         status=status,
         discarded=bool(conversation.get('discarded', False)),
+        meeting_treatment_eligible=projected_meeting_treatment_eligible(conversation),
     )
 
 
@@ -1684,7 +1689,11 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
-                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
+                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                if receipt is not None:
+                    existing_conversation['meeting_treatment_eligible'] = bool(
+                        receipt.get('meeting_treatment_eligible')
+                    )
                 return _conversation_response_from_data(existing_conversation)
 
     resolved_client_device_id = client_device_id or request.client_device_id
@@ -1727,7 +1736,11 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
-                persist_desktop_meeting_arrival_best_effort(uid, existing_conversation)
+                receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
+                if receipt is not None:
+                    existing_conversation['meeting_treatment_eligible'] = bool(
+                        receipt.get('meeting_treatment_eligible')
+                    )
                 return _conversation_response_from_data(existing_conversation)
             raise HTTPException(status_code=409, detail="Conversation creation already in progress")
     else:
@@ -1782,12 +1795,14 @@ def _create_conversation_from_segments(
             else {}
         ),
     }
-    persist_desktop_meeting_arrival_best_effort(uid, conversation)
+    receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
+    meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
+        meeting_treatment_eligible=meeting_treatment_eligible,
     )
 
 

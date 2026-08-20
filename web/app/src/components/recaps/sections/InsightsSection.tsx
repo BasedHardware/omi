@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HelpCircle, Lightbulb, ArrowRight, MessageSquare, ChevronDown } from 'lucide-react';
+import {
+  HelpCircle,
+  Lightbulb,
+  ArrowRight,
+  MessageSquare,
+  ChevronDown,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UnresolvedQuestion, DecisionMade, KnowledgeNugget } from '@/types/recap';
 
@@ -21,7 +27,8 @@ export function InsightsSection({
   learnings,
   onConversationClick,
 }: InsightsSectionProps) {
-  const hasContent = questions?.length > 0 || decisions?.length > 0 || learnings?.length > 0;
+  const hasContent =
+    questions?.length > 0 || decisions?.length > 0 || learnings?.length > 0;
 
   if (!hasContent) {
     return null;
@@ -36,7 +43,12 @@ export function InsightsSection({
         iconColor="text-warning"
         bgColor="bg-warning/5"
         borderColor="border-warning/20"
-        items={questions?.map(q => ({ content: q.question, conversationId: q.conversation_id })) || []}
+        items={
+          questions?.map((q) => ({
+            content: q.question,
+            conversationId: q.conversation_id,
+          })) || []
+        }
         onConversationClick={onConversationClick}
       />
 
@@ -47,7 +59,12 @@ export function InsightsSection({
         iconColor="text-success"
         bgColor="bg-success/5"
         borderColor="border-success/20"
-        items={decisions?.map(d => ({ content: d.decision, conversationId: d.conversation_id })) || []}
+        items={
+          decisions?.map((d) => ({
+            content: d.decision,
+            conversationId: d.conversation_id,
+          })) || []
+        }
         onConversationClick={onConversationClick}
       />
 
@@ -55,10 +72,15 @@ export function InsightsSection({
       <InsightColumn
         title="Learnings"
         icon={Lightbulb}
-        iconColor="text-purple-primary"
-        bgColor="bg-purple-primary/5"
-        borderColor="border-purple-primary/20"
-        items={learnings?.map(l => ({ content: l.insight, conversationId: l.conversation_id })) || []}
+        iconColor="text-text-primary"
+        bgColor="bg-white/[0.08]"
+        borderColor="border-white/25"
+        items={
+          learnings?.map((l) => ({
+            content: l.insight,
+            conversationId: l.conversation_id,
+          })) || []
+        }
         onConversationClick={onConversationClick}
       />
     </div>
@@ -98,7 +120,7 @@ function InsightColumn({
         'noise-overlay rounded-xl p-4 flex-1',
         'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
         'border border-white/[0.04]',
-        'flex flex-col min-h-[200px]'
+        'flex flex-col min-h-[200px]',
       )}
     >
       {/* Header */}
@@ -114,12 +136,7 @@ function InsightColumn({
         {items.map((item, idx) => (
           <div
             key={idx}
-            className={cn(
-              'p-2.5 rounded-lg',
-              bgColor,
-              'border',
-              borderColor
-            )}
+            className={cn('p-2.5 rounded-lg', bgColor, 'border', borderColor)}
           >
             <div className="flex items-start justify-between gap-2">
               <p className="text-sm text-text-secondary leading-relaxed flex-1">
@@ -130,8 +147,8 @@ function InsightColumn({
                   onClick={() => onConversationClick?.(item.conversationId!)}
                   className={cn(
                     'flex-shrink-0 p-1 rounded',
-                    'text-text-tertiary hover:text-purple-primary',
-                    'hover:bg-purple-primary/10 transition-colors'
+                    'text-text-tertiary hover:text-text-primary',
+                    'hover:bg-white/[0.14] transition-colors',
                   )}
                   title="View source conversation"
                 >

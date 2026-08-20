@@ -1316,16 +1316,6 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
     fi
 fi
 
-if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
-    step "Seeding shortcuts/settings from Omi Dev..."
-    if ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
-        auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
-        auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
-    else
-        echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
-    fi
-fi
-
 if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; then
     step "Seeding Rewind history from Omi Dev..."
     if ! ./scripts/omi-rewind-seed.sh "$BUNDLE_ID"; then
@@ -1334,6 +1324,20 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; the
 fi
 
 fi # full bundle path
+
+# Curated preferences are launch configuration, not bundle contents. Re-sync
+# them after both full installs and executable-only fast rebuilds so a reused
+# named bundle cannot retain hotkeys/settings that diverged from Omi Dev.
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
+    step "Seeding shortcuts/settings from Omi Dev..."
+    if ! ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
+        echo "ERROR: could not mirror shortcuts/settings from Omi Dev." >&2
+        echo "Set OMI_SKIP_SETTINGS_SEED=1 only when intentionally testing bundle-local settings." >&2
+        exit 1
+    fi
+    auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
+    auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
+fi
 
 signal_desktop_launch() {
     local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"

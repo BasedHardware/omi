@@ -73,7 +73,6 @@ backend-main:http:GET:/v1/admin/fair-use/flagged
 backend-main:http:GET:/v1/admin/fair-use/user/{uid}
 backend-main:http:GET:/v1/advice
 backend-main:http:GET:/v1/agent/tools
-backend-main:http:GET:/v1/agent/vm-status
 backend-main:http:GET:/v1/announcements/all
 backend-main:http:GET:/v1/announcements/changelogs
 backend-main:http:GET:/v1/announcements/features
@@ -330,8 +329,6 @@ backend-main:http:POST:/v1/admin/fair-use/user/{uid}/set-stage
 backend-main:http:POST:/v1/advice
 backend-main:http:POST:/v1/advice/mark-all-read
 backend-main:http:POST:/v1/agent/execute-tool
-backend-main:http:POST:/v1/agent/keepalive
-backend-main:http:POST:/v1/agent/vm-ensure
 backend-main:http:POST:/v1/agents/hume/callback
 backend-main:http:POST:/v1/announcements
 backend-main:http:POST:/v1/announcements/{announcement_id}/dismiss

@@ -1,3 +1,0 @@
-{
-  "change": "Long-running work contexts now reuse their cached prompt history instead of rebuilding it on every visit"
-}

@@ -161,6 +161,7 @@ async def process_conversation_task(
             finalization_job_id=job_id,
             dispatch_generation=generation,
             lease_epoch=lease_epoch,
+            final_attempt=attempt_count >= get_listen_finalization_tasks_max_attempts(),
         )
 
         if disposition == ConversationFinalizationDisposition.fenced:

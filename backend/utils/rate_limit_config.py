@@ -118,6 +118,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # MCP API-key contexts are keyed by app/key identity when available.
     "dev:memories_read": (120, 3600),
     "dev:action_items_read": (120, 3600),
+    # Conversation reads are limited in two tiers. Every conversation read consumes
+    # the shared "reads_total" ceiling plus its per-route budget, so splitting list
+    # and detail into separately tunable policies cannot raise the aggregate number
+    # of conversation reads one key can make. Transcript reads consume a third,
+    # stricter bucket on top of the other two.
+    "dev:conversation_reads_total": (60, 3600),
     "dev:conversations_read": (60, 3600),
     "dev:conversation_detail_read": (60, 3600),
     "dev:conversation_transcript_read": (25, 3600),
