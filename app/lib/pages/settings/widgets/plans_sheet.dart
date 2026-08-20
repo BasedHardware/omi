@@ -465,10 +465,10 @@ class _PlansSheetState extends State<PlansSheet> {
 
     PlatformManager.instance.analytics.upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
 
-    await _handleUpgrade(priceId);
+    await _handleUpgrade(priceId, targetPlan: tierId ?? 'unknown', billingInterval: isYearly ? 'year' : 'month');
   }
 
-  Future<void> _handleUpgrade(String priceId) async {
+  Future<void> _handleUpgrade(String priceId, {required String targetPlan, required String billingInterval}) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
 
@@ -548,7 +548,11 @@ class _PlansSheetState extends State<PlansSheet> {
             // Quick reactivation - no charge now
             final message = sessionData['message'] as String? ?? l10n.subscriptionReactivatedDefault;
             AppSnackbar.showSnackbar(message);
-            PlatformManager.instance.analytics.upgradeSucceeded();
+            PlatformManager.instance.analytics.upgradeSucceeded(
+              previousPlan: currentSub.plan.wireName,
+              newPlan: targetPlan,
+              billingInterval: billingInterval,
+            );
             await provider.fetchSubscription();
           }
           // Otherwise, this is a new subscription requiring checkout
@@ -559,7 +563,11 @@ class _PlansSheetState extends State<PlansSheet> {
 
             if (checkoutResult == true) {
               AppSnackbar.showSnackbar(l10n.subscriptionSuccessfulCharged);
-              PlatformManager.instance.analytics.upgradeSucceeded();
+              PlatformManager.instance.analytics.upgradeSucceeded(
+                previousPlan: currentSub.plan.wireName,
+                newPlan: targetPlan,
+                billingInterval: billingInterval,
+              );
             } else {
               PlatformManager.instance.analytics.upgradeCancelled();
             }

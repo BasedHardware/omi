@@ -455,6 +455,16 @@ class UploadFilesResult {
   bool get isQueued => jobId != null;
 }
 
+class SyncUploadHttpException implements Exception {
+  final int statusCode;
+  final String message;
+
+  const SyncUploadHttpException(this.statusCode, this.message);
+
+  @override
+  String toString() => 'SyncUploadHttpException(status=$statusCode): $message';
+}
+
 /// Server-provided classification for a sync upload HTTP 429.
 ///
 /// Fair use is deliberately opt-in: an unknown, proxy-generated, or platform
@@ -613,9 +623,11 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     return UploadFilesResult.queued(start.jobId);
   }
   if (response.statusCode == 400) {
-    throw Exception('Audio file could not be processed by server');
+    throw SyncUploadHttpException(response.statusCode, 'Audio file could not be processed by server');
+  } else if (response.statusCode == 401 || response.statusCode == 403) {
+    throw SyncUploadHttpException(response.statusCode, 'Upload authentication failed');
   } else if (response.statusCode == 413) {
-    throw Exception('Audio file is too large to upload');
+    throw SyncUploadHttpException(response.statusCode, 'Audio file is too large to upload');
   } else if (response.statusCode == 429 ||
       (response.statusCode == 503 &&
           response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'backfill_capacity')) {
@@ -626,9 +638,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();
   } else if (response.statusCode >= 500) {
-    throw Exception('Server is temporarily unavailable');
+    throw SyncUploadHttpException(response.statusCode, 'Server is temporarily unavailable');
   }
-  throw Exception('Upload failed unexpectedly');
+  throw SyncUploadHttpException(response.statusCode, 'Upload failed unexpectedly');
 }
 
 /// Why a single job-status fetch did not yield a usable status.

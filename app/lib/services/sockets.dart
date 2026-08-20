@@ -19,6 +19,7 @@ abstract class ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   });
 
@@ -55,6 +56,7 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) async {
     await _mutex.acquire();
@@ -66,7 +68,8 @@ class SocketServicePool extends ISocketService {
           _socket?.codec == codec &&
           _socket?.sampleRate == sampleRate &&
           _socket?.state == SocketServiceState.connected &&
-          _socket?.sttConfigId == sttConfigId) {
+          _socket?.sttConfigId == sttConfigId &&
+          _socket?.clientConversationId == clientConversationId) {
         Logger.debug("Reusing existing socket connection");
         return _socket;
       }
@@ -85,6 +88,7 @@ class SocketServicePool extends ISocketService {
           language,
           customSttConfig,
           source: source,
+          clientConversationId: clientConversationId,
         );
       } else {
         _socket = TranscriptSocketServiceFactory.createDefault(
@@ -93,6 +97,7 @@ class SocketServicePool extends ISocketService {
           language,
           source: source,
           sttConfigId: sttConfigId,
+          clientConversationId: clientConversationId,
         );
       }
 
@@ -114,6 +119,7 @@ class SocketServicePool extends ISocketService {
     required String language,
     bool force = false,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
   }) async {
     Logger.debug(
@@ -125,6 +131,7 @@ class SocketServicePool extends ISocketService {
       language: language,
       force: force,
       source: source,
+      clientConversationId: clientConversationId,
       customSttConfig: customSttConfig,
     );
   }

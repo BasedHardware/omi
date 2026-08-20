@@ -45,6 +45,7 @@ class SpeechProfileTranscriptSegmentSocketService extends TranscriptSegmentSocke
     super.source,
     super.customSttMode,
     super.onboardingMode,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: false);
 }
 
@@ -55,12 +56,18 @@ class ConversationTranscriptSegmentSocketService extends TranscriptSegmentSocket
     super.language, {
     super.source,
     super.customSttMode,
+    super.clientConversationId,
   }) : super.create(includeSpeechProfile: true);
 }
 
 class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketService {
-  CustomSttTranscriptSegmentSocketService.create(super.sampleRate, super.codec, super.language, {super.source})
-      : super.create(includeSpeechProfile: true, customSttMode: true);
+  CustomSttTranscriptSegmentSocketService.create(
+    super.sampleRate,
+    super.codec,
+    super.language, {
+    super.source,
+    super.clientConversationId,
+  }) : super.create(includeSpeechProfile: true, customSttMode: true);
 }
 
 enum SocketServiceState { connected, disconnected }
@@ -82,6 +89,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   String? source;
   bool customSttMode;
   String? sttConfigId;
+  String? clientConversationId;
 
   bool onboardingMode;
 
@@ -94,6 +102,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.customSttMode = false,
     this.sttConfigId,
     this.onboardingMode = false,
+    this.clientConversationId,
   }) {
     var params = '?language=$language&sample_rate=$sampleRate&codec=$codec&uid=${SharedPreferencesUtil().uid}'
         '&include_speech_profile=$includeSpeechProfile&stt_service=${SharedPreferencesUtil().transcriptionModel}'
@@ -101,6 +110,10 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
 
     if (source != null && source!.isNotEmpty) {
       params += '&source=${Uri.encodeComponent(source!)}';
+    }
+
+    if (clientConversationId != null && clientConversationId!.isNotEmpty) {
+      params += '&client_conversation_id=${Uri.encodeComponent(clientConversationId!)}';
     }
 
     if (customSttMode) {
@@ -140,6 +153,7 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.customSttMode = false,
     this.sttConfigId,
     this.onboardingMode = false,
+    this.clientConversationId,
   }) {
     _socket = socket;
     _socket.setListener(this);
@@ -316,6 +330,7 @@ class TranscriptSocketServiceFactory {
     bool includeSpeechProfile = true,
     String? source,
     String? sttConfigId,
+    String? clientConversationId,
   }) {
     return TranscriptSegmentSocketService.create(
       sampleRate,
@@ -324,6 +339,7 @@ class TranscriptSocketServiceFactory {
       includeSpeechProfile: includeSpeechProfile,
       source: source,
       sttConfigId: sttConfigId ?? 'omi:default',
+      clientConversationId: clientConversationId,
     );
   }
 
@@ -345,9 +361,10 @@ class TranscriptSocketServiceFactory {
     String language,
     CustomSttConfig config, {
     String? source,
+    String? clientConversationId,
   }) {
     if (!config.isEnabled) {
-      return createDefault(sampleRate, codec, language, source: source);
+      return createDefault(sampleRate, codec, language, source: source, clientConversationId: clientConversationId);
     }
 
     final sttConfigId = config.sttConfigId;
@@ -371,6 +388,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       sttConfigId: sttConfigId,
       sttProvider: config.provider.name,
+      clientConversationId: clientConversationId,
       forwardRawAudioToSecondary: config.sendRawAudioToOmi,
     );
   }
@@ -498,6 +516,7 @@ class TranscriptSocketServiceFactory {
     String? source,
     String? sttConfigId,
     String? sttProvider,
+    String? clientConversationId,
     required bool forwardRawAudioToSecondary,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
@@ -505,6 +524,7 @@ class TranscriptSocketServiceFactory {
       codec,
       language,
       source: source,
+      clientConversationId: clientConversationId,
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
@@ -520,6 +540,7 @@ class TranscriptSocketServiceFactory {
       source: source,
       customSttMode: true,
       sttConfigId: sttConfigId,
+      clientConversationId: clientConversationId,
     );
   }
 }
