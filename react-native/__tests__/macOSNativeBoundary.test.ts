@@ -40,3 +40,17 @@ test('keeps the glass reduce-transparency fallback intact', () => {
     'CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;',
   );
 });
+
+test('treats a generation transport failure with no HTTP response as an error', () => {
+  const source = readNativeSource('OmiBackendModule.mm');
+  const didCompleteIndex = source.indexOf('didCompleteWithError:');
+  expect(didCompleteIndex).toBeGreaterThan(-1);
+  const methodEnd = source.indexOf('@end', didCompleteIndex);
+  const methodSource = source.slice(didCompleteIndex, methodEnd);
+  expect(methodSource).toMatch(
+    /if\s*\(\s*self\.responseStatus\s*!=\s*0\s*&&\s*self\.responseStatus\s*!=\s*200\s*\)/,
+  );
+  expect(methodSource).toContain(
+    'Native generation transport failed before an HTTP response',
+  );
+});
