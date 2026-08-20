@@ -204,8 +204,15 @@ class RewindViewModel: ObservableObject {
     guard !isTranscriptExpanded else { return }
 
     // A today label can remain selected while the continuous viewport is panned into older history.
-    // Only append live frames when the actual visible window contains now.
-    guard RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: visibleTimelineRange, now: Date()) else { return }
+    // Only append live frames when the visible window contains now or is parked at the live edge.
+    guard
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: visibleTimelineRange,
+        newestLoadedTimestamp: screenshots.last?.timestamp.timeIntervalSince1970,
+        now: Date(),
+        isPlayerParkedOnNewestFrame: selectedScreenshot?.id != nil
+          && selectedScreenshot?.id == screenshots.last?.id)
+    else { return }
 
     // Silent refresh: append newly finalized frames without rescanning the retained history.
     await silentlyRefreshNewestFrames()
@@ -568,11 +575,11 @@ class RewindViewModel: ObservableObject {
       )
       guard ownerSnapshot.isCurrent() else { return }
 
-      // Filter out frames from the active (unfinalized) video chunk — they can't be displayed yet
+      // Frames from the active (unfinalized) video chunk are only displayable via their live JPEG
       let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
       guard ownerSnapshot.isCurrent() else { return }
       if let activeChunk = activeChunk {
-        results = results.filter { $0.videoChunkPath != activeChunk }
+        results = results.filter { $0.videoChunkPath != activeChunk || !($0.imagePath ?? "").isEmpty }
       }
 
       // Apply app filter if set
@@ -617,8 +624,22 @@ class RewindViewModel: ObservableObject {
       }
       guard !additions.isEmpty else { return }
       guard ownerSnapshot.isCurrent() else { return }
+      // Follow the live edge: only when the user is parked on the newest frame does the
+      // selection advance with new captures; a scrubbed-back position stays put.
+      let wasParkedOnNewestFrame = selectedScreenshot?.id != nil && selectedScreenshot?.id == newest.id
       screenshots.append(contentsOf: additions)
       historyRange = RewindTrackWindow.extending(historyRange, toInclude: additions[additions.count - 1].timestamp)
+      if wasParkedOnNewestFrame {
+        // Not selectScreenshot(_:) — that emits a per-frame analytics view event; this is
+        // passive following, not a user navigation.
+        selectedScreenshot = additions[additions.count - 1]
+      }
+      // A viewport parked at the live edge follows the frames it accepts; otherwise the newest
+      // loaded frame moves past the viewport's end and the next refresh tick gates itself off.
+      if let visible = visibleTimelineRange, visible.upperBound >= newest.timestamp.timeIntervalSince1970 {
+        visibleTimelineRange = RewindTrackWindow.extending(
+          visible, toInclude: additions[additions.count - 1].timestamp)
+      }
 
       let today = calendar.startOfDay(for: additions[additions.count - 1].timestamp)
       if !capturedDays.contains(where: { calendar.isDate($0, inSameDayAs: today) }) {
@@ -633,7 +654,7 @@ class RewindViewModel: ObservableObject {
   where S.Element == Screenshot {
     var results = Array(source)
     if let activeChunk = await VideoChunkEncoder.shared.currentChunkPath {
-      results.removeAll { $0.videoChunkPath == activeChunk }
+      results.removeAll { $0.videoChunkPath == activeChunk && ($0.imagePath ?? "").isEmpty }
     }
     if let app = selectedApp {
       results.removeAll { $0.appName != app }
