@@ -83,13 +83,13 @@ enum ContextDirectorGrounding {
   /// exception, every retrieval-hop answer was structurally undeliverable:
   /// 10 of 10 hop evaluations in one 48h dogfood window ended suppressed,
   /// including one whose reasoning said the retrieved context "directly helps".
-  /// task_candidate stays bucket-only: creating a task from retrieved history
-  /// is not the answer-delivery case and keeps the strict invariant.
+  /// task_candidate and resurface stay bucket-grounded: neither is the
+  /// answer-delivery case, so each keeps its existing invariant unchanged.
   static func permitsNonSilence(
     decision: String, entryRefs: [String], factIDs: [String], retrievedRefs: [String] = []
   ) -> Bool {
     if decision == "resurface" {
-      return !entryRefs.isEmpty || !factIDs.isEmpty || !retrievedRefs.isEmpty
+      return !entryRefs.isEmpty || !factIDs.isEmpty
     }
     if decision == "insight" || decision == "suggest", !retrievedRefs.isEmpty {
       return true

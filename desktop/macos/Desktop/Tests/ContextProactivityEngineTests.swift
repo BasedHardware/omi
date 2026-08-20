@@ -200,7 +200,8 @@ final class ContextProactivityEngineTests: XCTestCase {
         ContextDirectorGrounding.permitsNonSilence(
           decision: decision, entryRefs: [], factIDs: [], retrievedRefs: []))
     }
-    XCTAssertTrue(
+    // resurface keeps its bucket/fact-only rule: retrieval never grounds it.
+    XCTAssertFalse(
       ContextDirectorGrounding.permitsNonSilence(
         decision: "resurface", entryRefs: [], factIDs: [],
         retrievedRefs: ["conversation:xyz"]))

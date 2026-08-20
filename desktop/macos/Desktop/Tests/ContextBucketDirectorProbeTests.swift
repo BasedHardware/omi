@@ -266,13 +266,13 @@
         $0.name == "probe_context_bucket_director"
       }
       XCTAssertEqual(descriptor?.safety, "network_or_model")
-      XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("deliver notifications") }) == true)
+      XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("without it nothing is delivered") }) == true)
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("reasoning quota") }) == true)
       XCTAssertEqual(
         descriptor?.params,
         [
           "bucket_id", "version", "header", "frozen", "tail", "validated_facts", "tasks", "app", "window",
-          "captured_at", "notify_worthiness", "visit_count", "retrieved", "lookup_query",
+          "captured_at", "notify_worthiness", "visit_count", "retrieved", "lookup_query", "present",
         ])
     }
 
@@ -329,6 +329,11 @@
       // Cited retrieved refs validate against the supplied allowlist only.
       XCTAssertEqual(result["retrieved_ref_count"], "1")
       XCTAssertEqual(result["bucket_entry_ref_count"], "0")
+      // The real grounding guard runs on the replayed decision: an insight with
+      // no bucket citations survives on the validated retrieved ref alone.
+      XCTAssertEqual(result["grounding_permits"], "true")
+      // present was not requested, so nothing was delivered.
+      XCTAssertNil(result["presentation"])
     }
 
     func testReplayFailsClosedOutsideNonProductionBeforeClientCall() async {

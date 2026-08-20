@@ -131,7 +131,22 @@
       let citedRefs = ContextDirectorRetrievalHop.partitionCitedRefs(decision.bucketEntryRefs)
       let validRetrieved = ContextDirectorRetrievalHop.validatedRetrievedRefs(
         citedRefs.retrieved, allowed: Set(input.retrieved.map(\.ref)))
-      return [
+      // The engine validates citations against the store; the probe has no
+      // store, so a citation validates only when it appears verbatim in the
+      // supplied snapshot text — the same "cite only supplied refs" rule.
+      let suppliedText = ([input.frozen] + input.tail + input.validatedFacts).joined(separator: "\n")
+      let validBucketRefs = citedRefs.bucket.filter { suppliedText.contains($0) }
+      let validFactIDs = decision.factIDs.filter { suppliedText.contains($0) }
+      // The real grounding guard runs on the replayed decision, so a probe run
+      // exercises model -> citation validation -> grounding veto exactly as the
+      // engine chains them.
+      let groundingPermits =
+        decision.decision == "silence"
+        ? false
+        : ContextDirectorGrounding.permitsNonSilence(
+          decision: decision.decision, entryRefs: validBucketRefs, factIDs: validFactIDs,
+          retrievedRefs: validRetrieved)
+      var output = [
         "decision": String(decision.decision.prefix(32)),
         "title": decision.title,
         "message": decision.message,
@@ -140,9 +155,42 @@
         "fact_ref_count": "\(decision.factIDs.count)",
         "retrieved_ref_count": "\(validRetrieved.count)",
         "lookup_query": decision.lookupQuery ?? "",
+        "grounding_permits": groundingPermits ? "true" : "false",
         "model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "latency_ms": "\(max(0, latencyMs))",
       ]
+      // present=1 continues a grounding-permitted decision into the real
+      // presentation gate stack, completing the model -> grounding ->
+      // presentation chain the engine runs for an organic delivery.
+      if input.present {
+        guard groundingPermits else {
+          output["presentation"] = "not_attempted_grounding_veto_or_silence"
+          return output
+        }
+        let title = decision.title
+        let message = decision.message
+        let decisionType = decision.decision
+        let refDetail = (validBucketRefs + validRetrieved).joined(separator: ", ")
+        output["presentation"] = await MainActor.run {
+          guard let ownerID = RuntimeOwnerIdentity.currentOwnerId(), !ownerID.isEmpty else {
+            return "no_owner"
+          }
+          let context = FloatingBarNotificationContext(
+            sourceTitle: title,
+            assistantId: "context-director",
+            contextSummary: "probe replay",
+            detail: refDetail,
+            provenanceRef: "probe-present")
+          let presentation = NotificationService.shared.presentContextDirectorNotification(
+            ownerID: ownerID,
+            title: title,
+            message: message,
+            decisionType: decisionType,
+            context: context)
+          return "\(presentation)"
+        }
+      }
+      return output
     }
 
     private struct Input {
@@ -169,6 +217,9 @@
       /// Optional. The lookup query echoed into the retrieved section; ignored
       /// when `retrieved` is empty.
       let lookupQuery: String
+      /// Optional. "1" continues a grounding-permitted decision into the real
+      /// presentation gate stack.
+      let present: Bool
 
       init(params: [String: String]) throws {
         bucketID = try Self.requiredString(params, key: "bucket_id", maxLength: 200)
@@ -211,6 +262,7 @@
           params, key: "retrieved",
           maxCount: ContextDirectorRetrievalHop.maximumPromptItems)
         lookupQuery = params["lookup_query"].map { String($0.prefix(200)) } ?? ""
+        present = params["present"] == "1"
       }
 
       /// Absent means "first-call replay", so existing probe callers keep their
