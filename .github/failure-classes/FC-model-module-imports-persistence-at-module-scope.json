@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-model-module-imports-persistence-at-module-scope",
+  "violated_contract": "A model module must stay importable without its persistence layer. Binding a database helper at module scope in backend/models/** makes every importer of the model — including test collection, which reaches these modules long before any route runs — load the real client package transitively. Suites that install a partial stub for that database module then fail at import rather than at the call they stubbed, and the retry re-imports the real client into an already-populated protobuf descriptor pool, so the error surfaced names a duplicate proto file and not the missing symbol. The defect is the placement of the import, not the helper: a module-scope binding also re-exports the helper as an attribute of the model module, which invites tests to patch it there and couples the seam to the layering violation that created it.",
+  "canonical_prevention": "Import a persistence helper inside the function that calls it, so the model module's import graph stays free of the database layer, and patch the helper in tests at the module that defines it rather than at the model module that borrowed it. Prove it with a test file that exercises the resolving behaviour through the defining module's seam, and check the guard by running the affected suite file-isolated — a partial stub only fails when its file is the one that first imports the client, so a multi-file run can pass while the isolated lane CI uses still fails.",
+  "canonical_prevention_artifact": [
+    "backend/models/chat.py",
+    "backend/tests/unit/test_message_formatting.py"
+  ],
+  "evidence_prs": [
+    11913,
+    11932
+  ],
+  "scope_hints": [
+    "backend/models/**"
+  ],
+  "status": "open"
+}
