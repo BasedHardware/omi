@@ -1864,3 +1864,134 @@ async def test_authorization_lookup_failure_is_not_reported_as_an_explicit_denia
     )
     assert 'tools' not in payload
     assert [fallback['reason'] for fallback in fallbacks] == ['authorization_unavailable']
+
+
+def _count_cache_control(value):
+    """Count cache_control keys in a payload. Nested markers would split or
+    duplicate the automatic breakpoint and silently miss the shared prefix."""
+    count = 0
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key == 'cache_control':
+                count += 1
+            count += _count_cache_control(nested)
+    elif isinstance(value, list):
+        for item in value:
+            count += _count_cache_control(item)
+    return count
+
+
+def _stable_prefix(payload):
+    """Byte-stable tools+system prefix. User turns sit after the automatic
+    breakpoint's shared prefix and must not appear here."""
+    return json.dumps(
+        {'system': payload.get('system'), 'tools': payload.get('tools')},
+        sort_keys=True,
+        separators=(',', ':'),
+    )
+
+
+_STABLE_DESKTOP_SYSTEM = (
+    'You are Omi, a desktop assistant.\n'
+    '<sql_schema>\nCREATE TABLE memories (id TEXT, content TEXT);\n</sql_schema>\n'
+    '<memories>\n1. User prefers vim.\n2. User is in Ho Chi Minh City.\n</memories>'
+)
+_STABLE_DESKTOP_TOOLS = [
+    {'type': 'function', 'function': {'name': 'search_memories', 'parameters': {'type': 'object'}}},
+    {'type': 'function', 'function': {'name': 'execute_sql', 'parameters': {'type': 'object'}}},
+]
+
+
+def test_request_attaches_one_top_level_cache_control_breakpoint():
+    """Anthropic's direct API caches only at an explicit breakpoint. One
+    top-level automatic marker covers tools + system + the growing transcript;
+    a nested copy would consume a second slot and is not this change."""
+    _, payload = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'system', 'content': _STABLE_DESKTOP_SYSTEM},
+                {'role': 'user', 'content': 'hello'},
+            ],
+            'tools': _STABLE_DESKTOP_TOOLS,
+        }
+    )
+    assert payload['cache_control'] == desktop_chat._PROMPT_CACHE_CONTROL
+    assert payload['cache_control'] == {'type': 'ephemeral', 'ttl': '1h'}
+    assert _count_cache_control(payload) == 1
+    assert 'cache_control' not in json.dumps(payload.get('system'))
+    assert 'cache_control' not in json.dumps(payload.get('tools'))
+    assert 'cache_control' not in json.dumps(payload.get('messages'))
+
+
+def test_request_cache_prefix_is_byte_stable_across_volatile_user_turns():
+    """Cache hits require the tools+system prefix to be byte-identical across
+    turns from the same client. Timestamps and the current user turn live in
+    messages, after that prefix, so they cannot silently invalidate it."""
+    tools = _STABLE_DESKTOP_TOOLS
+    system = _STABLE_DESKTOP_SYSTEM
+    _, first = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': 'Current time: 2024-01-19 14:23:45.123456\nWhat did I work on?'},
+            ],
+            'tools': tools,
+        }
+    )
+    _, second = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': 'Current time: 2024-01-19 14:23:45.123456\nWhat did I work on?'},
+                {'role': 'assistant', 'content': 'You were on the desktop chat route.'},
+                {'role': 'user', 'content': 'Current time: 2024-06-01 09:00:00.654321\nSummarize that.'},
+            ],
+            'tools': tools,
+        }
+    )
+    assert _stable_prefix(first) == _stable_prefix(second)
+    assert first['system'] == second['system'] == system
+    assert first['tools'] == second['tools']
+    assert first['cache_control'] == second['cache_control'] == desktop_chat._PROMPT_CACHE_CONTROL
+    assert _count_cache_control(first) == _count_cache_control(second) == 1
+    assert first['messages'] != second['messages']
+    assert '2024-01-19 14:23:45.123456' not in _stable_prefix(first)
+    assert '2024-06-01 09:00:00.654321' not in _stable_prefix(second)
+
+
+def test_request_web_search_injection_keeps_a_constant_cached_prefix():
+    """Server-side web search appends a constant routing instruction and tool.
+    Two successive public-web turns from the same client must still share a
+    byte-identical prefix; only the user turn may change."""
+    _, first = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'system', 'content': _STABLE_DESKTOP_SYSTEM},
+                {'role': 'user', 'content': 'Search the web for the weather in New York. asked at 2024-01-19 14:23:45'},
+            ],
+            'tools': _STABLE_DESKTOP_TOOLS,
+            'omi_web_search': True,
+        }
+    )
+    _, second = _authorized_request(
+        {
+            'model': 'omi-sonnet',
+            'messages': [
+                {'role': 'system', 'content': _STABLE_DESKTOP_SYSTEM},
+                {'role': 'user', 'content': 'Search the web for the weather in London. asked at 2024-06-01 09:00:00'},
+            ],
+            'tools': _STABLE_DESKTOP_TOOLS,
+            'omi_web_search': True,
+        }
+    )
+    assert _stable_prefix(first) == _stable_prefix(second)
+    assert first['cache_control'] == second['cache_control'] == desktop_chat._PROMPT_CACHE_CONTROL
+    assert _count_cache_control(first) == 1
+    assert first['system'] == _STABLE_DESKTOP_SYSTEM + '\n\n' + desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION
+    assert [tool['name'] for tool in first['tools']] == ['web_search', 'search_memories', 'execute_sql']
+    assert '2024-01-19' not in _stable_prefix(first)
+    assert '2024-06-01' not in _stable_prefix(second)
