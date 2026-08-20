@@ -92,6 +92,21 @@ checks:
     triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "base-derived oversized-file checks must reject growth and stale approvals while ratcheting reductions down automatically"
+  - id: associated-pr-body-loader-tests
+    command: ["python3", ".github/scripts/test_load_associated_pr_bodies.py"]
+    triggers: [".github/scripts/load_associated_pr_bodies.py", ".github/scripts/test_load_associated_pr_bodies.py", ".github/actions/release-eligibility/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Release Eligibility must honor Line-Count-Exception declarations from the merged PR (#11564)"
+  - id: nested-workflow-dirs-removed-tests
+    command: ["python3", ".github/scripts/test_nested_workflows_removed.py"]
+    triggers: [".github/workflows/desktop-macos-test-install.yml", ".github/scripts/test_nested_workflows_removed.py", "desktop/macos/tests/test-test-install-workflow-contract.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GitHub never runs nested .github/workflows directories; the macOS install smoke must live at the repository root (#11408)"
+  - id: install-redis-action-tests
+    command: ["python3", ".github/scripts/test_install_redis_action.py"]
+    triggers: [".github/actions/install-redis/**", ".github/workflows/backend-hermetic-e2e.yml", ".github/scripts/test_install_redis_action.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "hermetic gauntlets must fail-fast on apt mirror hangs instead of riding the 20-minute job timeout (#11848)"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]

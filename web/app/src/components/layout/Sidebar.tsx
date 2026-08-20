@@ -92,7 +92,7 @@ const navItems: NavItem[] = [
     icon: <MessageCircle className="w-5 h-5" />,
   },
   {
-    label: 'My Apps',
+    label: 'Created by me',
     href: '/my-apps',
     icon: <LayoutGrid className="w-5 h-5" />,
   },

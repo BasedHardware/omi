@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_WORKFLOW="$SCRIPT_DIR/../.github/workflows/test-install.yml"
+DEFAULT_WORKFLOW="$SCRIPT_DIR/../../../.github/workflows/desktop-macos-test-install.yml"
 WORKFLOW="${2:-$DEFAULT_WORKFLOW}"
 
 # Self-provision actionlint via Go when not on PATH. The GitHub-hosted macOS

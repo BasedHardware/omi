@@ -557,7 +557,7 @@ export function AppsExplorer() {
                   : 'text-text-secondary hover:bg-bg-tertiary'
               )}
             >
-              My Apps
+              Created by me
             </button>
 
             {/* Spacer + Create button */}

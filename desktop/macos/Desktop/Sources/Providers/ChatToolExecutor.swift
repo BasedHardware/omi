@@ -1979,7 +1979,7 @@ class ChatToolExecutor {
         return authorizedOwnerChangedResult()
       }
 
-      if task.deleted == true {
+      if task.isRetired {
         return "Error: task '\(task.description)' has been deleted"
       }
 
@@ -2026,7 +2026,7 @@ class ChatToolExecutor {
         return authorizedOwnerChangedResult()
       }
 
-      if task.deleted == true {
+      if task.isRetired {
         return "Error: task '\(task.description)' is already deleted"
       }
 

@@ -177,8 +177,11 @@ def validate_workflow(text: str) -> list[str]:
     elif re.search(r"(?m)^        [\"']?(?:if|continue-on-error)[\"']?:", invocation):
         errors.append("release eligibility action invocation must not be conditionally skipped or tolerated")
     permissions = mapping_block(text, "permissions", 0)
-    if permissions is None or [line.strip() for line in permissions.splitlines() if line.strip()] != ["contents: read"]:
-        errors.append("release eligibility must use only repository contents: read permissions")
+    granted = [line.strip() for line in (permissions or "").splitlines() if line.strip()]
+    if granted != ["contents: read", "pull-requests: read"]:
+        errors.append(
+            "release eligibility must use only repository contents: read and pull-requests: read permissions"
+        )
     if re.search(r"(?m)^    permissions:", job or ""):
         errors.append("release eligibility result job must not override least-privilege workflow permissions")
     return errors

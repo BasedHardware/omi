@@ -33,10 +33,16 @@ def _app_dict(app_id, name, description):
     }
 
 
-def _search(monkeypatch, records, q, installs=None):
+def _search(monkeypatch, records, q, installs=None, captured=None):
     monkeypatch.setattr(apps_mod, 'search_apps_db', lambda **kw: [dict(r) for r in records])
     monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: set())
-    monkeypatch.setattr(apps_mod, 'get_apps_installs_count', lambda ids: installs or {})
+
+    def _installs(ids):
+        if captured is not None:
+            captured.append(list(ids))
+        return installs or {}
+
+    monkeypatch.setattr(apps_mod, 'get_apps_installs_count', _installs)
     monkeypatch.setattr(apps_mod, 'get_apps_reviews', lambda ids: {})
 
     return apps_mod.search_apps(
@@ -94,3 +100,25 @@ def test_search_is_case_insensitive_over_description(monkeypatch):
     result = _search(monkeypatch, [app], q='  AdHd ')
 
     assert [a['id'] for a in result['data']] == ['a1']
+
+
+def test_search_enriches_only_matching_apps(monkeypatch):
+    focus = _app_dict('a1', 'Focus Coach', 'Helps people with ADHD stay on task')
+    unrelated = _app_dict('a2', 'Recipe Finder', 'Finds recipes')
+    captured: list[list[str]] = []
+
+    result = _search(monkeypatch, [focus, unrelated], q='adhd', captured=captured)
+
+    assert [a['id'] for a in result['data']] == ['a1']
+    assert captured == [['a1']]
+
+
+def test_search_does_not_crash_on_non_string_catalog_fields(monkeypatch):
+    malformed = _app_dict('a1', 'Focus Coach', 'Helps people with ADHD stay on task')
+    malformed['name'] = {'en': 'Focus Coach'}
+    malformed['description'] = 12
+    named = _app_dict('a2', 'ADHD Buddy', 'Unrelated description')
+
+    result = _search(monkeypatch, [malformed, named], q='adhd')
+
+    assert [a['id'] for a in result['data']] == ['a2']

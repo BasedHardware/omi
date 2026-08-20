@@ -75,6 +75,7 @@ void main() {
 
   setUp(() {
     AccountCutoverRuntime.instance.resetForTesting();
+    AccountCutoverRuntime.retryBackoff = (_) => Duration.zero;
   });
 
   test('legacy default allows product traffic and uploads', () {
@@ -216,6 +217,24 @@ void main() {
     expect(runtime.control.productTrafficAllowed, isFalse);
     expect(runtime.decision, AccountCutoverGateDecision.migrationMaintenance);
     expect(runtime.allowsOfflineQueueUpload, isFalse);
+  });
+
+  test('transient fetch failure without authoritative state does not lock the app', () async {
+    final runtime = AccountCutoverRuntime.instance;
+    var fetches = 0;
+    final client = AccountCutoverControlClient(
+      fetch: () async {
+        fetches++;
+        return const AccountCutoverFetchResult.transportFailure();
+      },
+    );
+
+    await runtime.bindAuthenticatedOwner('owner-a', client: client);
+
+    expect(fetches, 3);
+    expect(runtime.isResolvedForOwner, isTrue);
+    expect(runtime.decision, AccountCutoverGateDecision.allowProductTraffic);
+    expect(runtime.hasAuthoritativeControl, isFalse);
   });
 
   test('owner transition clears prior account state and ignores stale in-flight results', () async {

@@ -555,10 +555,10 @@ private struct ChatFirstRestoredTasksHost: View {
         guard let task = await taskForFocus(id: id) else { return }
         await reveal(task, acknowledging: .task(id: id))
       case .goal(let id):
-        var task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
+        var task = tasksStore.tasks.first(where: { $0.goalId == id && !$0.isRetired })
         if task == nil {
           await tasksStore.loadCompletedTasks()
-          task = tasksStore.tasks.first(where: { $0.goalId == id && $0.deleted != true })
+          task = tasksStore.tasks.first(where: { $0.goalId == id && !$0.isRetired })
         }
         if task == nil,
           let detail = try? await APIClient.shared.getCanonicalGoalDetail(goalID: id),
@@ -577,7 +577,7 @@ private struct ChatFirstRestoredTasksHost: View {
   }
 
   private func taskForFocus(id: String) async -> TaskActionItem? {
-    if let task = tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true }) {
+    if let task = tasksStore.tasks.first(where: { $0.id == id && !$0.isRetired }) {
       return task
     }
     // Straight off the wire, so legacy `deleted` may be absent and retirement
@@ -587,7 +587,7 @@ private struct ChatFirstRestoredTasksHost: View {
       return task
     }
     await tasksStore.loadCompletedTasks()
-    return tasksStore.tasks.first(where: { $0.id == id && $0.deleted != true })
+    return tasksStore.tasks.first(where: { $0.id == id && !$0.isRetired })
   }
 
   private func reveal(_ task: TaskActionItem, acknowledging focus: ChatFirstPendingFocus) async {
@@ -618,13 +618,13 @@ private struct ChatFirstRestoredTasksHost: View {
   private func registerAutomationActions() {
     automationRuntime?.registerTasksPage(
       toggleTask: {
-        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else {
+        guard let task = tasksStore.tasks.first(where: { !$0.isRetired && !$0.completed }) else {
           return false
         }
         let intendedCompletion = !task.completed
         AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
         await tasksStore.toggleTask(task)
-        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && !$0.isRetired }
         AnalyticsManager.shared.chatFirst(
           .taskMutation(
             lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,

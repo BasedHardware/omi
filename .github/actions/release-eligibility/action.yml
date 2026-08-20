@@ -50,6 +50,7 @@ runs:
       env:
         RELEASE_BEFORE: ${{ inputs.before }}
         RELEASE_SHA: ${{ inputs.sha }}
+        GITHUB_TOKEN: ${{ github.token }}
         # The push lane cannot see PR labels; the release contract is that the
         # NEXT RELEASE has notes, which fragments already in the tree satisfy.
         DESKTOP_CHANGELOG_ACCEPT_TREE_FRAGMENTS: "1"
@@ -60,3 +61,18 @@ runs:
           --base "$RELEASE_BEFORE" \
           --head "$RELEASE_SHA" \
           --skip-pr-body-checks
+
+        # PR-body checks are invisible on push, so skip-pr-body-checks drops the
+        # line-count ratchet. Re-run it with the merged PR's body so a declared
+        # Line-Count-Exception that passed PR CI still passes eligibility (#11564).
+        ASSOCIATED_BODY="$RUNNER_TEMP/associated-pr-body.txt"
+        python3 .github/scripts/load_associated_pr_bodies.py \
+          --repository "${GITHUB_REPOSITORY}" \
+          --sha "$RELEASE_SHA" \
+          --output "$ASSOCIATED_BODY"
+        python3 .github/scripts/run_checks.py \
+          --lane ci \
+          --base "$RELEASE_BEFORE" \
+          --head "$RELEASE_SHA" \
+          --check-id product-file-line-count-ratchet \
+          --pr-body-file "$ASSOCIATED_BODY"

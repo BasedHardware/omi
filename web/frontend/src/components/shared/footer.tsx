@@ -89,11 +89,11 @@ export default function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'https://www.omi.me/products/omi-dev-kit-2'}
+                href={'https://www.omi.me/'}
                 target="_blank"
                 rel="noreferrer"
               >
-                Omi DEV KIT 2
+                Omi
               </a>
             </li>
           </ul>

@@ -55,7 +55,7 @@ jobs:
 
           changed_files="$(git diff --name-only "$base_sha"...HEAD)"
           printf '%s\n' "$changed_files"
-          if grep -Eq '^(backend/|package\.json$|package-lock\.json$|\.github/workflows/backend-hermetic-e2e\.yml$)' <<<"$changed_files"; then
+          if grep -Eq '^(backend/|package\.json$|package-lock\.json$|\.github/workflows/backend-hermetic-e2e\.yml$|\.github/actions/install-redis/)' <<<"$changed_files"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
             echo "applies=false" >> "$GITHUB_OUTPUT"
@@ -163,9 +163,8 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes redis-server
+        timeout-minutes: 2
+        uses: ./.github/actions/install-redis
 
       - name: Run listen to pusher stack gauntlet
         run: npm run test:listen-pusher-stack:emulator -- --state-dir "$RUNNER_TEMP/listen-pusher-stack"
@@ -238,9 +237,8 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes redis-server
+        timeout-minutes: 2
+        uses: ./.github/actions/install-redis
 
       - name: Run Sync Cloud Tasks stack gauntlet
         run: npm run test:sync-cloud-tasks-stack:emulator
@@ -290,9 +288,8 @@ jobs:
           java-version: '21'
 
       - name: Install Redis server
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes redis-server
+        timeout-minutes: 2
+        uses: ./.github/actions/install-redis
 
       - name: Run Phase 0A replay harness feasibility experiment
         env:

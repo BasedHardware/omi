@@ -1531,10 +1531,7 @@ def test_daily_summary(
     # User-initiated LLM generation — same free-tier gate as chat (402 past cap).
     enforce_chat_quota(uid, platform=x_app_platform)
     time_zone_name = notification_db.get_user_time_zone(uid)
-    tokens = notification_db.get_all_tokens(uid)
-
-    if not tokens:
-        raise HTTPException(status_code=400, detail='No notification tokens found for user')
+    tokens = notification_db.get_all_tokens(uid) or []
 
     # Parse date or use today
     target_date = None
@@ -1618,9 +1615,10 @@ def test_daily_summary(
         navigate_to=f"/daily-summary/{summary_id}",
     )
 
-    send_notification(
-        uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
-    )
+    if tokens:
+        send_notification(
+            uid, daily_summary_title, summary_body, NotificationMessage.get_message_as_dict(ai_message), tokens=tokens
+        )
 
     return {
         'status': 'ok',

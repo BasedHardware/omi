@@ -150,7 +150,7 @@ struct ChatFirstTasksPage: View {
   }
 
   private var visibleTasks: [TaskActionItem] {
-    tasksStore.tasks.filter { $0.deleted != true }
+    tasksStore.tasks.filter { !$0.isRetired }
   }
 
   private var todayTasks: [TaskActionItem] {
@@ -410,11 +410,11 @@ struct ChatFirstTasksPage: View {
   private func registerAutomationActions() {
     automationRuntime?.registerTasksPage(
       toggleTask: { [tasksStore] in
-        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else { return false }
+        guard let task = tasksStore.tasks.first(where: { !$0.isRetired && !$0.completed }) else { return false }
         let intendedCompletion = !task.completed
         AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
         await tasksStore.toggleTask(task)
-        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && !$0.isRetired }
         AnalyticsManager.shared.chatFirst(
           .taskMutation(
             lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,
@@ -544,7 +544,7 @@ private struct ChatFirstTaskRow: View {
         .taskMutation(lifecycle: .attempt, mutation: .completion)
       )
       await tasksStore.toggleTask(task)
-      let reconciledTask = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+      let reconciledTask = tasksStore.tasks.first { $0.id == task.id && !$0.isRetired }
       AnalyticsManager.shared.chatFirst(
         .taskMutation(
           lifecycle: reconciledTask?.completed == intendedCompletion ? .success : .rollback,

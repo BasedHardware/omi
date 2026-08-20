@@ -112,16 +112,18 @@ class AccountCutoverBlockingView extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 15, height: 1.35),
                     ),
-                    if (forceUpgrade) ...[
-                      const SizedBox(height: 20),
-                      FilledButton(
-                        onPressed: () async {
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: () async {
+                        if (forceUpgrade) {
                           final url = Platform.isIOS ? appStoreUrl : playStoreUrl;
                           await launchUrl(url, mode: LaunchMode.externalApplication);
-                        },
-                        child: Text(l10n.accountCutoverOpenStore),
-                      ),
-                    ],
+                          return;
+                        }
+                        await AccountCutoverRuntime.instance.refresh();
+                      },
+                      child: Text(forceUpgrade ? l10n.accountCutoverOpenStore : l10n.retry),
+                    ),
                   ],
                 ),
               ),
