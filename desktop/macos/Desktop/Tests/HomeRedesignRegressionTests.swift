@@ -373,6 +373,38 @@ final class ChatRowPresentationTests: XCTestCase {
       "Meeting notes ready")
   }
 
+  /// The director's copy contract makes the title and the message both name the same
+  /// referent; journaled together into one chat row that read as saying everything
+  /// twice (observed live on beta after 5a076e10b3). A headline whose every token the
+  /// body already carries — quoted, inflected, or reordered — is dropped from the row.
+  func testJournalDropsAHeadlineTheBodyAlreadyRestates() {
+    // Body quotes the title verbatim (smart quotes stripped by tokenization).
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Instruct David Editor to write extra script for main Omi demo video",
+        body:
+          "\u{201C}Instruct David Editor to write extra script for main Omi demo video\u{201D} is due August 21."),
+      "\u{201C}Instruct David Editor to write extra script for main Omi demo video\u{201D} is due August 21.")
+    // Body restates the title with different casing and inflection.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Latest Omi desktop app download link",
+        body: "The latest Omi desktop app download link is omi.me/desktop."),
+      "The latest Omi desktop app download link is omi.me/desktop.")
+    // Body reorders the title's tokens ("fix on main" -> "fix is live on main").
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "The Omi macOS click-away deadzone fix on main",
+        body: "The Omi macOS click-away deadzone fix is live on main; verify it when you can."),
+      "The Omi macOS click-away deadzone fix is live on main; verify it when you can.")
+    // A headline contributing even one new token keeps its own line.
+    XCTAssertEqual(
+      FloatingControlBarManager.notificationJournalText(
+        title: "Ship the quarterly report",
+        body: "You promised it by 5pm — draft the summary now."),
+      "Ship the quarterly report\nYou promised it by 5pm — draft the summary now.")
+  }
+
   func testAnOrdinaryReplyAndAUserTurnAreNotPushes() {
     XCTAssertEqual(ChatRowPresentation.of(message("Sounds good.", sender: .ai)), .assistantReply)
     XCTAssertEqual(ChatRowPresentation.of(message("hey", sender: .user)), .userTurn)
