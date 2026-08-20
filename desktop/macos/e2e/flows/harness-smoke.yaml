@@ -28,6 +28,7 @@ covers:
   - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
   - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentArtifactRetention.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopDevRuntimeManifest.swift
   - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift

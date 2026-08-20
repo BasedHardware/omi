@@ -46,17 +46,20 @@ final class AgentArtifactRetentionTests: XCTestCase {
     let staleDate = now.addingTimeInterval(-(AgentArtifactRetention.toolOutputRetention + 60))
     let freshDate = now.addingTimeInterval(-60)
 
-    let staleURL = root
+    let staleURL =
+      root
       .appendingPathComponent(AgentArtifactRetention.toolOutputDirectoryName, isDirectory: true)
       .appendingPathComponent("owner", isDirectory: true)
       .appendingPathComponent("session-old", isDirectory: true)
       .appendingPathComponent("list_agent_sessions-stale.json")
-    let freshURL = root
+    let freshURL =
+      root
       .appendingPathComponent(AgentArtifactRetention.toolOutputDirectoryName, isDirectory: true)
       .appendingPathComponent("owner", isDirectory: true)
       .appendingPathComponent("session-new", isDirectory: true)
       .appendingPathComponent("list_agent_sessions-fresh.json")
-    let deliveredURL = root
+    let deliveredURL =
+      root
       .appendingPathComponent("owner-1", isDirectory: true)
       .appendingPathComponent("session-1", isDirectory: true)
       .appendingPathComponent("run-1", isDirectory: true)
