@@ -109,6 +109,17 @@ def tag_age_seconds(tag: str) -> int | None:
         return None
 
 
+def tag_creation_age_seconds(tag: str) -> int | None:
+    """Read an annotated tag's creation clock, falling back for legacy tags."""
+    try:
+        raw = git(["for-each-ref", "--format=%(taggerdate:unix)", f"refs/tags/{tag}"])
+        if raw:
+            return max(0, int(time.time()) - int(raw))
+    except (subprocess.CalledProcessError, ValueError):
+        pass
+    return tag_age_seconds(tag)
+
+
 def latest_change_age_seconds(paths: list[str]) -> int | None:
     if not paths:
         return None
@@ -532,15 +543,12 @@ def github_candidate_release_published(repository: str, tag: str) -> tuple[bool 
 
 
 def candidate_publication_age_seconds(repository: str, tag: str) -> int | None:
-    """Age of the candidate's GitHub release, the hourly train's throttle clock.
+    """Age of the candidate tag or release, the hourly train's throttle clock.
 
-    Candidate tags are lightweight, so no local timestamp records when the tag
-    was CREATED — `git log --format=%ct <tag>` reads the tagged COMMIT's time,
-    and a tag pushed minutes ago onto an older commit would defeat the
-    throttle entirely. The release's createdAt is the authoritative
-    publication clock. No release yet means the candidate is still building
-    (the one-active-release fence owns that) or its build failed (the train
-    SHOULD cut a replacement), so the throttle deliberately stands aside.
+    New candidate tags are annotated and carry their own creation timestamp.
+    A GitHub release's createdAt remains authoritative after publication. For
+    legacy lightweight tags without a release, use the tagged commit time as a
+    conservative transition fallback.
     """
     result = subprocess.run(
         ["gh", "release", "view", tag, "--repo", repository, "--json", "tagName,createdAt"],
@@ -548,22 +556,21 @@ def candidate_publication_age_seconds(repository: str, tag: str) -> int | None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    if result.returncode != 0:
-        return None
-    try:
-        release = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(release, dict) or release.get("tagName") != tag:
-        return None
-    created_at = release.get("createdAt")
-    if not isinstance(created_at, str):
-        return None
-    try:
-        created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return max(0, int(time.time() - created.timestamp()))
+    if result.returncode == 0:
+        try:
+            release = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            release = None
+        if isinstance(release, dict) and release.get("tagName") == tag:
+            created_at = release.get("createdAt")
+            if isinstance(created_at, str):
+                try:
+                    created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                except ValueError:
+                    pass
+                else:
+                    return max(0, int(time.time() - created.timestamp()))
+    return tag_creation_age_seconds(tag)
 
 
 def normal_candidate_lifecycle(repository: str, source_sha: str, tag: str) -> tuple[str, str]:
@@ -712,7 +719,7 @@ def main() -> int:
             set_output("should_release", "false")
             set_output(
                 "reason",
-                f"Hourly release train: candidate {latest_tag} published {latest_candidate_age}s ago; "
+                f"Hourly release train: candidate {latest_tag} created {latest_candidate_age}s ago; "
                 f"next candidate in {remaining}s.",
             )
             return 0

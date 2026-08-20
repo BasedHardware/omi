@@ -697,7 +697,7 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
             with (
                 patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
                 patch.object(planner.subprocess, "run", return_value=completed),
-                patch.object(planner, "tag_age_seconds") as commit_age,
+                patch.object(planner, "tag_creation_age_seconds") as tag_age,
                 patch.object(planner, "releasable_desktop_changes_since") as changes,
                 patch.object(
                     sys,
@@ -709,18 +709,20 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 self.assertEqual(planner.main(), 0)
             outputs = output_path.read_text(encoding="utf-8")
 
-        commit_age.assert_not_called()
+        tag_age.assert_not_called()
         changes.assert_not_called()
         self.assertIn("should_release=false", outputs)
         self.assertIn("Hourly release train", outputs)
 
-    def test_train_throttle_stands_aside_when_the_candidate_has_no_release(self) -> None:
+    def test_train_throttle_uses_tag_creation_time_before_release_exists(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "github-output"
+            no_release = subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="release not found")
             with (
                 patch.object(planner, "latest_desktop_tag", return_value=LATEST_TAG),
-                patch.object(planner, "candidate_publication_age_seconds", return_value=None),
-                patch.object(planner, "releasable_desktop_changes_since", return_value=[]),
+                patch.object(planner.subprocess, "run", return_value=no_release),
+                patch.object(planner, "tag_creation_age_seconds", return_value=120) as tag_age,
+                patch.object(planner, "releasable_desktop_changes_since") as changes,
                 patch.object(
                     sys,
                     "argv",
@@ -731,8 +733,10 @@ class DesktopCandidateSourceCheckTests(unittest.TestCase):
                 self.assertEqual(planner.main(), 0)
             outputs = output_path.read_text(encoding="utf-8")
 
-        self.assertNotIn("Hourly release train", outputs)
-        self.assertIn("No releasable desktop app changes", outputs)
+        tag_age.assert_called_once_with(LATEST_TAG)
+        changes.assert_not_called()
+        self.assertIn("should_release=false", outputs)
+        self.assertIn("Hourly release train", outputs)
 
     def test_manual_dispatch_ignores_the_train_interval(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
