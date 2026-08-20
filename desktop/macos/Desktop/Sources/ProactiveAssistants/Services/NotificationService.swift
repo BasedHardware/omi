@@ -444,7 +444,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled)
     {
       log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
       recordInsightDeliveryOutcome(
@@ -694,7 +695,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled)
     else {
       onDropped?()
       return .suppressed
@@ -761,23 +763,25 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   }
 
   /// Maps every proactive notification kind to its user-facing category — Focus, Task,
-  /// Insight, or Memory — and answers whether that category's Settings toggle allows
-  /// delivery. Focus is the focus-nudge assistant alone; generic tips, resurfaced
-  /// items, and generated goals are all insights; meeting action items are tasks.
-  /// `.general` is functional system alerting outside the taxonomy and is never
-  /// category-gated.
+  /// Insight, Memory, or Integration — and answers whether that category's Settings
+  /// toggle allows delivery. Focus is the focus-nudge assistant alone; generic tips,
+  /// resurfaced items, and generated goals are all insights; meeting action items are
+  /// tasks; connect-an-app offers are integrations. `.general` is functional system
+  /// alerting outside the taxonomy and is never category-gated.
   nonisolated static func categoryToggleAllows(
     kind: ProactiveNotificationKind,
     focusEnabled: Bool,
     taskEnabled: Bool,
     insightEnabled: Bool,
-    memoryEnabled: Bool
+    memoryEnabled: Bool,
+    integrationEnabled: Bool
   ) -> Bool {
     switch kind {
     case .suggestion: return focusEnabled
     case .task, .meetingNotes: return taskEnabled
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
+    case .integration: return integrationEnabled
     case .general: return true
     }
   }

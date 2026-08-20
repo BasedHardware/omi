@@ -10,11 +10,11 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
   func testDirectorDecisionsAreGatedByTheirCategoryToggle() {
     func allows(
       _ kind: ProactiveNotificationKind, focus: Bool = true, task: Bool = true, insight: Bool = true,
-      memory: Bool = true
+      memory: Bool = true, integration: Bool = true
     ) -> Bool {
       NotificationService.categoryToggleAllows(
         kind: kind, focusEnabled: focus, taskEnabled: task,
-        insightEnabled: insight, memoryEnabled: memory)
+        insightEnabled: insight, memoryEnabled: memory, integrationEnabled: integration)
     }
     // Focus toggle owns the focus-nudge assistant alone.
     XCTAssertFalse(allows(.suggestion, focus: false))
@@ -29,8 +29,12 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
     XCTAssertFalse(allows(.goal, insight: false))
     // Memory toggle owns memory extraction.
     XCTAssertFalse(allows(.memory, memory: false))
+    // Integration toggle owns connect-an-app offers.
+    XCTAssertFalse(allows(.integration, integration: false))
+    XCTAssertTrue(allows(.integration, focus: false, task: false, insight: false, memory: false))
     // Functional alerts sit outside the taxonomy.
-    XCTAssertTrue(allows(.general, focus: false, task: false, insight: false, memory: false))
+    XCTAssertTrue(
+      allows(.general, focus: false, task: false, insight: false, memory: false, integration: false))
     // The director's decision strings resolve into the gated kinds; "suggest" is a
     // generic tip, which the taxonomy files under Insight.
     XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "suggest"), .insight)

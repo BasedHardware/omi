@@ -341,6 +341,7 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "memory-extraction"), .memory)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "goals"), .goal)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "meeting-notes"), .meetingNotes)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "integration_connect"), .integration)
     XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
   }
 
@@ -356,6 +357,7 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationBadge(kind: .resurface).label, "Insight")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .goal).label, "Insight")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .memory).label, "Memory")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .integration).label, "Integration")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .general).label, "Notification")
   }
 
