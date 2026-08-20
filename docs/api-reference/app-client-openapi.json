@@ -18739,6 +18739,40 @@
         "title": "SendMessageRequest",
         "type": "object"
       },
+      "SendShareEmailRequest": {
+        "properties": {
+          "recipient_emails": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Recipient Emails",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipient_emails"
+        ],
+        "title": "SendShareEmailRequest",
+        "type": "object"
+      },
+      "SendShareEmailResponse": {
+        "properties": {
+          "sent_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sent To",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sent_to"
+        ],
+        "title": "SendShareEmailResponse",
+        "type": "object"
+      },
       "SetConversationActionItemsStateRequest": {
         "properties": {
           "items_idx": {
@@ -18874,6 +18908,46 @@
           "token"
         ],
         "title": "ShareChatMessagesResponse",
+        "type": "object"
+      },
+      "ShareRecipient": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "ShareRecipient",
+        "type": "object"
+      },
+      "ShareRecipientsResponse": {
+        "properties": {
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipient"
+            },
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients"
+        ],
+        "title": "ShareRecipientsResponse",
         "type": "object"
       },
       "ShareTasksRequest": {
@@ -36219,6 +36293,193 @@
           }
         ],
         "summary": "Set Assignee Conversation Segment",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-email": {
+      "post": {
+        "description": "One-click send of the meeting summary to detected participants.\n\nRecipients are validated against the calendar-detected set so this can\nnever relay to arbitrary addresses. Sending makes the conversation\nlink-visible first (same contract as copying the share link) so the\nemailed link resolves.",
+        "operationId": "send_conversation_share_email_v1_conversations__conversation_id__share_email_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendShareEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendShareEmailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Send Conversation Share Email",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/share-recipients": {
+      "get": {
+        "description": "Who the meeting summary could be sent to: calendar-detected participants minus the owner.",
+        "operationId": "get_conversation_share_recipients_v1_conversations__conversation_id__share_recipients_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareRecipientsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation Share Recipients",
         "tags": [
           "conversations"
         ]
