@@ -3489,6 +3489,32 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
+    // The distributed com.omi.test.notification channel is machine-global: every
+    // running Omi bundle — the user's production install included — receives it,
+    // delivers it, and journals it into the real account's chat (#11943). This is
+    // the bundle-scoped alternative: it reaches only the bundle whose port and
+    // token the caller holds, through the same production sendNotification path.
+    register(
+      name: "send_test_notification",
+      summary: "Deliver a proactive test notification through the real sendNotification path (this bundle only)",
+      params: ["title", "message", "assistant_id"]
+    ) { params in
+      let title = params["title"] ?? "Insight"
+      let message = params["message"] ?? "Test notification from Omi"
+      let assistantId = params["assistant_id"] ?? "insight"
+      let posted = await MainActor.run { () -> Bool in
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
+        NotificationService.shared.sendNotification(
+          ownerID: ownerID,
+          title: title,
+          message: message,
+          assistantId: assistantId
+        )
+        return true
+      }
+      return ["posted": posted ? "true" : "false"]
+    }
+
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
