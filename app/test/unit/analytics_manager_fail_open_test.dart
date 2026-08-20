@@ -236,6 +236,20 @@ void main() {
     expect(adapter.events.last.properties, isNot(contains('transport-id')));
   });
 
+  test('firmware update telemetry normalizes an unavailable firmware revision', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    FirmwareUpdateTelemetry.start(
+      device: BtDevice(id: 'transport-id', name: 'Omi', type: DeviceType.omi, rssi: -50),
+      protocol: 'mcumgr',
+    );
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events.single.properties, containsPair('from_version', 'unknown'));
+  });
+
   test('memory telemetry carries the recording device firmware context', () {
     final device = BtDevice(id: 'device-id', name: 'Omi', type: DeviceType.omi, rssi: -50, firmwareRevision: '3.2.1');
 

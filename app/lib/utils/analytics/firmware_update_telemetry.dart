@@ -31,7 +31,7 @@ class FirmwareUpdateTelemetry {
   Map<String, Object> _properties({String? toVersion, String? failureClass}) => {
         'firmware_update_attempt_id': _attemptId,
         'protocol': protocol,
-        'from_version': _fromVersion.isEmpty ? 'unknown' : _fromVersion,
+        'from_version': _normalizeFirmwareVersion(_fromVersion),
         if (toVersion != null) 'to_version': toVersion,
         if (failureClass != null) 'failure_class': _normalizeFailureClass(failureClass),
       };
@@ -40,4 +40,9 @@ class FirmwareUpdateTelemetry {
         'firmware_file_missing' || 'native_dfu_error' || 'unknown' => failureClass,
         _ => 'unknown',
       };
+
+  static String _normalizeFirmwareVersion(String version) {
+    final normalized = version.trim();
+    return normalized.isEmpty || normalized.toLowerCase() == 'unknown' ? 'unknown' : normalized;
+  }
 }
