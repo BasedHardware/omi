@@ -488,12 +488,12 @@ checks:
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
+    reason: "the hourly workflow must bypass queued GitHub compile checks only when tag-bound Codemagic owns compile, signing, and signed-smoke admission"
   - id: desktop-candidate-source-identity
     command: ["python3", ".github/scripts/test_desktop_release_source_identity.py"]
     triggers: [".github/scripts/desktop-release-source-identity.py", ".github/scripts/test_desktop_release_source_identity.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "issue #11936: a candidate stays on the exact green source (or changelog-only child) while later desktop merges queue for the next train"
+    reason: "issue #11936: a candidate stays on the exact release source (or changelog-only child) while later desktop merges queue for the next train"
   - id: desktop-candidate-tag-transaction
     command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
     triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
@@ -503,17 +503,17 @@ checks:
     command: ["python3", ".github/scripts/test_observe_codemagic_tag_build.py"]
     triggers: [".github/scripts/observe-codemagic-tag-build.py", ".github/scripts/test_observe_codemagic_tag_build.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-155 requires exactly one observed native Codemagic tag build; missing, duplicate, and unobservable candidates fail closed with durable evidence"
+    reason: "SCA-155 requires exactly one exact-tag Codemagic build; missing, duplicate, and unobservable candidates fail closed with durable evidence"
   - id: desktop-codemagic-tag-intake-cli
     command: ["python3", ".github/scripts/check-codemagic-tag-intake.py", "--help"]
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-179 keeps the native Codemagic intake observer executable in every candidate-control revision"
+    reason: "SCA-179 keeps the direct Codemagic intake controller executable in every candidate-control revision"
   - id: desktop-codemagic-tag-intake-fixtures
     command: ["python3", ".github/scripts/test_check_codemagic_tag_intake.py"]
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/scripts/test_check_codemagic_tag_intake.py", ".github/workflows/desktop_auto_release.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-179 requires bounded exact-tag evidence that native Codemagic intake selected the release workflow and immutable source"
+    reason: "SCA-179 requires exact-tag evidence that direct Codemagic dispatch selected the release workflow and immutable source"
   - id: desktop-codemagic-failure-recovery
     command: ["python3", ".github/scripts/test_desktop_codemagic_failure_recovery.py"]
     triggers: [".github/scripts/desktop-codemagic-failure-recovery.py", ".github/scripts/desktop-codemagic-recovery-profiles.json", ".github/scripts/test_desktop_codemagic_failure_recovery.py", ".github/workflows/desktop_codemagic_failure_recovery.yml", "desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]

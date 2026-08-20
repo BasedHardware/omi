@@ -124,8 +124,7 @@ def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha:
 
 def create_local_lightweight_tag(*, release_tag: str, candidate_sha: str) -> None:
     """Create a direct commit tag; it is not a candidate until pushed."""
-    # No --annotate/--message flag: Codemagic's native tag trigger requires a
-    # lightweight ref, while source provenance is retained as a workflow artifact.
+    # Keep the ref lightweight; source provenance is retained as a workflow artifact.
     run_git(["tag", release_tag, candidate_sha])
 
 
@@ -139,7 +138,7 @@ def require_candidate_merged_on_main(repository: str, candidate_sha: str) -> Non
 
 
 def publish_immutable_tag_ref(release_tag: str) -> None:
-    """Publish through Git's tag push so Codemagic sees its native tag trigger."""
+    """Publish the immutable ref before the workflow dispatches its exact-tag build."""
     tag_ref = f"refs/tags/{release_tag}"
     # No force refspec: an existing remote candidate makes Git fail rather
     # than rewriting immutable tag evidence or retrying a stale candidate.

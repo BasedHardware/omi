@@ -1,0 +1,3 @@
+{
+  "change": "Made each hourly macOS update start its Codemagic release build without waiting for GitHub's macOS queue"
+}

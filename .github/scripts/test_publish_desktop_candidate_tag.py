@@ -43,7 +43,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         job = workflow.split("  plan-and-tag:\n", 1)[1]
         self.assertLess(job.index("- name: Generate Omi Bot token"), job.index("- name: Checkout with Omi Bot token"))
         self.assertEqual(job.count("token: ${{ steps.app-token.outputs.token }}"), 2)
-        self.assertIn("Verify native Codemagic tag intake or dispatch fenced fallback", job)
+        self.assertIn("Dispatch or reuse the exact-tag Codemagic build", job)
         self.assertIn("check-codemagic-tag-intake.py", job)
         self.assertIn("if: always() && steps.plan.outputs.should_release == 'true'", job)
 
