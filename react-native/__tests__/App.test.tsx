@@ -1592,10 +1592,23 @@ test('uses transparent separated macOS Home islands with a centered query lane',
       node => node.props.accessibilityLabel === 'Home chronological spine',
     ),
   ).toBeDefined();
-  expect(
-    renderer.root.find(node => node.props.accessibilityLabel === 'Search Home')
-      .props.placeholder,
-  ).toBe('Filter saved…');
+  const homeSearch = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Search Home',
+  );
+  expect(homeSearch.props.placeholder).toBe('Filter saved…');
+  await ReactTestRenderer.act(async () => {
+    homeSearch.props.onFocus();
+  });
+  const focusedDock = renderer.root.find(
+    node => node.props.accessibilityLabel === 'Home search dock',
+  );
+  expect(focusedDock.props.style).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({borderColor: '#78bda5', borderWidth: 1}),
+      expect.objectContaining({paddingLeft: 18, paddingRight: 18}),
+    ]),
+  );
+  expect(JSON.stringify(focusedDock.props.style)).not.toContain('shadowColor');
   const output = JSON.stringify(renderer.toJSON());
   expect(output.indexOf('Filter saved…')).toBeLessThan(
     output.indexOf('Home device affordance'),
