@@ -1373,6 +1373,7 @@ public enum OmiAPI {
     public let folderId: String?
     public let geolocation: Geolocation?
     public let id: String
+    public let imported: Bool?
     public let isLocked: Bool?
     public let language: String?
     public let meetingDedupSpeechS: Double?
@@ -1414,6 +1415,7 @@ public enum OmiAPI {
       case folderId = "folder_id"
       case geolocation
       case id
+      case imported
       case isLocked = "is_locked"
       case language
       case meetingDedupSpeechS = "meeting_dedup_speech_s"
@@ -1457,6 +1459,7 @@ public enum OmiAPI {
       folderId = try c.decodeIfPresent(String.self, forKey: .folderId)
       geolocation = try c.decodeIfPresent(Geolocation.self, forKey: .geolocation)
       id = try c.decode(String.self, forKey: .id)
+      imported = try c.decodeIfPresent(Bool.self, forKey: .imported)
       isLocked = try c.decodeIfPresent(Bool.self, forKey: .isLocked)
       language = try c.decodeIfPresent(String.self, forKey: .language)
       meetingDedupSpeechS = try c.decodeIfPresent(Double.self, forKey: .meetingDedupSpeechS)
@@ -1481,7 +1484,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, imported: Bool? = nil, isLocked: Bool? = nil, language: String? = nil, meetingDedupSpeechS: Double? = nil, meetingDurationS: Double? = nil, meetingTreatmentEligible: Bool? = nil, meetingTreatmentReason: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, usesCustomStt: Bool? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1499,6 +1502,7 @@ public enum OmiAPI {
       self.folderId = folderId
       self.geolocation = geolocation
       self.id = id
+      self.imported = imported
       self.isLocked = isLocked
       self.language = language
       self.meetingDedupSpeechS = meetingDedupSpeechS

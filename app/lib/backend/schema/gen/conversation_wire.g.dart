@@ -584,6 +584,7 @@ class GeneratedConversation {
   final String? folderId;
   final GeneratedGeolocation? geolocation;
   final String id;
+  final bool imported;
   final bool isLocked;
   final String? language;
   final double? meetingDedupSpeechS;
@@ -625,6 +626,7 @@ class GeneratedConversation {
     this.folderId,
     this.geolocation,
     required this.id,
+    this.imported = false,
     this.isLocked = false,
     this.language,
     this.meetingDedupSpeechS,
@@ -668,6 +670,7 @@ class GeneratedConversation {
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
       geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      imported: _required(_readFieldValue<bool>(_readField(json, const ["imported"]), "imported", _readBool, requiredField: false, nullable: false, defaultValue: false), "imported"),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
@@ -712,6 +715,7 @@ class GeneratedConversation {
       'folder_id': folderId,
       'geolocation': geolocation?.toJson(),
       'id': id,
+      'imported': imported,
       'is_locked': isLocked,
       'language': language,
       'meeting_dedup_speech_s': meetingDedupSpeechS,
