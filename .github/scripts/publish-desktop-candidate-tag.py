@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish an immutable lightweight macOS candidate from a merged green source."""
+"""Publish an immutable timestamped macOS candidate from a merged release source."""
 
 from __future__ import annotations
 
@@ -100,7 +100,7 @@ def validate_inputs(repository: str, release_tag: str, candidate_sha: str) -> No
 
 
 def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha: str) -> str:
-    """Bind the separately retained planner artifact to this exact lightweight tag."""
+    """Bind the separately retained planner artifact to this exact candidate tag."""
     try:
         decoded = json.loads(evidence)
     except json.JSONDecodeError as error:
@@ -122,10 +122,9 @@ def validate_planner_evidence(*, evidence: str, release_tag: str, candidate_sha:
     return origin_main_sha
 
 
-def create_local_lightweight_tag(*, release_tag: str, candidate_sha: str) -> None:
-    """Create a direct commit tag; it is not a candidate until pushed."""
-    # Keep the ref lightweight; source provenance is retained as a workflow artifact.
-    run_git(["tag", release_tag, candidate_sha])
+def create_local_candidate_tag(*, release_tag: str, candidate_sha: str) -> None:
+    """Create a timestamped immutable tag; it is not a candidate until pushed."""
+    run_git(["tag", "--annotate", "--message", f"Omi Desktop candidate {release_tag}", release_tag, candidate_sha])
 
 
 def require_candidate_merged_on_main(repository: str, candidate_sha: str) -> None:
@@ -160,7 +159,7 @@ def publish_candidate_tag(
     require_candidate_merged_on_main(repository, candidate_sha)
     # A local tag is not a candidate. It becomes one only through the native
     # Git tag push below, which is the provider-visible Codemagic boundary.
-    create_local_lightweight_tag(release_tag=release_tag, candidate_sha=candidate_sha)
+    create_local_candidate_tag(release_tag=release_tag, candidate_sha=candidate_sha)
     publish_immutable_tag_ref(release_tag)
 
 

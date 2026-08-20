@@ -488,7 +488,7 @@ checks:
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "the hourly workflow must bypass queued GitHub compile checks only when tag-bound Codemagic owns compile, signing, and signed-smoke admission"
+    reason: "the hourly workflow bypasses queued GitHub compile checks when tag-bound Codemagic owns admission, while the candidate clock still limits tags to one per hour"
   - id: desktop-candidate-source-identity
     command: ["python3", ".github/scripts/test_desktop_release_source_identity.py"]
     triggers: [".github/scripts/desktop-release-source-identity.py", ".github/scripts/test_desktop_release_source_identity.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
@@ -498,7 +498,7 @@ checks:
     command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
     triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "issue #11936: authoritative GitHub ancestry plus create-only publication admits a merged green source after main advances"
+    reason: "issue #11936: authoritative GitHub ancestry plus timestamped create-only publication admits an exact source after main advances"
   - id: desktop-codemagic-tag-build-observer
     command: ["python3", ".github/scripts/test_observe_codemagic_tag_build.py"]
     triggers: [".github/scripts/observe-codemagic-tag-build.py", ".github/scripts/test_observe_codemagic_tag_build.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
