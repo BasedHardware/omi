@@ -437,7 +437,7 @@ struct DesktopHomeView: View {
       enforceMainWindowMinimumSize()
       reportAutomationState()
       // First-run seed so the counter doesn't count the entire backlog as "new".
-      if topBarNewSinceRaw == 0 { topBarNewSinceRaw = Date().timeIntervalSince1970 }
+      seedTopBarNewSinceIfNeeded()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
@@ -635,7 +635,9 @@ struct DesktopHomeView: View {
   }
 
   private func seedTopBarNewSinceIfNeeded() {
-    topBarNewSinceRaw = topBarNewSinceRaw == 0 ? Date().timeIntervalSince1970 : topBarNewSinceRaw
+    let currentValue = topBarNewSinceRaw
+    guard currentValue == 0 else { return }
+    topBarNewSinceRaw = Date().timeIntervalSince1970
   }
 
   private var currentAppStateLabel: String {
