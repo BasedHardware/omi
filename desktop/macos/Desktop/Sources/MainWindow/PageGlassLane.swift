@@ -6,11 +6,12 @@
 //  wallpaper. That is the whole point — panels sit *on* the desktop rather than on a full-bleed slab
 //  of glass the window painted for them.
 //
-//  Home and Rewind were already built that way: each is a set of glass objects with real air between
-//  them (`QueryShellHome`, `RewindSearchLayout`). **Every other destination was drawn assuming the
-//  window's ground was underneath it**, so without one they render type and controls straight onto the
-//  wallpaper. This file is where they get a surface, and it is one surface for all of them: a page that
-//  invents its own panel is the drift `InkGlass` exists to stop.
+//  QueryShell Home and Rewind were already built that way: each is a set of glass objects with real air
+//  between them (`QueryShellHome`, `RewindSearchLayout`). The two older Home surfaces are the exception:
+//  `DashboardPage` is laned when it mounts either one, so without this file they render straight onto
+//  the wallpaper. **Every other destination was drawn assuming the window's ground was underneath it**,
+//  so this file is where they get a surface, and it is one surface for all of them: a page that invents
+//  its own panel is the drift `InkGlass` exists to stop.
 //
 //  ## One tall panel, not a header plus a body
 //
@@ -50,11 +51,12 @@ enum PageGlassLanePolicy {
   ///
   /// It takes the raw index rather than a `SidebarNavItem` because the router's `switch` sends every
   /// unrecognised index to Home through its `default:` branch. Resolving an unknown index to anything
-  /// else here would wrap Home in a second panel on exactly the routes nobody tests.
-  static func ownsItsPanels(selectedIndex: Int, usesLegacyHomeDesign: Bool = false) -> Bool {
+  /// else here would wrap Home in a second panel on exactly the routes nobody tests. The router passes
+  /// the already-resolved Home surface decision instead of making this lane read a settings key.
+  static func ownsItsPanels(selectedIndex: Int, homeOwnsItsPanels: Bool) -> Bool {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
     case .dashboard:
-      return !usesLegacyHomeDesign
+      return homeOwnsItsPanels
     case .rewind:
       return true
     default:
@@ -95,27 +97,19 @@ enum PageGlassLaneLayout {
 ///
 /// It wraps the router's whole page switch rather than each page in turn, so there is exactly one
 /// place that decides what a destination's surface is. A page inside it paints no background of its
-/// own (`glassContent()`); the panel is the ground.
+/// own (`glassContent()`); the panel is the ground. Home and Rewind are handed their own-glass answer
+/// by the router, while the older `DashboardPage` surfaces are handed `false` and use this panel.
 struct PageGlassLane<Content: View>: View {
   /// The route being rendered, used only to ask `PageGlassLanePolicy` whether it already has glass.
   let selectedIndex: Int
-  let usesLegacyHomeDesign: Bool
+  /// Whether the Home surface selected by the router owns its own glass.
+  let homeOwnsItsPanels: Bool
   @ViewBuilder var content: () -> Content
-
-  init(
-    selectedIndex: Int,
-    usesLegacyHomeDesign: Bool = false,
-    @ViewBuilder content: @escaping () -> Content
-  ) {
-    self.selectedIndex = selectedIndex
-    self.usesLegacyHomeDesign = usesLegacyHomeDesign
-    self.content = content
-  }
 
   var body: some View {
     if PageGlassLanePolicy.ownsItsPanels(
       selectedIndex: selectedIndex,
-      usesLegacyHomeDesign: usesLegacyHomeDesign
+      homeOwnsItsPanels: homeOwnsItsPanels
     ) {
       // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather
       // than the surface it was given — see `ShellModalScrim`. Published here rather than chosen at

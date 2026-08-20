@@ -119,7 +119,10 @@ struct ChatFirstShell: View {
   private var destination: some View {
     if ChatFirstPageGlassLanePolicy.shouldWrap(navigation.route) {
       PageGlassLane(
-        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route)
+        selectedIndex: ChatFirstPageGlassLanePolicy.pageGlassLaneIndex(for: navigation.route),
+        homeOwnsItsPanels: HomeDesignPresentation.queryShellOwnsItsPanels(
+          useLegacyHomeDesign: true,
+          forceModernPresentation: true)
       ) {
         routeDestination
       }
