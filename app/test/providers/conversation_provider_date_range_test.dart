@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -96,13 +97,13 @@ void main() {
       DateTime? capturedEnd;
       String? capturedQuery;
       final provider = makeProvider(
-        conversationSearchFetcher: (query,
-            {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
-          capturedQuery = query;
-          capturedStart = startDate;
-          capturedEnd = endDate;
-          return (<ServerConversation>[], 1, 1);
-        },
+        conversationSearchFetcher:
+            (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+              capturedQuery = query;
+              capturedStart = startDate;
+              capturedEnd = endDate;
+              return (<ServerConversation>[], 1, 1);
+            },
       );
 
       provider.setSearchDateRange(DateTime(2026, 6, 1, 9), DateTime(2026, 6, 30, 17));
@@ -113,16 +114,31 @@ void main() {
       expect(capturedEnd, DateTime(2026, 6, 30, 23, 59, 59, 999));
     });
 
+    test('search date bounds serialize as UTC with an explicit offset', () {
+      final localStart = DateTime(2026, 6, 15);
+      final localEnd = DateTime(2026, 6, 15, 23, 59, 59, 999);
+
+      final startIso = serializeConversationSearchDateBound(localStart);
+      final endIso = serializeConversationSearchDateBound(localEnd);
+
+      expect(localStart.isUtc, isFalse);
+      expect(localStart.toIso8601String().contains('Z'), isFalse);
+      expect(startIso.endsWith('Z'), isTrue);
+      expect(endIso.endsWith('Z'), isTrue);
+      expect(DateTime.parse(startIso), localStart.toUtc());
+      expect(DateTime.parse(endIso), localEnd.toUtc());
+    });
+
     test('searchMoreConversations keeps the same date bounds', () async {
       DateTime? capturedStart;
       DateTime? capturedEnd;
       final provider = makeProvider(
-        conversationSearchFetcher: (query,
-            {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
-          capturedStart = startDate;
-          capturedEnd = endDate;
-          return (<ServerConversation>[], page ?? 1, 2);
-        },
+        conversationSearchFetcher:
+            (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+              capturedStart = startDate;
+              capturedEnd = endDate;
+              return (<ServerConversation>[], page ?? 1, 2);
+            },
       );
 
       provider.setSearchDateRange(DateTime(2026, 6, 1), DateTime(2026, 6, 2));

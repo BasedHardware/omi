@@ -564,8 +564,8 @@ int? _parseRetryAfterSeconds(http.Response response) {
 /// Everything else remains a generic backend-capacity limit.
 SyncRateLimitKind syncRateLimitKindForResponse(http.Response response) =>
     response.headers['x-omi-rate-limit-reason']?.trim().toLowerCase() == 'fair_use'
-        ? SyncRateLimitKind.fairUse
-        : SyncRateLimitKind.backendCapacity;
+    ? SyncRateLimitKind.fairUse
+    : SyncRateLimitKind.backendCapacity;
 
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
@@ -683,6 +683,13 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   }
 }
 
+/// Serialize a local calendar-day bound for conversation search.
+///
+/// Local [DateTime] values have no offset in [DateTime.toIso8601String], and
+/// `search_conversations_endpoint` parses naive datetimes in the server TZ.
+/// Convert to UTC first, matching the conversation-list date filter.
+String serializeConversationSearchDateBound(DateTime date) => date.toUtc().toIso8601String();
+
 Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   String query, {
   int? page,
@@ -702,8 +709,8 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
-      if (startDate != null) 'start_date': startDate.toIso8601String(),
-      if (endDate != null) 'end_date': endDate.toIso8601String(),
+      if (startDate != null) 'start_date': serializeConversationSearchDateBound(startDate),
+      if (endDate != null) 'end_date': serializeConversationSearchDateBound(endDate),
       if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
