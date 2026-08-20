@@ -25,8 +25,8 @@ checks:
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
   - id: workflow-apt-network-bounds
-    command: ["python3", ".github/scripts/tests/run_apt_network_bounds_tests.py"]
-    triggers: [".github/workflows/**", ".github/scripts/check_workflow_apt_network_bounds.py", ".github/scripts/tests/test_workflow_apt_network_bounds.py", ".github/checks-manifest.yaml"]
+    command: ["bash", "scripts/run-workflow-apt-network-bounds.sh"]
+    triggers: [".github/workflows/**", ".github/scripts/check_workflow_apt_network_bounds.py", ".github/scripts/test_check_workflow_apt_network_bounds.py", "scripts/run-workflow-apt-network-bounds.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "apt has no built-in timeout; a stalled Azure mirror burns the job ceiling and reports an opaque cancellation. #11872 bounded two workflows by hand and still left an install line unbounded under a comment claiming otherwise"
   - id: pre-push-hatch-disclosure
