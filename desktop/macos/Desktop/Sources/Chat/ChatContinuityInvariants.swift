@@ -12,7 +12,9 @@ enum ProactiveNotificationKind: String, Equatable {
 
   static func from(decisionType: String) -> Self {
     switch decisionType {
-    case "suggest": return .suggestion
+    // Director "suggest" decisions are generic tips, which the user-facing taxonomy
+    // files under Insight; `.suggestion` is reserved for the focus-nudge assistant.
+    case "suggest": return .insight
     case "insight": return .insight
     case "task_candidate": return .task
     case "resurface": return .resurface

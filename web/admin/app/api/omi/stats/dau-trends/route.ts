@@ -48,9 +48,20 @@ export async function GET(request: NextRequest) {
       ORDER BY day
     `;
 
+    const rollingHogql = `
+      SELECT count(DISTINCT distinct_id) as users
+      FROM events
+      WHERE timestamp >= now() - interval 24 hour
+        ${scopeFilterAnd(platform)}
+    `;
+
     let results: [string, number][];
+    let rollingResult: [number][];
     try {
-      results = (await posthogResults(host, projectId, apiKey, hogql)) as [string, number][];
+      [results, rollingResult] = (await Promise.all([
+        posthogResults(host, projectId, apiKey, hogql),
+        posthogResults(host, projectId, apiKey, rollingHogql),
+      ])) as [[string, number][], [number][]];
     } catch (err) {
       console.error("PostHog query error:", err);
       return NextResponse.json({ error: "PostHog API error" }, { status: 502 });

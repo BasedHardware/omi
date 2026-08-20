@@ -78,6 +78,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var sessionVoiceContextFreshnessIdentity = ""
   /// A PTT current-screen answer is grounded in exactly one pre-overlay, turn-scoped image.
   /// It is never ambient context and is released on terminal/cancel paths.
+  /// When the user stopped speaking for the current PTT turn. The screen-evidence freshness
+  /// budget runs from here rather than from capture, so a long question does not expire the
+  /// image before the model can ask for it.
+  var screenEvidenceSpeechEndedAt: Date?
   var screenEvidence: RealtimeScreenEvidence?
   var screenEvidenceReadiness: RealtimeScreenEvidenceReadiness?
   var screenGroundingState: RealtimeScreenGroundingState = .inactive

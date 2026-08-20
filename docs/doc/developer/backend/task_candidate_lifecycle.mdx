@@ -89,7 +89,11 @@ Backend deploy workflows install the lockfile-pinned Firebase CLI and run `recon
 --check-only` against the generated manifest; they fail closed when any declared composite index is not `READY`.
 Index creation is a separate, human-approved operation: dispatch `.github/workflows/gcp_firestore_indexes.yml` on
 `main` with `APPLY_FIRESTORE_INDEXES` so `reconcile_firestore_indexes.py --provision-missing` can create missing
-indexes and wait for readiness before retrying deploy. The development verification job then calls
+indexes and wait for readiness before retrying deploy. Generated single-field exemptions are intentionally not part
+of that create-only operation: the workflow's automatic lane detects unapplied exemptions and fails with remediation.
+To apply them to the shared production data plane, dispatch the same workflow on `main` with environment `prod`,
+operation `field-exemptions`, and `APPLY_FIRESTORE_FIELD_EXEMPTIONS`; the dedicated reconciler previews the exact
+fields, disables only those automatic indexes, and verifies the live field configs afterward. The development verification job then calls
 `/v1/what-matters-now` as a configured
 synthetic user; it records only the HTTP status, never the user ID, credentials, or response body. It requires the
 development secret `OMI_TASK_INTELLIGENCE_SMOKE_UID`; provisioning or changing that secret is an operational action,

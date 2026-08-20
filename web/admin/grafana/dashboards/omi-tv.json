@@ -267,7 +267,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dall&root=growthAccounting&fields=active&agg=last&window=1&drop=1",
+          "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dall&root=growthAccounting&fields=active&agg=last&window=1",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5276,6 +5276,127 @@
       ],
       "title": "Infra cost by service \u2014 last 30 days",
       "type": "table"
+    },
+    {
+      "id": 991,
+      "type": "timeseries",
+      "title": "Releases / day \u2014 macOS vs iOS",
+      "description": "macOS: GitHub releases tagged -macos (candidates included). iOS: first day a version clears 200 daily App Store users (TestFlight noise excluded); latest verified against the App Store lookup API.",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 999,
+        "w": 24,
+        "h": 6
+      },
+      "timeFrom": "30d",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 70,
+            "showPoints": "always",
+            "pointSize": 5,
+            "barAlignment": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "gradientMode": "none",
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "macOS releases"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#3b82f6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "iOS releases"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#22c55e"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "timeseries",
+          "url": "http://127.0.0.1:8899/api/omi/stats/releases?days=30&_tzdates=date",
+          "url_options": {
+            "method": "GET",
+            "data": ""
+          },
+          "root_selector": "daily",
+          "columns": [
+            {
+              "selector": "date",
+              "text": "time",
+              "type": "timestamp",
+              "timestampFormat": "2006-01-02T15:04:05Z07:00"
+            },
+            {
+              "selector": "macos",
+              "text": "macOS releases",
+              "type": "number"
+            },
+            {
+              "selector": "ios",
+              "text": "iOS releases",
+              "type": "number"
+            }
+          ]
+        }
+      ]
     }
   ],
   "refresh": "1h",
@@ -5310,7 +5431,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dall&root=growthAccounting&fields=active&agg=last&window=1&label=WoW&drop=1",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fviral-metrics%3Fdays%3D60%26platform%3Dall&root=growthAccounting&fields=active&agg=last&window=1&label=WoW",
             "url_options": {
               "data": "",
               "method": "GET"

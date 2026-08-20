@@ -24,6 +24,11 @@ checks:
     triggers: ["scripts/pre-push", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_pre_push_ci_prediction.py", "desktop/macos/scripts/desktop-flow-lint.py", "desktop/macos/scripts/desktop_flow_contract.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9440: local CI prediction must select only bounded Flutter generator, desktop-flow, and Windows KG-worker checks for the final PR diff"
+  - id: workflow-apt-network-bounds
+    command: ["bash", "scripts/run-workflow-apt-network-bounds.sh"]
+    triggers: [".github/workflows/**", ".github/scripts/check_workflow_apt_network_bounds.py", ".github/scripts/test_check_workflow_apt_network_bounds.py", "scripts/run-workflow-apt-network-bounds.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "apt has no built-in timeout; a stalled Azure mirror burns the job ceiling and reports an opaque cancellation. #11872 bounded two workflows by hand and still left an install line unbounded under a comment claiming otherwise"
   - id: pre-push-hatch-disclosure
     command: ["python3", ".github/scripts/check_pre_push_hatch_disclosure.py"]
     triggers: ["scripts/pre-push", ".github/scripts/check_pre_push_hatch_disclosure.py", ".github/checks-manifest.yaml"]
@@ -111,7 +116,7 @@ checks:
     command: ["python3", ".github/scripts/test_check_desktop_beta_freshness.py"]
     triggers: [".github/scripts/check-desktop-beta-freshness.py", ".github/scripts/test_check_desktop_beta_freshness.py", ".github/scripts/plan-desktop-release.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_release_doctor.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "hourly beta freshness must diagnose promotion lag and a wedged candidate train from one command"
+    reason: "issue #11936: hourly freshness must age the oldest unshipped macOS update so continuous merges cannot reset and auto-close the alarm"
 
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
@@ -273,6 +278,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "SCA-273: the real watch presentation contract must stop its ripple after five seconds, preserve elapsed time, and localize accessibility labels for every native locale"
+  - id: ios-ble-energy-policy
+    command: ["ruby", "app/ios/test/omi_ble_energy_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBleEnergyPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Ble/BleHostApiImpl.swift", "app/ios/Runner.xcodeproj/project.pbxproj", "app/ios/test/omi_ble_energy_policy_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "iOS BLE diagnostics must not poll RSSI while closed, and frequent battery notifications must not rewrite the complete history on every packet"
   - id: deferred-work-markers
     command: ["python3", ".github/scripts/deferred-work-marker-count.py", "--changed-files", "{changed_files}", "--base", "{base}", "--check-new"]
     triggers: ["all"]
@@ -477,37 +488,37 @@ checks:
     command: ["python3", ".github/scripts/test_resolve_desktop_changelog_sync.py"]
     triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "partial tag-release recovery must resolve already-on-main changelog without O(n) main history scans"
+    reason: "issue #11936: squash/orphan changelog recovery must not hard-fail every hourly retry or scan main history O(n)"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "candidate tags require successful Release Eligibility and both Desktop Swift checks for the exact newest queued releasable desktop SHA"
+    reason: "the hourly workflow bypasses queued GitHub compile checks when tag-bound Codemagic owns admission, while the candidate clock still limits tags to one per hour"
   - id: desktop-candidate-source-identity
     command: ["python3", ".github/scripts/test_desktop_release_source_identity.py"]
     triggers: [".github/scripts/desktop-release-source-identity.py", ".github/scripts/test_desktop_release_source_identity.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-129 keeps a current-main candidate bound to the checked desktop source while rejecting a newer releasable desktop change"
+    reason: "issue #11936: a candidate stays on the exact release source (or changelog-only child) while later desktop merges queue for the next train"
   - id: desktop-candidate-tag-transaction
     command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
     triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-136 requires a fresh authoritative main check plus create-only immutable candidate tag publication"
+    reason: "issue #11936: authoritative GitHub ancestry plus timestamped create-only publication admits an exact source after main advances"
   - id: desktop-codemagic-tag-build-observer
     command: ["python3", ".github/scripts/test_observe_codemagic_tag_build.py"]
     triggers: [".github/scripts/observe-codemagic-tag-build.py", ".github/scripts/test_observe_codemagic_tag_build.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-155 requires exactly one observed native Codemagic tag build; missing, duplicate, and unobservable candidates fail closed with durable evidence"
+    reason: "SCA-155 requires exactly one exact-tag Codemagic build; missing, duplicate, and unobservable candidates fail closed with durable evidence"
   - id: desktop-codemagic-tag-intake-cli
     command: ["python3", ".github/scripts/check-codemagic-tag-intake.py", "--help"]
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-179 keeps the native Codemagic intake observer executable in every candidate-control revision"
+    reason: "SCA-179 keeps the direct Codemagic intake controller executable in every candidate-control revision"
   - id: desktop-codemagic-tag-intake-fixtures
     command: ["python3", ".github/scripts/test_check_codemagic_tag_intake.py"]
     triggers: [".github/scripts/check-codemagic-tag-intake.py", ".github/scripts/test_check_codemagic_tag_intake.py", ".github/workflows/desktop_auto_release.yml", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-179 requires bounded exact-tag evidence that native Codemagic intake selected the release workflow and immutable source"
+    reason: "SCA-179 requires exact-tag evidence that direct Codemagic dispatch selected the release workflow and immutable source"
   - id: desktop-codemagic-failure-recovery
     command: ["python3", ".github/scripts/test_desktop_codemagic_failure_recovery.py"]
     triggers: [".github/scripts/desktop-codemagic-failure-recovery.py", ".github/scripts/desktop-codemagic-recovery-profiles.json", ".github/scripts/test_desktop_codemagic_failure_recovery.py", ".github/workflows/desktop_codemagic_failure_recovery.yml", "desktop/macos/scripts/rehearse-desktop-release.sh", "desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]

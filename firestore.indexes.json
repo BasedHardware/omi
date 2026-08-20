@@ -785,18 +785,6 @@
       "fieldPath": "windowTitle",
       "ttl": false,
       "indexes": []
-    },
-    {
-      "collectionGroup": "screen_activity",
-      "fieldPath": "deviceName",
-      "ttl": false,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "screen_activity",
-      "fieldPath": "clientDeviceId",
-      "ttl": false,
-      "indexes": []
     }
   ]
 }

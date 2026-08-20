@@ -153,7 +153,9 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
                 disconnectHistory = emptyList(),
                 reconnectionCount = 0,
                 connectedAt = 0,
-                failToConnectCount = 0
+                failToConnectCount = 0,
+                nativeBackgroundBytesConsumed = 0,
+                nativeBackgroundPacketsConsumed = 0
             )))
         }
     }
