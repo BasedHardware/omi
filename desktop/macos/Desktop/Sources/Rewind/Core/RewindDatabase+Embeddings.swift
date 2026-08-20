@@ -55,6 +55,16 @@ extension RewindDatabase {
   /// `cutoff` admits a bucket only once the whole bucket has closed — ranking a partially
   /// visible bucket would embed one winner now and a different winner once the rest ages in.
   /// See `ScreenActivitySyncService.bucketEligibilityCutoffEpoch`.
+  ///
+  /// `embedding` is projected into `ranked` even though the caller never reads it: the outer
+  /// filter runs against the CTE, not `screenshots`, so omitting it made SQLite reject the
+  /// statement at prepare time with `no such column: embedding` — on every call, for every
+  /// user, not just when a bucket had a winner. That threw out of `runBackfill`, so no
+  /// lossless-compaction account ever backfilled a screen vector. It read as a CI flake
+  /// because the desktop Swift phase only runs when a PR touches `desktop/`, so the
+  /// intervening green `main` runs had skipped the suite rather than passed it.
+  /// Ranking still happens before the filter, which is what keeps the query idempotent:
+  /// a bucket's winner is chosen among all its rows and drops out once it has an embedding.
   func getCompactedScreenshotsMissingEmbeddings(limit: Int = 100, olderThan cutoff: Date) throws -> [(
     id: Int64, ocrText: String, appName: String, windowTitle: String?
   )] {

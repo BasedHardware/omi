@@ -37,6 +37,9 @@ final class OmiBleManager: NSObject {
 
     /// Peripheral whose live RSSI graph is currently subscribed by Flutter.
     private var diagnosticsRssiPeripheralUuid: String?
+    /// Whether the diagnostics UI currently has an RSSI subscription.
+    /// The UUID above remains the authoritative per-peripheral gate.
+    var isRssiStreamingEnabled = false
 
     /// Connection start time per peripheral UUID.
     private var connectionStartTimes: [String: Int64] = [:]
@@ -283,7 +286,8 @@ final class OmiBleManager: NSObject {
 
     // MARK: - RSSI Diagnostics
 
-    func setRssiStreaming(enabled: Bool, uuid: String) {
+    func setRssiStreamingEnabled(_ enabled: Bool, uuid: String) {
+        isRssiStreamingEnabled = enabled
         if enabled {
             diagnosticsRssiPeripheralUuid = uuid
             guard let peripheral = peripherals[uuid],
@@ -301,6 +305,7 @@ final class OmiBleManager: NSObject {
 
         if diagnosticsRssiPeripheralUuid == uuid {
             diagnosticsRssiPeripheralUuid = nil
+            isRssiStreamingEnabled = false
             stopRssiDiagnosticsPolling()
         }
     }
@@ -591,6 +596,10 @@ final class OmiBleManager: NSObject {
         if rssiTimerPeripheralUuid == peripheralUuid {
             stopRssiDiagnosticsPolling()
         }
+        if diagnosticsRssiPeripheralUuid == peripheralUuid {
+            diagnosticsRssiPeripheralUuid = nil
+            isRssiStreamingEnabled = false
+        }
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -631,6 +640,9 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
+                // State-restored peripherals have already connected in a prior
+                // process lifetime; count a later connection as a reconnect.
+                everConnected.insert(uuid)
                 uuids.append(uuid)
 
                 // Re-establish connection if not already connected
@@ -810,7 +822,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         rssiHistory[uuid] = samples
 
         // Forward to Flutter only while the diagnostics screen has subscribed.
-        if diagnosticsRssiPeripheralUuid == uuid {
+        if isRssiStreamingEnabled, diagnosticsRssiPeripheralUuid == uuid {
             flutterApi?.onRssiUpdate(peripheralUuid: uuid, rssi: value) { _ in }
         }
     }
