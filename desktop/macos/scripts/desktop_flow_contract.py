@@ -7,6 +7,9 @@ from __future__ import annotations
 # validation route.
 ACTION_SOURCE_RELATIVE_PATHS = (
     "Desktop/Sources/DesktopAutomationBridge.swift",
+    # settings_notifications_snapshot / set_notification_settings are registered
+    # in this extension, so the lint reported both as unknown actions.
+    "Desktop/Sources/DesktopAutomationBridge+Notifications.swift",
     "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
     "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift",
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",
