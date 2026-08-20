@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -20,8 +20,8 @@ class ReferralLinkResponse(BaseModel):
 
 
 @router.get('/v1/users/me/referral', response_model=ReferralLinkResponse)
-def get_referral_link(request: Request, uid: str = Depends(auth.get_current_user_uid)) -> ReferralLinkResponse:
-    return ReferralLinkResponse(referral_url=referral_link(uid, public_base_url=str(request.base_url)))
+def get_referral_link(uid: str = Depends(auth.get_current_user_uid)) -> ReferralLinkResponse:
+    return ReferralLinkResponse(referral_url=referral_link(uid))
 
 
 @router.get('/r/{code}', response_class=RedirectResponse)
