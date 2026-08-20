@@ -1,12 +1,10 @@
-"""Usage-based overage billing for chat.
-
-Every paid plan participates — we never ask a paying user to upgrade, we bill
-the excess.
+"""Usage-based overage billing for plans whose catalog policy enables it.
 
   - Operator (500 included chat questions / mo): overage on questions past cap.
   - Neo / Unlimited (200 included): overage on questions past cap.
   - Architect ($400 included AI compute / mo): overage on cost past cap.
-  - Free users still hard-capped (no payment method on file).
+  - Free is hard-capped. Plus and Unlimited-v2 preserve their current hard cap
+    while product decision B3 remains open.
   - BYOK users bypass everything (handled in ``utils.subscription.enforce_chat_quota``).
 
 True costs are tracked on every chat call via
@@ -23,6 +21,7 @@ This module reads those numbers rather than maintaining a parallel counter.
 import os
 from typing import Any, Dict, Optional
 
+from config.plan_catalog import plan_uses_overage
 from database import user_usage as user_usage_db
 from models.users import PlanType
 from utils.subscription import (
@@ -91,7 +90,7 @@ def _plan_included_cost_usd(plan: PlanType) -> Optional[float]:
 
 def is_overage_plan(plan: PlanType) -> bool:
     """True if this plan bills overage past its included allowance."""
-    return _plan_included_questions(plan) is not None or _plan_included_cost_usd(plan) is not None
+    return plan_uses_overage(plan)
 
 
 def get_user_overage(uid: str, plan: PlanType) -> Dict[str, Any]:

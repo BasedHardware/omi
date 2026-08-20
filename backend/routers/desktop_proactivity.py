@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from database._client import get_customer_firestore_client
 from database import redis_db, users as users_db
+from config.plan_catalog import DESKTOP_PROFILE_DEFAULTS
 from models.users import PlanType, Subscription
 from utils.env_loader import EnvStage, resolve_stage_from_env
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -28,9 +29,7 @@ from utils.llm.providers import get_openai_api_key
 from utils.observability.fallback import record_fallback
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import (
-    DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
-    DESKTOP_ACCESS_TIER_FULL,
     effective_desktop_access_tier,
     is_desktop_trial_paywalled,
 )
@@ -48,9 +47,8 @@ _QUOTA_WINDOW_SECONDS = 24 * 60 * 60
 # gate and director calls. Lower tiers are sized for a partial day and stay
 # governed by the device-side frequency gate.
 _TIER_DAILY_LIMITS: dict[str, dict[str, int]] = {
-    DESKTOP_ACCESS_TIER_FREE: {"proactive_extraction": 150, "proactive_reasoning": 60},
-    DESKTOP_ACCESS_TIER_FULL: {"proactive_extraction": 1000, "proactive_reasoning": 500},
-    DESKTOP_ACCESS_TIER_ARCHITECT: {"proactive_extraction": 2000, "proactive_reasoning": 1000},
+    tier: dict(cast(Mapping[str, int], profile['proactivity_daily']))
+    for tier, profile in DESKTOP_PROFILE_DEFAULTS.items()
 }
 _OPERATION_LANES = {
     "proactive_extraction": "omi:auto:desktop-proactive-extraction",

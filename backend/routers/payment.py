@@ -563,11 +563,10 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
 def _validate_price_id(price_id: str) -> None:
     """Reject a blank/whitespace-only or non-purchasable price_id before any Stripe call.
 
-    A valid checkout or upgrade target must be a currently-purchasable plan price. Legacy prices
-    (LEGACY_PRICE_MAP) are intentionally rejected here: they exist for existing subscribers'
-    renewals and webhook/subscription reconciliation, not as new purchase targets, so a caller
-    cannot select a hidden or deprecated price by posting its id directly. This is the boundary
-    check for the checkout and upgrade endpoints.
+    A valid checkout or upgrade target must be a currently-purchasable plan price. Retained catalog
+    prices are intentionally rejected here: they exist for existing subscribers' renewals and
+    reconciliation, not as new purchase targets, so a caller cannot select a hidden or deprecated
+    price by posting its ID directly. This is the checkout and upgrade boundary check.
     """
     if not price_id or not price_id.strip():
         raise HTTPException(status_code=400, detail="price_id is required")

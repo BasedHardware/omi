@@ -12,6 +12,17 @@ import database.user_usage as user_usage_db
 from database import redis_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
+from config.plan_catalog import (
+    DESKTOP_ENTITLED_PLAN_TYPES,
+    MOBILE_PLAN_TYPES,
+    PAID_PLAN_TYPES,
+    PLAN_DISPLAY_NAMES,
+    PRIMARY_BILLING_ENV_VARS,
+    RECOGNIZED_STRIPE_PRICE_INTERVALS,
+    allocation_limit,
+    plan_uses_overage,
+    resolve_stripe_price_plan,
+)
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys
 from utils.log_sanitizer import sanitize
@@ -24,17 +35,6 @@ logger = logging.getLogger(__name__)
 def _get_user(uid: str) -> Any:
     return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
 
-
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2}
-
-# Mobile consumer tiers: sold on ios/android + web, hidden from desktop.
-MOBILE_PLAN_TYPES = {PlanType.plus, PlanType.unlimited_v2}
-
-# Plans that unlock the full desktop (macOS) experience. This is deliberately
-# narrower than basic desktop usability: every plan, including Neo, has at
-# least the Free desktop tier. Operator and Architect add full desktop access.
-# Keep this in sync with the per-plan feature copy and the mobile plans sheet.
-DESKTOP_ENTITLED_PLAN_TYPES = {PlanType.operator, PlanType.architect}
 
 # Effective desktop tiers are used for Desktop-specific admission decisions.
 # Never use DESKTOP_ENTITLED_PLAN_TYPES as a zero-access check: it represents
@@ -423,6 +423,10 @@ def is_paid_plan(plan: PlanType) -> bool:
     return plan in PAID_PLAN_TYPES
 
 
+def _configured_plan_price_id(plan: PlanType, interval: str) -> Optional[str]:
+    return os.getenv(PRIMARY_BILLING_ENV_VARS[plan][interval])
+
+
 def get_paid_plan_definitions() -> List[Dict[str, Any]]:
     """All plan definitions.
 
@@ -438,8 +442,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": f"{NEO_CHAT_QUESTIONS_PER_MONTH} questions per month",
             "description": f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
             "eyebrow": "Starter",
-            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_UNLIMITED_ANNUAL_PRICE_ID'),
+            "monthly_price_id": _configured_plan_price_id(PlanType.unlimited, 'month'),
+            "annual_price_id": _configured_plan_price_id(PlanType.unlimited, 'year'),
             "annual_description": "Save ~17% with annual billing.",
             "legacy": False,
         },
@@ -450,8 +454,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} questions per month",
             "description": f"{OPERATOR_CHAT_QUESTIONS_PER_MONTH} chat questions per month. Shared with mobile and web.",
             "eyebrow": "Most popular",
-            "monthly_price_id": os.getenv('STRIPE_OPERATOR_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_OPERATOR_ANNUAL_PRICE_ID'),
+            "monthly_price_id": _configured_plan_price_id(PlanType.operator, 'month'),
+            "annual_price_id": _configured_plan_price_id(PlanType.operator, 'year'),
             "annual_description": "Save ~17% with annual billing.",
             "legacy": False,
         },
@@ -462,8 +466,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": "Power-user AI — thousands of chats + agentic automations",
             "description": "Power-user AI for heavy agentic workflows and vibe coding.",
             "eyebrow": "Automation + coding",
-            "monthly_price_id": os.getenv('STRIPE_ARCHITECT_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_ARCHITECT_ANNUAL_PRICE_ID'),
+            "monthly_price_id": _configured_plan_price_id(PlanType.architect, 'month'),
+            "annual_price_id": _configured_plan_price_id(PlanType.architect, 'year'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -474,8 +478,8 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
             "description": f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month.",
             "eyebrow": "For everyday use",
-            "monthly_price_id": os.getenv('STRIPE_PLUS_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_PLUS_ANNUAL_PRICE_ID'),
+            "monthly_price_id": _configured_plan_price_id(PlanType.plus, 'month'),
+            "annual_price_id": _configured_plan_price_id(PlanType.plus, 'year'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -486,32 +490,12 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "subtitle": "Unlimited transcription",
             "description": "Unlimited transcription — record all day.",
             "eyebrow": "Most popular",
-            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'),
+            "monthly_price_id": _configured_plan_price_id(PlanType.unlimited_v2, 'month'),
+            "annual_price_id": _configured_plan_price_id(PlanType.unlimited_v2, 'year'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
     ]
-
-
-# Old Stripe price IDs for subscribers who signed up before the Neo/Architect
-# rename. Stripe webhooks still fire with these for renewals/cancellations.
-LEGACY_PRICE_MAP = {
-    # Old Unlimited ($19.99/mo, $199.99/yr) → PlanType.unlimited (now Neo)
-    'price_1RtJPm1F8wnoWYvwhVJ38kLb': PlanType.unlimited,
-    'price_1RtJQ71F8wnoWYvwKMPaGlGY': PlanType.unlimited,
-    # Orphaned from the Apr 17–20 Neo-product window: between f30245338 (added
-    # a separate Stripe product `prod_UM0IIpZ4iOgfk5` "Neo" wired via
-    # STRIPE_NEO_* env vars) and 2e71145ab (reverted to STRIPE_UNLIMITED_*),
-    # desktop signups landed on these prices. Stripe keeps billing them, but
-    # post-revert code recognizes neither, so renewals raise "unknown price ID"
-    # and drop active subscribers to free.
-    'price_1TNIHd1F8wnoWYvwkIrekcQZ': PlanType.unlimited,  # Neo Monthly ($20/mo)
-    'price_1TNIHd1F8wnoWYvwlKywJ8TO': PlanType.unlimited,  # Neo Annual ($200/yr)
-    # Old Pro ($199/mo, $1999/yr) → PlanType.architect
-    'price_1TAfBB1F8wnoWYvw8XBFM1dX': PlanType.architect,
-    'price_1TLFac1F8wnoWYvwtPxZhtzE': PlanType.architect,
-}
 
 
 # Platform identifiers for the two mobile clients (X-App-Platform header).
@@ -738,17 +722,9 @@ def legacy_plan_features(plan: PlanType) -> List[str]:
 
 
 def get_plan_type_from_price_id(price_id: str) -> PlanType:
-    """Determines the plan type based on the Stripe price ID.
+    """Resolve retained and configured Stripe prices through the catalog."""
 
-    Checks active definitions first, then LEGACY_PRICE_MAP for subscribers
-    on old pricing (pre-Neo/Architect rename).
-    """
-    for definition in get_paid_plan_definitions():
-        if price_id in (definition["monthly_price_id"], definition["annual_price_id"]):
-            return definition["plan_type"]
-    if price_id in LEGACY_PRICE_MAP:
-        return LEGACY_PRICE_MAP[price_id]
-    raise ValueError(f"Price ID {price_id} does not correspond to a known plan.")
+    return resolve_stripe_price_plan(price_id)
 
 
 def price_ids_match_plan_and_interval(
@@ -762,7 +738,7 @@ def price_ids_match_plan_and_interval(
     except ValueError:
         return False
 
-    target_interval = None
+    target_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(target_price_id)
     for definition in get_paid_plan_definitions():
         if target_price_id == definition['monthly_price_id']:
             target_interval = 'month'
@@ -773,6 +749,8 @@ def price_ids_match_plan_and_interval(
     if not target_interval:
         return False
 
+    if not current_interval:
+        current_interval = RECOGNIZED_STRIPE_PRICE_INTERVALS.get(current_price_id)
     if not current_interval:
         for definition in get_paid_plan_definitions():
             if current_price_id == definition['monthly_price_id']:
@@ -796,10 +774,10 @@ def price_ids_match_plan_and_interval(
 def is_purchasable_price_id(price_id: str) -> bool:
     """True only if price_id is a currently-purchasable plan price (the active catalog).
 
-    Unlike get_plan_type_from_price_id, this deliberately excludes LEGACY_PRICE_MAP: legacy
-    prices exist for existing subscribers' renewals and webhook/subscription reconciliation, not
-    as new checkout or upgrade targets. Use this at the checkout/upgrade request boundary so a
-    caller cannot select a hidden or deprecated price by posting its id directly.
+    Unlike get_plan_type_from_price_id, this deliberately excludes the retained recognition
+    ledger: retained prices exist for current subscribers' renewals and reconciliation, not as
+    new checkout or upgrade targets. Use this at the checkout/upgrade request boundary so a
+    caller cannot select a hidden or deprecated price by posting its ID directly.
     """
     if not price_id:
         return False
@@ -837,10 +815,25 @@ def validate_stripe_price_ids():
                 )
 
 
-BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', '0'))
+_BASIC_TIER_SECONDS_DEFAULT = allocation_limit(
+    PlanType.basic,
+    'transcription',
+    use_legacy_value_for_open_decision=True,
+)
+BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(
+    os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', str((_BASIC_TIER_SECONDS_DEFAULT or 0) // 60))
+)
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
-BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', '0'))
-BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', '0'))
+BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(
+    os.getenv(
+        'BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', str(allocation_limit(PlanType.basic, 'words_transcribed') or 0)
+    )
+)
+BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(
+    os.getenv(
+        'BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', str(allocation_limit(PlanType.basic, 'insights_gained') or 0)
+    )
+)
 
 # Fixed non-human UID the desktop-backend release probe signs in as
 # (`PROBE_UID` in backend/scripts/firebase_release_probe_token.py). Its chat turns
@@ -850,15 +843,31 @@ BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_
 RELEASE_PROBE_UID = 'omi-release-probe'
 
 # Chat caps per plan. Env-overridable for ops.
-FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
-NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '200'))
-OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
-ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
+FREE_CHAT_QUESTIONS_PER_MONTH = int(
+    os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.basic, 'chat')))
+)
+NEO_CHAT_QUESTIONS_PER_MONTH = int(
+    os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.unlimited, 'chat')))
+)
+OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(
+    os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.operator, 'chat')))
+)
+_ARCHITECT_CHAT_COST_CENTS_DEFAULT = allocation_limit(PlanType.architect, 'chat')
+ARCHITECT_CHAT_COST_USD_PER_MONTH = float(
+    os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', str((_ARCHITECT_CHAT_COST_CENTS_DEFAULT or 0) / 100))
+)
 
-PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', '1500'))
+_PLUS_TIER_SECONDS_DEFAULT = allocation_limit(PlanType.plus, 'transcription')
+PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(
+    os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', str((_PLUS_TIER_SECONDS_DEFAULT or 0) // 60))
+)
 PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
-PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
-UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', '1000'))
+PLUS_CHAT_QUESTIONS_PER_MONTH = int(
+    os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.plus, 'chat')))
+)
+UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(
+    os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', str(allocation_limit(PlanType.unlimited_v2, 'chat')))
+)
 
 # Features available during the 3-day desktop trial (matches paid-plan behavior).
 TRIAL_FEATURES = [
@@ -868,16 +877,6 @@ TRIAL_FEATURES = [
     'unlimited_insights',
     f'{FREE_CHAT_QUESTIONS_PER_MONTH}_chat_questions_per_month',
 ]
-
-# Display names shown to users. Internal PlanType stays the same for Stripe compat.
-PLAN_DISPLAY_NAMES = {
-    PlanType.basic: 'Free',
-    PlanType.unlimited: 'Neo',
-    PlanType.architect: 'Architect',
-    PlanType.operator: 'Operator',
-    PlanType.plus: 'Plus',
-    PlanType.unlimited_v2: 'Unlimited',
-}
 
 
 def get_plan_display_name(plan: PlanType) -> str:
@@ -940,13 +939,6 @@ def get_chat_quota_snapshot(
     }
 
 
-# Plans that enter usage-based overage billing instead of hard-blocking when
-# they exceed their included allowance. Paying users are never asked to
-# "upgrade past their plan" — the excess is billed at end of cycle against
-# the card on file. Free stays hard-capped (no payment method on file).
-OVERAGE_ENABLED_PLANS = {PlanType.operator, PlanType.unlimited, PlanType.architect}
-
-
 def enforce_chat_quota(
     uid: str,
     platform: Optional[str] = None,
@@ -957,10 +949,11 @@ def enforce_chat_quota(
     """Block or allow a chat request based on the user's plan + usage.
 
     - BYOK users with an LLM key attached: always allowed, no Omi-side cost.
-    - Paid plans past their cap: ALLOWED — the call is served and the excess
-      accrues an overage charge. See ``utils.overage``.
-    - Free plan past its cap: blocked (no card on file) → 402, which the
-      chat endpoint converts into a canned AI reply for mobile UX.
+    - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
+      served and the excess accrues a charge. See ``utils.overage``.
+    - Hard-capped plans: blocked → 402, which the chat endpoint converts into
+      a canned AI reply for mobile UX. B3 keeps Plus/Unlimited-v2 on this legacy
+      behavior until the owner decides their policy.
     """
     # Release-probe traffic is the deploy gate proving the candidate can chat at
     # all — never paywall it, or the gate hard-blocks its own deploys once the
@@ -1003,10 +996,8 @@ def enforce_chat_quota(
 
     plan = snapshot['plan']
 
-    # Every paying plan goes into overage mode past its cap, regardless of
-    # whether the cap is expressed in questions or dollars. Only Free
-    # (PlanType.basic) falls through to the 402 below.
-    if plan in OVERAGE_ENABLED_PLANS:
+    # Reporting and enforcement share the catalog's one exhaustion predicate.
+    if plan_uses_overage(plan):
         return
 
     raise HTTPException(

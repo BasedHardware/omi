@@ -23,22 +23,30 @@ paid-only (same as before this config existed).
 
 from typing import Any, Dict, Optional, cast
 
+from config.plan_catalog import PHONE_CALL_PROFILE_DEFAULTS
 from database._client import db
 from database.cache import get_memory_cache
 
 _CACHE_KEY = "phone_call_config:default"
 _CACHE_TTL_SECONDS = 60  # short so flag flips propagate within a minute
 
-_DEFAULT_FREE_PLAN: Dict[str, Any] = {
-    "monthly_call_limit": 0,
-    "max_duration_seconds": 300,
-    "allowed_countries": [],
-}
-_DEFAULT_PAID_PLAN: Dict[str, Any] = {
-    "monthly_call_limit": None,
-    "max_duration_seconds": None,
-    "allowed_countries": [],
-}
+
+def _profile_default(name: str) -> Dict[str, Any]:
+    profile = PHONE_CALL_PROFILE_DEFAULTS[name]
+
+    def limit_value(field: str) -> Optional[int]:
+        limit = cast(Dict[str, Any], profile[field])
+        return None if limit['kind'] == 'unlimited' else int(limit['value'])
+
+    return {
+        "monthly_call_limit": limit_value('monthly_calls'),
+        "max_duration_seconds": limit_value('max_duration_seconds'),
+        "allowed_countries": [],
+    }
+
+
+_DEFAULT_FREE_PLAN = _profile_default('free')
+_DEFAULT_PAID_PLAN = _profile_default('paid')
 
 
 def _fetch_config() -> Dict[str, Any]:
