@@ -60,7 +60,7 @@ from utils.retrieval.safety import (
     should_retry_provider_error,
     INPUT_TOO_LONG_MESSAGE,
 )
-from utils.llm.private_context import anthropic_messages_carry_private_tool_output, without_tool_named
+from utils.retrieval.web_search_gate import SERVER_WEB_SEARCH_NAME, WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
@@ -385,27 +385,6 @@ TOOL_SEARCH_TOOL = {
     "name": "tool_search_tool_regex",
 }
 
-# Web search tool — Anthropic's built-in server-side web search (replaces Perplexity)
-SERVER_WEB_SEARCH_NAME = "web_search"
-WEB_SEARCH_TOOL = {
-    "type": "web_search_20260209",
-    "name": SERVER_WEB_SEARCH_NAME,
-    "max_uses": 5,
-}
-
-# Producers whose results may stay in the transcript while `web_search` is still
-# offered — see `utils/llm/private_context` for why the offer is gated at all.
-# Only product-doc lookups qualify: every other core tool reads user data, echoes
-# the user's input back (`save_user_preference_tool`, `create_action_item_tool`),
-# or can surface user data in an error string (`create_calendar_event_tool`
-# resolves attendees against Google Contacts). Unknown names — app tools are
-# registered at runtime — are private.
-#
-# `tool_search_tool_regex` is deliberately not gated: it is provider-executed
-# too, but it resolves inside Anthropic and reaches no third party, so it crosses
-# no boundary the request had not already crossed.
-_PUBLIC_SAFE_AGENT_TOOLS = frozenset({'get_omi_product_info_tool'})
-
 
 def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """Convert all tools and build name->object registry.
@@ -673,40 +652,15 @@ async def _run_anthropic_agent_stream(
     producer_started_at = asyncio.get_running_loop().time()
     loop_iteration = 0
 
-    # The taint appears *during* the loop: the opening request carries only the
-    # user/assistant transcript, and a tool result lands in `messages` after each
-    # iteration. The offer is therefore re-decided per request rather than once
-    # up front, and latched — a loop that has seen private data stays withheld
-    # even if a later iteration were to trim the transcript.
-    #
-    # Withholding changes the tool block, which is part of the cached prefix, so
-    # the iteration that trips the gate takes a prompt-cache miss. That cost is
-    # the price of the gate: do not hoist this decision back out of the loop to
-    # keep the prefix stable — the opening request is always clean, so a
-    # hoisted check can never observe the taint it exists to catch.
-    offers_server_web_search = any(
-        isinstance(schema, dict) and schema.get('name') == SERVER_WEB_SEARCH_NAME for schema in tool_schemas
-    )
+    # Re-decide the server-side web_search offer inside the loop. The taint
+    # only appears after tool results are appended; see web_search_gate.py.
     server_web_search_withheld = False
 
     while True:
         loop_iteration += 1
 
-        if (
-            offers_server_web_search
-            and not server_web_search_withheld
-            and anthropic_messages_carry_private_tool_output(messages, public_safe_tools=_PUBLIC_SAFE_AGENT_TOOLS)
-        ):
-            server_web_search_withheld = True
-            record_fallback(
-                component='other',
-                from_mode='anthropic_web_search',
-                to_mode='model_knowledge',
-                reason='private_tool_output_in_context',
-                outcome='degraded',
-            )
-        request_tools = (
-            without_tool_named(tool_schemas, SERVER_WEB_SEARCH_NAME) if server_web_search_withheld else tool_schemas
+        request_tools, server_web_search_withheld = request_tools_after_private_taint(
+            tool_schemas, messages, withheld=server_web_search_withheld
         )
 
         attempts_made = 0
