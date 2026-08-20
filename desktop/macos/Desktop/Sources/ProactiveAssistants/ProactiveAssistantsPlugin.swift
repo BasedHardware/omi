@@ -56,6 +56,11 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var captureTimer: Timer?
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
+  // Content-refresh dwell tracking (see ContextDwellRefreshPolicy): anchored at
+  // the last real context switch, reset there, at most two refreshes per dwell.
+  private var dwellContextAnchor: Date?
+  private var dwellRefreshCount = 0
+  private var dwellLastEvaluatedHash: UInt64?
 
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
@@ -838,11 +843,13 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Unified context switch detection (covers app changes, window ID changes, and title changes)
     // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
+    var contextSwitchedThisTick = false
     if let appForCheck = realAppName ?? currentApp {
       let switched = await AssistantCoordinator.shared.checkContextSwitch(
         newApp: appForCheck,
         newWindowTitle: windowTitle
       )
+      contextSwitchedThisTick = switched
       if switched && !isInDelayPeriod {
         let delaySeconds = AssistantSettings.shared.analysisDelay
         if delaySeconds > 0 {
@@ -992,6 +999,26 @@ public class ProactiveAssistantsPlugin: NSObject {
             captureTime: captureTime
           )
           AssistantCoordinator.shared.trackFrame(frame)
+          if ContextBucketsFeature.isEnabled {
+            if contextSwitchedThisTick || dwellContextAnchor == nil {
+              dwellContextAnchor = captureTime
+              dwellRefreshCount = 0
+              dwellLastEvaluatedHash = fullHash
+            } else if let anchor = dwellContextAnchor,
+              ContextDwellRefreshPolicy.shouldRefresh(
+                dwellSeconds: captureTime.timeIntervalSince(anchor),
+                completedRefreshes: dwellRefreshCount,
+                lastEvaluatedHash: dwellLastEvaluatedHash,
+                currentHash: fullHash)
+            {
+              dwellRefreshCount += 1
+              dwellLastEvaluatedHash = fullHash
+              log(
+                "Context dwell refresh #\(dwellRefreshCount): re-evaluating active context after content change"
+              )
+              Task { await AssistantCoordinator.shared.refreshActiveContextForDwell() }
+            }
+          }
           if !isInDelayPeriod {
             distributeFrameIfChanged(frame)
           } else {

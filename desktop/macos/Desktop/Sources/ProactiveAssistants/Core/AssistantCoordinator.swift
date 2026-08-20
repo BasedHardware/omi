@@ -237,6 +237,36 @@ class AssistantCoordinator {
     return true
   }
 
+  /// Content-refresh transition for a long dwell whose on-screen content
+  /// changed (see `ContextDwellRefreshPolicy`): closes and reopens the ACTIVE
+  /// context through the ordinary visit machinery, so the departing frame —
+  /// which now contains what the user typed — gets extraction, departure
+  /// evaluation, and the fresh visit gets its normal entry evaluation. Every
+  /// quota, cooldown, dedup, and budget gate applies unchanged.
+  @discardableResult
+  func refreshActiveContextForDwell() async -> Bool {
+    guard ContextBucketsFeature.isEnabled else { return false }
+    guard let app = lastTrackedApp, let frame = lastTrackedFrame else { return false }
+    guard !RewindSettings.shared.isAppExcluded(app) else { return false }
+    let request = ContextTransitionRequest(app: app, windowTitle: lastTrackedWindowTitle)
+    guard contextTransitionQueue.begin(request) else { return false }
+    defer { finishContextTransition(request) }
+    do {
+      let transition = try await ContextVisitCoordinator.shared.transition(
+        toApp: app,
+        windowTitle: lastTrackedWindowTitle,
+        departingFrame: frame)
+      if transition.departingQualified, let departingFence = transition.departingFence {
+        Task { await ContextBucketRollupWriter.shared.extract(frame: frame, fence: departingFence) }
+      }
+      Task { await ContextProactivityEngine.shared.contextEntered(transition.arrivingFence) }
+      return true
+    } catch {
+      logError("Context buckets: content-refresh transition failed", error: error)
+      return false
+    }
+  }
+
   /// Releases a completed transition and schedules the latest context observed
   /// during its persistence await. The follow-up runs on the main actor, so it
   /// cannot race the coordinator's tracked state or start a second write in
