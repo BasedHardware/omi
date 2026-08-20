@@ -2577,11 +2577,31 @@ actor RewindDatabase {
 
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
+    // Keep new migrations after every previously registered component migration. Existing rows
+    // deliberately start pending so a dark-launched lossless sweep can recover history later.
+    migrator.registerMigration("addScreenActivitySyncState") { db in
+      try Self.installScreenActivitySyncStateSchema(db)
+    }
+
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
       defaults: .standard,
       ownerID: contextBucketOwnerID)
+  }
+
+  /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
+  /// focused test without reproducing the entire historical migration ledger.
+  static func installScreenActivitySyncStateSchema(_ db: Database) throws {
+    try db.alter(table: "screenshots") { t in
+      t.add(column: "screenActivitySyncState", .integer).notNull().defaults(to: 0)
+    }
+    try db.execute(
+      sql: """
+        CREATE INDEX idx_screenshots_screen_activity_sync
+        ON screenshots(screenActivitySyncState, id)
+        WHERE screenActivitySyncState IN (0, 1)
+        """)
   }
 
   // MARK: - OCR Precision Reduction Migration

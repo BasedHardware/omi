@@ -152,6 +152,7 @@ async def run_listen_finalization_job(
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
                 force_process=bool(job.get('force_process')),
+                final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError:
             terminal = await _retry_or_dead_letter(

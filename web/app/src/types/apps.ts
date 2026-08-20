@@ -41,6 +41,8 @@ export interface App {
   description: string;
   image?: string;
   author?: string;
+  /** Set for personas; backs their public personas.omi.me URL. */
+  username?: string;
   email?: string;
   uid?: string;
   category: string;
@@ -144,11 +146,7 @@ export interface AppsSearchParams {
 
 // Filter types for the UI
 export type SortOption =
-  | 'installs_desc'
-  | 'rating_desc'
-  | 'rating_asc'
-  | 'name_asc'
-  | 'name_desc';
+  'installs_desc' | 'rating_desc' | 'rating_asc' | 'name_asc' | 'name_desc';
 
 export interface AppsFilters {
   category?: string;

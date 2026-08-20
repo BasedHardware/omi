@@ -198,7 +198,15 @@ class ManifestContractTests(unittest.TestCase):
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
-        self.assertIn("--skip-pr-body-checks", workflow)
+        # #9744: main pushes must pass a body through --pr-body-file (not
+        # --skip-pr-body-checks). #11835: the body must be the squash commit
+        # message PLUS the live merged PR body, because this repo squashes
+        # with the commit list rather than the PR description.
+        self.assertNotIn("--skip-pr-body-checks", workflow)
+        self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
+        self.assertRegex(workflow, r"pr_metadata\.py")
+        self.assertRegex(workflow, r"--from-commit-body-file")
+        self.assertRegex(workflow, r"--pr-body-file")
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
 
@@ -557,7 +565,27 @@ esac
             selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
             self.assertIn("failure-class-protocol", selected)
 
-    def test_main_push_excludes_only_pr_body_checks(self) -> None:
+    def test_main_push_includes_pr_body_checks_when_body_supplied(self) -> None:
+        """#9744: main pushes now pass the merge-commit body through
+        --pr-body-file, so body-requiring checks (product-invariants,
+        failure-class-protocol) must run — not be silently skipped."""
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["app/lib/example.dart"],
+                "ci",
+                include_pr_body_checks=True,
+            )
+        }
+        self.assertIn("product-invariants", selected)
+        self.assertIn("failure-class-protocol", selected)
+        self.assertIn("diff-hygiene", selected)
+
+    def test_main_push_without_body_still_excludes_pr_body_checks(self) -> None:
+        """Fail-closed: a main push with no body must NOT run body-requiring
+        checks (they would fail on empty text), preserving the old skip."""
         manifest = load_manifest(MANIFEST_PATH)
         selected = {
             check.id

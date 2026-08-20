@@ -9951,4 +9951,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get findDevice => 'Localiser';
+
+  @override
+  String get diagnosticsShareFailed => 'Impossible de partager le diagnostic. Veuillez réessayer.';
 }

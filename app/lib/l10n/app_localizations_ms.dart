@@ -9889,4 +9889,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get findDevice => 'Cari';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat berkongsi diagnostik. Sila cuba lagi.';
 }

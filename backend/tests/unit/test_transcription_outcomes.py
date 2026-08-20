@@ -109,6 +109,64 @@ def test_live_stt_attempt_records_one_bounded_acceptance_and_terminal(mock_accep
     terminal_child.inc.assert_called_once_with()
 
 
+@patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_TOTAL')
+@patch('utils.observability.transcription.OMI_LIVE_STT_ACCEPTED_TOTAL')
+def test_live_stt_attempt_emits_joinable_product_lifecycle(mock_accepted, mock_terminal):
+    mock_accepted.labels.return_value = MagicMock()
+    mock_terminal.labels.return_value = MagicMock()
+    emitted = []
+    times = iter([100.0, 101.25])
+
+    attempt = LiveSTTAttempt(
+        provider='deepgram',
+        platform='ios',
+        uid='user-1',
+        recording_id='recording-1',
+        conversation_id='conversation-1',
+        source='phone',
+        model='nova-3',
+        language='en',
+        emitter=lambda **event: emitted.append(event),
+        clock=lambda: next(times),
+    )
+    attempt.finish('success', phase='transcript_delivery')
+    attempt.finish('failure', phase='teardown')
+
+    assert [event['event'] for event in emitted] == ['Transcript Started', 'Transcript Completed']
+    assert emitted[0] == {
+        'uid': 'user-1',
+        'event': 'Transcript Started',
+        'properties': {
+            'recording_id': 'recording-1',
+            'conversation_id': 'conversation-1',
+            'transcription_source': 'phone',
+            'stt_provider': 'deepgram',
+            'stt_model': 'nova-3',
+            'transcript_language': 'en',
+            'app_platform': 'ios',
+        },
+    }
+    assert emitted[1]['properties']['duration_seconds'] == 1.25
+    assert emitted[1]['properties']['phase'] == 'transcript_delivery'
+
+
+@patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_TOTAL')
+@patch('utils.observability.transcription.OMI_LIVE_STT_ACCEPTED_TOTAL')
+def test_live_stt_product_telemetry_failure_is_fail_open(mock_accepted, mock_terminal):
+    mock_accepted.labels.return_value = MagicMock()
+    mock_terminal.labels.return_value = MagicMock()
+    attempt = LiveSTTAttempt(
+        provider='deepgram',
+        platform='ios',
+        uid='user-1',
+        emitter=lambda **_: (_ for _ in ()).throw(RuntimeError('analytics unavailable')),
+    )
+
+    attempt.finish('failure', phase='send')
+
+    mock_terminal.labels.return_value.inc.assert_called_once_with()
+
+
 @patch('utils.observability.transcription.OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL')
 def test_live_failure_labels_are_bounded(mock_counter):
     child = MagicMock()

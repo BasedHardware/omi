@@ -9933,4 +9933,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get findDevice => 'கண்டறி';
+
+  @override
+  String get diagnosticsShareFailed => 'கண்டறிதல் தரவைப் பகிர முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
 }

@@ -222,3 +222,76 @@ def test_stale_recovery_queries_oldest_rows_before_bounding_the_read():
     assert [conversation['id'] for conversation in selected] == ['oldest']
     assert query.ordering[0] == 'finished_at'
     assert query.limit_value == 1
+
+
+# ── Custom-STT marker on session resume (#7690) ─────────────────────────────
+
+
+class _ResumeHost:
+    """Minimal host for create_new_in_progress_conversation's resume branch."""
+
+    def __init__(self, *, existing_conversation: dict | None, use_custom_stt: bool) -> None:
+        self.request = SimpleNamespace(uid='uid-1', source='omi')
+        self.client_device_context = SimpleNamespace(client_device_id='dev-1', platform='desktop')
+        self.language = 'en'
+        self.use_custom_stt = use_custom_stt
+        self.client_conversation_id = None
+        self.recording_session_id = 'session-1'
+        self.is_multi_channel = False
+        self.state = SimpleNamespace(current_conversation_id=None)
+        self.recording_session_ids_by_conversation = {}
+        self.persistence = SimpleNamespace(call=self._call)
+        self.calls: list[tuple] = []
+        self._existing = existing_conversation
+
+    async def _call(self, fn, *_args, **_kwargs):
+        self.calls.append((fn.__name__, _args, _kwargs))
+        if fn.__name__ == 'open_live_recording_session':
+            return {'requires_rollover': False, 'conversation_id': 'conv-1'}
+        if fn.__name__ == 'get_conversation':
+            return self._existing
+        if fn.__name__ == 'set_in_progress_conversation_id':
+            return None
+        if fn.__name__ == 'update_conversation':
+            return None
+        return None
+
+
+class _ResumeController(LiveConversationController):
+    def __init__(self, host: _ResumeHost) -> None:
+        super().__init__(host)
+        self.session_events: list[str] = []
+
+    def send_conversation_session(self, *args, **kwargs) -> None:
+        self.session_events.append('sent')
+
+
+async def test_resume_persists_custom_stt_marker_when_session_uses_custom_stt():
+    """A conversation that started under normal STT but resumes under custom STT
+    must get the durable uses_custom_stt marker, or it could run Omi-paid LLM
+    enrichment without a BYOK key (#7690)."""
+    host = _ResumeHost(
+        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
+        use_custom_stt=True,
+    )
+    controller = _ResumeController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    updates = [c for c in host.calls if c[0] == 'update_conversation']
+    assert len(updates) == 1, f'expected one update_conversation call, got {host.calls}'
+    assert updates[0][1][2] == {'uses_custom_stt': True}, f'wrong update payload: {updates[0]}'
+
+
+async def test_resume_does_not_rewrite_marker_for_normal_stt_session():
+    """A normal-STT resume of a normal-STT conversation must not write anything."""
+    host = _ResumeHost(
+        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
+        use_custom_stt=False,
+    )
+    controller = _ResumeController(host)
+
+    await controller.create_new_in_progress_conversation()
+
+    updates = [c for c in host.calls if c[0] == 'update_conversation']
+    assert updates == [], f'unexpected update_conversation call: {host.calls}'

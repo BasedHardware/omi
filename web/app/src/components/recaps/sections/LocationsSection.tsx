@@ -1,7 +1,7 @@
 'use client';
 
 import { MapPin } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { cn } from '@/lib/utils';
 import type { LocationPin } from '@/types/recap';
 
@@ -37,11 +37,13 @@ export function LocationsSection({
   }
 
   return (
-    <div className={cn(
-      'overflow-hidden',
-      showBorder && 'rounded-xl border border-white/[0.04]',
-      className
-    )}>
+    <div
+      className={cn(
+        'overflow-hidden',
+        showBorder && 'rounded-xl border border-white/[0.04]',
+        className,
+      )}
+    >
       <LocationMap
         locations={locations}
         height={height}

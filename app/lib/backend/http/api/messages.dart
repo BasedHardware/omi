@@ -50,11 +50,16 @@ class ChatPageContext {
   }
 }
 
-Future<List<ServerMessage>> getMessagesServer({String? appId, bool dropdownSelected = false}) async {
+Future<List<ServerMessage>> getMessagesServer({
+  String? appId,
+  bool dropdownSelected = false,
+  int limit = 100,
+  int offset = 0,
+}) async {
   if (appId == 'no_selected') appId = null;
-  // TODO: Add pagination
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected',
+    url:
+        '${Env.apiBaseUrl}v2/messages?app_id=${appId ?? ''}&dropdown_selected=$dropdownSelected&limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',

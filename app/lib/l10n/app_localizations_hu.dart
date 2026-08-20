@@ -9904,4 +9904,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get findDevice => 'Keresés';
+
+  @override
+  String get diagnosticsShareFailed => 'A diagnosztika megosztása nem sikerült. Próbáld újra.';
 }

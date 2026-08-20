@@ -6,11 +6,18 @@ from types import SimpleNamespace
 import pytest
 
 from routers.listen.receiver import ListenReceiver
+from utils.product_telemetry import set_product_telemetry_client_for_tests
 
 
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
+
+
+@pytest.fixture(autouse=True)
+def _reset_product_telemetry_client():
+    yield
+    set_product_telemetry_client_for_tests(None)
 
 
 class _FramesWebSocket:
@@ -24,6 +31,22 @@ class _FramesWebSocket:
 class _BrokenDecoder:
     def decode(self, *_args, **_kwargs):
         raise ValueError('malformed frame')
+
+
+class _TelemetryClient:
+    def __init__(self):
+        self.events = []
+
+    def capture(self, **event):
+        self.events.append(event)
+
+
+class _VadGate:
+    def get_metrics(self):
+        return {'speech_ms_total': 1250, 'mode': 'active'}
+
+    def to_json_log(self):
+        return self.get_metrics()
 
 
 @pytest.mark.anyio
@@ -95,3 +118,74 @@ async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_
     await receiver._handle_multi_channel_audio(b'\x01malformed-frame')
 
     assert receiver.channel_mix_buffers == [bytearray()]
+
+
+@pytest.mark.anyio
+async def test_receiver_emits_decoded_audio_duration_at_session_end():
+    telemetry = _TelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+    websocket = _FramesWebSocket([{'bytes': b'\x01\x00' * 16000}, {'type': 'websocket.disconnect', 'code': 1000}])
+    host = SimpleNamespace(
+        request=SimpleNamespace(websocket=websocket, codec='pcm16', sample_rate=16000, uid='user-1'),
+        state=SimpleNamespace(
+            active=True,
+            close_code=1001,
+            last_audio_received_time=None,
+            last_activity_time=None,
+            first_audio_byte_timestamp=None,
+            last_usage_record_timestamp=None,
+            audio_ring_buffer=None,
+            current_conversation_id='conversation-1',
+        ),
+        limits=SimpleNamespace(ws_receive_timeout=1.0),
+        is_multi_channel=False,
+        frame_size=320,
+        use_custom_stt=True,
+        audio_bytes_send=None,
+        recording_session_id='recording-1',
+        transcripts=SimpleNamespace(enqueue=lambda _: None),
+        start_live_transcription=lambda: None,
+    )
+    receiver = ListenReceiver(host, [], {})
+
+    await receiver.receive_data()
+
+    assert telemetry.events[0]['event'] == 'Encoded Audio Duration Measured'
+    assert telemetry.events[0]['properties']['duration_seconds'] == 1.0
+    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+
+
+@pytest.mark.anyio
+async def test_receiver_emits_speech_positive_duration_at_session_end():
+    telemetry = _TelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+    websocket = _FramesWebSocket([{'type': 'websocket.disconnect', 'code': 1000}])
+    host = SimpleNamespace(
+        request=SimpleNamespace(websocket=websocket, codec='pcm16', uid='user-1'),
+        state=SimpleNamespace(
+            active=True,
+            close_code=1001,
+            last_audio_received_time=None,
+            last_activity_time=None,
+            first_audio_byte_timestamp=None,
+            last_usage_record_timestamp=None,
+            audio_ring_buffer=None,
+            current_conversation_id='conversation-1',
+        ),
+        limits=SimpleNamespace(ws_receive_timeout=1.0),
+        is_multi_channel=False,
+        frame_size=320,
+        use_custom_stt=True,
+        audio_bytes_send=None,
+        recording_session_id='recording-1',
+        transcripts=SimpleNamespace(enqueue=lambda _: None),
+        start_live_transcription=lambda: None,
+    )
+    receiver = ListenReceiver(host, [], {})
+    receiver.vad_gate = _VadGate()
+
+    await receiver.receive_data()
+
+    assert telemetry.events[0]['event'] == 'Speech Positive Duration Measured'
+    assert telemetry.events[0]['properties']['duration_seconds'] == 1.25
+    assert telemetry.events[0]['properties']['measurement'] == 'server_vad'

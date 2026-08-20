@@ -9887,4 +9887,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get findDevice => 'Atrast';
+
+  @override
+  String get diagnosticsShareFailed => 'Neizdevās kopīgot diagnostiku. Mēģiniet vēlreiz.';
 }

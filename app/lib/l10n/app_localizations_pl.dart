@@ -9893,4 +9893,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get findDevice => 'Znajdź';
+
+  @override
+  String get diagnosticsShareFailed => 'Nie udało się udostępnić diagnostyki. Spróbuj ponownie.';
 }

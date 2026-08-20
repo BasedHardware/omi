@@ -63,10 +63,13 @@ export interface ActionItem {
   completed?: boolean;
   completed_at?: string | null;
   concrete_deliverable?: boolean | null;
+  context?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
   description: string;
   due_at?: string | null;
+  due_certainty?: "confirmed" | "tentative" | null;
+  owner_name?: string | null;
   ownership_confidence?: number | null;
   source_segment_ids?: Array<string>;
   target_task_id?: string | null;
@@ -1079,8 +1082,13 @@ export interface Conversation {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
+  meeting_dedup_speech_s?: number | null;
+  meeting_duration_s?: number | null;
+  meeting_treatment_eligible?: boolean;
+  meeting_treatment_reason?: string | null;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
@@ -1095,6 +1103,7 @@ export interface Conversation {
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
+  uses_custom_stt?: boolean;
   visibility?: ConversationVisibility;
 }
 
@@ -1158,20 +1167,28 @@ export interface ConversationAudioUrlInfo {
 export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
+  meeting_treatment_eligible?: boolean;
   status: string;
 }
 
 export interface ConversationFinalizationStatusResponse {
   attempt_count: number;
   job_id: string;
+  meeting_treatment_eligible?: boolean;
   retryable: boolean;
   status: string;
   task_retry_count: number;
   terminal: boolean;
 }
 
+export interface ConversationLinkActionItemSpec {
+  description: string;
+  task_id?: string | null;
+}
+
 export interface ConversationLinkSpec {
   conversation_id: string;
+  recommended_action_items?: Array<ConversationLinkActionItemSpec>;
   summary: string;
   type: "conversationLink";
 }
@@ -2114,6 +2131,7 @@ export interface HasSpeechProfileResponse {
 
 export interface ImportJobResponse {
   conversations_created?: number | null;
+  conversations_skipped?: number | null;
   created_at?: string | null;
   error?: string | null;
   job_id: string;
@@ -2495,6 +2513,7 @@ export interface Message {
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
   client_message_id?: string | null;
+  content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
@@ -2925,6 +2944,7 @@ export interface ResponseMessage {
   chart_data?: ChartData | Record<string, unknown> | null;
   chat_session_id?: string | null;
   client_message_id?: string | null;
+  content_blocks?: Array<Record<string, unknown>>;
   created_at: string;
   data_protection_level?: string | null;
   files?: Array<FileChat>;
@@ -3045,6 +3065,12 @@ export interface SearchedMemory {
   reviewed_source?: string | null;
 }
 
+export interface Section {
+  body_markdown: string;
+  heading: string;
+  source_segment_ids?: Array<string>;
+}
+
 export interface SendMessageRequest {
   context?: PageContext | null;
   file_ids?: Array<string> | null;
@@ -3140,8 +3166,13 @@ export interface SharedConversationResponse {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
+  meeting_dedup_speech_s?: number | null;
+  meeting_duration_s?: number | null;
+  meeting_treatment_eligible?: boolean;
+  meeting_treatment_reason?: string | null;
   people?: Array<Person>;
   photos?: Array<ConversationPhoto>;
   plugins_results?: Array<PluginResult>;
@@ -3157,6 +3188,7 @@ export interface SharedConversationResponse {
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
   updated_at?: string | null;
+  uses_custom_stt?: boolean;
   visibility?: ConversationVisibility;
   [key: string]: unknown;
 }
@@ -3300,6 +3332,7 @@ export interface Structured {
   emoji?: string;
   events?: Array<Event>;
   overview?: string;
+  sections?: Array<Section>;
   title?: string;
 }
 
@@ -4251,6 +4284,7 @@ export interface OmiApiSchemas {
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
   "ConversationFinalizationStatusResponse": ConversationFinalizationStatusResponse;
+  "ConversationLinkActionItemSpec": ConversationLinkActionItemSpec;
   "ConversationLinkSpec": ConversationLinkSpec;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
@@ -4511,6 +4545,7 @@ export interface OmiApiSchemas {
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
+  "Section": Section;
   "SendMessageRequest": SendMessageRequest;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
@@ -16009,7 +16044,7 @@ export async function create_initial_message_v2_initial_message_post(query: { ap
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_messages_v2_messages_get(query: { plugin_id?: string | null, app_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Message>> {
+export async function get_messages_v2_messages_get(query: { plugin_id?: string | null, app_id?: string | null, chat_session_id?: string | null, limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<Message>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages`;
   const _params = query ? Object.entries(query)
@@ -16031,7 +16066,7 @@ export async function get_messages_v2_messages_get(query: { plugin_id?: string |
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function send_message_v2_messages_post(query: { plugin_id?: string | null, app_id?: string | null }, header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SendMessageRequest, init?: OmiApiClientInit): Promise<ResponseMessage> {
+export async function send_message_v2_messages_post(query: { plugin_id?: string | null, app_id?: string | null, chat_session_id?: string | null }, header: { X_App_Platform?: string, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: SendMessageRequest, init?: OmiApiClientInit): Promise<ResponseMessage> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages`;
   const _params = query ? Object.entries(query)
@@ -16055,7 +16090,7 @@ export async function send_message_v2_messages_post(query: { plugin_id?: string 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function clear_chat_messages_v2_messages_delete(query: { app_id?: string | null, plugin_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Message> {
+export async function clear_chat_messages_v2_messages_delete(query: { app_id?: string | null, plugin_id?: string | null, chat_session_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Message> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/messages`;
   const _params = query ? Object.entries(query)

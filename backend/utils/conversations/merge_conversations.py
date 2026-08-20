@@ -264,6 +264,12 @@ def perform_merge_async(
         # Private cloud sync: True if any has it
         private_cloud_sync_enabled = any(c.get("private_cloud_sync_enabled", False) for c in sorted_convs)
 
+        # Custom STT: True if any source was transcribed on a third-party
+        # provider, so the merged conversation stays behind the Omi-paid LLM
+        # post-processing gate (#7690). A custom-STT source must not be able to
+        # shed the marker by merging with a normal-STT one.
+        uses_custom_stt = any(c.get('uses_custom_stt', False) for c in sorted_convs)
+
         # Discarded: only if ALL are discarded
         discarded = all(c.get("discarded", False) for c in sorted_convs)
 
@@ -304,6 +310,7 @@ def perform_merge_async(
             geolocation=geolocation,
             visibility=visibility,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
+            uses_custom_stt=uses_custom_stt,
             discarded=discarded,
             status=ConversationStatus.processing,
             client_device_id=client_device_id,

@@ -9864,4 +9864,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get findDevice => 'Etsi';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiikan jakaminen epäonnistui. Yritä uudelleen.';
 }

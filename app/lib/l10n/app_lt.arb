@@ -3221,5 +3221,6 @@
     "askAboutThisConversation": "Paklausti apie tai",
     "sendRawAudioToOmi": "Siųsti neapdorotą garsą į Omi",
     "sendRawAudioToOmiDescription": "Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.",
-    "findDevice": "Rasti"
+    "findDevice": "Rasti",
+    "diagnosticsShareFailed": "Nepavyko bendrinti diagnostikos. Bandykite dar kartą."
 }

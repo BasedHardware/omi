@@ -241,8 +241,8 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_requires_private_network_egress_on_each_request_service(self) -> None:
         contracts = (
-            "--network=default",
-            "--subnet=default",
+            "--network=${{ vars.CLOUD_RUN_VPC_NETWORK }}",
+            "--subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}",
             "--vpc-egress=private-ranges-only",
         )
         for workflow, production, step in (
@@ -259,6 +259,40 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         mutated = workflow[:start] + mutated_block + workflow[start + len(block) :]
                         errors = POLICY.validate_deploy_workflow(mutated, production=production)
                         self.assertTrue(any(contract in error and "request service" in error for error in errors), errors)
+
+
+    def test_requires_llm_gateway_wiring_on_each_request_service(self) -> None:
+        """An unset feature mode silently routes managed desktop chat to Anthropic."""
+        contracts = (
+            "OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}",
+            "OMI_LLM_GATEWAY_FEATURE_MODE=gateway",
+            "OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true",
+            "OMI_LLM_CHAT_AGENT_ROUTE=gateway",
+            "OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
+        )
+        for workflow, production, step in (
+            (self.dev, False, "Deploy desktop-backend to Cloud Run"),
+            (self.prod, True, "Deploy production candidate at zero traffic"),
+        ):
+            with self.subTest(production=production):
+                start = workflow.index(f"      - name: {step}\n")
+                end = workflow.find("\n      - ", start + 1)
+                block = workflow[start:] if end < 0 else workflow[start:end]
+                for contract in contracts:
+                    with self.subTest(contract=contract):
+                        mutated_block = block.replace(contract, "", 1)
+                        mutated = workflow[:start] + mutated_block + workflow[start + len(block) :]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                        self.assertTrue(
+                            any(contract in error and "LLM gateway binding" in error for error in errors), errors
+                        )
+
+    def test_requires_the_gateway_serving_gate(self) -> None:
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            with self.subTest(production=production):
+                mutated = workflow.replace("verify-llm-gateway-serving.py", "gateway-gate-omitted.py")
+                errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                self.assertTrue(any("LLM gateway serving gate" in error for error in errors), errors)
 
 
     def test_rejects_development_serving_with_a_development_firebase_project(self) -> None:

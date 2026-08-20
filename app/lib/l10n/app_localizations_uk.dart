@@ -9886,4 +9886,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get findDevice => 'Знайти';
+
+  @override
+  String get diagnosticsShareFailed => 'Не вдалося поділитися діагностикою. Спробуйте ще раз.';
 }

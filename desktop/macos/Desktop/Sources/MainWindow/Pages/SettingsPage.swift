@@ -360,6 +360,7 @@ struct SettingsContentView: View {
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
+  @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"

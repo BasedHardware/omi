@@ -294,10 +294,7 @@ void main() {
 
   test('websocket completion during list fetch blocks a stale processing page row', () async {
     final page = Completer<({List<ServerConversation> items, bool ok})>();
-    final provider = ConversationProvider(
-      conversationListFetcher: () => page.future,
-      isSignedIn: () => true,
-    );
+    final provider = ConversationProvider(conversationListFetcher: () => page.future, isSignedIn: () => true);
     addTearDown(provider.dispose);
 
     final refresh = provider.forceRefreshConversations();
@@ -311,10 +308,7 @@ void main() {
 
   test('websocket processing start during list fetch keeps the newer live row', () async {
     final page = Completer<({List<ServerConversation> items, bool ok})>();
-    final provider = ConversationProvider(
-      conversationListFetcher: () => page.future,
-      isSignedIn: () => true,
-    );
+    final provider = ConversationProvider(conversationListFetcher: () => page.future, isSignedIn: () => true);
     addTearDown(provider.dispose);
 
     final refresh = provider.forceRefreshConversations();
@@ -574,7 +568,7 @@ void main() {
           50,
           (index) => _conversation('page-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );
@@ -586,7 +580,7 @@ void main() {
           _conversation('page-49', status: ConversationStatus.completed),
           _conversation('page-50', status: ConversationStatus.completed),
         ],
-        ok: true
+        ok: true,
       );
     };
     addTearDown(provider.dispose);
@@ -610,7 +604,7 @@ void main() {
           50,
           (index) => _conversation('page-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );
@@ -621,7 +615,7 @@ void main() {
           50,
           (index) => _conversation('next-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       );
     };
     addTearDown(provider.dispose);
@@ -641,7 +635,7 @@ void main() {
           50,
           (index) => _conversation('page-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );
@@ -665,7 +659,7 @@ void main() {
           50,
           (index) => _conversation('page-$index', status: ConversationStatus.completed),
         ),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );
@@ -774,10 +768,7 @@ void main() {
   test('stale full fetch is discarded after a confirmed delete', () async {
     final page = Completer<({List<ServerConversation> items, bool ok})>();
     final conversation = _conversation('c1', status: ConversationStatus.completed);
-    final provider = ConversationProvider(
-      conversationListFetcher: () => page.future,
-      isSignedIn: () => true,
-    );
+    final provider = ConversationProvider(conversationListFetcher: () => page.future, isSignedIn: () => true);
     final delete = Completer<bool>();
     provider.conversationDeleteFetcherOverride = (_) => delete.future;
     addTearDown(provider.dispose);
@@ -797,10 +788,7 @@ void main() {
   test('stale background fetch is discarded after a confirmed delete', () async {
     final page = Completer<({List<ServerConversation> items, bool ok})>();
     final conversation = _conversation('c1', status: ConversationStatus.completed);
-    final provider = ConversationProvider(
-      conversationListFetcher: () => page.future,
-      isSignedIn: () => true,
-    );
+    final provider = ConversationProvider(conversationListFetcher: () => page.future, isSignedIn: () => true);
     final delete = Completer<bool>();
     provider.conversationDeleteFetcherOverride = (_) => delete.future;
     addTearDown(provider.dispose);
@@ -908,19 +896,11 @@ void main() {
 
   test('failed page request releases the UI latch for the same offset retry', () {
     expect(
-      shouldReleaseConversationLoadMoreLatch(
-        currentRequestKey: 'offset:50',
-        requestKey: 'offset:50',
-        succeeded: false,
-      ),
+      shouldReleaseConversationLoadMoreLatch(currentRequestKey: 'offset:50', requestKey: 'offset:50', succeeded: false),
       isTrue,
     );
     expect(
-      shouldReleaseConversationLoadMoreLatch(
-        currentRequestKey: 'offset:50',
-        requestKey: 'offset:50',
-        succeeded: true,
-      ),
+      shouldReleaseConversationLoadMoreLatch(currentRequestKey: 'offset:50', requestKey: 'offset:50', succeeded: true),
       isFalse,
     );
     expect(
@@ -973,7 +953,7 @@ void main() {
       conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
       conversationLifecycleFetcher: (_) async => (
         item: _conversation('c1', status: ConversationStatus.processing, createdAt: DateTime.utc(2026, 1, 1)),
-        ok: true
+        ok: true,
       ),
       isSignedIn: () => true,
     );

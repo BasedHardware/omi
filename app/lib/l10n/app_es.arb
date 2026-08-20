@@ -3222,5 +3222,6 @@
     "askAboutThisConversation": "Preguntar sobre esto",
     "sendRawAudioToOmi": "Enviar audio sin procesar a Omi",
     "sendRawAudioToOmiDescription": "Desactívalo para impedir que se envíe audio sin procesar a Omi. Las transcripciones y los datos necesarios para las funciones en la nube aún pueden enviarse a Omi.",
-    "findDevice": "Buscar"
+    "findDevice": "Buscar",
+    "diagnosticsShareFailed": "No se pudo compartir el diagnóstico. Inténtalo de nuevo."
 }

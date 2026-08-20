@@ -3221,5 +3221,6 @@
     "askAboutThisConversation": "Запитати про це",
     "sendRawAudioToOmi": "Надсилати необроблений звук до Omi",
     "sendRawAudioToOmiDescription": "Вимкніть, щоб необроблений звук не надсилався до Omi. Транскрипти й дані, потрібні хмарним функціям, усе ще можуть надсилатися до Omi.",
-    "findDevice": "Знайти"
+    "findDevice": "Знайти",
+    "diagnosticsShareFailed": "Не вдалося поділитися діагностикою. Спробуйте ще раз."
 }

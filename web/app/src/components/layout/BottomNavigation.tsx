@@ -1,9 +1,9 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { usePathname, useRouter } from '@tschk/moonshine-next/navigation';
+import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
-import { GanttChartSquare, MessageCircle, Mic, CheckSquare, Menu } from 'lucide-react';
+import { GanttChartSquare, House, Mic, CheckSquare, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 
@@ -13,8 +13,8 @@ interface BottomNavigationProps {
 
 // Core navigation items (excluding More)
 const navItems = [
-  { label: 'Conversations', href: '/conversations', icon: GanttChartSquare },
-  { label: 'Chat', href: '/chat', icon: MessageCircle },
+  { label: 'Home', href: '/home', icon: House },
+  { label: 'Timeline', href: '/conversations', icon: GanttChartSquare },
   { label: 'Record', href: '/record', icon: Mic },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
 ];
@@ -28,8 +28,8 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
   // Handle conversations click - always go to list view
   const handleConversationsClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Always navigate to /conversations with a timestamp to force navigation
-    // This ensures the URL change is detected even if we're already on /conversations
+    // Always navigate to /timeline with a timestamp to force navigation
+    // This ensures the URL change is detected even if we're already on /timeline
     router.push('/conversations?v=' + Date.now(), { scroll: false });
   };
 
@@ -43,7 +43,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
         'lg:hidden', // Only show on mobile
         'bg-bg-secondary/80 backdrop-blur-md',
         'border-t border-bg-tertiary',
-        'pb-safe' // Safe area inset for devices with home indicators
+        'pb-safe', // Safe area inset for devices with home indicators
       )}
       aria-label="Primary navigation"
     >
@@ -66,8 +66,8 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
                 'w-14 h-14 rounded-xl',
                 'transition-colors duration-150',
                 isActive
-                  ? 'bg-purple-primary/10 text-purple-primary'
-                  : 'text-text-tertiary hover:text-text-secondary'
+                  ? 'bg-text-primary text-bg-primary'
+                  : 'text-text-tertiary hover:text-text-secondary',
               )}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
@@ -92,7 +92,7 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
             'flex flex-col items-center justify-center',
             'w-14 h-14 rounded-xl',
             'text-text-tertiary hover:text-text-secondary',
-            'transition-colors duration-150'
+            'transition-colors duration-150',
           )}
           aria-label="More options"
         >

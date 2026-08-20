@@ -1,12 +1,18 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl } from 'react-leaflet';
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  ZoomControl,
+} from 'react-leaflet';
 import L from 'leaflet';
 import { ExternalLink } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
 
-// Create simple purple marker icon
+// Create simple marker icon
 function createMarkerIcon() {
   return L.divIcon({
     className: 'custom-marker',
@@ -78,7 +84,10 @@ export default function SingleLocationMap({
   return (
     <div
       className={className}
-      style={{ height: typeof height === 'number' ? `${height}px` : height, width: '100%' }}
+      style={{
+        height: typeof height === 'number' ? `${height}px` : height,
+        width: '100%',
+      }}
     >
       <MapContainer
         center={[latitude, longitude]}
@@ -102,7 +111,7 @@ export default function SingleLocationMap({
                 href={openStreetMapUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700 transition-colors"
+                className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary transition-colors"
               >
                 <ExternalLink className="w-3 h-3" />
                 <span>Open in maps</span>

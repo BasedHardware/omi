@@ -9865,4 +9865,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get findDevice => 'Najít';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiku se nepodařilo sdílet. Zkus to znovu.';
 }

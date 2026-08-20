@@ -9868,4 +9868,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get findDevice => 'Hitta';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiken kunde inte delas. Försök igen.';
 }

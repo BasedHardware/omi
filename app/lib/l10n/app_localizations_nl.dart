@@ -9891,4 +9891,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get findDevice => 'Zoeken';
+
+  @override
+  String get diagnosticsShareFailed => 'Kon de diagnostiek niet delen. Probeer het opnieuw.';
 }

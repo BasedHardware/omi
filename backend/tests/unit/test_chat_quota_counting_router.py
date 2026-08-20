@@ -59,6 +59,7 @@ def _make_chat_client():
     graph.execute_graph_chat = MagicMock()
     graph.execute_persona_chat_stream = MagicMock()
 
+    sys.modules.pop('utils.chat_session_target', None)
     sys.modules.pop('routers.chat', None)
     module = harness.load_real_module('routers.chat', BACKEND_DIR / 'routers' / 'chat.py')
 

@@ -9946,4 +9946,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get findDevice => 'Finden';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnose konnte nicht geteilt werden. Bitte versuche es erneut.';
 }

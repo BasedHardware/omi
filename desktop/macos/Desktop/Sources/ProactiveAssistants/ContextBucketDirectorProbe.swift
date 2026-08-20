@@ -257,7 +257,7 @@
         else {
           throw ContextBucketDirectorProbeError.invalidParams(key)
         }
-        return try values.map { value in
+        return try values.enumerated().map { index, value in
           guard let description = value["description"] as? String,
             !description.isEmpty,
             description.count <= ContextDirectorTaskContext.maximumDescriptionLength
@@ -274,7 +274,11 @@
           } else {
             throw ContextBucketDirectorProbeError.invalidParams(key)
           }
-          return ContextDirectorTaskContext(description: description, dueAt: dueAt)
+          // DEBUG probe: accept a caller-supplied id so a probe can assert on
+          // exact task handles, and fall back to a stable synthetic one so the
+          // prompt's handles stay well-formed when the caller omits it.
+          let id = (value["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "probe-\(index)"
+          return ContextDirectorTaskContext(id: id, description: description, dueAt: dueAt)
         }
       }
 

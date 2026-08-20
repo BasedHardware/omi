@@ -9874,4 +9874,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get findDevice => 'Temukan';
+
+  @override
+  String get diagnosticsShareFailed => 'Tidak dapat membagikan diagnostik. Silakan coba lagi.';
 }

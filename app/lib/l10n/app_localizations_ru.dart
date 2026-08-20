@@ -9901,4 +9901,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get findDevice => 'Найти';
+
+  @override
+  String get diagnosticsShareFailed => 'Не удалось поделиться диагностикой. Попробуйте ещё раз.';
 }

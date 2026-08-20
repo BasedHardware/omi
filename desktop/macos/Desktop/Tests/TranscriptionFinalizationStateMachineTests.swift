@@ -379,6 +379,31 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         session: continuedMeeting,
         reason: .finishAndContinue
       ))
+
+    XCTAssertTrue(
+      ConversationFinalizationService.shouldWakeMeetingCompletion(
+        finalizationStatus: ConversationFinalizationStatusResponse(
+          jobID: "job-eligible",
+          status: "completed",
+          terminal: true,
+          retryable: false,
+          attemptCount: 1,
+          taskRetryCount: 0,
+          meetingTreatmentEligible: true
+        )
+      ))
+    XCTAssertFalse(
+      ConversationFinalizationService.shouldWakeMeetingCompletion(
+        finalizationStatus: ConversationFinalizationStatusResponse(
+          jobID: "job-short-call",
+          status: "completed",
+          terminal: true,
+          retryable: false,
+          attemptCount: 1,
+          taskRetryCount: 0,
+          meetingTreatmentEligible: false
+        )
+      ))
   }
 
   func testSessionsNeedingFinalizationIncludesRetryableWorkOnly() async throws {
@@ -642,7 +667,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
           .utf8
       ),
       Data(
-        #"{"job_id":"job-1","status":"completed","terminal":true,"retryable":false,"attempt_count":1,"task_retry_count":0}"#
+        #"{"job_id":"job-1","status":"completed","terminal":true,"retryable":false,"attempt_count":1,"task_retry_count":0,"meeting_treatment_eligible":true}"#
           .utf8
       ),
     ])
@@ -903,12 +928,12 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
     let session = try XCTUnwrap(storedSession)
 
-    let handled = try await ConversationFinalizationService.shared.resolveExhaustedCloudReconciliation(
+    let outcome = try await ConversationFinalizationService.shared.resolveExhaustedCloudReconciliation(
       session: session,
       sessionId: sessionId
     )
 
-    XCTAssertTrue(handled)
+    XCTAssertTrue(outcome.handled)
     let deletedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
     XCTAssertNil(deletedSession)
   }

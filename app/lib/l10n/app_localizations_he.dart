@@ -9786,4 +9786,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get findDevice => 'איתור';
+
+  @override
+  String get diagnosticsShareFailed => 'לא ניתן היה לשתף את האבחון. נסה שוב.';
 }

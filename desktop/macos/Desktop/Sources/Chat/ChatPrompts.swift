@@ -84,7 +84,7 @@ struct ChatPrompts {
     WHERE deleted = 0 AND isDismissed = 0 AND content LIKE '%keyword%'
     ORDER BY createdAt DESC
 
-    -- Daily recap (run ALL 3 for "what did I do" questions — use -1 day for yesterday, -7 day for past week):
+    -- Daily totals only (for counts/time breakdowns; use get_work_context for "what was I doing" — use -1 day for yesterday, -7 day for past week):
     -- Q1: App usage
     SELECT appName, COUNT(*) as count, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
     MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
@@ -103,7 +103,7 @@ struct ChatPrompts {
     AND createdAt < datetime('now', 'start of day', 'localtime') AND deleted = 0
     ORDER BY createdAt DESC
 
-    -- Recent screenshots with context:
+    -- Bounded OCR preview for explicit low-level inspection only; recent-work retrieval belongs to get_work_context:
     SELECT timestamp, appName, windowTitle, substr(ocrText, 1, 200) as preview
     FROM screenshots WHERE timestamp >= datetime('now', '-1 day', 'localtime')
     ORDER BY timestamp DESC LIMIT 20
@@ -482,6 +482,9 @@ struct ChatPrompts {
     "staged_tasks": "AI-extracted task candidates pending user review",
     "task_chat_messages": "Claude Code agent ↔ user chat history, one thread per task (action item)",
     "observations": "per-screenshot AI observations used to detect tasks and activities",
+    "context_visits":
+      "durable recent-work visits; handlesJson contains URL/file addresses and is the preferred SQL source for work aggregates",
+    "context_buckets": "durable document/page/file work destinations rolled up across visits",
     "local_kg_nodes":
       "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
     "local_kg_edges": "knowledge graph edges — relationships between entities",
@@ -501,6 +504,19 @@ struct ChatPrompts {
         "Legacy flag for screenshots captured before battery mode switched to adaptive capture cadence",
       "deviceName": "Computer name that captured this screenshot (optional; absent when provenance is unknown)",
       "clientDeviceId": "Stable capture-device identifier used for canonical memory provenance",
+    ],
+    "context_visits": [
+      "handlesJson": "JSON array of durable URL/file handles for the visited work source",
+      "bucketID": "FK to context_buckets",
+      "startedAt": "When this work visit started",
+      "endedAt": "When this work visit ended",
+      "outcome": "active | completed | discarded",
+    ],
+    "context_buckets": [
+      "subjectKind": "Kind of durable work destination",
+      "subjectID": "Stable destination identity, commonly derived from a URL or file",
+      "lastVisitedAt": "Most recent completed visit",
+      "visitCount": "Number of visits rolled into this destination",
     ],
     "action_items": [
       "description": "The task text shown to the user",
@@ -727,7 +743,7 @@ struct ChatPrompts {
 
     FTS query patterns:
     -- Keyword search with JOIN:
-    SELECT s.* FROM screenshots s JOIN screenshots_fts ON screenshots_fts.rowid = s.id WHERE screenshots_fts MATCH 'keyword'
+    SELECT s.id, s.timestamp, s.appName, s.windowTitle, substr(s.ocrText, 1, 200) AS preview FROM screenshots s JOIN screenshots_fts ON screenshots_fts.rowid = s.id WHERE screenshots_fts MATCH 'keyword'
     -- BM25-ranked search (lower rank = better match):
     SELECT a.*, bm25(action_items_fts) as rank FROM action_items a JOIN action_items_fts ON action_items_fts.rowid = a.id WHERE action_items_fts MATCH 'keyword' ORDER BY rank
     -- Multi-word: 'word1 word2' (AND), 'word1 OR word2' (OR), '"exact phrase"'

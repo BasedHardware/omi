@@ -9697,4 +9697,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get findDevice => '探す';
+
+  @override
+  String get diagnosticsShareFailed => '診断情報を共有できませんでした。もう一度お試しください。';
 }

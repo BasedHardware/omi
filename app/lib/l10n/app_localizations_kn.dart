@@ -9895,4 +9895,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get findDevice => 'ಹುಡುಕಿ';
+
+  @override
+  String get diagnosticsShareFailed => 'ಡಯಾಗ್ನೋಸ್ಟಿಕ್ಸ್ ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

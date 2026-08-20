@@ -6,9 +6,19 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
-from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
+
+from database.firestore_index_registry import (
+    CURRENT_CHAT_SESSION_ORDERED_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
+)
+
+# Sessions are per-user and per-app, so this is a ceiling on a small collection
+# rather than a page size; it exists so a pathological account cannot turn one
+# lookup into an unbounded read.
+CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
 
 from models.chat import Message
 from utils import encryption
@@ -653,19 +663,71 @@ def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, A
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    session_ref = (
-        db.collection('users')
-        .document(uid)
-        .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+    """The user's current chat session for an app.
+
+    Newest-first: an unordered `.limit(1)` lets Firestore return any matching
+    document, so once a user has more than one session for an app the "current"
+    one is whichever the index happens to yield. Callers treat this as the
+    session to read and append to, so an arbitrary pick silently splits a
+    conversation across sessions.
+
+    The ordering is applied after the read, not by `order_by`, because Firestore
+    drops documents that lack the ordered field entirely. `add_chat_session`
+    writes whatever dict it is handed, so a session with no `created_at` is
+    representable — and ordering in the query would make those sessions
+    invisible here, stranding a user's existing history behind a brand new
+    session. A session with no timestamp sorts oldest, and its id breaks ties so
+    the answer is stable across calls.
+    """
+    collection = db.collection('users').document(uid).collection('chat_sessions')
+    ordered_sessions = (
+        CURRENT_CHAT_SESSION_ORDERED_QUERY.build(
+            collection,
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .order_by('__name__', direction=firestore.Query.DESCENDING)
         .limit(1)
+        .stream()
+    )
+    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    if ordered_docs:
+        return max(
+            ordered_docs,
+            key=lambda data: (
+                data.get('created_at') is not None,
+                data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                str(data.get('id') or ''),
+            ),
+        )
+
+    legacy_session = (
+        CURRENT_CHAT_SESSION_QUERY.build(
+            collection,
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('__name__', direction=firestore.Query.ASCENDING)
+        .limit(1)
+        .stream()
     )
 
-    sessions = session_ref.stream()
-    for session in sessions:
-        return _typed_doc(session)
+    legacy_docs = [_typed_doc(session) for session in legacy_session]
+    if len(legacy_docs) > 1:
+        legacy_docs = legacy_docs[:1]
 
-    return None
+    newest: Optional[Dict[str, Any]] = None
+    newest_key: Optional[tuple] = None
+    for data in legacy_docs:
+        # `_typed_doc` returns {} for a document with no fields, which sorts as
+        # untimestamped and loses to anything real rather than being skipped.
+        created = data.get('created_at')
+        key = (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
+        if newest_key is None or key > newest_key:
+            newest, newest_key = data, key
+
+    return newest
 
 
 def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:
@@ -704,34 +766,51 @@ def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool =
     return None
 
 
+def _update_chat_session_if_exists(uid: str, chat_session_id: str, values: Dict[str, Any], what: str) -> bool:
+    """Apply a derived-state update to a chat session, tolerating a deleted session.
+
+    The message/file id lists and the OpenAI ids are derived state the session
+    document owns. Every writer below runs after a multi-second LLM call, and
+    DELETE /v2/messages (clear chat) deletes the session it read at the start of
+    that same window — so a concurrent clear, or a client retrying the slow
+    request, leaves these writes pointing at a tombstone. Firestore's update()
+    then raises NotFound and the user's chat call 500s even though the work it
+    was reporting already succeeded. A session that no longer exists has nothing
+    to record.
+
+    Returns True when the update was applied.
+    """
+    session_ref = db.collection('users').document(uid).collection('chat_sessions').document(chat_session_id)
+    try:
+        session_ref.update(values)
+        return True
+    except NotFound:
+        logger.warning(f"chat session {chat_session_id} no longer exists; skipping {what}")
+        return False
+
+
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str) -> None:
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+    _update_chat_session_if_exists(
+        uid, chat_session_id, {"message_ids": firestore.ArrayUnion([message_id])}, "message link"
+    )
 
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]) -> None:
     if not file_ids:
         return
 
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
+    _update_chat_session_if_exists(uid, chat_session_id, {"file_ids": firestore.ArrayUnion(file_ids)}, "file link")
 
 
 def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str) -> None:
     """Update OpenAI thread and assistant IDs for a chat session"""
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-
     update_data: Dict[str, str] = {}
     if thread_id:
         update_data['openai_thread_id'] = thread_id
     if assistant_id:
         update_data['openai_assistant_id'] = assistant_id
 
-    if update_data:
-        session_ref.update(update_data)
+    if update_data and _update_chat_session_if_exists(uid, chat_session_id, update_data, "openai id link"):
         logger.info(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
 
 
@@ -850,11 +929,9 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None) -> str:
     Queries by plugin_id to match both Python chat.py and Rust backend behavior.
     For main chat (app_id=None), matches sessions where plugin_id is None.
     """
-    col = db.collection('users').document(uid).collection('chat_sessions')
-    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        return docs[0].id
+    session = get_chat_session(uid, app_id=app_id)
+    if session:
+        return session['id']
     session = create_chat_session(uid, app_id=app_id)
     return session['id']
 
@@ -926,6 +1003,7 @@ def save_message(
     app_id: Optional[str] = None,
     session_id: Optional[str] = None,
     metadata: Optional[str] = None,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
     journal_revision: Optional[int] = None,
@@ -944,6 +1022,7 @@ def save_message(
         app_id=app_id,
         session_id=requested_session_id,
         metadata=metadata,
+        content_blocks=content_blocks,
         message_source=message_source,
     )
 
@@ -958,6 +1037,7 @@ def save_message(
                 app_id=app_id,
                 session_id=requested_session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
                 journal_revision=journal_revision,
@@ -986,6 +1066,8 @@ def save_message(
         'metadata': metadata,
         'message_source': message_source,
     }
+    if content_blocks is not None:
+        doc['content_blocks'] = content_blocks
     if client_message_id:
         doc['client_message_id'] = client_message_id
         doc['client_message_payload_hash'] = idempotency_payload_hash
@@ -1003,6 +1085,7 @@ def save_message(
                 app_id=app_id,
                 session_id=requested_session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
                 journal_revision=journal_revision,
@@ -1044,6 +1127,7 @@ def _apply_existing_message_revision(
     app_id: Optional[str],
     session_id: Optional[str],
     metadata: Optional[str],
+    content_blocks: Optional[List[Dict[str, Any]]],
     message_source: str,
     payload_hash: str,
     journal_revision: Optional[int],
@@ -1073,6 +1157,7 @@ def _apply_existing_message_revision(
                 app_id=app_id,
                 session_id=session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=payload_hash,
             )
@@ -1090,17 +1175,20 @@ def _apply_existing_message_revision(
                 app_id=app_id,
                 session_id=session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=payload_hash,
             )
             existing['_revision_updated'] = False
             return existing
-        patch = {
+        patch: Dict[str, Any] = {
             'text': text,
             'metadata': metadata,
             'client_message_payload_hash': payload_hash,
             'journal_revision': journal_revision,
         }
+        if content_blocks is not None:
+            patch['content_blocks'] = content_blocks
         write_transaction.update(message_ref, patch)
         existing.update(patch)
         existing['_revision_updated'] = True
@@ -1156,6 +1244,7 @@ def _assert_idempotent_message_payload(
     metadata: Optional[str],
     message_source: str,
     payload_hash: str,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Reject an idempotency-key collision without exposing message content."""
     existing_payload_hash = existing.get('client_message_payload_hash')
@@ -1169,6 +1258,8 @@ def _assert_idempotent_message_payload(
     # reconstructed from the stored row. New writes always use the exact hash.
     mismatched = existing.get('text') != text or existing.get('sender') != sender
     mismatched = mismatched or existing.get('metadata') != metadata
+    if content_blocks is not None:
+        mismatched = mismatched or existing.get('content_blocks') != content_blocks
     mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
     existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
     mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
@@ -1191,9 +1282,10 @@ def _message_idempotency_payload_hash(
     session_id: Optional[str],
     metadata: Optional[str],
     message_source: str,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Return a stable digest of the caller-controlled immutable payload."""
-    payload = {
+    payload: Dict[str, Any] = {
         'app_id': app_id,
         'message_source': message_source,
         'metadata': metadata,
@@ -1201,6 +1293,8 @@ def _message_idempotency_payload_hash(
         'session_id': session_id,
         'text': text,
     }
+    if content_blocks is not None:
+        payload['content_blocks'] = content_blocks
     canonical = json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
     return f'sha256:{hashlib.sha256(canonical.encode("utf-8")).hexdigest()}'
 
