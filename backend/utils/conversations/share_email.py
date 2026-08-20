@@ -45,6 +45,22 @@ def _normalized_email(value: Any) -> Optional[str]:
     return email
 
 
+def normalized_recipient_emails(values: List[str]) -> List[str]:
+    """Valid, lowercased, order-preserving, deduplicated recipient list.
+
+    Request payloads can repeat an address; without dedup one request would
+    send the same participant duplicate emails.
+    """
+    seen: set = set()
+    result: List[str] = []
+    for value in values:
+        email = _normalized_email(value)
+        if email and email not in seen:
+            seen.add(email)
+            result.append(email)
+    return result
+
+
 def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
     """All {name, email} pairs the calendar sources recorded for this conversation."""
     participants: List[Dict[str, Optional[str]]] = []
@@ -174,7 +190,7 @@ def send_summary_email(
     if not api_key:
         raise ValueError('email sending is not configured')
 
-    normalized = [email for email in (_normalized_email(e) for e in recipient_emails) if email]
+    normalized = normalized_recipient_emails(recipient_emails)
     if not normalized:
         raise ValueError('no valid recipients')
 

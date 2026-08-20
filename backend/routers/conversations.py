@@ -1374,7 +1374,7 @@ def send_conversation_share_email(
     """
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     detected = {recipient['email'] for recipient in share_email.get_share_recipients(uid, conversation)}
-    requested = [email.strip().lower() for email in request.recipient_emails]
+    requested = share_email.normalized_recipient_emails(request.recipient_emails)
     unknown = [email for email in requested if email not in detected]
     if unknown:
         raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
@@ -1391,7 +1391,10 @@ def send_conversation_share_email(
     )
 
     def _publish():
-        conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.shared)
+        # An already link-visible conversation keeps its existing visibility
+        # (never downgrade `public` to `shared`); only a private one is flipped.
+        if not was_shared:
+            conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.shared)
         redis_db.store_conversation_to_uid(conversation_id, uid)
         redis_db.add_public_conversation(conversation_id)
 

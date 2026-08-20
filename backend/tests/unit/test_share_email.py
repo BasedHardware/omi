@@ -126,3 +126,10 @@ def test_publish_then_send_rolls_back_partial_publish_failure():
     else:
         raise AssertionError('expected ConnectionError to propagate')
     assert calls == ['publish-db-write', 'unpublish']
+
+
+def test_normalized_recipient_emails_dedupes_preserving_order():
+    from utils.conversations.share_email import normalized_recipient_emails
+
+    result = normalized_recipient_emails(['B@acme.com', 'a@acme.com', 'b@acme.com', 'not-an-email', 'A@ACME.COM'])
+    assert result == ['b@acme.com', 'a@acme.com']
