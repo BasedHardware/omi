@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import timedelta
 from pathlib import Path
 from types import ModuleType
 
@@ -38,7 +39,7 @@ class _DocReference:
 
     def set(self, data, merge=False):
         if merge and self.id in self._collection._docs:
-            self._collection._docs[self.id].update(data)
+            _deep_merge(self._collection._docs[self.id], data)
         else:
             self._collection._docs[self.id] = dict(data)
 
@@ -59,6 +60,14 @@ class _Query:
         for doc_id, data in self._collection._docs.items():
             if data.get(self._field) == self._expected:
                 yield _DocSnapshot(_DocReference(self._collection, doc_id), data)
+
+
+def _deep_merge(target, source):
+    for key, value in source.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
 
 
 class _Collection:
@@ -224,12 +233,33 @@ def test_access_token_validation_backfills_memory_grant_for_existing_oauth_conse
     token_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
 
     memory_grant_ref = mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants')
-    memory_grant_ref.delete()
+    memory_grant_ref.set(
+        {
+            'grants': {
+                'mcp': {
+                    'apps': {
+                        'other-client': {
+                            'keys': {
+                                'other-grant': {
+                                    'enabled': False,
+                                    'scopes': [],
+                                    'default_read': False,
+                                    'archive_read': False,
+                                    'write': False,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
 
     auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
 
     assert auth_context['grant_id'] == grant['id']
-    repaired = memory_grant_ref.get().to_dict()['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']]
+    memory_grants = memory_grant_ref.get().to_dict()['grants']['mcp']['apps']
+    repaired = memory_grants['omi-chatgpt-prod']['keys'][grant['id']]
     assert repaired == {
         'enabled': True,
         'scopes': ['memories.read', 'memories.write'],
@@ -237,6 +267,206 @@ def test_access_token_validation_backfills_memory_grant_for_existing_oauth_conse
         'archive_read': False,
         'write': True,
     }
+    assert memory_grants['other-client']['keys']['other-grant']['enabled'] is False
+
+
+@pytest.mark.parametrize(
+    ('stored_entry', 'expected_reason'),
+    [
+        (
+            {
+                'enabled': False,
+                'scopes': ['memories.read'],
+                'default_read': True,
+                'archive_read': False,
+                'write': False,
+            },
+            'app_key_scope_grant_disabled',
+        ),
+        (
+            {
+                'enabled': True,
+                'scopes': [],
+                'default_read': False,
+                'archive_read': False,
+                'write': False,
+            },
+            'missing_persisted_scope_memories.read',
+        ),
+        ({'enabled': 'invalid'}, 'malformed_app_key_scope_grant'),
+    ],
+    ids=['disabled', 'narrowed', 'malformed'],
+)
+def test_access_token_backfill_never_overwrites_existing_memory_control_state(stored_entry, expected_reason):
+    uid = f"controlled-oauth-{expected_reason}"
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read'])
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    memory_grant_ref = mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants')
+    state = memory_grant_ref.get().to_dict()
+    state['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']] = stored_entry
+    memory_grant_ref.set(state)
+
+    auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+
+    assert auth_context is not None
+    persisted = memory_grant_ref.get().to_dict()
+    assert persisted['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']] == stored_entry
+    authorization = authorize_memory_external_default_memory_read(
+        build_mcp_default_memory_read_context(
+            McpVerifiedAuth(
+                uid=uid,
+                app_id='omi-chatgpt-prod',
+                key_id=grant['id'],
+                scopes=('memories.read',),
+            )
+        ),
+        db_client=mcp_oauth.db,
+    )
+    assert authorization.allowed is False
+    assert authorization.reason == expected_reason
+
+
+def test_access_token_backfill_does_not_repair_a_malformed_memory_control_parent():
+    uid = 'malformed-memory-control-parent'
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read'])
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    memory_grant_ref = mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants')
+    memory_grant_ref.set({'grants': 'malformed'})
+
+    assert mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL) is not None
+    assert memory_grant_ref.get().to_dict() == {'grants': 'malformed'}
+
+
+def test_reconsent_does_not_reenable_a_disabled_memory_control_grant():
+    uid = 'disabled-oauth-reconsent-user'
+    scopes = ['memories.read']
+    grant, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256('r' * 64),
+    )
+    memory_grant_ref = mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants')
+    state = memory_grant_ref.get().to_dict()
+    stored_grant = state['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']]
+    stored_grant['enabled'] = False
+    memory_grant_ref.set(state)
+
+    renewed_grant, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        'omi-chatgpt-prod',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256('s' * 64),
+    )
+
+    assert renewed_grant['id'] == grant['id']
+    persisted = memory_grant_ref.get().to_dict()['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']]
+    assert persisted['enabled'] is False
+
+
+_MISSING = object()
+
+
+@pytest.mark.parametrize(
+    ('record', 'field', 'value'),
+    [
+        ('token', 'uid', _MISSING),
+        ('token', 'uid', ''),
+        ('token', 'client_id', _MISSING),
+        ('token', 'client_id', 7),
+        ('token', 'grant_id', _MISSING),
+        ('token', 'grant_id', ''),
+        ('token', 'resource', _MISSING),
+        ('token', 'resource', 'https://attacker.example/mcp'),
+        ('token', 'scopes', _MISSING),
+        ('token', 'scopes', 'memories.read'),
+        ('token', 'scopes', []),
+        ('token', 'scopes', ['memories.read', 'memories.read']),
+        ('token', 'scopes', ['memories.archive.read']),
+        ('token', 'expires_at', _MISSING),
+        ('token', 'expires_at', 'expired'),
+        ('token', 'revoked_at', 'revoked'),
+        ('grant', '__document__', _MISSING),
+        ('grant', 'uid', _MISSING),
+        ('grant', 'uid', 'other-user'),
+        ('grant', 'client_id', _MISSING),
+        ('grant', 'client_id', 'other-client'),
+        ('grant', 'id', _MISSING),
+        ('grant', 'id', 'other-grant'),
+        ('grant', 'resource', _MISSING),
+        ('grant', 'resource', 'https://other.example/mcp'),
+        ('grant', 'scopes', _MISSING),
+        ('grant', 'scopes', []),
+        ('grant', 'scopes', ['conversations.read']),
+        ('grant', 'status', 'revoked'),
+        ('grant', 'revoked_at', 'revoked'),
+        ('grant', 'expires_at', 'expired'),
+    ],
+)
+def test_access_token_validation_rejects_malformed_or_mismatched_token_grant_pairs(record, field, value):
+    uid = f'strict-token-{record}-{field}-{abs(hash(repr(value)))}'
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read'])
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    token_ref = mcp_oauth.db.collection('mcp_oauth_access_tokens').document(
+        mcp_oauth.hash_secret(token_pair['access_token'])
+    )
+    grant_ref = mcp_oauth.db.collection('mcp_oauth_grants').document(grant['id'])
+    target_ref = token_ref if record == 'token' else grant_ref
+
+    if field == '__document__':
+        target_ref.delete()
+    else:
+        target = target_ref.get().to_dict()
+        if value is _MISSING:
+            target.pop(field, None)
+        elif value == 'expired':
+            target[field] = mcp_oauth._now() - timedelta(seconds=1)
+        elif value == 'revoked':
+            target[field] = mcp_oauth._now()
+        else:
+            target[field] = value
+        target_ref.set(target)
+
+    assert mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
+    token_ref.delete()
+    grant_ref.delete()
+    mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants').delete()
+
+
+def test_oauth_memory_grant_never_carries_archive_capability():
+    uid = 'oauth-no-archive-user'
+    scopes = ['memories.read', 'memories.write']
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    token_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+
+    auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+    persisted = (
+        mcp_oauth.db.collection(f'users/{uid}/memory_control')
+        .document('app_key_memory_grants')
+        .get()
+        .to_dict()['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']]
+    )
+
+    assert auth_context is not None
+    assert auth_context['scopes'] == scopes
+    assert persisted['archive_read'] is False
+    authorization = authorize_memory_external_default_memory_read(
+        build_mcp_default_memory_read_context(
+            McpVerifiedAuth(
+                uid=uid,
+                app_id='omi-chatgpt-prod',
+                key_id=grant['id'],
+                scopes=tuple(auth_context['scopes']),
+            )
+        ),
+        db_client=mcp_oauth.db,
+    )
+    assert authorization.allowed is True
+    assert authorization.policy.archive_capability is False
 
 
 def test_consent_transaction_rejects_deletion_marker_without_oauth_writes():
