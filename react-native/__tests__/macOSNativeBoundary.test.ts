@@ -41,6 +41,28 @@ test('keeps the glass reduce-transparency fallback intact', () => {
   );
 });
 
+test('keeps the shared HUD material translucent with a semantic opaque fallback', () => {
+  const source = readNativeSource('OmiGlassPanelView.mm');
+
+  expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.14;');
+  expect(source).toContain(
+    'self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;',
+  );
+  expect(source).toContain(
+    'self.material.material = NSVisualEffectMaterialHUDWindow;',
+  );
+  expect(source).toContain(
+    'self.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
+  );
+  expect(source).toContain('self.sheen = [CALayer layer];');
+  expect(source).toContain(
+    'self.sheen.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:0.5].CGColor;',
+  );
+  expect(source).toContain(
+    'self.scrim.backgroundColor = [NSColor.controlBackgroundColor colorWithAlphaComponent:alpha].CGColor;',
+  );
+});
+
 test('treats a generation transport failure with no HTTP response as an error', () => {
   const source = readNativeSource('OmiBackendModule.mm');
   const didCompleteIndex = source.indexOf('didCompleteWithError:');
