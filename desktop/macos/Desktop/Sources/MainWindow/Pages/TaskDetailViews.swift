@@ -119,11 +119,6 @@ private struct TaskDetailTooltip: View {
           tooltipBlock("Activity", act)
         }
 
-        // Agent
-        if let status = task.agentStatus {
-          tooltipRow("Agent", status.capitalized)
-        }
-
         // All metadata (compact)
         ForEach(allMetadataEntries, id: \.key) { entry in
           if entry.value.count > 60 || entry.value.contains("\n") {
@@ -245,11 +240,6 @@ struct TaskDetailView: View {
             || metadata["current_activity"] != nil || metadata["reasoning"] != nil
           {
             contextSection
-          }
-
-          // Agent work
-          if task.agentStatus != nil || task.agentPlan != nil {
-            agentSection
           }
 
           // Sentry section
@@ -401,32 +391,6 @@ struct TaskDetailView: View {
         }
         if let convId = task.conversationId {
           detailRow("Conversation", convId)
-        }
-      }
-      .padding(OmiSpacing.md)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(Ink.rowFill)
-      )
-    }
-  }
-
-  // MARK: - Agent
-
-  private var agentSection: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
-      sectionHeader("Agent")
-
-      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        if let status = task.agentStatus {
-          detailRow("Status", status.capitalized)
-        }
-        if let files = task.agentEditedFiles, !files.isEmpty {
-          detailBlock("Edited Files", files.joined(separator: "\n"))
-        }
-        if let plan = task.agentPlan, !plan.isEmpty {
-          detailBlock("Plan", String(plan.prefix(2000)))
         }
       }
       .padding(OmiSpacing.md)

@@ -59,25 +59,22 @@ final class NotchMomentsFollowUpCountTests: XCTestCase {
       NotchMomentsCoordinator.followUpCount(tasks: tasks, baselineIds: baseline, since: nil), 1)
   }
 
-  func testReceiptRequiresMatchingActiveCanonicalTask() {
-    let observed = task("task-1", createdAt: sessionStart)
-    let canonical = task("task-1", createdAt: sessionStart)
+  // The receipt contract is gone with the write it acknowledged (I1). What the
+  // moment carries now is a proposal, and the guarantee worth pinning is that the
+  // candidate identity survives the round trip through the transcript.
 
-    XCTAssertTrue(NotchMomentsCoordinator.isReceiptConfirmation(observed, canonical))
-    XCTAssertFalse(
-      NotchMomentsCoordinator.isReceiptConfirmation(
-        observed,
-        task("different-task", createdAt: sessionStart)),
-      "a different canonical task must never acknowledge the observed cache insert")
+  func testSuggestedTaskCardRoundTripsCandidateIdentity() {
+    let encoded = SuggestedTaskChatCard.encode(
+      candidateID: "cand_abc123", description: "Send Sarah the budget")
+    let parsed = SuggestedTaskChatCard.parse(encoded)
+
+    XCTAssertEqual(parsed?.candidateID, "cand_abc123")
+    XCTAssertEqual(parsed?.description, "Send Sarah the budget")
   }
 
-  func testReceiptRejectsCompletedOrRetiredCanonicalTask() {
-    let observed = task("task-1", createdAt: sessionStart)
-    let completed = TaskActionItem(id: "task-1", description: "task-1", completed: true, createdAt: sessionStart)
-    let retired = TaskActionItem(
-      id: "task-1", description: "task-1", completed: false, createdAt: sessionStart, deleted: true)
-
-    XCTAssertFalse(NotchMomentsCoordinator.isReceiptConfirmation(observed, completed))
-    XCTAssertFalse(NotchMomentsCoordinator.isReceiptConfirmation(observed, retired))
+  func testSuggestedTaskCardRejectsOrdinaryNotificationText() {
+    XCTAssertNil(SuggestedTaskChatCard.parse("Omi noticed something"))
+    XCTAssertNil(SuggestedTaskChatCard.parse("[Suggested task id=] no candidate"))
+    XCTAssertNil(SuggestedTaskChatCard.parse("[Suggested task id=cand_1]"))
   }
 }

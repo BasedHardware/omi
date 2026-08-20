@@ -111,7 +111,6 @@ final class TaskDetailPanelTests: XCTestCase {
     let activeActions = TaskDetailPanelActionPolicy.availableActions(for: active, indentLevel: 1, hasChat: true)
     XCTAssertTrue(activeActions.contains(.toggleCompletion))
     XCTAssertTrue(activeActions.contains(.edit))
-    XCTAssertTrue(activeActions.contains(.execute))
     XCTAssertTrue(activeActions.contains(.openThread))
     XCTAssertTrue(activeActions.contains(.decreaseIndent))
     XCTAssertTrue(activeActions.contains(.increaseIndent))
@@ -119,7 +118,6 @@ final class TaskDetailPanelTests: XCTestCase {
     XCTAssertTrue(activeActions.contains(.delete))
 
     let completedActions = TaskDetailPanelActionPolicy.availableActions(for: completed, indentLevel: 3, hasChat: false)
-    XCTAssertFalse(completedActions.contains(.execute))
     XCTAssertFalse(completedActions.contains(.openThread))
     XCTAssertFalse(completedActions.contains(.increaseIndent))
     XCTAssertTrue(completedActions.contains(.toggleCompletion))

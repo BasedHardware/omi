@@ -3494,11 +3494,6 @@ struct TasksPage: View {
             viewModel.editingTaskId = taskDetailTask.id
             closeTaskDetailPanel()
           },
-          onInvestigate: taskDetailTask.completed
-            ? nil
-            : {
-              investigateTask(taskDetailTask)
-            },
           onOpenChat: chatProvider != nil && TaskAgentSettings.shared.isChatEnabled
             ? {
               closeTaskDetailPanel()
@@ -3610,13 +3605,6 @@ struct TasksPage: View {
   }
 
   /// Start a background AI investigation for a task (no panel opens)
-  private func investigateTask(_ task: TaskActionItem) {
-    log("TaskChat: investigateTask called for task \(task.id)")
-    Task {
-      await chatCoordinator.investigateInBackground(for: task)
-    }
-  }
-
   /// Open chat for a task
   private func openChatForTask(_ task: TaskActionItem) {
     log(
@@ -4374,7 +4362,6 @@ struct TasksPage: View {
                   onClearTodayDeadlines: { await viewModel.clearTodayDeadlinesForIncompleteTasks() },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
                     ? { task in openChatForTask(task) } : nil,
-                  onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
                   onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
@@ -4463,7 +4450,6 @@ struct TasksPage: View {
                   onDecrementIndent: { viewModel.decrementIndent(for: $0) },
                   onOpenChat: (chatProvider != nil && TaskAgentSettings.shared.isChatEnabled)
                     ? { task in openChatForTask(task) } : nil,
-                  onInvestigate: { task in investigateTask(task) },
                   onSelect: { task in selectTask(task) },
                   onOpenDetails: { task in openTaskDetailPanel(for: task) },
                   onHover: { viewModel.hoveredTaskId = $0 },
@@ -4657,7 +4643,6 @@ struct TaskCategorySection: View {
   var onMoveTaskBeforeTarget: ((TaskActionItem, String, TaskCategory) -> Void)?
   var onClearTodayDeadlines: (() async -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
-  var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
   var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
@@ -4823,7 +4808,6 @@ struct TaskCategorySection: View {
                   onIncrementIndent: onIncrementIndent,
                   onDecrementIndent: onDecrementIndent,
                   onOpenChat: onOpenChat,
-                  onInvestigate: onInvestigate,
                   onSelect: onSelect,
                   onOpenDetails: onOpenDetails,
                   onHover: onHover,
@@ -5218,7 +5202,6 @@ struct TaskRow: View {
   var onIncrementIndent: ((String) -> Void)?
   var onDecrementIndent: ((String) -> Void)?
   var onOpenChat: ((TaskActionItem) -> Void)?
-  var onInvestigate: ((TaskActionItem) -> Void)?
   var onSelect: ((TaskActionItem) -> Void)?
   var onOpenDetails: ((TaskActionItem) -> Void)?
   var onHover: ((String?) -> Void)?
@@ -5767,28 +5750,6 @@ struct TaskRow: View {
         isDetailPanelPresented: isTaskDetailPanelActive
       ) {
         HStack(spacing: OmiSpacing.xxs) {
-          // Execute is an explicit work intent and stays in the same
-          // durable task-backed thread as chat/investigate.
-          if !task.completed {
-            Button {
-              onInvestigate?(task)
-            } label: {
-              HStack(spacing: OmiSpacing.hairline) {
-                Image(systemName: "sparkles")
-                  .font(.system(size: 9, weight: .bold))
-                Text("Execute")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-              }
-              .foregroundColor(Ink.surface)
-              .padding(.horizontal, OmiSpacing.sm)
-              .padding(.vertical, OmiSpacing.xxs)
-              .background(Ink.primary)
-              .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help("Spawn an agent to do this")
-          }
-
           // Add date button (shown on hover when no due date)
           if task.dueAt == nil && !task.completed {
             Button {
