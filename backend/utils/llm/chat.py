@@ -2,7 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-_MAX_WORDS_HINT = "Use a maximum of 2 words per item."
+_MAX_WORDS_HINT = "Use a maximum of 3 words per item."
 from html import escape
 from typing import Any, List, Optional, cast
 from zoneinfo import ZoneInfo
@@ -49,9 +49,10 @@ def normalize_filter(value: str) -> str:
     value = value.replace('natural language processing', 'nlp')
 
     words = value.split()
-    if len(words) <= 2:
-        return value
-    return f'{words[0]} {words[-1]}'.strip()
+    # After filler/abbrev, cap at 3 words by keeping first two + last so 3-word names stay intact.
+    if len(words) > 3:
+        return f'{words[0]} {words[1]} {words[-1]}'
+    return value
 
 
 # ****************************************

@@ -43,17 +43,17 @@ def stored_items(monkeypatch):
 def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_items) -> None:
     metadata = chat._process_extracted_metadata('uid-1', prompt='ignored', reference_date='2026-08-16')
 
-    assert metadata['people'] == ['new city', 'john doe']
-    assert metadata['topics'] == ['ai research', 'great topic']
+    assert metadata['people'] == ['new york city', 'john patrick doe']
+    assert metadata['topics'] == ['ai research', 'great big topic']
     assert metadata['entities'] == ['bank america', 'nlp']
 
     assert sorted(stored_items) == [
         ('entities', 'bank america'),
         ('entities', 'nlp'),
-        ('people', 'john doe'),
-        ('people', 'new city'),
+        ('people', 'john patrick doe'),
+        ('people', 'new york city'),
         ('topics', 'ai research'),
-        ('topics', 'great topic'),
+        ('topics', 'great big topic'),
     ]
 
 
@@ -64,15 +64,17 @@ def test_stored_filters_are_normalized_at_storage_boundary(monkeypatch, stored_i
         ('   ', ''),
         ('\t\n', ''),
         ('!@#$%', ''),
-        ('  Project Apollo Mission  ', 'project mission'),
+        ('  Project Apollo Mission  ', 'project apollo mission'),
         ('Artificial Intelligence', 'ai'),
         ('Machine Learning', 'ml'),
         ('Natural Language Processing', 'nlp'),
-        ('the great big important topic', 'great topic'),
+        ('the great big important topic', 'great big topic'),
         ('Bank of America', 'bank america'),
         ('University of California', 'university california'),
-        ("New York City!", 'new city'),
-        ('John Patrick Doe', 'john doe'),
+        ("New York City!", 'new york city'),
+        ('John Patrick Doe', 'john patrick doe'),
+        ('Martin Luther King', 'martin luther king'),
+        ('John Michael Patrick Doe', 'john michael doe'),
         ('東京の会議', '東京の会議'),
         ('José Álvarez', 'josé álvarez'),
         ('Jean-Luc Picard', 'jean-luc picard'),
