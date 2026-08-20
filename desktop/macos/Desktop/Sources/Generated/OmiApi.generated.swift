@@ -14167,7 +14167,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func getMessagesV2MessagesGet(client: OmiApiClient, pluginId: String? = nil, appId: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
+  public static func getMessagesV2MessagesGet(client: OmiApiClient, pluginId: String? = nil, appId: String? = nil, chatSessionId: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [OmiAnyCodable] {
     let _path = "/v2/messages"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14178,6 +14178,9 @@ public enum OmiAPI {
     }
     if let appId {
       queryItems.append(URLQueryItem(name: "app_id", value: String(appId)))
+    }
+    if let chatSessionId {
+      queryItems.append(URLQueryItem(name: "chat_session_id", value: String(chatSessionId)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14199,7 +14202,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode([OmiAnyCodable].self, from: data)
   }
 
-  public static func sendMessageV2MessagesPost(client: OmiApiClient, pluginId: String? = nil, appId: String? = nil, xAppPlatform: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func sendMessageV2MessagesPost(client: OmiApiClient, pluginId: String? = nil, appId: String? = nil, chatSessionId: String? = nil, xAppPlatform: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v2/messages"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14210,6 +14213,9 @@ public enum OmiAPI {
     }
     if let appId {
       queryItems.append(URLQueryItem(name: "app_id", value: String(appId)))
+    }
+    if let chatSessionId {
+      queryItems.append(URLQueryItem(name: "chat_session_id", value: String(chatSessionId)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -14233,7 +14239,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func clearChatMessagesV2MessagesDelete(client: OmiApiClient, appId: String? = nil, pluginId: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
+  public static func clearChatMessagesV2MessagesDelete(client: OmiApiClient, appId: String? = nil, pluginId: String? = nil, chatSessionId: String? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/messages"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -14244,6 +14250,9 @@ public enum OmiAPI {
     }
     if let pluginId {
       queryItems.append(URLQueryItem(name: "plugin_id", value: String(pluginId)))
+    }
+    if let chatSessionId {
+      queryItems.append(URLQueryItem(name: "chat_session_id", value: String(chatSessionId)))
     }
     if !queryItems.isEmpty { components.queryItems = queryItems }
     guard let url = components.url else { throw OmiApiError.invalidURL }

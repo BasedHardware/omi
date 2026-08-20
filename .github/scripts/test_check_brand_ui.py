@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import unittest
 
-from check_brand_ui import count_purple, is_ui_source
+from check_brand_ui import count_purple, is_purple_hex, is_ui_source
 
 
 class BrandUiTests(unittest.TestCase):
@@ -63,6 +63,35 @@ class BrandUiTests(unittest.TestCase):
 
     def test_counts_css_color_purple(self) -> None:
         self.assertGreaterEqual(count_purple("color: purple;"), 1)
+
+    def test_counts_tailwind_ramps_that_are_purple_by_sight_not_by_name(self) -> None:
+        # These shipped past the check: the web marketplace had a violet promo
+        # card, violet and indigo category themes, and violet capability chips.
+        self.assertGreaterEqual(count_purple('className="bg-violet-500 text-indigo-300"'), 2)
+        self.assertGreaterEqual(count_purple('className="from-fuchsia-600"'), 1)
+
+    def test_hex_is_judged_by_hue_not_by_membership(self) -> None:
+        # #6C2BD9 is one digit from the listed #6D28D9 and shipped the app-store
+        # developer banner's purple gradient past a green check.
+        for digits in ("6C2BD9", "2D1B69", "7C3AED", "A855F7", "C4B5FD", "D946EF"):
+            self.assertTrue(is_purple_hex(digits), digits)
+
+    def test_counts_css_swift_and_dart_indigo_literals(self) -> None:
+        self.assertEqual(count_purple("#6366F1"), 1)
+        self.assertEqual(count_purple("Color(hex: 0x6366F1)"), 1)
+        self.assertEqual(count_purple("Color(0xFF6366F1)"), 1)
+
+    def test_hue_test_leaves_blues_greys_and_pinks_alone(self) -> None:
+        # A false positive here blocks unrelated PRs, so the negative cases
+        # matter as much as the positive ones. Includes the app palette's own
+        # backgrounds and the blues sitting nearest the purple boundary.
+        for digits in ("3B82F6", "6C8EEF", "2563EB", "818CF6", "EC4899", "0F0F0F", "1F1F25", "35343B", "FFFFFF"):
+            self.assertFalse(is_purple_hex(digits), digits)
+
+    def test_near_black_is_neutral_whatever_hue_it_computes(self) -> None:
+        # #0D0D0F is the content pane's fill and sits at a blue-purple hue with
+        # almost no saturation; counting it would make the pane unfixable.
+        self.assertFalse(is_purple_hex("0D0D0F"))
 
 
 if __name__ == "__main__":

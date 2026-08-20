@@ -733,6 +733,24 @@
       ]
     },
     {
+      "collectionGroup": "chat_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "plugin_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "conversation_finalization_jobs",
       "queryScope": "COLLECTION",
       "fields": [

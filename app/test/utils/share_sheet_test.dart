@@ -32,9 +32,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: Center(
-              child: SizedBox(key: key, width: 48, height: 24),
-            ),
+            body: Center(child: SizedBox(key: key, width: 48, height: 24)),
           ),
         ),
       );
@@ -53,9 +51,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: Center(
-              child: SizedBox(key: key, width: 0, height: 0),
-            ),
+            body: Center(child: SizedBox(key: key, width: 0, height: 0)),
           ),
         ),
       );
