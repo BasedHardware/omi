@@ -3008,9 +3008,6 @@ const styles = StyleSheet.create({
   focusRing: {
     borderColor: '#78bda5',
     borderWidth: 1,
-    shadowColor: '#45b79b',
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
   },
   navText: {color: '#b0b0b0', fontSize: 14, fontWeight: '600'},
   navTextCollapsed: {opacity: 0, width: 0},
@@ -3091,7 +3088,7 @@ const styles = StyleSheet.create({
     maxWidth: 900,
     minHeight: 64,
     paddingLeft: 18,
-    paddingRight: 8,
+    paddingRight: 18,
     paddingVertical: 12,
   },
   macHomeResultsPanel: {
