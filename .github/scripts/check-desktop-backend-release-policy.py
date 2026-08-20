@@ -86,14 +86,56 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
     return errors
 
 def _validate_private_network_egress(text: str, *, workflow: str, request_step: str) -> list[str]:
+    """Pin the desktop backend to the backend VPC that carries the LLM gateway.
+
+    This used to require ``--network=default``, which dated from the retired
+    per-user Agent VMs. The LLM gateway is only published on an internal L7
+    load balancer inside ``CLOUD_RUN_VPC_NETWORK`` and that VPC has no peering
+    with ``default``, so the desktop backend could not reach it and silently
+    served managed chat straight from Anthropic. Keep the service on the same
+    VPC as the other backend Cloud Run services.
+    """
     errors: list[str] = []
     request_block = _step_block(text, request_step)
     if request_block is None:
         errors.append(f"{workflow}: missing request service deployment step for private network egress")
         return errors
-    for fragment in ("--network=default", "--subnet=default", "--vpc-egress=private-ranges-only"):
+    for fragment in (
+        "--network=${{ vars.CLOUD_RUN_VPC_NETWORK }}",
+        "--subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}",
+        "--vpc-egress=private-ranges-only",
+    ):
         if fragment not in request_block:
             errors.append(f"{workflow}: request service missing private network egress contract {fragment!r}")
+    return errors
+
+
+def _validate_llm_gateway_wiring(text: str, *, workflow: str, request_step: str) -> list[str]:
+    """Keep managed desktop chat on the gateway instead of a direct provider.
+
+    ``should_route_features_through_gateway`` treats an unset feature mode as
+    "direct", so omitting these bindings does not fail loudly - it bills
+    Anthropic. It also raises outside dev/local when the feature mode is on
+    without ``ALLOW_PROD_FEATURE_MODE`` and a URL, so the three must land
+    together. The URL is resolved by the gateway serving gate, which fails the
+    deploy when the data plane is not actually serving.
+    """
+    errors: list[str] = []
+    if "verify-llm-gateway-serving.py" not in text:
+        errors.append(f"{workflow}: missing LLM gateway serving gate before deployment")
+    request_block = _step_block(text, request_step)
+    if request_block is None:
+        errors.append(f"{workflow}: missing request service deployment step for LLM gateway wiring")
+        return errors
+    for fragment in (
+        "OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}",
+        "OMI_LLM_GATEWAY_FEATURE_MODE=gateway",
+        "OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true",
+        "OMI_LLM_CHAT_AGENT_ROUTE=gateway",
+        "OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
+    ):
+        if fragment not in request_block:
+            errors.append(f"{workflow}: request service missing LLM gateway binding {fragment!r}")
     return errors
 
 
@@ -172,6 +214,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
     )
     errors.extend(_validate_private_network_egress(text, workflow=workflow, request_step=request_step))
+    errors.extend(_validate_llm_gateway_wiring(text, workflow=workflow, request_step=request_step))
     if production:
         for fragment in (
             "on:\n  workflow_dispatch:",

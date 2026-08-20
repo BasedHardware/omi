@@ -50,15 +50,17 @@ void main() {
       );
 
       expect(await socket.connect(), isTrue);
-      primary.emitMessage(jsonEncode([
-        {'text': 'private audio, shared transcript'}
-      ]));
+      primary.emitMessage(
+        jsonEncode([
+          {'text': 'private audio, shared transcript'},
+        ]),
+      );
 
       expect(secondary.sent, hasLength(1));
       expect(jsonDecode(secondary.sent.single as String), {
         'type': 'suggested_transcript',
         'segments': [
-          {'text': 'private audio, shared transcript'}
+          {'text': 'private audio, shared transcript'},
         ],
         'stt_provider': 'customLive',
       });
@@ -84,10 +86,7 @@ void main() {
     test('keeps forwarding input frames by default', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
-      final socket = CompositeTranscriptionSocket(
-        primarySocket: primary,
-        secondarySocket: secondary,
-      );
+      final socket = CompositeTranscriptionSocket(primarySocket: primary, secondarySocket: secondary);
 
       expect(await socket.connect(), isTrue);
       final audio = Uint8List.fromList([4, 5, 6]);
@@ -104,12 +103,7 @@ void main() {
         sendRawAudioToOmi: false,
       );
 
-      final service = TranscriptSocketServiceFactory.createFromCustomConfig(
-        16000,
-        BleAudioCodec.pcm16,
-        'en',
-        config,
-      );
+      final service = TranscriptSocketServiceFactory.createFromCustomConfig(16000, BleAudioCodec.pcm16, 'en', config);
 
       expect(service.socket, isA<CompositeTranscriptionSocket>());
       expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
@@ -148,10 +142,7 @@ void main() {
         sendRawAudioToOmi: false,
       );
 
-      expect(
-        TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.pcm16, config),
-        isFalse,
-      );
+      expect(TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.pcm16, config), isFalse);
     });
   });
 }

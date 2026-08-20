@@ -947,6 +947,9 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
     metricsByID[connectorID] = metrics
     connectorDidSync.send(connectorID)
+    // Clear this integration's nudge history so a later disconnect is allowed
+    // to make the pitch again instead of finding a spent lifetime budget.
+    IntegrationNudgeCoordinator.shared.noteConnected(route: .importConnector(connectorID))
   }
 
   private func clearStoredMetrics(for connectorID: String) {
@@ -1151,6 +1154,28 @@ final class ImportConnectorStatusStore: ObservableObject {
     guard var metrics = metricsByID["apple-notes"], metrics.lastSyncedAt != nil else { return }
     metrics.requiresVerification = true
     metricsByID["apple-notes"] = metrics
+  }
+
+  /// Whether this connector has ever completed an import for the current owner.
+  ///
+  /// Deliberately different from `snapshot(for:).isConnected`, which reports
+  /// *currently usable* access: Apple Notes reads as not-connected until a live
+  /// re-import re-proves its revocable folder grant. That is right for a status
+  /// row and wrong for deciding whether to pitch the integration — a user who
+  /// imported Notes in March has already heard the pitch and taken it.
+  /// Reads the persisted keys rather than the in-memory snapshot, because the
+  /// caller is long-lived: a retained store would keep answering from the
+  /// metrics it loaded at init and would go on offering an integration the user
+  /// connected from the Apps tab a minute ago.
+  func hasEverSynced(connectorID: String) -> Bool {
+    guard sessionUserID != nil else { return false }
+    let lastSyncedAtKey = storageKey(prefix: lastSyncedAtKeyPrefix, connectorID: connectorID)
+    if defaults.object(forKey: lastSyncedAtKey) != nil, defaults.double(forKey: lastSyncedAtKey) > 0 {
+      return true
+    }
+    guard manualConnectorIDs.contains(connectorID) else { return false }
+    let memoryCountKey = storageKey(prefix: memoryCountKeyPrefix, connectorID: connectorID)
+    return defaults.object(forKey: memoryCountKey) != nil && defaults.integer(forKey: memoryCountKey) > 0
   }
 
   private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
@@ -1475,6 +1500,10 @@ struct ImportConnectorSheet: View {
 
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+          if let entry = IntegrationNudgeCatalog.importEntry(connectorID: connector.id) {
+            IntegrationValueSection(entry: entry)
+          }
+
           if connector.id == "chatgpt" || connector.id == "claude" {
             memoryImportContent
           } else {
@@ -1716,7 +1745,8 @@ struct ImportConnectorSheet: View {
     ConnectorImportRunner.shared.start(
       connectorID: connectorID,
       progressTitle: title,
-      progressDetail: detail
+      progressDetail: detail,
+      surface: IntegrationConnectOrigin.consumeSurface(for: .importConnector(connectorID))
     ) { progress in
       switch await operation(progress) {
       case .success(let result, let message):

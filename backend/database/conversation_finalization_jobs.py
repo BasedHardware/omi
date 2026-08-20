@@ -13,10 +13,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
 from database._client import document_id_from_seed, get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_index_registry import MEETING_RECEIPTS_DUE_QUERY
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -37,6 +39,8 @@ DEFAULT_RECONCILE_STALE_SECONDS = 300
 # job, and its request thread is not killed by the HTTP timeout, so the orphan
 # window must exceed any plausible live synchronous process_conversation run.
 DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
+MEETING_RECEIPT_SCHEMA_VERSION = 1
+MEETING_RECEIPT_RECONCILE_AFTER = timedelta(minutes=10)
 
 
 class FinalizationIntent(TypedDict):
@@ -731,7 +735,6 @@ def _mark_finalization_fanout_completed_txn(
     dispatch_generation: int,
     lease_epoch: int,
     now: datetime,
-    meeting_treatment_eligible: bool,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -746,7 +749,6 @@ def _mark_finalization_fanout_completed_txn(
         {
             'fanout_status': 'completed',
             'fanout_completed_at': now,
-            'meeting_treatment_eligible': meeting_treatment_eligible,
             'updated_at': now,
         },
     )
@@ -758,7 +760,6 @@ def mark_finalization_fanout_completed(
     dispatch_generation: int,
     lease_epoch: int,
     *,
-    meeting_treatment_eligible: bool,
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
@@ -770,7 +771,6 @@ def mark_finalization_fanout_completed(
         dispatch_generation,
         lease_epoch,
         _now(),
-        meeting_treatment_eligible,
     )
 
 
@@ -919,6 +919,301 @@ def get_finalization_job(job_id: str, *, firestore_client: Any = None) -> dict[s
     if not getattr(snapshot, 'exists', False):
         return None
     return snapshot.to_dict() or {}
+
+
+def _record_meeting_receipt_txn(
+    transaction: Any,
+    conversation_ref: Any,
+    jobs_collection: Any,
+    uid: str,
+    conversation_id: str,
+    finalization_job_id: str | None,
+    eligible: bool,
+    reason: str,
+    duration_s: float,
+    dedup_speech_s: float,
+    now: datetime,
+) -> dict[str, Any]:
+    """Create the finalization-job receipt once and project its verdict to the conversation."""
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(conversation_snapshot, 'exists', False):
+        return {'status': 'missing'}
+    conversation = conversation_snapshot.to_dict() or {}
+    existing_job_id = conversation.get('finalization_job_id')
+    job_id = (
+        finalization_job_id
+        if isinstance(finalization_job_id, str) and finalization_job_id
+        else (
+            existing_job_id
+            if isinstance(existing_job_id, str) and existing_job_id
+            else _job_id(uid, conversation_id, int(conversation.get('finalization_revision') or 0) + 1)
+        )
+    )
+    job_ref = jobs_collection.document(job_id)
+    job_snapshot = job_ref.get(transaction=transaction)
+    job = (job_snapshot.to_dict() or {}) if getattr(job_snapshot, 'exists', False) else {}
+    if job and (job.get('uid') != uid or job.get('conversation_id') != conversation_id):
+        return {'status': 'identity_mismatch'}
+
+    receipt = {
+        'meeting_receipt_schema_version': MEETING_RECEIPT_SCHEMA_VERSION,
+        'meeting_treatment_eligible': eligible,
+        'meeting_treatment_reason': reason,
+        'meeting_duration_s': duration_s,
+        'meeting_dedup_speech_s': dedup_speech_s,
+        'meeting_receipt_created_at': now,
+        'meeting_receipt_updated_at': now,
+        'meeting_receipt_reconcile_after_at': now + MEETING_RECEIPT_RECONCILE_AFTER,
+        'meeting_receipt_intent_id': None,
+        'meeting_receipt_intent_persisted_at': None,
+        'meeting_receipt_materialized_at': None,
+    }
+    if job.get('meeting_receipt_schema_version') == MEETING_RECEIPT_SCHEMA_VERSION:
+        receipt = {
+            key: job.get(key)
+            for key in (
+                'meeting_receipt_schema_version',
+                'meeting_treatment_eligible',
+                'meeting_treatment_reason',
+                'meeting_duration_s',
+                'meeting_dedup_speech_s',
+                'meeting_receipt_created_at',
+                'meeting_receipt_updated_at',
+                'meeting_receipt_reconcile_after_at',
+                'meeting_receipt_intent_id',
+                'meeting_receipt_intent_persisted_at',
+                'meeting_receipt_materialized_at',
+            )
+            if key in job
+        }
+    elif job:
+        transaction.update(job_ref, receipt)
+    else:
+        revision = int(conversation.get('finalization_revision') or 0) + 1
+        transaction.set(
+            job_ref,
+            {
+                'schema_version': 1,
+                'uid': uid,
+                'conversation_id': conversation_id,
+                'finalization_revision': revision,
+                'status': 'completed',
+                'requires_byok': False,
+                'force_process': False,
+                'fanout_key': f'conversation:{conversation_id}:finalization',
+                'fanout_status': 'completed',
+                'fanout_completed_at': now,
+                'finalization_outcome': 'success',
+                'terminal_outcome': 'success',
+                'terminal_at': now,
+                'dispatch_generation': 1,
+                'attempt_count': 1,
+                'task_retry_count': 0,
+                'created_at': now,
+                'updated_at': now,
+                **receipt,
+            },
+        )
+
+    conversation_updates = {
+        'finalization_job_id': job_id,
+        'meeting_treatment_eligible': bool(receipt['meeting_treatment_eligible']),
+        'meeting_treatment_reason': receipt['meeting_treatment_reason'],
+        'meeting_duration_s': receipt['meeting_duration_s'],
+        'meeting_dedup_speech_s': receipt['meeting_dedup_speech_s'],
+    }
+    if not existing_job_id:
+        conversation_updates['finalization_revision'] = int(conversation.get('finalization_revision') or 0) + 1
+        conversation_updates['finalization_status'] = 'completed'
+    transaction.update(conversation_ref, conversation_updates)
+    return {'status': 'recorded', 'job_id': job_id, **receipt}
+
+
+def record_meeting_receipt(
+    uid: str,
+    conversation_id: str,
+    *,
+    finalization_job_id: str | None,
+    eligible: bool,
+    reason: str,
+    duration_s: float,
+    dedup_speech_s: float,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_record_meeting_receipt_txn)
+    return transactional(
+        transaction,
+        _conversation_ref(client, uid, conversation_id),
+        client.collection(FINALIZATION_JOBS_COLLECTION),
+        uid,
+        conversation_id,
+        finalization_job_id,
+        eligible,
+        reason,
+        duration_s,
+        dedup_speech_s,
+        _now(),
+    )
+
+
+def mark_meeting_receipt_intent_persisted(job_id: str, intent_id: str, *, firestore_client: Any = None) -> bool:
+    client = _client(firestore_client)
+    job_ref = _job_ref(client, job_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> bool:
+        snapshot = job_ref.get(transaction=write_transaction)
+        if not getattr(snapshot, 'exists', False):
+            return False
+        job = snapshot.to_dict() or {}
+        existing = job.get('meeting_receipt_intent_id')
+        if isinstance(existing, str):
+            return existing == intent_id
+        now = _now()
+        write_transaction.update(
+            job_ref,
+            {
+                'meeting_receipt_intent_id': intent_id,
+                'meeting_receipt_intent_persisted_at': now,
+                'meeting_receipt_updated_at': now,
+            },
+        )
+        return True
+
+    return apply(transaction)
+
+
+def mark_meeting_receipt_materialized(
+    uid: str,
+    conversation_id: str,
+    intent_id: str,
+    *,
+    materialized_at: datetime,
+    firestore_client: Any = None,
+) -> bool:
+    client = _client(firestore_client)
+    conversation_ref = _conversation_ref(client, uid, conversation_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> bool:
+        conversation_snapshot = conversation_ref.get(transaction=write_transaction)
+        if not getattr(conversation_snapshot, 'exists', False):
+            return False
+        job_id = (conversation_snapshot.to_dict() or {}).get('finalization_job_id')
+        if not isinstance(job_id, str) or not job_id:
+            return False
+        job_ref = _job_ref(client, job_id)
+        job_snapshot = job_ref.get(transaction=write_transaction)
+        if not getattr(job_snapshot, 'exists', False):
+            return False
+        job = job_snapshot.to_dict() or {}
+        if job.get('meeting_receipt_intent_id') != intent_id:
+            return False
+        if job.get('meeting_receipt_materialized_at') is None:
+            write_transaction.update(
+                job_ref,
+                {
+                    'meeting_receipt_materialized_at': materialized_at,
+                    'meeting_receipt_updated_at': materialized_at,
+                },
+            )
+        return True
+
+    return apply(transaction)
+
+
+def get_meeting_receipt_reconcile_candidates(
+    *, limit: int = 100, now: datetime | None = None, firestore_client: Any = None
+) -> list[dict[str, Any]]:
+    """Return eligible receipts old enough to repair and still missing an intent id."""
+    client = _client(firestore_client)
+    cutoff = now or _now()
+    query = MEETING_RECEIPTS_DUE_QUERY.build(
+        client.collection(FINALIZATION_JOBS_COLLECTION),
+        {
+            'meeting_treatment_eligible': True,
+            'meeting_receipt_intent_id': None,
+            'meeting_receipt_reconcile_after_at': cutoff,
+        },
+        field_filter_factory=FieldFilter,
+    )
+    query = query.limit(max(1, min(limit, 100)))
+    candidates: list[dict[str, Any]] = []
+    for snapshot in query.stream():
+        job = snapshot.to_dict() or {}
+        candidates.append(job | {'job_id': snapshot.id})
+    return candidates
+
+
+def get_meeting_receipt_backfill_candidates(
+    *,
+    limit: int = 100,
+    max_scan: int = 2000,
+    resume_after_path: str | None = None,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Scan completed conversations fairly for legacy desktop meetings without receipts."""
+    client = _client(firestore_client)
+    page_size = max(1, min(limit, 100))
+    collected: list[dict[str, Any]] = []
+    scanned = 0
+    last_path: str | None = None
+    exhausted = False
+    cursor_snapshot: Any = None
+    if resume_after_path:
+        fetched = client.document(resume_after_path).get()
+        if getattr(fetched, 'exists', False):
+            cursor_snapshot = fetched
+
+    while len(collected) < limit and scanned < max_scan:
+        query = client.collection_group(CONVERSATIONS_COLLECTION).where(
+            filter=firestore.FieldFilter('status', '==', 'completed')
+        )
+        query = query.limit(page_size)
+        if cursor_snapshot is not None:
+            query = query.start_after(cursor_snapshot)
+        page = list(query.stream())
+        if not page:
+            exhausted = True
+            break
+        for snapshot in page:
+            scanned += 1
+            if scanned > max_scan:
+                break
+            last_path = snapshot.reference.path
+            uid = _uid_from_conversation_path(snapshot.reference.path)
+            if uid is None:
+                continue
+            data = snapshot.to_dict() or {}
+            external_data = data.get('external_data') or {}
+            source = data.get('source')
+            source = getattr(source, 'value', source)
+            if (
+                source != 'desktop'
+                or not isinstance(external_data, Mapping)
+                or external_data.get('conversation_role') != 'meeting'
+                or data.get('meeting_treatment_reason')
+            ):
+                continue
+            collected.append({'uid': uid, 'conversation_id': snapshot.id, 'conversation': data | {'id': snapshot.id}})
+            if len(collected) >= limit:
+                break
+        if scanned > max_scan:
+            break
+        if len(page) < page_size:
+            exhausted = True
+            break
+        cursor_snapshot = page[-1]
+
+    return {
+        'candidates': collected,
+        'resume_after_path': None if exhausted else last_path,
+        'exhausted': exhausted,
+    }
 
 
 def _claim_finalization_replay_txn(
@@ -1106,6 +1401,7 @@ def get_stale_processing_orphan_candidates(
 
 STALE_PROCESSING_SWEEP_STATE_COLLECTION = 'conversation_recovery_state'
 STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
+MEETING_RECEIPT_SWEEP_STATE_DOC = 'meeting_receipt_backfill_sweep'
 
 
 def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
@@ -1173,6 +1469,36 @@ def advance_stale_processing_sweep_cursor(
     return transactional(
         transaction,
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC),
+        expected_generation,
+        new_resume_after_path,
+        _now(),
+    )
+
+
+def get_meeting_receipt_backfill_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+    client = _client(firestore_client)
+    snapshot = (
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(MEETING_RECEIPT_SWEEP_STATE_DOC).get()
+    )
+    if not getattr(snapshot, 'exists', False):
+        return {'resume_after_path': None, 'generation': 0}
+    data = snapshot.to_dict() or {}
+    path = data.get('resume_after_path')
+    return {
+        'resume_after_path': path if isinstance(path, str) else None,
+        'generation': int(data.get('generation', 0)),
+    }
+
+
+def advance_meeting_receipt_backfill_cursor(
+    expected_generation: int, new_resume_after_path: str | None, *, firestore_client: Any = None
+) -> bool:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_advance_stale_processing_sweep_cursor_txn)
+    return transactional(
+        transaction,
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(MEETING_RECEIPT_SWEEP_STATE_DOC),
         expected_generation,
         new_resume_after_path,
         _now(),

@@ -115,6 +115,7 @@ final class AnalyticsEventTests: XCTestCase {
         allowed += AnalyticsEvent.PermissionState.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.CaptureSource.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.Surface.allCases.map(\.rawValue)
+        allowed += AnalyticsEvent.ArtifactKind.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.UpdateOutcome.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.FallbackReason.allCases.map(\.rawValue)
         allowed += AnalyticsEvent.CountBucket.allCases.map(\.rawValue)
@@ -170,7 +171,7 @@ final class AnalyticsEventTests: XCTestCase {
             .onboardingStep(index: 0, of: 1), .onboardingFinished(secondsElapsed: 0),
             .accountStateChanged(signedIn: false), .captureStateChanged(source: .screen, live: true),
             .gestureFired, .surfaceOpened(.settings), .searchRan(resultCountBucket: .zero),
-            .updateOutcome(.upToDate),
+            .firstArtifact(.conversation), .updateOutcome(.upToDate),
             .fallback(area: .capture, outcome: .degraded, reason: .offline),
         ]
         let names = representatives.map(\.name)
@@ -289,6 +290,239 @@ final class AnalyticsFallbackBridgeTests: XCTestCase {
     }
 }
 
+/// **Refusal 2, asserted from inside the process it failed to refuse.**
+///
+/// This is not a table test about a hypothetical build. The test runner *is* the failure: `swift
+/// test` runs under `com.apple.dt.xctest.tool`, `ContextPaths.ownIdentifier` falls back to the
+/// shipping identifier for any process that is not ours, and `isEnabled` — asking
+/// `!isDevelopmentBuild` — therefore answered true here. Every run of this suite spooled events to
+/// the real `analytics-spool.json` and POSTed them to production PostHog: 92 of them by the time it
+/// was noticed, all of `cfc_gesture_fired` and two thirds of `cfc_search_ran`.
+///
+/// So the strongest available seam is the one below — `isEnabled` read in the process that must be
+/// refused, rather than a rule read anywhere else.
+final class AnalyticsBuildRefusalTests: XCTestCase {
+
+    func testTheTestProcessItselfIsRefused() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CONTEXT_ANALYTICS_FORCE"] == "1",
+            "the override is deliberately absolute, and a run under it is a run that means to send")
+
+        XCTAssertFalse(
+            ContextAnalytics.isEnabled,
+            """
+            This process reports \(Bundle.main.bundleIdentifier ?? "nil") and is not the shipping \
+            app, so nothing it does may reach production analytics.
+            """)
+    }
+}
+
+/// **`cfc_onboarding_finished` has to survive the relaunch onboarding itself causes.**
+///
+/// Granting Screen Recording only takes effect in a new process, so the flow restarts the app from
+/// its own middle — the card's "Restart to finish", and macOS's "Quit & Reopen". The start instant
+/// used to be an in-memory static set only by `recordOnboardingStep`, so the process that actually
+/// reached `.done` frequently had no step transition of its own and `recordOnboardingFinished`
+/// returned having sent nothing. Live evidence: four of the five reporting installs have permissions
+/// granted and exactly one of them ever sent the event.
+///
+/// `recordOnboardingFinished` is `record(onboardingFinishedEvent())` and nothing else, so driving
+/// the decision over a scratch domain is driving the production rule — and it is the only way to
+/// drive it, because the suite is refused by `isEnabled`, as it must be.
+final class OnboardingCompletionReportTests: XCTestCase {
+
+    /// A scratch domain per test: the machine running the tests is the machine the app runs on, and
+    /// these are the very keys that decide whether a real install has already reported.
+    private func scratch() throws -> (UserDefaults, () -> Void) {
+        let suite = "com.omi.context-for-claude.OnboardingCompletionReportTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        return (defaults, { UserDefaults.standard.removePersistentDomain(forName: suite) })
+    }
+
+    private func seconds(_ event: AnalyticsEvent?) -> Int? {
+        guard case let .onboardingFinished(elapsed)? = event else { return nil }
+        return elapsed
+    }
+
+    /// The defect, driven: the first step happens in one process, the finish in another, and the
+    /// second process has nothing in memory from the first.
+    func testTheCompletionIsReportedByTheProcessThatComesBackFromTheGrant() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let started = Date(timeIntervalSince1970: 1_760_000_000)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started)
+
+        // — the Screen Recording grant ends the process here —
+
+        let event = ContextAnalytics.onboardingFinishedEvent(
+            in: defaults, at: started.addingTimeInterval(240))
+        XCTAssertEqual(event?.name, "cfc_onboarding_finished")
+        XCTAssertEqual(
+            seconds(event), 240,
+            "elapsed is measured from the first step, which was two processes ago and still counts")
+    }
+
+    /// Once per install, not once per run. The reported flag is deliberately not one of the three
+    /// records `OnboardingReset` spends, so "Run setup again" cannot add a second install-shaped
+    /// completion to the series.
+    func testNoSecondCompletionIsReportedHoweverManyTimesSetupIsRun() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let started = Date(timeIntervalSince1970: 1_760_000_000)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started)
+        XCTAssertNotNil(
+            ContextAnalytics.onboardingFinishedEvent(in: defaults, at: started.addingTimeInterval(90)))
+
+        // Settings → "Run setup again", walked all the way through a second time.
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started.addingTimeInterval(3_600))
+        XCTAssertNil(
+            ContextAnalytics.onboardingFinishedEvent(in: defaults, at: started.addingTimeInterval(3_700)),
+            "a second completion from one install reads as a second install that set itself up")
+        // And a relaunch in the middle of *that* run reports nothing either.
+        XCTAssertNil(ContextAnalytics.onboardingFinishedEvent(in: defaults, at: started))
+    }
+
+    /// A finish with no recorded start is the one case that must stay silent: an elapsed time
+    /// measured from nothing would be a zero, and a floor of zero-second setups is worse than a gap.
+    func testARunThatNeverRecordedAStepReportsNothing() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        XCTAssertNil(ContextAnalytics.onboardingFinishedEvent(in: defaults, at: Date()))
+    }
+
+    /// The stamp belongs to the run, so a later step must not move it — otherwise the elapsed time
+    /// shrinks to whatever the last card cost and the funnel's most useful number is a lie.
+    func testTheStartInstantIsTheFirstStepAndIsNotRestampedByLaterOnes() throws {
+        let (defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let started = Date(timeIntervalSince1970: 1_760_000_000)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started)
+        ContextAnalytics.noteOnboardingStarted(in: defaults, at: started.addingTimeInterval(120))
+
+        XCTAssertEqual(
+            seconds(ContextAnalytics.onboardingFinishedEvent(
+                in: defaults, at: started.addingTimeInterval(300))),
+            300)
+    }
+}
+
+/// **Activation: did this install ever store anything at all.**
+///
+/// Nothing in the schema answered that before `cfc_first_artifact`. `cfc_capture_state` reports a
+/// microphone being switched on, which is not a row landing; `cfc_daily_active` reports capture
+/// minutes, which look the same on an install's hundredth day as on its first. An install that
+/// captured all day and one that captured nothing were indistinguishable, and the product's
+/// activation metric cannot be computed from anything else here.
+///
+/// The flag is read and spent by `firstArtifactEvent`, which is what `recordFirstArtifact` reports
+/// through — so "did it report?" is asked below as "is the flag spent?". The suite is refused by
+/// `isEnabled`, as it must be, which is exactly why the decision is the seam rather than the sink.
+final class FirstArtifactTests: XCTestCase {
+
+    private struct WriteFailed: Error {}
+
+    /// The suite *name* comes back too: a relaunch, for this event, is nothing more than a second
+    /// `UserDefaults` object opened over the same persistent domain.
+    private func scratch() throws -> (String, UserDefaults, () -> Void) {
+        let suite = "com.omi.context-for-claude.FirstArtifactTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        return (suite, defaults, { UserDefaults.standard.removePersistentDomain(forName: suite) })
+    }
+
+    func testTheFirstStoredArtifactIsReportedWithWhatItWas() throws {
+        let (_, defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        let event = ContextAnalytics.firstArtifactEvent(.screen, in: defaults)
+        XCTAssertEqual(event?.name, "cfc_first_artifact")
+        XCTAssertEqual(event?.properties["kind"], .string("screen"))
+    }
+
+    /// Once per install, over the write path itself — and across the relaunch, which is a second
+    /// `UserDefaults` object over the same domain because that is all a relaunch is here.
+    func testAnInstallReportsItsFirstArtifactExactlyOnce() throws {
+        let (suite, defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        var writes = 0
+        ContextAnalytics.recordFirstArtifact(.conversation, in: defaults) { writes += 1 }
+        ContextAnalytics.recordFirstArtifact(.screen, in: defaults) { writes += 1 }
+        XCTAssertEqual(writes, 2, "the write itself always happens; only the report is once")
+
+        XCTAssertNil(
+            ContextAnalytics.firstArtifactEvent(.conversation, in: defaults),
+            "the first stored artifact spent the flag, so nothing after it may report")
+
+        // A day of capture later, in a process that has been restarted since.
+        let afterRelaunch = try XCTUnwrap(UserDefaults(suiteName: suite))
+        ContextAnalytics.recordFirstArtifact(.screen, in: afterRelaunch) { writes += 1 }
+        XCTAssertEqual(writes, 3)
+        XCTAssertNil(
+            ContextAnalytics.firstArtifactEvent(.screen, in: afterRelaunch),
+            "the flag is on disk, so the install stays activated exactly once across a relaunch")
+    }
+
+    /// **An attempt is not an artifact.** `EngineStore` catches and logs a failed insert, so an
+    /// install whose writes all fail would otherwise be counted as activated on the strength of
+    /// having tried — and the flag it spent could never be recovered.
+    func testAWriteThatFailedIsNotAnArtifact() throws {
+        let (_, defaults, cleanup) = try scratch()
+        defer { cleanup() }
+
+        XCTAssertThrowsError(
+            try ContextAnalytics.recordFirstArtifact(.screen, in: defaults) { throw WriteFailed() })
+
+        XCTAssertNotNil(
+            ContextAnalytics.firstArtifactEvent(.screen, in: defaults),
+            "nothing was stored, so the install's first artifact is still ahead of it")
+    }
+}
+
+/// **A static tripwire, and labelled as one: it reads the app's source text rather than running it.**
+///
+/// The rule it guards is the one `AnalyticsEvent.Surface` states in prose — a case nobody emits
+/// produces a permanently empty series, which reads as "nobody opens it" rather than "nobody measured
+/// it", and the first of those looks like a finding. `.search` was exactly that: the app's primary
+/// surface, in the enum since the schema was written, with no emitter anywhere.
+///
+/// It is a tripwire because the behavioural version is not available here. The emit is inside
+/// `SearchBarWindow.present()`, and a test process has no display to put a panel on and cannot make
+/// one key — the reason `HotkeyToggleTests` drives the chord through injected closures instead. So
+/// this checks that an emitter *exists*, which is the whole of what went wrong, and claims nothing
+/// about it firing.
+final class SurfaceEmitterTripwireTests: XCTestCase {
+
+    func testEverySurfaceCaseIsEmittedSomewhereInTheApp() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // ContextAppTests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // the package
+            .appendingPathComponent("Sources/ContextApp")
+
+        let files = try XCTUnwrap(
+            FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil),
+            "the app's sources have to be readable from the checkout for this tripwire to mean anything")
+        var text = ""
+        for case let url as URL in files where url.pathExtension == "swift" {
+            text += (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        }
+        XCTAssertFalse(text.isEmpty, "read no app source at all, so nothing below was checked")
+
+        for surface in AnalyticsEvent.Surface.allCases {
+            XCTAssertTrue(
+                text.contains(".surfaceOpened(.\(surface.rawValue))"),
+                """
+                No call site records \(surface.rawValue). Either give it one or take the case out — \
+                an empty series is read as an answer about users, not as a gap in the instrumentation.
+                """)
+        }
+    }
+}
+
 /// The day boundary the whole DAU series rests on.
 final class ContextAnalyticsDayTests: XCTestCase {
 
@@ -336,6 +570,7 @@ extension AnalyticsEvent {
              AnalyticsEvent.captureStateChanged(source: source, live: false)]
         }
         events += Surface.allCases.map { AnalyticsEvent.surfaceOpened($0) }
+        events += ArtifactKind.allCases.map { AnalyticsEvent.firstArtifact($0) }
         events += UpdateOutcome.allCases.map { AnalyticsEvent.updateOutcome($0) }
         events += FallbackReason.allCases.map {
             AnalyticsEvent.fallback(area: .capture, outcome: .degraded, reason: $0)
@@ -354,7 +589,7 @@ final class AnalyticsEventShapeTests: XCTestCase {
             "cfc_first_launch", "cfc_app_launched", "cfc_daily_active", "cfc_permission",
             "cfc_onboarding_step", "cfc_onboarding_finished", "cfc_account_state",
             "cfc_capture_state", "cfc_gesture_fired", "cfc_surface_opened", "cfc_search_ran",
-            "cfc_update_outcome", "cfc_fallback",
+            "cfc_first_artifact", "cfc_update_outcome", "cfc_fallback",
         ]
         XCTAssertEqual(
             covered, expected,

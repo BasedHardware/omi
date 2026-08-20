@@ -50,9 +50,11 @@ export async function GET(request: NextRequest) {
     // Default macos preserves the legacy meaning for existing callers.
     const platform = parsePlatformScope(searchParams.get("platform") ?? "macos");
     const os = scopeFilterAnd(platform);
-    // Mobile never emits `Sign In Completed`, so non-macOS signup cohorts
-    // anchor on the user's first-ever event instead.
-    const signupAnchor = platform === "macos" ? `AND event = 'Sign In Completed' ${os}` : os;
+    // Mobile never emits `Sign In Completed`, so non-macOS activation cohorts
+    // anchor on the user's first-ever event instead. Acquisition series
+    // (weekly/daily new, cumulative, ticker) all use first-seen so every
+    // panel agrees on one "new user" definition per platform.
+    const activationAnchor = platform === "macos" ? `AND event = 'Sign In Completed' ${os}` : os;
     // The Firestore activation overlay is macOS-scoped by construction
     // (conversation-within-7-days of a macOS signup) — never smear it over
     // mobile or all-platform telemetry.
@@ -80,17 +82,18 @@ export async function GET(request: NextRequest) {
       allTimeResult,
       userGrowthResult,
     ] = await Promise.all([
-      // 1. New users per week (first-ever Sign In Completed)
+      // 1. New users per week — first-seen on this platform, the same
+      // person-deduped population as the daily userGrowth series.
       hogql(apiKey, projectId, host, `
         SELECT
           toMonday(toDate(toString(min_ts))) as week,
           count(*) as new_users
         FROM (
-          SELECT distinct_id, min(timestamp) as min_ts
+          SELECT COALESCE(person_id, distinct_id) as actor, min(timestamp) as min_ts
           FROM events
           WHERE 1 = 1
-            ${signupAnchor}
-          GROUP BY distinct_id
+            ${os}
+          GROUP BY actor
         )
         WHERE min_ts >= now() - interval ${days} day
         GROUP BY week
@@ -205,7 +208,7 @@ export async function GET(request: NextRequest) {
               ) >= [${MIN_ACTIVATION_TELEMETRY_VERSION.join(", ")}] as reports_activation
             FROM events
             WHERE 1 = 1
-              ${signupAnchor}
+              ${activationAnchor}
             GROUP BY distinct_id
           ) signups
           LEFT JOIN (

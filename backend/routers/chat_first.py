@@ -16,6 +16,7 @@ from pydantic import ValidationError
 import database.action_items as action_items_db
 import database._client as db_client_module
 import database.chat_first_intents as chat_first_intents_db
+import database.conversation_finalization_jobs as finalization_jobs_db
 import database.conversations as conversations_db
 import database.goals as goals_db
 import database.task_intelligence_control as task_control_db
@@ -322,13 +323,24 @@ def _materialize_prompts(
     now = datetime.now(timezone.utc)
     for receipt in request.receipts:
         try:
-            chat_first_intents_db.acknowledge_materialization(
+            delivered_intent = chat_first_intents_db.acknowledge_materialization(
                 uid,
                 intent_id=receipt.intent_id,
                 receipt_id=receipt.receipt_id,
                 account_generation=request.control_generation,
                 now=now,
             )
+            for block in delivered_intent.blocks:
+                if isinstance(block, ConversationLinkSpec):
+                    try:
+                        finalization_jobs_db.mark_meeting_receipt_materialized(
+                            uid,
+                            block.conversation_id,
+                            delivered_intent.intent_id,
+                            materialized_at=now,
+                        )
+                    except Exception:
+                        logger.exception('meeting receipt materialization projection failed')
         except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
         except (

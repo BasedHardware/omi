@@ -1,9 +1,14 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
+
+# App display names are resolved by an injected callable, never by importing the database
+# layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
+# client into every import graph that touches a chat message.
+AppNameResolver = Callable[[str], Optional[str]]
 
 
 class MessageSender(str, Enum):
@@ -140,26 +145,45 @@ class Message(BaseModel):
         return parsed
 
     @staticmethod
+    def _resolve_sender_name(
+        message: 'Message',
+        *,
+        use_plugin_name_if_available: bool,
+        app_name_by_id: Dict[str, Optional[str]],
+        app_name_resolver: Optional[AppNameResolver],
+    ) -> str:
+        if message.sender == 'human':
+            return 'User'
+        if use_plugin_name_if_available and app_name_resolver and message.app_id and message.app_id.strip():
+            app_id = message.app_id.strip()
+            if app_id not in app_name_by_id:
+                name = app_name_resolver(app_id)
+                app_name_by_id[app_id] = name.strip() if isinstance(name, str) and name.strip() else None
+            resolved_name = app_name_by_id[app_id]
+            if resolved_name:
+                return resolved_name
+        return message.sender.upper()
+
+    @staticmethod
     def get_messages_as_string(
         messages: List['Message'],
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
+        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
-
-        def get_sender_name(message: Message) -> str:
-            if message.sender == 'human':
-                return 'User'
-            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
-                return message.app_id
-            return message.sender.upper()
+        app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
         for message in sorted_messages:
-            msg_text = (
-                f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {get_sender_name(message)}: {message.text}"
+            sender_name = Message._resolve_sender_name(
+                message,
+                use_plugin_name_if_available=use_plugin_name_if_available,
+                app_name_by_id=app_name_by_id,
+                app_name_resolver=app_name_resolver,
             )
+            msg_text = f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
 
             # Add file info if requested and files exist
             if include_file_info and message.files_id and len(message.files_id) > 0:
@@ -176,15 +200,10 @@ class Message(BaseModel):
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
+        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
-
-        def get_sender_name(message: Message) -> str:
-            if message.sender == 'human':
-                return 'User'
-            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
-                return message.app_id
-            return message.sender.upper()
+        app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
         for message in sorted_messages:
@@ -209,7 +228,7 @@ class Message(BaseModel):
 
             msg = f"""<message>
 <created_at>{message.created_at.strftime('%d %b %Y at %H:%M UTC')}</created_at>
-<sender>{get_sender_name(message)}</sender>
+<sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id, app_name_resolver=app_name_resolver)}</sender>
 <content>{message.text}</content>
 {file_section}
 </message>"""

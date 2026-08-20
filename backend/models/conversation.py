@@ -169,6 +169,13 @@ class Conversation(BaseModel):
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
+    # True when this conversation was transcribed on a third-party (custom STT)
+    # provider, so no Omi transcription credits were consumed. The durable marker
+    # lets post-processing decide whether Omi-paid LLM work (structure, summaries,
+    # memories, action items) should run at all: a custom-STT user without their
+    # own LLM BYOK key must not rack up unbounded Omi LLM cost.
+    uses_custom_stt: bool = False
+
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
@@ -188,6 +195,9 @@ class Conversation(BaseModel):
     app_id: Optional[str] = None
 
     discarded: bool = False
+    # True for conversations created via an external data import (e.g. Limitless ZIP).
+    # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
+    imported: bool = False
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
@@ -212,6 +222,12 @@ class Conversation(BaseModel):
     # Capture-device provenance (optional; absent on legacy conversations).
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+
+    # Read projection of the authoritative finalization-job meeting receipt.
+    meeting_treatment_eligible: bool = False
+    meeting_treatment_reason: Optional[str] = None
+    meeting_duration_s: Optional[float] = None
+    meeting_dedup_speech_s: Optional[float] = None
 
     def __init__(self, **data):
         raw_segments = data.get('transcript_segments')

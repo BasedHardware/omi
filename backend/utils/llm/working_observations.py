@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable, Sequence
-from typing import Any, List, Optional, Protocol, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Protocol, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -16,13 +16,17 @@ from models.memory_contracts import (
     deterministic_contract_id,
 )
 from utils.llm.usage_tracker import Features, track_usage
+from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
+
+if TYPE_CHECKING:
+    from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
 
 GetLlm = Callable[[str], object]
 ChatMessage = tuple[str, str]
 
 
 class LlmInvoker(Protocol):
-    def invoke(self, messages: Sequence[ChatMessage]) -> object: ...
+    def invoke(self, messages: Sequence[Any]) -> object: ...
 
 
 try:
@@ -220,6 +224,8 @@ def extract_l1_memory_archive_items_from_text(
     db_client: Any = None,
     llm: LlmInvoker | None = None,
     strict: bool = False,
+    prompt_prefix: Optional['ConversationPromptPrefix'] = None,
+    prompt_cache_enabled: bool = False,
 ) -> List[WorkingObservationArchiveItem]:
     stripped_text = text.strip() if text else ""
     normalized_source_type = (source_type or "").casefold()
@@ -233,19 +239,39 @@ def extract_l1_memory_archive_items_from_text(
 
     name = user_name or "the user"
     parser = PydanticOutputParser(pydantic_object=WorkingObservationBatch)
-    messages = _build_l1_messages(
+    legacy_messages = _build_l1_messages(
         name,
         source_type,
         text,
         parser.get_format_instructions(),
         language_instruction=language_instruction,
     )
+    cache_enabled = bool(prompt_prefix and prompt_prefix.cache_eligible and prompt_cache_enabled)
+    if prompt_prefix is not None:
+        messages: Sequence[Any] = [
+            *prompt_prefix.messages(cache_enabled=cache_enabled),
+            {'role': 'system', 'content': legacy_messages[0][1]},
+            {
+                'role': 'user',
+                'content': 'Extract memory candidates from the FULL TRANSCRIPT in the shared context above.',
+            },
+        ]
+    else:
+        messages = legacy_messages
 
     if llm is not None:
         model = llm
     elif get_llm is not None:
         try:
-            model = cast(LlmInvoker, get_llm("memory_l1"))
+            llm_factory = cast(Any, get_llm)
+            model = cast(
+                LlmInvoker,
+                llm_factory(
+                    'memory_l1',
+                    cache_key=prompt_prefix.cache_key if cache_enabled and prompt_prefix else None,
+                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if cache_enabled else None,
+                ),
+            )
         except Exception as exc:
             logger.error("Error extracting memory L1 archive items: client_initialization_failed")
             if strict:

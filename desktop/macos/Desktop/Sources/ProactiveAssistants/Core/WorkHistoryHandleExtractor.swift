@@ -51,9 +51,25 @@ enum WorkHistoryHandleExtractor {
     )
     guard AXIsProcessTrusted() else { return snapshot }
     guard let front = NSWorkspace.shared.frontmostApplication else { return snapshot }
+    // Reading our own accessibility tree from the capture tick crashes the app — see
+    // `AccessibilityProcessBoundary`. The visit still records its `app_window` handle.
+    guard AccessibilityProcessBoundary.isForeignProcess(front.processIdentifier) else {
+      return snapshot
+    }
     let nameMatches = front.localizedName == appName
     let bundleMatches = expectedBundleID.map { $0 == front.bundleIdentifier } ?? false
     guard nameMatches || bundleMatches else { return snapshot }
+    // Never run the accessibility query against our own process. An in-process
+    // `AXUIElementCopyAttributeValue` is serviced synchronously on the calling
+    // thread, so AppKit answers it by driving `NSHostingView.accessibilityChildren()`
+    // — which evaluates SwiftUI bodies right here. This runs on a cooperative
+    // background thread, so any `@MainActor` state a body touches trips Swift's
+    // isolation check and traps (EXC_BREAKPOINT). Omi becoming frontmost is
+    // routine (dock click, or the integration-connect card opening the Apps
+    // tab), and every one of those was a crash.
+    guard front.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+      return snapshot
+    }
     snapshot.bundleID = front.bundleIdentifier
     let app = AXUIElementCreateApplication(front.processIdentifier)
     guard let window = copyElement(app, attribute: kAXFocusedWindowAttribute) else { return snapshot }

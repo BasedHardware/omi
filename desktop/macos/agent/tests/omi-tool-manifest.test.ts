@@ -72,6 +72,7 @@ describe("omi tool manifest", () => {
 
   it("projects the pi-mono task-agent surface", () => {
     expect(toolNamesForAdapter("pi-mono")).toEqual([
+      "get_work_context",
       "execute_sql",
       "semantic_search",
       "get_daily_recap",
@@ -111,7 +112,6 @@ describe("omi tool manifest", () => {
       "check_permission_status",
       "request_permission",
       "screenshot",
-      "get_work_context",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
@@ -134,6 +134,20 @@ describe("omi tool manifest", () => {
     expect(captureScreen?.promptGuidelines?.join("\n")).not.toContain("get_work_context first");
     expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
     expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
+  });
+
+  it("gives recent-work retrieval explicit precedence over overlapping screen tools", () => {
+    const tools = toolsForAdapter("pi-mono");
+    const workContext = tools.find((tool) => tool.name === "get_work_context");
+    const executeSql = tools.find((tool) => tool.name === "execute_sql");
+    const semanticSearch = tools.find((tool) => tool.name === "semantic_search");
+
+    expect(tools[0]?.name).toBe("get_work_context");
+    expect(workContext?.description).toContain("Call get_work_context before semantic_search or execute_sql");
+    expect(executeSql?.description).toContain("call get_work_context first");
+    expect(executeSql?.description).toContain("context_visits(handlesJson)");
+    expect(executeSql?.description).toContain("Raw ocrText columns are refused");
+    expect(semanticSearch?.description).toContain("after get_work_context cannot identify");
   });
 
   it("keeps spawn_background_agent internal to coordinator RPC only", () => {

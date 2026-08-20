@@ -165,8 +165,9 @@ def test_a_regate_that_flips_after_the_response_leaves_the_graph_intact(client, 
 
 def test_the_legacy_rebuild_still_clears_the_graph_itself(monkeypatch):
     # The route relies on this: dropping its eager delete is only safe while
-    # `rebuild_knowledge_graph` starts by clearing the old graph, so a rebuild
-    # cannot merge new extractions into stale nodes.
+    # `rebuild_knowledge_graph` clears the old graph itself, so a rebuild cannot
+    # merge new extractions into stale nodes. The clear now runs at the end of the
+    # rebuild rather than the start (#11923), but it still runs.
     llm_kg = kg_router._knowledge_graph_llm_module()
     calls: List[str] = []
     monkeypatch.setattr(kg_db, "delete_knowledge_graph", lambda uid, **_kw: calls.append(uid))

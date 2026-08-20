@@ -14,19 +14,13 @@ void main() {
       // session made every launch hang here.
       final neverCompletes = Completer<String?>();
 
-      final result = await resolveStartupAuth(
-        () => neverCompletes.future,
-        timeout: const Duration(milliseconds: 50),
-      );
+      final result = await resolveStartupAuth(() => neverCompletes.future, timeout: const Duration(milliseconds: 50));
 
       expect(result, isFalse, reason: 'a stalled refresh must resolve as unauthenticated, not hang');
     });
 
     test('a successful refresh is authenticated', () async {
-      final result = await resolveStartupAuth(
-        () async => 'a-real-token',
-        timeout: const Duration(seconds: 5),
-      );
+      final result = await resolveStartupAuth(() async => 'a-real-token', timeout: const Duration(seconds: 5));
       expect(result, isTrue);
     });
 
@@ -34,10 +28,7 @@ void main() {
       // getIdToken() already returns null on every failure branch and startup
       // already continued to the sign-in screen. The timeout must not change
       // that path.
-      final result = await resolveStartupAuth(
-        () async => null,
-        timeout: const Duration(seconds: 5),
-      );
+      final result = await resolveStartupAuth(() async => null, timeout: const Duration(seconds: 5));
       expect(result, isFalse);
     });
 

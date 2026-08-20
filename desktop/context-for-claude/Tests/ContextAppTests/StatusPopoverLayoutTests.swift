@@ -65,6 +65,7 @@ final class StatusPopoverLayoutTests: XCTestCase {
     private func block(
         claudeCode: Bool = false,
         claudeDesktop: Bool = false,
+        liveness: ClaudeServerLiveness.State = .unknown,
         connectorNote: String? = nil,
         signedIn: Bool = false,
         email: String? = nil,
@@ -72,8 +73,8 @@ final class StatusPopoverLayoutTests: XCTestCase {
         uploadFailed: Bool = false
     ) -> [String] {
         let connector = ClaudeConnectorLine(
-            claudeCode: claudeCode,
-            claudeDesktop: claudeDesktop,
+            connection: ClaudeConnection(
+                claudeCode: claudeCode, claudeDesktop: claudeDesktop, liveness: liveness),
             note: connectorNote,
             isConnecting: false)
         let account = AccountPresentation(
@@ -117,21 +118,30 @@ final class StatusPopoverLayoutTests: XCTestCase {
         ]
         let emails = ["a@b.co", "david.d.zhang.a.very.long.address@some-long-domain.example.com"]
 
+        // Liveness is in the sweep because `.notServingClaudeDesktop` adds a *fourth* line to the
+        // block — the restart notice — in the state that also carries the longest summary. That is
+        // the tallest the connection half can get, and it is the one the panel has to be sized by.
+        let livenesses: [ClaudeServerLiveness.State] = [
+            .unknown, .servingClaudeDesktop, .notServingClaudeDesktop,
+        ]
+
         for claudeCode in [false, true] {
             for claudeDesktop in [false, true] {
+                for liveness in livenesses {
                 for signedIn in [false, true] {
                     for note in notes {
                         for email in emails {
                             let lines = block(
                                 claudeCode: claudeCode,
                                 claudeDesktop: claudeDesktop,
+                                liveness: liveness,
                                 signedIn: signedIn,
                                 email: email,
                                 uploadNote: note,
                                 uploadFailed: note != nil)
                             let state =
-                                "code=\(claudeCode) desktop=\(claudeDesktop) signedIn=\(signedIn) "
-                                + "note=\(note ?? "nil")"
+                                "code=\(claudeCode) desktop=\(claudeDesktop) live=\(liveness) "
+                                + "signedIn=\(signedIn) note=\(note ?? "nil")"
 
                             XCTAssertGreaterThanOrEqual(lines.count, 2, state)
                             for line in lines {
@@ -143,6 +153,7 @@ final class StatusPopoverLayoutTests: XCTestCase {
                         }
                     }
                 }
+                }
             }
         }
     }
@@ -153,7 +164,9 @@ final class StatusPopoverLayoutTests: XCTestCase {
     /// lost, whatever its row height is.
     func testTheSentenceNamingBothSurfacesNeedsMoreThanOneRow() {
         let both = ClaudeConnectorLine(
-            claudeCode: true, claudeDesktop: true, note: nil, isConnecting: false)
+            connection: ClaudeConnection(claudeCode: true, claudeDesktop: true, liveness: .unknown),
+            note: nil,
+            isConnecting: false)
 
         XCTAssertGreaterThan(
             Self.height(of: both.summary), InkPermissionRow.menuRowHeight,
@@ -161,8 +174,16 @@ final class StatusPopoverLayoutTests: XCTestCase {
 
         // …and it is the tall one, so it is the state the panel has to be sized by.
         for shorter in [
-            ClaudeConnectorLine(claudeCode: true, claudeDesktop: false, note: nil, isConnecting: false),
-            ClaudeConnectorLine(claudeCode: false, claudeDesktop: false, note: nil, isConnecting: false),
+            ClaudeConnectorLine(
+                connection: ClaudeConnection(
+                    claudeCode: true, claudeDesktop: false, liveness: .unknown),
+                note: nil,
+                isConnecting: false),
+            ClaudeConnectorLine(
+                connection: ClaudeConnection(
+                    claudeCode: false, claudeDesktop: false, liveness: .unknown),
+                note: nil,
+                isConnecting: false),
         ] {
             XCTAssertGreaterThan(Self.height(of: both.summary), Self.height(of: shorter.summary))
         }

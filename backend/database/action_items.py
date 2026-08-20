@@ -119,17 +119,35 @@ def get_visible_action_item_ids(
     The account-wide ID census intentionally includes every document for reconciliation
     and account deletion. UI Select All needs a narrower contract: exclude soft-deleted
     rows and include only rows that the explicit ``completed`` list filter can render.
+
+    The ``completed`` filter is pushed server-side via ``FieldFilter`` so Firestore only
+    streams (and bills) documents in the requested bucket, instead of the whole collection.
+    Firestore equality does not match documents where the field is absent and does not
+    conflate 1/0 with booleans, so this is equivalent to the old Python identity check
+    (``completed_value is completed``) for every doc the query now returns.
+
+    ``deleted`` is deliberately NOT pushed into the query as
+    ``.where('deleted', '==', False)``: Firestore equality filters never match documents
+    where the field is absent, and most rows have no ``deleted`` field at all (it is only
+    set on soft-deleted rows). A server-side filter on it would silently drop every
+    undeleted row. Keep this check in Python instead.
     """
     client = firestore_client or get_firestore_client()
     coll = client.collection('users').document(uid).collection(action_items_collection)
+    query = coll.select(['completed', 'deleted']).where(filter=FieldFilter('completed', '==', completed))
     visible_ids: List[str] = []
-    for doc in coll.select(['completed', 'status', 'deleted']).stream():
+    doc_count = 0
+    for doc in query.stream():
+        doc_count += 1
         data = _typed_doc(doc)
         if data.get('deleted'):
             continue
-        completed_value = data.get('completed')
-        if completed_value is completed:
-            visible_ids.append(doc.id)
+        visible_ids.append(doc.id)
+    record_firestore_read(
+        FirestoreReadFamily.ACTION_ITEMS_VISIBLE_IDS,
+        FirestoreReadMode.UNBOUNDED,
+        doc_count,
+    )
     return visible_ids
 
 

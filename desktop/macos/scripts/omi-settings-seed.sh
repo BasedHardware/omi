@@ -88,8 +88,25 @@ def defaults_export(domain):
         check=False,
     )
     if proc.returncode != 0:
-        return {}
-    return plistlib.loads(proc.stdout)
+        sys.exit(f"Could not export defaults domain {domain}")
+    data = plistlib.loads(proc.stdout)
+    if data:
+        return True, data
+
+    # `defaults export` returns an empty plist with status 0 for both an empty
+    # existing domain and a missing domain. Only `defaults domains` preserves
+    # that distinction, which decides whether stale target overrides are safe
+    # to clear.
+    domains = subprocess.run(
+        ["defaults", "domains"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if domains.returncode != 0:
+        sys.exit(f"Could not determine whether defaults domain {domain} exists")
+    known_domains = {item.strip() for item in domains.stdout.split(",")}
+    return domain in known_domains, data
 
 
 def source_audio_recording_mode(source):
@@ -109,12 +126,23 @@ def source_audio_recording_mode(source):
     }.get(source.get("systemAudioCaptureMode"), "onlyMeetings")
 
 
-source = defaults_export(src)
-if not source:
+source_exists, source = defaults_export(src)
+if not source_exists:
     print(f"No defaults found for {src}; applying target-only dev defaults")
 
-target_data = defaults_export(target)
+_, target_data = defaults_export(target)
+initial_target_keys = set(target_data)
 selected = {key: source[key] for key in KEYS if key in source}
+keys_to_delete = set()
+
+if source_exists:
+    # This is a mirror, not an overlay. A missing source key means the source
+    # app is using its compiled default. Remove any stale target override so
+    # the named bundle resolves the same effective value after a Swift update.
+    for key in KEYS:
+        if key not in source and key in target_data:
+            target_data.pop(key, None)
+            keys_to_delete.add(key)
 
 if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
     # Named dev bundles reuse auth/onboarding from Omi Dev, but macOS treats
@@ -128,7 +156,8 @@ if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
             "audioRecordingMode": "off",
         }
     )
-    # Never carry over the hidden kill switch from a previous seed or the source.
+    # These target-only safety keys are intentionally normalized even when the
+    # source domain is missing; other curated target preferences are preserved.
     target_data.pop("disableSystemAudioCapture", None)
     target_data.pop("screenAnalysisAutoStartFixed_v2", None)
     target_data.pop("screenAnalysisAutoStartFixed_v3", None)
@@ -149,6 +178,7 @@ else:
     target_data.pop("disableSystemAudioCapture", None)
 
 target_data.update(selected)
+keys_to_delete.difference_update(target_data)
 with tempfile.NamedTemporaryFile(suffix=".plist") as plist:
     plistlib.dump(target_data, plist)
     plist.flush()
@@ -163,8 +193,27 @@ for key in (
     "transcriptionEnabled",
     "systemAudioCaptureMode",
 ):
-    if key not in target_data:
-        subprocess.run(["defaults", "delete", target, key], check=False)
+    if key not in target_data and key in initial_target_keys:
+        keys_to_delete.add(key)
 
-print(f"Seeded {len(selected)} settings from {src} -> {target}")
+for key in sorted(keys_to_delete):
+    deleted = subprocess.run(
+        ["defaults", "delete", target, key],
+        capture_output=True,
+        check=False,
+    )
+    if deleted.returncode != 0:
+        sys.exit(f"Failed to remove stale setting {key} from {target}")
+
+target_exists, written = defaults_export(target)
+if not target_exists:
+    sys.exit(f"Seeded defaults domain {target} disappeared before verification")
+for key, expected in selected.items():
+    if written.get(key) != expected:
+        sys.exit(f"Failed to verify seeded setting {key} in {target}")
+for key in keys_to_delete:
+    if key in written:
+        sys.exit(f"Failed to verify removal of stale setting {key} from {target}")
+
+print(f"Seeded {len(selected)} settings and cleared {len(keys_to_delete)} stale settings from {src} -> {target}")
 PY

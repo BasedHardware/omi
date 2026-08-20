@@ -18,7 +18,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import preflight_runner
-from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
+from pr_metadata import (
+    TransientPRMetadataError,
+    extract_merged_pr_number,
+    load_from_api,
+    load_from_event_file,
+    resolve_main_push_body,
+)
 from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, run_git, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -105,6 +111,61 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaisesRegex(TransientPRMetadataError, "request failed"):
             load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
         self.assertEqual(calls["count"], 3)
+
+    def test_extract_merged_pr_number_from_squash_and_merge_subjects(self) -> None:
+        self.assertEqual(
+            extract_merged_pr_number(
+                "Cut the Windows app's idle request volume (#11835)\n\n* Run the retention sweep\n"
+            ),
+            11835,
+        )
+        self.assertEqual(extract_merged_pr_number('Merge pull request #10965 from aryanorastar/fix'), 10965)
+        self.assertEqual(extract_merged_pr_number('Revert "foo (#12)" (#99)'), 99)
+        self.assertIsNone(extract_merged_pr_number("security(backend): gate Anthropic web search"))
+        self.assertIsNone(extract_merged_pr_number(""))
+
+    def test_main_push_body_appends_live_pr_body_for_squash_head(self) -> None:
+        """#11835: squash commit list omitted INV-CHAT-1; the PR body had it."""
+        commit = (
+            "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
+            "* Stop rebuilding the about-user card on every voice hub warm\n"
+        )
+        metadata = type("M", (), {"body": "## Product invariants affected\n\n- INV-CHAT-1\n", "number": 11835})()
+        combined = resolve_main_push_body(
+            commit,
+            repository="BasedHardware/omi",
+            token="test-token",
+            loader=lambda *args, **kwargs: metadata,
+        )
+        self.assertIn("INV-CHAT-1", combined)
+        self.assertTrue(combined.startswith(commit.rstrip()))
+
+    def test_main_push_body_keeps_commit_message_without_pr_number_or_token(self) -> None:
+        commit = "direct push that forgot INV-CHAT-1\n"
+        self.assertEqual(
+            resolve_main_push_body(commit, repository="BasedHardware/omi", token=""),
+            commit,
+        )
+        self.assertEqual(
+            resolve_main_push_body(commit, repository="BasedHardware/omi", token="tok"),
+            commit,
+        )
+
+    def test_main_push_body_falls_back_when_api_fails(self) -> None:
+        commit = "Cut the Windows app's idle volume (#11835)\n"
+
+        def loader(*args: object, **kwargs: object):
+            raise RuntimeError("GitHub API returned HTTP 502 while reading PR #11835")
+
+        self.assertEqual(
+            resolve_main_push_body(
+                commit,
+                repository="BasedHardware/omi",
+                token="test-token",
+                loader=loader,
+            ),
+            commit,
+        )
 
     def test_event_payload_loader_uses_top_level_pr_number(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

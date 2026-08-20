@@ -52,6 +52,7 @@ from utils.metrics import (
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
 )
 from utils.readiness import ReadinessGate
+from utils.observability.fallback import record_fallback
 from utils.observability.journeys import JourneyAttempt
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -185,8 +186,16 @@ async def _websocket_util_trigger(
         # Pending batches keyed by conversation_id
         pending: Dict[str, Dict[str, Any]] = {}
 
+        # Conversations deleted underneath us (e.g. discarded as empty at rollover).
+        # Their chunks can never be referenced, played or cleaned up again, so we
+        # stop uploading rather than leaving more orphans in the bucket (#11742).
+        deleted_conversations: set[str] = set()
+
         def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
+            if conv_id in deleted_conversations:
+                audio_budget.release(len(chunk_info['data']))
+                return
             if conv_id not in pending:
                 bound_private_pending(pending, audio_budget)
                 pending[conv_id] = {
@@ -226,29 +235,41 @@ async def _websocket_util_trigger(
                     )
                     if audio_files:
                         files_payload = [af.model_dump() for af in audio_files]
-                        await run_blocking(
+                        applied = await run_blocking(
                             storage_executor,
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
                             {'audio_files': files_payload},
                         )
-                        # Rebuild the conversation playback artifact if a stamped one
-                        # went stale. No stamp (the live-conversation common case) → no-op.
-                        if is_audio_merge_dispatch_enabled():
-                            stamp = await run_blocking(
-                                storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
-                            )
-                            if stamp:
-                                await run_blocking(
-                                    storage_executor,
-                                    maybe_invalidate_conversation_playback,
-                                    uid,
-                                    conv_id,
-                                    {'conversation_audio': stamp},
-                                    files_payload,
-                                    'pusher_flush',
+                        if applied:
+                            # Rebuild the conversation playback artifact if a stamped one
+                            # went stale. No stamp (the live-conversation common case) → no-op.
+                            if is_audio_merge_dispatch_enabled():
+                                stamp = await run_blocking(
+                                    storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
                                 )
+                                if stamp:
+                                    await run_blocking(
+                                        storage_executor,
+                                        maybe_invalidate_conversation_playback,
+                                        uid,
+                                        conv_id,
+                                        {'conversation_audio': stamp},
+                                        files_payload,
+                                        'pusher_flush',
+                                    )
+                        else:
+                            deleted_conversations.add(conv_id)
+                            logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
+                            record_fallback(
+                                component='pusher',
+                                from_mode='private_cloud_sync',
+                                to_mode='drop',
+                                reason='policy',
+                                outcome='exhausted',
+                                log=logger,
+                            )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))

@@ -310,7 +310,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             key: _shareButtonKey,
             icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
             onPressed: _shareUsage,
-          )
+          ),
         ],
         bottom: TabBar(
           controller: _tabController,

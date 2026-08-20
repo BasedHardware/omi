@@ -45,7 +45,7 @@ export function NoDueDatePrompt({
       exit={{ opacity: 0, y: -10 }}
       className={cn(
         'relative bg-gradient-to-br from-amber-500/10 to-orange-500/10',
-        'border border-amber-500/20 rounded-xl p-4 overflow-hidden'
+        'border border-amber-500/20 rounded-xl p-4 overflow-hidden',
       )}
     >
       {/* Dismiss button */}
@@ -78,8 +78,8 @@ export function NoDueDatePrompt({
           onClick={onSetAllToday}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium',
-            'bg-purple-primary/20 text-purple-primary',
-            'hover:bg-purple-primary/30 transition-colors'
+            'bg-white/20 text-white',
+            'hover:bg-white/30 transition-colors',
           )}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -90,7 +90,7 @@ export function NoDueDatePrompt({
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium',
             'bg-bg-tertiary text-text-secondary',
-            'hover:bg-bg-quaternary transition-colors'
+            'hover:bg-bg-quaternary transition-colors',
           )}
         >
           Tomorrow
@@ -101,7 +101,7 @@ export function NoDueDatePrompt({
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium',
               'bg-bg-tertiary text-text-secondary',
-              'hover:bg-bg-quaternary transition-colors'
+              'hover:bg-bg-quaternary transition-colors',
             )}
           >
             Pick date...
@@ -116,7 +116,7 @@ export function NoDueDatePrompt({
                 className={cn(
                   'absolute top-full left-0 mt-1 z-50',
                   'bg-bg-secondary border border-bg-tertiary rounded-lg',
-                  'shadow-lg shadow-black/30 p-2'
+                  'shadow-lg shadow-black/30 p-2',
                 )}
               >
                 <input
@@ -125,7 +125,7 @@ export function NoDueDatePrompt({
                   className={cn(
                     'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
                     'text-xs text-text-primary outline-none',
-                    'focus:border-purple-primary'
+                    'focus:border-white',
                   )}
                   autoFocus
                 />
@@ -140,7 +140,7 @@ export function NoDueDatePrompt({
         onClick={onShowItems}
         className={cn(
           'flex items-center gap-1 text-xs text-text-tertiary',
-          'hover:text-purple-primary transition-colors'
+          'hover:text-white transition-colors',
         )}
       >
         View these tasks
@@ -151,7 +151,7 @@ export function NoDueDatePrompt({
       {items.length > 0 && (
         <div className="mt-3 pt-3 border-t border-white/5">
           <div className="space-y-1">
-            {items.slice(0, 3).map(item => (
+            {items.slice(0, 3).map((item) => (
               <div
                 key={item.id}
                 className="text-xs text-text-quaternary pl-2 border-l-2 border-amber-500/30"

@@ -583,7 +583,10 @@ deepgram: Optional[DeepgramClient] = None
 
 
 def _deepgram_options(endpoint: str) -> DeepgramClientOptions:
-    """Build options pinned to an explicit endpoint, never the SDK default."""
+    """Build options per client, pinned to an endpoint, never the SDK default.
+
+    DeepgramClient.__init__ writes its key into what it is handed, so a shared
+    object strands the managed client on whichever BYOK key came last."""
     options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
     options.url = endpoint
     return options
@@ -602,9 +605,6 @@ def _require_self_hosted_deepgram_endpoint(endpoint: str) -> str:
     return endpoint
 
 
-# Built once; also keys the per-request BYOK client below.
-deepgram_cloud_options = _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT)
-
 _managed_deepgram_lock = threading.RLock()
 _managed_deepgram_ready = False
 
@@ -619,7 +619,7 @@ def _build_managed_deepgram_client() -> Optional[DeepgramClient]:
     if not api_key:
         return None
     logger.info('Using Deepgram hosted API')
-    return DeepgramClient(api_key, deepgram_cloud_options)
+    return DeepgramClient(api_key, _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT))
 
 
 def _managed_deepgram_client() -> Optional[DeepgramClient]:
@@ -794,7 +794,7 @@ def _deepgram_client_for_request() -> DeepgramClient:
         return managed
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, deepgram_cloud_options)
+        return DeepgramClient(byok, _deepgram_options(DEEPGRAM_CLOUD_ENDPOINT))
     if managed is None:
         raise RuntimeError('Deepgram is not configured; set DEEPGRAM_API_KEY or provide a BYOK key')
     return managed

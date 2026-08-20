@@ -142,8 +142,10 @@ _drop_stale_module('utils.conversations.render', BACKEND_DIR / 'utils' / 'conver
 import database.conversations as conversations_db  # noqa: E402
 import routers.developer as developer  # noqa: E402
 import utils.task_intelligence.proactive_engine as proactive_engine  # noqa: E402
+import utils.conversations.meeting_receipt as meeting_receipt  # noqa: E402
 from models.conversation import Conversation, CreateConversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
+from utils.conversations.meeting_treatment import meeting_treatment_verdict  # noqa: E402
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -155,6 +157,36 @@ def _passthrough_resolve_geolocation(monkeypatch):
     # which would fail CreateConversation validation. Patch it to a passthrough so the geolocation flows
     # through unchanged, matching production for the None / already-resolved cases these tests exercise.
     monkeypatch.setattr(developer, 'resolve_geolocation', lambda g: g)
+
+    def record_receipt(uid, conversation, **_kwargs):
+        external_data = (
+            conversation.get('external_data') if isinstance(conversation, dict) else conversation.external_data
+        ) or {}
+        source = conversation.get('source') if isinstance(conversation, dict) else conversation.source
+        source = getattr(source, 'value', source)
+        if source != 'desktop' or external_data.get('conversation_role') != 'meeting':
+            return None
+        verdict = meeting_treatment_verdict(conversation)
+        if verdict.eligible:
+            conversation_id = conversation['id'] if isinstance(conversation, dict) else conversation.id
+            structured = (
+                conversation.get('structured') if isinstance(conversation, dict) else conversation.structured
+            ) or {}
+            title = structured.get('title') if isinstance(structured, dict) else structured.title
+            proactive_engine.persist_capture_arrival_intent(
+                uid,
+                conversation_id=conversation_id,
+                summary=title or '',
+                is_desktop_meeting=True,
+                recommended_action_items=[],
+            )
+        return {
+            'status': 'recorded',
+            'meeting_treatment_eligible': verdict.eligible,
+            'meeting_treatment_reason': verdict.reason,
+        }
+
+    monkeypatch.setattr(developer, 'record_and_persist_finalized_meeting_receipt', record_receipt)
 
 
 def _segment():
@@ -318,6 +350,66 @@ def test_completed_desktop_meeting_persists_exact_conversation_arrival(monkeypat
     )
 
 
+def test_real_2026_08_19_from_segments_shape_writes_exactly_one_durable_conversation_link(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'production-session-1588')
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=True))
+
+    def _process(_uid, _language, conversation):
+        conversation.status = ConversationStatus.completed
+        conversation.structured.title = 'Hardware startup collaboration'
+        return conversation
+
+    monkeypatch.setattr(developer, 'process_conversation', _process)
+    record = MagicMock(
+        return_value={
+            'status': 'recorded',
+            'job_id': 'job-production-shape',
+            'meeting_treatment_eligible': True,
+            'meeting_treatment_reason': 'eligible',
+        }
+    )
+    intent = SimpleNamespace(intent_id='turn_cfi_production_shape')
+    persist = MagicMock(return_value=intent)
+    mark = MagicMock(return_value=True)
+    monkeypatch.setattr(meeting_receipt.jobs_db, 'record_meeting_receipt', record)
+    monkeypatch.setattr(meeting_receipt, 'persist_capture_arrival_intent', persist)
+    monkeypatch.setattr(meeting_receipt.jobs_db, 'mark_meeting_receipt_intent_persisted', mark)
+    monkeypatch.setattr(
+        developer,
+        'record_and_persist_finalized_meeting_receipt',
+        meeting_receipt.record_and_persist_finalized_meeting_receipt,
+    )
+
+    request = _eligible_meeting_request(
+        client_session_id='production-session-1588',
+        finished_at=NOW + timedelta(seconds=1720),
+        conversation_finalization_reason='meeting_ended',
+        transcript_segments=[
+            {
+                'text': 'substantive meeting discussion',
+                'speaker': 'SPEAKER_00',
+                'is_user': True,
+                'start': 0.0,
+                'end': 1719.8,
+            }
+        ],
+    )
+    response = developer._create_conversation_from_segments('uid1', request)
+
+    assert response.id == expected_id
+    assert response.meeting_treatment_eligible is True
+    persist.assert_called_once_with(
+        'uid1',
+        conversation_id=expected_id,
+        summary='Hardware startup collaboration',
+        is_desktop_meeting=True,
+        recommended_action_items=[],
+    )
+    mark.assert_called_once_with('job-production-shape', 'turn_cfi_production_shape')
+
+
 def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'meeting-session-1')
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
@@ -331,7 +423,7 @@ def test_postprocess_arrival_adapter_failure_does_not_fail_creation(monkeypatch)
         return conversation
 
     monkeypatch.setattr(developer, 'process_conversation', _process)
-    monkeypatch.setattr(developer, 'persist_desktop_meeting_arrival_best_effort', MagicMock())
+    monkeypatch.setattr(developer, 'record_and_persist_finalized_meeting_receipt', MagicMock(return_value=None))
 
     response = developer._create_conversation_from_segments(
         'uid1', _request(client_session_id='meeting-session-1', conversation_role='meeting')

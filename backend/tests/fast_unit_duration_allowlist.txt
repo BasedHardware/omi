@@ -280,5 +280,8 @@ tests/unit/test_sync_merge_target_selection.py::test_sync_target_attach_fallback
 tests/unit/test_bounded_firestore_list_reads.py::test_legacy_get_memories_no_first_page_5000_force
 # File-isolation amortizes llm_gateway app/provider imports into the first oracle call.
 tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle_bypasses_ambient_proxy_configuration
+# File-isolation amortizes the merge_conversations import (models/database graph) into the first call.
+tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_stt_marker_from_any_source
+tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
