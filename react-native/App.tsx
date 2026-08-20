@@ -357,12 +357,19 @@ function displaySummary(item: DesktopReadProjection): string {
 const ProjectionRow = memo(function ProjectionRow({
   item,
   home = false,
+  spine = false,
 }: {
   item: DesktopReadProjection;
   home?: boolean;
+  spine?: boolean;
 }) {
   return (
-    <View style={[styles.resultRow, home && styles.homeCurrentRow]}>
+    <View
+      style={[
+        styles.resultRow,
+        home && styles.homeCurrentRow,
+        spine && styles.homeSpineRow,
+      ]}>
       <View style={styles.resultKindRow}>
         {home ? (
           <View style={styles.homeCurrentKindLead}>
@@ -372,25 +379,42 @@ const ProjectionRow = memo(function ProjectionRow({
                 item.kind === 'memory' && styles.homeCurrentKindDotMemory,
               ]}
             />
-            <Text style={[styles.resultKind, styles.homeCurrentKind]}>
+            <Text
+              style={[
+                styles.resultKind,
+                styles.homeCurrentKind,
+                spine && styles.homeSpineKind,
+              ]}>
               {item.kind}
             </Text>
           </View>
         ) : (
-          <Text style={styles.resultKind}>{item.kind}</Text>
+          <Text style={[styles.resultKind, spine && styles.homeSpineKind]}>
+            {item.kind}
+          </Text>
         )}
         {item.kind === 'conversation' && item.starred && (
-          <Text style={styles.resultMeta}>Starred</Text>
+          <Text style={[styles.resultMeta, spine && styles.homeSpineMeta]}>
+            Starred
+          </Text>
         )}
       </View>
       <Text
         numberOfLines={2}
-        style={[styles.resultTitle, home && styles.homeCurrentTitle]}>
+        style={[
+          styles.resultTitle,
+          home && styles.homeCurrentTitle,
+          spine && styles.homeSpineTitle,
+        ]}>
         {displayTitle(item)}
       </Text>
       <Text
         numberOfLines={2}
-        style={[styles.resultSummary, home && styles.homeCurrentSummary]}>
+        style={[
+          styles.resultSummary,
+          home && styles.homeCurrentSummary,
+          spine && styles.homeSpineSummary,
+        ]}>
         {displaySummary(item)}
       </Text>
     </View>
@@ -406,6 +430,9 @@ function ProjectionList({
   footer,
   emptyTitle,
   suppressEmpty,
+  rowVariant = 'default',
+  accessibilityLabel,
+  style,
 }: {
   items: DesktopReadProjection[];
   loading: boolean;
@@ -415,10 +442,15 @@ function ProjectionList({
   footer?: React.ReactElement;
   emptyTitle?: string;
   suppressEmpty?: boolean;
+  rowVariant?: 'default' | 'spine';
+  accessibilityLabel?: string;
+  style?: ViewProps['style'];
 }) {
   const renderItem = useCallback(
-    ({item}: {item: DesktopReadProjection}) => <ProjectionRow item={item} />,
-    [],
+    ({item}: {item: DesktopReadProjection}) => (
+      <ProjectionRow item={item} spine={rowVariant === 'spine'} />
+    ),
+    [rowVariant],
   );
   const keyExtractor = useCallback(
     (item: DesktopReadProjection) => `${item.kind}:${item.id}`,
@@ -442,6 +474,7 @@ function ProjectionList({
 
   return (
     <FlatList
+      accessibilityLabel={accessibilityLabel}
       contentContainerStyle={styles.resultList}
       data={items}
       keyExtractor={keyExtractor}
@@ -449,7 +482,77 @@ function ProjectionList({
       ListFooterComponent={footer ?? null}
       ListHeaderComponent={header ?? null}
       renderItem={renderItem}
+      style={style}
     />
+  );
+}
+
+function HomeSearchField({
+  compact,
+  desktop,
+  onBlur,
+  onChangeText,
+  onFocus,
+  onOpenChat,
+  onPressIn,
+  inputRef,
+  query,
+  searchFocused,
+  searchArmed,
+}: {
+  compact: boolean;
+  desktop: boolean;
+  onBlur: () => void;
+  onChangeText: (value: string) => void;
+  onFocus: () => void;
+  onOpenChat: () => void;
+  onPressIn: () => void;
+  inputRef: React.RefObject<TextInput | null>;
+  query: string;
+  searchFocused: boolean;
+  searchArmed: boolean;
+}) {
+  return (
+    <View
+      accessibilityLabel="Home search dock"
+      style={[
+        styles.homeSearchDock,
+        desktop && styles.macHomeQueryField,
+        compact && styles.homeSearchDockCompact,
+        searchFocused && styles.focusRing,
+      ]}>
+      <Search
+        accessible={false}
+        color={desktop ? '#505050' : '#888888'}
+        size={18}
+        strokeWidth={2}
+      />
+      <TextInput
+        accessibilityHint={
+          desktop
+            ? 'Filters loaded conversations and memories only.'
+            : undefined
+        }
+        accessibilityLabel="Search Home"
+        onBlur={onBlur}
+        onChangeText={onChangeText}
+        onFocus={onFocus}
+        onPressIn={onPressIn}
+        placeholder={desktop ? 'Filter saved…' : 'Search Omi'}
+        placeholderTextColor={desktop ? '#505050' : '#777777'}
+        ref={inputRef}
+        showSoftInputOnFocus={searchArmed}
+        style={[styles.searchInput, desktop && styles.macPrimaryText]}
+        value={query}
+      />
+      <FocusPressable
+        accessibilityLabel="Open Chat"
+        accessibilityRole="button"
+        onPress={onOpenChat}
+        style={({pressed}) => [styles.askOmiButton, pressed && styles.pressed]}>
+        <ArrowUp color="#141414" size={17} strokeWidth={2.5} />
+      </FocusPressable>
+    </View>
   );
 }
 
@@ -1090,7 +1193,15 @@ function TasksPage({
   );
 }
 
-function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
+function ReadStatus({
+  label,
+  page,
+  mac = false,
+}: {
+  label: string;
+  page: ReadPageState;
+  mac?: boolean;
+}) {
   if (page.complete && page.completenessStatus === 'complete') {
     return null;
   }
@@ -1102,8 +1213,10 @@ function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
     ? `${label} may be temporarily incomplete.`
     : `${label} are incomplete.`;
   return (
-    <View style={styles.readStatus}>
-      <Text style={styles.readStatusText}>{detail}</Text>
+    <View style={[styles.readStatus, mac && styles.macReadStatus]}>
+      <Text style={[styles.readStatusText, mac && styles.macReadStatusText]}>
+        {detail}
+      </Text>
     </View>
   );
 }
@@ -1111,16 +1224,20 @@ function ReadStatus({label, page}: {label: string; page: ReadPageState}) {
 function OutcomeStatus({
   label,
   outcome,
+  mac = false,
 }: {
   label: string;
   outcome: DomainReadOutcome<DesktopReadProjection>;
+  mac?: boolean;
 }) {
   return outcome.status === 'error' ? (
-    <View style={styles.readStatus}>
-      <Text style={styles.readStatusText}>{label} are unavailable.</Text>
+    <View style={[styles.readStatus, mac && styles.macReadStatus]}>
+      <Text style={[styles.readStatusText, mac && styles.macReadStatusText]}>
+        {label} are unavailable.
+      </Text>
     </View>
   ) : (
-    <ReadStatus label={label} page={outcome.value.page} />
+    <ReadStatus label={label} mac={mac} page={outcome.value.page} />
   );
 }
 
@@ -2041,6 +2158,171 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : '#d9826f';
   const currentItems = reads.slice(0, 2);
 
+  const homeDesktopReadStatus = (
+    <View style={styles.macHomeReadStatuses}>
+      {readsPhase !== 'ready' && readsPhase !== 'initial-loading' && (
+        <View style={styles.macHomeReadStatus}>
+          <Text style={styles.macHomeReadStatusText}>
+            {readsPhase === 'refreshing'
+              ? 'Refreshing saved data…'
+              : readsPhase === 'saved-but-refresh-failed'
+              ? 'Showing saved data. Could not refresh.'
+              : 'Saved data is unavailable.'}
+          </Text>
+          {allHomeReadsUnavailable && (
+            <Text style={styles.macHomeReadStatusCopy}>
+              {readOutcomes?.conversations.status === 'error'
+                ? readOutcomes.conversations.error
+                : desktopBackendConfigurationCopy}
+            </Text>
+          )}
+          {(readsPhase === 'saved-but-refresh-failed' ||
+            readsPhase === 'unavailable') && (
+            <FocusPressable
+              accessibilityLabel="Retry saved data"
+              accessibilityRole="button"
+              onPress={() => refreshReads(false)}
+              style={({pressed}) => [
+                styles.retryButton,
+                styles.macHomeRetryButton,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={styles.macHomeRetryButtonText}>Retry</Text>
+            </FocusPressable>
+          )}
+        </View>
+      )}
+      {readOutcomes !== null && !allHomeReadsUnavailable && (
+        <View style={styles.macHomeReadStatuses}>
+          <OutcomeStatus
+            label="Conversations"
+            mac
+            outcome={readOutcomes.conversations}
+          />
+          <OutcomeStatus label="Memories" mac outcome={readOutcomes.memories} />
+        </View>
+      )}
+    </View>
+  );
+
+  const homeDesktopDeviceAffordance = (
+    <View
+      accessibilityLabel="Home device affordance"
+      style={styles.macHomeDeviceAffordance}>
+      <View style={styles.macHomeDeviceStatus}>
+        <View
+          style={[styles.pendantStatusDot, {backgroundColor: homeStatusColor}]}
+        />
+        <Text style={styles.macHomeDeviceStatusText}>{homeStatus}</Text>
+      </View>
+      <View style={styles.macHomeDeviceActions}>
+        {nativeSnapshot?.devices.map(device => (
+          <FocusPressable
+            accessibilityLabel={`${
+              device.connected ? 'Disconnect' : 'Connect'
+            } ${device.name}`}
+            accessibilityRole="button"
+            disabled={deviceBusy}
+            key={device.id}
+            onPress={() => toggleDevice(device.id, device.connected)}
+            style={({pressed}) => [
+              styles.macHomeDeviceChip,
+              pressed && styles.pressed,
+            ]}>
+            <Text style={styles.macHomeDeviceChipText}>
+              {device.name} · {device.connected ? 'Connected' : 'Connect'}
+            </Text>
+          </FocusPressable>
+        ))}
+        <FocusPressable
+          accessibilityLabel="Scan for Omi devices"
+          accessibilityRole="button"
+          disabled={
+            deviceBusy || !isBluetoothScanAvailable(nativeSnapshot?.bluetooth)
+          }
+          onPress={scanForOmi}
+          style={({pressed}) => [
+            styles.macHomeDeviceChip,
+            pressed && styles.pressed,
+          ]}>
+          <Text style={styles.macHomeDeviceChipText}>
+            {deviceBusy ? 'Scanning…' : 'Devices'}
+          </Text>
+        </FocusPressable>
+      </View>
+      {deviceScanMessage !== null && (
+        <Text style={styles.macHomeDeviceHint}>{deviceScanMessage}</Text>
+      )}
+    </View>
+  );
+
+  const homeDesktopEmptyTitle =
+    readsPhase === 'unavailable'
+      ? 'Saved data unavailable'
+      : homeSearching
+      ? 'No results'
+      : 'No saved conversations or memories yet.';
+  const homeDesktopEmptyCopy =
+    readsPhase === 'unavailable'
+      ? readOutcomes?.conversations.status === 'error'
+        ? readOutcomes.conversations.error
+        : desktopBackendConfigurationCopy
+      : homeSearching
+      ? 'Filter covers loaded conversations and memories only.'
+      : 'Loaded conversations and memories will appear here.';
+
+  const homeDesktop = (
+    <View
+      accessibilityLabel="Home desktop query surface"
+      style={styles.macHomeSurface}>
+      <View accessibilityLabel="Home query lane" style={styles.macHomeLane}>
+        <View
+          accessibilityLabel="Home query island"
+          style={styles.macHomeQueryIsland}>
+          <OmiGlassPanel
+            accessibilityLabel="Home query material"
+            pointerEvents="none"
+            style={styles.macGlassPanel}
+          />
+          <HomeSearchField
+            compact={false}
+            desktop
+            inputRef={searchRef}
+            onBlur={() => setSearchFocused(false)}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onOpenChat={() => setRoute('Chat')}
+            onPressIn={() => setSearchArmed(true)}
+            query={searchQuery}
+            searchArmed={searchArmed}
+            searchFocused={searchFocused}
+          />
+        </View>
+        <View
+          accessibilityLabel="Home results panel"
+          style={styles.macHomeResultsPanel}>
+          <OmiGlassPanel
+            accessibilityLabel="Home results material"
+            pointerEvents="none"
+            style={styles.macGlassPanel}
+          />
+          <ProjectionList
+            accessibilityLabel="Home chronological spine"
+            emptyCopy={homeDesktopEmptyCopy}
+            emptyTitle={homeDesktopEmptyTitle}
+            error={null}
+            footer={homeDesktopReadStatus}
+            items={homeResults}
+            loading={readsPhase === 'initial-loading'}
+            rowVariant="spine"
+            style={styles.macHomeResultsList}
+          />
+        </View>
+        {homeDesktopDeviceAffordance}
+      </View>
+    </View>
+  );
+
   const homeOverview = (
     <ScrollView
       accessibilityLabel="Home overview"
@@ -2246,7 +2528,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 compact && styles.paneCompactSurface,
                 macDesktop && styles.macPane,
               ]}>
-              {macDesktop && (
+              {macDesktop && route !== 'Home' && (
                 <OmiGlassPanel
                   accessibilityLabel="Desktop material panel"
                   pointerEvents="none"
@@ -2264,233 +2546,211 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ]}>
                 <View style={[styles.stage, compact && styles.stageCompact]}>
                   {route === 'Home' ? (
-                    <View style={styles.searchHome}>
-                      {!homeSearching && homeOverview}
-                      {homeSearching && (
-                        <Animated.View
-                          accessibilityLabel="Home search results"
-                          style={[
-                            styles.homeResults,
-                            {opacity: homeResultsOpacity},
-                          ]}>
-                          <ProjectionList
-                            emptyCopy={
-                              homeSearching
-                                ? 'Clear the search to see saved items.'
-                                : 'Start typing to search what is saved.'
-                            }
-                            emptyTitle={
-                              homeSearching ? 'No results' : 'Nothing saved yet'
-                            }
-                            error={null}
-                            footer={
-                              <View style={styles.readStatuses}>
-                                {readsPhase !== 'ready' && (
-                                  <View
-                                    style={[
-                                      styles.readStatus,
-                                      macDesktop && styles.macReadStatus,
-                                    ]}>
-                                    <Text
+                    macDesktop ? (
+                      homeDesktop
+                    ) : (
+                      <View style={styles.searchHome}>
+                        {!homeSearching && homeOverview}
+                        {homeSearching && (
+                          <Animated.View
+                            accessibilityLabel="Home search results"
+                            style={[
+                              styles.homeResults,
+                              {opacity: homeResultsOpacity},
+                            ]}>
+                            <ProjectionList
+                              emptyCopy={
+                                homeSearching
+                                  ? 'Clear the search to see saved items.'
+                                  : 'Start typing to search what is saved.'
+                              }
+                              emptyTitle={
+                                homeSearching
+                                  ? 'No results'
+                                  : 'Nothing saved yet'
+                              }
+                              error={null}
+                              footer={
+                                <View style={styles.readStatuses}>
+                                  {readsPhase !== 'ready' && (
+                                    <View
                                       style={[
-                                        styles.readStatusText,
-                                        macDesktop && styles.macReadStatusText,
+                                        styles.readStatus,
+                                        macDesktop && styles.macReadStatus,
                                       ]}>
-                                      {readsPhase === 'initial-loading'
-                                        ? 'Loading saved data…'
-                                        : readsPhase === 'refreshing'
-                                        ? 'Refreshing saved data…'
-                                        : readsPhase ===
-                                          'saved-but-refresh-failed'
-                                        ? 'Showing saved data. Could not refresh.'
-                                        : 'Saved data is unavailable.'}
-                                    </Text>
-                                    {allHomeReadsUnavailable && (
                                       <Text
                                         style={[
-                                          styles.readStatusCopy,
+                                          styles.readStatusText,
                                           macDesktop &&
                                             styles.macReadStatusText,
                                         ]}>
-                                        {readOutcomes?.conversations.status ===
-                                        'error'
-                                          ? readOutcomes.conversations.error
-                                          : desktopBackendConfigurationCopy}
+                                        {readsPhase === 'initial-loading'
+                                          ? 'Loading saved data…'
+                                          : readsPhase === 'refreshing'
+                                          ? 'Refreshing saved data…'
+                                          : readsPhase ===
+                                            'saved-but-refresh-failed'
+                                          ? 'Showing saved data. Could not refresh.'
+                                          : 'Saved data is unavailable.'}
                                       </Text>
-                                    )}
-                                    {(readsPhase ===
-                                      'saved-but-refresh-failed' ||
-                                      readsPhase === 'unavailable') && (
-                                      <FocusPressable
-                                        accessibilityLabel="Retry saved data"
-                                        accessibilityRole="button"
-                                        onPress={() => refreshReads(false)}
-                                        style={({pressed}) => [
-                                          styles.retryButton,
-                                          macDesktop && styles.macRetryButton,
-                                          pressed && styles.pressed,
-                                        ]}>
+                                      {allHomeReadsUnavailable && (
                                         <Text
                                           style={[
-                                            styles.retryButtonText,
+                                            styles.readStatusCopy,
                                             macDesktop &&
-                                              styles.macRetryButtonText,
+                                              styles.macReadStatusText,
                                           ]}>
-                                          Retry
+                                          {readOutcomes?.conversations
+                                            .status === 'error'
+                                            ? readOutcomes.conversations.error
+                                            : desktopBackendConfigurationCopy}
                                         </Text>
-                                      </FocusPressable>
-                                    )}
-                                  </View>
-                                )}
-                                {readOutcomes !== null &&
-                                  !allHomeReadsUnavailable && (
-                                    <View style={styles.readStatuses}>
-                                      <OutcomeStatus
-                                        label="Conversations"
-                                        outcome={readOutcomes.conversations}
-                                      />
-                                      <OutcomeStatus
-                                        label="Memories"
-                                        outcome={readOutcomes.memories}
-                                      />
+                                      )}
+                                      {(readsPhase ===
+                                        'saved-but-refresh-failed' ||
+                                        readsPhase === 'unavailable') && (
+                                        <FocusPressable
+                                          accessibilityLabel="Retry saved data"
+                                          accessibilityRole="button"
+                                          onPress={() => refreshReads(false)}
+                                          style={({pressed}) => [
+                                            styles.retryButton,
+                                            macDesktop && styles.macRetryButton,
+                                            pressed && styles.pressed,
+                                          ]}>
+                                          <Text
+                                            style={[
+                                              styles.retryButtonText,
+                                              macDesktop &&
+                                                styles.macRetryButtonText,
+                                            ]}>
+                                            Retry
+                                          </Text>
+                                        </FocusPressable>
+                                      )}
                                     </View>
                                   )}
-                              </View>
-                            }
-                            header={
-                              <View style={styles.homeOverview}>
-                                <View style={styles.deviceHeader}>
-                                  <View>
-                                    <Text style={styles.sectionLabel}>
-                                      Devices
-                                    </Text>
-                                    <Text style={styles.deviceState}>
-                                      {nativeSnapshot === null
-                                        ? 'Checking Bluetooth…'
-                                        : bluetoothStatusLabel(
-                                            nativeSnapshot.bluetooth,
-                                          )}
-                                    </Text>
-                                  </View>
-                                  <FocusPressable
-                                    accessibilityLabel="Scan for Omi devices"
-                                    accessibilityRole="button"
-                                    disabled={
-                                      deviceBusy ||
-                                      !isBluetoothScanAvailable(
-                                        nativeSnapshot?.bluetooth,
-                                      )
-                                    }
-                                    onPress={scanForOmi}
-                                    style={({pressed}) => [
-                                      styles.scanButton,
-                                      pressed && styles.pressed,
-                                    ]}>
-                                    <Text style={styles.scanButtonText}>
-                                      {deviceBusy ? 'Scanning…' : 'Scan'}
-                                    </Text>
-                                  </FocusPressable>
+                                  {readOutcomes !== null &&
+                                    !allHomeReadsUnavailable && (
+                                      <View style={styles.readStatuses}>
+                                        <OutcomeStatus
+                                          label="Conversations"
+                                          outcome={readOutcomes.conversations}
+                                        />
+                                        <OutcomeStatus
+                                          label="Memories"
+                                          outcome={readOutcomes.memories}
+                                        />
+                                      </View>
+                                    )}
                                 </View>
-                                {nativeSnapshot?.devices.map(device => (
-                                  <FocusPressable
-                                    accessibilityLabel={`${
-                                      device.connected
-                                        ? 'Disconnect'
-                                        : 'Connect'
-                                    } ${device.name}`}
-                                    accessibilityRole="button"
-                                    key={device.id}
-                                    disabled={deviceBusy}
-                                    onPress={() =>
-                                      toggleDevice(device.id, device.connected)
-                                    }
-                                    style={({pressed}) => [
-                                      styles.deviceRow,
-                                      pressed && styles.pressed,
-                                    ]}>
+                              }
+                              header={
+                                <View style={styles.homeOverview}>
+                                  <View style={styles.deviceHeader}>
                                     <View>
-                                      <Text style={styles.deviceName}>
-                                        {device.name}
+                                      <Text style={styles.sectionLabel}>
+                                        Devices
                                       </Text>
-                                      <Text style={styles.deviceMeta}>
-                                        {device.connected
-                                          ? 'Connected'
-                                          : `${device.rssi} dBm`}
+                                      <Text style={styles.deviceState}>
+                                        {nativeSnapshot === null
+                                          ? 'Checking Bluetooth…'
+                                          : bluetoothStatusLabel(
+                                              nativeSnapshot.bluetooth,
+                                            )}
                                       </Text>
                                     </View>
-                                    {device.battery !== undefined && (
-                                      <Text style={styles.deviceBattery}>
-                                        {device.battery}%
+                                    <FocusPressable
+                                      accessibilityLabel="Scan for Omi devices"
+                                      accessibilityRole="button"
+                                      disabled={
+                                        deviceBusy ||
+                                        !isBluetoothScanAvailable(
+                                          nativeSnapshot?.bluetooth,
+                                        )
+                                      }
+                                      onPress={scanForOmi}
+                                      style={({pressed}) => [
+                                        styles.scanButton,
+                                        pressed && styles.pressed,
+                                      ]}>
+                                      <Text style={styles.scanButtonText}>
+                                        {deviceBusy ? 'Scanning…' : 'Scan'}
                                       </Text>
-                                    )}
-                                  </FocusPressable>
-                                ))}
-                                {(deviceScanMessage !== null ||
-                                  (nativeSnapshot !== null &&
-                                    nativeSnapshot.devices.length === 0)) && (
-                                  <Text style={styles.deviceHint}>
-                                    {deviceScanMessage ??
-                                      nativeSnapshot?.lastEvent ??
-                                      'No Omi device was discovered.'}
+                                    </FocusPressable>
+                                  </View>
+                                  {nativeSnapshot?.devices.map(device => (
+                                    <FocusPressable
+                                      accessibilityLabel={`${
+                                        device.connected
+                                          ? 'Disconnect'
+                                          : 'Connect'
+                                      } ${device.name}`}
+                                      accessibilityRole="button"
+                                      key={device.id}
+                                      disabled={deviceBusy}
+                                      onPress={() =>
+                                        toggleDevice(
+                                          device.id,
+                                          device.connected,
+                                        )
+                                      }
+                                      style={({pressed}) => [
+                                        styles.deviceRow,
+                                        pressed && styles.pressed,
+                                      ]}>
+                                      <View>
+                                        <Text style={styles.deviceName}>
+                                          {device.name}
+                                        </Text>
+                                        <Text style={styles.deviceMeta}>
+                                          {device.connected
+                                            ? 'Connected'
+                                            : `${device.rssi} dBm`}
+                                        </Text>
+                                      </View>
+                                      {device.battery !== undefined && (
+                                        <Text style={styles.deviceBattery}>
+                                          {device.battery}%
+                                        </Text>
+                                      )}
+                                    </FocusPressable>
+                                  ))}
+                                  {(deviceScanMessage !== null ||
+                                    (nativeSnapshot !== null &&
+                                      nativeSnapshot.devices.length === 0)) && (
+                                    <Text style={styles.deviceHint}>
+                                      {deviceScanMessage ??
+                                        nativeSnapshot?.lastEvent ??
+                                        'No Omi device was discovered.'}
+                                    </Text>
+                                  )}
+                                  <Text style={styles.sectionLabel}>
+                                    Currents
                                   </Text>
-                                )}
-                                <Text style={styles.sectionLabel}>
-                                  Currents
-                                </Text>
-                              </View>
-                            }
-                            items={homeResults}
-                            loading={readsPhase === 'initial-loading'}
-                            suppressEmpty={readsPhase !== 'ready'}
-                          />
-                        </Animated.View>
-                      )}
-                      <View
-                        accessibilityLabel="Home search dock"
-                        style={[
-                          styles.homeSearchDock,
-                          macDesktop && styles.macHomeSearchDock,
-                          compact && styles.homeSearchDockCompact,
-                          searchFocused && styles.focusRing,
-                        ]}>
-                        <Search
-                          accessible={false}
-                          color="#888888"
-                          size={18}
-                          strokeWidth={2}
-                        />
-                        <TextInput
-                          accessibilityLabel="Search Home"
+                                </View>
+                              }
+                              items={homeResults}
+                              loading={readsPhase === 'initial-loading'}
+                              suppressEmpty={readsPhase !== 'ready'}
+                            />
+                          </Animated.View>
+                        )}
+                        <HomeSearchField
+                          compact={compact}
+                          desktop={false}
+                          inputRef={searchRef}
                           onBlur={() => setSearchFocused(false)}
                           onChangeText={setSearchQuery}
                           onFocus={() => setSearchFocused(true)}
+                          onOpenChat={() => setRoute('Chat')}
                           onPressIn={() => setSearchArmed(true)}
-                          placeholder="Search Omi"
-                          placeholderTextColor="#777777"
-                          ref={searchRef}
-                          showSoftInputOnFocus={searchArmed}
-                          style={[
-                            styles.searchInput,
-                            macDesktop && styles.macPrimaryText,
-                          ]}
-                          value={searchQuery}
+                          query={searchQuery}
+                          searchArmed={searchArmed}
+                          searchFocused={searchFocused}
                         />
-                        <FocusPressable
-                          accessibilityLabel="Open Chat"
-                          accessibilityRole="button"
-                          onPress={() => setRoute('Chat')}
-                          style={({pressed}) => [
-                            styles.askOmiButton,
-                            pressed && styles.pressed,
-                          ]}>
-                          <ArrowUp
-                            color="#141414"
-                            size={17}
-                            strokeWidth={2.5}
-                          />
-                        </FocusPressable>
                       </View>
-                    </View>
+                    )
                   ) : route === 'Chat' ? (
                     <ScrollView
                       accessibilityLabel="Chat scroll region"
@@ -2808,10 +3068,43 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  macHomeSearchDock: {
-    backgroundColor: 'rgba(255, 255, 255, 0.62)',
-    borderColor: 'rgba(20, 20, 20, 0.22)',
+  macHomeSurface: {alignSelf: 'stretch', flex: 1},
+  macHomeLane: {
+    alignSelf: 'center',
+    flex: 1,
+    maxWidth: 900,
+    width: '100%',
   },
+  macHomeQueryIsland: {
+    borderRadius: 22,
+    minHeight: 64,
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  macHomeQueryField: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderWidth: 0,
+    marginBottom: 0,
+    marginTop: 0,
+    maxWidth: 900,
+    minHeight: 64,
+    paddingLeft: 18,
+    paddingRight: 8,
+    paddingVertical: 12,
+  },
+  macHomeResultsPanel: {
+    borderRadius: 22,
+    flex: 1,
+    maxHeight: 470,
+    marginTop: 12,
+    minHeight: 120,
+    overflow: 'hidden',
+    position: 'relative',
+    width: '100%',
+  },
+  macHomeResultsList: {flex: 1},
   paneCompact: {borderRadius: 0, borderWidth: 0},
   paneCompactSurface: {backgroundColor: '#1c1c1a'},
   stageMotion: {flex: 1},
@@ -2964,7 +3257,67 @@ const styles = StyleSheet.create({
   homeCurrentKind: {color: '#9eb8aa'},
   homeCurrentTitle: {fontSize: 16, lineHeight: 21, marginTop: 8},
   homeCurrentSummary: {color: '#9a9e98', lineHeight: 18, marginTop: 6},
+  homeSpineRow: {
+    backgroundColor: 'transparent',
+    borderBottomColor: 'rgba(20, 20, 20, 0.12)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+  },
+  homeSpineKind: {color: '#52615c'},
+  homeSpineMeta: {color: '#626262'},
+  homeSpineTitle: {color: '#141414', fontSize: 15, marginTop: 5},
+  homeSpineSummary: {color: '#5a5a5a', marginTop: 3},
   homeResults: {flex: 1},
+  macHomeReadStatuses: {gap: 8},
+  macHomeReadStatus: {
+    gap: 3,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  macHomeReadStatusText: {color: '#343434', fontSize: 12, fontWeight: '600'},
+  macHomeReadStatusCopy: {color: '#5a5a5a', fontSize: 12, lineHeight: 17},
+  macHomeRetryButton: {
+    alignSelf: 'flex-start',
+    minHeight: 32,
+    paddingHorizontal: 12,
+  },
+  macHomeRetryButtonText: {color: '#141414', fontSize: 12, fontWeight: '600'},
+  macHomeDeviceAffordance: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 36,
+    paddingHorizontal: 4,
+    paddingTop: 8,
+  },
+  macHomeDeviceStatus: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  macHomeDeviceStatusText: {color: '#343434', fontSize: 12},
+  macHomeDeviceActions: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'flex-end',
+  },
+  macHomeDeviceChip: {
+    borderColor: 'rgba(20, 20, 20, 0.22)',
+    borderRadius: 14,
+    borderWidth: 1,
+    minHeight: 30,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  macHomeDeviceChipText: {color: '#343434', fontSize: 11, fontWeight: '600'},
+  macHomeDeviceHint: {color: '#5a5a5a', fontSize: 11},
   deviceChip: {
     backgroundColor: '#242424',
     borderColor: '#383838',
