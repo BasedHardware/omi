@@ -8,6 +8,7 @@
 #include "lib/core/config.h"
 #include "lib/core/feedback.h"
 #include "lib/core/haptic.h"
+#include "lib/core/idle_sleep.h"
 #include "lib/core/led.h"
 #include "lib/core/lib/battery/battery.h"
 #include "lib/core/mic.h"
@@ -37,6 +38,10 @@ bool is_connected = false;
 bool is_charging = false;
 bool is_off = false;
 bool blink_toggle = false;
+static uint8_t low_battery_phase = 0;
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+bool is_capturing = false;
+#endif
 
 static void print_reset_reason(void)
 {
@@ -129,6 +134,17 @@ static void boot_ready_sequence(void)
     k_msleep(10);
 }
 
+// LED language (first match wins):
+//   off                                  device powered off
+//   blink red (+ green while charging)   RTC not synced, connect the app
+//   solid green                          charging, battery full
+//   blink green (+ blue/red phase)       charging
+//   solid blue                           connected
+//   solid red                            disconnected
+// Opt-in patterns, off in the shipping config so the default language above is
+// unchanged; enable only together with an app-side explanation:
+//   CONFIG_OMI_ENABLE_CAPTURE_LED       blue only while audio capture is subscribed
+//   CONFIG_OMI_ENABLE_BATTERY_LOW_LED   double-blink red at or below the low threshold
 void set_led_state()
 {
     // If device is off, turn off all LEDs immediately
@@ -166,14 +182,56 @@ void set_led_state()
             blink_toggle = !blink_toggle;
         }
     } else {
+#ifdef CONFIG_OMI_ENABLE_CAPTURE_LED
+        // Blue while a central is actively capturing (audio subscribed), red otherwise
+        blue = is_connected && is_capturing;
+        red = !blue;
+#else
         blue = is_connected;
         red = !is_connected;
+#endif
+#if defined(CONFIG_OMI_ENABLE_BATTERY) && defined(CONFIG_OMI_ENABLE_BATTERY_LOW_LED)
+        if (battery_percentage > 0 && battery_percentage <= CONFIG_OMI_BATTERY_LOW_THRESHOLD) {
+            // Low battery warning: double-blink red regardless of connection state
+            blue = false;
+            red = low_battery_phase < 2;
+            low_battery_phase = (low_battery_phase + 1) % 3;
+        } else {
+            low_battery_phase = 0;
+        }
+#endif
     }
 
     set_led_green(green);
     set_led_blue(blue);
     set_led_red(red);
 }
+
+#ifdef CONFIG_OMI_ENABLE_IDLE_SLEEP
+#define IDLE_SLEEP_TIMEOUT_SEC (CONFIG_OMI_IDLE_SLEEP_TIMEOUT_MIN * 60)
+#define IDLE_SLEEP_TICK_SEC 1
+static uint32_t idle_seconds = 0;
+
+static void update_idle_sleep(void)
+{
+    struct omi_idle_inputs inputs = {
+        .charging = is_charging,
+        .connected = is_connected,
+        .audio_subscribed = transport_is_audio_subscribed(),
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        .storage_transfer_active = storage_transfer_active(),
+        // A disconnected pendant with offline storage may be mid-recording, and the
+        // firmware cannot distinguish that from idle, so this build never auto-sleeps.
+        .offline_capture_possible = true,
+#endif
+    };
+
+    if (omi_idle_tick(&inputs, IDLE_SLEEP_TICK_SEC, IDLE_SLEEP_TIMEOUT_SEC, &idle_seconds)) {
+        LOG_INF("Idle for %u s; entering system off", idle_seconds);
+        turnoff_all();
+    }
+}
+#endif
 
 static int suspend_unused_modules(void)
 {
@@ -356,6 +414,9 @@ int main(void)
 #endif
 
         set_led_state();
+#ifdef CONFIG_OMI_ENABLE_IDLE_SLEEP
+        update_idle_sleep();
+#endif
         k_msleep(1000);
     }
 
