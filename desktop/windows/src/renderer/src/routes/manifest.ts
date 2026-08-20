@@ -1,7 +1,7 @@
 import { memo, createElement } from 'react'
 import type { ComponentType, ReactElement } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { House, GanttChartSquare, ListChecks, History, LayoutGrid, Lightbulb } from 'lucide-react'
+import { House, GanttChartSquare, ListChecks, History, LayoutGrid, Lightbulb, Bot } from 'lucide-react'
 import { Home } from '../pages/Home'
 import { Conversations } from '../pages/Conversations'
 import { Memories } from '../pages/Memories'
@@ -14,6 +14,7 @@ import { Rewind } from '../pages/Rewind'
 import { Insights } from '../pages/Insights'
 import { LiveConversation } from '../pages/LiveConversation'
 import { KnowledgeGraph } from '../pages/KnowledgeGraph'
+import { AiClone } from '../pages/AiClone'
 import { CONVERSATIONS_PATH } from '../lib/conversations/conversationsPanelActivity'
 
 // Single source of truth for the app's page routing. Both MainViews (what renders
@@ -79,6 +80,7 @@ const GoalsPanel = memo(Goals)
 const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
 const InsightsPanel = memo(Insights)
+const AiClonePanel = memo(AiClone)
 
 // Shared path constants — keep panel activity predicates and the manifest in sync.
 export const HOME_PATH = '/home'
@@ -185,6 +187,13 @@ export const routeManifest: RouteEntry[] = [
     Component: InsightsPanel,
     nav: { label: 'Insights', Icon: Lightbulb, order: 5 },
     escapeToHome: true
+  },
+  {
+    id: 'ai-clone',
+    kind: 'panel',
+    path: '/clone',
+    Component: AiClonePanel,
+    nav: { label: 'AI Clone', Icon: Bot, order: 6 }
   }
 ]
 

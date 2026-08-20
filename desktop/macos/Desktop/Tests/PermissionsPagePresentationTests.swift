@@ -36,6 +36,7 @@ final class PermissionsPagePresentationTests: XCTestCase {
         .transcription,
         .rewind,
         .floatingBar,
+        .aiClone,
         .notifications,
         .permissions,
         .shortcuts,

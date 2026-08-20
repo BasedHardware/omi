@@ -7,6 +7,7 @@ from __future__ import annotations
 # validation route.
 ACTION_SOURCE_RELATIVE_PATHS = (
     "Desktop/Sources/DesktopAutomationBridge.swift",
+    "Desktop/Sources/AIClone/AICloneAutomationActions.swift",
     "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
     "Desktop/Sources/Rewind/Core/RewindArtifactGauntlet.swift",
     "Desktop/Sources/DesktopAutomationOpenOmiShortcutQA.swift",

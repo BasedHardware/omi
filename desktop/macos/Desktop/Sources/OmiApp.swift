@@ -332,6 +332,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
+    // Resume the AI Clone listener when the user left it enabled (no-op otherwise): the
+    // reply loop belongs to the service, not to the Settings pane that happens to render it.
+    Task { @MainActor in AICloneService.shared.resumeIfEnabled() }
+
     // After a Sparkle update, show a small "what's new" card in the corner of the
     // main window once. Delayed so the window/overlay exist to render it.
     if restoreMainWindowAfterUpdateRelaunch != false {
