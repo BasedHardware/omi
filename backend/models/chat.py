@@ -1,11 +1,14 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Callable, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, model_validator
 
-from database.apps import get_app_by_id_db
+# App display names are resolved by an injected callable, never by importing the database
+# layer here: models/ must stay import-pure so a Pydantic module cannot drag the Firestore
+# client into every import graph that touches a chat message.
+AppNameResolver = Callable[[str], Optional[str]]
 
 
 class MessageSender(str, Enum):
@@ -147,14 +150,14 @@ class Message(BaseModel):
         *,
         use_plugin_name_if_available: bool,
         app_name_by_id: Dict[str, Optional[str]],
+        app_name_resolver: Optional[AppNameResolver],
     ) -> str:
         if message.sender == 'human':
             return 'User'
-        if use_plugin_name_if_available and message.app_id and message.app_id.strip():
+        if use_plugin_name_if_available and app_name_resolver and message.app_id and message.app_id.strip():
             app_id = message.app_id.strip()
             if app_id not in app_name_by_id:
-                app = get_app_by_id_db(app_id)
-                name = app.get('name') if app else None
+                name = app_name_resolver(app_id)
                 app_name_by_id[app_id] = name.strip() if isinstance(name, str) and name.strip() else None
             resolved_name = app_name_by_id[app_id]
             if resolved_name:
@@ -167,6 +170,7 @@ class Message(BaseModel):
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
+        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
         app_name_by_id: Dict[str, Optional[str]] = {}
@@ -177,6 +181,7 @@ class Message(BaseModel):
                 message,
                 use_plugin_name_if_available=use_plugin_name_if_available,
                 app_name_by_id=app_name_by_id,
+                app_name_resolver=app_name_resolver,
             )
             msg_text = f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
 
@@ -195,6 +200,7 @@ class Message(BaseModel):
         use_user_name_if_available: bool = False,
         use_plugin_name_if_available: bool = False,
         include_file_info: bool = False,
+        app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
         sorted_messages = sorted(messages, key=lambda m: m.created_at)
         app_name_by_id: Dict[str, Optional[str]] = {}
@@ -222,7 +228,7 @@ class Message(BaseModel):
 
             msg = f"""<message>
 <created_at>{message.created_at.strftime('%d %b %Y at %H:%M UTC')}</created_at>
-<sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id)}</sender>
+<sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id, app_name_resolver=app_name_resolver)}</sender>
 <content>{message.text}</content>
 {file_section}
 </message>"""

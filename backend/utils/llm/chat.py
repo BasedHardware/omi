@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, ValidationError
 import database.users as users_db
 import database.notifications as notification_db
 import database.goals as goals_db
+import database.apps as apps_db
 from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
@@ -34,6 +35,15 @@ logger = logging.getLogger(__name__)
 def _content_str(response: Any) -> str:
     """Extract string content from an LLM response (langchain content is typed as a union)."""
     return cast(str, response.content)
+
+
+def resolve_app_display_name(app_id: str) -> Optional[str]:
+    """App-record -> display name. Lives here, not in models/chat.py: this layer already owns
+    the database import, so the model stays free of it. Bound as a module (like users_db /
+    goals_db above) rather than `from database.apps import ...`, so suites that stub
+    database.apps can still import this module."""
+    app = apps_db.get_app_by_id_db(app_id)
+    return app.get('name') if app else None
 
 
 def normalize_filter(value: str) -> str:
@@ -267,7 +277,10 @@ def chunk_extraction(
 
 def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Optional[App] = None) -> str:
     conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+        messages,
+        use_user_name_if_available=True,
+        use_plugin_name_if_available=True,
+        app_name_resolver=resolve_app_display_name,
     )
     user_name, memories_str = get_prompt_memories(uid)
 
@@ -307,7 +320,10 @@ def answer_simple_message_stream(
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
     conversation_history = Message.get_messages_as_string(
-        messages, use_user_name_if_available=True, use_plugin_name_if_available=True
+        messages,
+        use_user_name_if_available=True,
+        use_plugin_name_if_available=True,
+        app_name_resolver=resolve_app_display_name,
     )
 
     return f"""
