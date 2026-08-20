@@ -89,6 +89,69 @@ codesign -dvv "/Applications/omi-<feature>.app" 2>&1 | grep -E 'Authority|TeamId
 codesign -d --entitlements :- "/Applications/omi-<feature>.app" | grep -o 'disable-library-validation'
 ```
 
+## `errSecInternalComponent`: the session, not the certificate
+
+An agent, a CI job, or any shell started outside the GUI login session hits this,
+and it is the single most misdiagnosed failure in this file:
+
+```
+build/<app>.app/Contents/Frameworks/Sparkle.framework: replacing existing signature
+build/<app>.app/Contents/Frameworks/Sparkle.framework: errSecInternalComponent
+```
+
+**The certificate is fine. The keychain is unlocked. You are the right user.** What
+is missing is authorization to *use* the private key from a process that cannot be
+shown a dialog.
+
+macOS normally resolves an unlisted caller by having SecurityAgent ask — *"codesign
+wants to use key X. Allow / Always Allow"*. A process whose `launchctl managername`
+reports `Background` rather than `Aqua` has no window server connection, so that
+dialog cannot be drawn and the Security framework fails the call immediately rather
+than hanging. `security` reports the same condition as exit 36, and
+`security show-keychain-info` says it outright: `User interaction is not allowed.`
+
+Diagnose it in one line before assuming anything about the identity:
+
+```bash
+launchctl managername            # Aqua = can prompt; Background = cannot
+```
+
+Two checks that will mislead you if you skip the one above:
+
+- `security find-identity -v -p codesigning` **lists the identity** — presence is not
+  permission.
+- `security unlock-keychain -p <deliberately-wrong-password> login.keychain-db`
+  **returns 0** when the keychain is already unlocked, so a locked keychain is not
+  the explanation.
+
+### The fix, once, permanently
+
+Grant `codesign` a standing partition on the key, from a terminal in the GUI session:
+
+```bash
+security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+  -l "Apple Development: YOUR NAME (XXXXXXXXXX)" ~/Library/Keychains/login.keychain-db
+```
+
+Omit `-k` so it prompts for the keychain password rather than recording it in shell
+history. After this, signing works from any session, including background ones.
+
+`run.sh` detects this failure and prints this remedy with your identity already
+substituted, so you should never have to find this section from a raw error.
+
+### The same wall blocks auth seeding
+
+`scripts/omi-auth-dump.sh` reads Firebase tokens from a team-scoped Keychain item.
+From a background session it prints `WARNING: no auth_idToken found — is the source
+bundle signed in?` **even when the source bundle is signed in** — the UserDefaults
+half reads fine and the secret does not. Same cause, same shape of fix:
+
+```bash
+security set-generic-password-partition-list -S apple-tool:,apple:,security: \
+  -s "com.omi.desktop.firebase-rest-session.v2.team.<TEAM>.bundle.com.omi.desktop-dev" \
+  -a firebase-rest-tokens ~/Library/Keychains/login.keychain-db
+```
+
 ## Do not "fix" a launch failure with ad-hoc signing
 
 `OMI_ALLOW_ADHOC_SIGN=1` looks like it works, and it is worse. An ad-hoc

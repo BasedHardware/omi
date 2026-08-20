@@ -501,6 +501,54 @@ if [ "$FAST_ONLY" = "1" ]; then
     fi
 fi
 
+
+# Every codesign call in this file goes through here.
+#
+# When signing fails because the *keychain* refused to hand over the private key, the raw
+# message is `errSecInternalComponent` — six syllables of nothing, and the failure looks
+# identical to a corrupt bundle or a bad identity. It sent one agent down a rabbit hole that
+# ended in ad-hoc signing, which is the one fix that silently breaks Rewind capture.
+#
+# The actual cause is almost always the session, not the certificate: a process launched
+# outside the GUI login session (`launchctl managername` reports `Background` rather than
+# `Aqua` — CI, an ssh shell, an agent harness, a LaunchDaemon) has no window server, so
+# SecurityAgent cannot draw the "codesign wants to use key X" dialog. Rather than hang, the
+# Security framework fails the call immediately. The key is present, the keychain is unlocked,
+# and the caller is the right user; only the authorization is missing.
+#
+# So say that, and say the one command that fixes it for good.
+omi_codesign() {
+    local output status
+    output="$(codesign "$@" 2>&1)"
+    status=$?
+    [ -n "$output" ] && printf '%s\n' "$output"
+    if [ $status -ne 0 ] && printf '%s' "$output" | grep -qE 'errSecInternalComponent|interaction is not allowed|User interaction'; then
+        echo ""
+        echo "ERROR: the keychain refused the signing key (not a bad bundle, not a bad identity)."
+        echo ""
+        echo "  identity: $SIGN_IDENTITY"
+        echo "  session : $(launchctl managername 2>/dev/null || echo unknown)   <- must be Aqua to show a keychain prompt"
+        echo ""
+        echo "  This shell cannot display the SecurityAgent dialog that would authorize the key,"
+        echo "  so macOS fails the request instead of asking. Grant codesign a standing partition"
+        echo "  on the key once, from a terminal in the GUI session:"
+        echo ""
+        echo "    security set-key-partition-list -S apple-tool:,apple:,codesign: -s \\"
+        echo "      -l \"$SIGN_IDENTITY\" ~/Library/Keychains/login.keychain-db"
+        echo ""
+        echo "  Omit -k so it prompts for the keychain password instead of putting it in history."
+        echo "  After that this build works from any session, including this one."
+        echo ""
+        echo "  DO NOT reach for OMI_ALLOW_ADHOC_SIGN=1 here. An ad-hoc signature has no"
+        echo "  designated requirement, so the bundle loses its own Screen Recording grant and"
+        echo "  Rewind captures nothing — which reads as a broken feature, not a signing problem."
+        echo "  See desktop/macos/docs/local-code-signing.md."
+        echo ""
+        exit 1
+    fi
+    return $status
+}
+
 sign_app_bundle() {
     local bundle="$1"
     local sign_nested="$2"
@@ -546,28 +594,28 @@ sign_app_bundle() {
     if [ "$sign_nested" = true ]; then
         if [ -d "$bundle/Contents/Frameworks/Sparkle.framework" ]; then
             substep "Signing Sparkle framework"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
         fi
         if [ -d "$bundle/Contents/Frameworks/Sentry.framework" ]; then
             substep "Signing Sentry framework"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sentry.framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sentry.framework"
         fi
         if [ -d "$bundle/Contents/Frameworks/onnxruntime.framework" ]; then
             substep "Signing onnxruntime framework"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/onnxruntime.framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/onnxruntime.framework"
         fi
         if [ -f "$bundle/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
             substep "Signing libsharpyuv"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libsharpyuv.0.dylib"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libsharpyuv.0.dylib"
         fi
         if [ -f "$bundle/Contents/Frameworks/libwebp.7.dylib" ]; then
             substep "Signing libwebp"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
         fi
         local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
         if [ -f "$node_bin" ]; then
             substep "Signing bundled node binary"
-            codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
+            omi_codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
         fi
     fi
 
@@ -601,7 +649,7 @@ sign_app_bundle() {
     fi
 
     substep "Signing app bundle"
-    codesign --force --options runtime --entitlements "$effective_entitlements" --sign "$SIGN_IDENTITY" "$bundle"
+    omi_codesign --force --options runtime --entitlements "$effective_entitlements" --sign "$SIGN_IDENTITY" "$bundle"
 }
 
 update_app_desktop_api_url() {
