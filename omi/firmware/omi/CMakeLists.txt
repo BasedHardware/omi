@@ -13,6 +13,7 @@ file(GLOB app_sources
     src/led.c
     src/haptic.c
     src/sd_card.c
+    src/sd_read_recovery.c
     src/spi_flash.c
     src/settings.c
     src/feedback.c
