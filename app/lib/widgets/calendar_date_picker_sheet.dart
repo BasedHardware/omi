@@ -146,6 +146,10 @@ Future<void> showConversationDateRangePicker(BuildContext context) async {
   );
 }
 
+/// Inclusive end of a calendar range. A single selected day has no second
+/// date, so fall back to [start] instead of leaving the upper bound open.
+DateTime closedCalendarRangeEnd(DateTime start, DateTime? end) => end ?? start;
+
 /// Date-range picker for conversation *search* (#4457 / #7977).
 ///
 /// Sibling of [showConversationDateRangePicker]: that sheet filters the
@@ -182,6 +186,7 @@ Future<void> showConversationSearchDateRangePicker(BuildContext context) async {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     CupertinoButton(
+                      key: const Key('search_date_range_cancel'),
                       padding: EdgeInsets.zero,
                       onPressed: () async {
                         if (hasExistingFilter) {
@@ -202,6 +207,7 @@ Future<void> showConversationSearchDateRangePicker(BuildContext context) async {
                     ),
                     const Spacer(),
                     CupertinoButton(
+                      key: const Key('search_date_range_done'),
                       padding: EdgeInsets.zero,
                       onPressed: () async {
                         final start = range.isNotEmpty ? range[0] : startDate;
@@ -209,12 +215,12 @@ Future<void> showConversationSearchDateRangePicker(BuildContext context) async {
                           Navigator.of(context).pop();
                           return;
                         }
-                        final end = range.length > 1 ? range[1] : endDate;
+                        final end = closedCalendarRangeEnd(start, range.length > 1 ? range[1] : null);
                         Navigator.of(context).pop();
                         if (provider.previousQuery.isNotEmpty) {
                           provider.setSearchDateRange(start, end);
                           await provider.searchConversations(provider.previousQuery);
-                          PlatformManager.instance.analytics.calendarFilterApplied(start, end ?? start);
+                          PlatformManager.instance.analytics.calendarFilterApplied(start, end);
                         }
                       },
                       child: Text(

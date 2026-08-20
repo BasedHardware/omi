@@ -154,7 +154,7 @@ class _SearchWidgetState extends State<SearchWidget> {
           // Calendar button - same height as search bar (48px)
           Consumer<ConversationProvider>(
             builder: (context, convoProvider, _) {
-              final hasSearchQuery = convoProvider.previousQuery.isNotEmpty;
+              final hasSearchQuery = searchController.text.isNotEmpty;
               final hasActiveFilter =
                   hasSearchQuery ? convoProvider.searchStartDate != null : convoProvider.selectedStartDate != null;
               return Container(
