@@ -135,9 +135,7 @@ def test_unparseable_filename_uses_recovered_startms_before_path():
 
     assert wrapped == nested
     assert wrapped != path_only
-    assert wrapped == document_id_from_seed(
-        f"{limitless.LIMITLESS_IMPORT_ID_NAMESPACE}:{UID}:{started_at.isoformat()}"
-    )
+    assert wrapped == document_id_from_seed(f"{limitless.LIMITLESS_IMPORT_ID_NAMESPACE}:{UID}:{started_at.isoformat()}")
 
 
 def test_reimport_same_export_creates_no_duplicates(tmp_path, store):
