@@ -67,7 +67,7 @@ extension RewindDatabase {
         db,
         sql: """
           WITH ranked AS (
-            SELECT id, ocrText, appName, windowTitle,
+            SELECT id, ocrText, appName, windowTitle, embedding,
                    ROW_NUMBER() OVER (
                      PARTITION BY appName, COALESCE(windowTitle, ''),
                                   CAST(strftime('%s', timestamp) AS INTEGER) / 300
