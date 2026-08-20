@@ -14,6 +14,12 @@ from google.cloud import firestore
 
 from database._client import db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.memory_app_key_grants import (
+    APP_KEY_MEMORY_GRANT_DOC_ID,
+    APP_KEY_MEMORY_GRANTS_COLLECTION,
+    MCP_CONSUMER,
+    build_app_key_scope_grant_contract_state,
+)
 
 PRODUCTION_MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
 # Omi Beta intentionally serves MCP data from dev while retaining the production
@@ -442,13 +448,63 @@ def _grant_write(
     return ref, existing, data
 
 
+def _oauth_memory_grant_ref(uid: str) -> Any:
+    return db.collection(f"users/{uid}/{APP_KEY_MEMORY_GRANTS_COLLECTION}").document(APP_KEY_MEMORY_GRANT_DOC_ID)
+
+
+def _oauth_memory_grant_contract(grant: Dict[str, Any]) -> Dict[str, Any]:
+    scopes = [scope for scope in grant.get("scopes") or [] if scope in {"memories.read", "memories.write"}]
+    return build_app_key_scope_grant_contract_state(
+        consumer=MCP_CONSUMER,
+        app_id=cast(str, grant["client_id"]),
+        key_id=cast(str, grant["id"]),
+        scopes=scopes,
+        default_read="memories.read" in scopes,
+        archive_read=False,
+        write="memories.write" in scopes,
+        enabled=True,
+    )
+
+
+def _ensure_oauth_memory_grant(grant: Dict[str, Any]) -> None:
+    """Backfill the app/key grant required by memory tools for active OAuth grants."""
+    expected = _oauth_memory_grant_contract(grant)
+    grant_ref = _oauth_memory_grant_ref(cast(str, grant["uid"]))
+    snapshot = grant_ref.get()
+    current: object = snapshot.to_dict() if getattr(snapshot, "exists", False) else {}
+    for field in (
+        "grants",
+        MCP_CONSUMER,
+        "apps",
+        grant["client_id"],
+        "keys",
+        grant["id"],
+    ):
+        current = current.get(field, {}) if isinstance(current, dict) else {}
+
+    expected_grant: object = expected
+    for field in (
+        "grants",
+        MCP_CONSUMER,
+        "apps",
+        grant["client_id"],
+        "keys",
+        grant["id"],
+    ):
+        expected_grant = expected_grant.get(field, {}) if isinstance(expected_grant, dict) else {}
+    if current != expected_grant:
+        grant_ref.set(expected, merge=True)
+
+
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
     deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
     now = _now()
     ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
     ref, existing, data = _grant_write(uid, client_id, resource, scopes, ref=ref, doc=ref.get(), now=now)
     ref.set(data, merge=True)
-    return {**existing, **data}
+    grant = {**existing, **data}
+    _ensure_oauth_memory_grant(grant)
+    return grant
 
 
 def _authorization_code_write(
@@ -537,6 +593,7 @@ def create_grant_and_authorization_code_if_allowed(
             now=now,
         )
         transaction.set(current_grant_ref, grant_data, merge=True)
+        transaction.set(_oauth_memory_grant_ref(uid), _oauth_memory_grant_contract(grant_data), merge=True)
         transaction.set(code_ref, code_data)
         return {**existing, **grant_data}, raw_code
 
@@ -730,6 +787,7 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
     grant = get_active_grant(cast(str, data.get("grant_id")))
     if not grant:
         return None
+    _ensure_oauth_memory_grant(grant)
     db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
     return {
         "uid": data.get("uid"),
