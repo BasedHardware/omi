@@ -1717,7 +1717,9 @@ final class DesktopAutomationActionRegistry {
               windowSize: window.frame.size,
               isResizable: window.styleMask.contains(.resizable),
               contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
-            extras = " shellAccepts=\(accepts) ignores=\(window.ignoresMouseEvents)"
+            extras =
+              " shellAccepts=\(accepts) glassSurfaces=\(InkGlassHitRegions.shared.surfaceCount(in: window))"
+              + " ignores=\(window.ignoresMouseEvents)"
           }
           return
             "\(String(describing: type(of: window)))(\"\(window.title)\" level=\(window.level.rawValue) key=\(window.isKeyWindow) idx=\(window.orderedIndex)\(extras))"
@@ -2401,6 +2403,31 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       CloudConnectorGuidanceOverlay.shared.dismiss()
       return ["dismissed": "true", "visible": "false"]
+    }
+
+    register(
+      name: "integration_nudge_evaluate",
+      summary:
+        "Read-only: which integration a given frontmost app/window maps to, and whether a nudge would fire",
+      params: ["bundle_id", "window_title"],
+      category: "read",
+      safety: "read_only"
+    ) { params in
+      await IntegrationNudgeAutomation.evaluate(
+        bundleID: params["bundle_id"],
+        windowTitle: params["window_title"]
+      )
+    }
+
+    register(
+      name: "integration_nudge_present",
+      summary: "Present the integration-connect card for one catalog entry (QA of the real card path)",
+      params: ["telemetry_id"],
+      category: "write",
+      surfaces: ["floating_bar"],
+      safety: "presents_ui"
+    ) { params in
+      await MainActor.run { IntegrationNudgeAutomation.present(telemetryID: params["telemetry_id"] ?? "") }
     }
 
     register(

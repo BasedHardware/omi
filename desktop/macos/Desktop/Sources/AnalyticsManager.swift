@@ -2,6 +2,15 @@ import AppKit
 import Foundation
 import Sentry
 
+/// Closed reason a presented notification left the screen. Auto-hide and explicit
+/// close must not share a single "dismissed" bucket — that made engagement
+/// unreadable (expiry counted as a user dismiss).
+enum NotificationDismissalKind: String, CaseIterable, Sendable {
+  case user
+  case timeout
+  case replaced
+}
+
 /// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
@@ -87,6 +96,21 @@ class AnalyticsManager {
 
   private func captureIntegrationConnectTelemetryForTests(_ event: String, properties: [String: Any]) {
     integrationConnectTelemetryCaptureForTests?(event, properties)
+  }
+
+  /// Integration-nudge seam: nil in production; tests install a scoped capture
+  /// to observe the real event names and payloads these methods emit.
+  private var integrationNudgeTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setIntegrationNudgeTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    integrationNudgeTelemetryCaptureForTests = capture
+  }
+
+  private func trackIntegrationNudge(_ event: String, properties: [String: Any]) {
+    integrationNudgeTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
   }
 
   func setDevicePairingTelemetryCaptureForTests(
@@ -262,6 +286,41 @@ class AnalyticsManager {
       IntegrationConnectTelemetry.failedEventName, properties: payload)
     PostHogManager.shared.track(
       IntegrationConnectTelemetry.failedEventName, properties: payload)
+  }
+
+  // MARK: - Integration Nudge Events
+
+  func integrationNudgeShown(
+    entry: IntegrationNudgeCatalogEntry,
+    trigger: IntegrationNudgeTrigger,
+    shownCount: Int
+  ) {
+    trackIntegrationNudge(
+      IntegrationNudgeTelemetry.shownEventName,
+      properties: IntegrationNudgeTelemetry.shownPayload(
+        integrationName: entry.displayName,
+        route: entry.route,
+        triggerID: trigger.id,
+        triggerKind: trigger.kind,
+        shownCount: shownCount
+      )
+    )
+  }
+
+  func integrationNudgeActioned(
+    entry: IntegrationNudgeCatalogEntry,
+    action: IntegrationNudgeTelemetry.Action,
+    triggerID: String
+  ) {
+    trackIntegrationNudge(
+      IntegrationNudgeTelemetry.actionedEventName,
+      properties: IntegrationNudgeTelemetry.actionedPayload(
+        integrationName: entry.displayName,
+        route: entry.route,
+        action: action,
+        triggerID: triggerID
+      )
+    )
   }
 
   // MARK: - Monitoring Events
@@ -1061,12 +1120,14 @@ class AnalyticsManager {
   func suggestionAssistantEvaluationFailed(
     identity: SuggestionAssistantTelemetry.Identity,
     shape: SuggestionAssistantTelemetry.EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
   ) {
     let payload = SuggestionAssistantTelemetry.evaluationFailedPayload(
       identity: identity,
       shape: shape,
-      latency: latency
+      latency: latency,
+      reason: reason
     )
     captureSuggestionAssistantTelemetryForTests(
       SuggestionAssistantTelemetry.evaluationFailedEventName,
@@ -1075,7 +1136,8 @@ class AnalyticsManager {
     PostHogManager.shared.suggestionAssistantEvaluationFailed(
       identity: identity,
       shape: shape,
-      latency: latency
+      latency: latency,
+      reason: reason
     )
   }
 
@@ -1246,12 +1308,15 @@ class AnalyticsManager {
     title: String,
     assistantId: String,
     surface: String,
+    dismissalKind: NotificationDismissalKind,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     if let suggestionIdentity {
+      var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+      properties["dismissal_kind"] = dismissalKind.rawValue
       captureSuggestionAssistantTelemetryForTests(
         "Notification Dismissed",
-        properties: SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
+        properties: properties
       )
     }
     PostHogManager.shared.notificationDismissed(
@@ -1259,6 +1324,7 @@ class AnalyticsManager {
       title: title,
       assistantId: assistantId,
       surface: surface,
+      dismissalKind: dismissalKind,
       suggestionIdentity: suggestionIdentity
     )
   }

@@ -324,7 +324,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get searchApps => 'ಅಪ್ಲಿಕೇಶನ ಹುಡುಕಿ...';
 
   @override
-  String get myApps => 'ನನ್ನ ಅಪ್ಲಿಕೇಶನ';
+  String get myApps => 'ನಾನು ರಚಿಸಿದವು';
 
   @override
   String get installedApps => 'ಅನುಸ್ಥಾಪಿತ ಅಪ್ಲಿಕೇಶನ';
@@ -9871,4 +9871,17 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸಿ';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi ಗೆ ಕಚ್ಚಾ ಆಡಿಯೊ ಕಳುಹಿಸುವುದನ್ನು ತಡೆಯಲು ಇದನ್ನು ಆಫ್ ಮಾಡಿ. ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ವೈಶಿಷ್ಟ್ಯಗಳಿಗೆ ಅಗತ್ಯವಾದ ಡೇಟಾವನ್ನು ಇನ್ನೂ Omi ಗೆ ಕಳುಹಿಸಬಹುದು.';
+
+  @override
+  String get findDevice => 'ಹುಡುಕಿ';
+
+  @override
+  String get diagnosticsShareFailed => 'ಡಯಾಗ್ನೋಸ್ಟಿಕ್ಸ್ ಹಂಚಿಕೊಳ್ಳಲಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 }

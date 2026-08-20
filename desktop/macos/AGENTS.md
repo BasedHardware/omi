@@ -58,7 +58,7 @@ Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.
 
 Beta candidates ship on the **hourly release train**: `desktop_auto_release.yml` runs on an hourly `schedule` (plus immediate manual `workflow_dispatch` for deliberate/emergency cuts — there is no `push` trigger). Each run tags the newest releasable `desktop/macos/**`/`codemagic.yaml` change since the last tag, coalescing every merge in the window and binding the immutable tag to the Codemagic config that builds it. A candidate reaches Beta automatically after Codemagic finishes the signed release build:
 
-1. **GitHub Actions** (`desktop_auto_release.yml`) — the planner auto-increments the version and pushes a `v*-macos` tag. Schedule runs pass `--min-tag-interval-seconds 3300`, throttling the train to at most one candidate per hour, measured from the previous candidate's GitHub-release `createdAt` (not the tagged commit's time — candidate tags are lightweight); manual dispatch skips the throttle. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. Fails closed unless `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` all succeeded for the exact newest releasable SHA, waiting up to an hour for in-flight checks; when the newest SHA carries a completed *failure*, the planner falls back to the newest **green** releasable SHA behind it (bounded scan) so a red tip degrades the candidate's freshness instead of stalling the train. After publication, a read-only 10-minute assertion uses the GitHub `CODEMAGIC_API_TOKEN` secret to require exactly one same-tag `omi-desktop-swift-release` build and retains JSON intake evidence; absence, duplicate intake, wrong workflow/source, and provider API visibility failures are distinct failures and never dispatch a fallback build.
+1. **GitHub Actions** (`desktop_auto_release.yml`) — the planner auto-increments the version and pushes a `v*-macos` tag. Schedule runs pass `--min-tag-interval-seconds 3300`, throttling the train to at most one candidate per hour, measured from the previous candidate's GitHub-release `createdAt` (not the tagged commit's time — candidate tags are lightweight); manual dispatch skips the throttle. A ~60s quiet window (`AUTO_RELEASE_QUIET_SECONDS`) coalesces near-simultaneous merges; the one-active-release fence (Codemagic build status on the latest tag) admits one candidate at a time. A single-pass source gate reads `Release Eligibility`, `Desktop Swift Build & Tests`, and `Desktop Swift Release Compile` for the exact newest releasable SHA: all green → tag; in-flight → defer until the next hourly tick; completed failure or a missing check that cannot exist → blocked (with a newest-green fallback when one exists). After publication, a read-only 10-minute assertion uses the GitHub `CODEMAGIC_API_TOKEN` secret to require exactly one same-tag `omi-desktop-swift-release` build and retains JSON intake evidence; absence, duplicate intake, wrong workflow/source, and provider API visibility failures are distinct failures and never dispatch a fallback build.
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M4:
    - Builds the universal app and dSYM, UUID-checks and uploads symbols to Sentry, and publishes both
    - Signs with Developer ID, notarizes with Apple
@@ -221,6 +221,12 @@ do not hand-edit those paths to match a specific machine.
 - **Firestore** (`based-hardware`): User data, conversations, action items
 - **Redis**: Caching
 - **Typesense**: Search
+
+### Screen activity sync rollout
+
+- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles stay on the legacy path until that PostHog flag is true; non-production bundles dogfood it by default and `OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` disables it locally.
+- OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
+- Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
 
 ### User Subcollections (Firestore)
 - `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
@@ -499,7 +505,8 @@ Guidelines:
 - Write from the user's perspective: "Fixed X", "Added Y", "Improved Z"
 - One sentence, no period at the end
 - Use a unique kebab-case filename so parallel PRs do not conflict
-- Skip internal-only changes (refactors, CI config, code cleanup)
+- Tests, generated Swift, e2e harness files, and listed release-infra paths are already exempt
+- Internal-only **production** edits (dead-code deletion, refactors in `Sources/`) need an in-repo marker, not the `no-changelog-needed` PR label — that label is invisible after merge and reddens main. Add `{"kind": "none"}` under `desktop/macos/changelog/unreleased/` instead
 - HTML is allowed for links: `<a href='...'>text</a>`
 - Do not edit `CHANGELOG.json` by hand; release automation regenerates it
 - Commit the fragment with your other changes (same commit is fine)

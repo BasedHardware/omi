@@ -322,7 +322,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get searchApps => 'अ‍ॅप शोधा...';
 
   @override
-  String get myApps => 'माझी अ‍ॅप्स';
+  String get myApps => 'माझे बनवलेले';
 
   @override
   String get installedApps => 'स्थापित अ‍ॅप्स';
@@ -9849,4 +9849,17 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi ला कच्चा ऑडिओ पाठवा';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi ला कच्चा ऑडिओ पाठवणे थांबवण्यासाठी हे बंद करा. प्रतिलेख आणि क्लाउड वैशिष्ट्यांसाठी आवश्यक डेटा अजूनही Omi ला पाठवला जाऊ शकतो.';
+
+  @override
+  String get findDevice => 'शोधा';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स शेअर करता आले नाही. कृपया पुन्हा प्रयत्न करा.';
 }

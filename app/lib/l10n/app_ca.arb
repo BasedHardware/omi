@@ -101,7 +101,7 @@
     "createYourOwnApp": "Crea la teva pròpia aplicació",
     "buildAndShareApp": "Construïu i compartiu la vostra aplicació personalitzada",
     "searchApps": "Cerca aplicacions...",
-    "myApps": "Les meves aplicacions",
+    "myApps": "Creat per mi",
     "installedApps": "Aplicacions instal·lades",
     "unableToFetchApps": "No s'han pogut obtenir les aplicacions :(\n\nComproveu la vostra connexió a internet i torneu-ho a provar.",
     "aboutOmi": "Sobre Omi",
@@ -3192,5 +3192,9 @@
     "accountCutoverMigrationInProgressTitle": "Migración en curso",
     "accountCutoverMigrationInProgressMessage": "Tu cuenta se está migrando. Las funciones del producto están en pausa hasta que termine la migración.",
     "accountCutoverMigrationRollbackMessage": "Tu cuenta está en mantenimiento tras una reversión de migración. Algunos datos más recientes pueden quedar retenidos.",
-    "accountCutoverOpenStore": "Abrir tienda"
+    "accountCutoverOpenStore": "Abrir tienda",
+    "sendRawAudioToOmi": "Envia l'àudio sense processar a Omi",
+    "sendRawAudioToOmiDescription": "Desactiva-ho per impedir que l'àudio sense processar s'enviï a Omi. Les transcripcions i les dades necessàries per a les funcions al núvol encara es poden enviar a Omi.",
+    "findDevice": "Troba",
+    "diagnosticsShareFailed": "No s'ha pogut compartir el diagnòstic. Torna-ho a provar."
 }

@@ -126,6 +126,18 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["memory", "facts", "notify memory"], section: .notifications, icon: "bell",
       settingId: "notifications.memory"),
     SettingsSearchItem(
+      name: "Integration Suggestions",
+      subtitle: "Offer to connect an app when you open one Omi works with",
+      keywords: ["integration", "suggestions", "connect", "gmail", "notion", "nudge"],
+      section: .notifications, icon: "bell",
+      settingId: "notifications.integrationsuggestions"),
+    SettingsSearchItem(
+      name: "Reset all suggestion history",
+      subtitle: "Clear every integration's suggestion history so Omi can offer them again",
+      keywords: ["reset", "integration", "suggestions", "history", "again"],
+      section: .notifications, icon: "bell",
+      settingId: "notifications.integrationsuggestions.reset"),
+    SettingsSearchItem(
       name: "Daily Summary",
       subtitle: "Receive a daily summary of your conversations and activities",
       keywords: ["daily", "summary", "digest", "end of day"], section: .notifications, icon: "bell",
@@ -196,8 +208,8 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["auto install", "automatic install", "download updates", "install updates"],
       section: .about, icon: "info.circle", settingId: "about.autoinstall"),
     SettingsSearchItem(
-      name: "Update Channel", subtitle: "Choose between stable and beta update channels",
-      keywords: ["channel", "beta", "stable", "release channel"], section: .about,
+      name: "Omi Beta", subtitle: "Install the separate Omi Beta app beside this one",
+      keywords: ["channel", "beta", "stable", "release channel", "omi beta"], section: .about,
       icon: "info.circle", settingId: "about.channel"),
     SettingsSearchItem(
       name: "Version Info", subtitle: "Current app version and build number",

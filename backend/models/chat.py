@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Any, List, Literal, Optional, Union
@@ -89,6 +90,13 @@ class Message(BaseModel):
     # message response remains readable by older clients while a new client can
     # reconcile the canonical turn identity and structured payload exactly.
     metadata: Optional[str] = None
+    content_blocks: List[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            'Structured chat content blocks. New rows store these directly; '
+            'legacy rows are projected from metadata.content_blocks.'
+        ),
+    )
     client_message_id: Optional[str] = None
     message_source: Optional[str] = None
     journal_revision: Optional[int] = None
@@ -105,6 +113,16 @@ class Message(BaseModel):
                 data['plugin_id'] = app_id_val
             elif plugin_id_val is not None:
                 data['app_id'] = plugin_id_val
+
+            if 'content_blocks' not in data:
+                metadata = data.get('metadata')
+                if isinstance(metadata, str):
+                    try:
+                        legacy_blocks = json.loads(metadata).get('content_blocks')
+                    except (AttributeError, TypeError, ValueError):
+                        legacy_blocks = None
+                    if isinstance(legacy_blocks, list):
+                        data['content_blocks'] = legacy_blocks
         return data
 
     @classmethod
@@ -133,11 +151,9 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
+                return message.app_id
+            return message.sender.upper()
 
         formatted_messages = []
         for message in sorted_messages:
@@ -166,11 +182,9 @@ class Message(BaseModel):
         def get_sender_name(message: Message) -> str:
             if message.sender == 'human':
                 return 'User'
-            # elif use_plugin_name_if_available and message.app_id is not None:
-            #     plugin = next((p for p in plugins if p.id == message.app_id), None)
-            #     if plugin:
-            #         return plugin.name RESTORE ME
-            return message.sender.upper()  # TODO: use app id
+            if use_plugin_name_if_available and message.app_id and message.app_id.strip():
+                return message.app_id
+            return message.sender.upper()
 
         formatted_messages = []
         for message in sorted_messages:

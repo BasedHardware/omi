@@ -37,7 +37,30 @@ struct ContextDeliveryAttempt: Equatable, Sendable {
   let reason: ContextDeliveryGateReason
 }
 
+/// A successfully presented director notification for one bucket, used only as
+/// bounded prompt context. This is a signal to the model, not a delivery gate.
+struct ContextBucketRecentDelivery: Equatable, Sendable, Decodable, FetchableRecord {
+  /// The prompt tells the director not to re-send a point it already delivered.
+  /// Showing it six of them made that instruction unenforceable in practice —
+  /// measured at 7 repeats in 34 deliveries. The block is now rendered with
+  /// absolute timestamps, so it is byte-stable for a given delivery set and
+  /// carrying more of it is close to free.
+  static let promptCap = 15
+  static let summaryCharacterLimit = 320
+  /// Delivery memory outlives notification expiry so the director cannot
+  /// forget, and re-send, a point it already delivered earlier in the day.
+  static let memoryLookback: TimeInterval = 6 * 60 * 60
+
+  let decisionType: String
+  let message: String?
+  let deliveredAt: Date
+}
+
 enum ContextDeliveryLifecycle {
+  /// Inserted when a delivery attempt begins, and kept when the lane fails
+  /// before a model decision. Not a choice to stay silent.
+  static let unresolvedDecisionType = "pending"
+
   /// Nonterminal ledger states that may still advance. Terminal
   /// `failed`/`suppressed`/`delivered` rows are immutable.
   static let advanceableStates: Set<String> = ["attempted", "model_completed", "policy_approved"]
@@ -101,10 +124,37 @@ enum ContextDeliveryBudget {
   /// 24-hour Redis window (`_QUOTA_WINDOW_SECONDS`), not local midnight.
   static let dailyWindowSeconds: TimeInterval = 24 * 60 * 60
 
+  /// How long after a visit ends its in-flight director evaluation may still
+  /// run to completion and deliver. Requiring `outcome = 'active'` at every
+  /// stage meant any context switch killed the evaluation mid-flight — quota
+  /// spent, nothing delivered — so users who task-switch fast could never
+  /// receive a delivery. Notifications are context-free banners, so a recent
+  /// departure does not invalidate the outcome; each stage re-checks freshness,
+  /// which bounds how stale a departed visit's delivery can be.
+  static let deliveryValidityWindowSeconds: TimeInterval = 60
+
+  /// A departed visit's evaluation must ground on a frame from that visit, not
+  /// the next context's screen. Frames captured at most this long after the
+  /// visit ended still count as the visit's own capture.
+  static let departedFrameCaptureEpsilonSeconds: TimeInterval = 2
+
   static func dailyLimit(frequencyLevel: Int, planMultiplier: Int = 1) -> Int {
     let base = [0, 10, 20, 40, 60, 100][max(0, min(5, frequencyLevel))]
     return base * max(1, planMultiplier)
   }
+
+  /// Ceiling on candidate-sourced deliveries per 24-hour window, inside the
+  /// overall daily budget.
+  ///
+  /// The rewritten candidate gate swung from a 4% to a 71% pass rate (n=7 —
+  /// far too small to size the true rate, which is exactly why a ceiling is
+  /// warranted while dogfood measures it): a gate that now returns parseable
+  /// JSON will act on its own `show=true` default. Cooldown and the daily
+  /// budget bound the total interruption rate, but not the *mix* — without a
+  /// ceiling, armed candidates could crowd the entire budget. The check runs
+  /// before the gate's model call, so a capped candidate costs no tokens and
+  /// stays armed for a quieter window rather than being retired.
+  static let candidateDailyShowCeiling = 8
 
   static func cooldownSeconds(frequencyLevel: Int) -> TimeInterval {
     switch frequencyLevel {
@@ -215,10 +265,18 @@ extension ContextBucketStore {
           cooldownSeconds: gate.cooldownSeconds)
       else { return ContextDeliveryAttempt(id: nil, reason: .cooldown) }
       let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
+      // The daily budget caps user-visible interruptions. Evaluations that resolved
+      // to silence or failed never reached the user, so they must not spend it — a
+      // day of heavy screen activity would otherwise exhaust the budget on invisible
+      // decisions and read as a dead feature. In-flight attempts still count until
+      // they resolve, so a burst cannot over-reserve past the cap.
       let attemptedInWindow =
         try Int.fetchOne(
           db,
-          sql: "SELECT COUNT(*) FROM proactive_deliveries WHERE attemptedAt >= ?",
+          sql: """
+            SELECT COUNT(*) FROM proactive_deliveries
+            WHERE attemptedAt >= ? AND lifecycleState NOT IN ('suppressed', 'failed')
+            """,
           arguments: [windowStart]) ?? 0
       guard attemptedInWindow < gate.dailyLimit else {
         return ContextDeliveryAttempt(id: nil, reason: .dailyBudget)
@@ -226,13 +284,15 @@ extension ContextBucketStore {
       let id = UUID().uuidString.lowercased()
       try db.execute(
         sql: """
-          INSERT INTO proactive_deliveries
-            (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
-             provenanceJson, attemptedAt, expiresAt, createdAt)
-          VALUES (?, ?, ?, ?, 'pending', 'attempted', '{}', ?, ?, ?)
+            INSERT INTO proactive_deliveries
+              (id, visitID, bucketID, bucketVersionID, decisionType, lifecycleState,
+               provenanceJson, attemptedAt, expiresAt, createdAt)
+            VALUES (?, ?, ?, ?, ?, 'attempted', '{}', ?, ?, ?)
           """,
         arguments: [
-          id, fence.visitID, snapshot.bucketID, snapshot.versionID, now, now.addingTimeInterval(30 * 24 * 60 * 60), now,
+          id, fence.visitID, snapshot.bucketID, snapshot.versionID,
+          ContextDeliveryLifecycle.unresolvedDecisionType, now,
+          now.addingTimeInterval(30 * 24 * 60 * 60), now,
         ])
       return ContextDeliveryAttempt(id: id, reason: .allowed)
     }
@@ -269,6 +329,40 @@ extension ContextBucketStore {
         timestampColumn: timestampColumn,
         now: now)
     }
+  }
+
+  /// Newest successfully presented notifications for this bucket within the
+  /// delivery-memory lookback. Bounded so the director prompt cannot grow
+  /// without limit. Failed/suppressed rows are excluded: the model should see
+  /// what the user actually received. Lookback is on `deliveredAt`, not
+  /// notification expiry, so a delivered point cannot be forgotten and re-sent
+  /// once its banner expires.
+  func recentDeliveredForBucket(
+    bucketID: String,
+    now: Date = Date(),
+    limit: Int = ContextBucketRecentDelivery.promptCap
+  ) async -> [ContextBucketRecentDelivery] {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return [] }
+    let cap = max(0, min(limit, ContextBucketRecentDelivery.promptCap))
+    guard cap > 0 else { return [] }
+    return
+      (try? await pool.read { db in
+        try ContextBucketRecentDelivery.fetchAll(
+          db,
+          sql: """
+            SELECT decisionType, message, deliveredAt FROM proactive_deliveries
+            WHERE bucketID = ?
+              AND lifecycleState = 'delivered'
+              AND deliveredAt IS NOT NULL
+              AND deliveredAt >= ?
+            ORDER BY deliveredAt DESC
+            LIMIT ?
+            """,
+          arguments: [
+            bucketID, now.addingTimeInterval(-ContextBucketRecentDelivery.memoryLookback), cap,
+          ])
+      }) ?? []
   }
 
   func deliveryProvenance(id: String, now: Date = Date()) async -> String? {

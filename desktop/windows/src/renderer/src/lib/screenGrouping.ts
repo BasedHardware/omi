@@ -37,5 +37,11 @@ export function budgetSegments(segments: ScreenSegment[], maxChars: number): Scr
     out.push(s)
     used += s.text.length
   }
+  // Never return empty when segments exist. The caller advances its watermark on
+  // an empty result, so a single segment larger than the whole budget (a long
+  // doc/log in one window) would be skipped forever. Keep a truncated first one.
+  if (out.length === 0 && segments.length > 0) {
+    out.push({ ...segments[0], text: segments[0].text.slice(0, maxChars) })
+  }
   return out
 }

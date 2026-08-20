@@ -101,7 +101,7 @@
     "createYourOwnApp": "Създайте свое приложение",
     "buildAndShareApp": "Създайте и споделете персонализирано приложение",
     "searchApps": "Търсене на приложения...",
-    "myApps": "Моите приложения",
+    "myApps": "Създадени от мен",
     "installedApps": "Инсталирани приложения",
     "unableToFetchApps": "Не могат да се заредят приложенията :(\n\nМоля, проверете интернет връзката си и опитайте отново.",
     "aboutOmi": "За Omi",
@@ -3192,5 +3192,9 @@
     "accountCutoverMigrationInProgressTitle": "Идёт миграция",
     "accountCutoverMigrationInProgressMessage": "Ваш аккаунт мигрирует. Функции продукта приостановлены до завершения миграции.",
     "accountCutoverMigrationRollbackMessage": "Ваш аккаунт на обслуживании после отката миграции. Часть более новых данных может быть изолирована.",
-    "accountCutoverOpenStore": "Открыть магазин"
+    "accountCutoverOpenStore": "Открыть магазин",
+    "sendRawAudioToOmi": "Изпращане на необработен звук към Omi",
+    "sendRawAudioToOmiDescription": "Изключете, за да спрете изпращането на необработен звук към Omi. Транскрипции и данни, нужни за облачните функции, все още може да се изпращат към Omi.",
+    "findDevice": "Намери",
+    "diagnosticsShareFailed": "Диагностиката не можа да бъде споделена. Опитайте отново."
 }

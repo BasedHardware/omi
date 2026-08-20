@@ -17,6 +17,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
@@ -683,11 +684,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
-                              final Rect? sharePositionOrigin =
-                                  box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+                              final Rect? sharePositionOrigin = box != null
+                                  ? box.localToGlobal(Offset.zero) & box.size
+                                  : null;
 
                               await Share.share(
-                                'https://h.omi.me/apps/${app.id}',
+                                appShareUrl(app.id),
                                 subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
@@ -698,35 +700,35 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
               appProvider.isAppOwner
                   ? (isLoading
-                      ? const SizedBox.shrink()
-                      : Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              await showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(16),
-                                    topRight: Radius.circular(16),
+                        ? const SizedBox.shrink()
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.withValues(alpha: 0.3),
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                              onPressed: () async {
+                                HapticFeedback.mediumImpact();
+                                await showModalBottomSheet(
+                                  context: context,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(16),
+                                      topRight: Radius.circular(16),
+                                    ),
                                   ),
-                                ),
-                                builder: (context) {
-                                  return ShowAppOptionsSheet(app: app);
-                                },
-                              );
-                            },
-                          ),
-                        ))
+                                  builder: (context) {
+                                    return ShowAppOptionsSheet(app: app);
+                                  },
+                                );
+                              },
+                            ),
+                          ))
                   : const SizedBox(width: 8),
             ],
           ),
@@ -791,11 +793,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ),
                                       if (app.official) ...[
                                         const SizedBox(width: 4),
-                                        const FaIcon(
-                                          FontAwesomeIcons.solidCircleCheck,
-                                          size: 14,
-                                          color: Colors.deepPurpleAccent,
-                                        ),
+                                        const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: Colors.white),
                                       ],
                                     ],
                                   ),
@@ -814,7 +812,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     child: Row(
                                       children: [
                                         if (app.ratingCount > 0) ...[
-                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Colors.white),
                                           const SizedBox(width: 4),
                                           Text(
                                             '${app.getRatingAvg()} (${app.ratingCount})',
@@ -843,73 +841,81 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       color: const Color(0xFF35343B),
                                     )
                                   : app.enabled
-                                      ? AnimatedLoadingButton(
-                                          text: 'Disable',
-                                          width: 90,
-                                          height: 32,
-                                          onPressed: () => _toggleApp(app.id, false),
-                                          color: Colors.grey.shade700,
-                                        )
-                                      : (app.isPaid && !app.isUserPaid
-                                          ? AnimatedLoadingButton(
-                                              width: 100,
-                                              height: 32,
-                                              text: "Subscribe",
-                                              onPressed: () async {
-                                                // Track subscribe button clicked
-                                                PlatformManager.instance.analytics.appDetailSubscribeClicked(
-                                                  appId: app.id,
-                                                  appName: app.name,
-                                                );
+                                  ? AnimatedLoadingButton(
+                                      text: 'Disable',
+                                      width: 90,
+                                      height: 32,
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.grey.shade700,
+                                    )
+                                  : (app.isPaid && !app.isUserPaid
+                                        ? AnimatedLoadingButton(
+                                            width: 100,
+                                            height: 32,
+                                            text: "Subscribe",
+                                            onPressed: () async {
+                                              // Track subscribe button clicked
+                                              PlatformManager.instance.analytics.appDetailSubscribeClicked(
+                                                appId: app.id,
+                                                appName: app.name,
+                                              );
 
-                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                  final uri = Uri.tryParse(app.paymentLink!);
-                                                  if (uri == null) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                    );
-                                                    return;
-                                                  }
-                                                  _checkPaymentStatus(app.id);
-                                                  await _launchUrlSafely(uri);
-                                                } else {
-                                                  await _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )
-                                          : AnimatedLoadingButton(
-                                              width: 75,
-                                              height: 32,
-                                              text: 'Enable',
-                                              onPressed: () async {
-                                                if (app.worksExternally()) {
-                                                  showDialog(
-                                                    context: context,
-                                                    builder: (ctx) {
-                                                      return StatefulBuilder(
-                                                        builder: (ctx, setState) {
-                                                          return ConfirmationDialog(
-                                                            title: context.l10n.dataAccessNotice,
-                                                            description: context.l10n.dataAccessNoticeDescription,
-                                                            onConfirm: () {
-                                                              _toggleApp(app.id, true);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            onCancel: () {
-                                                              Navigator.pop(context);
-                                                            },
-                                                          );
-                                                        },
-                                                      );
-                                                    },
+                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                final uri = Uri.tryParse(app.paymentLink!);
+                                                if (uri == null) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
                                                   );
-                                                } else {
-                                                  _toggleApp(app.id, true);
+                                                  return;
                                                 }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )),
+                                                _checkPaymentStatus(app.id);
+                                                await _launchUrlSafely(uri);
+                                              } else {
+                                                await _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: Colors.white,
+                                            // AnimatedLoadingButton defaults both to white; on a
+                                            // white surface the label and spinner vanish.
+                                            textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                            loaderColor: Colors.black,
+                                          )
+                                        : AnimatedLoadingButton(
+                                            width: 75,
+                                            height: 32,
+                                            text: 'Enable',
+                                            onPressed: () async {
+                                              if (app.worksExternally()) {
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (ctx) {
+                                                    return StatefulBuilder(
+                                                      builder: (ctx, setState) {
+                                                        return ConfirmationDialog(
+                                                          title: context.l10n.dataAccessNotice,
+                                                          description: context.l10n.dataAccessNoticeDescription,
+                                                          onConfirm: () {
+                                                            _toggleApp(app.id, true);
+                                                            Navigator.pop(context);
+                                                          },
+                                                          onCancel: () {
+                                                            Navigator.pop(context);
+                                                          },
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                );
+                                              } else {
+                                                _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: Colors.white,
+                                            // AnimatedLoadingButton defaults both to white; on a
+                                            // white surface the label and spinner vanish.
+                                            textStyle: const TextStyle(fontSize: 16, color: Colors.black),
+                                            loaderColor: Colors.black,
+                                          )),
                             ],
                           ),
                         ),
@@ -1400,8 +1406,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     RecentReviewsSection(
-                                      reviews:
-                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                                      reviews: app.reviews
+                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
+                                          .take(3)
+                                          .toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () {
@@ -1606,7 +1614,7 @@ class RatingDistributionWidget extends StatelessWidget {
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 14,
-                    color: index < ratingAvg.round() ? Colors.deepPurple : Colors.grey.shade700,
+                    color: index < ratingAvg.round() ? Colors.white : Colors.grey.shade700,
                   ),
                 );
               }),
@@ -1673,8 +1681,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-              ? prefs.fullName
-              : prefs.givenName;
+          ? prefs.fullName
+          : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -1793,9 +1801,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withValues(alpha: 0.1),
+        color: Colors.white.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1833,7 +1841,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 24,
-                    color: index < editRating ? Colors.deepPurple : Colors.grey.shade600,
+                    color: index < editRating ? Colors.white : Colors.grey.shade600,
                   ),
                 ),
               );
@@ -1864,8 +1872,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               key: const ValueKey('app_detail_submit_review_button'),
               onPressed: isSubmitting ? null : _submitReview,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
@@ -1875,7 +1883,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       width: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        // The button surface is now white, so a white spinner would be invisible.
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
                       ),
                     )
                   : Text(
@@ -1892,8 +1901,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context);
-    final displayName =
-        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName = isUserReview
+        ? l10n.yourReview
+        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(
@@ -1909,8 +1919,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 seed: avatarSeed,
                 username: review.username,
                 size: 36,
-                backgroundColor: isUserReview ? Colors.deepPurple.withValues(alpha: 0.2) : null,
-                foregroundColor: isUserReview ? Colors.deepPurple : null,
+                backgroundColor: isUserReview ? Colors.white.withValues(alpha: 0.2) : null,
+                foregroundColor: isUserReview ? Colors.white : null,
               ),
               const SizedBox(width: 12),
               // Name, date, and stars
@@ -1923,7 +1933,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                         Text(
                           displayName,
                           style: TextStyle(
-                            color: isUserReview ? Colors.deepPurple : Colors.grey,
+                            color: isUserReview ? Colors.white : Colors.grey,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1945,7 +1955,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
+                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
                           ),
                         );
                       }),

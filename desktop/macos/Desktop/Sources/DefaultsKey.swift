@@ -42,6 +42,10 @@ enum DefaultsKey: String {
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
+  /// Opt-out: when you open an app Omi integrates with but have not connected,
+  /// Omi offers the connection once. Defaults to on; the per-integration
+  /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
+  case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
   case hasCompletedOnboarding = "hasCompletedOnboarding"
   case onboardingStep = "onboardingStep"
@@ -74,12 +78,16 @@ enum DefaultsKey: String {
   // migration contract instead of repeating raw UserDefaults literals.
   case tasksCategoryOrder = "TasksCategoryOrder"
   case tasksSortOrderMigrated = "TasksSortOrderMigrated"
-  /// Whether the Suggestions section on the Tasks page is expanded. Shared by the
-  /// view (@AppStorage) and the view model's keyboard-navigation/select-all scope.
+  /// Whether the Suggested candidate section on the Tasks page is expanded.
+  /// Shared by the view (@AppStorage) and deep-link expand-before-scroll.
   case tasksSuggestionsSectionExpanded = "tasksSuggestionsSectionExpanded"
   case onboardingChatGPTImportedMemories = "onboardingChatGPTImportedMemoriesCount"
   case gmailSelectedCookiePath = "gmailSelectedCookiePath"
   case gmailSelectedAccountLabel = "gmailSelectedAccountLabel"
+  /// Preferred summarization app for conversation summaries; locally mirrored
+  /// (the backend exposes no GET) and pushed via
+  /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
+  case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
 }
 
@@ -123,6 +131,21 @@ struct ScopedDefaultsKey {
     Self(rawValue: "\(keyPrefix)\(ownerID).timestamps")
   }
 
+  /// Owner-scoped proactive integration-nudge history. `field` is one of the
+  /// closed set the store writes (`shownCount`, `lastShownAt`, `snoozedUntil`,
+  /// `optedOut`); `scope` is the catalog telemetry id plus the owner id, so one
+  /// person's dismissals never silence an integration for another account on
+  /// the same Mac.
+  static func integrationNudge(_ field: String, scope: String) -> Self {
+    Self(rawValue: "integrationNudge.v1.\(field).\(scope)")
+  }
+
+  /// Owner-scoped cross-integration nudge budget (last delivery, and the
+  /// delivery timestamps inside the trailing day window).
+  static func integrationNudgeBudget(_ field: String, ownerID: String) -> Self {
+    Self(rawValue: "integrationNudgeBudget.v1.\(field).\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -149,6 +172,9 @@ extension UserDefaults {
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
   func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
+  func integer(forKey key: ScopedDefaultsKey) -> Int { integer(forKey: key.rawValue) }
+  func double(forKey key: ScopedDefaultsKey) -> Double { double(forKey: key.rawValue) }
+  func array(forKey key: ScopedDefaultsKey) -> [Any]? { array(forKey: key.rawValue) }
   func stringArray(forKey key: ScopedDefaultsKey) -> [String]? { stringArray(forKey: key.rawValue) }
   func dictionary(forKey key: ScopedDefaultsKey) -> [String: Any]? {
     dictionary(forKey: key.rawValue)

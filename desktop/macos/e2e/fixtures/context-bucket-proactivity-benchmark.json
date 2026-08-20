@@ -1339,6 +1339,542 @@
       "expectedMaxAge": 0,
       "forbidden": ["resurface_completed_commitment", "create_followup_without_source", "notify_from_completion_receipt"],
       "rootCauseLabel": "commitment_already_completed"
+    },
+    {
+      "id": "referent-pull-request",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-pr-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-pr-001",
+          "workstreamId": "workstream-ingest",
+          "displayLabel": "Synthetic pull request review",
+          "version": 4,
+          "notifyWorthiness": 0.86,
+          "entries": [
+            {
+              "id": "entry-referent-pr-001",
+              "reference": "entry:referent:pr-001",
+              "appName": "SyntheticBrowser",
+              "contextKey": "web:pull-request-4821",
+              "narrative": "The user opened pull request #4821, \"Add a retry budget to the ingest lane\", in the nimbus-labs/ingest-suite repository and has been iterating on it across visits.",
+              "evidenceRefs": ["evidence:referent:pr-open"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-pr-002",
+              "reference": "entry:referent:pr-002",
+              "appName": "SyntheticBrowser",
+              "contextKey": "web:pull-request-4821",
+              "narrative": "Review activity arrived on that pull request after the user moved on to the repository's pull-request list.",
+              "evidenceRefs": ["evidence:referent:pr-blocked"],
+              "facts": [
+                {
+                  "id": "fact-referent-pr-blocked",
+                  "statement": "A pull request the user opened is blocked: a reviewer requested changes and one required check is failing.",
+                  "validityState": "validated",
+                  "confidence": 0.95,
+                  "notifyWorthiness": 0.86,
+                  "expiresAt": "2026-08-13T23:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-pr-001",
+            "capturedAt": "2026-08-13T16:20:00Z",
+            "appName": "SyntheticBrowser",
+            "windowTitle": "nimbus-labs/ingest-suite - Pull requests",
+            "contextKey": "web:ingest-suite-pull-requests",
+            "textSummary": "A list of open pull requests; no individual review thread is open."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "notify",
+      "expectedEvidenceRefs": ["evidence:referent:pr-blocked"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-pr-001",
+        "workstreamId": "workstream-ingest"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["#4821", "4821", "nimbus-labs/ingest-suite", "ingest-suite", "retry budget", "retry-budget"],
+      "forbidden": ["notify_without_validated_fact", "speak_without_naming_the_referent", "invent_an_identifier"],
+      "rootCauseLabel": "blocked_pull_request_named_only_in_narrative"
+    },
+    {
+      "id": "referent-email-thread",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-mail-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-mail-001",
+          "workstreamId": "workstream-renewals",
+          "displayLabel": "Synthetic renewal email thread",
+          "version": 4,
+          "notifyWorthiness": 0.84,
+          "entries": [
+            {
+              "id": "entry-referent-mail-001",
+              "reference": "entry:referent:mail-001",
+              "appName": "SyntheticMail",
+              "contextKey": "mail:thread-renewal-q3",
+              "narrative": "The user has been reading an email thread titled \"Q3 renewal terms\" from Marcus Chen about seat counts for the coming quarter.",
+              "evidenceRefs": ["evidence:referent:mail-thread"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-mail-002",
+              "reference": "entry:referent:mail-002",
+              "appName": "SyntheticMail",
+              "contextKey": "mail:inbox",
+              "narrative": "The user returned to the inbox without answering that thread's newest message.",
+              "evidenceRefs": ["evidence:referent:mail-unanswered"],
+              "facts": [
+                {
+                  "id": "fact-referent-mail-unanswered",
+                  "statement": "An email thread is waiting on a reply from the user, and the sender asked for the answer before Friday.",
+                  "validityState": "validated",
+                  "confidence": 0.93,
+                  "notifyWorthiness": 0.84,
+                  "expiresAt": "2026-08-14T23:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-mail-001",
+            "capturedAt": "2026-08-13T16:25:00Z",
+            "appName": "SyntheticMail",
+            "windowTitle": "Inbox - SyntheticMail",
+            "contextKey": "mail:inbox",
+            "textSummary": "A message list; no thread is open in the reading pane."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "notify",
+      "expectedEvidenceRefs": ["evidence:referent:mail-unanswered"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-mail-001",
+        "workstreamId": "workstream-renewals"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["Q3 renewal", "Marcus", "seat count", "seat-count"],
+      "forbidden": ["notify_without_validated_fact", "speak_without_naming_the_referent", "invent_a_sender"],
+      "rootCauseLabel": "unanswered_thread_named_only_in_narrative"
+    },
+    {
+      "id": "referent-document-comment",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-doc-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-doc-001",
+          "workstreamId": "workstream-pricing",
+          "displayLabel": "Synthetic pricing document",
+          "version": 4,
+          "notifyWorthiness": 0.81,
+          "entries": [
+            {
+              "id": "entry-referent-doc-001",
+              "reference": "entry:referent:doc-001",
+              "appName": "SyntheticDocs",
+              "contextKey": "doc:nimbus-pricing-one-pager",
+              "narrative": "The user has been editing the \"Nimbus pricing one-pager\", most recently the migration-discount table.",
+              "evidenceRefs": ["evidence:referent:doc-edit"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-doc-002",
+              "reference": "entry:referent:doc-002",
+              "appName": "SyntheticDocs",
+              "contextKey": "doc:workspace-recent",
+              "narrative": "Dana Whitfield left a comment on that document asking which tier the migration discount applies to, and it is still unresolved.",
+              "evidenceRefs": ["evidence:referent:doc-comment"],
+              "facts": [
+                {
+                  "id": "fact-referent-doc-comment",
+                  "statement": "A shared document has an unresolved comment addressed to the user, asking a question the user has not answered.",
+                  "validityState": "validated",
+                  "confidence": 0.91,
+                  "notifyWorthiness": 0.81,
+                  "expiresAt": "2026-08-14T20:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-doc-001",
+            "capturedAt": "2026-08-13T16:30:00Z",
+            "appName": "SyntheticDocs",
+            "windowTitle": "Nimbus workspace - Recent",
+            "contextKey": "doc:workspace-recent",
+            "textSummary": "A list of recently opened documents; none is open for editing."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "notify",
+      "expectedEvidenceRefs": ["evidence:referent:doc-comment"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-doc-001",
+        "workstreamId": "workstream-pricing"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["Nimbus pricing one-pager", "Nimbus pricing", "Dana", "migration discount", "migration-discount"],
+      "forbidden": ["notify_without_validated_fact", "speak_without_naming_the_referent", "invent_a_commenter"],
+      "rootCauseLabel": "unresolved_comment_named_only_in_narrative"
+    },
+    {
+      "id": "referent-person-request",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-chat-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-chat-001",
+          "workstreamId": "workstream-audit",
+          "displayLabel": "Synthetic direct message request",
+          "version": 4,
+          "notifyWorthiness": 0.88,
+          "entries": [
+            {
+              "id": "entry-referent-chat-001",
+              "reference": "entry:referent:chat-001",
+              "appName": "SyntheticChat",
+              "contextKey": "chat:dm-audit-vendor-list",
+              "narrative": "Aisha Okonkwo sent the user a direct message asking for the approved vendor list for the Halden audit before the 15:00 review.",
+              "evidenceRefs": ["evidence:referent:chat-dm"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-chat-002",
+              "reference": "entry:referent:chat-002",
+              "appName": "SyntheticChat",
+              "contextKey": "chat:channel-eng-general",
+              "narrative": "The user switched to a team channel without answering that direct message.",
+              "evidenceRefs": ["evidence:referent:chat-unanswered"],
+              "facts": [
+                {
+                  "id": "fact-referent-chat-unanswered",
+                  "statement": "Someone asked the user by direct message to send a document before a stated time, and that time has now passed.",
+                  "validityState": "validated",
+                  "confidence": 0.94,
+                  "notifyWorthiness": 0.88,
+                  "expiresAt": "2026-08-13T22:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-chat-001",
+            "capturedAt": "2026-08-13T16:35:00Z",
+            "appName": "SyntheticChat",
+            "windowTitle": "SyntheticChat - #eng-general",
+            "contextKey": "chat:channel-eng-general",
+            "textSummary": "A busy team channel; the direct-message thread is not open."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "notify",
+      "expectedEvidenceRefs": ["evidence:referent:chat-unanswered"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-chat-001",
+        "workstreamId": "workstream-audit"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["Aisha", "vendor list", "Halden"],
+      "forbidden": ["notify_without_validated_fact", "speak_without_naming_the_referent", "invent_a_requester"],
+      "rootCauseLabel": "person_request_named_only_in_narrative"
+    },
+    {
+      "id": "referent-meeting-conflict",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-cal-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-cal-001",
+          "workstreamId": "workstream-ingest",
+          "displayLabel": "Synthetic calendar conflict",
+          "version": 4,
+          "notifyWorthiness": 0.83,
+          "entries": [
+            {
+              "id": "entry-referent-cal-001",
+              "reference": "entry:referent:cal-001",
+              "appName": "SyntheticCalendar",
+              "contextKey": "cal:week-2026-08-10",
+              "narrative": "The user's week holds a \"Nimbus kickoff\" on Thursday at 15:00 and an \"Ingest retry design review\" with Tomas Iglesias at the same hour.",
+              "evidenceRefs": ["evidence:referent:cal-week"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-cal-002",
+              "reference": "entry:referent:cal-002",
+              "appName": "SyntheticCalendar",
+              "contextKey": "cal:day-2026-08-12",
+              "narrative": "The user moved to Wednesday's day view, where neither of those blocks is drawn.",
+              "evidenceRefs": ["evidence:referent:cal-overlap"],
+              "facts": [
+                {
+                  "id": "fact-referent-cal-overlap",
+                  "statement": "Two scheduled meetings later this week start at the same time and the user is expected at both.",
+                  "validityState": "validated",
+                  "confidence": 0.92,
+                  "notifyWorthiness": 0.83,
+                  "expiresAt": "2026-08-14T12:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-cal-001",
+            "capturedAt": "2026-08-13T16:40:00Z",
+            "appName": "SyntheticCalendar",
+            "windowTitle": "Day view - Wednesday, Aug 12",
+            "contextKey": "cal:day-2026-08-12",
+            "textSummary": "A single day's schedule; later days are not shown."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "notify",
+      "expectedEvidenceRefs": ["evidence:referent:cal-overlap"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-cal-001",
+        "workstreamId": "workstream-ingest"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["Nimbus kickoff", "Ingest retry design review", "Tomas", "Thursday"],
+      "forbidden": ["notify_without_validated_fact", "speak_without_naming_the_referent", "invent_an_attendee"],
+      "rootCauseLabel": "calendar_conflict_named_only_in_narrative"
+    },
+    {
+      "id": "referent-file-build-failure",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-build-001",
+          "subjectKind": "task",
+          "subjectId": "task-referent-build-001",
+          "workstreamId": "workstream-ingest",
+          "displayLabel": "Synthetic build failure",
+          "version": 4,
+          "notifyWorthiness": 0.85,
+          "entries": [
+            {
+              "id": "entry-referent-build-001",
+              "reference": "entry:referent:build-001",
+              "appName": "SyntheticTerminal",
+              "contextKey": "shell:ingest-suite-tests",
+              "narrative": "The user has been running the ingest-suite tests on branch feat/ingest-retry, which exercise decode_frame in packages/ingest/parser.rs.",
+              "evidenceRefs": ["evidence:referent:build-branch"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-build-002",
+              "reference": "entry:referent:build-002",
+              "appName": "SyntheticTerminal",
+              "contextKey": "shell:ingest-suite-editor",
+              "narrative": "The most recent run of those tests panicked in that function, and the user moved back to editing without rerunning them.",
+              "evidenceRefs": ["evidence:referent:build-panic"],
+              "facts": [
+                {
+                  "id": "fact-referent-build-panic",
+                  "statement": "The test run for the user's tracked branch fails reproducibly with a panic, and the failure is unaddressed.",
+                  "validityState": "validated",
+                  "confidence": 0.93,
+                  "notifyWorthiness": 0.85,
+                  "expiresAt": "2026-08-13T23:30:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-build-001",
+            "capturedAt": "2026-08-13T16:45:00Z",
+            "appName": "SyntheticTerminal",
+            "windowTitle": "ingest-suite - editor",
+            "contextKey": "shell:ingest-suite-editor",
+            "textSummary": "A source editor; no test output is visible."
+          }
+        ],
+        "tasks": [
+          {
+            "id": "task-referent-build-001",
+            "description": "Land the ingest retry budget",
+            "status": "open",
+            "dueAt": "2026-08-13T18:00:00Z",
+            "subjectId": "task-referent-build-001"
+          }
+        ]
+      },
+      "expectedAction": "notify",
+      "expectedEvidenceRefs": ["evidence:referent:build-panic"],
+      "expectedSubject": {
+        "kind": "task",
+        "id": "task-referent-build-001",
+        "workstreamId": "workstream-ingest"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["feat/ingest-retry", "ingest-retry", "parser.rs", "packages/ingest", "decode_frame"],
+      "forbidden": ["notify_without_validated_fact", "speak_without_naming_the_referent", "invent_a_fix"],
+      "rootCauseLabel": "build_failure_named_only_in_narrative"
+    },
+    {
+      "id": "referent-visible-on-screen",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-visible-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-visible-001",
+          "workstreamId": "workstream-ingest",
+          "displayLabel": "Synthetic pull request already open",
+          "version": 4,
+          "notifyWorthiness": 0.86,
+          "entries": [
+            {
+              "id": "entry-referent-visible-001",
+              "reference": "entry:referent:visible-001",
+              "appName": "SyntheticBrowser",
+              "contextKey": "web:pull-request-4821",
+              "narrative": "The user opened pull request #4821, \"Add a retry budget to the ingest lane\", in the nimbus-labs/ingest-suite repository.",
+              "evidenceRefs": ["evidence:referent:visible-open"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-visible-002",
+              "reference": "entry:referent:visible-002",
+              "appName": "SyntheticBrowser",
+              "contextKey": "web:pull-request-4821",
+              "narrative": "The user is reading the review thread on that pull request right now.",
+              "evidenceRefs": ["evidence:referent:visible-blocked"],
+              "facts": [
+                {
+                  "id": "fact-referent-visible-blocked",
+                  "statement": "A pull request the user opened is blocked: a reviewer requested changes and one required check is failing.",
+                  "validityState": "validated",
+                  "confidence": 0.95,
+                  "notifyWorthiness": 0.86,
+                  "expiresAt": "2026-08-13T23:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-visible-001",
+            "capturedAt": "2026-08-13T16:50:00Z",
+            "appName": "SyntheticBrowser",
+            "windowTitle": "Add a retry budget to the ingest lane by dazheng - Pull Request #4821 - nimbus-labs/ingest-suite",
+            "contextKey": "web:pull-request-4821",
+            "textSummary": "The review thread and the failing check are both on screen."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "silence",
+      "expectedEvidenceRefs": ["evidence:referent:visible-blocked"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-visible-001",
+        "workstreamId": "workstream-ingest"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": ["#4821", "4821", "nimbus-labs/ingest-suite", "ingest-suite", "retry budget"],
+      "forbidden": ["notify_about_what_is_already_on_screen", "speak_without_naming_the_referent"],
+      "rootCauseLabel": "referent_is_on_screen_so_silence_is_correct"
+    },
+    {
+      "id": "referent-no-identifier",
+      "category": "referent_identifiability",
+      "synthetic": {
+        "bucket": {
+          "id": "bucket-referent-none-001",
+          "subjectKind": "context",
+          "subjectId": "context-referent-none-001",
+          "workstreamId": "workstream-ingest",
+          "displayLabel": "Synthetic context with no handle",
+          "version": 4,
+          "notifyWorthiness": 0.84,
+          "entries": [
+            {
+              "id": "entry-referent-none-001",
+              "reference": "entry:referent:none-001",
+              "appName": "SyntheticBrowser",
+              "contextKey": "web:pull-request-unnamed",
+              "narrative": "The user has been iterating on a pull request across several visits.",
+              "evidenceRefs": ["evidence:referent:none-open"],
+              "facts": []
+            },
+            {
+              "id": "entry-referent-none-002",
+              "reference": "entry:referent:none-002",
+              "appName": "SyntheticBrowser",
+              "contextKey": "web:pull-requests",
+              "narrative": "Review activity arrived on it after the user moved on.",
+              "evidenceRefs": ["evidence:referent:none-blocked"],
+              "facts": [
+                {
+                  "id": "fact-referent-none-blocked",
+                  "statement": "A pull request the user opened is blocked: a reviewer requested changes and one required check is failing.",
+                  "validityState": "validated",
+                  "confidence": 0.95,
+                  "notifyWorthiness": 0.84,
+                  "expiresAt": "2026-08-13T23:00:00Z"
+                }
+              ]
+            }
+          ]
+        },
+        "frames": [
+          {
+            "id": "frame-referent-none-001",
+            "capturedAt": "2026-08-13T16:55:00Z",
+            "appName": "SyntheticBrowser",
+            "windowTitle": "Pull requests",
+            "contextKey": "web:pull-requests",
+            "textSummary": "A list of open pull requests with no repository or number legible."
+          }
+        ],
+        "tasks": []
+      },
+      "expectedAction": "either",
+      "expectedEvidenceRefs": ["evidence:referent:none-blocked"],
+      "expectedSubject": {
+        "kind": "context",
+        "id": "context-referent-none-001",
+        "workstreamId": "workstream-ingest"
+      },
+      "expectedMaxAge": 21600,
+      "referentTokens": [],
+      "forbidden": ["invent_an_identifier", "notify_without_validated_fact"],
+      "rootCauseLabel": "no_identifier_exists_so_none_may_be_invented"
     }
   ]
 }

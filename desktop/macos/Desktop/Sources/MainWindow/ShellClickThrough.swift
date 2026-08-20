@@ -1,23 +1,19 @@
 //
 //  ShellClickThrough.swift — the transparent shell window stops swallowing the desktop's clicks.
 //
-//  `ShellWindowChrome` made the main window a transparent rectangle noticeably larger than the
-//  panels floating inside it. The window server routes every click to the window under the cursor
-//  no matter what is drawn there, so all of that air — the reserved title-bar band, the margins
-//  beside the lane, the gaps between panels — was an invisible click sink: clicks aimed at another
-//  app landed on Omi, the other app never activated, and Omi never receded. Same failure class as
-//  the notch panel's dead zone (PR #11372), on the shell window.
+//  `ShellWindowChrome` makes the main window a transparent rectangle the size of the
+//  glass. Leftover air — the rounded-corner triangles, the gaps between stacked panels — would
+//  still be an invisible click sink: the window server routes every click to the window under the
+//  cursor no matter what is drawn there. Same failure class as the notch panel's dead zone
+//  (PR #11372), on the shell window.
 //
 //  Same mechanism, too: a view-level `hitTest` nil cannot make a window click-through, so the
 //  window-level `ignoresMouseEvents` is kept in sync with the pointer — ignored over air,
 //  interactive over content. "Content" is answered by `InkGlassHitRegions`: every glass surface
 //  registers its live extent, and a modal barrier registers the whole host while it is up.
 //
-//  What is deliberately given up: dragging the window from the *invisible* title-bar band above
-//  the top bar. The visible top bar still drags (`ShellWindowDragHandle`), and a band the user
-//  cannot see is exactly where they expect clicks to reach the app behind — that expectation is
-//  the bug report this file exists to fix. Resizing survives via an interactive rim along the
-//  window's frame edge.
+//  Drag lives on the visible top bar (`ShellWindowDragHandle`). Resizing survives via an
+//  interactive rim along the window's frame edge, which is the visible panel edge.
 //
 
 import AppKit
@@ -27,7 +23,8 @@ import OmiTheme
 /// Pure policy: which points of the shell window own the pointer.
 enum ShellClickThroughPolicy {
   /// Interactive band kept along the window's frame edge so the chrome-less, resizable window can
-  /// still be resized by grabbing its (invisible) edge. Matches AppKit's effective resize zone.
+  /// still be resized. The glass fills the window (`DesktopWindowLayoutPolicy.windowInset` is 0),
+  /// so this rim *is* the visible panel edge. Matches AppKit's effective resize zone.
   static let resizeRim: CGFloat = 8
 
   static func acceptsMouseHit(
@@ -57,8 +54,8 @@ final class ShellMouseInterceptionSync {
 
   init(window: NSWindow) {
     self.window = window
-    let scheduleReconciliation: @Sendable () -> Void = {
-      DispatchQueue.main.async { [weak self] in self?.sync() }
+    let scheduleReconciliation: @Sendable () -> Void = { [weak self] in
+      DispatchQueue.main.async { self?.sync() }
     }
     if let global = NSEvent.addGlobalMonitorForEvents(
       matching: [.mouseMoved, .leftMouseDragged],
@@ -104,7 +101,12 @@ final class ShellMouseInterceptionSync {
           localPoint: local,
           windowSize: window.frame.size,
           isResizable: window.styleMask.contains(.resizable),
-          contentContains: { InkGlassHitRegions.shared.containsPoint($0, in: window) })
+          contentContains: {
+            // No registered surface means nothing can vouch for this window's content, so it stays
+            // fully interactive rather than becoming a pass-through hole.
+            guard InkGlassHitRegions.shared.hasSurfaces(in: window) else { return true }
+            return InkGlassHitRegions.shared.containsPoint($0, in: window)
+          })
       })
     if window.ignoresMouseEvents != shouldIgnore {
       window.ignoresMouseEvents = shouldIgnore

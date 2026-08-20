@@ -14,7 +14,12 @@ from database import review_queue
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
-from utils.memory.memory_service import MemoryPayload, MemoryService, fetch_memory_dict
+from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
+    MemoryPayload,
+    MemoryService,
+    fetch_memory_dict,
+)
 from testing.parity_pack_v0.live_capture import SurfaceParityCapture
 from utils.memory.import_write_guard import (
     import_write_block_mode,
@@ -73,6 +78,14 @@ _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-E
 _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 _MEMORY_DEFAULT_DELETE_SUPPORTED_HEADER = 'X-Omi-Memory-Default-Delete-Supported'
 _MEMORY_NEXT_CURSOR_HEADER = 'X-Omi-Memory-Next-Cursor'
+
+
+def _normalize_memory_list_cursor(cursor: Optional[str]) -> Optional[str]:
+    """Treat missing/blank cursor as first-page so ``?cursor=`` cannot skip the fallback."""
+    if cursor is None:
+        return None
+    stripped = cursor.strip()
+    return stripped or None
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -540,6 +553,7 @@ def get_memories(
 
     # Cursor and legacy offset paging are mutually exclusive. Cursor mode owns
     # accounts beyond the bounded offset compatibility window.
+    cursor = _normalize_memory_list_cursor(cursor)
     if cursor is not None and bounded_offset != 0:
         raise HTTPException(
             status_code=400,
@@ -576,7 +590,27 @@ def get_memories(
                 include_archive=include_archive,
             )
         except HTTPException as exc:
-            if exc.status_code != 503 or exc.detail != "Memory cursor unavailable":
+            # First page must succeed whenever the legacy offset read can serve
+            # it. The cursor path 503s on a missing cursor secret
+            # ("Memory cursor unavailable"); the canonical keyset scan wraps any
+            # underlying failure as "Canonical memory unavailable"; the
+            # historical keyset scan wraps its own as "Historical memory
+            # unavailable". The keyset scans order by (updated_at DESC,
+            # __name__) and so fail while that composite index is building,
+            # which the offset read's single-field order does not — so all three
+            # fall back to read(). The keyset scans also walk past every row they
+            # must not emit before they can fill the page, so an account whose
+            # historical set is fully suppressed by canonical exhausts the scan
+            # row budget ("Memory scan budget exceeded") — that walk is what took
+            # the first page past the 30s edge timeout in prod on 2026-08-18, and
+            # the offset read serves it without the walk.
+            # Unrelated errors (4xx, other 503s) propagate.
+            if exc.status_code != 503 or exc.detail not in (
+                "Memory cursor unavailable",
+                "Canonical memory unavailable",
+                "Historical memory unavailable",
+                MEMORY_LIST_SCAN_BUDGET_DETAIL,
+            ):
                 raise
         else:
             if page.next_cursor:

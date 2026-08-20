@@ -49,8 +49,9 @@ for _p in ["google", "google.cloud", "google.cloud.firestore_v1", "database", "m
 _mod("google.cloud.firestore_v1.base_query", BaseCompositeFilter=MagicMock(), FieldFilter=MagicMock())
 _mod("google.cloud.firestore", ArrayUnion=MagicMock(), ArrayRemove=MagicMock())
 _mod("ulid", ULID=lambda: "01HZZTESTULID")
-_mod("models.app", UsageHistoryType=MagicMock())
+_mod("models.app", App=MagicMock(), UsageHistoryType=MagicMock())
 _mod("database._client", db=MagicMock())
+_mod("database.redis_db", get_generic_cache=MagicMock(), set_generic_cache=MagicMock())
 
 
 def _load():

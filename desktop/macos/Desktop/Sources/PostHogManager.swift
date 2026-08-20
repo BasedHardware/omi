@@ -839,14 +839,16 @@ extension PostHogManager {
   func suggestionAssistantEvaluationFailed(
     identity: SuggestionAssistantTelemetry.Identity,
     shape: SuggestionAssistantTelemetry.EvaluationShape,
-    latency: TimeInterval
+    latency: TimeInterval,
+    reason: SuggestionAssistantTelemetry.EvaluationFailureReason
   ) {
     track(
       SuggestionAssistantTelemetry.evaluationFailedEventName,
       properties: SuggestionAssistantTelemetry.evaluationFailedPayload(
         identity: identity,
         shape: shape,
-        latency: latency
+        latency: latency,
+        reason: reason
       )
     )
   }
@@ -1014,6 +1016,7 @@ extension PostHogManager {
     title: String,
     assistantId: String,
     surface: String,
+    dismissalKind: NotificationDismissalKind,
     suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
   ) {
     var properties = notificationProperties(
@@ -1022,6 +1025,7 @@ extension PostHogManager {
       assistantId: assistantId,
       surface: surface
     )
+    properties["dismissal_kind"] = dismissalKind.rawValue
     appendSuggestionNotificationIdentity(suggestionIdentity, to: &properties)
     track(
       "Notification Dismissed",

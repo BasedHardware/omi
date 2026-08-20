@@ -295,6 +295,7 @@ class SelectionTests(unittest.TestCase):
             {
                 "check-manifest-contract",
                 "diff-hygiene",
+                "git-author-identity",
                 "architecture-guardrails",
                 "product-invariants",
                 "failure-class-protocol",
@@ -645,12 +646,20 @@ class SingleFlightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
             counter = temp / "counter"
-            code = (
-                "from pathlib import Path; import time; "
-                f"p=Path({str(counter)!r}); p.write_text(p.read_text()+'x' if p.exists() else 'x'); "
-                "print('==> focused-tests', flush=True); time.sleep(.5)"
+            hold = temp / "hold"
+            hold.write_text("1", encoding="utf-8")
+            script = (
+                "from pathlib import Path\n"
+                "import time\n"
+                f"p = Path({str(counter)!r})\n"
+                f"hold = Path({str(hold)!r})\n"
+                "p.write_text(p.read_text() + 'x' if p.exists() else 'x')\n"
+                "print('==> focused-tests', flush=True)\n"
+                "deadline = time.monotonic() + 10\n"
+                "while hold.exists() and time.monotonic() < deadline:\n"
+                "    time.sleep(0.02)\n"
             )
-            command = [sys.executable, "-c", code]
+            command = [sys.executable, "-c", script]
             first = self.run_runner(temp, command)
             assert first.stdin is not None
             first.stdin.write("same\n")
@@ -660,6 +669,8 @@ class SingleFlightTests(unittest.TestCase):
             assert second.stdin is not None
             second.stdin.write("same\n")
             second.stdin.close()
+            time.sleep(0.3)
+            hold.unlink(missing_ok=True)
             first_output = first.stdout.read() if first.stdout else ""
             second_output = second.stdout.read() if second.stdout else ""
             self.assertEqual(first.wait(), 0, first_output)
@@ -674,10 +685,27 @@ class SingleFlightTests(unittest.TestCase):
             self.assertEqual(status["phase"], "passed")
             self.assertTrue((temp / "test" / "preflight.log").exists())
 
+    def _hold_command(self, hold: Path) -> list[str]:
+        # A short sleep races the second runner on a loaded host: the first
+        # child can exit before the overlap is observed, so the second starts
+        # cleanly and the test expects 75 but gets 0. Hold a file instead.
+        script = (
+            "from pathlib import Path\n"
+            "import time\n"
+            f"hold = Path({str(hold)!r})\n"
+            "print('==> slow', flush=True)\n"
+            "deadline = time.monotonic() + 10\n"
+            "while hold.exists() and time.monotonic() < deadline:\n"
+            "    time.sleep(0.02)\n"
+        )
+        return [sys.executable, "-c", script]
+
     def test_different_input_is_rejected_while_active(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
-            command = [sys.executable, "-c", "import time; print('==> slow', flush=True); time.sleep(.5)"]
+            hold = temp / "hold"
+            hold.write_text("1", encoding="utf-8")
+            command = self._hold_command(hold)
             first = self.run_runner(temp, command)
             assert first.stdin is not None
             first.stdin.write("first\n")
@@ -692,6 +720,7 @@ class SingleFlightTests(unittest.TestCase):
             if second.stdout:
                 second.stdout.close()
             self.assertIn("already running different input", second_output)
+            hold.unlink(missing_ok=True)
             if first.stdout:
                 first.stdout.read()
                 first.stdout.close()
@@ -718,7 +747,9 @@ class SingleFlightTests(unittest.TestCase):
     def test_different_pre_push_environment_is_not_joined(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             temp = Path(tmp)
-            command = [sys.executable, "-c", "import time; print('==> slow', flush=True); time.sleep(.5)"]
+            hold = temp / "hold"
+            hold.write_text("1", encoding="utf-8")
+            command = self._hold_command(hold)
             first = self.run_runner(temp, command, extra_env={"PRE_PUSH_SKIP_ACTIONLINT": "1"})
             assert first.stdin is not None
             first.stdin.close()
@@ -731,6 +762,7 @@ class SingleFlightTests(unittest.TestCase):
             self.assertIn("already running different input", second_output)
             if second.stdout:
                 second.stdout.close()
+            hold.unlink(missing_ok=True)
             if first.stdout:
                 first.stdout.read()
                 first.stdout.close()

@@ -137,7 +137,7 @@ struct OMIApp: App {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the glass runs under the title bar.
+    .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {
@@ -375,6 +375,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
+    // Observe meeting completions app-wide so the action-item banner also fires
+    // while the main window is closed or backgrounded.
+    MeetingActionItemBannerService.shared.activate()
+    NotificationSettingsSyncCoordinator.shared.start()
     // Notification registration repair is deliberately user-triggered from
     // Settings. Launch must not restart usernoted/NotificationCenter or alter
     // notification registration as a passive side effect.
@@ -518,7 +522,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Route completed background-agent results into live voice sessions.
     AgentCompletionVoiceDelivery.shared.start()
 
+    Task { await ContextWorkstreamReconciler.shared.start() }
+
     scheduleAppLifecycleMaintenance()
+
+    // Offer an integration when the user opens an app Omi can connect to.
+    //
+    // Deliberately outside the signed-in branch below: at launch, auth is often
+    // still being restored, so that branch is skipped for exactly the users who
+    // are signed in — the observer would then never be installed for the life of
+    // the process. The policy checks sign-in at decision time instead, and the
+    // coordinator re-scopes its history on `runtimeOwnerDidChange`.
+    IntegrationNudgeCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -1340,6 +1355,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
+    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.

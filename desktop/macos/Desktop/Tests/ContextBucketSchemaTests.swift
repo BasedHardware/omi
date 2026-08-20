@@ -53,6 +53,64 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: ownerID)))
   }
 
+  func testMigrationAddsWorkstreamTagColumnToBucketFacts() throws {
+    let suiteName = "ContextBucketSchemaTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let queue = try DatabaseQueue()
+    try createBaseScreenshotsTable(in: queue)
+    var migrator = DatabaseMigrator()
+    ContextBucketSchema.registerMigration(on: &migrator, defaults: defaults, ownerID: "owner-1")
+    try migrator.migrate(queue)
+    let columns = try queue.read { db in
+      try db.columns(in: "bucket_facts").map(\.name)
+    }
+    XCTAssertTrue(columns.contains("workstreamTag"))
+    let indexes = try queue.read { db in
+      try String.fetchAll(
+        db, sql: "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'bucket_facts'")
+    }
+    XCTAssertTrue(indexes.contains("idx_bucket_facts_workstream"))
+  }
+
+  func testMigrationCreatesWorkstreamAssignmentsAndCandidateTables() throws {
+    let queue = try migratedQueue()
+    let tables = try queue.read { db in
+      Set(try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'"))
+    }
+    XCTAssertTrue(tables.contains("bucket_workstreams"))
+    XCTAssertTrue(tables.contains("proactive_candidates"))
+    let workstreamColumns = try queue.read { db in
+      try db.columns(in: "bucket_workstreams").map(\.name)
+    }
+    XCTAssertEqual(
+      Set(workstreamColumns),
+      ["id", "bucketID", "tag", "source", "assignedAt"])
+    let candidateColumns = try queue.read { db in
+      try db.columns(in: "proactive_candidates").map(\.name)
+    }
+    XCTAssertEqual(
+      Set(candidateColumns),
+      [
+        "id", "bucketID", "workstreamTag", "message", "groundingFactIDsJson", "triggerNote",
+        "state", "createdAt", "expiresAt", "consumedAt",
+      ])
+    let indexes = try queue.read { db in
+      Set(
+        try String.fetchAll(
+          db, sql: "SELECT name FROM sqlite_master WHERE type = 'index'"))
+    }
+    XCTAssertTrue(indexes.contains("idx_bucket_workstreams_tag"))
+    XCTAssertTrue(indexes.contains("idx_proactive_candidates_lookup"))
+    XCTAssertTrue(indexes.contains("idx_proactive_candidates_workstream"))
+    let factColumns = try queue.read { db in
+      try db.columns(in: "bucket_facts").map(\.name)
+    }
+    XCTAssertTrue(
+      factColumns.contains("workstreamTag"),
+      "the dormant fact-level column must survive this migration")
+  }
+
   func testAnonymousDatabaseUsesSignedOutLegacyOwnerNamespace() throws {
     let suiteName = "ContextBucketSchemaTests.anonymous.\(UUID().uuidString)"
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -178,8 +236,65 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertEqual(remaining, ["live"])
   }
 
-  func testContextTablesAreExcludedFromAgentSync() {
+  func testExpiredAndTerminalCandidatesAreDeletedByRetentionSweep() throws {
+    let queue = try migratedQueue()
+    let now = Date(timeIntervalSince1970: 1_725_000_000)
+    try queue.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
+          VALUES ('bucket', 'task', 'task-1', ?, ?)
+          """,
+        arguments: [now, now])
+      for (id, state, expiry) in [
+        ("armed-live", "armed", now.addingTimeInterval(60)),
+        ("armed-expired", "armed", now.addingTimeInterval(-1)),
+        ("consumed", "consumed", now.addingTimeInterval(60)),
+      ] {
+        try db.execute(
+          sql: """
+            INSERT INTO proactive_candidates
+              (id, bucketID, message, groundingFactIDsJson, triggerNote, state,
+               createdAt, expiresAt)
+            VALUES (?, 'bucket', 'message', '[]', 'when relevant', ?, ?, ?)
+            """,
+          arguments: [id, state, now, expiry])
+      }
+      XCTAssertEqual(try ContextBucketSchema.deleteExpiredProactiveCandidates(in: db, now: now), 2)
+    }
+    let remaining = try queue.read { db in
+      try String.fetchAll(db, sql: "SELECT id FROM proactive_candidates ORDER BY id")
+    }
+    XCTAssertEqual(remaining, ["armed-live"])
+  }
+
+  func testDerivedDataEgressIsDefaultDenyAndContextTablesStayOutOfAgentSync() throws {
     XCTAssertTrue(ContextBucketSchema.tableNames.isDisjoint(with: AgentSyncService.syncedTableNames))
+
+    XCTAssertEqual(DerivedDataEgressPolicy.declarations.count, DerivedDataClass.allCases.count)
+    XCTAssertEqual(
+      DerivedDataClass.allCases.filter {
+        if case .allow = DerivedDataEgressPolicy.decision(for: $0) { return true }
+        return false
+      },
+      [.meetingIdentity])
+    XCTAssertTrue(
+      DerivedDataEgressPolicy.declaredRoutes.allSatisfy {
+        if case .allow = DerivedDataEgressPolicy.decision(for: $0.dataClass) { return true }
+        return false
+      })
+    XCTAssertEqual(
+      Set(DerivedDataEgressPolicy.declaredRoutes.map(\.route)),
+      Set(DerivedDataEgressRoute.allCases),
+      "A new derived-data route must be declared in the policy before it can pass CI")
+
+    let denied = DerivedDataEgressRequest(
+      dataClass: .contextBucketFacts,
+      route: .calendarMeetings,
+      purpose: DerivedDataEgressPolicy.meetingIdentityPurpose)
+    XCTAssertThrowsError(try DerivedDataEgressPolicy.authorize(denied)) { error in
+      XCTAssertEqual(error as? DerivedDataEgressPolicyError, .denied(.contextBucketFacts))
+    }
   }
 
   func testOneBucketPerDurableSubjectWhenWorkstreamIsNil() throws {

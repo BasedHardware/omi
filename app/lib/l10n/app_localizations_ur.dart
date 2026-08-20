@@ -322,7 +322,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get searchApps => 'ایپلیکیشنز تلاش کریں...';
 
   @override
-  String get myApps => 'میری ایپلیکیشنز';
+  String get myApps => 'میری بنائی ہوئی';
 
   @override
   String get installedApps => 'انسٹال شدہ ایپلیکیشنز';
@@ -9852,4 +9852,17 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'فتح المتجر';
+
+  @override
+  String get sendRawAudioToOmi => 'خام آڈیو Omi کو بھیجیں';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'خام آڈیو کو Omi بھیجے جانے سے روکنے کے لیے اسے بند کریں۔ ٹرانسکرپٹس اور کلاؤڈ فیچرز کے لیے درکار ڈیٹا اب بھی Omi کو بھیجا جا سکتا ہے۔';
+
+  @override
+  String get findDevice => 'تلاش کریں';
+
+  @override
+  String get diagnosticsShareFailed => 'تشخیصی معلومات شیئر نہیں کی جا سکیں۔ براہ کرم دوبارہ کوشش کریں۔';
 }

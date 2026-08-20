@@ -323,7 +323,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get searchApps => 'Hledat aplikace...';
 
   @override
-  String get myApps => 'Moje aplikace';
+  String get myApps => 'Vytvořeno mnou';
 
   @override
   String get installedApps => 'Nainstalované aplikace';
@@ -9841,4 +9841,17 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get sendRawAudioToOmi => 'Odesílat nezpracovaný zvuk do Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat.';
+
+  @override
+  String get findDevice => 'Najít';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnostiku se nepodařilo sdílet. Zkus to znovu.';
 }

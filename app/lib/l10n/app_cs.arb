@@ -101,7 +101,7 @@
     "createYourOwnApp": "Vytvořte si vlastní aplikaci",
     "buildAndShareApp": "Vytvořte a sdílejte vlastní aplikaci",
     "searchApps": "Hledat aplikace...",
-    "myApps": "Moje aplikace",
+    "myApps": "Vytvořeno mnou",
     "installedApps": "Nainstalované aplikace",
     "unableToFetchApps": "Nelze načíst aplikace :(\n\nZkontrolujte prosím připojení k internetu a zkuste to znovu.",
     "aboutOmi": "O Omi",
@@ -3192,5 +3192,9 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "sendRawAudioToOmi": "Odesílat nezpracovaný zvuk do Omi",
+    "sendRawAudioToOmiDescription": "Vypnutím zabráníte odesílání nezpracovaného zvuku do Omi. Přepisy a data potřebná pro cloudové funkce se mohou do Omi nadále odesílat.",
+    "findDevice": "Najít",
+    "diagnosticsShareFailed": "Diagnostiku se nepodařilo sdílet. Zkus to znovu."
 }

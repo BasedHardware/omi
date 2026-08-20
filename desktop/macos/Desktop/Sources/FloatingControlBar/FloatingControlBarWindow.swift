@@ -3466,9 +3466,13 @@ class FloatingControlBarManager {
   }
 
   func dismissCurrentNotification() {
+    dismissCurrentNotification(kind: .user)
+  }
+
+  func dismissCurrentNotification(kind: NotificationDismissalKind) {
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    dismissNotificationAndAdvanceQueue(trackDismissal: true)
+    dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: kind)
   }
 
   func flushQueuedNotificationsIfPossible() {
@@ -4045,10 +4049,19 @@ class FloatingControlBarManager {
 
     notificationDismissWorkItem?.cancel()
     notificationDismissWorkItem = nil
-    dismissNotificationAndAdvanceQueue(trackDismissal: false)
-    if case .openWhatMattersNow(let recommendationID) = notification.action {
+    dismissNotificationAndAdvanceQueue(trackDismissal: false, kind: .user)
+    switch notification.action {
+    case .openWhatMattersNow(let recommendationID):
       ContextualTaskNavigationRouter.shared.request(recommendationID: recommendationID)
       return
+    case .connectIntegration(let telemetryID, let triggerID):
+      IntegrationNudgeCoordinator.shared.acceptPresentedNudge(
+        telemetryID: telemetryID,
+        triggerID: triggerID
+      )
+      return
+    case nil:
+      break
     }
     _ = openNotificationConversation(notificationID: notification.id, in: window)
   }
@@ -4068,6 +4081,22 @@ class FloatingControlBarManager {
       return false
     }
     persistNotificationMessageIfNeeded(notification)
+
+    if let existing = window.state.currentNotification, existing.id != notification.id {
+      notificationDismissWorkItem?.cancel()
+      notificationDismissWorkItem = nil
+      AnalyticsManager.shared.notificationDismissed(
+        notificationId: existing.id.uuidString,
+        title: existing.title,
+        assistantId: existing.assistantId,
+        surface: "floating_bar",
+        dismissalKind: .replaced,
+        suggestionIdentity: existing.suggestionTelemetryIdentity
+      )
+      notificationPresentationCallbacks.removeValue(forKey: existing.id)?.onDropped()
+      notificationAuthorizationSnapshots.removeValue(forKey: existing.id)
+      window.dismissNotification(animated: false)
+    }
 
     // A live voice session has no eyes. Hand it the card as silent context so a spoken
     // follow-up has a referent; the typed path gets the same thing via
@@ -4111,14 +4140,17 @@ class FloatingControlBarManager {
     )
 
     let dismissWorkItem = DispatchWorkItem { [weak self] in
-      self?.dismissNotificationAndAdvanceQueue(trackDismissal: true)
+      self?.dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: .timeout)
     }
     notificationDismissWorkItem = dismissWorkItem
     DispatchQueue.main.asyncAfter(deadline: .now() + 6.0, execute: dismissWorkItem)
     return true
   }
 
-  private func dismissNotificationAndAdvanceQueue(trackDismissal: Bool) {
+  private func dismissNotificationAndAdvanceQueue(
+    trackDismissal: Bool,
+    kind: NotificationDismissalKind
+  ) {
     guard let window else { return }
 
     let dismissedNotification = window.state.currentNotification
@@ -4134,6 +4166,7 @@ class FloatingControlBarManager {
         title: dismissedNotification.title,
         assistantId: dismissedNotification.assistantId,
         surface: "floating_bar",
+        dismissalKind: kind,
         suggestionIdentity: dismissedNotification.suggestionTelemetryIdentity
       )
     }
@@ -4171,6 +4204,12 @@ class FloatingControlBarManager {
     let ownerID = notification.ownerID
     guard !ownerID.isEmpty,
       RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      // A proactive card is journaled because it is something Omi observed and
+      // the user may want to follow up on in chat. An integration offer is
+      // neither — it is product copy about a connector, and writing "Omi can
+      // read your inbox…" into the user's conversation history as though it
+      // were an observation is noise they cannot act on there.
+      notification.assistantId != IntegrationNudgeCoordinator.assistantID,
       let provider = historyChatProvider
     else { return }
     let surface = provider.mainChatSurfaceReference()
@@ -4182,8 +4221,9 @@ class FloatingControlBarManager {
     // Notifications become chat-visible only after canonical journal
     // admission. The notification card itself remains an independent
     // presentation surface while this async write is pending.
-    let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
-    let messageText = bodyText.isEmpty ? notification.title : bodyText
+    let messageText = Self.notificationJournalText(
+      title: notification.title,
+      body: notification.message)
     let continuityKey = ChatContinuityInvariants.proactiveNotificationContinuityKey(
       id: notification.id,
       kind: notification.kind)
@@ -4222,6 +4262,14 @@ class FloatingControlBarManager {
       )
       self.mostRecentNotificationKey = key
     }
+  }
+
+  nonisolated static func notificationJournalText(title: String, body: String) -> String {
+    let headline = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    let detail = body.trimmingCharacters(in: .whitespacesAndNewlines)
+    if headline.isEmpty { return detail }
+    if detail.isEmpty || detail == headline { return headline }
+    return "\(headline)\n\(detail)"
   }
 
   func mainChatSurfaceReference() -> AgentSurfaceReference {

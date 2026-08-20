@@ -100,7 +100,7 @@
     "createYourOwnApp": "独自のアプリを作成",
     "buildAndShareApp": "カスタムアプリを作成して共有",
     "searchApps": "アプリを検索...",
-    "myApps": "マイアプリ",
+    "myApps": "自分で作成",
     "installedApps": "インストール済みアプリ",
     "unableToFetchApps": "アプリを取得できません :(\n\nインターネット接続を確認して、もう一度お試しください。",
     "aboutOmi": "Omiについて",
@@ -3190,5 +3190,9 @@
     "accountCutoverMigrationInProgressTitle": "移行中",
     "accountCutoverMigrationInProgressMessage": "アカウントを移行中です。移行が完了するまでプロダクト機能は一時停止されます。",
     "accountCutoverMigrationRollbackMessage": "移行のロールバック後、アカウントはメンテナンス中です。新しいデータの一部が孤立している可能性があります。",
-    "accountCutoverOpenStore": "ストアを開く"
+    "accountCutoverOpenStore": "ストアを開く",
+    "sendRawAudioToOmi": "未処理の音声を Omi に送信",
+    "sendRawAudioToOmiDescription": "オフにすると、未処理の音声は Omi に送信されません。文字起こしとクラウド機能に必要なデータは、引き続き Omi に送信される場合があります。",
+    "findDevice": "探す",
+    "diagnosticsShareFailed": "診断情報を共有できませんでした。もう一度お試しください。"
 }

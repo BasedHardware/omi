@@ -1,5 +1,11 @@
 import Foundation
 
+enum GeminiWorkloadClass: String {
+  case interactive
+  case extraction
+  case maintenance
+}
+
 // MARK: - Thinking Budget Configuration
 
 /// Controls how many tokens Gemini 2.5 spends on internal reasoning.
@@ -182,6 +188,7 @@ struct GeminiResponse: Decodable {
 /// the Gemini API key server-side. Auth uses Firebase Bearer token.
 actor GeminiClient {
   private let model: String
+  private let workload: GeminiWorkloadClass
 
   /// Backend proxy base URL resolved through the identity-bound endpoint policy.
   /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
@@ -206,7 +213,7 @@ actor GeminiClient {
     )
   }
 
-  enum GeminiClientError: LocalizedError {
+  nonisolated enum GeminiClientError: LocalizedError {
     case missingAPIKey
     case networkError(Error)
     case invalidResponse
@@ -347,7 +354,12 @@ actor GeminiClient {
   /// (e.g. Pro overloaded → fall back to Flash). Nil or equal-to-primary = no fallback.
   private let fallbackModel: String?
 
-  init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive, fallbackModel: String? = nil) throws {
+  init(
+    apiKey: String? = nil,
+    model: String = ModelQoS.Gemini.proactive,
+    fallbackModel: String? = nil,
+    workload: GeminiWorkloadClass
+  ) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
     // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
@@ -357,6 +369,7 @@ actor GeminiClient {
     }
     self.model = model
     self.fallbackModel = fallbackModel
+    self.workload = workload
     // Which model a proactive assistant actually runs on is a product decision with a
     // measurable click-through cost, and until now it was invisible at runtime — the model
     // appears only inside the request URL, so a tier change could not be confirmed on a
@@ -428,10 +441,37 @@ actor GeminiClient {
   /// Replay only outcomes whose typed backend contract says they are safe.
   static func shouldAutoRetry(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
-      return geminiError.shouldAutoRetry
+      if geminiError.shouldAutoRetry { return true }
+      if case .networkError(let underlying) = geminiError {
+        return isReplayableTransportError(underlying)
+      }
+      return false
     }
-    // Raw URLSession errors are ambiguous after dispatch and must not be replayed.
-    return false
+    return isReplayableTransportError(error)
+  }
+
+  /// Transport failures that are safe to replay for this client.
+  ///
+  /// Replaying a dispatched request is only unsafe when the request may have had an
+  /// effect. Every call this client makes is a `generateContent` inference: it reads a
+  /// prompt and an image and returns text, with no server-side state change, so a duplicate
+  /// costs one extra inference and nothing else.
+  ///
+  /// `NSURLErrorNetworkConnectionLost` (-1005) is the dominant failure here and is a stale
+  /// pooled-connection race, not a real network outage: URLSession reuses a keep-alive
+  /// socket the server has already closed, and the request dies immediately. Measured on a
+  /// live desktop session, 12 of 13 suggestion evaluations failed this way while ordinary
+  /// requests to the same host succeeded in ~0.4s — every one of them was discarded without
+  /// a second attempt.
+  static func isReplayableTransportError(_ error: Error) -> Bool {
+    let code = (error as? URLError)?.code ?? URLError.Code(rawValue: (error as NSError).code)
+    switch code {
+    case .networkConnectionLost, .timedOut, .cannotConnectToHost, .notConnectedToInternet,
+      .dnsLookupFailed, .cannotFindHost:
+      return true
+    default:
+      return false
+    }
   }
 
   /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
@@ -555,6 +595,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
@@ -630,6 +671,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
         urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -702,6 +744,7 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
@@ -1007,6 +1050,7 @@ extension GeminiClient {
           urlRequest.httpMethod = "POST"
           urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
           urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
 

@@ -101,7 +101,7 @@
     "createYourOwnApp": "创建您自己的应用",
     "buildAndShareApp": "构建并分享您自己的应用",
     "searchApps": "搜索应用...",
-    "myApps": "我的应用",
+    "myApps": "我创建的",
     "installedApps": "已安装应用",
     "unableToFetchApps": "无法加载应用 :(\n\n请检查您的网络连接。",
     "aboutOmi": "关于 Omi",
@@ -3236,5 +3236,9 @@
     "accountCutoverMigrationInProgressTitle": "正在迁移",
     "accountCutoverMigrationInProgressMessage": "您的账户正在迁移。产品功能将暂停，直到迁移完成。",
     "accountCutoverMigrationRollbackMessage": "账户迁移回滚后处于维护状态。部分较新的数据可能被隔离。",
-    "accountCutoverOpenStore": "打开应用商店"
+    "accountCutoverOpenStore": "打开应用商店",
+    "sendRawAudioToOmi": "向 Omi 发送原始音频",
+    "sendRawAudioToOmiDescription": "关闭后不会向 Omi 发送原始音频；转写文本及云端功能所需数据仍可能发送至 Omi。",
+    "findDevice": "查找",
+    "diagnosticsShareFailed": "无法分享诊断信息，请重试。"
 }

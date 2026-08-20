@@ -146,7 +146,7 @@ jobs:
 
           changed_files="$(git diff --name-only "$parent_sha" "$RELEASE_SHA")"
           printf 'Changed files for %s:\n%s\n' "$RELEASE_SHA" "$changed_files"
-          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest|desktop_qualification_admission|desktop_qualification_evidence)\.py$)' <<<"$changed_files"; then
+          if grep -Eq '^(backend/|\.github/workflows/(gcp_backend_auto_dev|gcp_llm_gateway|release-eligibility)\.yml$|\.github/actions/(release-eligibility|sync-backfill-lifecycle|deploy-backend-stack)/|\.github/scripts/(verify_auto_backend_release_admission|desktop_release_manifest)\.py$)' <<<"$changed_files"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             {
               echo "### Backend development deploy scope"

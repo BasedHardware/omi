@@ -101,7 +101,7 @@
     "createYourOwnApp": "Stwórz własną aplikację",
     "buildAndShareApp": "Zbuduj i udostępnij swoją własną aplikację",
     "searchApps": "Szukaj aplikacji...",
-    "myApps": "Moje aplikacje",
+    "myApps": "Stworzone przeze mnie",
     "installedApps": "Zainstalowane aplikacje",
     "unableToFetchApps": "Nie można pobrać aplikacji :(\n\nSprawdź połączenie internetowe i spróbuj ponownie.",
     "aboutOmi": "O Omi",
@@ -3249,5 +3249,9 @@
     "accountCutoverMigrationInProgressTitle": "Trwa migracja",
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
-    "accountCutoverOpenStore": "Otwórz sklep"
+    "accountCutoverOpenStore": "Otwórz sklep",
+    "sendRawAudioToOmi": "Wysyłaj surowy dźwięk do Omi",
+    "sendRawAudioToOmiDescription": "Wyłącz, aby surowy dźwięk nie był wysyłany do Omi. Transkrypcje i dane wymagane przez funkcje chmurowe mogą nadal być wysyłane do Omi.",
+    "findDevice": "Znajdź",
+    "diagnosticsShareFailed": "Nie udało się udostępnić diagnostyki. Spróbuj ponownie."
 }

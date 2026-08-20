@@ -101,7 +101,7 @@
     "createYourOwnApp": "Tạo ứng dụng của riêng bạn",
     "buildAndShareApp": "Xây dựng và chia sẻ ứng dụng tùy chỉnh của bạn",
     "searchApps": "Tìm kiếm ứng dụng...",
-    "myApps": "Ứng dụng của tôi",
+    "myApps": "Do tôi tạo",
     "installedApps": "Ứng dụng đã cài đặt",
     "unableToFetchApps": "Không thể tải ứng dụng :(\n\nVui lòng kiểm tra kết nối internet và thử lại.",
     "aboutOmi": "Giới thiệu về Omi",
@@ -3219,5 +3219,9 @@
     "accountCutoverMigrationInProgressTitle": "Đang di chuyển",
     "accountCutoverMigrationInProgressMessage": "Tài khoản của bạn đang được di chuyển. Các tính năng sản phẩm tạm dừng cho đến khi hoàn tất.",
     "accountCutoverMigrationRollbackMessage": "Tài khoản của bạn đang bảo trì sau khi hoàn tác di chuyển. Một số dữ liệu mới hơn có thể bị cô lập.",
-    "accountCutoverOpenStore": "Mở cửa hàng"
+    "accountCutoverOpenStore": "Mở cửa hàng",
+    "sendRawAudioToOmi": "Gửi âm thanh thô đến Omi",
+    "sendRawAudioToOmiDescription": "Tắt để ngăn âm thanh thô được gửi đến Omi. Bản chép lời và dữ liệu cần cho các tính năng đám mây vẫn có thể được gửi đến Omi.",
+    "findDevice": "Tìm",
+    "diagnosticsShareFailed": "Không thể chia sẻ chẩn đoán. Vui lòng thử lại."
 }

@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -14,7 +12,6 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:upgrader/upgrader.dart';
 
-import 'package:omi/backend/http/api/agents.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
@@ -68,7 +65,6 @@ import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -262,10 +258,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
-      // Stop keepalive when app goes to background
-      if (mounted) {
-        Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
-      }
     } else if (state == AppLifecycleState.resumed) {
       event = 'App is resumed';
 
@@ -280,13 +272,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
-
-      // Ensure agent VM is running and restart keepalive
-      if (mounted && SharedPreferencesUtil().claudeAgentEnabled) {
-        ensureAgentVm();
-        Provider.of<MessageProvider>(context, listen: false).startVmKeepalive();
-      }
-
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
         final taskProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -371,17 +356,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _ensurePageInitialized(homePageIdx);
     WidgetsBinding.instance.addObserver(this);
     _prewarmRemainingTabs(homePageIdx);
-
-    // Pre-warm agent VM and WebSocket so session is ready by the time the user opens chat
-    if (SharedPreferencesUtil().claudeAgentEnabled) {
-      print('[HomePage] claudeAgentEnabled=true, calling ensureAgentVm + starting keepalive + preConnectAgent');
-      ensureAgentVm();
-      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-      messageProvider.startVmKeepalive();
-      messageProvider.preConnectAgent();
-    } else {
-      print('[HomePage] claudeAgentEnabled=false, skipping VM ensure');
-    }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final permission = await Geolocator.checkPermission();
@@ -941,8 +915,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -951,8 +925,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
@@ -993,7 +967,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           ),
                         ),
                       // Calendar button - only show when date filter is active
-                      if (convoProvider.selectedDate != null) ...[
+                      if (convoProvider.selectedStartDate != null) ...[
                         const SizedBox(width: 8),
                         Container(
                           width: 36,
@@ -1007,96 +981,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                             icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
-                              // Open date picker to change date, cancel clears filter
-                              DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
-                              await showCupertinoModalPopup<void>(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return Container(
-                                    height: 420,
-                                    padding: const EdgeInsets.only(top: 6.0),
-                                    margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-                                    color: const Color(0xFF1F1F25),
-                                    child: SafeArea(
-                                      top: false,
-                                      child: Column(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                                            decoration: const BoxDecoration(
-                                              color: Color(0xFF1F1F25),
-                                              border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                CupertinoButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: () async {
-                                                    // Get provider before pop to avoid using invalid context
-                                                    final provider = Provider.of<ConversationProvider>(
-                                                      context,
-                                                      listen: false,
-                                                    );
-                                                    Navigator.of(context).pop();
-                                                    await provider.clearDateFilter();
-                                                    PlatformManager.instance.analytics.calendarFilterCleared();
-                                                  },
-                                                  child: Text(
-                                                    context.l10n.removeFilter,
-                                                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                                                  ),
-                                                ),
-                                                const Spacer(),
-                                                CupertinoButton(
-                                                  padding: EdgeInsets.zero,
-                                                  onPressed: () async {
-                                                    final provider = Provider.of<ConversationProvider>(
-                                                      context,
-                                                      listen: false,
-                                                    );
-                                                    Navigator.of(context).pop();
-                                                    await provider.filterConversationsByDate(selectedDate);
-                                                    PlatformManager.instance.analytics.calendarFilterApplied(
-                                                      selectedDate,
-                                                    );
-                                                  },
-                                                  child: Text(
-                                                    context.l10n.done,
-                                                    style: const TextStyle(
-                                                      color: Colors.deepPurple,
-                                                      fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Material(
-                                              color: ResponsiveHelper.backgroundSecondary,
-                                              child: CalendarDatePicker2(
-                                                config: getDefaultCalendarConfig(
-                                                  firstDate: DateTime(2020),
-                                                  lastDate: DateTime.now(),
-                                                  currentDate: DateTime.now(),
-                                                ),
-                                                value: [selectedDate],
-                                                onValueChanged: (dates) {
-                                                  if (dates.isNotEmpty) {
-                                                    selectedDate = dates[0];
-                                                  }
-                                                },
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
+                              await showConversationDateRangePicker(context);
                             },
                           ),
                         ),
@@ -1239,10 +1124,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Stop VM keepalive timer
-    try {
-      Provider.of<MessageProvider>(context, listen: false).stopVmKeepalive();
-    } catch (_) {}
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
     // Remove capture provider listener using stored reference

@@ -324,7 +324,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get searchApps => 'Пребарај апликации...';
 
   @override
-  String get myApps => 'Мои апликации';
+  String get myApps => 'Создадено од мене';
 
   @override
   String get installedApps => 'Инсталирани апликации';
@@ -9892,4 +9892,17 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otevřít obchod';
+
+  @override
+  String get sendRawAudioToOmi => 'Испраќај необработено аудио до Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Исклучете за да спречите испраќање необработено аудио до Omi. Транскриптите и податоците потребни за облачните функции сè уште може да се испраќаат до Omi.';
+
+  @override
+  String get findDevice => 'Пронајди';
+
+  @override
+  String get diagnosticsShareFailed => 'Дијагностиката не можеше да се сподели. Обидете се повторно.';
 }

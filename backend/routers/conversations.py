@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import Any, Dict, List, Optional
@@ -48,6 +49,8 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.memory.retraction_scope import retraction_can_be_skipped
+from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
 from utils.conversations.search import (
     ConversationSearchUnavailableError,
@@ -57,12 +60,13 @@ from utils.conversations.search import (
     parse_exact_conversation_reference,
     search_conversations,
 )
-from utils.llm.conversation_processing import generate_summary_with_prompt
+from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
+from utils.product_telemetry import emit_product_event
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -87,6 +91,45 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     return conversation
+
+
+def _speaker_assignment(segment: TranscriptSegment) -> str:
+    if segment.is_user:
+        return 'self'
+    if segment.person_id:
+        return f"person:{hashlib.sha256(str(segment.person_id).encode('utf-8')).hexdigest()[:16]}"
+    return 'unassigned'
+
+
+def _speaker_assignment_kind(assignment: str) -> str:
+    return 'person' if assignment.startswith('person:') else assignment
+
+
+def _emit_speaker_identity_confirmed(
+    *,
+    uid: str,
+    conversation_id: str,
+    scope: str,
+    before: List[str],
+    after: List[str],
+) -> None:
+    if not after:
+        return
+    assignment_kinds = [_speaker_assignment_kind(value) for value in after]
+    properties = {
+        'conversation_id': conversation_id,
+        'confirmation': 'accepted' if before == after else 'corrected',
+        'assignment': assignment_kinds[0] if len(set(assignment_kinds)) == 1 else 'mixed',
+        'scope': scope,
+        'affected_segment_count': len(after),
+    }
+    if len(set(after)) == 1 and assignment_kinds[0] == 'person':
+        properties['assignment_id'] = after[0]
+    emit_product_event(
+        uid=uid,
+        event='Speaker Identity Confirmed',
+        properties=properties,
+    )
 
 
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
@@ -785,7 +828,24 @@ def delete_conversation(
         # Delete associated memories and action items before removing the conversation doc
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
-        MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+        memory_service = MemoryService(db_client=db_client)
+        # Retraction is fenced with canonical intake (MEMORY_MODE). Skipping it
+        # when there is provably nothing to retract keeps delete working while
+        # the fence is closed; anything real still raises rather than orphaning
+        # live memories against a deleted conversation.
+        if not retraction_can_be_skipped(uid, conversation_id, memory_service=memory_service, db_client=db_client):
+            try:
+                memory_service.retract_conversation_memories(uid, conversation_id)
+            except ConversationReplacementConflictError as error:
+                logger.exception('cascade retraction conflicted uid=%s conversation_id=%s', uid, conversation_id)
+                # Concurrent same-account memory writes kept winning the
+                # account-global control CAS. Nothing has been deleted yet, so
+                # fail closed with a retryable answer instead of an opaque 500;
+                # the retraction is idempotent, a retried delete is safe (#11726).
+                raise HTTPException(
+                    status_code=503,
+                    detail='Conversation memory retraction is busy, please retry',
+                ) from error
 
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
@@ -1002,6 +1062,7 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
         conversation.transcript_segments[segment_idx].person_id = None
@@ -1014,6 +1075,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='segment',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -1071,6 +1139,9 @@ def set_assignee_conversation_segment(
 
     is_unassigning = value is None or value is False
 
+    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
+    before = [_speaker_assignment(segment) for segment in targeted_segments]
+
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
             if segment.speaker_id == speaker_id:
@@ -1088,6 +1159,13 @@ def set_assignee_conversation_segment(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='speaker',
+        before=before,
+        after=[_speaker_assignment(segment) for segment in targeted_segments],
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -1134,6 +1212,7 @@ def assign_segments_bulk(
 
     segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
     resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
+    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
 
     for index in segment_indices:
         segment = conversation.transcript_segments[index]
@@ -1146,6 +1225,13 @@ def assign_segments_bulk(
 
     conversations_db.update_conversation_segments(
         uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='bulk',
+        before=before,
+        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -1437,7 +1523,18 @@ def test_prompt(
         raise HTTPException(status_code=400, detail="Conversation has no text content to summarize.")
 
     # Pass language code from conversation to match app behavior
-    summary = generate_summary_with_prompt(full_transcript, request.prompt, language_code=conversation.language or 'en')
+    try:
+        summary = generate_summary_with_prompt(
+            full_transcript, request.prompt, language_code=conversation.language or 'en'
+        )
+    except SummaryProviderError as exc:
+        # The provider failed on its own account, so this is an upstream failure and not a fault
+        # of the request: report it as one instead of as a 500 the client cannot act on.
+        logger.warning("test-prompt summary failed upstream: conversation_id=%s", conversation_id)
+        raise HTTPException(
+            status_code=504 if exc.timed_out else 502,
+            detail='summary_provider_timeout' if exc.timed_out else 'summary_provider_unavailable',
+        ) from exc
 
     return {"summary": summary}
 

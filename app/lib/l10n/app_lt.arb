@@ -1301,7 +1301,7 @@
     "multipleSpeakersDetected": "Aptikti keli kalbėtojai",
     "mute": "Nutildyti",
     "muted": "Nutildyta",
-    "myApps": "Mano programėlės",
+    "myApps": "Sukurta manęs",
     "myGoal": "Mano tikslas",
     "nConversations": "{count} pokalbių",
     "name": "Vardas",
@@ -3214,5 +3214,9 @@
     "accountCutoverMigrationInProgressTitle": "Trwa migracja",
     "accountCutoverMigrationInProgressMessage": "Twoje konto jest migrowane. Funkcje produktu są wstrzymane do końca migracji.",
     "accountCutoverMigrationRollbackMessage": "Twoje konto jest w trybie konserwacji po cofnięciu migracji. Nowsze dane mogą zostać odizolowane.",
-    "accountCutoverOpenStore": "Otwórz sklep"
+    "accountCutoverOpenStore": "Otwórz sklep",
+    "sendRawAudioToOmi": "Siųsti neapdorotą garsą į Omi",
+    "sendRawAudioToOmiDescription": "Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.",
+    "findDevice": "Rasti",
+    "diagnosticsShareFailed": "Nepavyko bendrinti diagnostikos. Bandykite dar kartą."
 }

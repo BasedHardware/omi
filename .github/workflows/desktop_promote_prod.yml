@@ -119,7 +119,7 @@ jobs:
 
           beta, stable = fields("/tmp/macos-beta-pointer.json"), fields("/tmp/macos-stable-pointer.json")
           if text(beta, "release_id") != os.environ["RELEASE_TAG"]:
-              raise SystemExit("Stable promotion requires the exact current qualified Beta release ID")
+              raise SystemExit("Stable promotion requires the exact current Beta release ID")
           generation = stable.get("generation", {}).get("integerValue", "0")
           if not generation.isdigit():
               raise SystemExit("Stable pointer generation is invalid")

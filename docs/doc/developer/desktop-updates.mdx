@@ -12,6 +12,11 @@ dogfooding. Beta OAuth remains on the production identity authority. The bundle
 identities intentionally isolate local storage, Keychain/TCC state, package names,
 and telemetry without creating another customer account universe.
 
+Stable.app does not Sparkle-install beta-channel builds. Early access is the
+separately-installable Omi Beta app. The default appcast serves only the stable
+channel so leftover Stable-identity clients that still request Sparkle
+`channel=beta` freeze until `macos-stable` surpasses their build.
+
 ## Release model
 
 One Codemagic build signs and notarizes Stable and Beta artifact pairs from one
@@ -81,4 +86,4 @@ The desktop release workflows retain the existing Firestore legacy bridge and st
 
 The surviving direct backend deployment boundary for the desktop update API is Cloud Run only. `gcp_backend.yml` accepts `environment=prod, deploy_targets=cloud-run-only`: it validates exact no-traffic revisions and the Cloud Run-only candidate release vector, snapshots traffic, promotes exact revisions, verifies the serving vector, then uses a runner-local Firebase token file to smoke `https://api.omi.me`. The safe desktop candidate-reservation route-presence check and known-audio request are serving evidence only; a failed shift, vector check, or smoke restores the saved traffic snapshot.
 
-`environment=prod, deploy_targets=all` is rejected before checkout, cloud authentication, image publication, or mutation. Transactional GKE/config rollback parity does not exist, so this workflow does not claim atomic full-stack deployment. The source-admitted direct GKE workflows (`gcp_backend_listen_helm.yml`, `gcp_backend_pusher.yml`, `gcp_llm_gateway.yml`, and `gcp_backend_agent_proxy.yml`) remain the operational production paths for their respective surfaces.
+`environment=prod, deploy_targets=all` is rejected before checkout, cloud authentication, image publication, or mutation. Transactional GKE/config rollback parity does not exist, so this workflow does not claim atomic full-stack deployment. The source-admitted direct GKE workflows (`gcp_backend_listen_helm.yml`, `gcp_backend_pusher.yml`, and `gcp_llm_gateway.yml`) remain the operational production paths for their respective surfaces. The Cloud Agent VM proxy workflow was retired in PR #11795; its residual live infrastructure has a separate runbook at `docs/runbooks/cloud-agent-vm-infrastructure-retirement.md`.

@@ -358,13 +358,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -939,7 +939,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1014,7 +1015,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1169,18 +1171,24 @@ class _PlansSheetState extends State<PlansSheet> {
                         _buildPromoCodeField(),
                         const SizedBox(height: 16),
 
-                        // Continue/Keep Unlimited button - only show for non-annual unlimited users
+                        // Continue/Upgrade — hidden for same-tier annual (nothing to
+                        // change) and for desktop-plan → mobile-tier switches.
                         Builder(
                           builder: (context) {
                             final currentPlan = _getCurrentPlanDetails();
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
-                                !hasScheduledUpgrade &&
-                                !isCancelled &&
-                                !usageProvider.isLoadingPlans &&
-                                usageProvider.availablePlans != null;
+                            final currentSub = usageProvider.subscription?.subscription;
+                            final shouldShowContinueButton = shouldShowPlanContinueButton(
+                              isOnAnnualPlan: isOnAnnualPlan,
+                              hasScheduledUpgrade: hasScheduledUpgrade,
+                              isCancelled: isCancelled,
+                              plansLoaded: !usageProvider.isLoadingPlans && usageProvider.availablePlans != null,
+                              selectedTierId: selectedTierId,
+                              currentTierId: currentSub?.plan.wireName,
+                              currentGrantsDesktop: currentSub?.plan.grantsDesktop ?? false,
+                            );
 
                             if (!shouldShowContinueButton) {
                               return const SizedBox.shrink();

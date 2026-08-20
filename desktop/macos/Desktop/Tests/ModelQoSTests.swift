@@ -73,12 +73,23 @@ final class ModelQoSTests: XCTestCase {
     XCTAssertEqual(ModelQoS.Gemini.taskExtraction, "gemini-2.5-flash")
   }
 
-  /// Insight is Pro on every tier by design — the timer caps it at ~6 analyses/hour, and the
-  /// premium-tier drop to Flash tracked a click-through fall from 2.34% to under 1%.
+  /// Insight is Pro on every tier by design — the timer caps it at ~6 analyses/hour, and it is
+  /// the best-performing high-volume notification lane (PostHog 30d to 2026-08-17: 1.162% CTR
+  /// vs 0.68% fleet average).
   func testInsightIsProOnEveryTier() {
     for tier in ModelTier.allCases {
       ModelQoS.activeTier = tier
       XCTAssertEqual(ModelQoS.Gemini.insight, "gemini-2.5-pro")
+    }
+  }
+
+  /// The PT-eviction pin. Lanes routed through `lightweight` must stay off `gemini-2.5-flash`:
+  /// that model burns the saturated Vertex PT reservation, which is reserved for task
+  /// extraction (2026-08-17 vertex-pt-flash-spend evidence). Tier-independent on purpose.
+  func testLightweightPinIsFlashLiteOnEveryTier() {
+    for tier in ModelTier.allCases {
+      ModelQoS.activeTier = tier
+      XCTAssertEqual(ModelQoS.Gemini.lightweight, "gemini-2.5-flash-lite")
     }
   }
 

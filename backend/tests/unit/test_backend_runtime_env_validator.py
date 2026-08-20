@@ -54,8 +54,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "off"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_ENABLED", "value": "on"},
         {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
         {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
 '''
@@ -71,6 +70,23 @@ def with_backend_pusher_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         r'\1\n        {"name": "HOSTED_PUSHER_API_URL", "value": "http://pusher.omiapi.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_conversation_notes_v2_env(payload: str) -> str:
+    """The summary rollout flags are declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flags on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -132,15 +148,18 @@ def with_parity_pack_env(payload: str) -> str:
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
+        {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_conversation_notes_v2_env(
+            with_backend_pusher_env(
+                with_parity_pack_env(
+                    with_listen_finalization_orphan_env(
+                        with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+                    )
                 )
             )
         )
@@ -186,10 +205,14 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> d
             'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway', 'category': 'rollout'},
             'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway', 'category': 'rollout'},
             'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
-            'MEMORY_MODE': {'value': mode, 'category': 'memory_rollout'},
-            'MEMORY_V3_GET_ENABLED': {'value': 'false' if mode == 'off' else 'true', 'category': 'memory_rollout'},
+            'MEMORY_ENABLED': {'value': 'off' if mode == 'off' else 'on', 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
+            'MEMORY_CANONICAL_MAINTENANCE_FLEX': {
+                'value': 'true' if cron == 'true' else 'false',
+                'category': 'memory_rollout',
+            },
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
+            'OMI_BACKGROUND_FLEX_CAPABLE': {'value': 'false', 'category': 'memory_rollout'},
         },
         'secrets': {
             'SERVICE_ACCOUNT_JSON': {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'},
@@ -274,6 +297,25 @@ def test_prod_listen_finalization_contract_requires_the_dedicated_worker_binding
         ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
     finally:
         backend_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL'] = missing_entry
+
+
+def test_listen_finalization_contract_requires_maps_key_on_backend_sync():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env in ('dev', 'prod'):
+        env_config = manifest['environments'][env]
+        secrets = env_config['cloud_run']['services']['backend-sync']['secrets']
+        assert secrets['GOOGLE_MAPS_API_KEY'] == {'secret': 'GOOGLE_MAPS_API_KEY', 'version': 'latest'}
+
+        missing = secrets.pop('GOOGLE_MAPS_API_KEY')
+        try:
+            assert validator.ValidationError(
+                f'{env}/cloud_run/backend-sync',
+                'missing required listen-finalization secret GOOGLE_MAPS_API_KEY',
+            ) in validator._validate_listen_finalization_dispatch_contract(env, env_config)
+        finally:
+            secrets['GOOGLE_MAPS_API_KEY'] = missing
 
 
 def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
@@ -1769,6 +1811,32 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_desktop_backend_compose_requires_vertex_pt_env(env):
+    validator = load_validator()
+    errors = validator.validate_runtime_env(env=env)
+    assert errors == []
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    desktop_env = manifest['environments'][env]['desktop_backend']['env']
+    expected_project = 'based-hardware' if env == 'prod' else 'based-hardware-dev'
+    assert desktop_env['USE_VERTEX_AI']['value'] == 'true'
+    assert desktop_env['GOOGLE_CLOUD_PROJECT']['value'] == expected_project
+    assert desktop_env['GCP_LOCATION']['value'] == 'us-central1'
+
+
+def test_desktop_backend_vertex_pt_omission_fails_loud(tmp_path):
+    validator = load_validator()
+    manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
+    del manifest['environments']['prod']['desktop_backend']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    messages = [error.message for error in errors if error.scope == 'prod/desktop_backend']
+    assert messages
+    assert any('Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28' in message for message in messages)
+
+
 def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_contract_is_present():
     validator = load_validator()
     retired = {
@@ -1876,9 +1944,11 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     notifications_job = manifest['environments']['dev']['cloud_run']['jobs']['notifications-job']
     forbidden_env = {
+        'MEMORY_ENABLED',
         'MEMORY_MODE',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -1911,11 +1981,14 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    # Simulate forgetting to enable the job while flipping a request-path surface to read.
-    manifest['environments']['prod']['cloud_run']['services']['backend']['env']['MEMORY_MODE'] = {
+    # Leftover Gate 3 alias: surface MEMORY_MODE=read while the job stays off.
+    backend_env = manifest['environments']['prod']['cloud_run']['services']['backend']['env']
+    backend_env.pop('MEMORY_ENABLED', None)
+    backend_env['MEMORY_MODE'] = {
         'value': 'read',
         'category': 'memory_rollout',
     }
+    job['env'].pop('MEMORY_ENABLED', None)
     job['env']['MEMORY_MODE'] = {'value': 'off', 'category': 'memory_rollout'}
     job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
 
@@ -1924,6 +1997,16 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
     errors = validator.validate_runtime_env(env='prod', manifest_path=path)
     messages = [error.message for error in errors]
     assert any('requires memory-maintenance-job' in message for message in messages)
+
+
+def test_memory_maintenance_job_contract_allows_write_without_job_cron():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'])
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
+    assert errors == []
 
 
 def test_memory_maintenance_job_contract_rejects_missing_job(tmp_path):
@@ -2001,6 +2084,28 @@ def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_en
             'OMI_LLM_GATEWAY_URL must be derived from the verified gateway endpoint, not pinned directly',
         )
         in errors
+    )
+
+
+def test_memory_maintenance_job_contract_allows_prod_on_with_job_cron():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod']
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
+    assert errors == []
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED']['value'] == 'true'
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX']['value'] == 'true'
+
+
+def test_memory_maintenance_job_contract_requires_flex_when_cron_enabled():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['dev']
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('dev', env_config)
+    assert any(
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled' in error.message
+        for error in errors
     )
 
 

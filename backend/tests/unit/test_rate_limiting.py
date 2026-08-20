@@ -489,6 +489,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "goals:advice",
             "goals:extract",
             "dev:conversations",
+            "dev:conversation_reads_total",
             "dev:conversations_read",
             "dev:conversation_detail_read",
             "dev:conversation_transcript_read",
@@ -561,6 +562,7 @@ class TestRouterWiring(unittest.TestCase):
         for policy in [
             "dev:memories_read",
             "dev:action_items_read",
+            "dev:conversation_reads_total",
             "dev:conversations_read",
             "dev:conversation_detail_read",
             "dev:conversation_transcript_read",
@@ -591,6 +593,62 @@ class TestRouterWiring(unittest.TestCase):
         self.assertNotIn('request.headers.get("Authorization"', developer_source)
         self.assertNotIn("request.headers.get('Authorization'", dependencies_source)
         self.assertNotIn('request.headers.get("Authorization"', dependencies_source)
+
+    def test_conversation_reads_share_an_aggregate_ceiling(self):
+        """Per-route read policies must not raise the total reads a key can make.
+
+        Before list and detail were split into separate policies they shared one
+        60/hr bucket. Giving detail its own 60/hr policy without a shared ceiling
+        would let one key make 120 conversation reads an hour -- a loosening of the
+        exact limit #8713 asked to tighten. The shared ceiling is what prevents that,
+        so this drives both routes and asserts the aggregate, not the per-route, cap
+        is what stops the caller.
+        """
+        dependencies = importlib.import_module("dependencies")
+
+        auth = dependencies.ApiKeyAuth(
+            uid="uid1",
+            scopes=["conversations:read"],
+            app_id="test-app",
+            key_id="test-key",
+        )
+
+        counters: dict[str, int] = {}
+
+        def counting_limiter(*, prefix, uid, app_id, key_id, policy_name):
+            max_requests, _window = RATE_POLICIES[policy_name]
+            counters[policy_name] = counters.get(policy_name, 0) + 1
+            if counters[policy_name] > max_requests:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+        async def drive() -> int:
+            served = 0
+            # Alternate routes so neither per-route bucket can be what stops us.
+            for i in range(500):
+                dep = (
+                    dependencies.get_auth_with_conversations_read
+                    if i % 2 == 0
+                    else dependencies.get_auth_with_conversation_detail_read
+                )
+                try:
+                    await dep(auth)
+                except HTTPException as exc:
+                    self.assertEqual(exc.status_code, 429)
+                    break
+                served += 1
+            return served
+
+        with patch.object(dependencies, "check_api_key_rate_limit", counting_limiter):
+            served = asyncio.run(drive())
+
+        umbrella_max, _window = RATE_POLICIES["dev:conversation_reads_total"]
+        split_total = RATE_POLICIES["dev:conversations_read"][0] + RATE_POLICIES["dev:conversation_detail_read"][0]
+
+        self.assertEqual(served, umbrella_max)
+        self.assertLess(served, split_total, "per-route budgets must not sum into a higher effective ceiling")
+        # The shared ceiling, not a per-route budget, is what rejected the caller.
+        self.assertLessEqual(counters["dev:conversations_read"], RATE_POLICIES["dev:conversations_read"][0])
+        self.assertLessEqual(counters["dev:conversation_detail_read"], RATE_POLICIES["dev:conversation_detail_read"][0])
 
     def test_developer_rate_limit_failures_log_without_request(self):
         dependencies = importlib.import_module("dependencies")
@@ -778,7 +836,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module._RATE_LIMIT_RESERVE_LUA = MagicMock(return_value=[1, 3, 3600])
         allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
         self.assertTrue(allowed)
-        self.assertEqual((remaining, retry), (7, 0))
+        self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
             keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
         )
@@ -792,6 +850,45 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module._RATE_LIMIT_RELEASE_LUA = MagicMock(return_value=2)
         self.real_module.release_rate_limit("uid1", "desktop_reasoning")
         self.real_module._RATE_LIMIT_RELEASE_LUA.assert_called_once_with(keys=["rl:desktop_reasoning:uid1"], args=[])
+
+    def _release_lua_source(self) -> str:
+        source = None
+        for lua_source in self.lua_sources:
+            if "DECR" in lua_source and "DEL" in lua_source and "INCR" not in lua_source:
+                source = lua_source
+                break
+        self.assertIsNotNone(source, "release Lua script was not registered")
+        return source
+
+    def test_release_lua_clamps_at_zero_after_delete(self):
+        # The guarded unit runner stubs the redis package, so the script cannot
+        # be executed here. Pin the clamp semantics structurally: a release on a
+        # missing/zeroed counter must DEL and return 0 instead of DECR-ing the
+        # key negative (an operator quota reset deletes keys mid-flight).
+        source = self._release_lua_source()
+        self.assertIn("or '0'", source)
+        self.assertIn("current <= 1", source)
+        self.assertIn("remaining <= 0", source)
+        self.assertEqual(source.count("redis.call('DEL', key)"), 2)
+        for clause in ("current <= 1", "remaining <= 0"):
+            branch = source.split(clause, 1)[1]
+            self.assertIn("return 0", branch.split("end", 1)[0])
+
+    def test_release_lua_clamps_at_zero_after_delete_executes(self):
+        # Full execution against fakeredis, for environments where the real
+        # redis package (and lupa) are importable — bare pytest locally.
+        try:
+            import fakeredis
+
+            client = fakeredis.FakeRedis()
+            script = client.register_script(self._release_lua_source())
+        except Exception:
+            self.skipTest("fakeredis with Lua support unavailable under the guarded runner")
+        key = "rl:desktop_reasoning:uid1"
+        remaining = script(keys=[key], args=[])
+        self.assertEqual(int(remaining), 0)
+        stored = client.get(key)
+        self.assertTrue(stored is None or int(stored) >= 0)
 
 
 if __name__ == '__main__':

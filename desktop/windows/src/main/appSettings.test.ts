@@ -43,6 +43,17 @@ describe('appSettings', () => {
     expect(s.recordHotkey).toBe('Ctrl+Space')
   })
 
+  it('keeps an explicit memory extraction interval when the default changes', () => {
+    // A user (or a prior full-object write) who already has 10 minutes on disk
+    // must keep 10 after we raised the absent-key default to 30. This is a
+    // default change, not a migration.
+    setAppSettings({ memoryExtractionIntervalMin: 10 })
+    setAppSettings({ closeToTrayNoticeShown: true })
+    _resetForTests()
+    expect(getAppSettings().memoryExtractionIntervalMin).toBe(10)
+    expect(getAppSettings().closeToTrayNoticeShown).toBe(true)
+  })
+
   it('round-trips a patched flag and preserves untouched fields', () => {
     setAppSettings({ closeToTrayNoticeShown: true })
     // Drop the cache so the assertion proves the value persisted to disk.
@@ -138,7 +149,7 @@ describe('appSettings', () => {
       notificationsEnabled: true,
       notificationFrequency: 0,
       memoryEnabled: false,
-      memoryExtractionIntervalMin: 10,
+      memoryExtractionIntervalMin: 30,
       memoryMinConfidence: 0.7,
       memoryExcludedApps: [],
       taskEnabled: true,
@@ -220,14 +231,24 @@ describe('appSettings', () => {
       []
     )
     // Memory: master flag opt-OUT; interval reuses the cooldown sanitizer (positive
-    // integer minutes, junk → 10); min-confidence clamps to [0,1] (junk → 0.7).
+    // integer minutes, junk/absent → 30); min-confidence clamps to [0,1] (junk → 0.7).
+    // External source for the 30-min default: 2026-08-17 workload value ranking
+    // (PostHog 30d) — worst CTR of any proactive lane; Mac already shipped 1800s.
     expect(sanitizeAppSettings({ memoryEnabled: false }).memoryEnabled).toBe(false)
+    expect(sanitizeAppSettings(null).memoryExtractionIntervalMin).toBe(30)
+    expect(sanitizeAppSettings({} as never).memoryExtractionIntervalMin).toBe(30)
+    // An already-persisted explicit interval survives, including the old 10-min
+    // default a user (or a prior write of the full settings object) has on disk.
+    // Changing the fallback is not a migration of existing settings.
+    expect(
+      sanitizeAppSettings({ memoryExtractionIntervalMin: 10 }).memoryExtractionIntervalMin
+    ).toBe(10)
     expect(
       sanitizeAppSettings({ memoryExtractionIntervalMin: 15 }).memoryExtractionIntervalMin
     ).toBe(15)
     expect(
       sanitizeAppSettings({ memoryExtractionIntervalMin: 0 }).memoryExtractionIntervalMin
-    ).toBe(10)
+    ).toBe(30)
     expect(sanitizeAppSettings({ memoryMinConfidence: 0.85 }).memoryMinConfidence).toBe(0.85)
     expect(sanitizeAppSettings({ memoryMinConfidence: 2 }).memoryMinConfidence).toBe(1)
     expect(sanitizeAppSettings({ memoryMinConfidence: -1 }).memoryMinConfidence).toBe(0)

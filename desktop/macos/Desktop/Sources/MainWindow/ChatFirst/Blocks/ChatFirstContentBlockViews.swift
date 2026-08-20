@@ -1,3 +1,4 @@
+import AppKit
 import OmiTheme
 import SwiftUI
 
@@ -451,10 +452,14 @@ struct CaptureLinkView: View {
 struct ConversationLinkView: View {
   let conversationID: String
   let summary: String
+  let recommendedActionItems: [ConversationLinkActionItem]
   let navigation: ChatFirstShellNavigation
 
   @State private var isOpening = false
   @State private var isUnavailable = false
+  @State private var isCopyingLink = false
+  @State private var shareLinkFeedback: ConversationShareLinkFeedback?
+  @State private var shareLinkFeedbackGeneration = 0
 
   var body: some View {
     Group {
@@ -467,16 +472,62 @@ struct ConversationLinkView: View {
           summary: summary,
           actionTitle: "Open conversation",
           isOpening: isOpening,
-          accessibilityID: "chat-first-conversation-\(conversationID)-open"
-        ) {
-          openConversation()
-        }
+          accessibilityID: "chat-first-conversation-\(conversationID)-open",
+          action: { openConversation() },
+          recommendedActionItems: recommendedActionItems,
+          recommendedActionItemAction: { item in
+            guard let taskID = item.taskID else { return }
+            navigation.open(focus: .task(id: taskID))
+          },
+          secondaryActionTitle: "Copy share link",
+          secondaryActionSystemImage: "link",
+          isSecondaryBusy: isCopyingLink,
+          secondaryAccessibilityID: "chat-first-conversation-\(conversationID)-copy-link",
+          secondaryHelp: "Copy share link — anyone with the link can view",
+          secondaryAction: { copyShareLink() },
+          statusMessage: shareLinkFeedback?.message,
+          statusSystemImage: shareLinkFeedback?.systemImage,
+          statusColor: shareLinkFeedback == .copied ? Ink.listeningGreen : Ink.errorRed
+        )
       }
     }
     .onAppear {
       AnalyticsManager.shared.chatFirst(
         .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
       )
+    }
+  }
+
+  /// Copies a public share link for the conversation. Minting the link flips
+  /// the conversation's visibility to shared, so the confirmation discloses
+  /// the audience. A failure here never touches `isUnavailable` — copy
+  /// problems must not block "Open conversation".
+  private func copyShareLink() {
+    guard !isCopyingLink else { return }
+    isCopyingLink = true
+    Task { @MainActor in
+      defer { isCopyingLink = false }
+      let feedback = await ConversationShareLinkAction.run(
+        mintLink: { try await APIClient.shared.getConversationShareLink(id: conversationID) },
+        copyToPasteboard: { link in
+          NSPasteboard.general.clearContents()
+          return NSPasteboard.general.setString(link, forType: .string)
+        }
+      )
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(
+          kind: .conversationLink,
+          outcome: feedback == .copied ? .acted : .rejected,
+          action: .copyLink
+        )
+      )
+      shareLinkFeedback = feedback
+      shareLinkFeedbackGeneration += 1
+      let generation = shareLinkFeedbackGeneration
+      DispatchQueue.main.asyncAfter(deadline: .now() + ConversationShareLinkFeedback.displaySeconds) {
+        guard shareLinkFeedbackGeneration == generation else { return }
+        shareLinkFeedback = nil
+      }
     }
   }
 
@@ -563,6 +614,21 @@ private struct ChatFirstLinkBlockView: View {
   let isOpening: Bool
   let accessibilityID: String
   let action: () -> Void
+  var recommendedActionItems: [ConversationLinkActionItem] = []
+  var recommendedActionItemAction: ((ConversationLinkActionItem) -> Void)? = nil
+  // Optional secondary chip rendered beside the primary destination chip
+  // (e.g. "Copy share link" beside "Open conversation"). The transient
+  // status renders on its own caption line under the chips so a long
+  // confirmation never stretches or clips the chip row.
+  var secondaryActionTitle: String? = nil
+  var secondaryActionSystemImage: String = "link"
+  var isSecondaryBusy: Bool = false
+  var secondaryAccessibilityID: String = ""
+  var secondaryHelp: String? = nil
+  var secondaryAction: (() -> Void)? = nil
+  var statusMessage: String? = nil
+  var statusSystemImage: String? = nil
+  var statusColor: Color = Ink.secondary
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -575,25 +641,69 @@ private struct ChatFirstLinkBlockView: View {
         .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
 
-      Button(action: action) {
-        HStack(spacing: OmiSpacing.xs) {
-          if isOpening {
-            ProgressView()
-              .controlSize(.small)
+      if !recommendedActionItems.isEmpty {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Recommended next steps")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(Ink.secondary)
+
+          ForEach(recommendedActionItems.indices, id: \.self) { index in
+            recommendedActionItemRow(recommendedActionItems[index])
           }
-          Text(actionTitle)
-          Image(systemName: "arrow.up.right")
         }
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundStyle(Ink.primary)
-        .padding(.horizontal, OmiSpacing.sm)
-        .padding(.vertical, OmiSpacing.xs)
-        .glassChip()
       }
-      .buttonStyle(.plain)
-      .disabled(isOpening)
-      .accessibilityLabel(actionTitle)
-      .accessibilityIdentifier(accessibilityID)
+
+      HStack(spacing: OmiSpacing.sm) {
+        Button(action: action) {
+          HStack(spacing: OmiSpacing.xs) {
+            if isOpening {
+              ProgressView()
+                .controlSize(.small)
+            }
+            Text(actionTitle)
+            Image(systemName: "arrow.up.right")
+          }
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundStyle(Ink.primary)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xs)
+          .glassChip()
+        }
+        .buttonStyle(.plain)
+        .disabled(isOpening)
+        .accessibilityLabel(actionTitle)
+        .accessibilityIdentifier(accessibilityID)
+
+        if let secondaryActionTitle, let secondaryAction {
+          Button(action: secondaryAction) {
+            HStack(spacing: OmiSpacing.xs) {
+              if isSecondaryBusy {
+                ProgressView()
+                  .controlSize(.small)
+              }
+              Text(secondaryActionTitle)
+              Image(systemName: secondaryActionSystemImage)
+            }
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .glassChip()
+          }
+          .buttonStyle(.plain)
+          .disabled(isSecondaryBusy)
+          .help(secondaryHelp ?? secondaryActionTitle)
+          .accessibilityLabel(secondaryHelp ?? secondaryActionTitle)
+          .accessibilityIdentifier(secondaryAccessibilityID)
+        }
+      }
+
+      if let statusMessage {
+        Label(statusMessage, systemImage: statusSystemImage ?? "checkmark")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .foregroundStyle(statusColor)
+          .fixedSize(horizontal: false, vertical: true)
+      }
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
@@ -604,6 +714,41 @@ private struct ChatFirstLinkBlockView: View {
       RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
+  }
+
+  @ViewBuilder
+  private func recommendedActionItemRow(_ item: ConversationLinkActionItem) -> some View {
+    if item.taskID != nil, let recommendedActionItemAction {
+      Button {
+        recommendedActionItemAction(item)
+      } label: {
+        recommendedActionItemLabel(item, showsOpenIndicator: true)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Open task: \(item.description)")
+    } else {
+      recommendedActionItemLabel(item, showsOpenIndicator: false)
+    }
+  }
+
+  private func recommendedActionItemLabel(
+    _ item: ConversationLinkActionItem,
+    showsOpenIndicator: Bool
+  ) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
+      Image(systemName: "circle")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundStyle(Ink.secondary)
+      Text(item.description)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundStyle(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+      if showsOpenIndicator {
+        Image(systemName: "chevron.right")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+      }
+    }
   }
 }
 

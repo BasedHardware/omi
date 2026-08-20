@@ -30,12 +30,14 @@ from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, Pro
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState
 from utils.memory.canonical_consolidation import (
+    CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
     ConsolidationAgentDecision,
     ConsolidationReport,
     apply_consolidation_decision,
     run_canonical_consolidation,
 )
 from utils.memory.canonical_required_processing import (
+    REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     RequiredMemoryProcessingReport,
     RequiredMemoryProcessor,
     run_required_memory_processing,
@@ -46,7 +48,7 @@ from utils.memory.memory_system import (
     ensure_canonical_apply_control_state,
     resolve_memory_system as resolve_memory_system,  # compatibility export; universal routing does not call it
 )
-from utils.memory.short_term_lifecycle import ShortTermDisposition
+from utils.memory.short_term_lifecycle import ShortTermDisposition, effective_short_term_expiry
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -259,7 +261,7 @@ def run_canonical_short_term_ttl_lifecycle(
     terminal = 0
     for item in items:
         disposition = None
-        if item.expires_at and item.expires_at <= current_time and item.tier == MemoryLayer.short_term:
+        if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
             disposition = ShortTermDisposition.reject_or_hide
         record, was_created = process_short_term_lifecycle_item(
             item,
@@ -322,6 +324,11 @@ def run_canonical_short_term_maintenance(
     llm_invoke: Optional[Callable[[str], str]] = None,
     recurrence_signal_sink: Optional[Callable[..., int]] = None,
     required_processor: Optional[RequiredMemoryProcessor] = None,
+    required_processing_attempt_lease_seconds: int = REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
+    required_processing_result_guard: Optional[Callable[[], None]] = None,
+    required_processing_limit: int = 0,
+    consolidation_attempt_lease_seconds: int = CONSOLIDATION_ATTEMPT_LEASE_SECONDS,
+    consolidation_result_guard: Optional[Callable[[], None]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
     """Drain prior projections, run maintenance phases, then project their commits."""
     client: Any = db_client if db_client is not None else default_db_client
@@ -337,12 +344,18 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         now=pre_outbox_now,
     )
-    required_processing = run_required_memory_processing(
-        uid,
-        db_client=client,
-        processor=required_processor,
-        now=current_time,
-    )
+    if required_processing_limit > 0:
+        required_processing = run_required_memory_processing(
+            uid,
+            db_client=client,
+            processor=required_processor,
+            now=current_time,
+            attempt_lease_seconds=required_processing_attempt_lease_seconds,
+            result_guard=required_processing_result_guard,
+            limit=required_processing_limit,
+        )
+    else:
+        required_processing = RequiredMemoryProcessingReport(uid=uid)
     lifecycle = run_canonical_short_term_ttl_lifecycle(
         uid,
         db_client=client,
@@ -356,6 +369,8 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         llm_invoke=llm_invoke,
         recurrence_signal_sink=recurrence_signal_sink,
+        attempt_lease_seconds=consolidation_attempt_lease_seconds,
+        result_guard=consolidation_result_guard,
     )
     # In production, use a post-commit timestamp so events created during this
     # pass are immediately due. Explicit test/replay clocks remain deterministic.

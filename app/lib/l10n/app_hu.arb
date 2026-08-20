@@ -101,7 +101,7 @@
     "createYourOwnApp": "Hozd létre saját alkalmazásod",
     "buildAndShareApp": "Építsd meg és oszd meg egyedi alkalmazásodat",
     "searchApps": "Alkalmazások keresése...",
-    "myApps": "Alkalmazásaim",
+    "myApps": "Általam létrehozva",
     "installedApps": "Telepített alkalmazások",
     "unableToFetchApps": "Nem sikerült betölteni az alkalmazásokat :(\n\nKérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.",
     "aboutOmi": "Az Omi-ról",
@@ -3310,5 +3310,9 @@
     "accountCutoverMigrationInProgressTitle": "Migráció folyamatban",
     "accountCutoverMigrationInProgressMessage": "A fiókja migrálás alatt áll. A termékfunkciók szünetelnek a migráció befejezéséig.",
     "accountCutoverMigrationRollbackMessage": "A fiókja karbantartás alatt áll a migráció visszavonása után. Egyes újabb adatok elkülönítve maradhatnak.",
-    "accountCutoverOpenStore": "Áruház megnyitása"
+    "accountCutoverOpenStore": "Áruház megnyitása",
+    "sendRawAudioToOmi": "Nyers hang küldése az Ominak",
+    "sendRawAudioToOmiDescription": "Kapcsold ki, hogy a nyers hang ne kerüljön az Omihoz. Az átiratok és a felhőfunkciókhoz szükséges adatok továbbra is elküldhetők az Ominak.",
+    "findDevice": "Keresés",
+    "diagnosticsShareFailed": "A diagnosztika megosztása nem sikerült. Próbáld újra."
 }

@@ -322,7 +322,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get searchApps => 'Ieškoti programų...';
 
   @override
-  String get myApps => 'Mano programėlės';
+  String get myApps => 'Sukurta manęs';
 
   @override
   String get installedApps => 'Įdiegtos programėlės';
@@ -9859,4 +9859,17 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Otwórz sklep';
+
+  @override
+  String get sendRawAudioToOmi => 'Siųsti neapdorotą garsą į Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Išjunkite, kad neapdorotas garsas nebūtų siunčiamas į Omi. Transkripcijos ir debesies funkcijoms reikalingi duomenys vis tiek gali būti siunčiami į Omi.';
+
+  @override
+  String get findDevice => 'Rasti';
+
+  @override
+  String get diagnosticsShareFailed => 'Nepavyko bendrinti diagnostikos. Bandykite dar kartą.';
 }

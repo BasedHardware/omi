@@ -1024,6 +1024,10 @@ class TestSaveMessageSessionBehavior:
                 sender='ai',
                 session_id='session-1',
                 metadata=enriched_metadata,
+                content_blocks=[
+                    {'type': 'agentSpawn', 'id': 'spawn-1'},
+                    {'type': 'agentCompletion', 'id': 'completion-1'},
+                ],
                 client_message_id='turn-1',
                 journal_revision=11,
             )
@@ -1034,6 +1038,10 @@ class TestSaveMessageSessionBehavior:
         patched_db.transaction.return_value.update.assert_called_once()
         update = patched_db.transaction.return_value.update.call_args.args[1]
         assert update['metadata'] == enriched_metadata
+        assert update['content_blocks'] == [
+            {'type': 'agentSpawn', 'id': 'spawn-1'},
+            {'type': 'agentCompletion', 'id': 'completion-1'},
+        ]
         assert update['journal_revision'] == 11
 
     def test_equal_journal_revision_with_different_payload_fails_closed(self):

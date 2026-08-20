@@ -418,7 +418,7 @@
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
-    "myApps": "Моје апликације",
+    "myApps": "Направљено од мене",
     "@myApps": {
         "description": "Filter button for user's own apps"
     },
@@ -10780,5 +10780,9 @@
     "accountCutoverMigrationInProgressTitle": "Probíhá migrace",
     "accountCutoverMigrationInProgressMessage": "Váš účet se migrací. Produktové funkce jsou pozastaveny až do dokončení migrace.",
     "accountCutoverMigrationRollbackMessage": "Váš účet je po vrácení migrace v režimu údržby. Novější data mohou být izolována.",
-    "accountCutoverOpenStore": "Otevřít obchod"
+    "accountCutoverOpenStore": "Otevřít obchod",
+    "sendRawAudioToOmi": "Шаљи необрађени звук у Omi",
+    "sendRawAudioToOmiDescription": "Искључите да бисте спречили слање необрађеног звука у Omi. Транскрипти и подаци потребни за функције у облаку и даље се могу слати у Omi.",
+    "findDevice": "Пронађи",
+    "diagnosticsShareFailed": "Dijagnostiku nije bilo moguće podeliti. Pokušaj ponovo."
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,6 +64,49 @@ void main() {
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
+  });
+
+  test('find device coalesces overlapping provider requests', () async {
+    final completion = Completer<bool>();
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) {
+        runnerCalls++;
+        return completion.future;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    final first = provider.findDevice();
+    final second = provider.findDevice();
+
+    expect(identical(first, second), isTrue);
+    expect(runnerCalls, 1);
+
+    completion.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+
+    expect(await provider.findDevice(), isTrue);
+    expect(runnerCalls, 2);
+  });
+
+  test('find device rejects OmiGlass devices before invoking the runner', () async {
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) async {
+        runnerCalls++;
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'glass-1', name: 'OmiGlass', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    expect(await provider.findDevice(), isFalse);
+    expect(runnerCalls, 0);
   });
 
   test('Device Paired is deduped by user and device while connections recur', () async {
@@ -326,15 +371,12 @@ void main() {
     test('alert fires again after recovery — the core bug scenario', () {
       // 50% → 15% (alert) → 25% (recover) → 10% (should alert AGAIN)
       final alerts = runSequence([50, 15, 25, 10]);
-      expect(
-          alerts,
-          [
-            false,
-            true,
-            false,
-            true,
-          ],
-          reason: 'Before fix: [false, true, false, false] — second alert never fires');
+      expect(alerts, [
+        false,
+        true,
+        false,
+        true,
+      ], reason: 'Before fix: [false, true, false, false] — second alert never fires');
     });
 
     test('full lifecycle: multiple charge cycles', () {

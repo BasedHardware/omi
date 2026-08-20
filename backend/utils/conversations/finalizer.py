@@ -16,11 +16,12 @@ from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.meeting_treatment import is_meeting_treatment_eligible
 from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.log_sanitizer import sanitize_pii
-from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent
+from utils.task_intelligence.proactive_engine import persist_capture_arrival_intent, recommended_meeting_action_items
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +44,17 @@ async def finalize_persisted_conversation(
     dispatch_generation: int,
     lease_epoch: int,
     force_process: bool = False,
+    final_attempt: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
 
     The pusher WebSocket request already installs request-scoped BYOK context
     before calling this helper.  Cloud Tasks never does, so it cannot silently
     substitute platform credentials for a BYOK job.
+
+    `final_attempt` says the job has no retry left, so a failed external
+    integration delivery is dropped rather than dead-lettering the whole
+    conversation for a third-party endpoint that is down.
     """
     conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
     if not conversation_data:
@@ -162,6 +168,7 @@ async def finalize_persisted_conversation(
             conversation,
             idempotency_key=fanout['fanout_key'],
             require_delivery=True,
+            last_delivery_attempt=final_attempt,
         )
         # Publish the content-free capture-arrival intent before marking the
         # durable fanout projection completed. Desktop waits on that projection
@@ -169,23 +176,18 @@ async def finalize_persisted_conversation(
         # where a completed projection existed without a notes-ready intent.
         source = getattr(conversation, 'source', None)
         source_value = getattr(source, 'value', source)
-        external_data = getattr(conversation, 'external_data', None) or {}
-        is_desktop_meeting = (
-            source_value == 'desktop'
-            and external_data.get('conversation_role') == 'meeting'
-            and external_data.get('conversation_finalization_reason') != 'max_duration_rotation'
-            and not getattr(conversation, 'discarded', False)
-        )
-        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or is_desktop_meeting:
+        meeting_treatment_eligible = is_meeting_treatment_eligible(conversation)
+        if (source_value == 'omi' and not getattr(conversation, 'discarded', False)) or meeting_treatment_eligible:
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                if is_desktop_meeting:
+                if meeting_treatment_eligible:
                     persist_capture_arrival_intent(
                         uid,
                         conversation_id=conversation_id,
                         summary=summary,
                         is_desktop_meeting=True,
+                        recommended_action_items=recommended_meeting_action_items(structured),
                     )
                 else:
                     persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
@@ -201,6 +203,7 @@ async def finalize_persisted_conversation(
             finalization_job_id,
             dispatch_generation,
             lease_epoch,
+            meeting_treatment_eligible=meeting_treatment_eligible,
         )
         if not fanout_completed:
             raise ConversationFinalizationError('fanout_completion_conflict')

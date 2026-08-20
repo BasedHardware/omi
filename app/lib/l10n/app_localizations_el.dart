@@ -325,7 +325,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get searchApps => 'Αναζήτηση εφαρμογών...';
 
   @override
-  String get myApps => 'Οι εφαρμογές μου';
+  String get myApps => 'Δημιουργήθηκε από εμένα';
 
   @override
   String get installedApps => 'Εγκατεστημένες εφαρμογές';
@@ -9909,4 +9909,17 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Άνοιγμα καταστήματος';
+
+  @override
+  String get sendRawAudioToOmi => 'Αποστολή ακατέργαστου ήχου στο Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Απενεργοποιήστε το για να μην αποστέλλεται ακατέργαστος ήχος στο Omi. Οι απομαγνητοφωνήσεις και τα δεδομένα που απαιτούν οι λειτουργίες cloud ενδέχεται να συνεχίσουν να αποστέλλονται στο Omi.';
+
+  @override
+  String get findDevice => 'Εύρεση';
+
+  @override
+  String get diagnosticsShareFailed => 'Δεν ήταν δυνατή η κοινοποίηση των διαγνωστικών. Δοκιμάστε ξανά.';
 }

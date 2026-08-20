@@ -324,7 +324,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get searchApps => 'Căutați aplicații...';
 
   @override
-  String get myApps => 'Aplicațiile mele';
+  String get myApps => 'Creat de mine';
 
   @override
   String get installedApps => 'Aplicații instalate';
@@ -9887,4 +9887,17 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'Deschide magazinul';
+
+  @override
+  String get sendRawAudioToOmi => 'Trimite sunetul brut către Omi';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Dezactivează pentru a împiedica trimiterea sunetului brut către Omi. Transcrierile și datele necesare funcțiilor cloud pot fi trimise în continuare către Omi.';
+
+  @override
+  String get findDevice => 'Găsește';
+
+  @override
+  String get diagnosticsShareFailed => 'Diagnosticul nu a putut fi partajat. Încearcă din nou.';
 }

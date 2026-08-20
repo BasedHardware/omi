@@ -321,7 +321,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get searchApps => 'ऐप्स खोजें...';
 
   @override
-  String get myApps => 'मेरे ऐप्स';
+  String get myApps => 'मेरे द्वारा बनाया गया';
 
   @override
   String get installedApps => 'इंस्टॉल किए गए ऐप्स';
@@ -9819,4 +9819,17 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get accountCutoverOpenStore => 'स्टोर खोलें';
+
+  @override
+  String get sendRawAudioToOmi => 'Omi को कच्चा ऑडियो भेजें';
+
+  @override
+  String get sendRawAudioToOmiDescription =>
+      'Omi को कच्चा ऑडियो भेजे जाने से रोकने के लिए इसे बंद करें। ट्रांसक्रिप्ट और क्लाउड सुविधाओं के लिए आवश्यक डेटा अभी भी Omi को भेजा जा सकता है।';
+
+  @override
+  String get findDevice => 'ढूँढें';
+
+  @override
+  String get diagnosticsShareFailed => 'डायग्नोस्टिक्स साझा नहीं किया जा सका। कृपया पुनः प्रयास करें।';
 }
