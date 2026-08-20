@@ -111,7 +111,7 @@ checks:
     command: ["python3", ".github/scripts/test_check_desktop_beta_freshness.py"]
     triggers: [".github/scripts/check-desktop-beta-freshness.py", ".github/scripts/test_check_desktop_beta_freshness.py", ".github/scripts/plan-desktop-release.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/desktop_release_doctor.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "hourly beta freshness must diagnose promotion lag and a wedged candidate train from one command"
+    reason: "issue #11936: hourly freshness must age the oldest unshipped macOS update so continuous merges cannot reset and auto-close the alarm"
 
   - id: desktop-beta-admission-firestore-contention
     command: ["bash", "backend/testing/desktop_beta_admission/run.sh"]
@@ -477,7 +477,7 @@ checks:
     command: ["python3", ".github/scripts/test_resolve_desktop_changelog_sync.py"]
     triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "partial tag-release recovery must resolve already-on-main changelog without O(n) main history scans"
+    reason: "issue #11936: squash/orphan changelog recovery must not hard-fail every hourly retry or scan main history O(n)"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
@@ -487,12 +487,12 @@ checks:
     command: ["python3", ".github/scripts/test_desktop_release_source_identity.py"]
     triggers: [".github/scripts/desktop-release-source-identity.py", ".github/scripts/test_desktop_release_source_identity.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-129 keeps a current-main candidate bound to the checked desktop source while rejecting a newer releasable desktop change"
+    reason: "issue #11936: a candidate stays on the exact green source (or changelog-only child) while later desktop merges queue for the next train"
   - id: desktop-candidate-tag-transaction
     command: ["python3", ".github/scripts/test_publish_desktop_candidate_tag.py"]
     triggers: [".github/scripts/publish-desktop-candidate-tag.py", ".github/scripts/test_publish_desktop_candidate_tag.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "SCA-136 requires a fresh authoritative main check plus create-only immutable candidate tag publication"
+    reason: "issue #11936: authoritative GitHub ancestry plus create-only publication admits a merged green source after main advances"
   - id: desktop-codemagic-tag-build-observer
     command: ["python3", ".github/scripts/test_observe_codemagic_tag_build.py"]
     triggers: [".github/scripts/observe-codemagic-tag-build.py", ".github/scripts/test_observe_codemagic_tag_build.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
