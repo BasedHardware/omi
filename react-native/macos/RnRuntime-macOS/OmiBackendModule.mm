@@ -151,7 +151,7 @@ didCompleteWithError:(NSError *)error {
   @synchronized(self) {
     if (self.settled) return;
   }
-  if (self.responseStatus != 200) {
+  if (self.responseStatus != 0 && self.responseStatus != 200) {
     NSString *body = [[NSString alloc] initWithData:self.data encoding:NSUTF8StringEncoding];
     [self finishWithValue:body ?: @"" code:nil message:nil];
     return;
@@ -177,7 +177,10 @@ didCompleteWithError:(NSError *)error {
                    dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), reconnect);
     return;
   }
-  [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:@"Generation ended without a terminal frame"];
+  NSString *message = self.responseStatus == 0
+      ? @"Native generation transport failed before an HTTP response"
+      : @"Generation ended without a terminal frame";
+  [self finishWithValue:nil code:@"OMI_HTTP_TRANSPORT" message:message];
 }
 
 @end
