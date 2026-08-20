@@ -416,7 +416,9 @@ enum ContextProactivityPromptBuilder {
     its answer is not. When the RETRIEVED CONTEXT section supplies that answer, deliver it as
     insight or suggest — put the answer itself (the link, name, date, or value) in the message
     exactly as the retrieved text spells it, and cite the refs that contain it. Stay silent as
-    usual when the retrieved items do not actually answer the question.
+    usual when the retrieved items do not actually answer the question. A question the user is
+    writing NOW is a fresh request, not repetition: answer it even when a recent delivery
+    already carried the same answer.
     """
 
   /// Same rules as before, restructured as an ordered decision procedure: the
