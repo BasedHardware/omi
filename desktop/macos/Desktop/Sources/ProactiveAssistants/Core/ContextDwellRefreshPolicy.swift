@@ -10,18 +10,24 @@ import Foundation
 /// often never change the window title, so "the next app switch" can be hours
 /// away and the whole session is one never-re-evaluated visit.
 ///
+/// The trigger is KEYBOARD activity, not frame similarity: typing one line
+/// into a large window flips at most a bit or two of a preview-scale dHash —
+/// the same near-identity that makes the capture preview-skip path starve
+/// full captures while the user types — so pixel similarity structurally
+/// cannot see the exact events this exists for. A key-down since the anchor,
+/// followed by a short settle, is precise, free, and fires for nothing else.
+///
 /// A content-refresh transition closes and reopens the active visit through
 /// the ordinary machinery (departure extraction of the current frame,
 /// departure evaluation, fresh entry evaluation), so every existing quota,
 /// cooldown, dedup, and budget gate still applies.
 ///
-/// Cost bound: the first refresh of a context needs 20s of dwell; each
-/// further refresh needs at least 90s since the previous one; and every
-/// refresh requires the screen to have actually changed since the last
-/// evaluated frame — a static screen never buys a model call. Worst case is
-/// a continuously-changing screen at ~40 refreshes/hour, the same order as
-/// ordinary app-switch evaluations, and the per-operation server quotas
-/// still cap the day.
+/// Cost bound: the first refresh of a context needs 20s of dwell; repeats
+/// need at least 90s since the previous one; and every refresh requires
+/// typing to have happened since the last one. Reading, watching, or an idle
+/// screen never buys a model call. Worst case is a continuous typist at ~40
+/// refreshes/hour — the same order as ordinary app-switch evaluations, under
+/// the same server quotas.
 enum ContextDwellRefreshPolicy {
   /// Dwell before the FIRST refresh of a context: long enough to type a
   /// question, short enough that its answer lands within ~30s of typing.
@@ -30,23 +36,20 @@ enum ContextDwellRefreshPolicy {
   /// Minimum spacing between refreshes within one continuous context dwell.
   static let repeatRefreshCooldownSeconds: TimeInterval = 90
 
-  /// Preview-scale dHash similarity (1 - hamming/64, the metric the capture
-  /// preview-skip path uses) at or above which the screen counts as unchanged
-  /// since the last evaluated frame.
-  static let unchangedSimilarityFloor: Double = 0.97
+  /// The keyboard must have been quiet at least this long: mid-word capture
+  /// wastes the evaluation on a half-typed thought.
+  static let typingSettleSeconds: TimeInterval = 2
 
   static func shouldRefresh(
     secondsSinceAnchor: TimeInterval,
     firedRefreshesThisContext: Int,
-    lastEvaluatedHash: UInt64?,
-    currentHash: UInt64
+    keyboardIdleSeconds: TimeInterval
   ) -> Bool {
     let required =
       firedRefreshesThisContext == 0 ? initialRefreshDwellSeconds : repeatRefreshCooldownSeconds
     guard secondsSinceAnchor >= required else { return false }
-    guard let lastEvaluatedHash else { return true }
-    let distance = (currentHash ^ lastEvaluatedHash).nonzeroBitCount
-    let similarity = 1.0 - Double(distance) / Double(UInt64.bitWidth)
-    return similarity < unchangedSimilarityFloor
+    // Typed since the anchor: the last key-down is younger than the anchor.
+    guard keyboardIdleSeconds < secondsSinceAnchor else { return false }
+    return keyboardIdleSeconds >= typingSettleSeconds
   }
 }

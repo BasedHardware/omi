@@ -57,10 +57,9 @@ public class ProactiveAssistantsPlugin: NSObject {
   private var analysisDelayTimer: Timer?
   private var isInDelayPeriod = false
   // Content-refresh dwell tracking (see ContextDwellRefreshPolicy): anchored at
-  // the last real context switch, reset there, at most two refreshes per dwell.
+  // the last real context switch or fired refresh, reset on real switches.
   private var dwellContextAnchor: Date?
   private var dwellRefreshCount = 0
-  private var dwellLastEvaluatedHash: UInt64?
 
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
@@ -619,6 +618,38 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
   }
 
+  /// Seconds since the last physical key-down, system-wide. The dwell-refresh
+  /// trigger (ContextDwellRefreshPolicy) keys on typing because typed text is
+  /// invisible to pixel-similarity signals.
+  private static func keyboardIdleSeconds() -> TimeInterval {
+    CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown)
+  }
+
+  /// A dwell refresh must capture its own frame: the preview-skip path starves
+  /// full captures while the user types, so the freshest tracked frame would
+  /// otherwise predate the very content this refresh exists to evaluate.
+  private func captureFrameThenRefreshActiveContext(
+    windowID: CGWindowID, appName: String, windowTitle: String?
+  ) async {
+    if #available(macOS 14.0, *) {
+      guard let screenCaptureService else { return }
+      let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
+      if case .success(let image) = result {
+        frameCount += 1
+        let frame = CapturedFrame(
+          cgImage: image,
+          jpegQuality: 0.8,
+          appName: appName,
+          windowTitle: windowTitle,
+          frameNumber: frameCount,
+          captureTime: Date()
+        )
+        AssistantCoordinator.shared.trackFrame(frame)
+      }
+    }
+    await AssistantCoordinator.shared.refreshActiveContextForDwell()
+  }
+
   private func handleCaptureTargetUnavailable() {
     // A secure/system/helper surface is not proof that the capture engine or
     // permission failed. Keep the normal timer armed so the very next real
@@ -843,13 +874,40 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Unified context switch detection (covers app changes, window ID changes, and title changes)
     // Called BEFORE trackFrame so the coordinator's departing frame is from the previous context
-    var contextSwitchedThisTick = false
     if let appForCheck = realAppName ?? currentApp {
       let switched = await AssistantCoordinator.shared.checkContextSwitch(
         newApp: appForCheck,
         newWindowTitle: windowTitle
       )
-      contextSwitchedThisTick = switched
+      // Content-refresh dwell tracking (see ContextDwellRefreshPolicy). This
+      // sits BEFORE the capture decision on purpose: typed text moves almost
+      // no preview pixels, so the preview-skip path starves full captures
+      // during exactly the dwells this exists to re-evaluate.
+      if ContextBucketsFeature.isEnabled, !RewindSettings.shared.isAppExcluded(appForCheck) {
+        let tickTime = Date()
+        if switched || dwellContextAnchor == nil {
+          dwellContextAnchor = tickTime
+          dwellRefreshCount = 0
+        } else if let anchor = dwellContextAnchor,
+          ContextDwellRefreshPolicy.shouldRefresh(
+            secondsSinceAnchor: tickTime.timeIntervalSince(anchor),
+            firedRefreshesThisContext: dwellRefreshCount,
+            keyboardIdleSeconds: Self.keyboardIdleSeconds())
+        {
+          dwellContextAnchor = tickTime
+          dwellRefreshCount += 1
+          log(
+            "Context dwell refresh #\(dwellRefreshCount): typed content settled; re-evaluating active context"
+          )
+          let refreshApp = appForCheck
+          let refreshTitle = windowTitle
+          let refreshWindowID = windowID
+          Task { [weak self] in
+            await self?.captureFrameThenRefreshActiveContext(
+              windowID: refreshWindowID, appName: refreshApp, windowTitle: refreshTitle)
+          }
+        }
+      }
       if switched && !isInDelayPeriod {
         let delaySeconds = AssistantSettings.shared.analysisDelay
         if delaySeconds > 0 {
@@ -999,30 +1057,6 @@ public class ProactiveAssistantsPlugin: NSObject {
             captureTime: captureTime
           )
           AssistantCoordinator.shared.trackFrame(frame)
-          if ContextBucketsFeature.isEnabled {
-            if contextSwitchedThisTick || dwellContextAnchor == nil {
-              dwellContextAnchor = captureTime
-              dwellRefreshCount = 0
-              dwellLastEvaluatedHash = fullHash
-            } else if let anchor = dwellContextAnchor,
-              ContextDwellRefreshPolicy.shouldRefresh(
-                secondsSinceAnchor: captureTime.timeIntervalSince(anchor),
-                firedRefreshesThisContext: dwellRefreshCount,
-                lastEvaluatedHash: dwellLastEvaluatedHash,
-                currentHash: fullHash)
-            {
-              // The anchor moves to this refresh so the repeat cooldown is
-              // measured refresh-to-refresh; the count only chooses the
-              // initial-vs-repeat threshold and resets on a real switch.
-              dwellContextAnchor = captureTime
-              dwellRefreshCount += 1
-              dwellLastEvaluatedHash = fullHash
-              log(
-                "Context dwell refresh #\(dwellRefreshCount): re-evaluating active context after content change"
-              )
-              Task { await AssistantCoordinator.shared.refreshActiveContextForDwell() }
-            }
-          }
           if !isInDelayPeriod {
             distributeFrameIfChanged(frame)
           } else {
