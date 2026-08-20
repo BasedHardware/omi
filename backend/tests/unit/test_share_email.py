@@ -133,3 +133,57 @@ def test_normalized_recipient_emails_dedupes_preserving_order():
 
     result = normalized_recipient_emails(['B@acme.com', 'a@acme.com', 'b@acme.com', 'not-an-email', 'A@ACME.COM'])
     assert result == ['b@acme.com', 'a@acme.com']
+
+
+def test_ambiguous_delivery_keeps_publish():
+    from utils.conversations.share_email import AmbiguousDeliveryError, publish_then_send
+
+    calls = []
+
+    def ambiguous_send():
+        calls.append('send')
+        raise AmbiguousDeliveryError('email delivery status unknown')
+
+    try:
+        publish_then_send(
+            publish=lambda: calls.append('publish'),
+            unpublish=lambda: calls.append('unpublish'),
+            send=ambiguous_send,
+        )
+    except AmbiguousDeliveryError:
+        pass
+    else:
+        raise AssertionError('expected AmbiguousDeliveryError to propagate')
+    assert calls == ['publish', 'send']
+
+
+def test_read_timeout_maps_to_ambiguous_and_connect_failure_to_definitive(monkeypatch):
+    import requests
+
+    from utils.conversations import share_email as se
+
+    monkeypatch.setenv('RESEND_API_KEY', 'test-key')
+    monkeypatch.setattr(se, 'get_user_from_uid', lambda uid: {'email': 'owner@acme.com', 'display_name': 'Owner'})
+    conversation = {'id': 'c1', 'structured': {'title': 'T', 'overview': 'O'}}
+
+    def raise_read_timeout(*a, **kw):
+        raise requests.exceptions.ReadTimeout('read timed out')
+
+    monkeypatch.setattr(se.requests, 'post', raise_read_timeout)
+    try:
+        se.send_summary_email(uid='u1', conversation=conversation, recipient_emails=['a@b.co'])
+    except se.AmbiguousDeliveryError:
+        pass
+    else:
+        raise AssertionError('read timeout must be ambiguous')
+
+    def raise_connection_error(*a, **kw):
+        raise requests.ConnectionError('refused')
+
+    monkeypatch.setattr(se.requests, 'post', raise_connection_error)
+    try:
+        se.send_summary_email(uid='u1', conversation=conversation, recipient_emails=['a@b.co'])
+    except se.AmbiguousDeliveryError:
+        raise AssertionError('connection failure is definitive, not ambiguous')
+    except RuntimeError:
+        pass

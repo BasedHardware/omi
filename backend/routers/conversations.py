@@ -1401,6 +1401,11 @@ def send_conversation_share_email(
     def _unpublish():
         if was_shared:
             return
+        # Re-read before rolling back: a concurrent visibility change made
+        # while the provider call was in flight must not be overwritten.
+        current = _get_valid_conversation_by_id(uid, conversation_id)
+        if current.get('visibility') not in (ConversationVisibility.shared, 'shared'):
+            return
         conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.private)
         redis_db.remove_conversation_to_uid(conversation_id)
         redis_db.remove_public_conversation(conversation_id)
@@ -1412,6 +1417,8 @@ def send_conversation_share_email(
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except share_email.AmbiguousDeliveryError as e:
+        raise HTTPException(status_code=504, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 

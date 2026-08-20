@@ -25,6 +25,17 @@ from utils.share_links import build_share_url
 
 logger = logging.getLogger(__name__)
 
+
+class AmbiguousDeliveryError(RuntimeError):
+    """Transport failed after the provider may have accepted the message.
+
+    A read timeout (or any failure after the request body was sent) leaves
+    delivery status unknown: the recipient may already hold the email, so the
+    published link must stand — unpublishing could turn a delivered email into
+    a dead link.
+    """
+
+
 # Granola gates follow-up drafts to meetings with <= 10 people; above that a
 # blanket "send to everyone" proposal is more likely wrong than helpful.
 MAX_MEETING_PARTICIPANTS = 10
@@ -162,6 +173,10 @@ def publish_then_send(
     try:
         publish()
         return send()
+    except AmbiguousDeliveryError:
+        # Delivery status unknown — the recipient may already have the email,
+        # so the published link stands rather than risking a dead link.
+        raise
     except Exception:
         # publish() can fail after partially mutating state (e.g. the database
         # visibility write lands but the Redis registration raises), so the
@@ -215,12 +230,19 @@ def send_summary_email(
     if owner_email:
         payload['reply_to'] = owner_email
 
-    response = requests.post(
-        RESEND_API_URL,
-        json=payload,
-        headers={'Authorization': f'Bearer {api_key}'},
-        timeout=15,
-    )
+    try:
+        response = requests.post(
+            RESEND_API_URL,
+            json=payload,
+            headers={'Authorization': f'Bearer {api_key}'},
+            timeout=15,
+        )
+    except (requests.ConnectionError, requests.exceptions.ConnectTimeout) as exc:
+        # The request never reached the provider — definitively not delivered.
+        raise RuntimeError('email provider unreachable') from exc
+    except requests.RequestException as exc:
+        # Sent but no response read (e.g. read timeout): delivery is unknown.
+        raise AmbiguousDeliveryError('email delivery status unknown') from exc
     if response.status_code >= 400:
         logger.error('share email send failed uid=%s status=%s', uid, response.status_code)
         raise RuntimeError('email provider rejected the send')

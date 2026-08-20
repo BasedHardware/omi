@@ -46,7 +46,11 @@ def _client() -> TestClient:
 def _stub_data_layer(monkeypatch):
     state = {'visibility': 'private', 'redis': set(), 'sent': []}
 
-    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda uid, cid, **kw: _conversation())
+    monkeypatch.setattr(
+        conversations_router,
+        '_get_valid_conversation_by_id',
+        lambda uid, cid, **kw: _conversation() | {'visibility': state['visibility']},
+    )
     monkeypatch.setattr(
         conversations_router.share_email,
         'get_user_from_uid',
@@ -139,4 +143,45 @@ def test_share_email_preserves_public_visibility(monkeypatch, _stub_data_layer):
     )
     assert response.status_code == 200
     assert _stub_data_layer['visibility'] == 'public'
+    assert CONV_ID in _stub_data_layer['redis']
+
+
+def test_rollback_skipped_when_visibility_changed_concurrently(monkeypatch, _stub_data_layer):
+    reads = {'n': 0}
+
+    def evolving_conversation(uid, cid, **kw):
+        reads['n'] += 1
+        conv = _conversation()
+        # First read serves the request; by rollback time the user has made it public.
+        conv['visibility'] = 'private' if reads['n'] == 1 else 'public'
+        return conv
+
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', evolving_conversation)
+
+    def failing_send(*, uid, conversation, recipient_emails):
+        _stub_data_layer['visibility'] = 'public'
+        raise RuntimeError('email provider rejected the send')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', failing_send)
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 502
+    assert _stub_data_layer['visibility'] == 'public'
+
+
+def test_ambiguous_delivery_returns_504_and_keeps_link_live(monkeypatch, _stub_data_layer):
+    from utils.conversations.share_email import AmbiguousDeliveryError
+
+    def ambiguous_send(*, uid, conversation, recipient_emails):
+        raise AmbiguousDeliveryError('email delivery status unknown')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', ambiguous_send)
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 504
+    assert _stub_data_layer['visibility'] == 'shared'
     assert CONV_ID in _stub_data_layer['redis']
