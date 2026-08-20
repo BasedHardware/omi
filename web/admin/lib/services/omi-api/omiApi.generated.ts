@@ -1082,6 +1082,7 @@ export interface Conversation {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
   meeting_dedup_speech_s?: number | null;
@@ -3163,6 +3164,7 @@ export interface SharedConversationResponse {
   folder_id?: string | null;
   geolocation?: Geolocation | null;
   id: string;
+  imported?: boolean;
   is_locked?: boolean;
   language?: string | null;
   meeting_dedup_speech_s?: number | null;
