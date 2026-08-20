@@ -16,23 +16,24 @@ final class ContextDeliveryAuthorityTests: XCTestCase {
         kind: kind, focusEnabled: focus, taskEnabled: task,
         insightEnabled: insight, memoryEnabled: memory)
     }
-    // Focus toggle owns suggestions and goals.
+    // Focus toggle owns the focus-nudge assistant alone.
     XCTAssertFalse(allows(.suggestion, focus: false))
-    XCTAssertFalse(allows(.goal, focus: false))
     XCTAssertTrue(allows(.suggestion, task: false, insight: false, memory: false))
     // Task toggle owns task candidates and meeting action items.
     XCTAssertFalse(allows(.task, task: false))
     XCTAssertFalse(allows(.meetingNotes, task: false))
     XCTAssertTrue(allows(.task, focus: false, insight: false, memory: false))
-    // Insight toggle owns insights and resurfaced items.
+    // Insight toggle owns insights, tips, resurfaced items, and generated goals.
     XCTAssertFalse(allows(.insight, insight: false))
     XCTAssertFalse(allows(.resurface, insight: false))
+    XCTAssertFalse(allows(.goal, insight: false))
     // Memory toggle owns memory extraction.
     XCTAssertFalse(allows(.memory, memory: false))
     // Functional alerts sit outside the taxonomy.
     XCTAssertTrue(allows(.general, focus: false, task: false, insight: false, memory: false))
-    // The director's decision strings resolve into the gated kinds.
-    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "suggest"), .suggestion)
+    // The director's decision strings resolve into the gated kinds; "suggest" is a
+    // generic tip, which the taxonomy files under Insight.
+    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "suggest"), .insight)
     XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "task_candidate"), .task)
     XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "resurface"), .resurface)
   }

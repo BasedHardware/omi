@@ -158,10 +158,11 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
   }
 
   /// Behavioral guard for the four-type taxonomy: the director's real entry point must
-  /// refuse a delivery whose category toggle is off. Every upstream gate is pinned open
+  /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
+  /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
   /// (owner seeded, master on, frequency Maximum, not paywalled) and the surface is
   /// pinned to the deterministic banner path (bar enabled, previews muted), so the
-  /// Focus toggle is the only closed gate: removing the category guard from
+  /// Insight toggle is the only closed gate: removing the category guard from
   /// `presentContextDirectorNotification` makes this call return `.queued` from the
   /// banner path instead of `.suppressed`, failing the test.
   @MainActor
@@ -176,7 +177,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       DefaultsKey.askOmiBarEnabled.rawValue,
     ]
     let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
-    let savedFocusEnabled = SuggestionAssistantSettings.shared.isEnabled
+    let savedInsightEnabled = InsightAssistantSettings.shared.notificationsEnabled
     let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     defer {
       for (key, value) in savedValues {
@@ -186,7 +187,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
           defaults.removeObject(forKey: key)
         }
       }
-      SuggestionAssistantSettings.shared.isEnabled = savedFocusEnabled
+      InsightAssistantSettings.shared.notificationsEnabled = savedInsightEnabled
       ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
     }
 
@@ -198,7 +199,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
     defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
     ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
-    SuggestionAssistantSettings.shared.isEnabled = false
+    InsightAssistantSettings.shared.notificationsEnabled = false
     let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
     XCTAssertEqual(liveOwner, owner)
 
@@ -220,7 +221,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
 
   /// The four category toggles bind every proactive producer at the shared
   /// `sendNotification` boundary — including the dedicated producers that never
-  /// consulted a toggle before generating: goals (Focus) and meeting action items
+  /// consulted a toggle before generating: goals (Insight) and meeting action items
   /// (Task). Same construction as the director test: every upstream gate is pinned
   /// open and the surface pinned to the banner path, so with the category gate
   /// removed these calls fall through to a delivery dispatch this bundle-less test
@@ -238,7 +239,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       DefaultsKey.askOmiBarEnabled.rawValue,
     ]
     let savedValues = pinnedKeys.map { ($0, defaults.object(forKey: $0)) }
-    let savedFocusEnabled = SuggestionAssistantSettings.shared.isEnabled
+    let savedInsightEnabled = InsightAssistantSettings.shared.notificationsEnabled
     let savedTaskEnabled = TaskAssistantSettings.shared.notificationsEnabled
     let savedPreviewsEnabled = ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled
     defer {
@@ -249,7 +250,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
           defaults.removeObject(forKey: key)
         }
       }
-      SuggestionAssistantSettings.shared.isEnabled = savedFocusEnabled
+      InsightAssistantSettings.shared.notificationsEnabled = savedInsightEnabled
       TaskAssistantSettings.shared.notificationsEnabled = savedTaskEnabled
       ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = savedPreviewsEnabled
     }
@@ -262,7 +263,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     defaults.set(false, forKey: DefaultsKey.desktopIsPaywalled.rawValue)
     defaults.set(true, forKey: DefaultsKey.askOmiBarEnabled.rawValue)
     ShortcutSettings.shared.floatingBarNotificationPreviewsEnabled = false
-    SuggestionAssistantSettings.shared.isEnabled = false
+    InsightAssistantSettings.shared.notificationsEnabled = false
     TaskAssistantSettings.shared.notificationsEnabled = false
     let liveOwner = try XCTUnwrap(RuntimeOwnerIdentity.currentOwnerId())
     XCTAssertEqual(liveOwner, owner)

@@ -246,15 +246,15 @@ struct ProactiveNotificationBadge: Equatable {
   /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
   /// Insight, Memory — matching the four toggles in Settings → Notifications. Internal
   /// kinds stay distinct (their raw values are persisted in chat continuity keys), but
-  /// every one of them presents as one of the four: goals feed the focus system,
-  /// meeting action items are tasks, and a resurfaced item is an insight about
-  /// relevance. `.general` is reserved for functional system alerts, which sit outside
-  /// the proactive taxonomy.
+  /// every one of them presents as one of the four: Focus is the focus-nudge assistant
+  /// alone; generic tips, resurfaced items, and generated goals are all insights;
+  /// meeting action items are tasks. `.general` is reserved for functional system
+  /// alerts, which sit outside the proactive taxonomy.
   init(kind: ProactiveNotificationKind) {
     switch kind {
-    case .suggestion, .goal:
+    case .suggestion:
       (label, systemImage) = ("Focus", Self.suggestionSystemImage)
-    case .insight, .resurface:
+    case .insight, .resurface, .goal:
       (label, systemImage) = ("Insight", Self.insightSystemImage)
     case .task, .meetingNotes:
       (label, systemImage) = ("Task", "checkmark.circle")

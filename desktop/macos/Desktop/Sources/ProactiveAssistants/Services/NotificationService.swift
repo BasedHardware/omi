@@ -762,9 +762,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
   /// Maps every proactive notification kind to its user-facing category — Focus, Task,
   /// Insight, or Memory — and answers whether that category's Settings toggle allows
-  /// delivery. Goals feed the focus system, meeting action items are tasks, and a
-  /// resurfaced item is an insight about relevance. `.general` is functional system
-  /// alerting outside the taxonomy and is never category-gated.
+  /// delivery. Focus is the focus-nudge assistant alone; generic tips, resurfaced
+  /// items, and generated goals are all insights; meeting action items are tasks.
+  /// `.general` is functional system alerting outside the taxonomy and is never
+  /// category-gated.
   nonisolated static func categoryToggleAllows(
     kind: ProactiveNotificationKind,
     focusEnabled: Bool,
@@ -773,9 +774,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     memoryEnabled: Bool
   ) -> Bool {
     switch kind {
-    case .suggestion, .goal: return focusEnabled
+    case .suggestion: return focusEnabled
     case .task, .meetingNotes: return taskEnabled
-    case .insight, .resurface: return insightEnabled
+    case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
     case .general: return true
     }
