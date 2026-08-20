@@ -9,6 +9,7 @@ already stored ("first import wins").
 
 import io
 import uuid as uuid_lib
+from datetime import datetime, timezone
 from zipfile import ZipFile
 from unittest.mock import MagicMock
 
@@ -59,13 +60,13 @@ def store(monkeypatch):
     return fake
 
 
-def _lifelog_md(first_line_text: str = "Hello team, let's begin.") -> str:
+def _lifelog_md(first_line_text: str = "Hello team, let's begin.", start_ms: int = 1000) -> str:
     return (
         "# Morning Standup\n\n"
         "## Summary\n\n"
         "### Key point\n\n"
-        f"> [1](#startMs=1000&endMs=5000): {first_line_text}\n"
-        "> [2](#startMs=5000&endMs=9000): Sounds good to me.\n"
+        f"> [1](#startMs={start_ms}&endMs={start_ms + 4000}): {first_line_text}\n"
+        f"> [2](#startMs={start_ms + 4000}&endMs={start_ms + 8000}): Sounds good to me.\n"
     )
 
 
@@ -109,6 +110,19 @@ def test_unparseable_filename_falls_back_to_full_path():
     d = limitless.conversation_id_for_lifelog(UID, "a/lifelogs/note.md")
     e = limitless.conversation_id_for_lifelog(UID, "b/lifelogs/note.md")
     assert d != e
+
+
+def test_unparseable_filename_uses_recovered_startms_before_path():
+    started_at = datetime.fromtimestamp(1.0, tz=timezone.utc)
+    wrapped = limitless.conversation_id_for_lifelog(UID, "export/lifelogs/note.md", started_at=started_at)
+    nested = limitless.conversation_id_for_lifelog(UID, "lifelogs/note.md", started_at=started_at)
+    path_only = limitless.conversation_id_for_lifelog(UID, "lifelogs/note.md")
+
+    assert wrapped == nested
+    assert wrapped != path_only
+    assert wrapped == document_id_from_seed(
+        f"{limitless.LIMITLESS_IMPORT_ID_NAMESPACE}:{UID}:{started_at.isoformat()}"
+    )
 
 
 def test_reimport_same_export_creates_no_duplicates(tmp_path, store):
@@ -182,14 +196,21 @@ def test_duplicate_basename_in_archive_does_not_overwrite(tmp_path, store):
 def test_nested_unparseable_basenames_do_not_collide(tmp_path, store):
     zip_data = _zip_bytes(
         {
-            "a/lifelogs/note.md": _lifelog_md("Folder A content."),
-            "b/lifelogs/note.md": _lifelog_md("Folder B content."),
+            "a/lifelogs/note.md": _lifelog_md("Folder A content.", start_ms=1000),
+            "b/lifelogs/note.md": _lifelog_md("Folder B content.", start_ms=2000),
         }
     )
 
     _run_import(tmp_path, zip_data)
 
-    assert len(store.docs) == 2, "same basename in different folders must not be deduped when unparseable"
+    assert len(store.docs) == 2, "same basename in different folders must not be deduped when startMs differs"
+
+
+def test_wrapper_prefixed_unparseable_lifelogs_share_recovered_startms(tmp_path, store):
+    _run_import(tmp_path, _zip_bytes({"lifelogs/note.md": _lifelog_md()}), job_id="job-1")
+    _run_import(tmp_path, _zip_bytes({"export/lifelogs/note.md": _lifelog_md()}), job_id="job-2")
+
+    assert len(store.docs) == 1, "same recovered startMs must dedupe across ZIP wrapper prefixes"
 
 
 def test_persisted_id_is_deterministic_not_random(tmp_path, store):

@@ -205,7 +205,7 @@ def _create_overview_from_transcript(segments: List[TranscriptSegment], max_char
 LIMITLESS_IMPORT_ID_NAMESPACE = "limitless"
 
 
-def conversation_id_for_lifelog(uid: str, lifelog_path: str) -> str:
+def conversation_id_for_lifelog(uid: str, lifelog_path: str, *, started_at: Optional[datetime] = None) -> str:
     """Deterministic conversation ID for a Limitless lifelog file.
 
     Keyed on (uid, stable lifelog identity) via the shared ``document_id_from_seed``
@@ -218,13 +218,14 @@ def conversation_id_for_lifelog(uid: str, lifelog_path: str) -> str:
     regenerates a lifelog's title between exports, the re-import still maps to the
     same conversation instead of creating a near-duplicate. A single pendant cannot
     start two lifelogs in the same second, so the timestamp alone identifies a
-    lifelog. If the filename carries no parseable timestamp, the lifelog's full path
-    within the export is used as the fallback identity — not just its basename — so
-    distinct files that share a basename in different folders don't collide (and get
-    one of them silently skipped).
+    lifelog. If the filename carries no parseable timestamp, a recovered
+    ``started_at`` from the lifelog body (``startMs``) is used before falling
+    back to the archive path, so the same record packaged as
+    ``export/lifelogs/note.md`` vs ``lifelogs/note.md`` does not duplicate.
     """
-    started_at, _title_slug = parse_lifelog_filename(Path(lifelog_path).name)
-    identity = started_at.isoformat() if started_at else lifelog_path
+    filename_started_at, _title_slug = parse_lifelog_filename(Path(lifelog_path).name)
+    identity_dt = filename_started_at or started_at
+    identity = identity_dt.isoformat() if identity_dt else lifelog_path
     return document_id_from_seed(f"{LIMITLESS_IMPORT_ID_NAMESPACE}:{uid}:{identity}")
 
 
@@ -313,7 +314,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         import_jobs_db.update_import_job(job_id, {'processed_files': processed_files})
                         continue
 
-                    conversation_id = conversation_id_for_lifelog(uid, lifelog_path)
+                    conversation_id = conversation_id_for_lifelog(uid, lifelog_path, started_at=started_at)
 
                     # Calculate finished_at from last segment
                     if segments and started_at:
