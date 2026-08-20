@@ -5,6 +5,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 
 /// Regression tests for the search date-range boundary normalization in
 /// ConversationProvider.setSearchDateRange (#4457 / rebase of #7977).
@@ -66,6 +67,19 @@ void main() {
 
       expect(provider.searchStartDate, DateTime(2026, 6, 15));
       expect(provider.searchEndDate, isNull);
+    });
+
+    test('a single selected day falls back to a closed range ending on start', () {
+      final start = DateTime(2026, 6, 15, 9);
+      expect(closedCalendarRangeEnd(start, null), start);
+      expect(closedCalendarRangeEnd(start, DateTime(2026, 6, 20, 17)), DateTime(2026, 6, 20, 17));
+
+      final provider = makeProvider();
+      final end = closedCalendarRangeEnd(start, null);
+      provider.setSearchDateRange(start, end);
+
+      expect(provider.searchStartDate, DateTime(2026, 6, 15));
+      expect(provider.searchEndDate, DateTime(2026, 6, 15, 23, 59, 59, 999));
     });
 
     test('clearSearchDateRange resets both bounds', () {

@@ -9,14 +9,15 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 
-typedef CalendarYearBuilder = Widget Function({
-  required int year,
-  TextStyle? textStyle,
-  BoxDecoration? decoration,
-  bool? isSelected,
-  bool? isDisabled,
-  bool? isCurrentYear,
-});
+typedef CalendarYearBuilder =
+    Widget Function({
+      required int year,
+      TextStyle? textStyle,
+      BoxDecoration? decoration,
+      bool? isSelected,
+      bool? isDisabled,
+      bool? isCurrentYear,
+    });
 
 CalendarDatePicker2Config getDefaultCalendarConfig({
   DateTime? firstDate,
@@ -146,6 +147,10 @@ Future<void> showConversationDateRangePicker(BuildContext context) async {
   );
 }
 
+/// Inclusive end of a calendar range. A single selected day has no second
+/// date, so fall back to [start] instead of leaving the upper bound open.
+DateTime closedCalendarRangeEnd(DateTime start, DateTime? end) => end ?? start;
+
 /// Date-range picker for conversation *search* (#4457 / #7977).
 ///
 /// Sibling of [showConversationDateRangePicker]: that sheet filters the
@@ -209,12 +214,12 @@ Future<void> showConversationSearchDateRangePicker(BuildContext context) async {
                           Navigator.of(context).pop();
                           return;
                         }
-                        final end = range.length > 1 ? range[1] : endDate;
+                        final end = closedCalendarRangeEnd(start, range.length > 1 ? range[1] : null);
                         Navigator.of(context).pop();
                         if (provider.previousQuery.isNotEmpty) {
                           provider.setSearchDateRange(start, end);
                           await provider.searchConversations(provider.previousQuery);
-                          PlatformManager.instance.analytics.calendarFilterApplied(start, end ?? start);
+                          PlatformManager.instance.analytics.calendarFilterApplied(start, end);
                         }
                       },
                       child: Text(
