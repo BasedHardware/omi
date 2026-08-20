@@ -341,14 +341,16 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "memory-extraction"), .memory)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "goals"), .goal)
     XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "meeting-notes"), .meetingNotes)
+    XCTAssertEqual(ProactiveNotificationKind.from(assistantId: "integration_connect"), .integration)
     XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
   }
 
-  /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
-  /// Insight, Memory — matching the four toggles in Settings → Notifications. Focus is
-  /// the focus-nudge assistant alone; tips, resurfaced items, and generated goals are
-  /// insights. `.general` is reserved for functional system alerts outside the taxonomy.
-  func testEveryProactiveKindPresentsAsOneOfTheFourCategories() {
+  /// The user-facing taxonomy is exactly five proactive categories — Focus, Task,
+  /// Insight, Memory, Integration — matching the five toggles in Settings →
+  /// Notifications. Focus is the focus-nudge assistant alone; tips, resurfaced items,
+  /// and generated goals are insights; connect-an-app offers are integrations.
+  /// `.general` is reserved for functional system alerts outside the taxonomy.
+  func testEveryProactiveKindPresentsAsOneOfTheFiveCategories() {
     XCTAssertEqual(ProactiveNotificationBadge(kind: .suggestion).label, "Focus")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .task).label, "Task")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .meetingNotes).label, "Task")
@@ -356,6 +358,7 @@ final class ChatRowPresentationTests: XCTestCase {
     XCTAssertEqual(ProactiveNotificationBadge(kind: .resurface).label, "Insight")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .goal).label, "Insight")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .memory).label, "Memory")
+    XCTAssertEqual(ProactiveNotificationBadge(kind: .integration).label, "Integration")
     XCTAssertEqual(ProactiveNotificationBadge(kind: .general).label, "Notification")
   }
 

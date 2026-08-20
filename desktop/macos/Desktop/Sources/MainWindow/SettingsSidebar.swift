@@ -126,17 +126,17 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["memory", "facts", "notify memory"], section: .notifications, icon: "bell",
       settingId: "notifications.memory"),
     SettingsSearchItem(
-      name: "Integration Suggestions",
-      subtitle: "Offer to connect an app when you open one Omi works with",
+      name: "Integration Notifications",
+      subtitle: "Occasionally offer to connect an app Omi can use — Gmail, Notion, ChatGPT",
       keywords: ["integration", "suggestions", "connect", "gmail", "notion", "nudge"],
       section: .notifications, icon: "bell",
       settingId: "notifications.integrationsuggestions"),
     SettingsSearchItem(
-      name: "Reset all suggestion history",
+      name: "Reset Integration Suggestions",
       subtitle: "Clear every integration's suggestion history so Omi can offer them again",
       keywords: ["reset", "integration", "suggestions", "history", "again"],
-      section: .notifications, icon: "bell",
-      settingId: "notifications.integrationsuggestions.reset"),
+      section: .advanced, icon: "wrench.and.screwdriver",
+      settingId: "advanced.troubleshooting.resetintegrationsuggestions"),
     SettingsSearchItem(
       name: "Daily Summary",
       subtitle: "Receive a daily summary of your conversations and activities",
