@@ -244,6 +244,10 @@ class TestDevWebhookAutoDisable:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr(
+            "utils.webhooks.safe_request_targets",
+            lambda url: [(url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})],
+        )
 
     def test_append_query_params_preserves_existing_query(self):
         from utils.webhooks import _append_query_params
@@ -280,9 +284,15 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+            patch(
+                "utils.webhooks.safe_request_targets",
+                side_effect=lambda url: [
+                    (url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})
+                ],
+            ),
         ):
             response = await _post_dev_webhook(
                 "test_webhook",
@@ -297,6 +307,7 @@ class TestDevWebhookAutoDisable:
         idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
         assert len(set(idempotency_keys)) == 1
         assert idempotency_keys[0]
+        assert mock_client.post.await_args_list[0].kwargs.get("follow_redirects") is False
 
     @pytest.mark.asyncio
     async def test_dev_webhook_disabled_on_threshold(self):
@@ -313,7 +324,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
@@ -345,7 +356,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
         ):
@@ -364,7 +375,7 @@ class TestDevWebhookAutoDisable:
         mock_cb.allow_request.return_value = True
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -401,7 +412,7 @@ class TestDevWebhookAutoDisable:
             sleep_calls.append(delay)
 
         with (
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
@@ -506,6 +517,13 @@ class TestGetAppWebhookHealth:
         assert result is None
 
 
+def _passthrough_safe_target(url):
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname or 'example.com'
+    return url, {'headers': {'Host': host}, 'extensions': {'sni_hostname': host}}
+
+
 class TestChatToolCircuitBreaker:
     """Test circuit breaker and health tracking in app_tools._call_tool_endpoint."""
 
@@ -550,6 +568,7 @@ class TestChatToolCircuitBreaker:
 
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "safe_request_target", side_effect=_passthrough_safe_target),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
         ):
             result = await mod._call_tool_endpoint({}, config, tool, "app-1")
@@ -578,6 +597,7 @@ class TestChatToolCircuitBreaker:
 
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "safe_request_target", side_effect=_passthrough_safe_target),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
             patch.object(mod, "record_app_webhook_success") as mock_success,
             patch("httpx.AsyncClient") as mock_client_cls,
@@ -617,6 +637,7 @@ class TestChatToolCircuitBreaker:
 
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "safe_request_target", side_effect=_passthrough_safe_target),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
             patch.object(mod, "record_app_webhook_failure", return_value=0) as mock_fail,
             patch("httpx.AsyncClient") as mock_client_cls,
@@ -652,6 +673,7 @@ class TestChatToolCircuitBreaker:
 
         with (
             patch.object(mod, "is_app_webhook_disabled", return_value=False),
+            patch.object(mod, "safe_request_target", side_effect=_passthrough_safe_target),
             patch.object(mod, "get_webhook_circuit_breaker", return_value=mock_cb),
             patch.object(mod, "record_app_webhook_failure", return_value=0) as mock_fail,
             patch("httpx.AsyncClient") as mock_client_cls,
@@ -669,12 +691,26 @@ class TestChatToolCircuitBreaker:
         mock_fail.assert_called_once_with("app-1", 0, "TimeoutException", "chat_tool")
 
 
+def _patch_sync_httpx_client(response=None, side_effect=None):
+    """Patch utils.apps.httpx.Client for sync pinned outbound health checks."""
+    mock_client = MagicMock()
+    if side_effect is not None:
+        mock_client.request.side_effect = side_effect
+    else:
+        mock_client.request.return_value = response
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_client
+    mock_cm.__exit__.return_value = None
+    return patch('utils.apps.httpx.Client', return_value=mock_cm), mock_client
+
+
 class TestReEnableRouterBehavior:
     """Tests for the production validate_app_endpoints_for_reenable helper from utils.apps."""
 
     @pytest.fixture(autouse=True)
-    def _load_helper(self):
+    def _load_helper(self, monkeypatch):
         self._validate = validate_app_endpoints_for_reenable
+        monkeypatch.setattr('utils.apps.safe_request_target', _passthrough_safe_target)
 
     def test_no_endpoints_returns_400(self):
         """Re-enable with no configured endpoints should return 400."""
@@ -695,7 +731,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -707,7 +743,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             self._validate(app, update, 'app-1')
 
     def test_mcp_non_2xx_allowed(self):
@@ -716,7 +752,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 401
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             self._validate(app, update, 'app-1')
 
     def test_chat_tool_reachability_check_allows_non_2xx(self):
@@ -728,7 +764,7 @@ class TestReEnableRouterBehavior:
         update = {}
         mock_resp = MagicMock()
         mock_resp.status_code = 404
-        with patch("utils.apps.httpx.request", return_value=mock_resp):
+        with _patch_sync_httpx_client(response=mock_resp)[0]:
             self._validate(app, update, 'app-1')
 
     def test_timeout_blocks_reenable(self):
@@ -737,7 +773,7 @@ class TestReEnableRouterBehavior:
 
         app = {'external_integration': {'webhook_url': 'https://slow.example.com'}, 'chat_tools': []}
         update = {}
-        with patch("utils.apps.httpx.request", side_effect=httpx.TimeoutException("timeout")):
+        with _patch_sync_httpx_client(side_effect=httpx.TimeoutException("timeout"))[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -749,7 +785,7 @@ class TestReEnableRouterBehavior:
 
         app = {'external_integration': {'webhook_url': 'https://down.example.com'}, 'chat_tools': []}
         update = {}
-        with patch("utils.apps.httpx.request", side_effect=httpx.ConnectError("refused")):
+        with _patch_sync_httpx_client(side_effect=httpx.ConnectError("refused"))[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -770,7 +806,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
 
         assert len(call_urls) == 3
@@ -801,7 +837,7 @@ class TestReEnableRouterBehavior:
                 return resp
             raise httpx.ConnectError("refused")
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             with pytest.raises(HTTPException) as exc_info:
                 self._validate(app, update, 'app-1')
         assert exc_info.value.status_code == 400
@@ -822,7 +858,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
         assert probed_urls == ['https://new-fixed.example.com/api']
 
@@ -841,7 +877,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
         assert probed_urls == ['https://example.com/hook']
 
@@ -860,7 +896,7 @@ class TestReEnableRouterBehavior:
             resp.status_code = 200
             return resp
 
-        with patch("utils.apps.httpx.request", side_effect=mock_request):
+        with _patch_sync_httpx_client(side_effect=mock_request)[0]:
             self._validate(app, update, 'app-1')
         assert len(probed_urls) == 2
         assert 'https://example.com/webhook' in probed_urls
@@ -1194,6 +1230,7 @@ class TestMarketplaceIntegrationHealthPaths:
 
         with (
             patch.object(_app_tools, 'is_app_webhook_disabled', return_value=False),
+            patch.object(_app_tools, 'safe_request_target', side_effect=_passthrough_safe_target),
             patch.object(_app_tools, 'get_webhook_circuit_breaker', return_value=mock_cb),
             patch.object(_app_tools, 'record_app_webhook_failure', return_value=0) as mock_fail,
             patch("httpx.AsyncClient") as mock_client_cls,
@@ -1935,6 +1972,10 @@ class TestDevWebhookIntegrationPaths:
     def _stub_webhook_db_lookups(self, monkeypatch):
         monkeypatch.setattr("utils.webhooks.user_webhook_status_db", MagicMock(return_value=True))
         monkeypatch.setattr("utils.webhooks.get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+        monkeypatch.setattr(
+            "utils.webhooks.safe_request_targets",
+            lambda url: [(url, {'headers': {'Host': 'example.com'}, 'extensions': {'sni_hostname': 'example.com'}})],
+        )
 
     @pytest.mark.asyncio
     async def test_conversation_created_records_success(self):
@@ -1954,7 +1995,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_success") as mock_success,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=AsyncMock()),
         ):
@@ -1991,7 +2032,7 @@ class TestDevWebhookIntegrationPaths:
 
         with (
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
@@ -2028,7 +2069,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
-            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_pinned_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
             patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),

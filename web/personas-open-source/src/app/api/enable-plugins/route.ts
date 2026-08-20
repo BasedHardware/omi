@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
 import Redis from 'ioredis';
+import {
+  PersonaAuthenticationError,
+  PersonaGatewayUnavailableError,
+  assertPersonaUidMatch,
+  resolvePersonaOwnerIdentity,
+} from '@/lib/server/persona-chat-gateway.mjs';
 
 // Configure Redis client - credentials should be in environment variables
 console.log('Initializing Redis client configuration...');
@@ -41,15 +47,30 @@ export async function POST(req: Request) {
   console.log('[API /api/enable-plugins] Received POST request');
   let currentUid = 'unknown'; // For logging in catch block
   try {
-    console.log('[API /api/enable-plugins] Parsing request body...');
-    const { uid } = (await req.json()) as PostBody;
-    currentUid = uid; // Assign after parsing
-    console.log(`[API /api/enable-plugins] Parsed UID: ${uid}`);
-
-    if (!uid) {
-      console.error('[API /api/enable-plugins] Error: Missing UID in request body');
-      return NextResponse.json({ error: 'Missing uid' }, { status: 400 });
+    let identity;
+    try {
+      identity = await resolvePersonaOwnerIdentity(req.headers.get('authorization'));
+    } catch (error: unknown) {
+      if (error instanceof PersonaAuthenticationError) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      if (error instanceof PersonaGatewayUnavailableError) {
+        return NextResponse.json({ error: 'Auth unavailable' }, { status: 503 });
+      }
+      throw error;
     }
+
+    console.log('[API /api/enable-plugins] Parsing request body...');
+    const { uid: requestedUid } = (await req.json()) as PostBody;
+    console.log(`[API /api/enable-plugins] Parsed UID: ${requestedUid}`);
+
+    let uid: string;
+    try {
+      uid = assertPersonaUidMatch(identity, requestedUid);
+    } catch {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    currentUid = uid;
 
     const key = `users:${uid}:enabled_plugins`;
     const pluginsToAdd = [

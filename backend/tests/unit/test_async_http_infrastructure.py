@@ -182,6 +182,43 @@ class TestWebhookCircuitBreaker:
         )
         assert cb.allow_request() is False, "Breaker must block requests after single probe failure"
 
+    def test_half_open_probe_released_without_counting_failure(self):
+        """A consumed HALF_OPEN probe that never reached the network must be released.
+
+        When a delivery is rejected before any request (target no longer public,
+        DNS failure), the caller calls `release_probe()` instead of
+        `record_failure()`: the breaker must fall back to OPEN without counting
+        a network failure, then grant a fresh probe after the recovery timeout.
+        Without this, `_half_open_in_flight` stays at 1 and every later
+        delivery is rejected forever.
+        """
+        cb = WebhookCircuitBreaker("test-host")
+        for _ in range(_CIRCUIT_BREAKER_FAILURE_THRESHOLD):
+            cb.record_failure()
+        cb._last_failure_time = time.monotonic() - _CIRCUIT_BREAKER_RECOVERY_TIMEOUT - 1
+
+        assert cb.state == 'half_open'
+        assert cb.allow_request() is True  # single probe consumed
+        assert cb.allow_request() is False  # no more probes until resolved
+
+        cb.release_probe()
+        assert cb.state == 'open', "A rejected probe must fall back to OPEN, not stay HALF_OPEN"
+        assert cb.allow_request() is False, "OPEN blocks requests until the recovery timeout"
+
+        # After the timeout, a fresh probe must be possible again.
+        cb._last_failure_time = time.monotonic() - _CIRCUIT_BREAKER_RECOVERY_TIMEOUT - 1
+        assert cb.state == 'half_open'
+        assert cb.allow_request() is True, "Breaker must recover and probe again after the timeout"
+
+    def test_release_probe_noops_when_closed(self):
+        """`release_probe` must not affect a CLOSED breaker (config errors do
+        not count as failures while the breaker is not probing)."""
+        cb = WebhookCircuitBreaker("test-host")
+        assert cb.state == 'closed'
+        cb.release_probe()
+        assert cb.state == 'closed'
+        assert cb.allow_request() is True
+
 
 # ============================================================================
 # Circuit breaker registry
@@ -364,6 +401,20 @@ class TestSharedExecutors:
 
         result = storage_executor.submit(lambda: threading.current_thread().name).result(timeout=5)
         assert result.startswith("storage")
+
+    def test_resolver_executor_submits(self):
+        from utils.executors import resolver_executor
+
+        future = resolver_executor.submit(lambda: "resolved")
+        assert future.result(timeout=5) == "resolved"
+
+    def test_resolver_executor_thread_name_prefix(self):
+        import threading
+
+        from utils.executors import resolver_executor
+
+        result = resolver_executor.submit(lambda: threading.current_thread().name).result(timeout=5)
+        assert result.startswith("resolver")
 
     def test_critical_executor_parallel_work(self):
         """Verify critical executor handles concurrent submissions."""

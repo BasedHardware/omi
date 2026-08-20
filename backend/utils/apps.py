@@ -78,7 +78,8 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
-from utils.executors import run_blocking, db_executor, llm_executor
+from utils.executors import run_blocking, db_executor, llm_executor, resolver_executor
+from utils.http_client import assert_public_http_url, safe_request_target, UnsafeWebhookURLError
 from utils.social import get_twitter_timeline
 import logging
 
@@ -142,7 +143,22 @@ def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: D
         )
     for label, url, method, require_2xx in endpoints_to_check:
         try:
-            resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=True)
+            pinned_url, pin_kwargs = resolver_executor.submit(safe_request_target, url).result()
+        except UnsafeWebhookURLError:
+            raise HTTPException(
+                status_code=400,
+                detail=f'{label.capitalize()} endpoint is not a public http(s) URL. Fix it before re-enabling.',
+            )
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.request(
+                    method,
+                    pinned_url,
+                    json={},
+                    follow_redirects=False,
+                    headers=pin_kwargs['headers'],
+                    extensions=pin_kwargs['extensions'],
+                )
             if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
                 raise HTTPException(
                     status_code=400,
@@ -1511,11 +1527,24 @@ def fetch_app_chat_tools_from_manifest(
     try:
         logger.info(f"📥 Fetching chat tools manifest from: {manifest_url}")
 
-        response = httpx.get(
-            manifest_url,
-            timeout=float(timeout),
-            headers={'Accept': 'application/json', 'User-Agent': 'Omi-App-Store/1.0'},
-        )
+        try:
+            pinned_url, pin_kwargs = safe_request_target(manifest_url)
+        except UnsafeWebhookURLError as e:
+            logger.warning(f"⚠️ Rejected non-public manifest URL: {e}")
+            return None
+
+        headers = {
+            'Accept': 'application/json',
+            'User-Agent': 'Omi-App-Store/1.0',
+            **pin_kwargs['headers'],
+        }
+        with httpx.Client(timeout=float(timeout)) as client:
+            response = client.get(
+                pinned_url,
+                headers=headers,
+                extensions=pin_kwargs['extensions'],
+                follow_redirects=False,
+            )
 
         if response.status_code != 200:
             logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
@@ -1616,11 +1645,23 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         logger.warning(f"⚠️ Tool '{name}' missing required 'endpoint' field")
         return None
 
+    endpoint = endpoint.strip()
+    # "/tools/x" is the documented manifest format: routers.apps
+    # ._process_chat_tools_manifest resolves it against app_home_url and
+    # invocation pins the result via safe_request_target. "//host/x" is not
+    # app-relative, so it is still validated here.
+    if not (endpoint.startswith('/') and not endpoint.startswith('//')):
+        try:
+            assert_public_http_url(endpoint)
+        except UnsafeWebhookURLError as e:
+            logger.warning(f"⚠️ Tool '{name}' has non-public endpoint: {e}")
+            return None
+
     # Build normalized tool definition
     validated: Dict[str, Any] = {
         'name': name.strip(),
         'description': description.strip(),
-        'endpoint': endpoint.strip(),
+        'endpoint': endpoint,
         'method': (typed_tool.get('method') or 'POST').upper(),
         'auth_required': typed_tool.get('auth_required', True),
     }

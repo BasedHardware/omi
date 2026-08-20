@@ -19,8 +19,14 @@ from models.users import WebhookType, webhook_url_from_setting
 import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
-from utils.executors import db_executor, run_blocking
-from utils.http_client import get_webhook_client, get_webhook_circuit_breaker, get_webhook_semaphore
+from utils.executors import db_executor, resolver_executor, run_blocking
+from utils.http_client import (
+    get_pinned_webhook_client,
+    get_webhook_circuit_breaker,
+    get_webhook_semaphore,
+    safe_request_targets,
+    UnsafeWebhookURLError,
+)
 from utils.notifications import send_notification
 import logging
 
@@ -61,21 +67,42 @@ async def _post_dev_webhook(
     if retry_delays is None:
         retry_delays = _get_dev_webhook_retry_delays()
 
+    # SSRF guard: a developer-configured webhook that resolves to a
+    # private/loopback/link-local/metadata address is a configuration
+    # error, not a delivery failure — reject it without recording a
+    # failure or tripping the circuit breaker. DNS runs on the resolver
+    # bulkhead so slow user-controlled hostnames cannot occupy database
+    # workers that unrelated Firestore/Redis work is waiting on.
+    try:
+        pinned_targets = await run_blocking(resolver_executor, safe_request_targets, webhook_url)
+    except UnsafeWebhookURLError as e:
+        logger.warning('Rejected non-public developer webhook URL for %s: %s', webhook_name, e)
+        return None
+
     headers = dict(request_kwargs.pop('headers', {}) or {})
     headers.setdefault('Idempotency-Key', idempotency_key or str(uuid.uuid4()))
-    request_kwargs['headers'] = headers
+    request_kwargs['follow_redirects'] = False
 
-    client = get_webhook_client()
-    attempts = len(retry_delays) + 1
+    client = get_pinned_webhook_client()
+    attempts = max(len(retry_delays) + 1, len(pinned_targets))
     last_response = None
     last_exception = None
 
     for attempt_index in range(attempts):
         attempt_number = attempt_index + 1
         failure_reason = None
+        # A host with several public addresses can have one edge unreachable;
+        # rotate through the validated set so a retry tries another address
+        # while every attempt still connects to a pinned IP.
+        pinned_url, pin_kwargs = pinned_targets[attempt_index % len(pinned_targets)]
+        attempt_headers = dict(headers)
+        attempt_headers.update(pin_kwargs['headers'])
+        attempt_kwargs = dict(request_kwargs)
+        attempt_kwargs['headers'] = attempt_headers
+        attempt_kwargs['extensions'] = pin_kwargs['extensions']
         try:
             async with get_webhook_semaphore():
-                response = await client.post(webhook_url, **request_kwargs)
+                response = await client.post(pinned_url, **attempt_kwargs)
             last_response = response
             last_exception = None
             if 200 <= response.status_code < 300:
@@ -157,6 +184,11 @@ async def conversation_created_webhook(uid, memory: Conversation):
                 json=payload,
                 headers={'Content-Type': 'application/json'},
             )
+            if response is None:
+                # The probe was consumed before any request (rejected target);
+                # resolve it so the breaker can recover on a later delivery.
+                cb.release_probe()
+                return
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.memory_created)
@@ -212,6 +244,9 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
                 },
                 headers={'Content-Type': 'application/json'},
             )
+            if response is None:
+                cb.release_probe()
+                return
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.day_summary)
@@ -257,6 +292,9 @@ async def realtime_transcript_webhook(uid, segments: List[dict]):
                 json={'segments': segments, 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
             )
+            if response is None:
+                cb.release_probe()
+                return
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.realtime_transcript)
@@ -332,6 +370,9 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
                 content=bytes(data),
                 headers={'Content-Type': 'application/octet-stream'},
             )
+            if response is None:
+                cb.release_probe()
+                return
             if response.status_code >= 200 and response.status_code < 300:
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.audio_bytes)

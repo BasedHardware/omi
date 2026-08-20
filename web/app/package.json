@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:seo": "node --test src/components/seo/serialize-json-ld.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",

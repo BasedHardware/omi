@@ -7,6 +7,7 @@ set_user_webhook_endpoint read data['url'] via direct subscript, so a body witho
 import importlib.abc
 import importlib.machinery
 import importlib.util
+import asyncio
 import os
 import sys
 import types
@@ -115,6 +116,13 @@ import pydantic  # noqa: E402
 from routers.users import SetUserWebhookUrlRequest  # noqa: E402
 
 
+async def _run_blocking(_executor, function, *args):
+    return function(*args)
+
+
+users_mod.run_blocking = _run_blocking
+
+
 def test_missing_url_returns_422():
     # Pydantic rejects missing required field; FastAPI surfaces as 422 at API layer.
     with pytest.raises(pydantic.ValidationError):
@@ -127,9 +135,12 @@ def test_valid_url_sets():
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
+        patch.object(users_mod, 'assert_public_http_url', return_value='8.8.8.8'),
     ):
-        result = users_mod.set_user_webhook_endpoint(
-            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
+        result = asyncio.run(
+            users_mod.set_user_webhook_endpoint(
+                wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
+            )
         )
     assert result['status'] == 'ok'
     setdb.assert_called_once()
@@ -145,8 +156,8 @@ def test_empty_url_disables_without_resetting_health():
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
     ):
-        result = users_mod.set_user_webhook_endpoint(
-            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=''), uid='u1'
+        result = asyncio.run(
+            users_mod.set_user_webhook_endpoint(wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=''), uid='u1')
         )
     assert result['status'] == 'ok'
     disable.assert_called_once_with('u1', 'audio_bytes')
@@ -167,8 +178,8 @@ def test_cleared_audio_bytes_url_keeping_delay_disables():
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success') as reset_health,
     ):
-        result = users_mod.set_user_webhook_endpoint(
-            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=',5'), uid='u1'
+        result = asyncio.run(
+            users_mod.set_user_webhook_endpoint(wtype='audio_bytes', data=SetUserWebhookUrlRequest(url=',5'), uid='u1')
         )
     assert result['status'] == 'ok'
     disable.assert_called_once_with('u1', 'audio_bytes')
@@ -183,9 +194,12 @@ def test_audio_bytes_url_with_delay_still_enables():
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success'),
+        patch.object(users_mod, 'assert_public_http_url', return_value='8.8.8.8'),
     ):
-        users_mod.set_user_webhook_endpoint(
-            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x,5'), uid='u1'
+        asyncio.run(
+            users_mod.set_user_webhook_endpoint(
+                wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x,5'), uid='u1'
+            )
         )
     enable.assert_called_once_with('u1', 'audio_bytes')
     disable.assert_not_called()
@@ -197,8 +211,13 @@ def test_blank_url_disables_for_non_audio_webhooks():
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success'),
+        patch.object(users_mod, 'assert_public_http_url', return_value='8.8.8.8'),
     ):
-        users_mod.set_user_webhook_endpoint(wtype='memory_created', data=SetUserWebhookUrlRequest(url='   '), uid='u1')
+        asyncio.run(
+            users_mod.set_user_webhook_endpoint(
+                wtype='memory_created', data=SetUserWebhookUrlRequest(url='   '), uid='u1'
+            )
+        )
     disable.assert_called_once_with('u1', 'memory_created')
     enable.assert_not_called()
 
@@ -210,9 +229,12 @@ def test_comma_in_non_audio_url_is_not_a_delay_separator():
         patch.object(users_mod, 'disable_user_webhook_db') as disable,
         patch.object(users_mod, 'enable_user_webhook_db') as enable,
         patch.object(users_mod, 'record_dev_webhook_success'),
+        patch.object(users_mod, 'assert_public_http_url', return_value='8.8.8.8'),
     ):
-        users_mod.set_user_webhook_endpoint(
-            wtype='realtime_transcript', data=SetUserWebhookUrlRequest(url='https://h/i?ids=1,2'), uid='u1'
+        asyncio.run(
+            users_mod.set_user_webhook_endpoint(
+                wtype='realtime_transcript', data=SetUserWebhookUrlRequest(url='https://h/i?ids=1,2'), uid='u1'
+            )
         )
     enable.assert_called_once_with('u1', 'realtime_transcript')
     disable.assert_not_called()

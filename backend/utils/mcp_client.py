@@ -20,6 +20,8 @@ from urllib.parse import urlencode, urljoin, urlparse
 import httpx
 
 from models.app import ChatTool
+from utils.executors import resolver_executor, run_blocking
+from utils.http_client import safe_request_target
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -28,6 +30,10 @@ logger = logging.getLogger(__name__)
 MCP_CLIENT_NAME = "Omi"
 MCP_CLIENT_VERSION = "1.0.0"
 MCP_PROTOCOL_VERSION = "2025-03-26"
+
+
+def _safe_request_target(url: str) -> tuple[str, dict]:
+    return safe_request_target(url)
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +53,13 @@ async def discover_oauth_metadata(server_url: str) -> Optional[dict[str, Any]]:
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         try:
-            resp = await client.get(metadata_url, follow_redirects=True)
+            pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, metadata_url)
+            resp = await client.get(
+                pinned_url,
+                headers=pin_kwargs['headers'],
+                extensions=pin_kwargs['extensions'],
+                follow_redirects=False,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 return {
@@ -78,8 +90,15 @@ async def register_oauth_client(
     if scopes:
         payload["scope"] = " ".join(scopes)
 
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, registration_endpoint)
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(registration_endpoint, json=payload)
+        resp = await client.post(
+            pinned_url,
+            json=payload,
+            headers=pin_kwargs['headers'],
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
         resp.raise_for_status()
         data = resp.json()
         logger.info(f"[MCP OAuth] Registration response: {sanitize(data)}")
@@ -143,8 +162,15 @@ async def exchange_oauth_code(
     if code_verifier:
         payload["code_verifier"] = code_verifier
 
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, token_endpoint)
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(token_endpoint, data=payload)
+        resp = await client.post(
+            pinned_url,
+            data=payload,
+            headers=pin_kwargs['headers'],
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
         resp.raise_for_status()
         data = resp.json()
         token_type = data.get("token_type", "Bearer")
@@ -177,8 +203,15 @@ async def refresh_oauth_token(
     if client_secret:
         payload["client_secret"] = client_secret
 
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, token_endpoint)
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.post(token_endpoint, data=payload)
+        resp = await client.post(
+            pinned_url,
+            data=payload,
+            headers=pin_kwargs['headers'],
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -245,14 +278,28 @@ async def _mcp_post(
     if session_id:
         headers["Mcp-Session-Id"] = session_id
 
+    pinned_url, pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, server_url)
+    headers.update(pin_kwargs['headers'])
+
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        resp = await client.post(server_url, json=payload, headers=headers, follow_redirects=True)
+        resp = await client.post(
+            pinned_url,
+            json=payload,
+            headers=headers,
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
 
         if resp.status_code == 401:
             raise PermissionError("MCP server returned 401 Unauthorized")
 
         # Capture session ID from response
         new_session_id = resp.headers.get("mcp-session-id", session_id)
+
+        # Redirects are not followed (the target is IP-pinned); a 3xx with an
+        # empty body would otherwise be mistaken for an empty notification ack.
+        if 300 <= resp.status_code < 400:
+            resp.raise_for_status()
 
         # Notifications (no "id" in request) may return 202/204 with no body
         if resp.status_code in (202, 204) or not resp.text.strip():
@@ -325,12 +372,21 @@ async def _sse_send_and_receive_inner(
     if access_token:
         headers["Authorization"] = f"Bearer {access_token}"
 
+    pinned_sse_url, sse_pin_kwargs = await run_blocking(resolver_executor, _safe_request_target, sse_url)
+    headers.update(sse_pin_kwargs['headers'])
+
     expected_responses = sum(1 for p in payloads if "id" in p)
     responses: list[dict[str, Any]] = []
     post_endpoint: Optional[str] = None
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-        async with client.stream("GET", sse_url, headers=headers, follow_redirects=True) as stream:
+        async with client.stream(
+            "GET",
+            pinned_sse_url,
+            headers=headers,
+            extensions=sse_pin_kwargs['extensions'],
+            follow_redirects=False,
+        ) as stream:
             if stream.status_code == 401:
                 raise PermissionError("MCP server returned 401 Unauthorized")
             if stream.status_code >= 400:
@@ -369,17 +425,28 @@ async def _sse_send_and_receive_inner(
                                 post_endpoint = origin + data_str
                             logger.info(f"[MCP SSE] Got endpoint: {sanitize(post_endpoint)}")
 
+                            pinned_post_url, post_pin_kwargs = await run_blocking(
+                                resolver_executor, _safe_request_target, post_endpoint
+                            )
                             # Now send all payloads
                             post_headers = {"Content-Type": "application/json"}
+                            post_headers.update(post_pin_kwargs['headers'])
                             if access_token:
                                 post_headers["Authorization"] = f"Bearer {access_token}"
                             for payload in payloads:
-                                await client.post(
-                                    post_endpoint,
+                                post_resp = await client.post(
+                                    pinned_post_url,
                                     json=payload,
                                     headers=post_headers,
-                                    follow_redirects=True,
+                                    extensions=post_pin_kwargs['extensions'],
+                                    follow_redirects=False,
                                 )
+                                # Redirects stay disabled (pinning is what closes
+                                # the DNS-rebinding hole), but a discarded 3xx/4xx
+                                # response would leave the caller waiting for
+                                # replies that never arrive on the SSE stream
+                                # until the 30s timeout. Fail immediately instead.
+                                post_resp.raise_for_status()
 
                         elif event_type == "message" and data_str:
                             try:

@@ -1,3 +1,5 @@
+import { serializeJsonLd } from './serialize-json-ld.mjs';
+
 interface JsonLdProps {
   data: Record<string, unknown>;
 }
@@ -6,7 +8,7 @@ export function JsonLd({ data }: JsonLdProps) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
     />
   );
 }
@@ -93,7 +95,11 @@ interface CollectionPageJsonLdProps {
   url: string;
 }
 
-export function CollectionPageJsonLd({ name, description, url }: CollectionPageJsonLdProps) {
+export function CollectionPageJsonLd({
+  name,
+  description,
+  url,
+}: CollectionPageJsonLdProps) {
   const data = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',

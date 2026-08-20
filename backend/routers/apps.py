@@ -19,11 +19,18 @@ from utils.executors import (
     critical_executor,
     db_executor,
     llm_executor,
+    resolver_executor,
     storage_executor,
     run_blocking,
     start_background_task,
 )
-from utils.http_client import get_webhook_client
+from utils.http_client import (
+    get_pinned_webhook_client,
+    assert_public_http_url,
+    safe_request_target,
+    UnsafeWebhookURLError,
+)
+from utils.upload_temp import temp_upload_path
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
@@ -63,6 +70,7 @@ from database.apps import (
 from database.webhook_health import clear_app_webhook_health
 from database.auth import get_user_from_uid
 from database.redis_db import (
+    delete_generic_cache,
     get_generic_cache,
     set_generic_cache,
     get_specific_user_review,
@@ -72,6 +80,7 @@ from database.redis_db import (
     disable_app,
     is_app_enabled,
     delete_app_cache_by_id,
+    is_username_taken,
     save_username,
     get_enabled_apps,
     get_conversation_summary_app_ids,
@@ -145,6 +154,7 @@ from utils.social import (
     upsert_persona_from_twitter_profile,
     add_twitter_to_persona,
 )
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -858,11 +868,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
                         status_code=422,
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
                     )
-    os.makedirs('_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-    img_url = upload_app_logo(file_path, data['id'])
+    with temp_upload_path('_temp/apps', file.filename) as file_path:
+        with open(file_path, 'wb') as f:
+            f.write(file.file.read())
+        img_url = upload_app_logo(file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
@@ -915,11 +924,10 @@ async def create_persona(
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
     data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
-    os.makedirs('_temp/apps', exist_ok=True)
-    file_path = f"_temp/apps/{file.filename}"
     contents = await file.read()
-    await run_blocking(storage_executor, _write_file, file_path, contents)
-    img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
+    with temp_upload_path('_temp/apps', file.filename) as file_path:
+        await run_blocking(storage_executor, _write_file, file_path, contents)
+        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
@@ -956,11 +964,10 @@ async def update_persona(
             and persona['image'].startswith('https://storage.googleapis.com/')
         ):
             await run_blocking(storage_executor, delete_app_logo, persona['image'])
-        os.makedirs('_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
         contents = await file.read()
-        await run_blocking(storage_executor, _write_file, file_path, contents)
-        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
+        with temp_upload_path('_temp/apps', file.filename) as file_path:
+            await run_blocking(storage_executor, _write_file, file_path, contents)
+            img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
         data['image'] = img_url
 
     await run_blocking(db_executor, save_username, data['username'], uid)
@@ -1071,11 +1078,10 @@ def update_app(
     if file:
         if 'image' in app and len(app['image']) > 0 and app['image'].startswith('https://storage.googleapis.com/'):
             delete_app_logo(app['image'])
-        os.makedirs('_temp/apps', exist_ok=True)
-        file_path = f"_temp/apps/{file.filename}"
-        with open(file_path, 'wb') as f:
-            f.write(file.file.read())
-        img_url = upload_app_logo(file_path, app_id)
+        with temp_upload_path('_temp/apps', file.filename) as file_path:
+            with open(file_path, 'wb') as f:
+                f.write(file.file.read())
+            img_url = upload_app_logo(file_path, app_id)
         data['image'] = img_url
     data['updated_at'] = datetime.now(timezone.utc)
 
@@ -1572,7 +1578,7 @@ async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(aut
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
-    from utils.llm.app_generator import generate_app_from_prompt
+    from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
 
     prompt = data.prompt.strip()
     if not prompt:
@@ -1833,6 +1839,13 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=422, detail='App name is required')
     if not server_url:
         raise HTTPException(status_code=422, detail='MCP server URL is required')
+    try:
+        # getaddrinfo() is blocking: a user-supplied hostname with a slow
+        # resolver would stall the whole event loop, so offload it. DNS runs
+        # on the resolver bulkhead, not db workers.
+        await run_blocking(resolver_executor, assert_public_http_url, server_url)
+    except UnsafeWebhookURLError:
+        raise HTTPException(status_code=400, detail='MCP server URL must be a public http(s) URL')
 
     # Extract domain for logo
     parsed = urlparse(server_url)
@@ -2146,14 +2159,24 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
-        client = get_webhook_client()
-        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
-        logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
+        setup_url = app.external_integration.setup_completed_url + f'?uid={uid}'
+        try:
+            pinned_url, pin_kwargs = await run_blocking(resolver_executor, safe_request_target, setup_url)
+        except UnsafeWebhookURLError:
+            raise HTTPException(status_code=400, detail='App setup URL must be a public http(s) URL')
+        client = get_pinned_webhook_client()
+        res = await client.get(
+            pinned_url,
+            headers=pin_kwargs['headers'],
+            extensions=pin_kwargs['extensions'],
+            follow_redirects=False,
+        )
+        logger.info(f'enable_app_endpoint {res.status_code}')
         if res.status_code != 200 or not _setup_completed_from_response(res):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status
-    if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
+    if app.is_paid and await run_blocking(db_executor, get_is_user_paid_app, app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
     await run_blocking(db_executor, enable_app, uid, app_id)

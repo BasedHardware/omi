@@ -693,7 +693,10 @@ Recent activity on Twitter:\n"${enhancedDesc}" which you can use for your person
       try {
         const enableRes = await fetch('/api/enable-plugins', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
           body: JSON.stringify({ uid: uid }), // Use real UID
         });
         if (!enableRes.ok) {
@@ -839,7 +842,10 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
         try {
           const enableRes = await fetch('/api/enable-plugins', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${idToken}`,
+            },
             body: JSON.stringify({ uid: uid }), // Use real UID
           });
           if (!enableRes.ok) {
@@ -882,28 +888,36 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
 
     // Initiate the background fact storage - DO NOT await this
     try {
-      fetch('/api/store-facts', {
-        // No await here!
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ uid, memories }),
-      })
-        .then((response) => {
-          if (!response.ok) {
-            console.error(
-              `[storeFactsAndRedirect] Background /api/store-facts call failed with status: ${response.status}`,
-            );
-            // Optionally log response.text() here if needed, but don't block
-          }
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        console.error(
+          '[storeFactsAndRedirect] Missing auth token; skipping store-facts.',
+        );
+      } else {
+        fetch('/api/store-facts', {
+          // No await here!
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ uid, memories }),
         })
-        .catch((err) => {
-          console.error(
-            '[storeFactsAndRedirect] Background fetch to /api/store-facts failed:',
-            err,
-          );
-        });
+          .then((response) => {
+            if (!response.ok) {
+              console.error(
+                `[storeFactsAndRedirect] Background /api/store-facts call failed with status: ${response.status}`,
+              );
+              // Optionally log response.text() here if needed, but don't block
+            }
+          })
+          .catch((err) => {
+            console.error(
+              '[storeFactsAndRedirect] Background fetch to /api/store-facts failed:',
+              err,
+            );
+          });
+      }
     } catch (err) {
       // Catch synchronous errors initiating the fetch, though unlikely
       console.error(
@@ -996,29 +1010,39 @@ Recent activity on Linkedin:\n"${enhancedDesc}" which you can use for your perso
       console.log(
         `[handleIntegrationClick] Triggering background /api/enable-plugins for UID: ${uid}`,
       );
-      fetch('/api/enable-plugins', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: uid }),
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            console.error(
-              `[handleIntegrationClick] Background /api/enable-plugins call failed for provider ${provider}:`,
-              await response.text(),
-            );
-          } else {
-            console.log(
-              `[handleIntegrationClick] Background /api/enable-plugins call successful for UID: ${uid}`,
-            );
-          }
+      const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        console.error(
+          `[handleIntegrationClick] Missing auth token; skipping /api/enable-plugins for provider ${provider}`,
+        );
+      } else {
+        fetch('/api/enable-plugins', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ uid: uid }),
         })
-        .catch((apiErr) => {
-          console.error(
-            `[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`,
-            apiErr,
-          );
-        });
+          .then(async (response) => {
+            if (!response.ok) {
+              console.error(
+                `[handleIntegrationClick] Background /api/enable-plugins call failed for provider ${provider}:`,
+                await response.text(),
+              );
+            } else {
+              console.log(
+                `[handleIntegrationClick] Background /api/enable-plugins call successful for UID: ${uid}`,
+              );
+            }
+          })
+          .catch((apiErr) => {
+            console.error(
+              `[handleIntegrationClick] Background /api/enable-plugins fetch failed for provider ${provider}:`,
+              apiErr,
+            );
+          });
+      }
 
       // 3. Construct Veyrax Redirect URL
       const redirectUrl = `https://veyrax.com/user/omi?omi_user_id=${encodeURIComponent(

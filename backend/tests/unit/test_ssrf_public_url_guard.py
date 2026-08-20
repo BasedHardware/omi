@@ -109,6 +109,13 @@ def test_rejects_non_public_addresses(monkeypatch, unsafe_ip, label):
         assert_public_http_url('https://webhook.example.com/callback')
 
 
+@pytest.mark.parametrize('mapped_ip', ['::ffff:100.64.0.1', '::ffff:127.0.0.1', '::ffff:169.254.169.254'])
+def test_rejects_ipv4_mapped_non_public_addresses(monkeypatch, mapped_ip):
+    _mock_resolve(monkeypatch, mapped_ip)
+    with pytest.raises(UnsafeWebhookURLError, match='non-public address'):
+        assert_public_http_url('https://webhook.example.com/callback')
+
+
 # ---------------------------------------------------------------------------
 # Accepts ordinary public targets
 # ---------------------------------------------------------------------------
@@ -177,8 +184,50 @@ def test_pin_ipv4_preserves_path_and_query():
 def test_pin_ipv6_brackets_host_and_preserves_port():
     pinned_url, extra = pin_to_resolved_ip('http://example.com:8080/x', '2001:db8::1')
     assert pinned_url == 'http://[2001:db8::1]:8080/x'
-    assert extra['headers']['Host'] == 'example.com'
+    # RFC 9110 s7.2: Host carries the target URI's authority, including a
+    # non-default port. Sending a bare hostname routes to the wrong vhost.
+    assert extra['headers']['Host'] == 'example.com:8080'
+    # SNI is a hostname only -- never a port (RFC 6066 s3).
     assert extra['extensions']['sni_hostname'] == 'example.com'
+
+
+def test_pin_preserves_ipv6_literal_brackets_in_host_header():
+    pinned_url, extra = pin_to_resolved_ip('http://[2001:db8::2]:9000/x', '2001:db8::2')
+    assert pinned_url == 'http://[2001:db8::2]:9000/x'
+    assert extra['headers']['Host'] == '[2001:db8::2]:9000'
+
+
+def test_pin_idna_encodes_host_authority():
+    pinned_url, extra = pin_to_resolved_ip('https://münich.example:8443/hook', '203.0.113.5')
+    assert pinned_url == 'https://203.0.113.5:8443/hook'
+    assert extra['headers']['Host'] == 'xn--mnich-kva.example:8443'
+    assert extra['extensions']['sni_hostname'] == 'xn--mnich-kva.example'
+
+
+def test_pin_preserves_url_credentials():
+    pinned_url, extra = pin_to_resolved_ip('https://user:pw@example.com/hook', '203.0.113.5')
+    # httpx turns URL userinfo into Basic auth; dropping it silently
+    # unauthenticates the callback.
+    assert pinned_url == 'https://user:pw@203.0.113.5/hook'
+    # ...but userinfo must never leak into the Host header.
+    assert extra['headers']['Host'] == 'example.com'
+
+
+@pytest.mark.parametrize(
+    'malformed_url',
+    ['http://[::1', 'http://example.com:notaport/x', 'https://[bad::/path'],
+)
+def test_rejects_malformed_urls_as_unsafe(malformed_url):
+    # urlparse (or .port) raises ValueError for these. Callers only handle
+    # UnsafeWebhookURLError, so a raw ValueError becomes a 500.
+    with pytest.raises(UnsafeWebhookURLError):
+        assert_public_http_url(malformed_url)
+
+
+@pytest.mark.parametrize('malformed_url', ['http://[::1', 'http://example.com:notaport/x'])
+def test_safe_request_target_rejects_malformed_urls(malformed_url):
+    with pytest.raises(UnsafeWebhookURLError):
+        safe_request_target(malformed_url)
 
 
 # ---------------------------------------------------------------------------

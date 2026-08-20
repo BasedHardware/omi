@@ -4,6 +4,8 @@ Provides shared executors with strict separation (bulkhead pattern):
 - critical_executor: auth verification, rate limiting, hard restriction checks,
   small session/code cache reads. Must never starve — gates every request.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
+- resolver_executor: DNS resolution (getaddrinfo) for user-supplied outbound URLs.
+  External resolver latency must not occupy database workers.
 - llm_executor: persona generation, onboarding LLM, slow model-backed work. Bulkhead
   to prevent slow LLM retries from blocking DB or auth operations.
 - stripe_executor: Stripe API calls (Subscription.retrieve, etc.). External network I/O
@@ -64,6 +66,7 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
 
 critical_executor = MonitoredThreadPoolExecutor(name="critical", max_workers=8, thread_name_prefix="critical")
 db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
+resolver_executor = MonitoredThreadPoolExecutor(name="resolver", max_workers=4, thread_name_prefix="resolver")
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
@@ -74,6 +77,7 @@ storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, 
 _ALL_EXECUTORS = [
     critical_executor,
     db_executor,
+    resolver_executor,
     llm_executor,
     stripe_executor,
     sync_executor,
