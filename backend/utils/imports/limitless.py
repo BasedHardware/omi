@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
 from zipfile import ZipFile
 
+import database.conversations as conversations_db
 import database.import_jobs as import_jobs_db
 from database.document_ids import document_id_from_seed
 from models.conversation import AppResult, Conversation
@@ -229,6 +230,26 @@ def conversation_id_for_lifelog(uid: str, lifelog_path: str, *, started_at: Opti
     return document_id_from_seed(f"{LIMITLESS_IMPORT_ID_NAMESPACE}:{uid}:{identity}")
 
 
+def find_legacy_limitless_conversation_id(uid: str, started_at: datetime) -> Optional[str]:
+    """Return a pre-deterministic Limitless conversation id at this started_at.
+
+    Imports from before deterministic IDs used random UUIDs. A re-upload after
+    the upgrade must skip those rows instead of inserting a second document.
+    """
+    rows = conversations_db.get_conversations(
+        uid,
+        limit=20,
+        include_discarded=True,
+        start_date=started_at,
+        end_date=started_at,
+        date_field='started_at',
+    )
+    for row in rows:
+        if row.get('source') in (ConversationSource.limitless, ConversationSource.limitless.value):
+            return row.get('id')
+    return None
+
+
 def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code: str = 'en') -> None:
     """
     Background worker to process a Limitless ZIP export using LIGHT IMPORT mode.
@@ -323,6 +344,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     else:
                         finished_at = started_at or datetime.now(timezone.utc)
 
+                    source_started_at = started_at
                     if not started_at:
                         started_at = datetime.now(timezone.utc)
 
@@ -364,7 +386,16 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     # stored instead of overwriting them. This is atomic (Firestore create()),
                     # so it never duplicates and never clobbers edits a user may have made to a
                     # previously-imported conversation ("first import wins").
-                    if lifecycle_service.persist_imported_conversation(uid, conversation.model_dump()):
+                    # Before create, skip when a legacy random-UUID Limitless row already
+                    # exists at this started_at so the first post-upgrade re-import does
+                    # not insert a deterministic duplicate.
+                    legacy_id = (
+                        find_legacy_limitless_conversation_id(uid, source_started_at) if source_started_at else None
+                    )
+                    if legacy_id and legacy_id != conversation_id:
+                        conversations_skipped += 1
+                        logger.info("[Limitless Import] Skipped already-imported lifelog")
+                    elif lifecycle_service.persist_imported_conversation(uid, conversation.model_dump()):
                         conversations_created += 1
                     else:
                         conversations_skipped += 1

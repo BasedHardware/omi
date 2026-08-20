@@ -44,6 +44,13 @@ class _FakeConversationStore:
         self.docs[cid] = data
         return True
 
+    def find_legacy_limitless_conversation_id(self, uid, started_at):
+        del uid
+        for cid, data in self.docs.items():
+            if data.get("source") in ("limitless",) and data.get("started_at") == started_at:
+                return cid
+        return None
+
 
 @pytest.fixture
 def store(monkeypatch):
@@ -52,6 +59,11 @@ def store(monkeypatch):
         limitless.lifecycle_service,
         "persist_imported_conversation",
         fake.persist_imported_conversation,
+    )
+    monkeypatch.setattr(
+        limitless,
+        "find_legacy_limitless_conversation_id",
+        fake.find_legacy_limitless_conversation_id,
     )
     monkeypatch.setattr(limitless.import_jobs_db, "create_import_job", MagicMock())
     monkeypatch.setattr(limitless.import_jobs_db, "update_import_job", MagicMock())
@@ -224,6 +236,59 @@ def test_different_users_do_not_collide(tmp_path, store):
     _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}), uid="user-b", job_id="job-b")
 
     assert len(store.docs) == 2, "same export imported by two users must not share conversation IDs"
+
+
+def test_find_legacy_limitless_matches_source_and_started_at(monkeypatch):
+    started_at = datetime(2025, 10, 8, 7, 0, 25, tzinfo=timezone.utc)
+    captured = {}
+
+    def fake_get_conversations(uid, **kwargs):
+        captured.update(kwargs)
+        captured["uid"] = uid
+        return [
+            {"id": "omi-row", "source": "omi", "started_at": started_at},
+            {"id": "legacy-uuid", "source": "limitless", "started_at": started_at},
+        ]
+
+    monkeypatch.setattr(limitless.conversations_db, "get_conversations", fake_get_conversations)
+
+    assert limitless.find_legacy_limitless_conversation_id(UID, started_at) == "legacy-uuid"
+    assert captured["uid"] == UID
+    assert captured["date_field"] == "started_at"
+    assert captured["start_date"] == started_at
+    assert captured["end_date"] == started_at
+    assert captured["include_discarded"] is True
+
+
+def test_reimport_skips_legacy_uuid_row_with_same_started_at(tmp_path, store):
+    started_at, _slug = limitless.parse_lifelog_filename(FN_A)
+    legacy_id = str(uuid_lib.uuid4())
+    store.docs[legacy_id] = {
+        "id": legacy_id,
+        "started_at": started_at,
+        "source": "limitless",
+        "structured": {"title": "legacy import"},
+    }
+
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    deterministic_id = limitless.conversation_id_for_lifelog(UID, FN_A)
+    assert list(store.docs) == [legacy_id]
+    assert deterministic_id not in store.docs
+    assert store.docs[legacy_id]["structured"]["title"] == "legacy import"
+
+
+def test_legacy_row_with_different_started_at_does_not_block_import(tmp_path, store):
+    store.docs[str(uuid_lib.uuid4())] = {
+        "id": "other-legacy",
+        "started_at": datetime(2000, 1, 1, tzinfo=timezone.utc),
+        "source": "limitless",
+    }
+
+    _run_import(tmp_path, _zip_bytes({f"lifelogs/{FN_A}": _lifelog_md()}))
+
+    assert limitless.conversation_id_for_lifelog(UID, FN_A) in store.docs
+    assert len(store.docs) == 2
 
 
 def test_create_error_is_isolated_per_file(tmp_path, store):
