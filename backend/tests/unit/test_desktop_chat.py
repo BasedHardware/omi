@@ -15,6 +15,13 @@ def _authorized_request(body, *, web_search_allowed: bool = True):
     return desktop_chat._request(body, web_search_authorization=status)
 
 
+def _fail_direct_anthropic(message: str):
+    def _raise(**_kwargs):
+        raise AssertionError(message)
+
+    return _raise
+
+
 def test_request_translates_openai_tool_history_and_alias():
     public_model, payload = _authorized_request(
         {
@@ -849,7 +856,7 @@ async def test_stream_schedules_terminal_usage_when_cancelled_after_message_delt
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_routes_public_web_search_to_direct_anthropic(monkeypatch):
+async def test_chat_completions_routes_public_web_search_to_managed_perplexity_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -857,46 +864,53 @@ async def test_chat_completions_routes_public_web_search_to_direct_anthropic(mon
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-
-    class Messages:
-        async def create(self, **payload):
-            assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
-            return SimpleNamespace(
-                id='msg_web',
-                content=[SimpleNamespace(type='text', text='grounded')],
-                stop_reason='end_turn',
-                usage=SimpleNamespace(
-                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
-                ),
-            )
-
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=Messages()),
+        _fail_direct_anthropic('public web search must not construct a direct Anthropic client'),
     )
 
     class GatewayClient:
-        async def post(self, *args, **kwargs):
-            raise AssertionError('public web search must use direct Anthropic')
+        def __init__(self):
+            self.calls = []
 
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+        async def post(self, url, *, headers, json):
+            self.calls.append({'url': url, 'headers': headers, 'json': json})
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-web',
+                    'choices': [{'message': {'content': 'grounded from https://example.com'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
     response = await desktop_chat.chat_completions(
         {
             'model': 'omi-sonnet',
             'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
             'omi_web_search': True,
+            'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
         },
         uid='user-1',
         x_app_platform=None,
         x_omi_chat_contract_version=None,
         x_omi_request_id=None,
     )
-    assert b'grounded' in response.body
+    assert b'grounded from https://example.com' in response.body
+    assert client.calls[0]['json']['model'] == 'omi:auto:web-search'
+    assert 'tools' not in client.calls[0]['json']
+    assert 'tool_choice' not in client.calls[0]['json']
+    assert client.calls[0]['headers'].get('X-Omi-LLM-Feature') == 'web_search'
+    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in client.calls[0]['json']['messages'][0]['content']
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(monkeypatch):
+async def test_chat_completions_routes_pi_public_web_policy_to_managed_perplexity_lane(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -904,30 +918,31 @@ async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-
-    class Messages:
-        async def create(self, **payload):
-            assert payload['tools'] == [desktop_chat._WEB_SEARCH_TOOL]
-            return SimpleNamespace(
-                id='msg_policy_web',
-                content=[SimpleNamespace(type='text', text='grounded')],
-                stop_reason='end_turn',
-                usage=SimpleNamespace(
-                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
-                ),
-            )
-
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=Messages()),
+        _fail_direct_anthropic('Pi public web policy must not construct a direct Anthropic client'),
     )
 
     class GatewayClient:
-        async def post(self, *args, **kwargs):
-            raise AssertionError('Pi public web policy must use direct Anthropic')
+        def __init__(self):
+            self.calls = []
 
-    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: GatewayClient())
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-policy-web',
+                    'choices': [{'message': {'content': 'grounded'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
     response = await desktop_chat.chat_completions(
         {
             'model': 'omi-sonnet',
@@ -944,6 +959,72 @@ async def test_chat_completions_routes_pi_public_web_policy_to_direct_anthropic(
         x_omi_request_id=None,
     )
     assert b'grounded' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:web-search'
+    assert client.calls[0]['messages'][0]['content'].startswith(desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION)
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_streams_public_web_search_through_managed_perplexity_lane(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        _fail_direct_anthropic('streaming public web search must not construct a direct Anthropic client'),
+    )
+
+    class StreamResponse:
+        status_code = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def aiter_bytes(self):
+            yield b'data: {"id":"chatcmpl-1","choices":[{"delta":{"content":"grounded"},"finish_reason":"stop"}]}\n\n'
+            yield (
+                b'data: {"id":"chatcmpl-1","choices":[],'
+                b'"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}\n\n'
+            )
+            yield b'data: [DONE]\n\n'
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = []
+
+        def stream(self, method, url, **kwargs):
+            self.calls.append({'method': method, 'url': url, **kwargs})
+            return StreamResponse()
+
+        async def post(self, *args, **kwargs):
+            raise AssertionError('streaming public web search must use stream()')
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
+            'omi_web_search': True,
+            'stream': True,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+    body = await _drain(response)
+    assert 'grounded' in body
+    assert client.calls[0]['json']['model'] == 'omi:auto:web-search'
+    assert 'tools' not in client.calls[0]['json']
 
 
 @pytest.mark.asyncio
@@ -1103,7 +1184,10 @@ def _wire_direct_lane(monkeypatch, quota_calls):
 
 
 async def _drain(response):
-    return ''.join([chunk async for chunk in response.body_iterator])
+    # The direct Anthropic path yields str chunks; the managed gateway path
+    # proxies raw bytes via httpx aiter_bytes. Accept both.
+    chunks = [chunk async for chunk in response.body_iterator]
+    return ''.join(c.decode() if isinstance(c, (bytes, bytearray)) else c for c in chunks)
 
 
 @pytest.mark.asyncio
@@ -1299,8 +1383,8 @@ def test_gateway_body_rejects_unsupported_image_url_instead_of_dropping_it():
 
 def test_specialist_haiku_requests_bypass_managed_chat_agent():
     assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-haiku-4-5-20251001'})
-    assert not desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
-    assert not desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'omi-opus'})
+    assert desktop_chat._uses_managed_chat_agent({'model': 'claude-opus-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'claude-sonnet-4-6'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'omi:auto:chat-agent'})
     assert desktop_chat._uses_managed_chat_agent({'model': 'omi-luna'})
@@ -1315,7 +1399,7 @@ def test_structured_aliases_route_to_the_structured_lane_not_chat():
         assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-structured'
 
     # Conversational and omitted models keep the chat-agent lane.
-    for alias in ('omi-luna', 'omi-auto', 'claude-sonnet-4-6', ''):
+    for alias in ('omi-luna', 'omi-auto', 'claude-sonnet-4-6', 'omi-opus', ''):
         assert desktop_chat._managed_lane_id({'model': alias}) == 'omi:auto:chat-agent'
     assert desktop_chat._managed_lane_id({}) == 'omi:auto:chat-agent'
 
@@ -1324,8 +1408,12 @@ def test_structured_lane_traffic_is_attributed_to_its_own_feature():
     """Structured-lane calls must not land in the ledger as chat-agent traffic."""
     assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-structured') == 'chat_structured'
     assert desktop_chat._gateway_feature_for_lane('omi:auto:chat-agent') == 'chat_agent'
+    assert desktop_chat._gateway_feature_for_lane('omi:auto:web-search') == 'web_search'
     assert desktop_chat._gateway_request_headers(
         'req-1', 'omi:auto:chat-structured'
+    ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
+    assert desktop_chat._gateway_request_headers(
+        'req-1', 'omi:auto:web-search'
     ) != desktop_chat._gateway_request_headers('req-1', 'omi:auto:chat-agent')
 
 
@@ -1335,6 +1423,22 @@ def test_gateway_body_stamps_the_selected_lane():
     assert desktop_chat._gateway_body(request, lane)['model'] == 'omi:auto:chat-structured'
     # Default stays the chat lane for callers that do not pass one.
     assert desktop_chat._gateway_body(request)['model'] == 'omi:auto:chat-agent'
+
+
+def test_gateway_body_strips_tools_on_the_web_search_lane():
+    request = {
+        'model': 'omi-sonnet',
+        'messages': [{'role': 'system', 'content': 'be concise'}, {'role': 'user', 'content': 'news?'}],
+        'tools': [{'type': 'function', 'function': {'name': 'weather', 'parameters': {'type': 'object'}}}],
+        'tool_choice': 'auto',
+        'omi_web_search': True,
+    }
+    body = desktop_chat._gateway_body(request, desktop_chat.WEB_SEARCH_AUTO_LANE_ID)
+    assert body['model'] == 'omi:auto:web-search'
+    assert 'tools' not in body
+    assert 'tool_choice' not in body
+    assert 'omi_web_search' not in body
+    assert desktop_chat._PUBLIC_WEB_ROUTING_INSTRUCTION in body['messages'][0]['content']
 
 
 def test_gateway_body_normalizes_openai_tool_history_content():
@@ -1515,16 +1619,7 @@ async def test_chat_completions_gateway_mode_disabled_for_byok(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ('requested_model', 'translated_model'),
-    [
-        ('claude-haiku-4-5-20251001', 'claude-haiku-4-5'),
-        ('omi-opus', 'claude-opus-4-6'),
-    ],
-)
-async def test_chat_completions_specialist_models_bypass_managed_gateway(
-    monkeypatch, requested_model, translated_model
-):
+async def test_chat_completions_specialist_haiku_bypasses_managed_gateway(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -1535,7 +1630,7 @@ async def test_chat_completions_specialist_models_bypass_managed_gateway(
 
     class Messages:
         async def create(self, **payload):
-            assert payload['model'] == translated_model
+            assert payload['model'] == 'claude-haiku-4-5'
             return SimpleNamespace(
                 id='msg_haiku',
                 content=[SimpleNamespace(type='text', text='specialist')],
@@ -1559,7 +1654,7 @@ async def test_chat_completions_specialist_models_bypass_managed_gateway(
 
     response = await desktop_chat.chat_completions(
         {
-            'model': requested_model,
+            'model': 'claude-haiku-4-5-20251001',
             'messages': [{'role': 'user', 'content': 'extract this'}],
             'max_tokens': 16,
         },
@@ -1570,6 +1665,55 @@ async def test_chat_completions_specialist_models_bypass_managed_gateway(
     )
 
     assert b'"content":"specialist"' in response.body
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_routes_legacy_opus_alias_through_managed_gateway(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        _fail_direct_anthropic('legacy opus aliases must not construct a direct Anthropic client'),
+    )
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-opus',
+                    'choices': [{'message': {'content': 'managed'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-opus',
+            'messages': [{'role': 'user', 'content': 'hello'}],
+            'max_tokens': 16,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+    assert b'managed' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:chat-agent'
 
 
 @pytest.mark.asyncio
@@ -1756,7 +1900,7 @@ def test_request_treats_unrecognized_tool_output_as_private():
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_keeps_private_tool_output_out_of_anthropic_web_search(monkeypatch):
+async def test_chat_completions_keeps_private_tool_output_out_of_managed_web_search(monkeypatch):
     monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
     monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
@@ -1764,24 +1908,31 @@ async def test_chat_completions_keeps_private_tool_output_out_of_anthropic_web_s
     monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
     monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
     monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
-
-    class Messages:
-        async def create(self, **payload):
-            assert desktop_chat._WEB_SEARCH_TOOL not in payload.get('tools', [])
-            return SimpleNamespace(
-                id='msg_private',
-                content=[SimpleNamespace(type='text', text='answered')],
-                stop_reason='end_turn',
-                usage=SimpleNamespace(
-                    input_tokens=1, cache_creation_input_tokens=0, cache_read_input_tokens=0, output_tokens=1
-                ),
-            )
-
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
     monkeypatch.setattr(
         desktop_chat,
         'get_direct_anthropic_client',
-        lambda **_: SimpleNamespace(messages=Messages()),
+        _fail_direct_anthropic('tainted web-search turns must stay on the managed gateway'),
     )
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-private',
+                    'choices': [{'message': {'content': 'answered'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
     response = await desktop_chat.chat_completions(
         {
             'model': 'omi-sonnet',
@@ -1808,6 +1959,64 @@ async def test_chat_completions_keeps_private_tool_output_out_of_anthropic_web_s
         x_omi_request_id=None,
     )
     assert b'answered' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:chat-agent'
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_withholds_managed_web_search_when_unauthorized(monkeypatch):
+    monkeypatch.setattr(desktop_chat, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setattr(desktop_chat, 'enforce_desktop_chat_quota', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_chat, '_meter_server_request', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'run_blocking', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'should_route_chat_agent_through_gateway', lambda: True)
+    monkeypatch.setattr(desktop_chat, 'get_byok_key', lambda _: None)
+    monkeypatch.setattr(desktop_chat, '_record_usage', lambda *_args, **_kwargs: _done())
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(
+        desktop_chat,
+        'get_direct_anthropic_client',
+        _fail_direct_anthropic('unauthorized web-search turns must not construct a direct Anthropic client'),
+    )
+
+    async def denied(*_args, **_kwargs):
+        return 'denied'
+
+    monkeypatch.setattr(desktop_chat, '_web_search_authorized', denied)
+    fallbacks = []
+    monkeypatch.setattr(desktop_chat, 'record_fallback', lambda **fields: fallbacks.append(fields))
+
+    class GatewayClient:
+        def __init__(self):
+            self.calls = []
+
+        async def post(self, url, *, headers, json):
+            self.calls.append(json)
+            return httpx.Response(
+                200,
+                json={
+                    'id': 'chat-denied',
+                    'choices': [{'message': {'content': 'answered'}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5},
+                },
+                request=httpx.Request('POST', url),
+            )
+
+    client = GatewayClient()
+    monkeypatch.setattr(desktop_chat, 'get_llm_gateway_client', lambda: client)
+    response = await desktop_chat.chat_completions(
+        {
+            'model': 'omi-sonnet',
+            'messages': [{'role': 'user', 'content': 'Search the web for current news.'}],
+            'omi_web_search': True,
+        },
+        uid='user-1',
+        x_app_platform=None,
+        x_omi_chat_contract_version=None,
+        x_omi_request_id=None,
+    )
+    assert b'answered' in response.body
+    assert client.calls[0]['model'] == 'omi:auto:chat-agent'
+    assert [fallback['reason'] for fallback in fallbacks] == ['not_authorized']
 
 
 @pytest.mark.asyncio
