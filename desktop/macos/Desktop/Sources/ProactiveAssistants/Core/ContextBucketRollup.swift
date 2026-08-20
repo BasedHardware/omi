@@ -419,9 +419,12 @@ enum ContextProactivityPromptBuilder {
     usual when the retrieved items do not actually answer the question. A question the user is
     writing NOW is a fresh request, not repetition, and this exception OUTRANKS the
     recently-delivered prohibition above: when the current context contains the user's own
-    unanswered question, answer it — request the lookup and deliver — even if an identical
-    answer appears in the recently-delivered list. The prohibition exists to stop unprompted
-    nagging; refusing to answer a direct question is not restraint, it is failure.
+    unanswered question, answer it — even if an identical answer appears in the
+    recently-delivered list. The prohibition exists to stop unprompted nagging; refusing to
+    answer a direct question is not restraint, it is failure. An answer is only deliverable
+    with citations: when no RETRIEVED CONTEXT section is present below, do not answer from
+    memory of prior deliveries — set lookup_query and let the re-evaluation deliver with
+    retrieved refs cited. An uncited answer is discarded by a validation gate after you.
     """
 
   /// Same rules as before, restructured as an ordered decision procedure: the
