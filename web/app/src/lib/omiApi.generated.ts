@@ -2129,6 +2129,7 @@ export interface HasSpeechProfileResponse {
 
 export interface ImportJobResponse {
   conversations_created?: number | null;
+  conversations_skipped?: number | null;
   created_at?: string | null;
   error?: string | null;
   job_id: string;
