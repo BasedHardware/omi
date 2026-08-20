@@ -13,6 +13,9 @@ on:
   # evidence without an unrelated commit.
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.

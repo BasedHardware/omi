@@ -24,6 +24,13 @@ on:
       - 'desktop/windows/**'
       - '.github/workflows/desktop-windows-ci.yml'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-windows-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     working-directory: desktop/windows
@@ -32,8 +39,11 @@ jobs:
   checks:
     name: Typecheck · Lint · Test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
       - uses: pnpm/action-setup@v6
         with:
@@ -60,8 +70,11 @@ jobs:
   build-windows:
     name: Windows build smoke
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
         with:
           version: 10
@@ -94,8 +107,11 @@ jobs:
   build-linux:
     name: Linux package · helper smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@v6
         with:
           version: 10
@@ -137,7 +153,18 @@ jobs:
           xvfb-run -a bash -euo pipefail -c '
             dist/linux-unpacked/omi-windows --no-sandbox &
             app_pid=$!
-            sleep 10
+            # Electron main process must stay up for the whole readiness window
+            # before we SIGTERM it. Do not name this counter `_`: bash rewrites
+            # `$_` to the last argument of the previous command, so `kill -0
+            # "$app_pid"` would make the window collapse to one iteration.
+            for i in $(seq 1 5); do
+              if ! kill -0 "$app_pid" 2>/dev/null; then
+                wait "$app_pid" || true
+                echo "unpacked app exited before readiness window (second $i)" >&2
+                exit 1
+              fi
+              sleep 1
+            done
             kill -0 "$app_pid"
             kill "$app_pid"
             wait "$app_pid" || true

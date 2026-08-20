@@ -12,9 +12,14 @@ on:
         type: boolean 
         default: true
 
+permissions:
+  contents: read
+  issues: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Sync issues
         uses: paritytech/github-issue-sync@34a24348bf2f2a73924e322f43d6132e0c276b5f

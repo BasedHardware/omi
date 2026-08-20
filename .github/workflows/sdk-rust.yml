@@ -11,18 +11,31 @@ on:
       - "sdks/rust/**"
       - ".github/workflows/sdk-rust.yml"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-rust-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: sdks/rust/omi-device
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
         with:
+          persist-credentials: false
+      # Pin the action commit; pass toolchain: stable because a SHA pin no longer
+      # encodes the channel the way dtolnay/rust-toolchain@stable does.
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: sdks/rust/omi-device
       - run: cargo fmt --check
