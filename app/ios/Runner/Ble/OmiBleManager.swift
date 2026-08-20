@@ -31,8 +31,13 @@ final class OmiBleManager: NSObject {
     /// Whether the user explicitly disconnected (suppress auto-reconnect).
     private var manuallyDisconnected: Set<String> = []
 
-    /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
+    /// Diagnostics RSSI poll — only while the diagnostics graph is subscribed.
+    /// Not a connection keep-alive; a 3s timer does not prevent `connection_timeout`.
     private var rssiTimer: Timer?
+
+    /// Last battery sample actually written to the plist ring, per peripheral.
+    private var lastPersistedBatteryLevel: [String: Int] = [:]
+    private var lastPersistedBatteryAtMs: [String: Int64] = [:]
 
     /// When true, RSSI reads are forwarded to Flutter for the diagnostics graph.
     var isRssiStreamingEnabled = false
@@ -253,20 +258,30 @@ final class OmiBleManager: NSObject {
         }
     }
 
-    // MARK: - RSSI Keep-Alive
+    // MARK: - RSSI diagnostics polling
 
-    private func startRssiKeepAlive(for peripheral: CBPeripheral) {
-        stopRssiKeepAlive()
+    func setRssiStreamingEnabled(_ enabled: Bool, uuid: String) {
+        isRssiStreamingEnabled = enabled
+        if enabled, let peripheral = peripherals[uuid], peripheral.state == .connected {
+            startRssiPolling(for: peripheral)
+        } else {
+            stopRssiPolling()
+        }
+    }
+
+    private func startRssiPolling(for peripheral: CBPeripheral) {
+        stopRssiPolling()
         rssiTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self, weak peripheral] _ in
             guard let peripheral = peripheral, peripheral.state == .connected else {
-                self?.stopRssiKeepAlive()
+                self?.stopRssiPolling()
                 return
             }
             peripheral.readRSSI()
         }
+        peripheral.readRSSI()
     }
 
-    private func stopRssiKeepAlive() {
+    private func stopRssiPolling() {
         rssiTimer?.invalidate()
         rssiTimer = nil
     }
@@ -307,6 +322,9 @@ final class OmiBleManager: NSObject {
     private static let batteryHistoryKeyPrefix = "battery_history_"
     private static let maxBatteryHistoryEntries = 2000
     private static let batteryHistoryRetentionMs: Int64 = 7 * 24 * 3600 * 1000
+    private static let batteryMinDeltaPercent = 5
+    private static let batteryMinIntervalMs: Int64 = 15 * 60 * 1_000
+    private static let batteryLowThresholdPercent = 20
 
     private static let batteryLevelCharUuid = CBUUID(string: "2A19")
 
@@ -485,16 +503,52 @@ final class OmiBleManager: NSObject {
 
     private static func batteryHistoryKey(_ uuid: String) -> String { "\(batteryHistoryKeyPrefix)\(uuid)" }
 
+    /// The in-memory throttle baseline is lost on process restart; restore it
+    /// from the newest persisted history entry so the first battery
+    /// notification after a relaunch cannot bypass the throttle.
+    private func rehydrateBatteryBaseline(uuid: String) {
+        guard let history = UserDefaults.standard.array(forKey: OmiBleManager.batteryHistoryKey(uuid)) as? [[String: Any]],
+              let last = history.last,
+              let ts = last["ts"] as? Int64,
+              let level = last["level"] as? Int
+        else { return }
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryAtMs[uuid] = ts
+    }
+
+    private func shouldPersistBatteryReading(uuid: String, level: Int, nowMs: Int64) -> Bool {
+        // Rehydrate the throttle baseline after a process restart so the first
+        // notification is checked against the last persisted sample.
+        if lastPersistedBatteryLevel[uuid] == nil || lastPersistedBatteryAtMs[uuid] == nil {
+            rehydrateBatteryBaseline(uuid: uuid)
+        }
+        guard let previousLevel = lastPersistedBatteryLevel[uuid],
+              let lastPersistedAtMs = lastPersistedBatteryAtMs[uuid]
+        else {
+            return true
+        }
+        let delta = abs(previousLevel - level)
+        let elapsed = nowMs - lastPersistedAtMs
+        let crossedLow =
+            (level < OmiBleManager.batteryLowThresholdPercent && previousLevel >= OmiBleManager.batteryLowThresholdPercent) ||
+            (level >= OmiBleManager.batteryLowThresholdPercent && previousLevel < OmiBleManager.batteryLowThresholdPercent)
+        return delta >= OmiBleManager.batteryMinDeltaPercent || elapsed >= OmiBleManager.batteryMinIntervalMs || crossedLow
+    }
+
     private func persistBatteryReading(uuid: String, level: Int) {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        guard shouldPersistBatteryReading(uuid: uuid, level: level, nowMs: now) else { return }
+
         let defaults = UserDefaults.standard
         let key = OmiBleManager.batteryHistoryKey(uuid)
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = Int64(Date().timeIntervalSince1970 * 1000)
         let cutoff = now - OmiBleManager.batteryHistoryRetentionMs
         history.removeAll { ($0["ts"] as? Int64 ?? 0) < cutoff }
 
         history.append(["ts": now, "level": level])
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryAtMs[uuid] = now
 
         if history.count > OmiBleManager.maxBatteryHistoryEntries {
             history = Array(history.suffix(OmiBleManager.maxBatteryHistoryEntries))
@@ -520,7 +574,7 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
-        stopRssiKeepAlive()
+        stopRssiPolling()
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -561,6 +615,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
+                // State-restored peripherals have already connected in a prior
+                // process lifetime; mark them so reconnectStalePeripherals will
+                // re-issue connect instead of treating them as scan strangers.
+                everConnected.insert(uuid)
                 uuids.append(uuid)
 
                 // Re-establish connection if not already connected
@@ -713,7 +771,9 @@ extension OmiBleManager: CBPeripheralDelegate {
             
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            startRssiKeepAlive(for: peripheral)
+            if isRssiStreamingEnabled {
+                startRssiPolling(for: peripheral)
+            }
         }
     }
 
