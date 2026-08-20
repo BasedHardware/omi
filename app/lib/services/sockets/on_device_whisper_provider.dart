@@ -59,6 +59,19 @@ class OnDeviceWhisperProvider implements ISttProvider {
     }
   }
 
+  @visibleForTesting
+  TranscribeRequest buildTranscribeRequest(String audioPath, {String? language}) {
+    final effectiveLanguage = language ?? this.language;
+    return TranscribeRequest(
+      audio: audioPath,
+      // Empty string lets whisper.cpp auto-detect; used for the 'multi' setting.
+      language: effectiveLanguage == 'multi' ? '' : effectiveLanguage,
+      isTranslate: false,
+      isNoTimestamps: true,
+      splitOnWord: false,
+    );
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(
     Uint8List audioData, {
@@ -76,13 +89,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
       await tempFile.writeAsBytes(audioData);
 
       try {
-        final req = TranscribeRequest(
-          audio: tempFile.path,
-          language: (language == 'multi' ? '' : language) ?? '',
-          isTranslate: false,
-          isNoTimestamps: true,
-          splitOnWord: false,
-        );
+        final req = buildTranscribeRequest(tempFile.path, language: language);
 
         final res = await _whisper!.transcribe(transcribeRequest: req);
 
