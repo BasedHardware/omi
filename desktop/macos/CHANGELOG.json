@@ -3,11 +3,26 @@
   "releases": [
     {
       "version": "0.12.189",
-      "date": "2026-08-19",
+      "date": "2026-08-20",
       "changes": [
-        "Improved meeting notes with participant identity derived privately from local meeting screens",
-        "Only Meetings mode now recognizes Discord, Slack huddle, and WhatsApp calls as meetings, so capture starts when you join those calls",
-        "Added system calendar meeting titles and participants to conversation notes without requiring Google Calendar"
+        "Fixed the desktop Home view's new-item state initialization",
+        "Omi now offers to connect an integration when you open an app it works with — Gmail, Google Calendar, Apple Notes, Notion, Obsidian, ChatGPT, Claude, Gemini, X, or your local files — with what the integration would do for you and what Omi would read; every connector's sheet now shows the same 'What you get' detail, and you can turn the suggestions off or reset them in Settings → Notifications",
+        "Proactive notifications now wait for something that changed, like a new blocker or approaching deadline, instead of repeating a standing status",
+        "Added environmental speaker context analysis to detect multi-party calls and meetings from ambient speech",
+        "Added voice barge-in interruption to halt playback immediately when the user begins speaking",
+        "Made \"where was that doc?\" answer from the document itself — recent-work questions now resolve to the URL or file you were in, without decoding screen history first",
+        "Added Accessibility to Settings → Permissions, so the permission Omi needs to identify the page or file you are in can finally be granted — and granting it now takes effect immediately instead of after a restart",
+        "Fixed a crash that could quit Omi while you were using its own window, once Accessibility was granted",
+        "Beta builds now use the improved meeting notes pipeline and calendar-aware participant identity by default",
+        "Fixed screen search vectors never backfilling for accounts on the new lossless screen history",
+        "Live suggestions and other AI features no longer fail silently when a pooled network connection goes stale",
+        "Fixed gaps in synced screen activity when OCR or search indexing finishes after capture",
+        "Fixed named development bundles keeping shortcuts that differ from Omi Dev",
+        "Fixed Permissions showing Accessibility as granted when it was switched off, and added the Bluetooth, Full Disk Access, and Automation permissions the page never displayed",
+        "Improved proactive notifications so work updates carry the exact on-screen name or handle when available",
+        "Recent-work answers now say how long ago each visit was, in a form that costs a fraction of the previous timestamps",
+        "Recent-work questions now answer from the document, page, or file you were actually in, instead of searching raw screen text",
+        "Fixed recent-work answers misreporting how long ago you were in an app, and made an in-progress visit say that it is still open"
       ]
     },
     {
