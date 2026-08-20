@@ -22,6 +22,16 @@ import XCTest
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Webex", title: nil))
     }
 
+    func testChatAppCallMatchesOnOwnerName() {
+      // Discord voice, Slack huddles, and WhatsApp calls are meetings, same as Teams:
+      // the owner name alone marks the app's windows as call windows (no title /
+      // Screen Recording permission needed). Meeting gating stays mic-in-use based
+      // (`callAppIsUsingMicrophone`), so this does not make idle chat a meeting.
+      XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Discord", title: nil))
+      XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Slack", title: "#general | Acme"))
+      XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "WhatsApp", title: nil))
+    }
+
     func testBrowserRequiresCallKeywordInTitle() {
       XCTAssertTrue(
         ConferencingApps.isCallWindow(ownerName: "Google Chrome", title: "Google Meet — Standup"))
@@ -46,6 +56,21 @@ import XCTest
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.tdesktop.Telegram"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "ru.keepcoder.telegram"))
       // Omi itself (which is always using the mic while recording) must not count as a meeting.
+      XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.omi.omi-mtg-sysaudio"))
+      XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.google.Chrome"))
+    }
+
+    func testChatAppBundleIDsAreNativeCallApps() {
+      // Verified macOS bundle IDs (Homebrew cask quit targets for the current apps):
+      // Discord com.hnc.Discord, Slack com.tinyspeck.slackmacgap, WhatsApp
+      // net.whatsapp.WhatsApp. Their calls hold the mic, so mic-in-use detection
+      // fires while in a Discord voice channel, Slack huddle, or WhatsApp call.
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord"))
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.discord"))  // case-insensitive
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.tinyspeck.slackmacgap"))
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "net.whatsapp.WhatsApp"))
+      // Omi itself and browsers are not native call apps (browser calls are matched
+      // separately by browserBundleIDPrefixes inside callAppIsUsingMicrophone).
       XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.omi.omi-mtg-sysaudio"))
       XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.google.Chrome"))
     }
@@ -97,6 +122,24 @@ import XCTest
       XCTAssertFalse(ConferencingApps.isShareIndicatorWindow(ownerName: "zoom.us", title: nil))
       XCTAssertFalse(ConferencingApps.isShareIndicatorWindow(ownerName: nil, title: "zoom share"))
       XCTAssertFalse(ConferencingApps.isShareIndicatorWindow(ownerName: "zoom.us", title: ""))
+    }
+
+    func testChatAppOrdinaryWindowsAreNotShareIndicators() {
+      // Ordinary Slack/Discord/WhatsApp chat windows are not presenting-toolbars;
+      // only the Zoom/Teams/browser share signatures may pause capture (#10143).
+      XCTAssertFalse(
+        ConferencingApps.isShareIndicatorWindow(
+          ownerName: "Slack", title: "#general | Acme Workspace"))
+      XCTAssertFalse(
+        ConferencingApps.isShareIndicatorWindow(
+          ownerName: "Discord", title: "#general | Discord"))
+      XCTAssertFalse(
+        ConferencingApps.isShareIndicatorWindow(
+          ownerName: "WhatsApp", title: "Chats"))
+      // Even a chat about sharing in one of these apps is not the toolbar itself.
+      XCTAssertFalse(
+        ConferencingApps.isShareIndicatorWindow(
+          ownerName: "Slack", title: "Screen sharing toolbar"))
     }
 
     func testBrowserBundleIDPrefixMatchingCatchesHelpers() {

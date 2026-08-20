@@ -648,15 +648,12 @@ def complete_finalization_fanout(
     job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
-    *,
-    meeting_treatment_eligible: bool,
 ) -> bool:
     """Persist completion only after the idempotency-keyed fanout succeeds."""
     return jobs_db.mark_finalization_fanout_completed(
         job_id,
         dispatch_generation,
         lease_epoch,
-        meeting_treatment_eligible=meeting_treatment_eligible,
     )
 
 

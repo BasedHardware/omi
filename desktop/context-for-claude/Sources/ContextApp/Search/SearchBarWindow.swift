@@ -186,6 +186,16 @@ final class SearchBarWindow {
         // search beat — is being told a fact about the display, so it is announced after the display
         // has it and not before.
         SearchPanelWatch.report(.opened)
+        // **This branch and not the one above**, which is the difference between "the surface was
+        // opened" and "a key was pressed at a surface that was already up". Here rather than at the
+        // callers because there are five of them — the gesture, the bound shortcut, the menu bar,
+        // the timeline's "Search All" pill and the tutorial's own button — and a per-caller emit
+        // would have measured whichever ones somebody remembered.
+        //
+        // Not implied by `cfc_gesture_fired`: that counts the gesture, which also *closes* an open
+        // panel and fires from a Mac where the panel never appeared at all. This is the app's
+        // primary surface, and it was the only one in `Surface` with no emitter.
+        ContextAnalytics.record(.surfaceOpened(.search))
     }
 
     /// **Activating a result: open the timeline there, then get out of the way.**
