@@ -17,6 +17,7 @@ import pytest
 
 from utils.llm.private_context import anthropic_messages_carry_private_tool_output
 from utils.retrieval import agentic
+from utils.retrieval import web_search_gate
 from utils.retrieval.safety import AgentSafetyGuard
 
 WEB_SEARCH_NAME = 'web_search'
@@ -92,7 +93,12 @@ def _drive_loop(monkeypatch, *, turns, registry):
     monkeypatch.setattr(agentic, 'anthropic_client', SimpleNamespace(messages=fake_messages))
 
     fallbacks = []
-    monkeypatch.setattr(agentic, 'record_fallback', lambda **fields: fallbacks.append(fields))
+
+    def _capture_fallback(**fields):
+        fallbacks.append(fields)
+
+    monkeypatch.setattr(agentic, 'record_fallback', _capture_fallback)
+    monkeypatch.setattr(web_search_gate, 'record_fallback', _capture_fallback)
 
     async def main():
         callback = agentic.AsyncStreamingCallback()
