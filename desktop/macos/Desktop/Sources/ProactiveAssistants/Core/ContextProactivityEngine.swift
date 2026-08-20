@@ -15,12 +15,19 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
   /// keeps the memberwise initializer source-compatible for existing callers
   /// (same pattern as `BucketExtraction.destination`).
   var lookupQuery: String? = nil
+  /// Open tasks this notification is about, as supplied `task:<id>` handles.
+  ///
+  /// Optional for the same reason as `lookupQuery`: a response predating the
+  /// field still decodes. Always filtered through
+  /// `ContextDirectorTaskRefs.resolvable` before it is stored or rendered.
+  var taskRefs: [String]? = nil
 
   enum CodingKeys: String, CodingKey {
     case decision, title, message, reasoning
     case bucketEntryRefs = "bucket_entry_refs"
     case factIDs = "fact_ids"
     case lookupQuery = "lookup_query"
+    case taskRefs = "task_refs"
   }
 
   func clamped() -> ContextDirectorDecision {
@@ -33,6 +40,9 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
       factIDs: factIDs.prefix(20).map { String($0.prefix(200)) },
       lookupQuery: lookupQuery.map {
         String($0.prefix(ContextDirectorRetrievalHop.maximumQueryLength))
+      },
+      taskRefs: taskRefs.map {
+        $0.prefix(ContextDirectorTaskRefs.maximumCount).map { String($0.prefix(200)) }
       })
   }
 }
@@ -94,7 +104,7 @@ enum ContextDirectorTaskSelection {
         return lhs.createdAt > rhs.createdAt
       }
       .prefix(maximumCount)
-      .map { ContextDirectorTaskContext(description: $0.description, dueAt: $0.dueAt) }
+      .map { ContextDirectorTaskContext(id: $0.id, description: $0.description, dueAt: $0.dueAt) }
   }
 }
 
@@ -496,11 +506,20 @@ actor ContextProactivityEngine {
           decision.factIDs,
           snapshotFacts: snapshot.validatedFacts,
           bucketID: snapshot.bucketID)
+      // Filtered against the tasks actually supplied on this visit. An invented
+      // handle would render in chat as a "Task is no longer available"
+      // tombstone instead of failing visibly, so an unresolvable ref is dropped
+      // here rather than stored. Silence carries none, matching `factIDs`.
+      let taskRefs =
+        decision.decision == "silence"
+        ? []
+        : ContextDirectorTaskRefs.resolvable(decision.taskRefs ?? [], supplied: taskContext)
       var provenance: [String: Any] = [
         "bucket_id": snapshot.bucketID,
         "bucket_version_id": snapshot.versionID,
         "bucket_entry_refs": entryRefs,
         "fact_ids": factIDs,
+        "task_refs": taskRefs,
         "reasoning": decision.reasoning,
         "provider_model": ContextProactivityTelemetry.boundedProviderModel(result.providerModel),
         "cached_tokens": result.usage.cachedTokens,
@@ -1097,16 +1116,50 @@ actor ContextProactivityEngine {
 
   static var schema: [String: Any] { schema(allowLookup: false) }
 
+  /// `title` and `message` are the only two fields the user ever reads, and they
+  /// were the only two declared as bare strings. A delivered notification read
+  /// "Insight / PR blocked, needs review" — the decision type answered back as a
+  /// title, and a body naming no pull request — which nothing in the schema or
+  /// the prompt forbade.
+  ///
+  /// These descriptions were measured together with the prompt's naming rule
+  /// (see `ContextProactivityPromptBuilder.directorStablePrompt`). Alone they
+  /// took title naming from 34/58 to 60/61 spoken runs but cost body naming
+  /// (58/58 → 57/61): the model moved the identifier into the title instead of
+  /// carrying it in both. The prompt rule is what holds both at 67/67, so the two
+  /// halves ship together and neither should be removed on its own.
   static func schema(allowLookup: Bool) -> [String: Any] {
     var properties: [String: Any] = [
       "decision": ["type": "string", "enum": ["suggest", "insight", "task_candidate", "resurface", "silence"]],
-      "title": ["type": "string"],
-      "message": ["type": "string"],
+      "title": [
+        "type": "string",
+        "description":
+          "The specific thing this is about, as the supplied context names it: the pull request "
+          + "number and repository, the sender and subject of the thread, the title of the "
+          + "document, the file and branch, the name and time of the meeting. Never a category "
+          + "word such as \"Insight\", \"Suggestion\", or \"Task\". Empty only when the decision "
+          + "is silence.",
+      ],
+      "message": [
+        "type": "string",
+        "description":
+          "What the user should know or do, written so it still makes sense away from the screen "
+          + "that produced it. Name the same specific thing the title names, then say what "
+          + "changed or what to do about it. A message that identifies only a category -- \"PR "
+          + "blocked\", \"respond to the email\", \"document needs review\" -- is useless. Empty "
+          + "only when the decision is silence.",
+      ],
       "reasoning": ["type": "string"],
       "bucket_entry_refs": ["type": "array", "items": ["type": "string"]],
       "fact_ids": ["type": "array", "items": ["type": "string"]],
+      // Strict structured output requires every declared property to be
+      // required, so the contract tells the model to answer [] for "about none
+      // of the listed tasks" rather than omitting the key.
+      "task_refs": ["type": "array", "items": ["type": "string"]],
     ]
-    var required = ["decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids"]
+    var required = [
+      "decision", "title", "message", "reasoning", "bucket_entry_refs", "fact_ids", "task_refs",
+    ]
     if allowLookup {
       // Strict structured output requires every declared property to be listed
       // as required, so the prompt tells the model to answer "" for no lookup.

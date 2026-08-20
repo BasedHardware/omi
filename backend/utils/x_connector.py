@@ -33,10 +33,12 @@ from database import x_posts as x_posts_db
 from database._client import db
 from database.vector_db import upsert_x_post_vectors_batch
 from models.memories import MemoryDB
+from models.memory_contracts import MemoryExtractionError
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.promotion_flex import PromotionFlexDeferred, PromotionFlexRunRouter
+from utils.observability.fallback import record_fallback
 from testing.parity_pack_v0.live_capture import capture_memory_write
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -356,16 +358,37 @@ def _extract_and_index(
 
     total = 0
     for chunk, post_ids in chunks:
-        if llm is None:
-            extracted = extract_memories_from_text(uid, chunk, 'twitter_tweets')
-        else:
-            extracted = extract_memories_from_text(
+        try:
+            if llm is None:
+                extracted = extract_memories_from_text(uid, chunk, 'twitter_tweets')
+            else:
+                extracted = extract_memories_from_text(
+                    uid,
+                    chunk,
+                    'twitter_tweets',
+                    strict=True,
+                    llm=llm,
+                )
+        except MemoryExtractionError as exc:
+            # A provider 5xx on this chunk means the extractor never produced a
+            # batch — not "this chunk has no memories". Do not acknowledge the
+            # raw posts (they stay pending and the next sync replays this chunk),
+            # and keep extracting the remaining chunks so one provider blip does
+            # not starve the batches behind it in the same cycle.
+            logger.warning(
+                'x_connector: chunk skipped provider_5xx uid=%s posts=%d extractor=%s',
                 uid,
-                chunk,
-                'twitter_tweets',
-                strict=True,
-                llm=llm,
+                len(post_ids),
+                exc.extractor,
             )
+            record_fallback(
+                component='other',
+                from_mode='x_memory_extraction',
+                to_mode='chunk_deferred',
+                reason='provider_5xx',
+                outcome='degraded',
+            )
+            continue
         if result_guard is not None:
             result_guard()
         if extracted:

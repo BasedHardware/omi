@@ -67,6 +67,7 @@ class HarnessConfig:
     redis_host: str = "127.0.0.1"
     redis_port: int = REDIS_PORT
     typesense_port: int = TYPESENSE_PORT
+    dev_bind_host: str = "127.0.0.1"
     llm_gateway_port: int = LLM_GATEWAY_PORT
 
     @property
@@ -118,6 +119,35 @@ def repo_root_from(path: Path) -> Path:
 
 def provider_mode_from_env(env: Mapping[str, str] | None = None) -> str:
     return providers.provider_mode_from_env(env)
+
+
+DEV_BIND_HOST_ENV = "OMI_DEV_BIND_HOST"
+# Falls back to OMI_DEV_HOST (app/setup.sh:53) so a contributor who follows the
+# documented physical-device setup — set OMI_DEV_HOST to the Mac's reachable
+# address — gets a harness that actually listens there too, not just an app
+# built to expect it (#11774). OMI_DEV_BIND_HOST exists for the narrower case
+# of wanting an asymmetric bind (e.g. a different advertise vs. listen address).
+APP_DEV_HOST_ENV = "OMI_DEV_HOST"
+
+
+def dev_bind_host_from_env(env: Mapping[str, str] | None = None) -> str:
+    """Resolve what the harness's HTTP services and Firebase emulators bind to.
+
+    Defaults to loopback-only, preserving today's behavior. Binds all
+    interfaces (0.0.0.0) when a private LAN/CGNAT address is requested, rather
+    than that literal address, so loopback callers (health checks, a booted
+    simulator) keep working alongside the newly reachable LAN/tailnet address.
+    Fails closed (SafetyError) on a publicly routable address.
+    """
+
+    source = os.environ if env is None else env
+    requested = source.get(DEV_BIND_HOST_ENV, "").strip() or source.get(APP_DEV_HOST_ENV, "").strip()
+    if not requested:
+        return "127.0.0.1"
+    safety.validate_dev_bind_host(requested, name=DEV_BIND_HOST_ENV)
+    if safety.is_loopback_host(requested):
+        return "127.0.0.1"
+    return "0.0.0.0"
 
 
 def _port_from_env(source: Mapping[str, str], name: str, default: int, offset: int) -> int:
@@ -240,6 +270,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         else safety.layout_for_instance(repo_root, instance, source)
     )
     ports = harness_ports_from_env(source)
+    dev_bind_host = dev_bind_host_from_env(source)
     cfg = HarnessConfig(
         repo_root=repo_root.resolve(),
         instance=instance,
@@ -252,6 +283,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
         redis_port=ports["redis"],
         typesense_port=ports["typesense"],
         llm_gateway_port=ports["llm_gateway"],
+        dev_bind_host=dev_bind_host,
     )
     parsed = parse_secrets_file(cfg)
     if parsed.secrets.get("PROVIDER_MODE"):
@@ -268,6 +300,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
             redis_port=cfg.redis_port,
             typesense_port=cfg.typesense_port,
             llm_gateway_port=cfg.llm_gateway_port,
+            dev_bind_host=cfg.dev_bind_host,
         )
     safety.validate_harness_runtime_config(
         project_id=cfg.project_id,

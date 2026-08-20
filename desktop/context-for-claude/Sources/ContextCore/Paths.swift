@@ -60,6 +60,34 @@ public enum ContextPaths {
         identifier != shippingBundleIdentifier
     }
 
+    /// **Whether this process is the shipping app itself** — asked of what `Bundle.main` actually
+    /// *reported*, not of the identity derived from it.
+    ///
+    /// The distinction looks pedantic and is not. `ownIdentifier` answers "which identity does this
+    /// process own", and its fallback to the shipping id is right for everything keyed on that: the
+    /// log subsystem, the Keychain service, the `tccutil` line. But it means a foreign process —
+    /// anything not running from a bundle of ours — resolves to the shipping identifier and therefore
+    /// looks, to `isDevelopmentBuild`, exactly like the notarized release.
+    ///
+    /// The process that is foreign in practice is the test runner. `swift test` runs under
+    /// `com.apple.dt.xctest.tool`, so `isDevelopmentBuild` was **false** inside the suite and
+    /// `ContextAnalytics.isEnabled` was **true**: the tests reported to production PostHog from the
+    /// real spool for as long as the suite has existed — measured, 92 events under one distinct id,
+    /// carrying the xctest tool's own `CFBundleShortVersionString` of `16.0`, and accounting for
+    /// every `cfc_gesture_fired` in the project and two thirds of `cfc_search_ran`.
+    ///
+    /// So anything that must run **only in the shipping app** asks this, and anything keyed on this
+    /// build's *identity* keeps asking `isDevelopmentBuild`. Unknown answers no: a process that
+    /// cannot prove it is the release is not the release.
+    public static func isShippingBundle(reportedBy reported: String?) -> Bool {
+        reported == shippingBundleIdentifier
+    }
+
+    /// The same question about the running process.
+    public static var isShippingBundle: Bool {
+        isShippingBundle(reportedBy: Bundle.main.bundleIdentifier)
+    }
+
     /// `~/Library/Application Support/ContextForClaude`
     public static var supportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

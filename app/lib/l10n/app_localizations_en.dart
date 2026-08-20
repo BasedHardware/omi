@@ -322,7 +322,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchApps => 'Search apps...';
 
   @override
-  String get myApps => 'My Apps';
+  String get myApps => 'Created by me';
 
   @override
   String get installedApps => 'Installed Apps';
@@ -9842,4 +9842,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get findDevice => 'Find';
+
+  @override
+  String get diagnosticsShareFailed => 'Couldn\'t share diagnostics. Please try again.';
 }

@@ -37,6 +37,9 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionAssistantSettings.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Suggestions/SuggestionModels.swift
   - desktop/macos/Desktop/Sources/ModelQoS.swift
+  - desktop/macos/Desktop/Sources/Automation/AccessibilityProcessBoundary.swift
+  - desktop/macos/Desktop/Sources/Diagnostics/PermissionsSnapshot.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/OverlayService.swift
 preconditions:
   - auth_ready
 

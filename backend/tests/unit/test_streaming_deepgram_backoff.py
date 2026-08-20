@@ -334,6 +334,33 @@ def test_deepgram_options_never_enable_keepalive():
         assert opts.url == endpoint
 
 
+def test_byok_client_leaves_managed_credential_intact(monkeypatch):
+    """A BYOK request must not repoint the process-wide client at the user's key.
+
+    DeepgramClient.__init__ calls config.set_apikey(), so any options object
+    shared between the managed and BYOK clients carries whichever key was set
+    last. In prod that stranded a canary replica on a stale BYOK key: every
+    live session it served answered HTTP 401 for six hours.
+    """
+    import utils.stt.streaming as streaming
+
+    monkeypatch.setattr(streaming, 'is_dg_self_hosted', False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
+    monkeypatch.setattr(streaming, 'deepgram', None)
+    monkeypatch.setattr(streaming, '_managed_deepgram_ready', False)
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: None)
+
+    managed = streaming._deepgram_client_for_request()
+    assert managed._config.api_key == 'managed-key'
+
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: 'byok-key')
+    assert streaming._deepgram_client_for_request()._config.api_key == 'byok-key'
+
+    assert managed._config.api_key == 'managed-key'
+    monkeypatch.setattr(streaming, 'get_byok_key', lambda _provider: None)
+    assert streaming._deepgram_client_for_request()._config.api_key == 'managed-key'
+
+
 @pytest.mark.asyncio
 async def test_process_audio_dg_returns_safe_socket_no_gate():
     """process_audio_dg returns SafeDeepgramSocket when no VAD gate provided (#5870)."""

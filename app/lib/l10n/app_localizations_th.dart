@@ -321,7 +321,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get searchApps => 'ค้นหาแอป...';
 
   @override
-  String get myApps => 'แอปของฉัน';
+  String get myApps => 'สร้างโดยฉัน';
 
   @override
   String get installedApps => 'แอปที่ติดตั้งแล้ว';
@@ -9794,4 +9794,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get findDevice => 'ค้นหา';
+
+  @override
+  String get diagnosticsShareFailed => 'ไม่สามารถแชร์ข้อมูลวินิจฉัยได้ โปรดลองใหม่';
 }

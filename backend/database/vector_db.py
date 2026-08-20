@@ -789,11 +789,13 @@ def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
         if not embedding:
             continue
         ts_value: Any = row['timestamp']
-        timestamp = (
-            int(datetime.fromisoformat(ts_value.replace('Z', '+00:00')).timestamp())
-            if isinstance(ts_value, str)
-            else int(ts_value)
-        )
+        if isinstance(ts_value, str):
+            parsed_timestamp = datetime.fromisoformat(ts_value.replace('Z', '+00:00'))
+            if parsed_timestamp.tzinfo is None:
+                parsed_timestamp = parsed_timestamp.replace(tzinfo=timezone.utc)
+            timestamp = int(parsed_timestamp.timestamp())
+        else:
+            timestamp = int(ts_value)
         metadata = {
             "uid": uid,
             "screenshot_id": str(row.get("storageId") or row['id']),

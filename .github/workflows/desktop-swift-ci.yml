@@ -132,9 +132,10 @@ jobs:
         run: |
           MANIFEST_ARGS=()
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # Repo Checks owns PR metadata enforcement and reruns it for label
-            # changes. This macOS-only lane has no live PR metadata, so it must
-            # not independently reject the supported no-changelog-needed label.
+            # Repo Checks owns PR-body metadata. This macOS-only lane still
+            # passes --skip-changelog so it does not depend on labels; the
+            # checker itself no longer treats that skip as an exemption for
+            # production desktop paths (SCA-343 / #11778).
             MANIFEST_ARGS+=(--skip-changelog)
           fi
           python3 .github/scripts/run_checks.py \

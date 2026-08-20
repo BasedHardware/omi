@@ -147,7 +147,7 @@ enum DesktopCapabilityRegistry {
       when: !available(screenshotTools).isEmpty
     )
     append(
-      "Recent work/activity history -> get_work_context. Treat its screen_now and timeline fields as historical unless this turn has a separately attached live image.",
+      "Recent work/activity history, \"what was I doing in X\", and \"where was that doc/page/file\" -> get_work_context before semantic_search or execute_sql. Answer from visits[].handles and briefs[].handles, which name the document, URL, or file itself; open or read that source. Its screen_now and timeline are empty unless you pass include_screen=true, and are historical evidence even then.",
       when: has("get_work_context")
     )
     append(
@@ -169,7 +169,13 @@ enum DesktopCapabilityRegistry {
       when: !availablePermissionTools.isEmpty
     )
     append("What the user did today/yesterday/this week -> get_daily_recap.", when: has("get_daily_recap"))
-    append("App usage counts or exact local stats -> execute_sql.", when: has("execute_sql"))
+    if has("execute_sql") {
+      let boundary =
+        has("get_work_context")
+        ? " It does not own recent-work retrieval: never select raw screenshots.ocrText for \"what was I doing\" or location questions; use get_work_context first."
+        : " Raw screenshots.ocrText projections are refused; use only bounded OCR previews for exact inspection."
+      append("Counts, aggregates, date ranges, or exact structured local stats -> execute_sql.\(boundary)", when: true)
+    }
     append("Fuzzy screen-history questions -> semantic_search.", when: has("semantic_search"))
     append("Find tasks by meaning -> search_tasks.", when: has("search_tasks"))
     let taskWriteTools = ["create_action_item", "update_action_item", "execute_sql"]

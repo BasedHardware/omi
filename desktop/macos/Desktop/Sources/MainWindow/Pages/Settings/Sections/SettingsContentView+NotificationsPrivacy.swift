@@ -107,6 +107,52 @@ extension SettingsContentView {
         }
       }
 
+      // Integration suggestions sit inside the master gate because the feature
+      // genuinely depends on it: `IntegrationNudgeCoordinator.isEnabledNow`
+      // requires notifications to be on, so showing this switched ON beside a
+      // disabled master toggle would promise a feature that cannot run.
+      if notificationsEnabled {
+        // Integration suggestions
+        settingsCard(settingId: "notifications.integrationsuggestions") {
+          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+            HStack {
+              settingsCardHeader(icon: "sparkles.rectangle.stack", title: "Integration Suggestions")
+
+              Spacer()
+
+              // `@AppStorage` already persists to the key the coordinator reads;
+              // a second writer on one key only invites drift.
+              Toggle("", isOn: $integrationNudgesEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
+            }
+
+            Text(
+              "When you open an app Omi can connect to — Gmail, Notion, ChatGPT — occasionally offer the "
+                + "connection, with what it would do for you. At most a few times per integration."
+            )
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+
+            if integrationNudgesEnabled {
+              GlassSeparator()
+
+              settingRow(
+                title: "Reset all suggestion history",
+                subtitle:
+                  "Clears every integration's suggestion history, including ones you hid, so Omi can offer them again",
+                settingId: "notifications.integrationsuggestions.reset"
+              ) {
+                Button("Reset") {
+                  IntegrationNudgeStore.shared.resetAll()
+                }
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+              }
+            }
+          }
+        }
+      }
+
       // Daily Summary
       settingsCard(settingId: "notifications.dailysummary") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {

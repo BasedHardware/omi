@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { ConversationTurn } from "./types.js";
+import { structuredTurnFallbackText } from "./content-block-fallback.js";
+import type { ConversationContentBlock, ConversationTurn } from "./types.js";
 
 const MAX_JOURNAL_REVISION = 2_147_483_647;
 
@@ -11,15 +12,16 @@ export interface BackendTurnPayload {
   sender: "human" | "ai";
   appId: string | null;
   sessionId: string | null;
+  contentBlocks: ConversationContentBlock[];
   metadata: string | null;
   messageSource: "desktop_chat" | "realtime_voice";
 }
 
 export function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson);
+  const { content_blocks: _legacyContentBlocks, ...messageMetadata } = metadata;
   const backendMetadata = {
-    ...metadata,
-    ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
+    ...messageMetadata,
     ...(turn.resources.length > 0 ? { resources: turn.resources } : {}),
   };
   const projectedText = turn.content.trim()
@@ -27,7 +29,7 @@ export function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     : turn.role === "assistant"
       && turn.status === "completed"
       && (turn.contentBlocks.length > 0 || turn.resources.length > 0)
-      ? "Done."
+      ? structuredTurnFallbackText(turn.contentBlocks, turn.resources)
       : "";
   return {
     turnId: turn.turnId,
@@ -37,6 +39,7 @@ export function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
     sender: turn.role === "user" ? "human" : "ai",
     appId: typeof metadata.appId === "string" ? metadata.appId : null,
     sessionId: typeof metadata.sessionId === "string" ? metadata.sessionId : null,
+    contentBlocks: turn.contentBlocks,
     metadata: Object.keys(backendMetadata).length === 0 ? null : stableJson(backendMetadata),
     messageSource: turn.origin === "realtime_voice" ? "realtime_voice" : "desktop_chat",
   };

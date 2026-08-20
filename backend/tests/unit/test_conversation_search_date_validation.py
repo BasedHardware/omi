@@ -60,11 +60,13 @@ _stubs = [
     'utils.conversations.analytics',
     'utils.conversations.render',
     'utils.conversations.process_conversation',
+    'utils.conversations.meeting_receipt',
     'utils.conversations.search',
     'utils.conversations.calendar_linking',
     'utils.conversations.calendar_utils',
     'utils.conversations.location',
     'utils.executors',
+    'utils.product_telemetry',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',
@@ -696,6 +698,7 @@ def test_finalization_status_endpoint_exposes_retryable_durable_state():
         'retryable': True,
         'attempt_count': 2,
         'task_retry_count': 1,
+        'meeting_treatment_eligible': False,
     }
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),

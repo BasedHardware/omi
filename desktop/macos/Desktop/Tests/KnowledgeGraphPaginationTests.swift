@@ -361,6 +361,46 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
       ])
   }
 
+  func testCanonicalGraphUnavailable503FallsBackToLegacyGraph() async throws {
+    // Production fences canonical intake, so accounts with no canonical state
+    // get 503 `canonical_graph_unavailable` — their graph is in the legacy
+    // store, which `/v1/knowledge-graph` serves. Failing here left the atlas
+    // permanently empty for those accounts.
+    KnowledgeGraphURLStub.setResponses([
+      (503, Data(#"{"detail":"canonical_graph_unavailable"}"#.utf8)),
+      (200, pageData(nodes: [nodeData(id: "legacy-503")])),
+    ])
+    let client = await makeClient(urlProtocolClass: KnowledgeGraphURLStub.self)
+
+    let graph = try await client.getKnowledgeGraph()
+
+    XCTAssertEqual(graph.nodes.map(\.id), ["legacy-503"])
+    XCTAssertEqual(
+      KnowledgeGraphURLStub.requests().map { $0.url?.path },
+      [
+        "/v1/knowledge-graph/canonical",
+        "/v1/knowledge-graph",
+      ])
+  }
+
+  func testTransient503DoesNotFallBackToLegacyGraph() async throws {
+    // An outage is not a statement that this account has no canonical graph;
+    // hiding it behind the legacy store would publish a stale graph as current.
+    KnowledgeGraphURLStub.setResponses([
+      (503, Data(#"{"detail":"temporarily unavailable"}"#.utf8)),
+      (200, pageData(nodes: [nodeData(id: "must-not-be-used")])),
+    ])
+    let client = await makeClient(urlProtocolClass: KnowledgeGraphURLStub.self)
+
+    do {
+      _ = try await client.getKnowledgeGraph()
+      XCTFail("A transient 503 must not be hidden by the legacy fallback")
+    } catch APIError.httpError(let statusCode, _) {
+      XCTAssertEqual(statusCode, 503)
+    }
+    XCTAssertEqual(KnowledgeGraphURLStub.requests().count, 1)
+  }
+
   func testOwnerSwitchDiscardsAnInFlightCanonicalPage() async throws {
     try await transitionOwner(to: "graph-owner-a")
     let snapshot = try XCTUnwrap(

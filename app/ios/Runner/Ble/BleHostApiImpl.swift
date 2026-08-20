@@ -84,11 +84,11 @@ final class BleHostApiImpl: BleHostApi {
     // ── Diagnostics ──
 
     func startRssiStreaming(uuid: String) throws {
-        bleManager.isRssiStreamingEnabled = true
+        bleManager.setRssiStreamingEnabled(true, uuid: uuid)
     }
 
     func stopRssiStreaming(uuid: String) throws {
-        bleManager.isRssiStreamingEnabled = false
+        bleManager.setRssiStreamingEnabled(false, uuid: uuid)
     }
 
     func getDeviceDiagnostics(uuid: String, completion: @escaping (Result<BleDeviceDiagnostics, Error>) -> Void) {

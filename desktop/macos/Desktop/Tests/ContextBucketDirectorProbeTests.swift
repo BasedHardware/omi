@@ -95,6 +95,9 @@
         snapshot: expectedSnapshot,
         tasks: [
           ContextDirectorTaskContext(
+            // Matches the probe parser's synthetic fallback for a task supplied
+            // without an explicit id, so both sides of this golden agree.
+            id: "probe-0",
             description: "Review synthetic item",
             dueAt: try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-13T17:00:00Z")))
         ],

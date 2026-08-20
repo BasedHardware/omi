@@ -124,8 +124,57 @@ def test_legacy_principal_can_rebuild(client, monkeypatch, deleted, fallbacks):
 
     assert response.status_code == 200
     assert response.json()["status"] == "rebuilding"
-    assert deleted == [UID]
+    # The route hands the delete to the rebuild itself; see the regression tests below.
+    assert deleted == []
     assert scheduled == [(UID, "Ada")]
+
+
+def test_rebuild_does_not_delete_the_graph_before_the_rebuild_runs(client, monkeypatch, deleted, fallbacks):
+    # The route used to delete the graph and only then schedule the rebuild, so any
+    # background task that never ran — process restart, pod eviction — left the user
+    # with no graph at all behind a 200 that said "rebuilding".
+    _legacy_principal(monkeypatch)
+
+    # Stands in for a task that is scheduled and then never executes.
+    monkeypatch.setattr(kg_router, "_rebuild_graph_task", lambda uid, user_name: None)
+
+    response = client.post("/v1/knowledge-graph/rebuild")
+
+    assert response.status_code == 200
+    assert deleted == []
+
+
+def test_a_regate_that_flips_after_the_response_leaves_the_graph_intact(client, monkeypatch, deleted, fallbacks):
+    # The task re-checks the gate after the response is returned. An account that
+    # becomes assertion-backed in that window no-ops the rebuild — which used to mean
+    # the legacy graph stayed deleted, with nothing left to own it.
+    _head(monkeypatch, _failed_head(Reason.MISSING_STATE_HEAD))
+    answers = iter([False, True])  # route says legacy, the task's re-check says assertion-backed
+    monkeypatch.setattr(kg_db, "has_stored_memory_graph_assertions", lambda uid, **_kw: next(answers))
+
+    def _must_not_run(*_args: Any, **_kwargs: Any):  # pragma: no cover - asserts absence
+        raise AssertionError("legacy rebuild ran for an account that became assertion-backed")
+
+    monkeypatch.setattr(kg_router, "_run_rebuild_knowledge_graph", _must_not_run)
+
+    response = client.post("/v1/knowledge-graph/rebuild")
+
+    assert response.status_code == 200
+    assert deleted == []
+
+
+def test_the_legacy_rebuild_still_clears_the_graph_itself(monkeypatch):
+    # The route relies on this: dropping its eager delete is only safe while
+    # `rebuild_knowledge_graph` starts by clearing the old graph, so a rebuild
+    # cannot merge new extractions into stale nodes.
+    llm_kg = kg_router._knowledge_graph_llm_module()
+    calls: List[str] = []
+    monkeypatch.setattr(kg_db, "delete_knowledge_graph", lambda uid, **_kw: calls.append(uid))
+    monkeypatch.setattr(kg_db, "get_knowledge_graph", lambda uid, **_kw: {"nodes": [], "edges": []})
+
+    llm_kg.rebuild_knowledge_graph(UID, [], "Ada", db_client=object())
+
+    assert calls == [UID]
 
 
 def test_legacy_principal_can_delete(client, monkeypatch, deleted, fallbacks):

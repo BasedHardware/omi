@@ -459,15 +459,17 @@ extension APIClient {
   /// re-renders with the reprocessed app as primary. Decoding a synthetic
   /// `{success, message}` envelope here used to throw on every successful call.
   func reprocessConversation(conversationId: String, appId: String) async throws -> ServerConversation {
-    struct ReprocessRequest: Encodable {
-      let appId: String
-      enum CodingKeys: String, CodingKey {
-        case appId = "app_id"
-      }
-    }
-    let body = ReprocessRequest(appId: appId)
-    return try await post("v1/conversations/\(conversationId)/reprocess", body: body)
+    // `app_id` is declared as a QUERY parameter on the route, so a JSON body is silently
+    // ignored and the reprocess runs with no explicit app. Under the apps-opt-in pipeline
+    // mode that means picking an app returns the first-party note instead of the chosen app.
+    let encoded =
+      appId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? appId
+    return try await post(
+      "v1/conversations/\(conversationId)/reprocess?app_id=\(encoded)",
+      body: EmptyBody())
   }
+
+  private struct EmptyBody: Encodable {}
 
   /// Sets the user's preferred summarization app; the backend keys future
   /// conversation processing on it (mobile uses the same route).

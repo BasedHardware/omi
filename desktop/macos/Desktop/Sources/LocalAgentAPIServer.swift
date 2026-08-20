@@ -381,9 +381,10 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     return diff == 0
   }
 
-  /// One-call "work context" for agents: the current screen + a compressed
-  /// timeline of the last N minutes of on-screen activity. Read-only; composes
-  /// existing Rewind data so agents stop asking the user to screenshot/re-explain.
+  /// One-call "work context" for agents: the documents, URLs, and files the user was
+  /// recently working in, as durable handles. Read-only. The screenshot timeline is
+  /// fallback evidence and is built only when the caller passes `include_screen`, so the
+  /// default call costs neither a frame decode nor Screen Recording.
   private func workContextResponse(arguments: [String: Any]) async -> LocalHTTPResponse {
     let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
     let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)

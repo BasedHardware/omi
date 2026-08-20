@@ -24,6 +24,7 @@ SCHEMA_GROUPS = {
             'AppResult',
             'PluginResult',
             'Event',
+            'Section',
             'Structured',
             'Geolocation',
             'ConversationPhoto',

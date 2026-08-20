@@ -149,8 +149,13 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
 <Tip>
 The automatic setup runs entirely on your machine — local API, local emulators,
 no production data — making it the fastest way to start building apps and making
-changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN address so
-the device can reach the harness.
+changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN or Tailscale
+address before running both `setup.sh ios` and `make dev-up` (in the same shell,
+or exported so both commands see it) — this now makes the harness itself listen
+there too, not just the app you build. Only a private address works (LAN, e.g.
+`192.168.x.x`, or Tailscale/CGNAT, e.g. `100.x.x.x`); a public address is
+rejected. Use `OMI_DEV_BIND_HOST` instead if you want the harness to bind a
+different address than the one the app is compiled to reach.
 </Tip>
 
 ---
@@ -326,8 +331,11 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     Run `make dev-up` from the repo root first, and confirm with `make dev-status`.
 
     On a physical device, `127.0.0.1` is the phone — set `OMI_DEV_HOST` to your
-    Mac's LAN address before running `setup.sh` so the build points at your
-    machine. The Android emulator uses `10.0.2.2` by default.
+    Mac's LAN or Tailscale address before running **both** `setup.sh` (so the
+    build points at your machine) and `make dev-up` (so the harness actually
+    listens there — it defaults to loopback-only otherwise, which is why a
+    device build alone used to reach nothing). Export it in the same shell so
+    both commands see it. The Android emulator uses `10.0.2.2` by default.
   </Accordion>
   <Accordion title="Sign-in works but every request returns 401" icon="triangle-exclamation">
     The app and the backend are on **different Firebase projects**. Firebase ID
