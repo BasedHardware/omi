@@ -1,0 +1,3 @@
+{
+  "change": "Added an optional referral link as the final onboarding step and kept onboarding completion scoped to each signed-in account"
+}

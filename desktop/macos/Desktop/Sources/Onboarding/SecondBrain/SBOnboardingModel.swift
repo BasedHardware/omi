@@ -55,7 +55,7 @@ final class SBOnboardingModel: ObservableObject {
   enum Step: Int, CaseIterable {
     case promise, name, howHeard, language, role
     case mic, systemAudio, screen, files, accessibility, automation
-    case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture
+    case shortcutOpen, shortcutTalk, screenDemo, agents, context, capture, referral
   }
 
   /// "How did you hear about Omi?" options (mirrors the legacy step).
@@ -328,7 +328,9 @@ final class SBOnboardingModel: ObservableObject {
       return "The more I can see, the more I can help. Connect anything you want me to know:"
     case .capture:
       return
-        "You're all set, \(name). One last thing: should I listen all the time, or only during your meetings?"
+        "You're all set, \(name). Should I listen all the time, or only during your meetings?"
+    case .referral:
+      return "Want to invite a friend? They'll get one free month of Operator."
     }
   }
 
@@ -689,6 +691,10 @@ final class SBOnboardingModel: ObservableObject {
 
   func capture(_ selection: CaptureSelection) {
     AssistantSettings.shared.audioRecordingMode = selection.audioRecordingMode
+    advance(userAnswer: nil, to: .referral)
+  }
+
+  func finishReferral() {
     complete()
   }
 
@@ -736,6 +742,7 @@ final class SBOnboardingModel: ObservableObject {
     // entirely and onboarding could never complete at all.
     //
     // The journal is genuinely async and genuinely optional. Completion is neither.
+    OnboardingFlow.markCompleted(for: RuntimeOwnerIdentity.currentOwnerId())
     appState.hasCompletedOnboarding = true
     onComplete?()
     Task { [chatProvider] in
@@ -747,6 +754,10 @@ final class SBOnboardingModel: ObservableObject {
   /// tab (with the personalized opener), without force-enabling capture or screen
   /// analysis the user chose to bypass. They can turn those on later.
   func skip() {
+    if step == .referral {
+      complete()
+      return
+    }
     finishOnboardingHandoff(clearOnboardingChatFlag: false)
   }
 
