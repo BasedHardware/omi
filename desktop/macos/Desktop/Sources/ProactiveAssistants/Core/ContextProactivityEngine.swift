@@ -745,7 +745,7 @@ actor ContextProactivityEngine {
                 provenanceJSON: provenanceJSON,
                 message: presentedDecision.message,
                 authorizationSnapshot: authorizationSnapshot,
-                consumeFactID: forcedLookup?.sourceFactID)
+                consumeFactIDs: forcedLookup?.questionFactIDs ?? [])
             }
           },
           onDropped: { [weak self] in
@@ -1155,7 +1155,7 @@ actor ContextProactivityEngine {
     provenanceJSON: String,
     message: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    consumeFactID: String? = nil
+    consumeFactIDs: [String] = []
   ) async {
     // onPresented is the authoritative observation that the interruption became
     // visible. A queued card can legitimately paint after its source visit has
@@ -1180,8 +1180,8 @@ actor ContextProactivityEngine {
       // list omitted, repeating the identical card until the fact expired.
       // Expiring it also lets a RE-typed question re-validate (the duplicate
       // check ignores expired facts), so asking again still gets an answer.
-      if let consumeFactID {
-        try? await store.expireFact(id: consumeFactID)
+      for factID in consumeFactIDs {
+        try? await store.expireFact(id: factID)
       }
     } catch {
       await terminalize(

@@ -68,24 +68,31 @@ enum ContextDirectorRetrievalHop {
   /// subject): a question someone else asked in a thread being read is
   /// floor-worthy context, never a forced lookup.
   static func forcedLookupQuery(validatedFacts: [String]) -> ForcedLookup? {
+    var query: String? = nil
+    var questionFactIDs: [String] = []
     for fact in validatedFacts {
       let statement = factStatement(fact)
       guard ContextFactWritePolicy.isUserAuthoredQuestion(statement) else { continue }
-      let flattened = ContextDestinationKey.singleLine(statement, limit: maximumQueryLength)
-      if flattened.count >= minimumQueryLength {
-        return ForcedLookup(query: flattened, sourceFactID: factID(fact))
+      if let id = factID(fact) { questionFactIDs.append(id) }
+      if query == nil {
+        let flattened = ContextDestinationKey.singleLine(statement, limit: maximumQueryLength)
+        if flattened.count >= minimumQueryLength { query = flattened }
       }
     }
-    return nil
+    guard let query else { return nil }
+    return ForcedLookup(query: query, questionFactIDs: questionFactIDs)
   }
 
   struct ForcedLookup: Equatable, Sendable {
     let query: String
-    /// The originating fact, so a delivered answer can consume it — an
-    /// unanswered fact re-forces retrieval on every dwell refresh with the
-    /// anti-repetition list omitted, which repeats the identical card until
-    /// the fact expires.
-    let sourceFactID: String?
+    /// EVERY user-question fact in the snapshot, so a delivered answer can
+    /// consume them all. Consuming only the source fact left older question
+    /// facts armed, and the newest of those would answer the NEXT typed
+    /// question before its own extraction landed — observed live as a price
+    /// question receiving the download-link answer. An answer event makes the
+    /// bucket's entire question state stale; new questions arrive as new
+    /// facts.
+    let questionFactIDs: [String]
   }
 
   private static func factID(_ line: String) -> String? {

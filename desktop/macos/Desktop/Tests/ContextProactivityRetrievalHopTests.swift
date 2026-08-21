@@ -394,7 +394,7 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
     // Snapshot fact lines are newest-first; the newest question wins.
     let lookup = ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: facts)
     XCTAssertEqual(lookup?.query, "The user is asking: Where is the newest Omi desktop build?")
-    XCTAssertEqual(lookup?.sourceFactID, "newest")
+    XCTAssertEqual(lookup?.questionFactIDs, ["newest", "older"], "delivery consumes every question fact")
     // No user-question fact -> no forced retrieval.
     XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [facts[2]]))
     XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: []))
