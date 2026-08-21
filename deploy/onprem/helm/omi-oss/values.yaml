@@ -101,6 +101,13 @@ auth:
       storage: 2Gi
       password: ""   # required when db=postgres (dev overlay sets a throwaway value)
 chat:
+  # KNOWN GAP vs compose: this profile brings up the vector store (Qdrant) only. The chart ships NO
+  # llm_gateway workload and renders no OMI_LLM_GATEWAY_* env, while compose has both
+  # (compose.selfhost.yaml + backend.env.*). Without that wiring the backend would take its direct
+  # branch into the built-in cloud model table (gpt-*, gemini via Vertex, openrouter, perplexity),
+  # three of which have no base-URL override — so on an offline deployment LLM features now REFUSE
+  # loudly instead of silently reaching a vendor (utils/llm/gateway_client.py). Retrieval and
+  # embeddings work; chat completion needs the gateway, which is tracked work, not a values switch.
   enabled: false
   # Embedding dimension — MUST match the operator's embeddings model (compose default 1024, e.g. bge-m3).
   vectorDim: 1024
