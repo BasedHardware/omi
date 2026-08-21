@@ -81,6 +81,12 @@ def _stub_data_layer(monkeypatch):
         return True
 
     monkeypatch.setattr(conversations_router.conversations_db, 'set_conversation_visibility_if_unchanged', guarded_set)
+    monkeypatch.setattr(conversations_router.share_email, 'consume_daily_send_quota', lambda uid, n: True)
+    monkeypatch.setattr(
+        conversations_router.conversations_db,
+        'add_share_email_sent_recipients',
+        lambda uid, cid, emails: state['sent'].extend(emails),
+    )
     monkeypatch.setattr(
         conversations_router.redis_db, 'store_conversation_to_uid', lambda cid, uid: state['redis'].add(cid)
     )
@@ -227,3 +233,41 @@ def test_rollback_skipped_when_concurrent_share_wrote_same_value(monkeypatch, _s
     assert response.status_code == 502
     assert _stub_data_layer['visibility'] == 'shared'
     assert CONV_ID in _stub_data_layer['redis']
+
+
+def test_repeat_send_is_idempotent_per_recipient(monkeypatch, _stub_data_layer):
+    dispatches = []
+
+    def counting_send(*, uid, conversation, recipient_emails):
+        dispatches.append(list(recipient_emails))
+        return {'sent_to': recipient_emails}
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', counting_send)
+    conv = _conversation()
+
+    def get_conv(uid, cid, **kw):
+        conv['visibility'] = _stub_data_layer['visibility']
+        conv['share_email_sent_to'] = list(_stub_data_layer['sent'])
+        return conv
+
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', get_conv)
+
+    first = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    second = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert first.status_code == 200 and second.status_code == 200
+    assert second.json() == {'sent_to': ['sarah@acme.com']}
+    assert dispatches == [['sarah@acme.com']]
+
+
+def test_quota_exhaustion_returns_429_without_dispatch(monkeypatch, _stub_data_layer):
+    monkeypatch.setattr(conversations_router.share_email, 'consume_daily_send_quota', lambda uid, n: False)
+    called = []
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda **kw: called.append(1) or {'sent_to': []},
+    )
+    response = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert response.status_code == 429
+    assert called == []
+    assert _stub_data_layer['visibility'] == 'private'

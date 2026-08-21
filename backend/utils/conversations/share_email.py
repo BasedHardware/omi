@@ -40,6 +40,9 @@ class AmbiguousDeliveryError(RuntimeError):
 # blanket "send to everyone" proposal is more likely wrong than helpful.
 MAX_MEETING_PARTICIPANTS = 10
 MAX_RECIPIENTS = 5
+# Attributable but still bounded: one authenticated user may relay at most
+# this many summary emails per UTC day.
+DAILY_SEND_QUOTA = 30
 
 RESEND_API_URL = 'https://api.resend.com/emails'
 SHARE_EMAIL_FROM_ADDRESS = os.getenv('SHARE_EMAIL_FROM_ADDRESS', 'notes@mail.omi.me')
@@ -155,6 +158,26 @@ def build_summary_email(
 
 def _escape_html(value: str) -> str:
     return value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
+
+def consume_daily_send_quota(uid: str, recipient_count: int) -> bool:
+    """Redis daily counter for outbound summary emails; False when exhausted."""
+    from datetime import datetime, timezone
+
+    from database.redis_db import r
+
+    key = f"share_email_quota:{uid}:{datetime.now(timezone.utc).strftime('%Y%m%d')}"
+    try:
+        total = r.incrby(key, recipient_count)
+        if total == recipient_count:
+            r.expire(key, 172800)
+        if total > DAILY_SEND_QUOTA:
+            r.incrby(key, -recipient_count)
+            return False
+        return True
+    except Exception:
+        logger.exception('share email: quota check failed open')
+        return True
 
 
 def publish_then_send(

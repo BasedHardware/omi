@@ -1379,6 +1379,17 @@ def send_conversation_share_email(
     if unknown:
         raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
 
+    # Idempotency: a recipient already emailed for this conversation is not
+    # dispatched again — repeats (button double-taps, client retries) return
+    # success without a duplicate email.
+    already_sent = {e for e in (conversation.get('share_email_sent_to') or []) if isinstance(e, str)}
+    to_dispatch = [email for email in requested if email not in already_sent]
+    if not to_dispatch:
+        return {'sent_to': requested}
+
+    if not share_email.consume_daily_send_quota(uid, len(to_dispatch)):
+        raise HTTPException(status_code=429, detail='Daily share-email limit reached')
+
     # Publish before dispatching (the emailed link must never race a private
     # conversation), and roll the publish back if the send fails so a failed
     # send cannot leave a never-shared conversation link-visible. A
@@ -1419,7 +1430,9 @@ def send_conversation_share_email(
         redis_db.remove_public_conversation(conversation_id)
 
     def _send():
-        return share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=requested)
+        result = share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
+        conversations_db.add_share_email_sent_recipients(uid, conversation_id, result['sent_to'])
+        return {'sent_to': requested}
 
     try:
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)

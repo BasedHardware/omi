@@ -1485,6 +1485,15 @@ def update_conversation_segments(
 # ***********************************
 
 
+def add_share_email_sent_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Record recipients this conversation's summary was already emailed to."""
+    from google.cloud import firestore as gc_firestore
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'share_email_sent_to': gc_firestore.ArrayUnion(emails)})
+
+
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
