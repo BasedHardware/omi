@@ -435,6 +435,25 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
       ContextDirectorRetrievalHop.impliedCitations(
         message: "You should restart your computer.", items: items, question: ""),
       [])
+    // A hallucinated SUPERSTRING of a retrieved identifier must not ground:
+    // substring matching let "omi.me/desktop" attribute a message pointing at
+    // "omi.me/desktop-scam.xyz". Exact token intersection rejects it.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "Download it at omi.me/desktop-scam.xyz today", items: items,
+        question: "What is the latest omi desktop app download link?"),
+      [])
+    // Scheme and www prefixes normalize away on both sides, so a memory that
+    // stored the full URL still grounds a message that writes it bare.
+    let schemed = [
+      ContextRetrievedItem(
+        ref: "memory:dl-2", title: "Memory",
+        preview: "Grab it from https://www.omi.me/desktop when needed.", createdAt: nil)
+    ]
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "The link is omi.me/desktop.", items: schemed, question: ""),
+      ["memory:dl-2"])
   }
 
   func testQuestionFactConsumptionRequiresACitedAnswer() {

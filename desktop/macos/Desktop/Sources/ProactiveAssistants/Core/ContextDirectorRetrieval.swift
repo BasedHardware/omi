@@ -116,24 +116,23 @@ enum ContextDirectorRetrievalHop {
   static func impliedCitations(
     message: String, items: [ContextRetrievedItem], question: String = ""
   ) -> [String] {
-    let normalizedMessage = normalizedForMatch(message)
-    guard !normalizedMessage.isEmpty else { return [] }
+    // Exact token intersection, never substring: a retrieved "omi.me" must
+    // not ground a message that says "omi.me-scam.xyz/desktop" — a hallucinated
+    // superstring of a real identifier is exactly the failure the grounding
+    // veto exists to stop. Scheme/www prefixes are normalized away on both
+    // sides so "https://omi.me/desktop" in a memory still grounds a message
+    // that writes it bare.
+    let messageTokens = Set(identifierTokens(in: message))
+    guard !messageTokens.isEmpty else { return [] }
     let questionTokens = Set(identifierTokens(in: question))
     var cited: [String] = []
     for item in items {
       let candidates = identifierTokens(in: item.preview).filter { !questionTokens.contains($0) }
-      if candidates.contains(where: { normalizedMessage.contains($0) }) {
+      if candidates.contains(where: { messageTokens.contains($0) }) {
         cited.append(item.ref)
       }
     }
     return cited
-  }
-
-  private static func normalizedForMatch(_ text: String) -> String {
-    text.lowercased()
-      .components(separatedBy: .whitespacesAndNewlines)
-      .filter { !$0.isEmpty }
-      .joined(separator: " ")
   }
 
   private static let tokenTrimSet = CharacterSet(charactersIn: ".,;:!?)([]'\u{0022}\u{2019}\u{201D}")
@@ -142,6 +141,10 @@ enum ContextDirectorRetrievalHop {
     text.lowercased()
       .components(separatedBy: .whitespacesAndNewlines)
       .map { $0.trimmingCharacters(in: tokenTrimSet) }
+      .map {
+        $0.replacingOccurrences(
+          of: #"^(?:https?://)?(?:www\.)?"#, with: "", options: .regularExpression)
+      }
       .filter { token in
         token.count >= 6
           && token.contains(where: { "/.@:0123456789".contains($0) })
