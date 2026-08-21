@@ -217,29 +217,34 @@ enum ContextFactWritePolicy {
   /// an authoring/asking frame, so page content that merely displays a
   /// question ("the page shows a FAQ") never floors.
   static func isUserAuthoredQuestion(_ statement: String) -> Bool {
-    let questionSignal =
+    // A strong asking verb with the user as subject IS the signal: extraction
+    // freely paraphrases the typed question away from its punctuation and its
+    // interrogative words ("The user is asking for a link to the latest Omi
+    // desktop to be shared"), so requiring a separate question marker missed
+    // real asks. Weak authoring verbs (writing/typing/composing/drafting)
+    // still need an explicit question marker so ordinary composing never
+    // floors.
+    if statement.range(
+      of:
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is asking|asks|asked|wants to know|is requesting|requests)\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    if statement.range(
+      of: #"(?i)\b(?:body|draft|message|email)\b[^.]{0,60}\bcontains the question\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    let questionMarker =
       statement.contains("?")
       || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil
-      // The model routinely paraphrases the question away from its punctuation
-      // ("The user is asking where to download the latest version of Omi
-      // desktop.") — an asking verb followed by an interrogative clause is the
-      // same signal.
-      || statement.range(
-        of:
-          #"(?i)\b(?:asking|asks|asked|wants to know|is requesting)\s+(?:\S+\s+){0,2}?(?:where|what|when|who|whom|how|why|which|whether|if)\b"#,
-        options: .regularExpression) != nil
-    guard questionSignal else { return false }
-    // The asking SUBJECT must be the user or their draft: "David asked when
-    // the offsite is" is floor-worthy context via the named-person speech-act
-    // class, but it must never become a forced lookup that answers a question
-    // the user did not ask.
+    guard questionMarker else { return false }
     return statement.range(
       of:
-        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is asking|asks|asked|is writing|is typing|is composing|is drafting|wants to know|is requesting)\b"#,
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is writing|is typing|is composing|is drafting)\b"#,
       options: .regularExpression) != nil
-      || statement.range(
-        of: #"(?i)\b(?:body|draft|message|email)\b[^.]{0,60}\bcontains the question\b"#,
-        options: .regularExpression) != nil
   }
 
   /// A capitalized name immediately before a speech verb, where the name is not

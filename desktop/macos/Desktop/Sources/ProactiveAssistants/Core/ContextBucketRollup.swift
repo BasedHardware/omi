@@ -1135,13 +1135,21 @@ actor ContextBucketRollupWriter {
       // director look at the departed bucket, grounded on the same departing
       // frame this extraction used. The engine re-runs every delivery gate and
       // the freshness window bounds how long after departure it can act.
+      let departureFlag = await MainActor.run(body: {
+        ContextBucketsFeature.isDepartureEvaluationEnabled
+      })
+      log(
+        "DepartureEvalDebug: maxWorthiness=\(writeResult?.maximumValidatedWorthiness ?? -1) flag=\(departureFlag)"
+      )
       if let writeResult,
         ContextDepartureEvaluationPolicy.triggers(
           maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness,
-          flagEnabled: await MainActor.run(body: { ContextBucketsFeature.isDepartureEvaluationEnabled }))
+          flagEnabled: departureFlag)
       {
+        log("DepartureEvalDebug: invoking evaluateAfterDeparture")
         await ContextProactivityEngine.shared.evaluateAfterDeparture(
           fence: fence, departingFrame: frame)
+        log("DepartureEvalDebug: evaluateAfterDeparture returned")
       }
     } catch {
       switch error as? ProactiveLaneClientError {

@@ -225,6 +225,15 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
       ContextFactWritePolicy.verdict(
         "The user is asking where to download the latest version of Omi desktop."),
       .floorHumanEvent)
+    // A paraphrased REQUEST with a strong asking verb needs no question marker
+    // (live extraction: "asking for a link ... to be shared").
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The user is asking for a link to the latest Omi desktop to be shared with david@scalingforever.com."))
+    // Someone else's question never qualifies.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "David asked when the offsite is scheduled?"))
     // Authoring frames without a question signal never floor via this class.
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(
