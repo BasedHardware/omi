@@ -332,6 +332,13 @@ enum ContextProactivityPromptBuilder {
       Then write the facts list. A fact is an event or an obligation: a commitment someone
       made, a request, a deadline, a blocker, a failure, a decision, or a status that
       changed.
+      A question the user is writing — in an email draft, a chat message, a document — is
+      always a fact, with high notify_worthiness: record who it is addressed to and the
+      question itself verbatim, phrased as "The user is asking <recipient>: <question>".
+      Good: The user is asking alex@example.com: When is the next release shipping?
+      Bad: A message is being composed to alex@example.com asking about the release date.
+      Report the question currently on screen even when an earlier fact recorded a similar
+      or identical question — a re-asked question is a new fact, never a duplicate.
       Never write a fact saying that an app, window, tab, page, sidebar, panel, or button
       is open, visible, active, or shows something. Put that in the summary instead.
       Most screens yield zero to three facts. An empty facts list is a correct answer.
@@ -409,6 +416,19 @@ enum ContextProactivityPromptBuilder {
     CONTEXT section appended, and when that section is already present below, any further
     lookup_query is ignored. Refs from that section (conversation:…, memory:…) may be cited in
     bucket_entry_refs only when the section supplies them.
+    A question the user is writing is not "already visible" content: the question is on screen,
+    its answer is not. When the RETRIEVED CONTEXT section supplies that answer, deliver it as
+    insight or suggest — put the answer itself (the link, name, date, or value) in the message
+    exactly as the retrieved text spells it, and cite the refs that contain it. Stay silent as
+    usual when the retrieved items do not actually answer the question. A question the user is
+    writing NOW is a fresh request, not repetition, and this exception OUTRANKS the
+    recently-delivered prohibition above: when the current context contains the user's own
+    unanswered question, answer it — even if an identical answer appears in the
+    recently-delivered list. The prohibition exists to stop unprompted nagging; refusing to
+    answer a direct question is not restraint, it is failure. An answer is only deliverable
+    with citations: when no RETRIEVED CONTEXT section is present below, do not answer from
+    memory of prior deliveries — set lookup_query and let the re-evaluation deliver with
+    retrieved refs cited. An uncited answer is discarded by a validation gate after you.
     """
 
   /// Same rules as before, restructured as an ordered decision procedure: the
@@ -487,10 +507,13 @@ enum ContextProactivityPromptBuilder {
       Check the reasons for silence first, in this order:
       - No validated fact supports a specific, timely action: silence.
       - The point is already visible on the user's screen: silence. Speak only when you add
-        something the user cannot currently see: a commitment, a deadline, a conflict, or a
-        connection to other work.
+        something the user cannot currently see: a commitment, a deadline, a conflict, a
+        connection to other work — or the answer to a question the user is writing. The
+        question is on screen; its answer is not.
       - The point repeats anything in the recently-delivered list, even reworded: silence.
-        That list is a prohibition, not background.
+        That list is a prohibition, not background. One exception: a question the user is
+        writing or asking right now is always answered, even when the answer repeats a
+        recent delivery — a direct question is a fresh request, never nagging.
       - The point announces that meeting notes, a transcript, or a call summary are ready:
         silence. The conversation-finalization lane owns that claim and attaches the exact
         conversation link.
@@ -761,8 +784,14 @@ extension ContextBucketStore {
           let duplicate =
             try Bool.fetchOne(
               db,
-              sql: "SELECT EXISTS(SELECT 1 FROM bucket_facts WHERE bucketID = ? AND statement = ?)",
-              arguments: [bucketID, statement]) ?? false
+              sql: """
+                SELECT EXISTS(
+                  SELECT 1 FROM bucket_facts
+                  WHERE bucketID = ? AND statement = ?
+                    AND (expiresAt IS NULL OR expiresAt > ?)
+                )
+                """,
+              arguments: [bucketID, statement, Date()]) ?? false
           let validity = BucketFactValidator.validity(
             evidenceText: evidenceText,
             evidenceRefs: evidenceRefs,
@@ -779,13 +808,22 @@ extension ContextBucketStore {
             break
           }
           maximumWorthiness = max(maximumWorthiness, worthiness)
+          // A user-authored question expires shortly after its compose moment:
+          // without this, any later departure evaluation of the bucket can
+          // force retrieval for a question no longer on screen and answer the
+          // wrong ask. Re-asks re-validate through the expiry-aware duplicate
+          // check above.
+          let questionExpiry: Date? =
+            applyWritePolicy && validity == .validated
+              && ContextFactWritePolicy.isUserAuthoredQuestion(statement)
+            ? now.addingTimeInterval(ContextFactWritePolicy.userQuestionFactTTLSeconds) : nil
           try db.execute(
             sql: """
               INSERT INTO bucket_facts
                 (id, bucketID, entryID, appName, statement, identifiersJson, evidenceText,
                  evidenceRefsJson, validityState, dispositionState, confidence,
-                 notifyWorthiness, workstreamTag, createdAt, updatedAt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?)
+                 notifyWorthiness, workstreamTag, expiresAt, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?, ?)
               """,
             arguments: [
               UUID().uuidString.lowercased(), bucketID, entryID, appName, statement,
@@ -793,7 +831,7 @@ extension ContextBucketStore {
               evidenceText,
               String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
               validity.rawValue, min(max(fact.confidence, 0), 1), worthiness,
-              nil as String?, now, now,
+              nil as String?, questionExpiry, now, now,
             ])
           if validity == .validated {
             existingFactIdentities.append(

@@ -1,5 +1,9 @@
 # Plan catalog audience
 
+Canonical identity, billed price identity, entitlements, allocations, and migration ownership are in
+`backend/config/plan_catalog.json` and `docs/agents/plan-source-of-truth.md`. This page owns only storefront audience
+behavior. Do not add plan values or Stripe IDs here.
+
 Locked purchase-catalog rules. Tests in
 `backend/tests/unit/test_subscription_restructure.py` and
 `app/test/utils/plan_pricing_test.dart` enforce them. Do not re-widen a

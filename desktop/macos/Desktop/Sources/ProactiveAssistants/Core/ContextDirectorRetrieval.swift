@@ -56,6 +56,127 @@ enum ContextDirectorRetrievalHop {
     return flattened
   }
 
+  /// A validated user-authored-question fact makes retrieval mandatory, not
+  /// model-optional: the fact statement itself becomes the lookup query and the
+  /// evaluation runs once with the retrieved context attached. Asking the model
+  /// FIRST whether it wants a lookup proved a coin flip in live runs — the bare
+  /// call silences typed questions on the repetition/already-visible checks —
+  /// while the retrieval-attached form delivered every time. Snapshot fact
+  /// lines are newest-first, and the newest question is the one the user is
+  /// typing now, so iteration is NOT reversed. Only questions the USER authored
+  /// qualify (`isUserAuthoredQuestion` requires the user/draft as the asking
+  /// subject): a question someone else asked in a thread being read is
+  /// floor-worthy context, never a forced lookup.
+  static func forcedLookupQuery(validatedFacts: [String]) -> ForcedLookup? {
+    var query: String? = nil
+    var questionFactIDs: [String] = []
+    for fact in validatedFacts {
+      let statement = factStatement(fact)
+      guard ContextFactWritePolicy.isUserAuthoredQuestion(statement) else { continue }
+      if let id = factID(fact) { questionFactIDs.append(id) }
+      if query == nil {
+        let flattened = ContextDestinationKey.singleLine(statement, limit: maximumQueryLength)
+        if flattened.count >= minimumQueryLength { query = flattened }
+      }
+    }
+    guard let query else { return nil }
+    return ForcedLookup(query: query, questionFactIDs: questionFactIDs)
+  }
+
+  struct ForcedLookup: Equatable, Sendable {
+    let query: String
+    /// EVERY user-question fact in the snapshot, so a delivered answer can
+    /// consume them all. Consuming only the source fact left older question
+    /// facts armed, and the newest of those would answer the NEXT typed
+    /// question before its own extraction landed — observed live as a price
+    /// question receiving the download-link answer. An answer event makes the
+    /// bucket's entire question state stale; new questions arrive as new
+    /// facts.
+    let questionFactIDs: [String]
+  }
+
+  private static func factID(_ line: String) -> String? {
+    guard line.hasPrefix("fact:") else { return nil }
+    let id = line.dropFirst(5).prefix { !$0.isWhitespace }
+    return id.isEmpty ? nil : String(id)
+  }
+
+  /// Citation auto-attribution for forced-question answers. The model reliably
+  /// writes the retrieved answer into the message but only stochastically
+  /// copies the ref into bucket_entry_refs, and an uncited answer dies at the
+  /// grounding veto. Attribution matches ONLY identifier-like tokens — a token
+  /// of 6+ characters containing a slash, dot, at-sign, colon, or digit (a
+  /// link, an email, a version, a date) shared by the message and a retrieved
+  /// preview, after trailing punctuation is stripped and whitespace collapsed.
+  /// Plain-word overlap never attributes: retrieved previews are semantic hits
+  /// for the question and echo its words, so phrase overlap would let an
+  /// invented answer ride a noise item through the veto. Tokens that appear in
+  /// the question itself are excluded for the same reason. A hallucinated
+  /// value matches no retrieved identifier and still dies at the veto.
+  static func impliedCitations(
+    message: String, items: [ContextRetrievedItem], question: String = ""
+  ) -> [String] {
+    // Exact token intersection, never substring: a retrieved "omi.me" must
+    // not ground a message that says "omi.me-scam.xyz/desktop" — a hallucinated
+    // superstring of a real identifier is exactly the failure the grounding
+    // veto exists to stop. Scheme/www prefixes are normalized away on both
+    // sides so "https://omi.me/desktop" in a memory still grounds a message
+    // that writes it bare.
+    let messageTokens = Set(identifierTokens(in: message))
+    guard !messageTokens.isEmpty else { return [] }
+    let questionTokens = Set(identifierTokens(in: question))
+    var cited: [String] = []
+    for item in items {
+      let candidates = identifierTokens(in: item.preview).filter { !questionTokens.contains($0) }
+      if candidates.contains(where: { messageTokens.contains($0) }) {
+        cited.append(item.ref)
+      }
+    }
+    return cited
+  }
+
+  private static let tokenTrimSet = CharacterSet(charactersIn: ".,;:!?)([]'\u{0022}\u{2019}\u{201D}")
+
+  private static func identifierTokens(in text: String) -> [String] {
+    text.lowercased()
+      .components(separatedBy: .whitespacesAndNewlines)
+      .map { $0.trimmingCharacters(in: tokenTrimSet) }
+      .map {
+        $0.replacingOccurrences(
+          of: #"^(?:https?://)?(?:www\.)?"#, with: "", options: .regularExpression)
+      }
+      .filter { token in
+        token.count >= 6
+          && token.contains(where: { "/.@:0123456789".contains($0) })
+      }
+  }
+
+  /// A question fact is consumed only by its ANSWER: a presented delivery that
+  /// cited retrieved content from the forced lookup. An unrelated
+  /// bucket-grounded insight sharing the bucket, or an evaluation whose forced
+  /// retrieval returned nothing, must leave the still-unanswered question
+  /// armed for the next evaluation.
+  static func consumableQuestionFacts(
+    forced: ForcedLookup?,
+    retrievalCompleted: Bool,
+    citedRetrievedRefs: [String]
+  ) -> [String] {
+    guard let forced, retrievalCompleted, !citedRetrievedRefs.isEmpty else { return [] }
+    return forced.questionFactIDs
+  }
+
+  /// Fact lines are assembled as "fact:<id> <statement> [evidence: ...]".
+  private static func factStatement(_ line: String) -> String {
+    var statement = line
+    if statement.hasPrefix("fact:"), let space = statement.firstIndex(of: " ") {
+      statement = String(statement[statement.index(after: space)...])
+    }
+    if let evidence = statement.range(of: " [evidence:") {
+      statement = String(statement[..<evidence.lowerBound])
+    }
+    return statement.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   /// Maps backend tool sources into citable items for one namespace.
   ///
   /// Fail-closed mapping: a source whose kind does not match the endpoint it

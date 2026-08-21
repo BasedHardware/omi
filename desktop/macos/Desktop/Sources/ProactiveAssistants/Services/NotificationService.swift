@@ -377,6 +377,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     deliverSystemBanner: Bool = false,
     deliveryMode: NotificationDeliveryMode = .standard,
     respectFrequency: Bool = true,
+    isPersistent: Bool = false,
     authorizationSnapshot suppliedAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) {
     guard !ownerID.isEmpty,
@@ -445,7 +446,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
         memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
-        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled)
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
     {
       log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
       recordInsightDeliveryOutcome(
@@ -459,7 +461,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // Proactive notifications honor the user's frequency setting. Functional
     // notifications (Crisp support replies, screen-recording permission prompts,
     // onboarding test) pass `respectFrequency: false` to bypass the gate.
+    // The meeting summary share card is exempt: it is a direct receipt of the
+    // user's own meeting ending, so it must appear after every meeting — the
+    // master toggle and its own category toggle above remain its only gates.
     if respectFrequency
+      && assistantId != MeetingActionItemBannerPolicy.assistantID
       && !isProactiveNotificationEligible(
         assistantId: assistantId,
         now: Date(),
@@ -524,6 +530,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
+        isPersistent: isPersistent,
         onPresented: recordPresentation
       )
       switch presentation {
@@ -696,7 +703,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
         memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
-        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled)
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled,
+        meetingSummaryEnabled: MeetingSummaryNotificationSettings.isEnabled)
     else {
       onDropped?()
       return .suppressed
@@ -774,11 +782,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     taskEnabled: Bool,
     insightEnabled: Bool,
     memoryEnabled: Bool,
-    integrationEnabled: Bool
+    integrationEnabled: Bool,
+    meetingSummaryEnabled: Bool = true
   ) -> Bool {
     switch kind {
     case .suggestion: return focusEnabled
-    case .task, .meetingNotes: return taskEnabled
+    case .task: return taskEnabled
+    case .meetingNotes: return meetingSummaryEnabled
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
     case .integration: return integrationEnabled
