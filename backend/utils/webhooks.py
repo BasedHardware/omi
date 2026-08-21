@@ -168,7 +168,9 @@ async def _post_dev_webhook(
         logger.error(
             f'{webhook_name}: delivery failed status={last_response.status_code} attempts={attempts} url={webhook_url}'
         )
-        enqueue_dev_webhook_dlq(
+        await run_blocking(
+            db_executor,
+            enqueue_dev_webhook_dlq,
             webhook_name=webhook_name,
             webhook_url=webhook_url,
             status_code=last_response.status_code,
@@ -180,7 +182,9 @@ async def _post_dev_webhook(
     if last_exception is None:
         raise RuntimeError(f'{webhook_name}: delivery failed without a response or exception')
     logger.error(f'{webhook_name}: delivery failed error={type(last_exception).__name__} attempts={attempts}')
-    enqueue_dev_webhook_dlq(
+    await run_blocking(
+        db_executor,
+        enqueue_dev_webhook_dlq,
         webhook_name=webhook_name,
         webhook_url=webhook_url,
         status_code=0,
