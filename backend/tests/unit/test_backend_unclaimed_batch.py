@@ -60,9 +60,10 @@ def test_enqueue_dev_webhook_dlq_stores_entry(monkeypatch):
 
 
 def test_short_conversation_hard_discard_constant():
-    from utils.conversations import process_conversation as pc
+    from pathlib import Path
 
-    assert pc.SHORT_CONVERSATION_HARD_DISCARD_SECONDS == 30.0
+    source = Path(__file__).resolve().parents[2] / 'utils' / 'conversations' / 'process_conversation.py'
+    assert 'SHORT_CONVERSATION_HARD_DISCARD_SECONDS = 30.0' in source.read_text()
 
 
 def test_crisp_unread_route_removed():
