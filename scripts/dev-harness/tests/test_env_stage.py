@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev_harness import config, safety
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -35,6 +34,10 @@ def test_child_env_for_real_mode() -> None:
     child = config.child_env_for(cfg)
     assert child["PROVIDER_MODE"] == "real"
     assert child["BASE_API_URL"] == cfg.backend_url
+    assert child["OMI_LOCAL_STORAGE_ROOT"] == str(cfg.layout.services_dir / "storage")
+    assert child["OMI_LOCAL_STORAGE_BASE_URL"] == f"{cfg.backend_url}/_local/storage"
+    assert child["BUCKET_SPEECH_PROFILES"] == "speech-profiles"
+    assert child["BUCKET_MEMORIES_RECORDINGS"] == "memories-recordings"
 
 
 def test_nondefault_port_offset_propagates_to_every_harness_service() -> None:
