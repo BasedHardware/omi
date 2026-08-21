@@ -192,6 +192,8 @@ The application exporter is separate to prevent Cloud Monitoring API read cost f
 
 Each component has dev and prod values:
 
+`.github/workflows/gcp_cloud_run_metrics_egress.yml` owns the Cloud Run application exporter and its kube-prometheus-stack scrape configuration: relevant merges auto-deploy development, while production requires a protected-environment dispatch from `main`.
+
 | Component | Dev | Prod |
 |-----------|-----|------|
 | kube-prometheus-stack | `kube-prometheus-stack/dev_omi_monitoring_values.yaml` | `kube-prometheus-stack/prod_omi_monitoring_values.yaml` |
@@ -199,6 +201,7 @@ Each component has dev and prod values:
 | Alloy | `alloy/dev_omi_k8s_monitoring_values.yml` | `alloy/prod_omi_k8s_monitoring_values.yml` |
 | Loki | `loki/dev_omi_loki_values.yaml` | `loki/prod_omi_loki_values.yaml` |
 | Stackdriver exporter | `prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml` | `prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml` |
+| Cloud Run metrics exporter | `prometheus-stackdriver-exporter/dev_omi_cloud_run_metrics_exporter.yaml` | `prometheus-stackdriver-exporter/prod_omi_cloud_run_metrics_exporter.yaml` |
 | Grafana ALB cert | `kube-prometheus-stack/dev_omi_grafana_alb_cert.yaml` | `kube-prometheus-stack/prod_omi_grafana_alb_cert.yaml` |
 
 ## Current Dashboards

@@ -31,6 +31,7 @@ Live evidence collected on 2026-08-21:
 - `backend` and `desktop-backend` each had one Cloud Run container with max scale 100. Backend had `METRICS_SECRET` and always-allocated CPU; desktop-backend had neither. A public URL scrape therefore cannot enumerate either service's instances.
 - The Cloud Monitoring API already contained `prometheus.googleapis.com/*` descriptors from GKE's managed collector, proving GMP storage is active, but it contained zero `prometheus.googleapis.com/omi_*` descriptors.
 - The live prod Stackdriver exporter is v0.18.0. Its deployed arguments contain only the two load-balancer prefixes from the repository values, and its GSA has `roles/monitoring.viewer`.
+- Live Helm ownership is asymmetric: dev Prometheus is release `dev-kube-prometheus-stack`, while prod is `prod-omi-kube-prometheus-stack`; the existing exporters are `dev/prod-omi-prometheus-stackdriver-exporter`. The deployment workflow encodes these observed names instead of deriving a nonexistent dev release.
 - Grafana's GSA has `roles/monitoring.viewer`, but the live provisioned datasource list contains only Prometheus and Alertmanager. A direct Cloud Monitoring datasource is possible but is not the requested Prometheus ingestion path.
 - Both projects have the Run, Monitoring, Logging, and Secret Manager APIs enabled. Both Cloud Run services use the Compute Engine default service account; each runtime account has project-level `roles/secretmanager.secretAccessor`, and its current `roles/editor` includes `monitoring.timeSeries.create`. A future least-privilege service account must receive `roles/monitoring.metricWriter`, `roles/logging.logWriter`, and access to `cloud-run-gmp-config` explicitly.
 - `cloud-run-gmp-config` does not exist in either project before this rollout. The deployment identity must be able to create the secret, add versions, and update its non-sensitive content-hash label; the helper creates it without printing its content.
@@ -108,21 +109,30 @@ Run the focused repository contracts first:
 
 ```bash
 cd backend
-pytest -q tests/unit/test_attach_cloud_run_gmp_sidecar.py   tests/unit/test_metrics_sidecar_server.py   tests/unit/test_desktop_backend_cors.py   tests/unit/test_render_backend_runtime_env.py   tests/unit/test_backend_runtime_env_validator.py   tests/unit/test_monitoring_telemetry_contract.py   tests/unit/test_monitoring_alert_rule_contract.py
+pytest -q tests/unit/test_attach_cloud_run_gmp_sidecar.py \
+  tests/unit/test_metrics_sidecar_server.py \
+  tests/unit/test_desktop_backend_cors.py \
+  tests/unit/test_render_backend_runtime_env.py \
+  tests/unit/test_backend_runtime_env_validator.py \
+  tests/unit/test_monitoring_telemetry_contract.py \
+  tests/unit/test_monitoring_alert_rule_contract.py \
+  tests/unit/test_cloud_run_metrics_egress_workflow.py
 python3 deploy/compose_runtime_env.py --check
 ```
 
-After merge, an operator must deploy the Cloud Run revisions and the monitoring releases; repository changes alone do not mutate either platform.
+After merge, platform deployment is still required; repository changes alone do not mutate Cloud Run or GKE. The repository now owns both halves instead of leaving Helm commands as an undocumented manual release:
 
-1. Run the normal backend and desktop-backend deployment workflows in dev. The workflow creates or versions `cloud-run-gmp-config` from the checked-in non-sensitive config, pins that numeric secret version into a two-container no-traffic candidate, and runs the existing acceptance gates before promotion.
-2. Install the isolated exporter, then upgrade kube-prometheus-stack:
+- `.github/workflows/gcp_cloud_run_metrics_egress.yml` runs automatically for relevant changes on `main` and atomically installs the dev exporter plus the dev Prometheus scrape configuration. It uses the live release name `dev-kube-prometheus-stack`, not the failed historical `dev-omi-kube-prometheus-stack` release.
+- Production is an explicit protected-environment dispatch from `main`. It atomically upgrades `prod-omi-cloud-run-metrics-exporter` and the live `prod-omi-kube-prometheus-stack` release with pinned chart versions.
+- Both paths render first, install the isolated exporter before its scrape target, wait for Helm readiness, and verify the exporter Deployment and Service.
+
+1. Confirm the automatic `Deploy Cloud Run Metrics Egress` development run succeeded after merge. If it must be retried, dispatch it from `main`:
 
 ```bash
-cd backend/charts/monitoring
-helm -n dev-omi-monitoring upgrade --install dev-omi-cloud-run-metrics-exporter   prometheus-community/prometheus-stackdriver-exporter --version 4.8.3   -f prometheus-stackdriver-exporter/dev_omi_cloud_run_metrics_exporter.yaml
-helm -n dev-omi-monitoring upgrade --install dev-kube-prometheus-stack   prometheus-community/kube-prometheus-stack --version 75.15.1   -f kube-prometheus-stack/dev_omi_monitoring_values.yaml
+gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=development
 ```
 
+2. Run the normal backend and desktop-backend deployment workflows in dev. They create or version `cloud-run-gmp-config` from the checked-in non-sensitive config, pin that numeric secret version into a two-container no-traffic candidate, and run the existing acceptance gates before promotion.
 3. Confirm each Cloud Run revision has two containers without displaying environment values:
 
 ```bash
@@ -133,7 +143,8 @@ gcloud run services describe backend --project=based-hardware-dev --region=us-ce
 4. Confirm the collector has successful scrapes and no export errors:
 
 ```bash
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="desktop-backend" AND labels."run.googleapis.com/container_name"="collector"'   --project=based-hardware-dev --freshness=30m --limit=50
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="desktop-backend" AND labels."run.googleapis.com/container_name"="collector"' \
+  --project=based-hardware-dev --freshness=30m --limit=50
 ```
 
 5. In Cloud Monitoring Metrics Explorer, use PromQL and query an idle, zero-initialized metric such as `omi_journey_accepted_total`. Confirm both `service_name="backend"` and `service_name="desktop-backend"` exist and instances are distinct.
@@ -144,7 +155,12 @@ gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.serv
 ```
 
 7. Generate one known dev client journey, then confirm the corresponding counter increases in Cloud Monitoring and in kube-prometheus-stack after the one-minute exporter offset. Compare `sum(rate(...[5m]))` by service between both stores.
-8. Repeat the two Helm upgrades with the prod values/release names, deploy the prod Cloud Run revisions, and repeat the checks before enabling any new Grafana alert.
+8. Dispatch the production metrics egress workflow from `main`, then deploy the prod Cloud Run revisions and repeat the checks before enabling any new Grafana alert:
+
+```bash
+gh workflow run gcp_cloud_run_metrics_egress.yml --ref main -f environment=prod
+```
+
 9. Confirm the public route remains protected without printing the token: unauthenticated and invalid-bearer requests to `/metrics` must return 401; only the loopback listener is unauthenticated.
 
-Rollback Cloud Run traffic with the existing recovery workflows. Rolling back to a pre-sidecar revision removes new ingestion for that service but does not affect request serving. Roll back the monitoring changes by removing `cloud-run-application-metrics` from kube-prometheus-stack and uninstalling the isolated exporter release; do not change the original load-balancer exporter.
+Rollback Cloud Run traffic with the existing recovery workflows. Rolling back to a pre-sidecar revision removes new ingestion for that service but does not affect request serving. Roll back the monitoring changes with Helm rollback of both environment-specific releases; do not change the original load-balancer exporter.
