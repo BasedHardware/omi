@@ -56,6 +56,34 @@ enum ContextDirectorRetrievalHop {
     return flattened
   }
 
+  /// A validated user-authored-question fact makes retrieval mandatory, not
+  /// model-optional: the fact statement itself becomes the lookup query and the
+  /// evaluation runs once with the retrieved context attached. Asking the model
+  /// FIRST whether it wants a lookup proved a coin flip in live runs — the bare
+  /// call silences typed questions on the repetition/already-visible checks —
+  /// while the retrieval-attached form delivered every time.
+  static func forcedLookupQuery(validatedFacts: [String]) -> String? {
+    for fact in validatedFacts.reversed() {
+      let statement = factStatement(fact)
+      guard ContextFactWritePolicy.isUserAuthoredQuestion(statement) else { continue }
+      let flattened = ContextDestinationKey.singleLine(statement, limit: maximumQueryLength)
+      if flattened.count >= minimumQueryLength { return flattened }
+    }
+    return nil
+  }
+
+  /// Fact lines are assembled as "fact:<id> <statement> [evidence: ...]".
+  private static func factStatement(_ line: String) -> String {
+    var statement = line
+    if statement.hasPrefix("fact:"), let space = statement.firstIndex(of: " ") {
+      statement = String(statement[statement.index(after: space)...])
+    }
+    if let evidence = statement.range(of: " [evidence:") {
+      statement = String(statement[..<evidence.lowerBound])
+    }
+    return statement.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   /// Maps backend tool sources into citable items for one namespace.
   ///
   /// Fail-closed mapping: a source whose kind does not match the endpoint it

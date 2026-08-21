@@ -439,11 +439,33 @@ actor ContextProactivityEngine {
       return
     }
     let cacheKey = ContextPromptCacheKey.director
+    // Forced retrieval: a validated user-authored-question fact skips the
+    // first bare call and evaluates once WITH the retrieved answer attached.
+    // The bare first call proved stochastically willing to silence a typed
+    // question on the repetition/already-visible checks across live runs,
+    // while the retrieval-attached form delivered every time — so when the
+    // client can already see the question in the validated facts, asking the
+    // model whether to look it up is a coin flip that costs the delivery.
+    var forcedRetrievalAllowlist: Set<String> = []
+    var forcedRetrievalProvenance: [String: Any]? = nil
+    var effectiveUncachedPrompt = uncachedPrompt
+    if retrievalHopEnabled,
+      let forcedQuery = ContextDirectorRetrievalHop.forcedLookupQuery(
+        validatedFacts: snapshot.validatedFacts)
+    {
+      let items = await retrieve(forcedQuery, authorizationSnapshot)
+      if let section = ContextDirectorRetrievalHop.promptSection(query: forcedQuery, items: items) {
+        effectiveUncachedPrompt = uncachedPrompt + "\n\n" + section
+        forcedRetrievalAllowlist = Set(items.map(\.ref))
+        forcedRetrievalProvenance = ContextDirectorRetrievalHop.provenance(
+          query: forcedQuery, items: items, citedRefs: [], hopCompleted: true, failure: nil)
+      }
+    }
     do {
       var result = try await client.complete(
         operation: ModelQoS.Proactivity.reasoningOperation,
         prompt: prompt,
-        uncachedPrompt: uncachedPrompt,
+        uncachedPrompt: effectiveUncachedPrompt,
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema(allowLookup: retrievalHopEnabled),
         cacheKey: cacheKey,
@@ -465,8 +487,8 @@ actor ContextProactivityEngine {
         ContextDirectorDecision.self, from: Data(result.content.utf8)
       ).clamped()
       var decision = firstDecision
-      var retrievedRefAllowlist: Set<String> = []
-      var retrievalProvenance: [String: Any]? = nil
+      var retrievedRefAllowlist: Set<String> = forcedRetrievalAllowlist
+      var retrievalProvenance: [String: Any]? = forcedRetrievalProvenance
       // The single bounded retrieval hop: at most one retrieval and one further
       // director call per visit, and only when the director asked for one.
       // `plan` is the sole admission and this is the sole second call site, so
@@ -474,7 +496,7 @@ actor ContextProactivityEngine {
       if let lookupQuery = ContextDirectorRetrievalHop.plan(
         lookupQuery: firstDecision.lookupQuery,
         flagEnabled: retrievalHopEnabled,
-        priorHops: 0)
+        priorHops: forcedRetrievalProvenance == nil ? 0 : 1)
       {
         let hop = await performRetrievalHop(
           query: lookupQuery,

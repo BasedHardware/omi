@@ -384,4 +384,18 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
     // The whole object must serialize into the delivery's provenance JSON.
     XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys]))
   }
+
+  func testForcedLookupQueryFromUserQuestionFact() {
+    let facts = [
+      "fact:aaa The user is drafting an email addressed to david@scalingforever.com. [evidence: To david; refs: []]",
+      "fact:bbb The user is asking: What is the latest omi desktop app download link? [evidence: body text; refs: []]",
+    ]
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: facts),
+      "The user is asking: What is the latest omi desktop app download link?")
+    // No user-question fact -> no forced retrieval.
+    XCTAssertNil(
+      ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [facts[0]]))
+    XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: []))
+  }
 }
