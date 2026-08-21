@@ -105,11 +105,23 @@ _mock_populate_speaker_names = MagicMock()
 # ---- Prepare controllable mocks for database modules ----
 
 import database.conversations as conversations_db
+import database.daily_summaries as daily_summaries_db
 import database.folders as folders_db
-from dependencies import ApiKeyAuth, get_api_key_auth, get_auth_with_conversations_read, get_uid_with_conversations_read
+from dependencies import (
+    ApiKeyAuth,
+    get_api_key_auth,
+    get_auth_with_conversation_detail_read,
+    get_auth_with_conversations_read,
+    get_uid_with_conversations_read,
+)
 
 _mock_get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations = _mock_get_conversations
+
+_mock_get_daily_summaries = MagicMock(return_value=[])
+_mock_get_daily_summary = MagicMock(return_value=None)
+daily_summaries_db.get_daily_summaries = _mock_get_daily_summaries
+daily_summaries_db.get_daily_summary = _mock_get_daily_summary
 
 _mock_get_folders = MagicMock(return_value=[])
 _mock_initialize_system_folders = MagicMock(return_value=[])
@@ -377,6 +389,7 @@ def _build_test_app():
     app.include_router(developer_router)
     app.dependency_overrides[get_uid_with_conversations_read] = lambda: 'uid1'
     app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
+    app.dependency_overrides[get_auth_with_conversation_detail_read] = _read_auth
     return app, TestClient(app)
 
 
@@ -418,6 +431,10 @@ class TestDevApiHttpLayer:
         _mock_get_conversations.return_value = []
         _mock_get_folders.reset_mock()
         _mock_get_folders.return_value = [_make_folder('f1', 'Work')]
+        _mock_get_daily_summaries.reset_mock()
+        _mock_get_daily_summaries.return_value = []
+        _mock_get_daily_summary.reset_mock()
+        _mock_get_daily_summary.return_value = None
         _mock_initialize_system_folders.reset_mock()
         _mock_populate_folder_names.reset_mock()
         _mock_populate_speaker_names.reset_mock()
@@ -508,6 +525,46 @@ class TestDevApiHttpLayer:
         assert len(body) == 1
         assert body[0]['id'] == 'f1'
         assert body[0]['name'] == 'Work'
+
+    def test_daily_summary_list_exposes_date_filters_and_pagination(self):
+        _mock_get_daily_summaries.return_value = [
+            {'id': 'recap-1', 'date': '2026-08-20', 'headline': 'A productive day'}
+        ]
+        _, client = _build_test_app()
+
+        response = client.get(
+            '/v1/dev/user/daily-summaries?limit=10&offset=2&start_date=2026-08-01&end_date=2026-08-20'
+        )
+
+        assert response.status_code == 200
+        assert response.json()['summaries'][0]['id'] == 'recap-1'
+        _mock_get_daily_summaries.assert_called_once_with(
+            'uid1', limit=10, offset=2, start_date='2026-08-01', end_date='2026-08-20'
+        )
+
+    def test_daily_summary_detail_returns_404_for_unknown_id(self):
+        _, client = _build_test_app()
+
+        response = client.get('/v1/dev/user/daily-summaries/missing')
+
+        assert response.status_code == 404
+        assert response.json() == {'detail': 'Daily summary not found'}
+        _mock_get_daily_summary.assert_called_once_with('uid1', 'missing')
+
+    def test_daily_summaries_require_conversations_read_scope(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from routers.developer import router as developer_router
+
+        app = FastAPI()
+        app.include_router(developer_router)
+        app.dependency_overrides[get_api_key_auth] = lambda: ApiKeyAuth(
+            uid='uid1', scopes=['memories:read'], app_id='test-app', key_id='test-key'
+        )
+
+        response = TestClient(app, raise_server_exceptions=False).get('/v1/dev/user/daily-summaries')
+
+        assert response.status_code == 403
 
 
 class TestDevApiMemoriesHttpLayer:
