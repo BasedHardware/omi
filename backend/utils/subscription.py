@@ -912,7 +912,11 @@ def _chat_allowance_text(plan: PlanType) -> str:
     if allocation['unit'] == 'question':
         if limit is None:
             return 'Unlimited chat questions per month'
-        return f'{limit} questions per month'
+        # Keep the word "chat": the pre-catalog copy was
+        # "{N} chat questions per month. Shared with mobile and web." and this is
+        # user-visible storefront text. A consolidation must not quietly reword the
+        # product; changing it is a copy decision, not a refactor.
+        return f'{limit} chat questions per month'
     if allocation['unit'] == 'usd_cent':
         if limit is None:
             return 'Unlimited AI compute per month'
