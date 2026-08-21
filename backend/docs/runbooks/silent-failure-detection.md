@@ -29,6 +29,16 @@ alert fired. Nothing was down in the sense any existing alert could observe:
 Each of these is a general failure mode, not a one-off. The rules below exist
 to make each of them observable.
 
+## Where to look
+
+All five rules link to **Grafana → Resilience / Fallbacks**:
+
+| Panel | Shows |
+|---|---|
+| 12 — LLM gateway pre-route rejections | The rejection counter that lane success rate cannot see. |
+| 13 — LLM gateway lane success rate | Per-lane success share, zero-filled so a never-successful lane plots at 0 rather than vanishing. |
+| 14 — Journey signal liveness | Accepted attempts per journey. A flat zero line here means that journey's alerts are dead, not that the path is healthy. |
+
 ## The alerts
 
 ### LLM Gateway — clients rejected before routing

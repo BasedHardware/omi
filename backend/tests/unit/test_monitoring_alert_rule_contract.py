@@ -358,3 +358,34 @@ def test_chat_traffic_zero_threshold_sits_below_the_measured_weekly_floor():
         assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [5], export_name
         assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["type"] == "lt"
         assert 'lane_id="omi:auto:chat-agent"' in rule["data"][0]["model"]["expr"]
+
+
+RESILIENCE_DASHBOARD = MONITORING / "dashboards/omi-services/resilience-fallbacks.json"
+SILENT_FAILURE_PANELS = {
+    PRE_ROUTE_REJECTION_RULE: "12",
+    "omi-llm-gateway-lane-failure-ratio": "13",
+    LANE_ZERO_SUCCESS_RULE: "13",
+    SIGNAL_DEAD_RULE: "14",
+    CHAT_TRAFFIC_ZERO_RULE: "13",
+}
+
+
+def test_silent_failure_alerts_link_a_panel_that_shows_their_own_signal():
+    """ "Confirm it in the linked panel" is only actionable if the panel plots it."""
+    dashboard = json.loads(RESILIENCE_DASHBOARD.read_text(encoding="utf-8"))
+    panels = {str(panel["id"]): panel for panel in dashboard["panels"]}
+    metric_for_panel = {
+        "12": "llm_gateway_request_rejections_total",
+        "13": "llm_gateway_requests_total",
+        "14": "omi_journey_accepted_total",
+    }
+
+    for panel_id, metric in metric_for_panel.items():
+        assert panel_id in panels, f"resilience dashboard is missing panel {panel_id}"
+        assert any(metric in target["expr"] for target in panels[panel_id]["targets"]), panel_id
+
+    for export_name, rules in _all_rule_exports().items():
+        for uid, panel_id in SILENT_FAILURE_PANELS.items():
+            annotations = rules[uid]["annotations"]
+            assert annotations["__dashboardUid__"] == dashboard["uid"], f"{export_name}:{uid}"
+            assert annotations["__panelId__"] == panel_id, f"{export_name}:{uid}"

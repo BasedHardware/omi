@@ -860,7 +860,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
-      "__panelId__": "7",
+      "__panelId__": "13",
       "summary": "The AI chat agent lane served under 5 requests in an hour; the lowest hour in the preceding week was 18",
       "threshold": "< 5 requests in 1h, sustained 30m",
       "user_impact": "Users may be unable to start or continue an Omi chat at all.",
