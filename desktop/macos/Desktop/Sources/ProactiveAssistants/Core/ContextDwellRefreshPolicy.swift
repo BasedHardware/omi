@@ -56,6 +56,17 @@ enum ContextDwellRefreshPolicy {
     now.addingTimeInterval(-(repeatRefreshCooldownSeconds - 10))
   }
 
+  /// Generation-guarded retry anchor: an in-flight refresh chain from context
+  /// A that aborts AFTER the user switched to context B must not backdate B's
+  /// freshly reset anchor (that would grant B a premature refresh on A's
+  /// schedule). The tick increments the generation on every context switch;
+  /// an abort may only move the anchor when its launch generation is still
+  /// current.
+  static func retryAnchor(now: Date, launchGeneration: Int, currentGeneration: Int) -> Date? {
+    guard launchGeneration == currentGeneration else { return nil }
+    return retryAnchor(now: now)
+  }
+
   /// One grace follow-up per typing burst: after the first fired refresh the
   /// anchor moves to the fire time, so "typed since the anchor" could never
   /// re-trigger without NEW typing — and a refresh whose extraction returned

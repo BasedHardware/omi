@@ -75,6 +75,20 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
       "repeats never exhaust while the user keeps typing")
   }
 
+  func testStaleChainCannotBackdateANewContextsAnchor() {
+    // Context A's refresh is in flight when the user switches to context B
+    // (the tick bumps the generation). A's late abort must not move B's
+    // freshly reset anchor — that would grant B a premature refresh on A's
+    // schedule.
+    let now = Date()
+    XCTAssertNil(
+      ContextDwellRefreshPolicy.retryAnchor(now: now, launchGeneration: 3, currentGeneration: 4))
+    // Same generation: the abort retries on the ordinary backdated schedule.
+    XCTAssertEqual(
+      ContextDwellRefreshPolicy.retryAnchor(now: now, launchGeneration: 4, currentGeneration: 4),
+      ContextDwellRefreshPolicy.retryAnchor(now: now))
+  }
+
   func testRetryAnchorReArmsShortlyWithoutDoubleFire() {
     let now = Date()
     let anchor = ContextDwellRefreshPolicy.retryAnchor(now: now)

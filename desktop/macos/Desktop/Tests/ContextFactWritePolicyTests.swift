@@ -265,6 +265,11 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(
         "The page shows frequently asked questions about billing."))
+    // User-subject inclusion phrasing (live 02:44 extraction, scored 0.9 by
+    // the model yet unclassified, which kept the forced lookup dark).
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The user included a question about the latest Omi desktop link in the body of the email."))
   }
 
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {

@@ -258,6 +258,16 @@ enum ContextFactWritePolicy {
     {
       return true
     }
+    // User-subject inclusion verbs ("The user included a question about the
+    // latest Omi desktop link in the body of the email" — live, scored 0.9 by
+    // the model yet unclassified here, so the forced lookup never armed).
+    if statement.range(
+      of:
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:included|includes|including|added|adds|adding|embedded|embeds|posed|poses|posing|put|puts)\b[^.]{0,40}\bquestion\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
     let questionMarker =
       statement.contains("?")
       || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil

@@ -60,6 +60,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   // the last real context switch or fired refresh, reset on real switches.
   private var dwellContextAnchor: Date?
   private var dwellRefreshCount = 0
+  private var dwellGeneration = 0
 
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
@@ -651,18 +652,23 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// full captures while the user types, so the freshest tracked frame would
   /// otherwise predate the very content this refresh exists to evaluate.
   private func captureFrameThenRefreshActiveContext(
-    windowID: CGWindowID, appName: String, windowTitle: String?
+    windowID: CGWindowID, appName: String, windowTitle: String?, launchGeneration: Int
   ) async {
     // Capture BEFORE the transition so the departing extraction sees the typed
     // content even when the preview-skip path starved full captures. Skip the
     // whole refresh if the user already switched away: tracking the old app's
     // frame after a switch would contaminate the new context's bucket.
+    log("Context dwell refresh chain: started")
     guard AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle) else {
       // The slot must not die silently: backdate the anchor exactly like a
       // failed capture so the next settled tick can retry, and say why. SPA
       // titles (compose drafts) shift underneath the tick, so this guard
       // fires in normal use, not only on real app switches.
-      dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
+        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
+      {
+        dwellContextAnchor = anchor
+      }
       log("Context dwell refresh aborted: context no longer tracked; retrying shortly")
       return
     }
@@ -691,15 +697,24 @@ public class ProactiveAssistantsPlugin: NSObject {
       }
     }
     guard capturedFreshFrame else {
-      dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
+        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
+      {
+        dwellContextAnchor = anchor
+      }
       log("Context dwell refresh aborted: fresh capture failed; retrying shortly")
       return
     }
+    log("Context dwell refresh chain: fresh frame captured")
     guard
       let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell(
         expectedApp: appName, expectedWindowTitle: windowTitle)
     else {
-      dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      if let anchor = ContextDwellRefreshPolicy.retryAnchor(
+        now: Date(), launchGeneration: launchGeneration, currentGeneration: dwellGeneration)
+      {
+        dwellContextAnchor = anchor
+      }
       log("Context dwell refresh aborted: coordinator refused the transition; retrying shortly")
       return
     }
@@ -723,6 +738,7 @@ public class ProactiveAssistantsPlugin: NSObject {
           ))
       }
     }
+    log("Context dwell refresh chain: transitioned; entering evaluation")
     await ContextProactivityEngine.shared.contextEntered(arrivingFence)
   }
 
@@ -966,6 +982,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         if switched || dwellContextAnchor == nil {
           dwellContextAnchor = tickTime
           dwellRefreshCount = 0
+          dwellGeneration += 1
         } else if let anchor = dwellContextAnchor,
           ContextDwellRefreshPolicy.shouldRefresh(
             secondsSinceAnchor: tickTime.timeIntervalSince(anchor),
@@ -980,9 +997,11 @@ public class ProactiveAssistantsPlugin: NSObject {
           let refreshApp = appForCheck
           let refreshTitle = windowTitle
           let refreshWindowID = windowID
+          let launchGeneration = dwellGeneration
           Task { [weak self] in
             await self?.captureFrameThenRefreshActiveContext(
-              windowID: refreshWindowID, appName: refreshApp, windowTitle: refreshTitle)
+              windowID: refreshWindowID, appName: refreshApp, windowTitle: refreshTitle,
+              launchGeneration: launchGeneration)
           }
         }
       }
