@@ -43,6 +43,12 @@ spec:
             # is not lost (same reason as compose).
             - name: NTFY_CACHE_FILE
               value: /var/cache/ntfy/cache.db
+            # Message size limit; ntfy defaults to 4096 and treats an over-limit body as an attachment
+            # (`400 invalid request: attachments not allowed`), so the notification is lost. The WebPush
+            # ciphertext is hex-armored for this text-only transport, which DOUBLES it: the 100-id bulk
+            # delete is 7906 B on the wire (BACKLOG L17). Same value as compose.
+            - name: NTFY_MESSAGE_SIZE_LIMIT
+              value: "16384"
           ports:
             - name: http
               containerPort: 80

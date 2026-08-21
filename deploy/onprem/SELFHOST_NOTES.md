@@ -1013,6 +1013,12 @@ git worktree add -f /tmp/base <sha-you-started-from>
 # run the same sweep in both trees, then compare file-by-file AND count-by-count
 ```
 
+**Two suites flake under the parallel sweep, and only there** (measured 2026-08-21, `-P 16`):
+`testing/e2e/test_sync_lifecycle.py` and `testing/e2e/test_boundary_contract_compatibility.py` each failed
+once in a sweep and then passed 3/3 and 5/5 in isolation. Both are E2E with a websocket or a lifecycle
+fixture, neither touches what was being changed at the time. So a single new FAIL in one of those two is
+worth re-running alone before treating it as a regression — and a FAIL in anything else is not.
+
 The list below drifts: it said *three files* while the measured sweep failed *eight*, and only one
 name overlapped — two of the three documented residuals had since started passing. A stale list is
 worse than no list, because "the FAIL set equals the known residuals" then reads as green. The
@@ -1241,6 +1247,32 @@ line at boot:
 STARTUP: PUSH_NOTIFICATION_BACKEND=unifiedpush but UNIFIEDPUSH_INTERNAL_BASE_URL is not set — no push
 notification will be delivered ...
 ```
+
+**Payload size: hex-armor doubles the body** (ADR-0073). The ciphertext is hex-encoded because ntfy is
+text-only, so a payload sized for FCM's 4 KB is ~8 KB on the wire — measured, the 100-id bulk action-item
+delete is 3850 B of plaintext and **7906 B posted**. ntfy's own `message-size-limit` defaults to **4096** and
+treats an over-limit body as an attachment, so it answers `400 invalid request: attachments not allowed` and
+the notification is gone. `NTFY_MESSAGE_SIZE_LIMIT=16384` is therefore declared on both targets (compose
+service + Helm StatefulSet), and a static test requires the declared value to be ≥ 7906 on each.
+
+Verify it on the running stack:
+
+```bash
+docker compose -f compose.prod.yaml exec ntfy sh -c 'echo $NTFY_MESSAGE_SIZE_LIMIT'   # -> 16384
+docker compose -f compose.prod.yaml exec backend /opt/venv/bin/python -c "
+import urllib.request, urllib.error
+for n in (7906, 15684, 16385):
+    req = urllib.request.Request('http://ntfy:80/probe', data=b'a'*n, headers={'Content-Type':'text/plain'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r: print(n, '->', r.status)
+    except urllib.error.HTTPError as e: print(n, '->', e.code)"
+# expected: 7906 -> 200 · 15684 -> 200 · 16385 -> 400
+```
+
+A 4xx that is not 404/410 is now recorded as `component=push to=dropped reason=capability_mismatch
+outcome=exhausted` instead of being filed as transient — which matters because the Apple-Reminders sync
+payload is **not chunked at all** and exceeds even FCM's 4 KB at ~30 items: upstream's bound on both
+transports, so beyond ~50 items the only thing we can offer is the signal.
 
 ```bash
 cd deploy/onprem

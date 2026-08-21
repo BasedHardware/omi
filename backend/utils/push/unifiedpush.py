@@ -30,6 +30,7 @@ import httpx
 import database.notifications as notification_db
 from database.notifications import UnifiedPushEndpoint
 from utils.executors import db_executor, push_crypto_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.http_client import get_ntfy_client
 from utils.push import webpush_encryption
 from utils.push.base import PushMessage
@@ -105,7 +106,18 @@ def render_payload(msg: PushMessage) -> dict:
 
 
 def _classify(endpoint_url: str, status: Optional[int], dead: List[str]) -> bool:
-    """Return True if the send succeeded; record permanently-dead endpoint URLs for cleanup."""
+    """Return True if the send succeeded; record permanently-dead endpoint URLs for cleanup.
+
+    A 4xx that is not 404/410 is the payload, not the endpoint: no retry makes an over-limit body fit, so
+    it is recorded as an EXHAUSTED capability mismatch rather than filed as transient and logged. That
+    distinction is the whole of BACKLOG L17 — hex-armor doubles the body (measured: a 100-id bulk delete
+    is 3850 B of plaintext and 7906 B on the wire), ntfy's default limit is 4096, and it answers
+    ``400 invalid request: attachments not allowed`` because an over-limit body looks like an attachment.
+    Every one of those notifications used to disappear with a log line and no counter.
+
+    5xx and a transport error (``status is None``) stay transient on purpose: the same message may well
+    arrive next time, and labelling those as "the transport cannot carry this" would bury the real signal.
+    """
     if status is None:
         return False
     if status in _DEAD_ENDPOINT_STATUSES:
@@ -114,6 +126,22 @@ def _classify(endpoint_url: str, status: Optional[int], dead: List[str]) -> bool
         return False
     if 200 <= status < 300:
         return True
+    if 400 <= status < 500:
+        record_fallback(
+            component='push',
+            from_mode='unifiedpush',
+            to_mode='dropped',
+            reason='capability_mismatch',
+            outcome='exhausted',
+            log=logger,
+        )
+        logger.error(
+            'UnifiedPush send REJECTED - status %s (payload the transport will not carry; check '
+            'NTFY_MESSAGE_SIZE_LIMIT vs the hex-armored body size): %s',
+            status,
+            endpoint_url,
+        )
+        return False
     logger.error('UnifiedPush send failed - status %s: %s', status, endpoint_url)
     return False
 

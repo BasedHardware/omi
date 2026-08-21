@@ -109,6 +109,15 @@ services:
       # drops any notification a device has not yet fetched. Persist them to a SQLite file on the
       # ntfy-cache volume (retained NTFY_CACHE_DURATION, ntfy default 12h) so they survive down/up.
       NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      # Message size limit. ntfy's default is 4096 bytes and an over-limit body is treated as an
+      # ATTACHMENT — with attachments off (the default) it answers `400 invalid request: attachments not
+      # allowed` and the notification is gone. Our bodies are bigger than they look: the WebPush
+      # ciphertext is HEX-ARMORED for this text-only transport, which doubles it. Measured with the real
+      # crypto: the 100-id bulk action-item delete is 3850 B of plaintext and **7906 B on the wire**, and
+      # ntfy v2.11.0 answered 200 / 400 / 400 for 3466 / 4206 / 7906 B on the default limit (BACKLOG L17).
+      # 16 KiB carries every BOUNDED payload with headroom (and ~50 items of the unbounded Apple-Reminders
+      # sync, which exceeds FCM's own 4 KB limit at 30 — that one is upstream's bound, not ours).
+      NTFY_MESSAGE_SIZE_LIMIT: "16384"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:80/v1/health | grep -q '\"healthy\":true'"]
       interval: 5s
