@@ -289,6 +289,14 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(
         "An email from David contains the line: 'when is the offsite?'"))
+    // Every artifact-subject branch honors the received marker, including the
+    // original contains-the-question shape (review finding).
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "An email from David contains the question: when is the offsite scheduled?"))
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A message received from the sender questions the deployment timeline."))
   }
 
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {

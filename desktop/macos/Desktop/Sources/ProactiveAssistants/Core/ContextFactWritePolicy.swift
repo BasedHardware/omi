@@ -240,9 +240,16 @@ enum ContextFactWritePolicy {
     {
       return true
     }
-    if statement.range(
-      of: #"(?i)\b(?:body|draft|message|email)\b[^.]{0,60}\bcontains the question\b"#,
-      options: .regularExpression) != nil
+    // Artifact-subject branches below must never classify RECEIVED content:
+    // "An email from David contains the question: …" is someone else's ask.
+    let receivedMarker =
+      statement.range(
+        of: #"(?i)\b(?:from|received|sender|sent by|reply from|inbox)\b"#,
+        options: .regularExpression) != nil
+    if !receivedMarker,
+      statement.range(
+        of: #"(?i)\b(?:body|draft|message|email)\b[^.]{0,60}\bcontains the question\b"#,
+        options: .regularExpression) != nil
     {
       return true
     }
@@ -253,16 +260,18 @@ enum ContextFactWritePolicy {
     // keeping the departure trigger dark. A draft that contains or poses a
     // question was authored by the user in every compose context this path
     // serves; received questions arrive as speech-acts ("David asked …").
-    if statement.range(
-      of:
-        #"(?i)\b(?:draft|email|message|note|body|content)\b[^.]{0,70}\b(?:contain(?:s|ing)?|includes?|including|with)\b[^.]{0,40}\bquestion\b"#,
-      options: .regularExpression) != nil
+    if !receivedMarker,
+      statement.range(
+        of:
+          #"(?i)\b(?:draft|email|message|note|body|content)\b[^.]{0,70}\b(?:contain(?:s|ing)?|includes?|including|with)\b[^.]{0,40}\bquestion\b"#,
+        options: .regularExpression) != nil
     {
       return true
     }
-    if statement.range(
-      of: #"(?i)\b(?:draft|email|message|note|body|text|content)\b[^.]{0,50}\bquestions\b"#,
-      options: .regularExpression) != nil
+    if !receivedMarker,
+      statement.range(
+        of: #"(?i)\b(?:draft|email|message|note|body|text|content)\b[^.]{0,50}\bquestions\b"#,
+        options: .regularExpression) != nil
     {
       return true
     }
