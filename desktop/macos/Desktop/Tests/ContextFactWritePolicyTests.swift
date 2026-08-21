@@ -252,6 +252,19 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(
         "The user is composing an email addressed to david@scalingforever.com."))
+    // Passive draft-subject phrasings (live 02:22 extraction, both scored 0.0
+    // and kept the departure trigger dark) floor.
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A draft email is addressed to david@scalingforever.com containing a question about the Omi desktop download URL."
+      ))
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A note or message content questions the URL to download Omi for Mac."))
+    // A displayed artifact that merely lists questions is not an authored ask.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The page shows frequently asked questions about billing."))
   }
 
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {

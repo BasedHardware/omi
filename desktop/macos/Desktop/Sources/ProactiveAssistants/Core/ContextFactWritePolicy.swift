@@ -238,6 +238,26 @@ enum ContextFactWritePolicy {
     {
       return true
     }
+    // Passive draft-subject phrasings observed live: "A draft email is
+    // addressed to david@… containing a question about …" and "A note or
+    // message content questions the URL to download Omi for Mac." — the model
+    // displaces the user subject onto the artifact, and both scored 0.0,
+    // keeping the departure trigger dark. A draft that contains or poses a
+    // question was authored by the user in every compose context this path
+    // serves; received questions arrive as speech-acts ("David asked …").
+    if statement.range(
+      of:
+        #"(?i)\b(?:draft|email|message|note|body|content)\b[^.]{0,70}\b(?:contain(?:s|ing)?|includes?|including|with)\b[^.]{0,40}\bquestion\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
+    if statement.range(
+      of: #"(?i)\b(?:draft|email|message|note|body|text|content)\b[^.]{0,50}\bquestions\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
     let questionMarker =
       statement.contains("?")
       || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil
