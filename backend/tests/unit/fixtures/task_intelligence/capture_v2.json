@@ -1,12 +1,51 @@
 {
   "schema_version": 1,
   "policy_version": "capture.v2",
+  "wake_word_extractor_cases": [
+    {
+      "id": "omni_command_with_following_payload",
+      "unmarked_transcript": "[segment:wake-1 0.000-1.000] User: Hey Omni, don't forget to send Sarah the budget.\n\n[segment:payload-1 1.000-2.000] User: The signed budget is due Friday.",
+      "marked_transcript": "[segment:wake-1 0.000-1.000] <omi-wake-word-invocation/> User: Hey Omni, don't forget to send Sarah the budget.\n\n[segment:payload-1 1.000-2.000] User: The signed budget is due Friday.",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-1", "payload-1"]
+    },
+    {
+      "id": "ordinary_extraction_survives_marked_conversation",
+      "unmarked_transcript": "[segment:ordinary-1 0.000-1.000] User: I will call the dentist tomorrow.\n\n[segment:wake-2 1.000-2.000] User: Hey Omi, add a task to send the budget.",
+      "marked_transcript": "[segment:ordinary-1 0.000-1.000] User: I will call the dentist tomorrow.\n\n[segment:wake-2 1.000-2.000] <omi-wake-word-invocation/> User: Hey Omi, add a task to send the budget.",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-2"],
+      "ordinary_source_segment_ids": ["ordinary-1"]
+    },
+    {
+      "id": "multilingual_context_with_english_invocation",
+      "unmarked_transcript": "[segment:context-zh 0.000-1.000] User: 我们继续说中文。\n\n[segment:wake-multi 1.000-2.000] User: Hey Omi，提醒我发预算。",
+      "marked_transcript": "[segment:context-zh 0.000-1.000] User: 我们继续说中文。\n\n[segment:wake-multi 1.000-2.000] <omi-wake-word-invocation/> User: Hey Omi，提醒我发预算。",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-multi"]
+    },
+    {
+      "id": "quoted_phrase_remains_non_actionable",
+      "unmarked_transcript": "[segment:quoted-1 0.000-2.000] User: The documentation should show the phrase Hey Omi as an example.",
+      "marked_transcript": "[segment:quoted-1 0.000-2.000] <omi-wake-word-invocation/> User: The documentation should show the phrase Hey Omi as an example.",
+      "expected_marked_capture_kind": null,
+      "required_marked_source_segment_ids": ["quoted-1"]
+    }
+  ],
   "cases": [
     {
       "id": "explicit_create",
       "inputs": {
         "transcript": {"text": "Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}},
         "screen": {"text": "User typed: Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}}
+      },
+      "expected": {"outcome": "create_direct", "interruption": "invoking_surface_only"}
+    },
+    {
+      "id": "wake_word_direct_mention",
+      "inputs": {
+        "transcript": {"text": "[segment:wake-1 0.000-2.000] <omi-wake-word-invocation/> User: Hey Omni, add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "direct_mention": true, "public_broadcast": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}},
+        "screen": {"text": "User explicitly typed: Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "direct_mention": true, "public_broadcast": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}}
       },
       "expected": {"outcome": "create_direct", "interruption": "invoking_surface_only"}
     },

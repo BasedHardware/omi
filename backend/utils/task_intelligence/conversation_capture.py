@@ -5,13 +5,15 @@ details from leaking into the already broad processing module and gives legacy t
 harnesses one stable dependency seam.
 """
 
+from collections.abc import Collection, Sequence
 from datetime import datetime
-from typing import Any, Sequence
+from typing import Any
 
 import database.action_items as action_items_db
 import database.task_intelligence_control as task_control_db
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCreatePayload, TaskOwner
 from models.candidate import CandidateAction
+from utils.conversations.wake_word import find_wake_word_segment_ids
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
 
@@ -34,7 +36,10 @@ def _concrete_deliverable(action_item: Any) -> bool:
     return raw is True
 
 
-def _capture_signals(action_item: Any) -> BackendCaptureSignals:
+def _capture_signals(
+    action_item: Any,
+    wake_word_segment_ids: Collection[str] = (),
+) -> BackendCaptureSignals:
     capture_kind = getattr(action_item, 'capture_kind', None)
     raw_candidate_action = getattr(action_item, 'candidate_action', None)
     candidate_action = raw_candidate_action if isinstance(raw_candidate_action, str) else 'create'
@@ -46,6 +51,7 @@ def _capture_signals(action_item: Any) -> BackendCaptureSignals:
     ownership_confidence = (
         float(raw_ownership_confidence) if isinstance(raw_ownership_confidence, (int, float)) else 0.5
     )
+    source_segment_ids = set(getattr(action_item, 'source_segment_ids', None) or [])
     return BackendCaptureSignals(
         explicit_command=capture_kind == 'explicit_command',
         clear_commitment=capture_kind == 'clear_commitment',
@@ -57,6 +63,7 @@ def _capture_signals(action_item: Any) -> BackendCaptureSignals:
         refines_task=target_task_id if candidate_action in {'update', 'complete'} else None,
         capture_confidence=capture_confidence,
         ownership_confidence=ownership_confidence,
+        direct_mention=bool(source_segment_ids.intersection(wake_word_segment_ids)),
     )
 
 
@@ -82,6 +89,7 @@ def _capture_decision(
     conversation_id: str,
     transcript_segments: Sequence[Any] = (),
 ):
+    wake_word_segment_ids = find_wake_word_segment_ids(transcript_segments)
     return adapt_backend_capture(
         TaskCreatePayload(
             description=action_item.description,
@@ -91,7 +99,7 @@ def _capture_decision(
         ),
         evidence_ref=_conversation_evidence_ref(action_item, conversation_id, transcript_segments),
         source_surface='conversation',
-        signals=_capture_signals(action_item),
+        signals=_capture_signals(action_item, wake_word_segment_ids),
     )
 
 

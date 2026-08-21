@@ -89,6 +89,7 @@ langchain_prompts.ChatPromptTemplate = MagicMock()
 # Stub utils packages and the LLM client module.
 _stub_package("utils")
 _stub_package("utils.llm")
+_stub_package("utils.conversations")
 llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
 llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
@@ -145,6 +146,13 @@ _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" /
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
+
+# wake_word is stdlib-only; load the real trust-boundary helper before the
+# isolated conversation-processing module imports it.
+_load_module_from_file(
+    "utils.conversations.wake_word",
+    BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
+)
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",

@@ -1,6 +1,8 @@
 """Hermetic runners for versioned task-intelligence fixtures."""
 
 from collections.abc import Callable
+from datetime import datetime, timezone
+import logging
 from typing import Any
 
 from models.task_recommendation import DeterministicFacts, FeedbackSubjectKind, RecommendationSubjectKind
@@ -9,6 +11,19 @@ from utils.task_intelligence.capture_policy import CapturePolicyResult, run_capt
 
 NormalizedSignals = dict[str, Any]
 FixtureAdapter = Callable[[dict[str, Any]], NormalizedSignals]
+ActionItemExtractor = Callable[..., list[Any]]
+
+_EXTRACTION_LOGGER = logging.getLogger('utils.llm.conversation_processing')
+
+
+class _ExtractionFailureCapture(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.failed = False
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if record.getMessage().startswith('Error extracting action items:'):
+            self.failed = True
 
 
 def _capture_stub_output(payload: dict[str, Any], *, modality: str) -> NormalizedSignals:
@@ -170,6 +185,126 @@ def run_fixture_suite(
     }
 
 
+def _item_result(item: Any) -> dict[str, Any]:
+    return {
+        'description': item.description,
+        'capture_kind': item.capture_kind,
+        'source_segment_ids': item.source_segment_ids,
+    }
+
+
+def _extract_for_live_evaluation(extractor: ActionItemExtractor, *args: Any, **kwargs: Any) -> list[Any]:
+    """Turn the production extractor's fail-open [] into an explicit eval failure."""
+
+    capture = _ExtractionFailureCapture()
+    previous_propagate = _EXTRACTION_LOGGER.propagate
+    _EXTRACTION_LOGGER.addHandler(capture)
+    _EXTRACTION_LOGGER.propagate = False
+    try:
+        try:
+            items = extractor(*args, **kwargs)
+        except Exception:
+            raise RuntimeError('live wake-word evaluation NOT_RUN: extractor call failed') from None
+    finally:
+        _EXTRACTION_LOGGER.propagate = previous_propagate
+        _EXTRACTION_LOGGER.removeHandler(capture)
+    if capture.failed:
+        raise RuntimeError('live wake-word evaluation NOT_RUN: extractor call failed')
+    return items
+
+
+def _matching_capture_kinds(items: list[dict[str, Any]], required_segment_ids: set[str]) -> list[str | None]:
+    return [
+        item['capture_kind']
+        for item in items
+        if required_segment_ids.intersection(item.get('source_segment_ids') or [])
+    ]
+
+
+def _evaluate_pair(case: dict[str, Any], pair: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    required_ids = set(case['required_marked_source_segment_ids'])
+    expected_kind = case['expected_marked_capture_kind']
+    unmarked_kinds = _matching_capture_kinds(pair['unmarked'], required_ids)
+    marked_kinds = _matching_capture_kinds(pair['marked'], required_ids)
+    ordinary_ids = set(case.get('ordinary_source_segment_ids', []))
+    unmarked_source_ids = {
+        segment_id for item in pair['unmarked'] for segment_id in (item.get('source_segment_ids') or [])
+    }
+    marked_source_ids = {segment_id for item in pair['marked'] for segment_id in (item.get('source_segment_ids') or [])}
+    unmarked_ordinary_kinds = _matching_capture_kinds(pair['unmarked'], ordinary_ids)
+    marked_ordinary_kinds = _matching_capture_kinds(pair['marked'], ordinary_ids)
+    marked_expected_kind = not marked_kinds if expected_kind is None else expected_kind in marked_kinds
+    return {
+        'unmarked_wake_capture_kinds': unmarked_kinds,
+        'marked_wake_capture_kinds': marked_kinds,
+        'marked_expected_kind': marked_expected_kind,
+        'capture_kind_changed': (
+            expected_kind in marked_kinds and expected_kind not in unmarked_kinds if expected_kind is not None else None
+        ),
+        'marked_provenance_complete': (
+            any(
+                item.get('capture_kind') == expected_kind
+                and required_ids.issubset(set(item.get('source_segment_ids') or []))
+                for item in pair['marked']
+            )
+            if expected_kind is not None
+            else None
+        ),
+        'ordinary_extraction_preserved': (
+            ordinary_ids.issubset(unmarked_source_ids) and ordinary_ids.issubset(marked_source_ids)
+            if ordinary_ids
+            else None
+        ),
+        'ordinary_capture_kinds_unchanged': (
+            sorted(unmarked_ordinary_kinds, key=str) == sorted(marked_ordinary_kinds, key=str) if ordinary_ids else None
+        ),
+    }
+
+
+def run_live_wake_word_evaluation(
+    capture: dict[str, Any], *, trials: int, extractor: ActionItemExtractor
+) -> dict[str, Any]:
+    """Run paired synthetic transcripts through the supplied production extractor."""
+
+    results: dict[str, list[dict[str, Any]]] = {}
+    evaluations: list[dict[str, Any]] = []
+    for case in capture.get('wake_word_extractor_cases', []):
+        case_trials: list[dict[str, Any]] = []
+        for _ in range(trials):
+            pair: dict[str, list[dict[str, Any]]] = {}
+            for treatment in ('unmarked', 'marked'):
+                items = _extract_for_live_evaluation(
+                    extractor,
+                    case[f'{treatment}_transcript'],
+                    datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
+                    'multi',
+                    'UTC',
+                    task_intelligence_capture=True,
+                    trusted_wake_word_markers=treatment == 'marked',
+                )
+                pair[treatment] = [_item_result(item) for item in items]
+            evaluation = _evaluate_pair(case, pair)
+            evaluations.append(evaluation)
+            case_trials.append({'outputs': pair, 'evaluation': evaluation})
+        results[case['id']] = case_trials
+    return {
+        'trials_per_case': trials,
+        'cases': results,
+        'measurement': {
+            'paired_trials': len(evaluations),
+            'marked_expected_kind': sum(result['marked_expected_kind'] for result in evaluations),
+            'capture_kind_changed': sum(result['capture_kind_changed'] is True for result in evaluations),
+            'marked_provenance_complete': sum(result['marked_provenance_complete'] is True for result in evaluations),
+            'ordinary_extraction_preserved': sum(
+                result['ordinary_extraction_preserved'] is True for result in evaluations
+            ),
+            'ordinary_capture_kinds_unchanged': sum(
+                result['ordinary_capture_kinds_unchanged'] is True for result in evaluations
+            ),
+        },
+    }
+
+
 __all__ = [
     'CapturePolicyResult',
     'KNOWN_TEST_ADAPTERS',
@@ -179,6 +314,7 @@ __all__ = [
     'run_capture_case',
     'run_capture_policy',
     'run_fixture_suite',
+    'run_live_wake_word_evaluation',
     'run_recorded_association_case',
     'run_recorded_ranking_case',
     'screen_capture_v2',

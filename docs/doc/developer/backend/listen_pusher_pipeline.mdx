@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-19 (durable meeting receipt and reconciliation)
+> Last updated: 2026-08-20 (end-of-conversation wake-word command marking)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -310,6 +310,17 @@ sequenceDiagram
         Note over Backend: Live request buffered in pending_conversation_requests;<br/>durable job remains recoverable by the reconciler
     end
 ```
+
+Before discard and structured extraction, the finalizer renders a separate
+segment-ID-labelled task transcript. A pure matcher marks evidence-backed
+English `Hey Omi` / `Hey Omie` / `Hey Omni` forms inline, including adjacent segments within
+two seconds and tokens welded to following words. The discard model still
+adjudicates whether a short marked utterance is meaningful, and the structured
+extractor still decides whether it is a concrete command; the marker never
+creates a task by itself. Extracted items whose source segment IDs intersect
+the matched invocation deterministically carry the direct-mention signal into
+the shared capture policy. This path has no realtime wake-word state or
+notification surface.
 
 ### 2.1 Durable finalization ownership
 

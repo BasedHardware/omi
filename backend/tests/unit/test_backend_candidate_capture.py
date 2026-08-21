@@ -30,6 +30,7 @@ def _action(
     target_task_id=None,
     concrete_deliverable=None,
     capture_confidence=None,
+    source_segment_ids=None,
 ):
     default_confidence = 0.95 if capture_kind else None
     return SimpleNamespace(
@@ -46,6 +47,7 @@ def _action(
         candidate_action=candidate_action,
         target_task_id=target_task_id,
         concrete_deliverable=concrete_deliverable,
+        source_segment_ids=source_segment_ids or [],
     )
 
 
@@ -206,6 +208,40 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
         ).policy.outcome
         == 'ignore'
     )
+
+
+def test_wake_word_provenance_sets_direct_mention_only_on_intersection():
+    action = _action(
+        'Send the budget',
+        capture_kind='explicit_command',
+        source_segment_ids=['wake-segment', 'payload-segment'],
+    )
+
+    matched = conversation_capture._capture_signals(action, {'wake-segment'})
+    unrelated = conversation_capture._capture_signals(action, {'other-segment'})
+
+    assert matched.direct_mention is True
+    assert unrelated.direct_mention is False
+
+
+def test_wake_word_direct_mention_prevents_public_broadcast_drop():
+    action = _action(
+        'Send the budget',
+        capture_kind='explicit_command',
+        source_segment_ids=['wake-segment'],
+    )
+    signals = conversation_capture._capture_signals(action, {'wake-segment'}).model_copy(
+        update={'public_broadcast': True}
+    )
+
+    decision = adapt_backend_capture(
+        TaskCreatePayload(description=action.description),
+        evidence_ref=EvidenceRef(kind='conversation', id='conversation-1', scope='canonical'),
+        source_surface='conversation',
+        signals=signals,
+    )
+
+    assert decision.policy.outcome == 'create_direct'
 
 
 @pytest.mark.parametrize(

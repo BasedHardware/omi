@@ -63,10 +63,31 @@ def test_capture_fixture_freezes_cross_modality_semantics():
 
     by_id = {case['id']: case['expected'] for case in fixture['cases']}
     assert by_id['clear_commitment'] == {'outcome': 'auto_accept_silent', 'interruption': 'none'}
+    assert by_id['wake_word_direct_mention'] == {
+        'outcome': 'create_direct',
+        'interruption': 'invoking_surface_only',
+    }
     assert by_id['unaccepted_request']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_at_confidence_floors']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_below_ownership_floor']['outcome'] == 'ignore'
     assert by_id['public_channel_not_owned']['outcome'] == 'ignore'
+
+
+def test_capture_fixture_defines_paired_wake_word_extractor_evaluation():
+    fixture = load_fixture('capture_v2.json')
+
+    cases = fixture['wake_word_extractor_cases']
+    assert {case['id'] for case in cases} == {
+        'multilingual_context_with_english_invocation',
+        'omni_command_with_following_payload',
+        'ordinary_extraction_survives_marked_conversation',
+        'quoted_phrase_remains_non_actionable',
+    }
+    for case in cases:
+        assert '<omi-wake-word-invocation/>' not in case['unmarked_transcript']
+        assert '<omi-wake-word-invocation/>' in case['marked_transcript']
+        assert case['expected_marked_capture_kind'] in {'explicit_command', None}
+        assert case['required_marked_source_segment_ids']
 
 
 def test_association_and_ranking_fixtures_include_negative_and_empty_cases():
