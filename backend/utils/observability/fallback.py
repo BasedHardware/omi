@@ -75,6 +75,8 @@ ALLOWED_COMPONENTS = frozenset(
         # Vector store (ADR-0033): an unconfigured store makes writes and deletes no-ops, and a capability
         # silently lost is the thing this counter exists for. Without the label it buckets to 'other'.
         'vector_store',
+        # Object store (ADR-0032): an unset public endpoint makes every signed URL carry the internal host.
+        'object_store',
         'other',
     }
 )

@@ -13,6 +13,7 @@ set empty on AWS bucket-owner-enforced buckets and grant public access via a buc
 from __future__ import annotations
 
 import io
+import logging
 import tempfile
 import os
 import threading
@@ -20,6 +21,9 @@ from typing import IO, Any, Dict, List, Optional
 
 from utils.object_store.errors import ObjectNotFound
 from utils.object_store.ports import ObjectInfo
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 _NOT_FOUND_CODES = ("404", "NoSuchKey", "NotFound")
 
@@ -44,6 +48,41 @@ def _s3():
                     config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
                 )
     return _client
+
+
+_public_client_lock = threading.Lock()
+_public_client: Any = None
+
+
+def _s3_public() -> Any:
+    """A client bound to the EXTERNAL base, used only to sign URLs that leave the process.
+
+    Not the same client as ``_s3()``: a SigV4 signature covers the Host header, so a signed URL cannot
+    have its host rewritten afterwards — the signature would stop matching and the object would 403.
+    Signing has to happen against the host the caller will actually use.
+
+    Returns ``None`` when ``S3_PUBLIC_ENDPOINT`` is unset, so ``presign_get`` can fall back to the
+    internal client (unchanged behaviour for a deployment that never configured it) while recording the
+    loss instead of hiding it.
+    """
+    if not (os.getenv("S3_PUBLIC_ENDPOINT") or "").strip():
+        return None
+    global _public_client
+    if _public_client is None:
+        with _public_client_lock:
+            if _public_client is None:
+                import boto3  # lazy: only the s3 backend needs this SDK
+                from botocore.config import Config
+
+                _public_client = boto3.client(
+                    "s3",
+                    endpoint_url=_public_base(),
+                    aws_access_key_id=os.getenv("S3_ACCESS_KEY"),
+                    aws_secret_access_key=os.getenv("S3_SECRET_KEY"),
+                    region_name=(os.getenv("S3_REGION") or "us-east-1").strip(),
+                    config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+                )
+    return _public_client
 
 
 def _public_base() -> str:
@@ -235,18 +274,44 @@ class S3ObjectStore:
                 return None
             raise
 
+    # Headers a REPLACE self-copy drops unless restated. The GCS twin uses blob.patch(), which touches
+    # only the metadata, so without this the two adapters disagreed on what "set metadata" means: on S3
+    # it also reset the content type, and an image served as application/octet-stream is a broken image.
+    _PRESERVED_HEADERS = ("ContentType", "CacheControl", "ContentDisposition", "ContentEncoding")
+
     def set_metadata(self, bucket: str, key: str, metadata: Dict[str, Any]) -> None:
-        _s3().copy_object(
+        client = _s3()
+        head = client.head_object(Bucket=bucket, Key=key)
+        preserved = {name: head[name] for name in self._PRESERVED_HEADERS if head.get(name)}
+        client.copy_object(
             Bucket=bucket,
             Key=key,
             CopySource={"Bucket": bucket, "Key": key},
             Metadata={str(k): str(v) for k, v in metadata.items()},
             MetadataDirective="REPLACE",
+            **preserved,
         )
 
     # --- URLs ---
     def presign_get(self, bucket: str, key: str, *, expires_seconds: int) -> str:
-        return _s3().generate_presigned_url("get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_seconds)
+        # Sign against the EXTERNAL base: this URL is handed to clients outside the process (the app, a
+        # prerecorded STT provider, a desktop updater), and the client endpoint is the internal one
+        # (the documented on-prem value is http://rustfs:9000). public_url already refused to expose
+        # that host; signing was still doing it.
+        client = _s3_public()
+        if client is None:
+            record_fallback(
+                component='object_store',
+                from_mode='presign_public_endpoint',
+                to_mode='presign_internal_endpoint',
+                reason='config_incomplete',
+                outcome='degraded',
+                log=logger,
+            )
+            client = _s3()
+        return client.generate_presigned_url(
+            "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_seconds
+        )
 
     def public_url(self, bucket: str, key: str) -> str:
         return f"{_public_base()}/{bucket}/{key}"

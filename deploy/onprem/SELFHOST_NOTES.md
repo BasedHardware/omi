@@ -795,10 +795,11 @@ docker run -d --name oc-gcs --network host \
 # wait: curl 127.0.0.1:9000 -> 403 (S3 serving); curl 127.0.0.1:4443/storage/v1/b -> 200
 # 2. Contract suite (same host netns)
 docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app -w /app \
-  -e S3_ENDPOINT=http://127.0.0.1:9000 -e S3_ACCESS_KEY=testkey -e S3_SECRET_KEY=testsecret -e S3_REGION=us-east-1 \
+  -e S3_ENDPOINT=http://127.0.0.1:9000 -e S3_PUBLIC_ENDPOINT=http://127.0.0.1:9000 \
+  -e S3_ACCESS_KEY=testkey -e S3_SECRET_KEY=testsecret -e S3_REGION=us-east-1 \
   -e STORAGE_EMULATOR_HOST=http://127.0.0.1:4443 \
   omi-oss-backend-test -m pytest -q tests/contract/test_object_store_contract.py
-# expected: 33 passed, 1 skipped (presign_get[gcs]: fake-gcs-server has no signing key; GCS V4
+# expected: 39 passed, 1 skipped (presign_get[gcs]: fake-gcs-server has no signing key; GCS V4
 # signing is covered by the hermetic delegation unit test in the same file)
 docker rm -f oc-rustfs oc-gcs    # cleanup
 ```
