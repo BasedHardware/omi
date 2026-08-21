@@ -37,6 +37,18 @@ DEFAULT_BASELINE = Path('.github/scripts/object_store_boundary_baseline.json')
 #  - migrations/         : removed in WP1; kept here so a re-added dir does not silently slip in.
 EXCLUDED_PREFIXES = ('utils/object_store/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/', 'migrations/')
 
+# EXCEPT the ones the runtime actually imports. ADR-0023's premise — "scripts/ is not deployed runtime" —
+# is FALSE for two modules (BACKLOG L12): main.py imports scripts/reconcile_mongo_indexes.py and calls it at
+# boot, and utils/memory/canonical_short_term_maintenance_cron.py imports run_enrichment from
+# scripts/enrich_historical_memory_graph.py. Excluding the whole directory therefore left runtime code
+# unscanned. These two are scanned; tests/unit/test_runtime_reachable_scripts.py RECOMPUTES the set from the
+# source, so the tuple cannot drift away from reality.
+RUNTIME_REACHABLE_SCRIPTS = (
+    'scripts/enrich_historical_memory_graph.py',
+    'scripts/reconcile_mongo_indexes.py',
+)
+
+
 # Distinctive google-cloud-storage blob/bucket method names (no stdlib / domain collisions). The raw
 # client import is forbidden on its own; these catch a client handed across a module boundary.
 _FORBIDDEN_OP_METHODS = frozenset(
@@ -189,7 +201,9 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
     counts: dict[str, int] = {}
     for path in sorted(root.rglob('*.py')):
         rel_to_scan = path.relative_to(root).as_posix()
-        if any(rel_to_scan.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+        if rel_to_scan not in RUNTIME_REACHABLE_SCRIPTS and any(
+            rel_to_scan.startswith(prefix) for prefix in EXCLUDED_PREFIXES
+        ):
             continue
         count = count_boundary_violations(path.read_text(encoding='utf-8'), str(path))
         if count:

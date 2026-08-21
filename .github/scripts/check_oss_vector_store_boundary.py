@@ -35,6 +35,17 @@ DEFAULT_BASELINE = Path('.github/scripts/vector_store_boundary_baseline.json')
 # client must fail this boundary too (the upstream migrations reach vectors only via the port; verified 0).
 EXCLUDED_PREFIXES = ('utils/vector/', 'tests/', 'testing/', 'scripts/', 'agent-proxy/')
 
+# EXCEPT the ones the runtime actually imports. ADR-0023's premise — "scripts/ is not deployed runtime" —
+# is FALSE for two modules (BACKLOG L12): main.py imports scripts/reconcile_mongo_indexes.py and calls it at
+# boot, and utils/memory/canonical_short_term_maintenance_cron.py imports run_enrichment from
+# scripts/enrich_historical_memory_graph.py. Excluding the whole directory therefore left runtime code
+# unscanned. These two are scanned; tests/unit/test_runtime_reachable_scripts.py RECOMPUTES the set from the
+# source, so the tuple cannot drift away from reality.
+RUNTIME_REACHABLE_SCRIPTS = (
+    'scripts/enrich_historical_memory_graph.py',
+    'scripts/reconcile_mongo_indexes.py',
+)
+
 
 def _is_forbidden_import_module(module: str | None) -> bool:
     if not module:
@@ -99,7 +110,9 @@ def collect_counts(repository_root: Path, scan_root: Path) -> dict[str, int]:
     counts: dict[str, int] = {}
     for path in sorted(root.rglob('*.py')):
         rel_to_scan = path.relative_to(root).as_posix()
-        if any(rel_to_scan.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+        if rel_to_scan not in RUNTIME_REACHABLE_SCRIPTS and any(
+            rel_to_scan.startswith(prefix) for prefix in EXCLUDED_PREFIXES
+        ):
             continue
         count = count_boundary_violations(path.read_text(encoding='utf-8'), str(path))
         if count:
