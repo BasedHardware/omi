@@ -20,6 +20,7 @@ PROD_VALUES = MONITORING / 'kube-prometheus-stack' / 'prod_omi_monitoring_values
 ALERT_RULES = MONITORING / 'alert-rules.json'
 PARAKEET_SERVICEMONITOR = REPO / 'backend/charts/parakeet' / 'templates' / 'servicemonitor.yaml'
 STACKDRIVER_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_stackdriver_exporter.yaml'
+CLOUD_RUN_EXPORTER = MONITORING / 'prometheus-stackdriver-exporter' / 'prod_omi_cloud_run_metrics_exporter.yaml'
 
 
 def _load_inventory() -> dict[str, Any]:
@@ -107,6 +108,22 @@ def test_stackdriver_exporter_values_present():
     assert STACKDRIVER_EXPORTER.is_file()
     inventory = _load_inventory()
     assert any(job['name'] == 'prometheus-stackdriver-metrics' for job in inventory['scrape_jobs'])
+
+
+def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited():
+    values = yaml.safe_load(CLOUD_RUN_EXPORTER.read_text(encoding='utf-8'))
+    metrics = values['stackdriver']['metrics']
+    assert metrics['prefixes'] == ['prometheus.googleapis.com/omi_']
+    assert metrics['interval'] == '2m'
+    assert metrics['offset'] == '1m'
+    assert metrics['filters'] == [
+        'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
+        '(resource.labels.namespace="backend" OR resource.labels.namespace="desktop-backend")'
+    ]
+    assert values['serviceAccount'] == {
+        'create': False,
+        'name': 'prod-omi-prometheus-stackdriver-exporter',
+    }
 
 
 def test_enforced_coverage_alert_includes_declared_jobs():
