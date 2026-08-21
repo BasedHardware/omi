@@ -180,9 +180,25 @@ def test_the_repository_is_at_or_below_its_baseline():
     assert result['stale_baseline'] == []
 
 
-def test_the_two_measured_gaps_carry_a_real_note_not_the_default():
-    """These two were proven on live storage; they must not sit behind the 'unreviewed' marker."""
+def test_the_two_measured_gaps_are_now_DECLARED_not_merely_annotated():
+    """The successor of "these two carry a real note".
+
+    `MEMORY_ENABLED` and `MEMORY_V3_CURSOR_SECRET` were the two gaps proven on live storage, and the
+    original assertion demanded a written finding instead of the `unreviewed` default. Both have since been
+    **declared** in our env-file and in the chart (ADR-0063/ADR-0064 work), which is the outcome the note
+    was pointing at — and the baseline self-cleans, so a declared name leaves it. Asserting they are ABSENT
+    keeps the guarantee where annotating them no longer can: if either is ever dropped from our declarations
+    it reappears in the baseline as `unreviewed`, and this fails.
+    """
     root = Path(__file__).resolve().parents[3]
     baseline = _MODULE.load_baseline(root / _MODULE.DEFAULT_BASELINE)
     for name in ('MEMORY_ENABLED', 'MEMORY_V3_CURSOR_SECRET'):
-        assert baseline.get(name, _MODULE.UNREVIEWED) != _MODULE.UNREVIEWED, f'{name} needs its finding written down'
+        assert name not in baseline, f'{name} is undeclared again — declare it, do not annotate it'
+
+
+def test_every_baseline_entry_that_carries_a_note_keeps_it():
+    """The ratchet's other half: a note, once written, must not silently decay to `unreviewed`."""
+    root = Path(__file__).resolve().parents[3]
+    baseline = _MODULE.load_baseline(root / _MODULE.DEFAULT_BASELINE)
+    annotated = {name: note for name, note in baseline.items() if note != _MODULE.UNREVIEWED}
+    assert all(note.strip() for note in annotated.values()), 'a blank note is not a note'
