@@ -46,7 +46,12 @@ void main() {
     final source = File('ios/Runner/AppDelegate.swift').readAsStringSync();
 
     expect(source, contains('request.taskHint = .dictation'));
-    expect(source, contains('request.addsPunctuation = true'));
+    expect(
+      source,
+      contains('''if #available(iOS 16, *) {
+                request.addsPunctuation = true
+            }'''),
+    );
   });
 
   test('Apple on-device STT drops low-energy filler transcripts', () async {

@@ -687,7 +687,9 @@ class SpeechRecognitionHandler: NSObject {
             request.shouldReportPartialResults = false
             request.requiresOnDeviceRecognition = true // Force on-device
             request.taskHint = .dictation
-            request.addsPunctuation = true
+            if #available(iOS 16, *) {
+                request.addsPunctuation = true
+            }
             
             let task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
                 if let error = error {
