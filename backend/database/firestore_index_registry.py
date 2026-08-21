@@ -621,6 +621,21 @@ MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
     ),
 )
 
+HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
+    identifier='hourly_usage_plan_attribution_month',
+    collection_group='hourly_usage',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('year', '==', 'year'),
+        FirestoreQueryFilter('month', '==', 'month'),
+    ),
+    index_fields=(
+        _asc('year'),
+        _asc('month'),
+        _asc('__name__'),
+    ),
+)
+
 QUERY_SPECS = (
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
@@ -650,6 +665,7 @@ QUERY_SPECS = (
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
+    HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
