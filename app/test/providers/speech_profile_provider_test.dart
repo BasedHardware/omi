@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/services/services.dart';
@@ -168,6 +169,95 @@ void main() {
         async.elapse(const Duration(seconds: 30));
 
         expect(provider.openCalls, 0, reason: 'onboarding already finished; nothing to reconnect');
+
+        provider.dispose();
+      });
+    });
+  });
+
+  // Regression coverage: closeCode 1011 (server-side STT failure) with no
+  // user speech captured yet means the STT backend is down, not that the
+  // socket hiccuped. Before this fix, every such close scheduled another 5s
+  // reconnect forever, spamming the "connection lost" dialog (see
+  // speech_profile_widget.dart/page.dart) with no way out except force-
+  // quitting, even though "Skip for now" sits right next to it.
+  group('speech-profile socket gives up when STT is unavailable', () {
+    test('stops reconnecting and surfaces STT_UNAVAILABLE after repeated 1011 closes', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider();
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+
+        provider.onClosed(1011);
+        expect(provider.error, 'SOCKET_DISCONNECTED');
+
+        provider.onClosed(1011);
+        expect(provider.error, 'SOCKET_DISCONNECTED');
+
+        provider.onClosed(1011);
+        expect(
+          provider.error,
+          'STT_UNAVAILABLE',
+          reason: 'third consecutive 1011 with no captured speech means STT is down; keep retrying cannot fix that',
+        );
+
+        async.elapse(const Duration(seconds: 30));
+        expect(provider.openCalls, 0, reason: 'must not keep scheduling reconnects once STT is deemed unavailable');
+
+        provider.dispose();
+      });
+    });
+
+    test('does not give up on an ordinary disconnect that is not a 1011 STT failure', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider();
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+
+        provider.onClosed(1006);
+        provider.onClosed(1006);
+        provider.onClosed(1006);
+
+        expect(provider.error, 'SOCKET_DISCONNECTED', reason: 'code 1006 is a generic drop, not the STT-down signal');
+
+        async.elapse(const Duration(seconds: 5));
+        expect(provider.openCalls, 1, reason: 'an ordinary disconnect must still keep retrying');
+
+        provider.dispose();
+      });
+    });
+
+    test('does not give up once real speech has been captured', () {
+      fakeAsync((async) {
+        final provider = _CountingSpeechProfileProvider();
+        provider.usePhoneMic = true;
+        provider.updateStartedRecording(true);
+
+        provider.onClosed(1011);
+        provider.onClosed(1011);
+
+        // Simulate captured speech directly rather than going through
+        // onSegmentReceived, which also touches the WavBytesUtil that
+        // initialise() (not exercised by this test) normally sets up.
+        provider.segments.add(
+          TranscriptSegment(
+            id: '1',
+            text: 'hello',
+            speaker: 'SPEAKER_1',
+            isUser: true,
+            personId: null,
+            start: 0,
+            end: 1,
+            translations: [],
+          ),
+        );
+
+        provider.onClosed(1011);
+        expect(
+          provider.error,
+          'SOCKET_DISCONNECTED',
+          reason: 'speech was captured, so STT is actually working; a later 1011 must not short-circuit to skip',
+        );
 
         provider.dispose();
       });
