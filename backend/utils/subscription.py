@@ -816,8 +816,8 @@ def validate_stripe_price_ids():
                 )
 
 
-_BASIC_TIER_SECONDS_DEFAULT = allocation_limit(PlanType.basic, 'transcription')
-if _BASIC_TIER_SECONDS_DEFAULT is None:
+_basic_tier_seconds_raw = allocation_limit(PlanType.basic, 'transcription')
+if _basic_tier_seconds_raw is None:
     # allocation_limit returns None for an unlimited allocation. Free is metered by
     # design, so an unlimited basic transcription allowance is a catalog authoring
     # mistake, not a configuration choice. Fail with a sentence that says what is
@@ -826,6 +826,9 @@ if _BASIC_TIER_SECONDS_DEFAULT is None:
         'basic.transcription must declare a finite allowance; an unlimited free tier '
         'would make transcription spend unbounded per user'
     )
+
+# Narrowed above, so the rest of the module (and pyright) can treat it as a plain int.
+_BASIC_TIER_SECONDS_DEFAULT: int = _basic_tier_seconds_raw
 
 
 def _legacy_overlay(env_name: str) -> Tuple[bool, Optional[int]]:
