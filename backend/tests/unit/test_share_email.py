@@ -187,3 +187,22 @@ def test_read_timeout_maps_to_ambiguous_and_connect_failure_to_definitive(monkey
         raise AssertionError('connection failure is definitive, not ambiguous')
     except RuntimeError:
         pass
+
+
+def test_quota_redis_outage_fails_open_and_records_fallback(monkeypatch):
+    from utils.conversations import share_email as se
+
+    class BrokenRedis:
+        def incrby(self, *a, **kw):
+            raise ConnectionError('redis down')
+
+    import database.redis_db as redis_db
+
+    monkeypatch.setattr(redis_db, 'r', BrokenRedis())
+    events = []
+    import utils.observability.fallback as fallback
+
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **kw: events.append(kw))
+    assert se.consume_daily_send_quota('uid-1', 1) is True
+    assert len(events) == 1
+    assert events[0]['to_mode'] == 'quota_bypassed'

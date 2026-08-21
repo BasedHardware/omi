@@ -177,7 +177,18 @@ def consume_daily_send_quota(uid: str, recipient_count: int) -> bool:
             return False
         return True
     except Exception:
-        logger.exception('share email: quota check failed open')
+        # Fail-open: a Redis outage must not block the user's own share, but
+        # the unenforced-quota window has to be observable.
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='quota_enforced',
+            to_mode='quota_bypassed',
+            reason='provider_error',
+            outcome='degraded',
+            log=logger,
+        )
         return True
 
 
