@@ -25,7 +25,9 @@ os.environ.setdefault(
 )
 
 from tests.unit.memory_import_isolation import (
+    CLIENT_BINDING_DATABASE_MODULES,
     WS_I_HEAVY_STUB_MODULE_NAMES,
+    drop_client_binding_modules,
     install_database_client_stub,
     install_ws_i_heavy_import_stubs,
     restore_sys_modules,
@@ -39,10 +41,17 @@ def _memory_replace_import_isolation():
         [
             "database._client",
             "utils.conversations.process_conversation",
+            *CLIENT_BINDING_DATABASE_MODULES,
             *WS_I_HEAVY_STUB_MODULE_NAMES,
         ]
     )
     install_database_client_stub()
+    # Evict anything that already captured a live Firestore handle before stubbing.
+    # Without this the stub install skips those names, _extract_memories_canonical
+    # reaches the real database.notifications.get_user_time_zone, and the test spends
+    # an hour in google.api_core retry backoff instead of 0.36s -- passing either way,
+    # so only the clock shows it.
+    drop_client_binding_modules()
     install_ws_i_heavy_import_stubs()
     yield
     restore_sys_modules(saved)
