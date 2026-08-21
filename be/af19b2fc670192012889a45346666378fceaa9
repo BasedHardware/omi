@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
+  s_5799d664feb3c5::t_eb287318efcd8b 430-455,463-465,483,542
+  s_5799d664feb3c5::t_bc8a60595e2b17 497,518-521,528,541,550
+desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift
+  s_5799d664feb3c5::t_ea3e02a3291c8c 1-50
+desktop/macos/Desktop/Tests/ConversationSummarySectionsDecodeTests.swift
+  s_5799d664feb3c5::t_1eaa9ee1bd28c4 1-98
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/CaptureArchivePage.swift
+  s_5799d664feb3c5::t_4d5091838736c6 120,149-190
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  s_5799d664feb3c5::t_91949728b3731c 602-606
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "beaf19b2fc670192012889a45346666378fceaa9",
+  "prompts": {},
+  "sessions": {
+    "s_5799d664feb3c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a560635-5b6c-4f58-8252-1717f103fd11",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
