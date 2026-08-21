@@ -26,6 +26,7 @@ honor identically.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from collections import defaultdict
@@ -33,12 +34,16 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 
 from pymongo import ASCENDING, DESCENDING, DeleteOne, InsertOne, MongoClient, ReplaceOne, UpdateOne
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure
+
+from utils.observability.fallback import record_fallback
 
 from ..errors import AlreadyExists, NotFound, PreconditionFailed
 from ..records import StoredDocument
 from ..sentinels import DELETE, SERVER_TIMESTAMP, ArrayRemove, ArrayUnion, Increment
 from ..ports import Filter
+
+logger = logging.getLogger(__name__)
 
 # ``array_contains_any`` maps to ``$in``: on an array-valued field Mongo's $in matches when ANY array
 # element is in the given list (mirrors Firestore array_contains_any). ``not-in`` -> ``$nin``.
@@ -162,6 +167,22 @@ def _to_record(doc: Dict[str, Any], path: str) -> StoredDocument:
     )
 
 
+# A standalone mongod refuses transaction numbers outright; every other OperationFailure is a real error
+# and must not be retried non-atomically. Matched on the server's own words plus its code, because either
+# alone has changed across server versions.
+_NO_TRANSACTIONS_MARKERS = (
+    'Transaction numbers are only allowed on a replica set member or mongos',
+    'Transactions are not supported',
+)
+
+
+def _is_transactions_unsupported(exc: OperationFailure) -> bool:
+    if getattr(exc, 'code', None) == 20:  # IllegalOperation
+        return True
+    message = str(exc)
+    return any(marker in message for marker in _NO_TRANSACTIONS_MARKERS)
+
+
 class _MongoBatch:
     """Neutral batched-write accumulator; on commit, groups ops by collection and bulk-writes.
 
@@ -191,7 +212,7 @@ class _MongoBatch:
         self._append(
             collection_name,
             UpdateOne({"_id": path}, bump),
-            lambda coll, _b=bump: coll.update_one({"_id": path}, _b),
+            lambda coll, session=None, _b=bump: coll.update_one({"_id": path}, _b, session=session),
         )
 
     def set(self, path: str, data: Dict[str, Any], *, merge: bool = False) -> None:
@@ -204,7 +225,7 @@ class _MongoBatch:
             self._append(
                 collection_name,
                 UpdateOne({"_id": path}, update, upsert=True),
-                lambda coll: coll.update_one({"_id": path}, update, upsert=True),
+                lambda coll, session=None: coll.update_one({"_id": path}, update, upsert=True, session=session),
             )
             self._append_bump(collection_name, path, now)
         else:
@@ -226,7 +247,7 @@ class _MongoBatch:
             self._append(
                 collection_name,
                 UpdateOne({"_id": path}, doc_update, upsert=True),
-                lambda coll: coll.update_one({"_id": path}, doc_update, upsert=True),
+                lambda coll, session=None: coll.update_one({"_id": path}, doc_update, upsert=True, session=session),
             )
             # A non-merge set can still carry neutral transforms (SERVER_TIMESTAMP/Increment/ArrayUnion).
             # Mirror MongoDocumentStore._set: apply them in a follow-up update right after the replace, or
@@ -237,7 +258,7 @@ class _MongoBatch:
                 self._append(
                     collection_name,
                     UpdateOne({"_id": path}, transform_ops),
-                    lambda coll, _o=transform_ops: coll.update_one({"_id": path}, _o),
+                    lambda coll, session=None, _o=transform_ops: coll.update_one({"_id": path}, _o, session=session),
                 )
 
     def create(self, path: str, data: Dict[str, Any]) -> None:
@@ -250,13 +271,13 @@ class _MongoBatch:
         document = {"_id": path, "_parent": parent, "_key": key, "_updated_at": now, "_created_at": now, "d": plain}
         transforms = {k: v for k, v in data.items() if _is_sentinel(v)}
 
-        def run(coll: Any) -> None:
+        def run(coll: Any, session: Any = None) -> None:
             try:
-                coll.insert_one(document)
+                coll.insert_one(document, session=session)
             except DuplicateKeyError as exc:
                 raise AlreadyExists(path) from exc
             if transforms:
-                coll.update_one({"_id": path}, _build_update_ops(transforms))
+                coll.update_one({"_id": path}, _build_update_ops(transforms), session=session)
 
         # ``checked`` so a duplicate-key collision surfaces per-op — bulk_write's aggregate result
         # cannot attribute a DuplicateKeyError to one queued op — forcing the sequential commit path.
@@ -274,8 +295,8 @@ class _MongoBatch:
             update.setdefault("$set", {})["_updated_at"] = _rev_stamp(if_updated_at)
             query = {"_id": path, "_updated_at": if_updated_at}
 
-            def run_occ(coll: Any) -> None:
-                if coll.update_one(query, update).matched_count == 0:
+            def run_occ(coll: Any, session: Any = None) -> None:
+                if coll.update_one(query, update, session=session).matched_count == 0:
                     raise PreconditionFailed(path)
 
             self._append(collection_name, UpdateOne(query, update), run_occ, checked=True)
@@ -286,10 +307,10 @@ class _MongoBatch:
         # both) -> NotFound, matching the Firestore batch (raises at commit, not a silent drop).
         bump = [{"$set": {"_updated_at": _monotonic_updated_at(now)}}]
 
-        def run(coll: Any) -> None:
+        def run(coll: Any, session: Any = None) -> None:
             if update:
-                coll.update_one({"_id": path}, update)
-            if coll.update_one({"_id": path}, bump).matched_count == 0:
+                coll.update_one({"_id": path}, update, session=session)
+            if coll.update_one({"_id": path}, bump, session=session).matched_count == 0:
                 raise NotFound(path)
 
         self._append(collection_name, UpdateOne({"_id": path}, bump), run, checked=True)
@@ -300,28 +321,69 @@ class _MongoBatch:
         if if_updated_at is not None:
             query["_updated_at"] = if_updated_at
 
-        def run(coll: Any) -> None:
-            result = coll.delete_one(query)
+        def run(coll: Any, session: Any = None) -> None:
+            result = coll.delete_one(query, session=session)
             if if_updated_at is not None and result.deleted_count == 0:
                 raise PreconditionFailed(path)
 
         self._append(collection_name, DeleteOne(query), run, checked=if_updated_at is not None)
 
-    def commit(self) -> None:
-        by_collection: Dict[str, list] = defaultdict(list)
-        for collection_name, op, run, checked in self._ops:
-            by_collection[collection_name].append((op, run, checked))
+    def _apply(self, by_collection: Dict[str, list], session: Any = None) -> None:
         for collection_name, ops in by_collection.items():
             coll = self._store._db[collection_name]
             if any(checked for _, _, checked in ops):
                 # Sequential in queued order so precondition/update ops are individually checkable.
                 for _, run, _ in ops:
-                    run(coll)
+                    run(coll, session)
             else:
                 # Ordered: within one collection, queued writes to the SAME document must apply in order
                 # (a set then update, or set then delete) — ordered=False lets Mongo reorder and lose the
                 # later write or resurrect a deleted doc.
-                coll.bulk_write([op for op, _, _ in ops], ordered=True)
+                coll.bulk_write([op for op, _, _ in ops], ordered=True, session=session)
+
+    def commit(self) -> None:
+        """Apply every queued write inside ONE transaction: a batch is all-or-nothing (BACKLOG L25).
+
+        The writes are grouped by collection because Mongo bulk-writes per collection, and that grouping
+        used to BE the commit: group after group, no rollback. Two callers depend on the opposite, and say
+        so in their own comments — ``database/chat.py::delete_messages`` ("The batch is atomic, so re-query
+        before applying any decrement") and ``database/staged_tasks.py`` ("Firestore rejects the atomic
+        batch instead of deleting the newer record"). Measured on a live replica set before this: a batch
+        whose second group failed its precondition left the FIRST group applied — the chat message was
+        deleted and its session counter never decremented (permanent drift), and the action item was
+        created while the staged row stayed forever. Firestore applied nothing, as the callers assume.
+
+        The transaction also makes the retry safe: ``with_transaction`` replays the callback on a transient
+        write conflict, and a rollback means the replay starts from the original state.
+
+        A server that cannot do transactions (standalone mongod — not a configuration this project
+        deploys: both compose and the chart run a replica set) keeps the previous per-collection
+        behaviour, with the lost atomicity RECORDED rather than assumed. The catch is deliberately narrow:
+        a ``PreconditionFailed`` is a StoreError, never an ``OperationFailure``, so the expected race can
+        never be mistaken for "transactions unavailable" and silently re-applied non-atomically.
+        """
+        by_collection: Dict[str, list] = defaultdict(list)
+        for collection_name, op, run, checked in self._ops:
+            by_collection[collection_name].append((op, run, checked))
+        if not by_collection:
+            self._ops = []
+            return
+
+        try:
+            with self._store._mongo_client.start_session() as session:
+                session.with_transaction(lambda active: self._apply(by_collection, active))
+        except OperationFailure as exc:
+            if not _is_transactions_unsupported(exc):
+                raise
+            record_fallback(
+                component='document_store',
+                from_mode='batch_transaction',
+                to_mode='batch_per_collection',
+                reason='capability_mismatch',
+                outcome='degraded',
+                log=logger,
+            )
+            self._apply(by_collection)
         self._ops = []
 
 

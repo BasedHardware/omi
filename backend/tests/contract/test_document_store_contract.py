@@ -873,3 +873,37 @@ def test_a_transactional_query_sees_a_row_written_before_the_transaction(store, 
 
     store.set(f"users/{uid}/action_items/a9", {"key": "k9", "done": False})
     assert store.run_transaction(create_then_read) == ["a9"]
+
+
+def test_a_batch_that_fails_a_precondition_applies_NOTHING_across_collections(store, uid):
+    """A batch is all-or-nothing, even when its writes span two collections (BACKLOG L25).
+
+    Two callers depend on this and say so in their own comments. `database/chat.py::delete_messages`
+    queues the message deletes (with preconditions) and the `chat_sessions` counter updates in ONE batch,
+    and its except branch reads "The batch is atomic, so re-query before applying any decrement".
+    `database/staged_tasks.py` queues the action-item create plus the guarded staged-row delete and says
+    "Firestore rejects the atomic batch instead of deleting the newer record".
+
+    Measured before this test existed: on Mongo the commit grouped by collection and applied one group at
+    a time, so the FIRST group landed and the second raised — the message was deleted and its counter
+    never decremented (permanent drift), and the action item was created while the staged row stayed
+    forever (AlreadyExists on every later pass). Firestore applied nothing, as the callers assume.
+    """
+    from database.store.errors import PreconditionFailed
+
+    store.set(f"users/{uid}/messages/m1", {"text": "hello"})
+    store.set(f"users/{uid}/chat_sessions/s1", {"message_count": 1})
+    stale_revision = store.get(f"users/{uid}/chat_sessions/s1").updated_at
+
+    # Somebody else touches the SESSION after we read it — the race the callers guard against.
+    store.update(f"users/{uid}/chat_sessions/s1", {"message_count": 5})
+
+    batch = store.batch()
+    batch.delete(f"users/{uid}/messages/m1")
+    batch.update(f"users/{uid}/chat_sessions/s1", {"message_count": 0}, if_updated_at=stale_revision)
+    with pytest.raises(PreconditionFailed):
+        batch.commit()
+
+    # Neither half applied: the delete is the destructive one, and it is queued FIRST.
+    assert store.get(f"users/{uid}/messages/m1").exists, 'the message was deleted by a batch that failed'
+    assert store.get(f"users/{uid}/chat_sessions/s1").to_dict()["message_count"] == 5

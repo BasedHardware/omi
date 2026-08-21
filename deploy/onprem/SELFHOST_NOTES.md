@@ -908,6 +908,15 @@ So `tx.query` means "the read runs in the transaction's own view of committed st
 that needs read-set conflict detection (the `idempotency_key` de-dup in `database/action_items.py`) is NOT
 protected on Mongo by the transaction alone — BACKLOG L46.
 
+**A batch, on the other hand, IS all-or-nothing on both backends** (ADR-0072). The Mongo commit used to
+group by collection and apply one group at a time with no rollback, which two callers explicitly rely on
+not happening (`chat.py::delete_messages`, `staged_tasks.py`); measured, a failing precondition on the
+second group left the first applied — the chat message deleted and its counter never decremented. The
+commit now runs inside a transaction, so **the batch path needs the replica set too**, not just
+`run_transaction`. A standalone mongod keeps the old behaviour and records
+`component=document_store to=batch_per_collection reason=capability_mismatch`; neither of our targets is
+standalone.
+
 Note: gRPC (Firestore) bypasses the Python socket guard; pymongo uses Python sockets but on loopback,
 which the guard permits.
 
