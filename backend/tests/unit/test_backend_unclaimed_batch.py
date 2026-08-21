@@ -19,7 +19,7 @@ def test_fake_gcs_client_used_when_omi_use_fake_gcs(monkeypatch):
 
     storage_mod.storage_client = None
     client = storage_mod._get_storage_client()
-    from testing.e2e.fakes.storage import FakeStorageClient
+    from utils.other.fake_gcs import FakeStorageClient
 
     assert isinstance(client, FakeStorageClient)
     bucket = client.bucket('speech-profiles')

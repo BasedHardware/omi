@@ -75,7 +75,7 @@ def _get_storage_client() -> Any:
                     'on',
                 } or os.getenv('PROVIDER_MODE', '').strip().lower() == 'offline'
                 if use_fake:
-                    from testing.e2e.fakes.storage import FakeStorageClient, setup_fake_storage
+                    from utils.other.fake_gcs import FakeStorageClient, setup_fake_storage
 
                     setup_fake_storage()
                     storage_client = FakeStorageClient()
