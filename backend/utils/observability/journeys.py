@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import threading
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from datetime import datetime, timezone
 from time import monotonic
@@ -127,13 +129,46 @@ class _ObservedClientJourneyStream(AsyncIterator[_StreamItem]):
                 pass
 
 
+logger = logging.getLogger(__name__)
+
+_RECORDER_WARNING_INTERVAL_SECONDS = 60.0
+_recorder_warning_lock = threading.Lock()
+_last_recorder_warning_at = 0.0
+
+
+def _record_fail_open(what: str, record: Callable[[], None]) -> None:
+    """Run a metric write that must never propagate into a product request.
+
+    Observability is not allowed to break the thing it observes. It is equally
+    not allowed to fail silently: a recorder that quietly stops writing is
+    indistinguishable from a healthy path with nothing to report, which is the
+    failure mode this whole metric family exists to make visible. Failures are
+    swallowed for the caller and logged at a bounded rate for the operator.
+    """
+
+    global _last_recorder_warning_at
+    try:
+        record()
+    except Exception:
+        now = monotonic()
+        with _recorder_warning_lock:
+            due = now - _last_recorder_warning_at >= _RECORDER_WARNING_INTERVAL_SECONDS
+            if due:
+                _last_recorder_warning_at = now
+        if due:
+            logger.warning('client_journey_metric_record_failed what=%s', what, exc_info=True)
+
+
 def record_client_journey_accepted(journey: object, client_kind: object) -> None:
     """Record a bounded acceptance event without creating labels from raw input."""
 
-    OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(
-        journey=bounded_client_journey(journey),
-        client_kind=bounded_client_kind(client_kind),
-    ).inc()
+    _record_fail_open(
+        'accepted',
+        lambda: OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(
+            journey=bounded_client_journey(journey),
+            client_kind=bounded_client_kind(client_kind),
+        ).inc(),
+    )
 
 
 def record_client_journey_terminal(
@@ -151,24 +186,27 @@ def record_client_journey_terminal(
     not queue state and must never be subtracted to infer in-flight work.
     """
 
-    journey_label = bounded_client_journey(journey)
-    client_kind_label = bounded_client_kind(client_kind)
-    outcome_label = bounded_client_journey_outcome(outcome)
-    OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
-        journey=journey_label,
-        client_kind=client_kind_label,
-        outcome=outcome_label,
-    ).inc()
-    OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(
-        journey=journey_label,
-        outcome=outcome_label,
-    ).observe(max(0.0, elapsed_seconds))
-    if outcome_label in {'failure', 'degraded', 'unknown'}:
-        OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
+    def _record() -> None:
+        journey_label = bounded_client_journey(journey)
+        client_kind_label = bounded_client_kind(client_kind)
+        outcome_label = bounded_client_journey_outcome(outcome)
+        OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
             journey=journey_label,
             client_kind=client_kind_label,
-            issue_class=bounded_client_journey_issue_class(issue_class),
+            outcome=outcome_label,
         ).inc()
+        OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(
+            journey=journey_label,
+            outcome=outcome_label,
+        ).observe(max(0.0, elapsed_seconds))
+        if outcome_label in {'failure', 'degraded', 'unknown'}:
+            OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
+                journey=journey_label,
+                client_kind=client_kind_label,
+                issue_class=bounded_client_journey_issue_class(issue_class),
+            ).inc()
+
+    _record_fail_open('terminal', _record)
 
 
 class ClientJourneyAttempt:

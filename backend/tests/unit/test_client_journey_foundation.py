@@ -349,3 +349,59 @@ def test_never_iterated_stream_is_cancelled_when_abandoned(monkeypatch):
     gc.collect()
 
     assert attempt.outcome == 'cancelled'
+
+
+def test_recorders_are_fail_open_and_still_report_their_own_breakage(monkeypatch, caplog):
+    """A broken recorder must not break the request, and must not be silent.
+
+    A recorder that quietly stops writing is indistinguishable from a healthy
+    path with nothing to report. That is the exact failure this metric family
+    exists to expose, so it must not be reproduced inside the family itself.
+    """
+    _install_client_journey_metrics(monkeypatch)
+    monkeypatch.setattr(journeys, '_last_recorder_warning_at', 0.0)
+    for name in (
+        'OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL',
+        'OMI_CLIENT_JOURNEY_TERMINAL_TOTAL',
+        'OMI_CLIENT_JOURNEY_DURATION_SECONDS',
+        'OMI_CLIENT_JOURNEY_ISSUES_TOTAL',
+    ):
+        broken = MagicMock()
+        broken.labels.side_effect = RuntimeError('metric backend is down')
+        monkeypatch.setattr(journeys, name, broken)
+
+    with caplog.at_level('WARNING'):
+        journeys.record_client_journey_accepted('desktop_chat', 'desktop_macos')
+        journeys.record_client_journey_terminal(
+            'desktop_chat', 'desktop_macos', 'failure', 1.0, issue_class='provider_error'
+        )
+
+    assert 'client_journey_metric_record_failed' in caplog.text
+
+
+def test_a_failing_recorder_never_reaches_the_user_stream(monkeypatch):
+    _install_client_journey_metrics(monkeypatch)
+    broken = MagicMock()
+    broken.labels.side_effect = RuntimeError('metric backend is down')
+    monkeypatch.setattr(journeys, 'OMI_CLIENT_JOURNEY_TERMINAL_TOTAL', broken)
+    monkeypatch.setattr(journeys, 'OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL', broken)
+
+    attempt = journeys.ClientJourneyAttempt('desktop_chat', 'desktop_macos')
+
+    async def source():
+        yield b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+        yield _DESKTOP_CHAT_DONE_FRAME
+
+    async def drain():
+        return [
+            item
+            async for item in attempt.observe_stream(
+                source(),
+                success_when=lambda item: b'data: [DONE]' in item,
+                failure_when=lambda item: b'"error"' in item,
+            )
+        ]
+
+    delivered = asyncio.run(drain())
+
+    assert len(delivered) == 2
