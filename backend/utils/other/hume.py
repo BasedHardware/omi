@@ -171,6 +171,13 @@ class HumeClient:
         self.callback_url = callback_url
 
     def request_user_expression_mersurement(self, urls: List[str]) -> Dict[str, Any]:
+        # Vendor egress (ADR-0057). Gated HERE, at the door, so any caller is covered — and because until
+        # now the POST went out even with no key at all ('X-Hume-Api-Key': ... else ''), i.e. the only thing
+        # standing between a conversation's audio URL and api.hume.ai was Hume's own 401.
+        from config.vendor_egress import vendor_egress_denied
+
+        if vendor_egress_denied('hume_prosody', log=logger):
+            return {"error": {"message": "vendor egress denied by policy"}}
         err: Optional[Dict[str, Any]] = None
         resp: Optional[httpx.Response] = None
 

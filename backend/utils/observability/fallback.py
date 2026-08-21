@@ -77,6 +77,8 @@ ALLOWED_COMPONENTS = frozenset(
         'vector_store',
         # Object store (ADR-0032): an unset public endpoint makes every signed URL carry the internal host.
         'object_store',
+        # Egress toward a third-party vendor, denied by posture (ADR-0057).
+        'vendor_egress',
         'other',
     }
 )

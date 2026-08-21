@@ -35,32 +35,24 @@ def is_langsmith_enabled() -> bool:
     return False
 
 
-def is_selfhost_deployment() -> bool:
-    """True when this deployment declares itself self-hosted (OMI_ENV_STAGE=selfhost, ADR-0058).
+def vendor_tracing_denied() -> bool:
+    """Whether LangSmith tracing must stay off, per OMI_VENDOR_EGRESS (ADR-0057).
 
-    LangSmith is a SaaS: the traces it exports carry the prompts themselves plus uid/app_id metadata,
-    so on an on-prem deployment they are conversation content leaving the premises. The tracer path
-    below was gated on ONE condition — "is an API key present?" — and the module's own startup log
-    spells out the consequence: "Global tracing off but API key present -> per-request tracing
-    enabled". So LANGCHAIN_TRACING_V2=false plus an inherited key still exported chat traces.
+    This gate used to hang on ``OMI_ENV_STAGE=selfhost``. That worked, but by coincidence: the stage means
+    "a real deployment, not a developer's machine", NOT "data may leave the premises" — and appending a
+    sovereignty guard to it is exactly the mistake that produced the reverted `ba986abdb4`. The traces carry
+    the prompts themselves plus uid/app_id, so this is conversation content leaving the premises.
 
-    The tracing flag is deliberately NOT the gate: upstream ships exactly that combination in its
-    cloud values and relies on per-request tracing, so honouring the flag here would change upstream
-    product behaviour rather than add the abstraction this fork carries. The deployment's own
-    declaration is the gate instead, resolved through the existing env-loader stage helper rather
-    than a parallel notion of "self-hosted". Cloud behaviour is unchanged; a self-hosted stack stops
-    depending on nobody having configured a key.
-
-    NOTE (ADR-0057, still Proposed): the stage answers "am I a real deployment", not "may data leave
-    for a vendor" — two orthogonal axes. Keying a data-sovereignty guard on it is right only by
-    coincidence; when the explicit vendor-egress switch lands, this gate moves onto it.
+    The tracing FLAG is deliberately not the gate, and that has not changed: the tracer path below is gated
+    on one condition — "is an API key present?" — and this module's own startup log spells out the
+    consequence ("Global tracing off but API key present -> per-request tracing enabled"), so
+    LANGCHAIN_TRACING_V2=false plus an inherited key still exports chat traces. Upstream ships exactly that
+    combination in its cloud values and relies on per-request tracing, so honouring the flag here would
+    change upstream product behaviour instead of adding the abstraction this fork carries.
     """
-    try:
-        from utils.env_loader import EnvStage, resolve_stage_from_env
+    from config.vendor_egress import vendor_egress_denied
 
-        return resolve_stage_from_env() == EnvStage.SELFHOST.value
-    except Exception:  # pragma: no cover - a stage helper failure must not enable egress
-        return False
+    return vendor_egress_denied('langsmith_tracing', log=logger)
 
 
 def get_langsmith_project() -> str:
@@ -110,6 +102,17 @@ def log_langsmith_status() -> None:
     project = get_langsmith_project()
     endpoint = get_langsmith_endpoint()
 
+    # Checked with the plain predicate, NOT vendor_tracing_denied(): a status line is not a lost
+    # capability, and recording a fallback for it would put one event per boot in the counter.
+    from config.vendor_egress import vendor_egress_allowed
+
+    if not vendor_egress_allowed():
+        # Without this branch the startup log states "Per-request tracing (chat only) / Prompt Hub:
+        # enabled" whenever a key is present — while both paths are gated off. The one line an operator
+        # reads at boot must not contradict the posture (ADR-0057).
+        logger.info("📊 LangSmith: DISABLED by policy (OMI_VENDOR_EGRESS=deny) — no tracer, no Prompt Hub")
+        return
+
     if global_enabled and has_key:
         logger.info(f"🔍 LangSmith: GLOBAL tracing ENABLED")
         logger.info(f"   Project: {project}")
@@ -145,7 +148,7 @@ def get_chat_tracer_callbacks(
     Returns:
         List containing LangChainTracer callback if API key is set, else empty list
     """
-    if is_selfhost_deployment():
+    if vendor_tracing_denied():
         return []
     if not has_langsmith_api_key():
         return []

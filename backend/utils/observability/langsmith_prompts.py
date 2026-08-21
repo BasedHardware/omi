@@ -12,7 +12,7 @@ import time
 from typing import Optional, Dict, Any, Tuple, Iterable, cast
 from dataclasses import dataclass
 
-from utils.observability.langsmith import has_langsmith_api_key, is_selfhost_deployment
+from utils.observability.langsmith import has_langsmith_api_key, vendor_tracing_denied
 import logging
 
 logger = logging.getLogger(__name__)
@@ -64,10 +64,10 @@ def _fetch_prompt_from_langsmith(prompt_name: str) -> Optional[CachedPrompt]:
     Note: Prompt fetching only requires an API key, not tracing to be enabled.
     This allows prompt versioning to work even when global tracing is disabled.
     """
-    if is_selfhost_deployment():
-        # Second SaaS surface on this module: the hub pull is an outbound call to LangSmith,
-        # and it fails open to the local prompt, so an offline deployment loses nothing by
-        # skipping it (utils/observability/langsmith.py::is_selfhost_deployment).
+    if vendor_tracing_denied():
+        # Second SaaS surface on this module: the hub pull is an outbound call to LangSmith, and it
+        # fails open to the local prompt, so a deployment that denies vendor egress loses nothing by
+        # skipping it (utils/observability/langsmith.py::vendor_tracing_denied).
         return None
     if not has_langsmith_api_key():
         logger.error(f"⚠️  LangSmith API key not configured, cannot fetch prompt: {prompt_name}")

@@ -2130,6 +2130,14 @@ def _send_important_conversation_notification_if_needed(uid: str, conversation: 
 def process_user_emotion(uid: str, language_code: str, conversation: Conversation, urls: List[str]) -> None:
     logger.info(f'process_user_emotion conversation.id= {conversation.id}')
 
+    # Vendor egress (ADR-0057). Gated here as well as inside the client, and BEFORE the task row: the
+    # client's refusal takes the `"error" in ok` path below, which returns without ever moving the task out
+    # of PROCESSING — one orphan row per conversation, forever.
+    from config.vendor_egress import vendor_egress_denied
+
+    if vendor_egress_denied('hume_prosody', log=logger):
+        return
+
     # save task
     now = datetime.now()
     task = Task(

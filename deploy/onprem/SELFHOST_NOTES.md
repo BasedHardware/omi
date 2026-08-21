@@ -496,6 +496,52 @@ Requirements and gotchas:
   `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
   `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.
 
+## Vendor egress: `OMI_VENDOR_EGRESS` (ADR-0057)
+
+One explicit switch for "may data leave for a third party", declared `deny` in `backend.env.base` and in
+the chart's `backend.env`. The code default is **`allow`** so upstream behaviour is unchanged for anyone
+who never heard of the variable — which is exactly why a self-hosted stack must declare it: silence would
+be consent. An **unknown value fails closed** and says so (`OMI_VENDOR_EGRESS='allowed' is not 'allow' or
+'deny'; failing closed`), because a typo in a sovereignty gate must not open it.
+
+It governs **three** surfaces — the ones that either send data to a vendor or do not exist at all — and all
+three **degrade**, recording `component=vendor_egress` on `omi_fallback_total`:
+
+| surface | what leaves | at `deny` |
+|---|---|---|
+| Hume prosody (`utils/other/hume.py`) | a URL to the conversation audio → `api.hume.ai` | no emotion enrichment; the conversation is intact, and no orphan `PROCESSING` task row is written |
+| LangSmith (`utils/observability/langsmith*.py`) | the prompts themselves + `uid`/`app_id` → SaaS | no tracer, no Prompt Hub pull (the local prompt is used) |
+| GitHub (`utils/github_releases.py`, `utils/app_integrations.py`) | that this deployment exists → `api.github.com` | update endpoints answer "no release"; the product tool answers without the docs corpus |
+
+Both GitHub gates sit **after** the cache read: what is governed is the request, not the feature, and
+serving a value already on this box sends nothing anywhere.
+
+What it does **not** govern, because these are not vendors or not a posture: the operator's own inference
+endpoint (ADR-0035 — that IS the on-prem design), image and model-weight provisioning (ADR-0048), push
+notifications (ADR-0011, its own flag), and fallbacks that reach a vendor despite local configuration —
+those are defects, tracked one by one.
+
+Proven live on `compose.prod.yaml`, same container, one variable apart:
+
+```bash
+# deny (the declared posture): the product path answers without leaving the box
+docker compose -f compose.prod.yaml exec backend \
+  curl -s -o /dev/null -w '%{http_code}\n' 'http://localhost:8080/v2/desktop/download/latest?platform=macos'
+# -> 404, and: omi_fallback_event component=vendor_egress from=github_releases to=skipped reason=policy
+
+# allow: the same call reaches api.github.com (100 releases) — so the gate is what stopped it,
+# not a missing network path
+docker compose -f compose.prod.yaml exec -e OMI_VENDOR_EGRESS=allow backend /opt/venv/bin/python -c \
+  "import asyncio; from utils.github_releases import get_omi_github_releases; \
+   print(len(asyncio.run(get_omi_github_releases('probe'))))"
+```
+
+> **The fallback counter is not readable on-prem yet.** `record_fallback` writes both a log line and
+> `omi_fallback_total`, but `GET /metrics` requires `METRICS_SECRET` (`routers/metrics.py:15`) and we
+> declare it in neither compose nor Helm — so it answers **401** everywhere and every fallback we record
+> (`vendor_egress`, `vector_store`, `object_store`, …) is observable only through the log. Tracked as a
+> debt; the log line above is the channel that works today.
+
 ## Scheduled work: ONE compose service, several cadences (ADR-0062/0065)
 
 `--profile jobs` brings up a single `scheduled_jobs` container. Which jobs it ticks, and how often, is

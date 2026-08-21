@@ -163,6 +163,12 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
     """
     if cached := get_generic_cache(f'get_github_docs_content_{repo}_{path}'):
         return cached
+    # Vendor egress (ADR-0057). AFTER the cache: serving docs already on this box sends nothing anywhere.
+    # None is the fail-soft value the caller already handles (tests/unit/test_omi_product_tool_failsoft.py).
+    from config.vendor_egress import vendor_egress_denied
+
+    if vendor_egress_denied('github_docs', log=logger):
+        return None
     docs_content = {}
     headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
 

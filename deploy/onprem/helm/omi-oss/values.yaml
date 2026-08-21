@@ -63,6 +63,12 @@ backend:
     # demand Google Cloud Tasks at startup; `dev`/`local` would enable a fallback to api.openai.com.
     # PROVIDER_MODE is intentionally absent — upstream uses it for "fake providers".
     OMI_ENV_STAGE: selfhost
+    # Egress toward a third-party VENDOR (ADR-0057). The code default is `allow`, so a self-hosted stack
+    # that says nothing permits it by omission — hence declared here. Governs three surfaces: Hume prosody,
+    # LangSmith tracing, and the GitHub release/docs fetches. It does NOT govern the operator's own
+    # inference endpoint (ADR-0035), image/model provisioning (ADR-0048), or push (ADR-0011, own flag).
+    # All three degrade and record component=vendor_egress; an unknown value fails closed.
+    OMI_VENDOR_EGRESS: deny
     STORAGE_BACKEND: mongo
     FIREBASE_PROJECT_ID: demo-omi-local
     FIREBASE_AUTH_PROJECT_ID: demo-omi-local
