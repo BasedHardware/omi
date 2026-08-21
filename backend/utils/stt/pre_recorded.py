@@ -116,7 +116,20 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
         return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
 
-    # Only reachable with every pre-recorded provider disabled, which no retry resolves.
+    # Only reachable with every pre-recorded provider disabled, which no retry resolves. Reachable on
+    # purpose under OMI_VENDOR_EGRESS=deny (ADR-0057, BACKLOG L40): a language the local provider cannot
+    # serve used to select Modulate, and the audio itself is what goes to a vendor. Failing closed is the
+    # right answer, but it must be a LOUD one — an operator sees "no transcript" and needs the reason.
+    from config.vendor_egress import vendor_egress_allowed
+
+    if not vendor_egress_allowed():
+        logger.error(
+            'prerecorded STT unavailable for language=%s: no local provider serves it and '
+            'OMI_VENDOR_EGRESS=deny withholds the vendor ones (set STT_PRERECORDED_MODEL, or allow egress)',
+            base_lang,
+        )
+    else:
+        logger.error('prerecorded STT unavailable for language=%s: every provider is disabled', base_lang)
     raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
 
 

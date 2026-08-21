@@ -84,8 +84,6 @@
   "STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID": "unreviewed",
   "STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID": "unreviewed",
   "STRIPE_WEBHOOK_SECRET": "unreviewed",
-  "STT_PRERECORDED_MODEL": "unreviewed",
-  "STT_SERVICE_MODELS": "unreviewed",
   "SYNC_BACKFILL_ENABLED": "unreviewed",
   "SYNC_BACKFILL_GLOBAL_DAILY_HOURS": "unreviewed",
   "SYNC_BACKFILL_MAX_AGE_SECONDS": "unreviewed",

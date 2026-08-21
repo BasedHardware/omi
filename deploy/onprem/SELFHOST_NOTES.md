@@ -512,9 +512,18 @@ three **degrade**, recording `component=vendor_egress` on `omi_fallback_total`:
 | Hume prosody (`utils/other/hume.py`) | a URL to the conversation audio → `api.hume.ai` | no emotion enrichment; the conversation is intact, and no orphan `PROCESSING` task row is written |
 | LangSmith (`utils/observability/langsmith*.py`) | the prompts themselves + `uid`/`app_id` → SaaS | no tracer, no Prompt Hub pull (the local prompt is used) |
 | GitHub (`utils/github_releases.py`, `utils/app_integrations.py`) | that this deployment exists → `api.github.com` | update endpoints answer "no release"; the product tool answers without the docs corpus |
+| **STT provider selection** (`config/stt_provider_policy.py`, ADR-0066) | the conversation **audio** → Modulate / Deepgram cloud | a vendor provider is not selectable: `TranscriptionFailure(CONFIG_ERROR, retryable=False)` for batch, `(None, None, None)` for streaming. **Raises, does not degrade** |
 
 Both GitHub gates sit **after** the cache read: what is governed is the request, not the feature, and
 serving a value already on this box sends nothing anywhere.
+
+**STT is the one that raises**, per ADR-0057's own criterion: an empty transcript is a wrong artefact the
+user sees, so failing must be loud. It also carries a lesson worth repeating — the STT preferences
+(`STT_SERVICE_MODELS`, `STT_PRERECORDED_MODEL`) used to live only in a **comment** in `backend.env.base`,
+and measured on the running stack that meant even English selected **modulate**: the only thing keeping the
+audio in was the absence of `MODULATE_API_KEY`. They are declared now, in the env-file and in the chart.
+Consequence to know: **`compose.prod.yaml` without `--profile inference` has no STT at all** — there is no
+local provider to select — and it now says so instead of quietly picking a vendor.
 
 What it does **not** govern, because these are not vendors or not a posture: the operator's own inference
 endpoint (ADR-0035 — that IS the on-prem design), image and model-weight provisioning (ADR-0048), push

@@ -305,6 +305,10 @@ inference:
         backendEnv:
           HOSTED_PARAKEET_API_URL: http://parakeet:8080
           STT_SERVICE_MODELS: parakeet
+          # Pre-recorded has its OWN preference variable, and it was missing here: unset, the policy default
+          # is `parakeet, modulate-velma-2`, so a language Parakeet does not serve selected the vendor
+          # (BACKLOG L40). OMI_VENDOR_EGRESS=deny refuses it now, but the preference belongs in the file too.
+          STT_PRERECORDED_MODEL: parakeet
       # Speaker diarization / embeddings — GPU.
       diarizer:
         enabled: true
