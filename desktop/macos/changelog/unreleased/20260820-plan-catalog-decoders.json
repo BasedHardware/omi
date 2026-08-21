@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Internal only. macOS gains decoding for the plus and unlimited_v2 plan values and a lossless unknown-plan case, but the backend still remaps both to unlimited for every shipped client, so no user sees a behavior or copy change from this PR. The user-facing change arrives when the wire floors are lowered (work item W2)."
+}
