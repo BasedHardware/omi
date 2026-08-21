@@ -521,7 +521,7 @@ Mount the **whole repo** so `backend/` sits at its real depth:
 
 Do **not** set `OMI_ENV_STAGE=selfhost` for the unit sweep: that variable is for the runtime compose
 posture, and forcing it makes a couple of tests assert the wrong environment/stage. `LOCAL_DEVELOPMENT=true`
-is the signal the unit suite expects. (See the two known residuals at the end.)
+is the signal the unit suite expects. (See the known residual failures at the end.)
 
 ### Run one suite — FILE-ISOLATED (mandatory)
 
@@ -565,8 +565,9 @@ false failures on a loaded box (observed: `-P 16` yielded ~90 false FAILs that a
 Re-run the FAIL set at low parallelism (`-P 3`) and diff against a pre-change baseline worktree before
 calling anything a regression.
 
-With this harness the whole unit+e2e sweep is green except the known residuals below. To gate a
-change, the FAIL set must equal that known-residual set; any other file failing is a regression to fix.
+To gate a change, **diff the FAIL set against a baseline worktree at the commit you started from** —
+not against the residual list below, which drifts (it said three files while the sweep failed eight).
+Same file names AND same counts on both sides = no regression.
 
 ### Regression guard
 
@@ -715,10 +716,41 @@ docker run --rm --network host -v $(git rev-parse --show-toplevel)/backend:/app 
 docker rm -f kc-contract    # cleanup
 ```
 
-### Three known residual failures (not our code, not fixable via the harness)
+### Known residual failures — and why the list is not the gate
 
-With the harness above the offline unit sweep is green except three files, all pre-existing/upstream
-and unrelated to the self-host work:
+**Do not gate a change on this list. Gate it on a diff against a baseline worktree** at the commit you
+started from:
+
+```bash
+git worktree add -f /tmp/base <sha-you-started-from>
+# run the same sweep in both trees, then compare file-by-file AND count-by-count
+```
+
+The list below drifts: it said *three files* while the measured sweep failed *eight*, and only one
+name overlapped — two of the three documented residuals had since started passing. A stale list is
+worse than no list, because "the FAIL set equals the known residuals" then reads as green. The
+baseline diff cannot drift, and it is what caught a regression this list would have absorbed
+(`test_city_prompt_context.py`, ours, fixed in `1a8a6edb01`).
+
+**Measured 2026-08-21 at `e88aeb2d90`** — 960 files swept, 8 failing, all present at `bb14216e52` too
+(so none introduced by the self-host work at that point):
+
+| file | failing tests | diagnosed? |
+|---|---|---|
+| `testing/e2e/test_crud.py` | 5 (`TestMemoryCRUD` create/list/edit/delete/batch) | no |
+| `testing/e2e/test_failure_modes.py` | 2 (`test_crud_works_with_fake_redis`, `test_unicode_content_roundtrip`) | no |
+| `testing/e2e/test_mobile_lifecycle_compatibility.py` | 2 (bootstrap shapes, mutation compatibility) | no |
+| `testing/e2e/test_retrieval_search.py` | 1 (`test_memory_search_reindexes_updates_and_delete_removes_result`) | no |
+| `tests/unit/test_app_client_swift_generator.py` | 2 (generated DTO file, CLI UTF-8 locale) | no |
+| `tests/unit/test_app_client_ts_generator.py` | 1 (generated schema types) | no |
+| `tests/unit/test_city_prompt_context.py` | *was* 1 | ✅ fixed (`1a8a6edb01`) |
+| `tests/unit/test_sys_modules_hermeticity.py` | 1 (single-process safe subset) | ✅ see below |
+
+The five undiagnosed groups are recorded as such on purpose: calling them "upstream, unrelated"
+without evidence is exactly how a real regression hides. They are tracked in `docs/BACKLOG.md`.
+
+Previously documented and **now passing** (kept because the reasoning explains what the harness does
+to them, and they can come back):
 
 - `tests/unit/test_auto_dev_backend_scope.py` — one subtest extracts and executes the real
   `.github/workflows/gcp_backend_auto_dev.yml` scope step's bash against a temp git repo; the
@@ -727,6 +759,8 @@ and unrelated to the self-host work:
   bearer -> close 1008), which requires `LOCAL_DEVELOPMENT` unset. The unit sweep sets it because ~46
   other files rely on the dev-auth bypass; a single global env cannot satisfy both. The file passes
   in isolation with `LOCAL_DEVELOPMENT` unset.
+
+Still failing, diagnosed:
 - `tests/unit/test_sys_modules_hermeticity.py` — the single-process-safe-subset guard fails because
   several upstream STT test files (`test_parakeet_diarization/nim/prerecorded/stream_session.py`,
   `test_sync_transcription_prefs.py`) write `DEEPGRAM_API_KEY` at module/fixture scope without
