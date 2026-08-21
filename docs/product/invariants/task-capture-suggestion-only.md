@@ -1,12 +1,8 @@
 # INV-TASK-2: Automatic task capture proposes, it never writes
 
-**Status:** proposed
-
-**Proposed on:** 2026-08-20
+**Status:** locked
 
 **Statement:** A task the user did not ask for is never written to their task list. Every automatically derived task — from a conversation, from the screen, from a proactive notification — is a pending Candidate that becomes an action item only through an explicit user gesture, and a Candidate nobody acts on expires rather than accumulating.
-
-Promotion to `locked` requires this rule and its guards to stand unchanged for seven days, per the registry's promotion rule. Earliest promotion: 2026-08-27.
 
 ## Why
 
