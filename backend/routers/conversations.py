@@ -1396,11 +1396,12 @@ def send_conversation_share_email(
         # An already link-visible conversation keeps its existing visibility
         # (never downgrade `public` to `shared`); only a private one is flipped.
         if not was_shared:
-            conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.shared)
-            # CAS token: rollback may only reverse THIS request's write. Any
-            # concurrent write — even one storing the same 'shared' value —
-            # bumps the doc's update_time and voids the token.
-            publish_token['update_time'] = conversations_db.get_conversation_update_time(uid, conversation_id)
+            # CAS token from the write's own result: rollback may only reverse
+            # THIS request's write. Any concurrent write — even one storing the
+            # same 'shared' value — bumps the doc's update_time and voids it.
+            publish_token['update_time'] = conversations_db.set_conversation_visibility_returning_update_time(
+                uid, conversation_id, ConversationVisibility.shared
+            )
         redis_db.store_conversation_to_uid(conversation_id, uid)
         redis_db.add_public_conversation(conversation_id)
 

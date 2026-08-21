@@ -65,8 +65,13 @@ def _stub_data_layer(monkeypatch):
     # the doc token matches, mirroring Firestore's last_update_time precondition.
     state['doc_token'] = 't1'
 
+    def publish_write(uid, cid, value):
+        state['visibility'] = getattr(value, 'value', value)
+        state['doc_token'] = 't1'
+        return 't1'
+
     monkeypatch.setattr(
-        conversations_router.conversations_db, 'get_conversation_update_time', lambda uid, cid: state['doc_token']
+        conversations_router.conversations_db, 'set_conversation_visibility_returning_update_time', publish_write
     )
 
     def guarded_set(uid, cid, value, last_update_time):

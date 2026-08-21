@@ -1491,11 +1491,17 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
-def get_conversation_update_time(uid: str, conversation_id: str):
-    """Document update_time snapshot, used as a CAS token for visibility rollback."""
+def set_conversation_visibility_returning_update_time(uid: str, conversation_id: str, visibility: str):
+    """Visibility write that returns its own WriteResult.update_time.
+
+    The returned timestamp is the CAS token for rollback: taken from the write
+    itself (not a follow-up read), so no concurrent writer can slip between
+    token capture and the write it describes.
+    """
     user_ref = db.collection('users').document(uid)
-    snapshot = user_ref.collection(conversations_collection).document(conversation_id).get()
-    return snapshot.update_time if getattr(snapshot, 'exists', False) else None
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    result = conversation_ref.update({'visibility': visibility})
+    return getattr(result, 'update_time', None)
 
 
 def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, visibility: str, last_update_time) -> bool:
