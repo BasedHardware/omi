@@ -22,12 +22,15 @@ import Foundation
 /// departure evaluation, fresh entry evaluation), so every existing quota,
 /// cooldown, dedup, and budget gate still applies.
 ///
-/// Cost bound: the first refresh of a context needs 20s of dwell; repeats
+/// Cost bound: the first refresh of a context needs 12s of dwell; repeats
 /// need at least 40s since the previous one; and every refresh requires
 /// typing to have happened since the last one. Reading, watching, or an idle
 /// screen never buys a model call. Worst case is a continuous typist at ~90
-/// refreshes/hour — the same order as ordinary app-switch evaluations, under
-/// the same server quotas and delivery-level cooldowns.
+/// refreshes/hour, and each refresh fans out to up to three or four model
+/// calls (departure extraction, departure evaluation, entry evaluation, a
+/// possible forced retrieval), all still bounded by the per-tier server
+/// quotas and delivery-level cooldowns — and remotely stoppable on its own
+/// via `ContextBucketsFeature.isDwellRefreshEnabled`.
 enum ContextDwellRefreshPolicy {
   /// Dwell before the FIRST refresh of a context: long enough to type a
   /// question, short enough that its answer lands within ~30s of typing.

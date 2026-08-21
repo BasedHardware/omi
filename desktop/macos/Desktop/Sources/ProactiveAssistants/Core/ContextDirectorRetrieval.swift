@@ -61,51 +61,84 @@ enum ContextDirectorRetrievalHop {
   /// evaluation runs once with the retrieved context attached. Asking the model
   /// FIRST whether it wants a lookup proved a coin flip in live runs — the bare
   /// call silences typed questions on the repetition/already-visible checks —
-  /// while the retrieval-attached form delivered every time.
-  static func forcedLookupQuery(validatedFacts: [String]) -> String? {
-    for fact in validatedFacts.reversed() {
+  /// while the retrieval-attached form delivered every time. Snapshot fact
+  /// lines are newest-first, and the newest question is the one the user is
+  /// typing now, so iteration is NOT reversed. Only questions the USER authored
+  /// qualify (`isUserAuthoredQuestion` requires the user/draft as the asking
+  /// subject): a question someone else asked in a thread being read is
+  /// floor-worthy context, never a forced lookup.
+  static func forcedLookupQuery(validatedFacts: [String]) -> ForcedLookup? {
+    for fact in validatedFacts {
       let statement = factStatement(fact)
       guard ContextFactWritePolicy.isUserAuthoredQuestion(statement) else { continue }
       let flattened = ContextDestinationKey.singleLine(statement, limit: maximumQueryLength)
-      if flattened.count >= minimumQueryLength { return flattened }
+      if flattened.count >= minimumQueryLength {
+        return ForcedLookup(query: flattened, sourceFactID: factID(fact))
+      }
     }
     return nil
+  }
+
+  struct ForcedLookup: Equatable, Sendable {
+    let query: String
+    /// The originating fact, so a delivered answer can consume it — an
+    /// unanswered fact re-forces retrieval on every dwell refresh with the
+    /// anti-repetition list omitted, which repeats the identical card until
+    /// the fact expires.
+    let sourceFactID: String?
+  }
+
+  private static func factID(_ line: String) -> String? {
+    guard line.hasPrefix("fact:") else { return nil }
+    let id = line.dropFirst(5).prefix { !$0.isWhitespace }
+    return id.isEmpty ? nil : String(id)
   }
 
   /// Citation auto-attribution for forced-question answers. The model reliably
   /// writes the retrieved answer into the message but only stochastically
   /// copies the ref into bucket_entry_refs, and an uncited answer dies at the
-  /// grounding veto. When the message provably contains content from a
-  /// retrieved item — a shared long token (a link, an identifier) or a shared
-  /// three-word phrase — the item's ref IS the citation the model omitted.
-  /// Content that matches nothing retrieved earns no citation and still dies
-  /// at the veto, so hallucinated answers stay undeliverable.
-  static func impliedCitations(message: String, items: [ContextRetrievedItem]) -> [String] {
-    let normalizedMessage = message.lowercased()
+  /// grounding veto. Attribution matches ONLY identifier-like tokens — a token
+  /// of 6+ characters containing a slash, dot, at-sign, colon, or digit (a
+  /// link, an email, a version, a date) shared by the message and a retrieved
+  /// preview, after trailing punctuation is stripped and whitespace collapsed.
+  /// Plain-word overlap never attributes: retrieved previews are semantic hits
+  /// for the question and echo its words, so phrase overlap would let an
+  /// invented answer ride a noise item through the veto. Tokens that appear in
+  /// the question itself are excluded for the same reason. A hallucinated
+  /// value matches no retrieved identifier and still dies at the veto.
+  static func impliedCitations(
+    message: String, items: [ContextRetrievedItem], question: String = ""
+  ) -> [String] {
+    let normalizedMessage = normalizedForMatch(message)
     guard !normalizedMessage.isEmpty else { return [] }
+    let questionTokens = Set(identifierTokens(in: question))
     var cited: [String] = []
     for item in items {
-      let preview = item.preview.lowercased()
-      let tokens = preview.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-      var matched = false
-      for token in tokens where token.count >= 10 {
-        if normalizedMessage.contains(token) {
-          matched = true
-          break
-        }
+      let candidates = identifierTokens(in: item.preview).filter { !questionTokens.contains($0) }
+      if candidates.contains(where: { normalizedMessage.contains($0) }) {
+        cited.append(item.ref)
       }
-      if !matched, tokens.count >= 3 {
-        for i in 0...(tokens.count - 3) {
-          let phrase = tokens[i...(i + 2)].joined(separator: " ")
-          if phrase.count >= 12, normalizedMessage.contains(phrase) {
-            matched = true
-            break
-          }
-        }
-      }
-      if matched { cited.append(item.ref) }
     }
     return cited
+  }
+
+  private static func normalizedForMatch(_ text: String) -> String {
+    text.lowercased()
+      .components(separatedBy: .whitespacesAndNewlines)
+      .filter { !$0.isEmpty }
+      .joined(separator: " ")
+  }
+
+  private static let tokenTrimSet = CharacterSet(charactersIn: ".,;:!?)([]'\u{0022}\u{2019}\u{201D}")
+
+  private static func identifierTokens(in text: String) -> [String] {
+    text.lowercased()
+      .components(separatedBy: .whitespacesAndNewlines)
+      .map { $0.trimmingCharacters(in: tokenTrimSet) }
+      .filter { token in
+        token.count >= 6
+          && token.contains(where: { "/.@:0123456789".contains($0) })
+      }
   }
 
   /// Fact lines are assembled as "fact:<id> <statement> [evidence: ...]".

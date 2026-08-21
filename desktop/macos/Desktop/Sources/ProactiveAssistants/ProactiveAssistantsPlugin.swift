@@ -635,10 +635,15 @@ public class ProactiveAssistantsPlugin: NSObject {
     windowID: CGWindowID, appName: String, windowTitle: String?
   ) async {
     // Capture BEFORE the transition so the departing extraction sees the typed
-    // content even when the preview-skip path starved full captures.
+    // content even when the preview-skip path starved full captures. Skip the
+    // whole refresh if the user already switched away: tracking the old app's
+    // frame after a switch would contaminate the new context's bucket.
+    guard AssistantCoordinator.shared.currentTrackedApp == appName else { return }
     if #available(macOS 14.0, *), let screenCaptureService {
       let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
-      if case .success(let image) = result {
+      if case .success(let image) = result,
+        AssistantCoordinator.shared.currentTrackedApp == appName
+      {
         frameCount += 1
         AssistantCoordinator.shared.trackFrame(
           CapturedFrame(
@@ -651,14 +656,18 @@ public class ProactiveAssistantsPlugin: NSObject {
           ))
       }
     }
-    guard let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell()
+    guard
+      let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell(
+        expectedApp: appName, expectedWindowTitle: windowTitle)
     else { return }
     // Capture AGAIN after the visit opened: the entry evaluation only grounds
     // on frames captured at or after the visit began, and a static screen may
     // never produce another full frame through the preview-skip path.
     if #available(macOS 14.0, *), let screenCaptureService {
       let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
-      if case .success(let image) = result {
+      if case .success(let image) = result,
+        AssistantCoordinator.shared.currentTrackedApp == appName
+      {
         frameCount += 1
         AssistantCoordinator.shared.trackFrame(
           CapturedFrame(
@@ -907,7 +916,9 @@ public class ProactiveAssistantsPlugin: NSObject {
       // sits BEFORE the capture decision on purpose: typed text moves almost
       // no preview pixels, so the preview-skip path starves full captures
       // during exactly the dwells this exists to re-evaluate.
-      if ContextBucketsFeature.isEnabled, !RewindSettings.shared.isAppExcluded(appForCheck) {
+      if ContextBucketsFeature.isDwellRefreshEnabled,
+        !RewindSettings.shared.isAppExcluded(appForCheck)
+      {
         let tickTime = Date()
         if switched || dwellContextAnchor == nil {
           dwellContextAnchor = tickTime

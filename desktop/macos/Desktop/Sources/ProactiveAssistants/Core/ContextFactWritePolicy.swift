@@ -229,10 +229,17 @@ enum ContextFactWritePolicy {
           #"(?i)\b(?:asking|asks|asked|wants to know|is requesting)\s+(?:\S+\s+){0,2}?(?:where|what|when|who|whom|how|why|which|whether|if)\b"#,
         options: .regularExpression) != nil
     guard questionSignal else { return false }
+    // The asking SUBJECT must be the user or their draft: "David asked when
+    // the offsite is" is floor-worthy context via the named-person speech-act
+    // class, but it must never become a forced lookup that answers a question
+    // the user did not ask.
     return statement.range(
       of:
-        #"(?i)\b(?:is asking|asks|asked|is writing|is typing|is composing|is drafting|contains the question|wants to know|is requesting)\b"#,
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is asking|asks|asked|is writing|is typing|is composing|is drafting|wants to know|is requesting)\b"#,
       options: .regularExpression) != nil
+      || statement.range(
+        of: #"(?i)\b(?:body|draft|message|email)\b[^.]{0,60}\bcontains the question\b"#,
+        options: .regularExpression) != nil
   }
 
   /// A capitalized name immediately before a speech verb, where the name is not

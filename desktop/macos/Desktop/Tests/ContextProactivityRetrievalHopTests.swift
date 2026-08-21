@@ -387,38 +387,53 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
 
   func testForcedLookupQueryFromUserQuestionFact() {
     let facts = [
-      "fact:aaa The user is drafting an email addressed to david@scalingforever.com. [evidence: To david; refs: []]",
-      "fact:bbb The user is asking: What is the latest omi desktop app download link? [evidence: body text; refs: []]",
+      "fact:newest The user is asking: Where is the newest Omi desktop build? [evidence: body; refs: []]",
+      "fact:older The user is asking: What is the latest omi desktop app download link? [evidence: body text; refs: []]",
+      "fact:ctx The user is drafting an email addressed to david@scalingforever.com. [evidence: To david; refs: []]",
     ]
-    XCTAssertEqual(
-      ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: facts),
-      "The user is asking: What is the latest omi desktop app download link?")
+    // Snapshot fact lines are newest-first; the newest question wins.
+    let lookup = ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: facts)
+    XCTAssertEqual(lookup?.query, "The user is asking: Where is the newest Omi desktop build?")
+    XCTAssertEqual(lookup?.sourceFactID, "newest")
     // No user-question fact -> no forced retrieval.
-    XCTAssertNil(
-      ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [facts[0]]))
+    XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [facts[2]]))
     XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: []))
+    // A question someone ELSE asked never forces a lookup.
+    XCTAssertNil(
+      ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [
+        "fact:other David asked when the offsite is scheduled? [evidence: thread; refs: []]"
+      ]))
   }
 
-  func testImpliedCitationsMatchOnSharedContent() {
+  func testImpliedCitationsMatchOnIdentifiersOnly() {
     let items = [
       ContextRetrievedItem(
         ref: "memory:dl-1", title: "Memory",
         preview:
-          "The download link for the latest Omi desktop app (macOS) is omi.me/desktop — share this link whenever someone asks.",
+          "The download link for the latest Omi desktop app (macOS) is omi.me/desktop. Share when asked.",
         createdAt: nil),
       ContextRetrievedItem(
         ref: "conversation:noise", title: "Conversation",
-        preview: "Jii and Speaker 1 troubleshoot an OpenGL rendering issue.", createdAt: nil),
+        preview: "Jii and Speaker 1 troubleshoot the latest Omi desktop notification issue.",
+        createdAt: nil),
     ]
-    // A shared long token (the link) attributes the citation.
+    // A shared identifier token attributes — despite the preview's trailing period.
     XCTAssertEqual(
       ContextDirectorRetrievalHop.impliedCitations(
-        message: "The latest Omi desktop app download link is omi.me/desktop.", items: items),
+        message: "The latest Omi desktop app download link is omi.me/desktop", items: items,
+        question: "What is the latest omi desktop app download link?"),
       ["memory:dl-1"])
+    // Plain-word overlap with a noise item never attributes: an invented value
+    // sharing only common phrases dies at the veto.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "The latest Omi desktop download link is omi.me/legacy-2024", items: items,
+        question: "What is the latest omi desktop app download link?"),
+      [])
     // Content matching nothing retrieved earns no citation.
     XCTAssertEqual(
       ContextDirectorRetrievalHop.impliedCitations(
-        message: "You should restart your computer.", items: items),
+        message: "You should restart your computer.", items: items, question: ""),
       [])
   }
 }

@@ -103,6 +103,22 @@ enum ContextBucketsFeature {
     return !PostHogManager.shared.isFeatureEnabled(departureEvaluationKillSwitchFlagName)
   }
 
+  /// The keyboard-triggered dwell refresh (ContextDwellRefreshPolicy): its own
+  /// remote stop because it multiplies evaluation volume (each refresh buys a
+  /// departure extraction + departure evaluation + entry evaluation, plus a
+  /// possible forced retrieval), so it must be stoppable without taking the
+  /// whole pipeline down. Same inverted fail-open semantics as the flags above.
+  @MainActor static var isDwellRefreshEnabled: Bool {
+    guard isEnabled else { return false }
+    if AppBuild.isNonProduction {
+      return ProcessInfo.processInfo.environment[localDwellRefreshOverrideName] != "0"
+    }
+    return !PostHogManager.shared.isFeatureEnabled(dwellRefreshKillSwitchFlagName)
+  }
+
+  static let dwellRefreshKillSwitchFlagName = "context_buckets_dwell_refresh_kill"
+  private static let localDwellRefreshOverrideName = "OMI_FORCE_DWELL_REFRESH"
+
   static let departureEvaluationKillSwitchFlagName = "context_buckets_departure_eval_kill"
   private static let localDepartureEvaluationOverrideName = "OMI_FORCE_DEPARTURE_EVALUATION"
 

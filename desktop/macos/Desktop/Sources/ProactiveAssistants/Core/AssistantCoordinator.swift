@@ -247,10 +247,24 @@ class AssistantCoordinator {
   /// post-entry frame BEFORE engaging the director: the entry evaluation only
   /// grounds on frames captured at or after the visit began, and the
   /// preview-skip path may not produce another full frame for a static screen.
-  func refreshActiveContextForDwell() async -> ContextVisitFence? {
+  func refreshActiveContextForDwell(
+    expectedApp: String, expectedWindowTitle: String?
+  ) async -> ContextVisitFence? {
     guard ContextBucketsFeature.isEnabled else { return nil }
     guard let app = lastTrackedApp, let frame = lastTrackedFrame else { return nil }
+    // The dwell task is detached from its tick: if the user switched contexts
+    // while it awaited, refreshing would close the just-opened visit and
+    // extract the OLD context's frame into the NEW context's bucket.
+    guard app == expectedApp,
+      ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle)
+        == ContextDetection.normalizeWindowTitle(expectedWindowTitle)
+    else { return nil }
     guard !RewindSettings.shared.isAppExcluded(app) else { return nil }
+    // A refused same-context refresh must be DROPPED, not queued: begin()
+    // stores a refused request as pending, and finishContextTransition would
+    // replay it as a phantom switch back to this context after the in-flight
+    // real transition completes.
+    guard contextTransitionQueue.inFlight == nil else { return nil }
     let request = ContextTransitionRequest(app: app, windowTitle: lastTrackedWindowTitle)
     guard contextTransitionQueue.begin(request) else { return nil }
     defer { finishContextTransition(request) }
@@ -305,6 +319,10 @@ class AssistantCoordinator {
   }
 
   // MARK: - Frame Tracking & Distribution
+
+  /// The app of the context currently tracked for switches; the dwell task
+  /// uses it to drop stale captures after an app switch.
+  var currentTrackedApp: String? { lastTrackedApp }
 
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {

@@ -404,14 +404,7 @@ actor ContextProactivityEngine {
     let envSignal = await MainActor.run {
       EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
     }
-    var uncachedPrompt =
-      ContextProactivityPromptBuilder.directorVolatilePrompt(
-        tasks: taskContext,
-        frame: currentFrame,
-        recentDeliveries: recentDeliveries,
-        visitCount: snapshot.visitCount,
-        environmentalSignal: envSignal)
-      + (workstreamSection.map { "\n\n" + $0 } ?? "")
+    var volatileExtras = workstreamSection.map { "\n\n" + $0 } ?? ""
     if candidatesEnabled {
       let selected = ContextWorkstreamPooling.selectRecent(
         await store.recentContextPool(
@@ -421,9 +414,17 @@ actor ContextProactivityEngine {
       if let section = ContextWorkstreamPooling.recentContextPromptSection(
         items: fresh, now: currentFrame.captureTime)
       {
-        uncachedPrompt += "\n\n" + section
+        volatileExtras += "\n\n" + section
       }
     }
+    let uncachedPrompt =
+      ContextProactivityPromptBuilder.directorVolatilePrompt(
+        tasks: taskContext,
+        frame: currentFrame,
+        recentDeliveries: recentDeliveries,
+        visitCount: snapshot.visitCount,
+        environmentalSignal: envSignal)
+      + volatileExtras
     guard
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
       await store.fenceFreshness(fence).fresh
@@ -461,29 +462,33 @@ actor ContextProactivityEngine {
     var forcedRetrievalAllowlist: Set<String> = []
     var forcedRetrievalItems: [ContextRetrievedItem] = []
     var forcedRetrievalProvenance: [String: Any]? = nil
+    var forcedLookup: ContextDirectorRetrievalHop.ForcedLookup? = nil
     var effectiveUncachedPrompt = uncachedPrompt
     if retrievalHopEnabled,
-      let forcedQuery = ContextDirectorRetrievalHop.forcedLookupQuery(
+      let lookup = ContextDirectorRetrievalHop.forcedLookupQuery(
         validatedFacts: snapshot.validatedFacts)
     {
-      let items = await retrieve(forcedQuery, authorizationSnapshot)
-      if let section = ContextDirectorRetrievalHop.promptSection(query: forcedQuery, items: items) {
+      forcedLookup = lookup
+      let items = await retrieve(lookup.query, authorizationSnapshot)
+      if let section = ContextDirectorRetrievalHop.promptSection(query: lookup.query, items: items) {
         // A direct question invalidates the anti-nagging guard by design, and
         // in live runs the model kept reading the identical answer cards in
         // the recent-deliveries list as "delivered repeatedly" and silencing.
         // The forced evaluation therefore omits that list mechanically instead
-        // of asking the model to discount it.
+        // of asking the model to discount it. Every other volatile section
+        // (workstream, recent-context pool) is preserved so pooling context
+        // and its provenance stay truthful.
         let answerPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
           tasks: taskContext,
           frame: currentFrame,
           recentDeliveries: [],
           visitCount: snapshot.visitCount,
           environmentalSignal: envSignal)
-        effectiveUncachedPrompt = answerPrompt + "\n\n" + section
+        effectiveUncachedPrompt = answerPrompt + volatileExtras + "\n\n" + section
         forcedRetrievalAllowlist = Set(items.map(\.ref))
         forcedRetrievalItems = items
         forcedRetrievalProvenance = ContextDirectorRetrievalHop.provenance(
-          query: forcedQuery, items: items, citedRefs: [], hopCompleted: true, failure: nil)
+          query: lookup.query, items: items, citedRefs: [], hopCompleted: true, failure: nil)
       }
     }
     do {
@@ -521,7 +526,7 @@ actor ContextProactivityEngine {
       if let lookupQuery = ContextDirectorRetrievalHop.plan(
         lookupQuery: firstDecision.lookupQuery,
         flagEnabled: retrievalHopEnabled,
-        priorHops: forcedRetrievalProvenance == nil ? 0 : 1)
+        priorHops: forcedLookup == nil ? 0 : 1)
       {
         let hop = await performRetrievalHop(
           query: lookupQuery,
@@ -571,7 +576,8 @@ actor ContextProactivityEngine {
         decision.decision == "insight" || decision.decision == "suggest"
       {
         retrievedRefs = ContextDirectorRetrievalHop.impliedCitations(
-          message: decision.message, items: forcedRetrievalItems)
+          message: decision.message, items: forcedRetrievalItems,
+          question: forcedLookup?.query ?? "")
       }
       let factIDs =
         decision.decision == "silence"
@@ -738,7 +744,8 @@ actor ContextProactivityEngine {
                 decisionType: presentedDecision.decision,
                 provenanceJSON: provenanceJSON,
                 message: presentedDecision.message,
-                authorizationSnapshot: authorizationSnapshot)
+                authorizationSnapshot: authorizationSnapshot,
+                consumeFactID: forcedLookup?.sourceFactID)
             }
           },
           onDropped: { [weak self] in
@@ -1147,7 +1154,8 @@ actor ContextProactivityEngine {
     decisionType: String,
     provenanceJSON: String,
     message: String,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
+    consumeFactID: String? = nil
   ) async {
     // onPresented is the authoritative observation that the interruption became
     // visible. A queued card can legitimately paint after its source visit has
@@ -1167,6 +1175,14 @@ actor ContextProactivityEngine {
       // A late onPresented after failed/suppressed must not revive delivery state.
       // task_candidate graduation already ran before presentation.
       guard advanced else { return }
+      // A delivered answer consumes its question fact: an unanswered fact
+      // re-forces retrieval on every dwell refresh with the anti-repetition
+      // list omitted, repeating the identical card until the fact expired.
+      // Expiring it also lets a RE-typed question re-validate (the duplicate
+      // check ignores expired facts), so asking again still gets an answer.
+      if let consumeFactID {
+        try? await store.expireFact(id: consumeFactID)
+      }
     } catch {
       await terminalize(
         deliveryID: deliveryID,

@@ -780,8 +780,14 @@ extension ContextBucketStore {
           let duplicate =
             try Bool.fetchOne(
               db,
-              sql: "SELECT EXISTS(SELECT 1 FROM bucket_facts WHERE bucketID = ? AND statement = ?)",
-              arguments: [bucketID, statement]) ?? false
+              sql: """
+                SELECT EXISTS(
+                  SELECT 1 FROM bucket_facts
+                  WHERE bucketID = ? AND statement = ?
+                    AND (expiresAt IS NULL OR expiresAt > ?)
+                )
+                """,
+              arguments: [bucketID, statement, Date()]) ?? false
           let validity = BucketFactValidator.validity(
             evidenceText: evidenceText,
             evidenceRefs: evidenceRefs,
