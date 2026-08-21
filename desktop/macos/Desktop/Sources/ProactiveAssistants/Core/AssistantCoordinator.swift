@@ -324,6 +324,16 @@ class AssistantCoordinator {
   /// uses it to drop stale captures after an app switch.
   var currentTrackedApp: String? { lastTrackedApp }
 
+  /// Whether the tracker still points at this exact context. The dwell task
+  /// guards every capture with it: an app-only check let a same-app tab/title
+  /// switch during the async capture overwrite the tracked frame with the
+  /// departed window's pixels, contaminating the active bucket.
+  func isTracking(app: String, windowTitle: String?) -> Bool {
+    lastTrackedApp == app
+      && ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle)
+        == ContextDetection.normalizeWindowTitle(windowTitle)
+  }
+
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
     lastTrackedFrame = frame

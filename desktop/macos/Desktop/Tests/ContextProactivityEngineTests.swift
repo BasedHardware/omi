@@ -1168,4 +1168,24 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     XCTAssertEqual(decision.message, "The link is omi.me/desktop.")
     XCTAssertEqual(decision.bucketEntryRefs, ["memory:abc-123"], "citations stay citations")
   }
+
+  @MainActor
+  func testDwellCaptureGuardRejectsSameAppTitleSwitch() async {
+    // Prime the tracker (buckets disabled so no store writes), then a same-app
+    // title switch must invalidate the old context for the dwell capture guard.
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Original Title", bucketsEnabled: false)
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"))
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Different Document", bucketsEnabled: false)
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"),
+      "a same-app title switch during the async capture must drop the stale frame")
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "OtherApp", windowTitle: "Different Document"))
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(
+        app: "GuardTestApp", windowTitle: "Different Document"))
+  }
 }

@@ -638,7 +638,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     // content even when the preview-skip path starved full captures. Skip the
     // whole refresh if the user already switched away: tracking the old app's
     // frame after a switch would contaminate the new context's bucket.
-    guard AssistantCoordinator.shared.currentTrackedApp == appName else { return }
+    guard AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle) else {
+      return
+    }
     // The fresh pre-transition capture is REQUIRED: transitioning without it
     // would extract a stale frame that predates the typed content, spending
     // the refresh (and its cooldown) on nothing. On failure — or on macOS 13,
@@ -648,7 +650,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     if #available(macOS 14.0, *), let screenCaptureService {
       let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
       if case .success(let image) = result,
-        AssistantCoordinator.shared.currentTrackedApp == appName
+        AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
       {
         frameCount += 1
         AssistantCoordinator.shared.trackFrame(
@@ -677,7 +679,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     if #available(macOS 14.0, *), let screenCaptureService {
       let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
       if case .success(let image) = result,
-        AssistantCoordinator.shared.currentTrackedApp == appName
+        AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
       {
         frameCount += 1
         AssistantCoordinator.shared.trackFrame(

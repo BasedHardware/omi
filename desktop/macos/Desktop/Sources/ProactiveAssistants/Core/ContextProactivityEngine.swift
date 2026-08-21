@@ -483,10 +483,16 @@ actor ContextProactivityEngine {
     var forcedRetrievalProvenance: [String: Any]? = nil
     var forcedLookup: ContextDirectorRetrievalHop.ForcedLookup? = nil
     var effectiveUncachedPrompt = uncachedPrompt
+    if retrievalHopEnabled {
+      log(
+        "ForcedLookupDebug: facts=\(snapshot.validatedFacts.count) firstChars=\(snapshot.validatedFacts.first.map { String($0.prefix(90)) } ?? "none")"
+      )
+    }
     if retrievalHopEnabled,
       let lookup = ContextDirectorRetrievalHop.forcedLookupQuery(
         validatedFacts: snapshot.validatedFacts)
     {
+      log("ForcedLookupDebug: firing query=\(lookup.query.prefix(80))")
       forcedLookup = lookup
       let items = await retrieve(lookup.query, authorizationSnapshot)
       if let section = ContextDirectorRetrievalHop.promptSection(query: lookup.query, items: items) {
