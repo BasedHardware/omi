@@ -5,13 +5,23 @@
   "properties": {
     "secrets": {
       "type": "object",
-      "properties": { "create": { "type": "boolean" } }
+      "properties": {
+        "create": {
+          "type": "boolean"
+        }
+      }
     },
     "networkPolicy": {
       "type": "object",
-      "properties": { "enabled": { "type": "boolean" } }
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
     },
-    "storageClassName": { "type": "string" },
+    "storageClassName": {
+      "type": "string"
+    },
     "backend": {
       "type": "object",
       "properties": {
@@ -19,34 +29,142 @@
           "type": "object",
           "description": "repository + tag; an empty tag means the release (Chart.appVersion, ADR-0054)",
           "properties": {
-            "repository": { "type": "string", "minLength": 1 },
-            "tag": { "type": "string" }
+            "repository": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string"
+            }
           },
-          "required": ["repository"]
+          "required": [
+            "repository"
+          ]
         },
-        "replicas": { "type": "integer", "minimum": 1 },
-        "encryptionSecret": { "type": "string" }
+        "replicas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "encryptionSecret": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "cursorSecret": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
-    "chat": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "vectorDim": { "type": "integer", "minimum": 1 } } },
-    "objstore": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
-    "push": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "chat": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "vectorDim": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "objstore": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "push": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
     "auth": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "hostname": { "type": "string" },
-        "audience": { "type": "string" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "audience": {
+          "type": "string"
+        }
       }
     },
-    "inference": { "type": "object", "properties": { "enabled": { "type": "boolean" } } },
+    "inference": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
     "ingress": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "type": { "type": "string", "enum": ["gateway", "ingress"] },
-        "httpNodePort": { "type": "integer" },
-        "httpsNodePort": { "type": "integer" }
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "gateway",
+            "ingress"
+          ]
+        },
+        "httpNodePort": {
+          "type": "integer"
+        },
+        "httpsNodePort": {
+          "type": "integer"
+        }
+      }
+    },
+    "scheduledJobs": {
+      "type": "object",
+      "properties": {
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 9
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        },
+        "memoryMaintenance": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 9
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
       }
     }
   }

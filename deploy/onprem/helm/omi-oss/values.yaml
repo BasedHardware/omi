@@ -39,6 +39,18 @@ backend:
   # Kind loads images with `kind load docker-image` (no registry, study §4.3) — Never avoids any pull.
   imagePullPolicy: Never
   replicas: 1
+  # Canonical memory intake. `false` is a legitimate choice, but it must be a CHOSEN one: with the
+  # variable unset the code defaults to off and every memory write answers 503 with readiness green.
+  # `true` requires the memory-maintenance CronJob (scheduledJobs.memoryMaintenance) so the outbox
+  # drains, and wants an LLM endpoint for the consolidation step (it degrades, not fails, without one).
+  memory:
+    # HELD at false pending a decision (BACKLOG L33/L37): `true` is wanted, but the canonical memory
+    # outbox's "projection" event IS the Typesense keyword index, and with no Typesense deployed every
+    # projection_sync stays retryable_failure forever — one permanently stuck event per memory written.
+    enabled: false
+    # Signs the memory-list keyset cursor: `openssl rand -hex 32`. Required when enabled — see the
+    # Secret template for what breaks without it.
+    cursorSecret: ""
   service:
     port: 8080
   # ENCRYPTION_SECRET lives in a Secret; the dev overlay sets a throwaway value, prod injects a real one.
@@ -103,6 +115,28 @@ auth:
       image: postgres:16-alpine
       storage: 2Gi
       password: ""   # required when db=postgres (dev overlay sets a throwaway value)
+# Scheduled work (ADR-0062). Upstream runs exactly two periodic jobs, both HOURLY, as Cloud Run Jobs
+# driven by Cloud Scheduler. This chart ran none, so two product surfaces were absent: the daily
+# summary (a PERSISTED document — /v1/users/daily-summaries stayed empty forever, not merely a push
+# missed) and the canonical memory outbox drain (a written memory never got its projection or vector).
+# One CronJob per job, same image as the backend with a different command.
+scheduledJobs:
+  notifications:
+    # Daily notifications + the daily summary, plus a weekly read-only health verdict and the X
+    # connector sync (both self-gating). Inert when the push transport is `disabled`, which is why it
+    # is safe to have on by default: the cost of it being off is a missing product feature.
+    enabled: true
+    schedule: "0 * * * *"
+    resources: {}
+  memoryMaintenance:
+    # Drains the canonical memory outbox (projections + vectors), consolidates ("dreaming" — wants an
+    # LLM endpoint; without one it degrades with a recorded fallback), audits short-term TTL and drains
+    # the recurrence inbox. Pointless unless MEMORY_ENABLED=on, which backend-configmap sets from
+    # backend.memory.enabled — keep the two together, and both are HELD at false pending L33/L37.
+    enabled: false
+    schedule: "0 * * * *"
+    resources: {}
+
 chat:
   # Brings up the vector store (Qdrant) AND, with llmGateway below, the on-prem chat LLM path — the
   # compose parity that used to be missing here. The backend only ever emits `omi:auto:<feature>` lane

@@ -72,6 +72,51 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------------------------
+  # Scheduled work (profile "jobs", ADR-0062). Upstream runs these two as HOURLY Cloud Run Jobs
+  # driven by Cloud Scheduler; we have neither, and without them two product surfaces are absent:
+  # the daily summary is a PERSISTED document, so /v1/users/daily-summaries stays empty forever, and
+  # the canonical memory outbox is never drained, so a written memory never gets its projection or
+  # its vector. Same image as the backend with a different command (the llm_gateway pattern) — the
+  # runner is `jobs/onprem_scheduled.py`, which calls upstream's own function bodies without the
+  # Firebase init its Cloud Run entrypoints open with.
+  #
+  # `--loop` because compose has no scheduler: the process sleeps to the next top of the hour, which
+  # is upstream's schedule (0 * * * *) and what the notifications job's local-hour bucketing assumes.
+  # In Kubernetes the same command runs WITHOUT --loop, once per CronJob tick.
+  #
+  # Two services, not one: separate logs, independent restart, and either can be left out.
+  scheduled_notifications:
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    profiles: ["jobs"]
+    env_file:
+      - ./backend.env.base
+    command: ["python", "-m", "jobs.onprem_scheduled", "--job", "notifications", "--loop"]
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks: [omi]
+    restart: unless-stopped
+
+  # Its OWN profile, not "jobs": with MEMORY_ENABLED / MEMORY_CANONICAL_MAINTENANCE_ENABLED off this
+  # job fails by design (a tick that drains nothing must not report success), so bundling it with the
+  # notifications runner would make `--profile jobs` produce an hourly failure on every deployment that
+  # has not turned memory on. Bring it up together with memory: `--profile jobs --profile jobs-memory`.
+  scheduled_memory_maintenance:
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    profiles: ["jobs-memory"]
+    env_file:
+      - ./backend.env.base
+    # Needs MEMORY_ENABLED=on to have anything to do, and an LLM endpoint for the consolidation step
+    # (without one it degrades with a recorded fallback rather than failing). The outbox drain and the
+    # TTL audit do not need inference.
+    command: ["python", "-m", "jobs.onprem_scheduled", "--job", "memory-maintenance", "--loop"]
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks: [omi]
+    restart: unless-stopped
+
   # TLS-terminating reverse proxy for the backend API (conf: api-proxy.conf). The mobile app sends
   # the Bearer token to the API, so on-prem serves it over HTTPS (same posture as the OIDC issuer).
   # Set the app's API_BASE_URL to https://<host>:${API_HTTPS_PORT}. Generate certs: ./gen-dev-certs.sh

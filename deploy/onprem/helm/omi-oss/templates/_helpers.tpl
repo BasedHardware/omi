@@ -40,3 +40,19 @@ value, ingress.loadBalancerIP, fixes the issuer + TLS SAN without repeating the 
 {{- define "omi-oss.authHostname" -}}
 {{- .Values.auth.hostname | default (printf "https://%s" .Values.ingress.loadBalancerIP) -}}
 {{- end -}}
+
+{{/*
+Canonical memory intake, tolerant of a values tree that predates the key.
+
+`helm upgrade --reuse-values` reuses the PREVIOUS release's computed values and drops new chart
+defaults, so on an existing release `.Values.backend.memory.enabled` is nil and a bare read fails the
+upgrade with "nil pointer evaluating interface {}.enabled". Found that way on a live cluster. The
+fallback is `false` — the same value values.yaml holds it at — so the rendered config is identical
+either way rather than quietly different.
+*/}}
+{{- define "omi-oss.memoryEnabled" -}}
+{{- $mem := .Values.backend.memory | default dict -}}
+{{- $enabled := $mem.enabled -}}
+{{- if kindIs "invalid" $enabled }}{{ $enabled = false }}{{ end -}}
+{{- $enabled -}}
+{{- end -}}

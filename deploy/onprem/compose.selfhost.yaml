@@ -6,6 +6,16 @@ name: omi-oss
 # points at a real Firestore. Keeping mongo out of base is what lets a posture skip the datastore it
 # does not use (the mirror of keeping the Firestore emulator out of base/prod).
 services:
+  # The scheduled runners talk to the same datastore as the backend, so the posture overlay adds the
+  # dependency here for the same reason it does for `backend`: base knows only about valkey.
+  scheduled_notifications:
+    depends_on:
+      mongo:
+        condition: service_healthy
+  scheduled_memory_maintenance:
+    depends_on:
+      mongo:
+        condition: service_healthy
   mongo:
     image: ${OMI_OSS_MONGO_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
