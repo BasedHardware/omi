@@ -446,11 +446,16 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   }
 
   private func bridgeSource() throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
+    // d5596a6b50 split notification actions into their own file to satisfy the
+    // line-count ratchet; this scrape must cover every bridge action source or
+    // relocated actions read as unregistered.
+    let sources = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/DesktopAutomationBridge.swift")
-    return try String(contentsOf: url, encoding: .utf8)
+      .appendingPathComponent("Sources")
+    return try ["DesktopAutomationBridge.swift", "DesktopAutomationBridge+Notifications.swift"]
+      .map { try String(contentsOf: sources.appendingPathComponent($0), encoding: .utf8) }
+      .joined(separator: "\n")
   }
 
   private func actionBody(named action: String, in source: String) throws -> String {
