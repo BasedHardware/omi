@@ -83,7 +83,8 @@ from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
 from utils.observability.fallback import record_fallback
-from utils.observability.journeys import JourneyAttempt
+from utils.journey_metrics_contract import resolve_client_kind_from_headers
+from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
     read_wav_duration_ms,
@@ -189,6 +190,25 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
         if len(keywords) >= 100:
             break
     return keywords
+
+
+def _mobile_chat_stream_succeeded(frame: str) -> bool:
+    """A mobile answer succeeds only at a terminal frame with renderable text."""
+
+    if not frame.startswith('done: '):
+        return False
+    try:
+        payload = json.loads(base64.b64decode(frame.removeprefix('done: ').strip()).decode('utf-8'))
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    answer = payload.get('text') if isinstance(payload, dict) else None
+    return isinstance(answer, str) and bool(answer.strip())
+
+
+def _mobile_chat_stream_failed(frame: str) -> bool:
+    """Typed in-band errors are failures even when a fallback done frame follows."""
+
+    return frame.lstrip().startswith('error: ')
 
 
 def filter_messages(messages, app_id):
@@ -341,6 +361,7 @@ def _record_chat_quota_question_best_effort(
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
+    request: Request,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
@@ -527,6 +548,10 @@ def send_message(
         return ai_message, ask_for_nps
 
     journey_attempt = JourneyAttempt('chat_response')
+    mobile_journey_attempt = ClientJourneyAttempt(
+        'mobile_chat',
+        resolve_client_kind_from_headers(request.headers),
+    )
 
     async def generate_stream():
         callback_data = {}
@@ -600,6 +625,7 @@ def send_message(
                 chat_session=chat_session,
                 context=data.context,
                 platform=x_app_platform,
+                client_kind=mobile_journey_attempt.client_kind,
             ):
                 if chunk:
                     if chunk.startswith('error: '):
@@ -652,7 +678,14 @@ def send_message(
             if not journey_attempt.finished:
                 journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+    observed_stream = mobile_journey_attempt.observe_stream(
+        generate_stream(),
+        success_when=_mobile_chat_stream_succeeded,
+        failure_when=_mobile_chat_stream_failed,
+        failure_class='provider_error',
+        missing_success_class='empty_answer',
+    )
+    return StreamingResponse(observed_stream, media_type="text/event-stream")
 
 
 @router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
