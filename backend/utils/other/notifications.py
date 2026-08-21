@@ -15,7 +15,7 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
-from utils.push.base import UNIFIEDPUSH
+from utils.push.base import DISABLED, UNIFIEDPUSH
 from utils.push.selector import resolve_push_backend
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
@@ -64,16 +64,26 @@ async def send_daily_summary_notification() -> None:
             users = await _get_users_for_daily_summary(timezones, target_hour)
             if not users:
                 continue
-            # Fetch recipients for the resolved backend (UnifiedPush endpoints keyed by uid, or FCM tokens),
-            # then keep only users with a deliverable recipient and shape them for the sender.
+            # Fetch recipients for the resolved backend (UnifiedPush endpoints keyed by uid, or FCM tokens)
+            # and shape every eligible user for the sender — including those with NO recipient.
+            #
+            # The fan-out used to keep only deliverable users, but the per-user path both CREATES the
+            # summary (create_daily_summary below) and delivers it, so a user without a recipient never
+            # got a summary generated at all and /v1/users/daily-summaries — which the app reads — stayed
+            # empty for them. The daily summary is a persisted product artifact; gating its creation on
+            # push deliverability is wrong in any posture, and on-prem it is the normal case
+            # (PUSH_NOTIFICATION_BACKEND=disabled is first-class, ADR-0011).
+            #
+            # Delivery for those users is already a safe no-op: _send_to_user returns 0 for DISABLED and
+            # for an empty token list, so nothing is sent and nothing fans out to anyone else.
             recipients_by_uid = await _recipients_by_uid(users, timezones, backend)
-            fan_out = [
-                (uid, recipients_by_uid.get(uid, []), tz)
-                for uid, _user_data, tz in users
-                if recipients_by_uid.get(uid)
-            ]
+            fan_out = [(uid, recipients_by_uid.get(uid, []), tz) for uid, _user_data, tz in users]
             if fan_out:
-                logger.info(f"Sending daily summary to {len(fan_out)} users at local hour {target_hour}")
+                deliverable = sum(1 for _uid, recipients, _tz in fan_out if recipients)
+                logger.info(
+                    f"Daily summary for {len(fan_out)} users at local hour {target_hour} "
+                    f"({deliverable} with a deliverable recipient, backend={backend})"
+                )
                 await _send_bulk_summary_notification(fan_out, backend)
 
     except Exception as e:
@@ -100,6 +110,10 @@ async def _recipients_by_uid(
     """Recipients keyed by uid for the resolved delivery backend — the service-layer delivery-policy
     decision (cubic PR 10887 #427). UnifiedPush: one batched collection-group read by timezone; FCM: the
     users' subcollection tokens + legacy field. Both are neutral DB reads run on the DB worker."""
+    if backend == DISABLED:
+        # No branch existed for it, so `disabled` fell through to the FCM read below: a full token read,
+        # every hour, for a transport that will never deliver. Nothing to fetch, so fetch nothing.
+        return {}
     if backend == UNIFIEDPUSH:
         return await run_blocking(db_executor, notification_db.get_unifiedpush_endpoints_by_uid, timezones)
     return await run_blocking(db_executor, notification_db.get_fcm_tokens_for_users, users)
