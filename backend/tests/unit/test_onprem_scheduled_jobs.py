@@ -16,8 +16,13 @@ import pytest
 from jobs import onprem_scheduled
 
 
-def test_both_upstream_jobs_are_dispatchable():
-    assert sorted(onprem_scheduled.JOBS) == ['memory-maintenance', 'notifications']
+def test_every_job_is_dispatchable():
+    """Upstream's two hourly jobs, plus the conversation-search indexer that is ours (ADR-0064)."""
+    assert sorted(onprem_scheduled.JOBS) == [
+        'conversation-search-index',
+        'memory-maintenance',
+        'notifications',
+    ]
 
 
 def test_run_once_dispatches_the_named_job(monkeypatch):
@@ -115,7 +120,9 @@ def test_cli_rejects_an_unknown_job():
 def test_cli_runs_once_by_default(monkeypatch):
     seen: list[tuple[str, bool]] = []
     monkeypatch.setattr(onprem_scheduled, 'run_once', lambda job: seen.append((job, False)) or 0)
-    monkeypatch.setattr(onprem_scheduled, 'run_loop', lambda job: seen.append((job, True)) or 0)
+    monkeypatch.setattr(
+        onprem_scheduled, 'run_loop', lambda job, **_kw: seen.append((job, True)) or 0
+    )
     assert onprem_scheduled.main(['--job', 'notifications']) == 0
     assert seen == [('notifications', False)]
     assert onprem_scheduled.main(['--job', 'notifications', '--loop']) == 0
@@ -151,3 +158,48 @@ def test_memory_maintenance_proceeds_when_its_switch_is_on(monkeypatch):
 
     monkeypatch.setattr(cron_mod, 'run_canonical_short_term_maintenance_cron', fake_cron)
     assert onprem_scheduled.run_once('memory-maintenance') == 0
+
+
+def test_the_conversation_search_index_job_is_dispatchable():
+    """Ours, not upstream's: the missing writer for the Typesense conversations collection."""
+    assert 'conversation-search-index' in onprem_scheduled.JOBS
+
+
+def test_a_fixed_interval_replaces_the_hour_alignment():
+    """Search freshness is user-visible, so that job must not wait up to an hour."""
+    slept: list[float] = []
+
+    async def noop():
+        return None
+
+    import pytest as _pytest
+
+    monkey = _pytest.MonkeyPatch()
+    monkey.setitem(onprem_scheduled.JOBS, 'conversation-search-index', noop)
+    try:
+        onprem_scheduled.run_loop('conversation-search-index', sleeper=slept.append, ticks=2, interval_seconds=300)
+    finally:
+        monkey.undo()
+    assert slept == [300.0, 300.0]
+
+
+def test_the_default_cadence_is_still_the_top_of_the_hour():
+    slept: list[float] = []
+
+    async def noop():
+        return None
+
+    import pytest as _pytest
+
+    monkey = _pytest.MonkeyPatch()
+    monkey.setitem(onprem_scheduled.JOBS, 'notifications', noop)
+    try:
+        onprem_scheduled.run_loop('notifications', sleeper=slept.append, ticks=1)
+    finally:
+        monkey.undo()
+    assert 0 < slept[0] <= 3600
+
+
+def test_a_nonsense_interval_is_refused():
+    with pytest.raises(SystemExit):
+        onprem_scheduled.main(['--job', 'notifications', '--loop', '--interval-seconds', '0'])

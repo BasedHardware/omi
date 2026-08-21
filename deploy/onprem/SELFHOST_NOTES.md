@@ -553,6 +553,51 @@ Typesense reads `TYPESENSE_API_KEY` from the environment and enforces it (wrong 
 **`TYPESENSE_PROTOCOL=http` is not optional.** The client defaults to **https**
 (`utils/conversations/search.py:155`), so a service reached by name over plain HTTP must say so.
 
+### Conversation search: we write the index (ADR-0064)
+
+`--profile search` also runs `scheduled_conversation_search_index`, **every 5 minutes** (not hourly:
+search freshness is user-visible). It is the writer upstream does not ship — their `conversations`
+collection is filled by a Firestore -> Typesense pipeline outside the codebase, so without this the index
+stays empty and the app's search bar and date browse find nothing.
+
+One bounded **full** reconcile per run, not an incremental sweep: the store's `updated_at` is document
+metadata, not a queryable field, so a "changed since" watermark would index new conversations and
+silently miss every edit. The pass costs one read per conversation and is correct including deletions.
+Two rules it obeys: a truncated run **says so**, and a truncated run **does not prune** (pruning is
+"delete what the scan did not see", so pruning a partial scan would delete live conversations).
+Raise the cap with `CONVERSATION_SEARCH_INDEX_MAX_DOCUMENTS`.
+
+Force one pass and check what it did:
+
+```bash
+docker compose -f compose.prod.yaml --profile search \
+  run --rm --no-deps scheduled_conversation_search_index \
+  python -m jobs.onprem_scheduled --job conversation-search-index
+# -> scanned=N indexed=N skipped_incomplete=0 pruned=M truncated=False errors=0
+```
+
+### The admin dashboard's conversation count
+
+`web/admin` reads `num_documents` off the `conversations` collection **directly**, not through the
+backend (`app/api/omi/stats/conversation-count/route.ts`). With the indexer running that number equals
+the store — verified: 2 in Typesense, 2 in Mongo. Two traps when wiring it:
+
+- **`TYPESENSE_HOST` must carry the scheme.** That route prepends `https://` when the value has none
+  (`route.ts:26-28`), and our Typesense speaks plain HTTP. Use `TYPESENSE_HOST=http://<host>:8108`.
+- **Do not give it the master key.** `search.apiKey` can read *and write* every collection, including the
+  memory atoms. Mint a key that can do exactly one thing, and verify it is refused elsewhere:
+
+```bash
+curl -X POST http://<typesense>:8108/keys -H "X-TYPESENSE-API-KEY: $MASTER" \
+  -d '{"description":"admin stats: conversation count","actions":["collections:get"],"collections":["conversations"]}'
+# the response `value` is the only time the key is shown. Then check the blast radius:
+curl -s -o /dev/null -w '%{http_code}\n' http://<typesense>:8108/collections/conversations         -H "X-TYPESENSE-API-KEY: $SCOPED"  # 200
+curl -s -o /dev/null -w '%{http_code}\n' http://<typesense>:8108/collections/canonical_memory_atoms -H "X-TYPESENSE-API-KEY: $SCOPED"  # 401
+```
+
+Verified against the pinned image: the scoped key reads `conversations` and is **Forbidden** on the
+memory collection.
+
 ## Testing the backend offline
 
 The box has only Docker (no host venv). Suites run in a **test image** = the WP0 backend image plus

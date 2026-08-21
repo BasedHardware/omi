@@ -72,6 +72,34 @@ services:
     networks: [omi]
     restart: unless-stopped
 
+  # The writer for the Typesense `conversations` collection (ADR-0064) — ours, not upstream's, which
+  # fills it from a Firestore -> Typesense pipeline that is not in the codebase. Without it the index
+  # stays empty and the app's conversation search AND its date browse find nothing.
+  # Profile "search": it needs Typesense, and it is pointless without it.
+  # Every 5 minutes, not hourly: search freshness is user-visible, so waiting up to an hour is the wrong
+  # trade. The pass is a bounded full reconcile (see the module docstring for why not incremental).
+  scheduled_conversation_search_index:
+    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
+    profiles: ["search"]
+    env_file:
+      - ./backend.env.base
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
+    command:
+      - python
+      - -m
+      - jobs.onprem_scheduled
+      - --job
+      - conversation-search-index
+      - --loop
+      - --interval-seconds
+      - "300"
+    depends_on:
+      valkey:
+        condition: service_healthy
+    networks: [omi]
+    restart: unless-stopped
+
   # ---------------------------------------------------------------------------------------------
   # Scheduled work (profile "jobs", ADR-0062). Upstream runs these two as HOURLY Cloud Run Jobs
   # driven by Cloud Scheduler; we have neither, and without them two product surfaces are absent:

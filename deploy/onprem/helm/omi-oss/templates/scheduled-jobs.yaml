@@ -31,7 +31,10 @@ places to change a default. See MANUAL-prod-k0s.md.
             "cfg"  $.Values.scheduledJobs.notifications)
       (dict "name" "scheduled-memory-maintenance"
             "arg"  "memory-maintenance"
-            "cfg"  $.Values.scheduledJobs.memoryMaintenance) }}
+            "cfg"  $.Values.scheduledJobs.memoryMaintenance)
+      (dict "name" "scheduled-conversation-search-index"
+            "arg"  "conversation-search-index"
+            "cfg"  $.Values.scheduledJobs.conversationSearchIndex) }}
 {{- if $job.cfg.enabled }}
 ---
 apiVersion: batch/v1

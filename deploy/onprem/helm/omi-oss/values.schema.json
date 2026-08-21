@@ -164,6 +164,21 @@
               "type": "object"
             }
           }
+        },
+        "conversationSearchIndex": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "schedule": {
+              "type": "string",
+              "minLength": 9
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
         }
       }
     },

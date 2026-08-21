@@ -12,6 +12,13 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+  # Needs the datastore it reads and the index it writes.
+  scheduled_conversation_search_index:
+    depends_on:
+      mongo:
+        condition: service_healthy
+      typesense:
+        condition: service_healthy
   scheduled_memory_maintenance:
     # It is the WRITER of the keyword index, so it needs the same shared key as the backend.
     environment:

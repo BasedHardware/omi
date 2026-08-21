@@ -128,6 +128,13 @@ scheduledJobs:
     enabled: true
     schedule: "0 * * * *"
     resources: {}
+  conversationSearchIndex:
+    # The writer for the Typesense `conversations` collection (ADR-0064) — ours, because upstream fills it
+    # from a pipeline that is not in the codebase. Needs search.enabled; without Typesense the job refuses.
+    # Every 5 minutes, not hourly: search freshness is user-visible. The pass is a bounded full reconcile.
+    enabled: false
+    schedule: "*/5 * * * *"
+    resources: {}
   memoryMaintenance:
     # Drains the canonical memory outbox (projections + vectors), consolidates ("dreaming" — wants an
     # LLM endpoint; without one it degrades with a recorded fallback), audits short-term TTL and drains

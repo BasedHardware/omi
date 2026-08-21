@@ -104,9 +104,28 @@ async def _run_memory_maintenance() -> None:
         raise RuntimeError(f'memory-maintenance completed with {len(summary.errors)} error(s): {summary.errors[:3]}')
 
 
+async def _run_conversation_search_index() -> None:
+    """Ours, not upstream's: the writer for the Typesense `conversations` collection (ADR-0064).
+
+    Upstream fills that collection from a Firestore -> Typesense pipeline outside the codebase, so on-prem
+    it stayed empty and conversation search (and the app's DATE browse, which uses the same endpoint) had
+    nothing to find. Unlike the other two this is not hourly work: search freshness is user-visible, so its
+    driver runs it every few minutes with ``--interval-seconds``.
+    """
+    from utils.conversations.search_index_sync import reconcile_conversation_search_index
+
+    report = await asyncio.to_thread(reconcile_conversation_search_index)
+    logger.info('conversation-search-index %s', report.as_log())
+    if report.errors:
+        raise RuntimeError(
+            f'conversation-search-index completed with {len(report.errors)} error(s): {report.errors[:3]}'
+        )
+
+
 JOBS: Dict[str, Callable[[], Awaitable[None]]] = {
     'notifications': _run_notifications,
     'memory-maintenance': _run_memory_maintenance,
+    'conversation-search-index': _run_conversation_search_index,
 }
 
 
@@ -133,17 +152,31 @@ def run_once(job: str) -> int:
     return 0
 
 
-def run_loop(job: str, *, sleeper: Callable[[float], None] = time.sleep, ticks: int | None = None) -> int:
-    """Tick at the top of every hour, forever (or ``ticks`` times, for tests).
+def run_loop(
+    job: str,
+    *,
+    sleeper: Callable[[float], None] = time.sleep,
+    ticks: int | None = None,
+    interval_seconds: int | None = None,
+) -> int:
+    """Tick forever (or ``ticks`` times, for tests).
 
-    A failing tick is logged and the loop continues: one bad hour must not stop every later hour. The
-    exit code reports whether any tick failed, which only matters for the bounded (test) form.
+    Without ``interval_seconds`` the cadence is the top of every hour, matching upstream's schedule. With
+    it, a fixed interval — for work whose freshness a user notices (the conversation search index), where
+    waiting up to an hour is the wrong trade.
+
+    A failing tick is logged and the loop continues: one bad tick must not stop every later one. The exit
+    code reports whether any tick failed, which only matters for the bounded (test) form.
     """
     failures = 0
     remaining = ticks
     while remaining is None or remaining > 0:
-        delay = seconds_to_next_hour(datetime.now(timezone.utc))
-        logger.info('job=%s sleeping %.0fs until the next hour', job, delay)
+        if interval_seconds is None:
+            delay: float = seconds_to_next_hour(datetime.now(timezone.utc))
+            logger.info('job=%s sleeping %.0fs until the next hour', job, delay)
+        else:
+            delay = float(interval_seconds)
+            logger.info('job=%s sleeping %.0fs (fixed interval)', job, delay)
         sleeper(delay)
         failures += run_once(job)
         if remaining is not None:
@@ -157,10 +190,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         '--loop',
         action='store_true',
-        help='tick at the top of every hour instead of running once (compose; k8s uses a CronJob)',
+        help='tick repeatedly instead of running once (compose; k8s uses a CronJob)',
+    )
+    parser.add_argument(
+        '--interval-seconds',
+        type=int,
+        default=None,
+        help='with --loop, tick every N seconds instead of at the top of the hour',
     )
     args = parser.parse_args(argv)
-    return run_loop(args.job) if args.loop else run_once(args.job)
+    if args.interval_seconds is not None and args.interval_seconds < 1:
+        parser.error('--interval-seconds must be >= 1')
+    if not args.loop:
+        return run_once(args.job)
+    return run_loop(args.job, interval_seconds=args.interval_seconds)
 
 
 if __name__ == '__main__':
