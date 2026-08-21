@@ -8,7 +8,7 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -61,6 +61,12 @@ async def get_current_user_id(
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
+    except ExecutorSaturatedError as error:
+        raise HTTPException(
+            status_code=503,
+            detail='Authentication temporarily unavailable. Try again shortly.',
+            headers={'Retry-After': '1'},
+        ) from error
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
