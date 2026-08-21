@@ -31,10 +31,10 @@ import Foundation
 enum ContextDwellRefreshPolicy {
   /// Dwell before the FIRST refresh of a context: long enough to type a
   /// question, short enough that its answer lands within ~30s of typing.
-  static let initialRefreshDwellSeconds: TimeInterval = 20
+  static let initialRefreshDwellSeconds: TimeInterval = 12
 
   /// Minimum spacing between refreshes within one continuous context dwell.
-  static let repeatRefreshCooldownSeconds: TimeInterval = 90
+  static let repeatRefreshCooldownSeconds: TimeInterval = 40
 
   /// The keyboard must have been quiet at least this long: mid-word capture
   /// wastes the evaluation on a half-typed thought.

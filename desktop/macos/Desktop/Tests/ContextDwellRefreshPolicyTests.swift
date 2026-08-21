@@ -6,13 +6,13 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
   func testNoRefreshBeforeInitialDwell() {
     XCTAssertFalse(
       ContextDwellRefreshPolicy.shouldRefresh(
-        secondsSinceAnchor: 19, firedRefreshesThisContext: 0, keyboardIdleSeconds: 5))
+        secondsSinceAnchor: 11, firedRefreshesThisContext: 0, keyboardIdleSeconds: 5))
   }
 
   func testFirstRefreshAfterTypingSettles() {
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        secondsSinceAnchor: 20, firedRefreshesThisContext: 0, keyboardIdleSeconds: 3))
+        secondsSinceAnchor: 12, firedRefreshesThisContext: 0, keyboardIdleSeconds: 3))
   }
 
   func testNoRefreshWithoutTypingSinceAnchor() {
@@ -37,13 +37,13 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
     // but only after the refresh-to-refresh cooldown, not the initial dwell.
     XCTAssertFalse(
       ContextDwellRefreshPolicy.shouldRefresh(
-        secondsSinceAnchor: 45, firedRefreshesThisContext: 1, keyboardIdleSeconds: 5))
+        secondsSinceAnchor: 30, firedRefreshesThisContext: 1, keyboardIdleSeconds: 5))
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        secondsSinceAnchor: 90, firedRefreshesThisContext: 1, keyboardIdleSeconds: 5))
+        secondsSinceAnchor: 40, firedRefreshesThisContext: 1, keyboardIdleSeconds: 5))
     XCTAssertTrue(
       ContextDwellRefreshPolicy.shouldRefresh(
-        secondsSinceAnchor: 95, firedRefreshesThisContext: 40, keyboardIdleSeconds: 5),
+        secondsSinceAnchor: 45, firedRefreshesThisContext: 40, keyboardIdleSeconds: 5),
       "repeats never exhaust while the user keeps typing")
   }
 }
