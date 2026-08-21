@@ -4903,6 +4903,47 @@
         "title": "BulkMoveConversationsResponse",
         "type": "object"
       },
+      "ButtonEventRequest": {
+        "properties": {
+          "button_event": {
+            "description": "single_tap | double_tap | long_tap",
+            "title": "Button Event",
+            "type": "string"
+          },
+          "device_id": {
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Stable id for the physical gesture across retries",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "button_event",
+          "device_id",
+          "event_id",
+          "timestamp"
+        ],
+        "title": "ButtonEventRequest",
+        "type": "object"
+      },
       "CalendarEventLink": {
         "description": "Links a conversation to a Google Calendar event.",
         "properties": {
@@ -24300,6 +24341,11 @@
             "title": "Audio Bytes",
             "type": "boolean"
           },
+          "button_event": {
+            "default": false,
+            "title": "Button Event",
+            "type": "boolean"
+          },
           "day_summary": {
             "title": "Day Summary",
             "type": "boolean"
@@ -24476,7 +24522,8 @@
           "audio_bytes_websocket",
           "realtime_transcript",
           "memory_created",
-          "day_summary"
+          "day_summary",
+          "button_event"
         ],
         "title": "WebhookType",
         "type": "string"
@@ -51000,6 +51047,94 @@
           }
         ],
         "summary": "Delete Account",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/developer/button-event": {
+      "post": {
+        "description": "App → backend forward of an opt-in hardware button gesture (#11719).",
+        "operationId": "post_developer_button_event_v1_users_developer_button_event_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ButtonEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Post Developer Button Event",
         "tags": [
           "v1"
         ]
