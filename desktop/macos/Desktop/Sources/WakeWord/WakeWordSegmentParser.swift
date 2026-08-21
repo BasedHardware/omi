@@ -30,15 +30,19 @@ enum WakeWordSegmentParser {
     normalize(raw).trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
   }
 
-  /// Speech-to-text spells the wake word by sound, not by brand. "Omi" is
-  /// acoustically "oh-mee", so recognizers routinely emit "oh me", "omni", or
-  /// "ohmi" instead. Matching only the literal spelling makes the wake word fail
-  /// for reasons the user cannot see or correct, so known renderings are accepted
-  /// as the same phrase. Downstream guards (user speech only, 2+ word command,
-  /// cooldown, dedup) still bound the false-positive cost of the wider match.
+  /// Speech-to-text spells the wake word by sound, not by brand. The backend's
+  /// read-only scan of 25,329 real transcript segments found "omie" and "omni"
+  /// alongside "omi"; desktop live runs also observed split and aspirated forms.
+  /// Matching only the literal spelling makes the wake word fail for reasons the
+  /// user cannot see or correct, so measured renderings are accepted as the same
+  /// phrase. Downstream guards (user speech only, 2+ word command, cooldown,
+  /// dedup) still bound the false-positive cost of the wider match.
   static let sttHomophones: [String: [String]] = [
     "omi": [
-      "oh me", "ohmi", "omni", "oh mi", "omee", "o me", "oh-me",
+      // Shared with backend EVIDENCE_BACKED_WAKE_WORD_VARIANTS.
+      "omie", "omni",
+      // Additional renderings observed during desktop microphone testing.
+      "oh me", "ohmi", "oh mi", "omee", "o me", "oh-me",
       // On-device recognition has no keyword list, so it also fronts the vowel
       // with an aspirate ("Homi what's the weather?", observed live). Deliberately
       // excludes "homie": it is an ordinary English word, and accepting it as the

@@ -52,11 +52,23 @@ final class WakeWordSegmentParserTests: XCTestCase {
     XCTAssertEqual(
       WakeWordSegmentParser.command(after: "Oh me, how are you?", wakePhrase: "Omi"),
       "how are you?")
-    for rendering in ["Omni", "Ohmi", "Oh mi", "Omee", "O me"] {
+    for rendering in ["Omie", "Omni", "Ohmi", "Oh mi", "Omee", "O me"] {
       XCTAssertEqual(
         WakeWordSegmentParser.command(after: "\(rendering), order pizza", wakePhrase: "Omi"),
         "order pizza",
         "expected \(rendering) to be treated as the wake word")
+    }
+  }
+
+  /// The backend hardware-transcript scan found `omie` and `omni` in real data.
+  /// Greeting-prefixed forms should work even when the recognizer omits punctuation.
+  func testAcceptsEvidenceBackedHardwareTranscriptVariants() {
+    for rendering in ["Omie", "Omni"] {
+      XCTAssertEqual(
+        WakeWordSegmentParser.command(
+          after: "Hey \(rendering) order pizza", wakePhrase: "Omi"),
+        "order pizza",
+        "expected Hey \(rendering) to be treated as the wake word")
     }
   }
 
@@ -71,6 +83,8 @@ final class WakeWordSegmentParserTests: XCTestCase {
       "oh me and my friend went hiking",
       "o me it has been a long day",
       "oh me I forgot to reply",
+      "omie is the spelling in this transcript",
+      "omni is a word people use in ordinary speech",
     ] {
       XCTAssertNil(
         WakeWordSegmentParser.command(after: sentence, wakePhrase: "Omi"),
