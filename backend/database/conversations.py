@@ -1485,13 +1485,40 @@ def update_conversation_segments(
 # ***********************************
 
 
-def add_share_email_sent_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
-    """Record recipients this conversation's summary was already emailed to."""
+def reserve_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> list[str]:
+    """Atomically claim not-yet-emailed recipients for this request.
+
+    A Firestore transaction reads the sent ledger and writes the claimed
+    subset in one step, so two concurrent requests can never both claim the
+    same recipient. Returns the subset this caller owns dispatching.
+    """
     from google.cloud import firestore as gc_firestore
 
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'share_email_sent_to': gc_firestore.ArrayUnion(emails)})
+
+    @gc_firestore.transactional
+    def _reserve(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
+        already = {e for e in (data.get('share_email_sent_to') or []) if isinstance(e, str)}
+        claimed = [e for e in emails if e not in already]
+        if claimed:
+            transaction.update(conversation_ref, {'share_email_sent_to': gc_firestore.ArrayUnion(claimed)})
+        return claimed
+
+    return run_transactional(db, _reserve)
+
+
+def release_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Release a reservation after a definitive send failure so retries work."""
+    from google.cloud import firestore as gc_firestore
+
+    if not emails:
+        return
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'share_email_sent_to': gc_firestore.ArrayRemove(emails)})
 
 
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):

@@ -13,6 +13,7 @@ against the detected set so this endpoint can never relay to arbitrary
 addresses.
 """
 
+import hashlib
 import logging
 import os
 import re
@@ -253,11 +254,16 @@ def send_summary_email(
     if owner_email:
         payload['reply_to'] = owner_email
 
+    # Stable per-content idempotency key: even if a retry races past every
+    # client-side guard, Resend dedupes the dispatch itself.
+    idempotency_key = hashlib.sha256(
+        f"{uid}:{conversation.get('id')}:{','.join(sorted(normalized))}".encode()
+    ).hexdigest()
     try:
         response = requests.post(
             RESEND_API_URL,
             json=payload,
-            headers={'Authorization': f'Bearer {api_key}'},
+            headers={'Authorization': f'Bearer {api_key}', 'Idempotency-Key': idempotency_key},
             timeout=15,
         )
     except (requests.ConnectionError, requests.exceptions.ConnectTimeout) as exc:

@@ -1379,15 +1379,16 @@ def send_conversation_share_email(
     if unknown:
         raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
 
-    # Idempotency: a recipient already emailed for this conversation is not
-    # dispatched again — repeats (button double-taps, client retries) return
-    # success without a duplicate email.
-    already_sent = {e for e in (conversation.get('share_email_sent_to') or []) if isinstance(e, str)}
-    to_dispatch = [email for email in requested if email not in already_sent]
+    # Idempotency under concurrency: a Firestore transaction atomically claims
+    # the not-yet-emailed recipients, so simultaneous duplicate requests can
+    # never both dispatch to the same address; repeats return success without
+    # a duplicate email.
+    to_dispatch = conversations_db.reserve_share_email_recipients(uid, conversation_id, requested)
     if not to_dispatch:
         return {'sent_to': requested}
 
     if not share_email.consume_daily_send_quota(uid, len(to_dispatch)):
+        conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
         raise HTTPException(status_code=429, detail='Daily share-email limit reached')
 
     # Publish before dispatching (the emailed link must never race a private
@@ -1430,17 +1431,30 @@ def send_conversation_share_email(
         redis_db.remove_public_conversation(conversation_id)
 
     def _send():
-        result = share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
-        conversations_db.add_share_email_sent_recipients(uid, conversation_id, result['sent_to'])
+        # The reservation above is the durable ledger entry — nothing to write
+        # after the provider accepts, so no failure after a successful dispatch
+        # can trigger the visibility rollback (a delivered email keeps a live
+        # link).
+        share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
         return {'sent_to': requested}
+
+    def _release_reservation():
+        try:
+            conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            logger.exception('share email: failed to release recipient reservation')
 
     try:
         return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
     except ValueError as e:
+        _release_reservation()
         raise HTTPException(status_code=503, detail=str(e))
     except share_email.AmbiguousDeliveryError as e:
+        # Delivery may have happened: the reservation stands (no duplicate on
+        # retry) and the link stays published.
         raise HTTPException(status_code=504, detail=str(e))
     except RuntimeError as e:
+        _release_reservation()
         raise HTTPException(status_code=502, detail=str(e))
 
 

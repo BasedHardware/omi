@@ -82,10 +82,17 @@ def _stub_data_layer(monkeypatch):
 
     monkeypatch.setattr(conversations_router.conversations_db, 'set_conversation_visibility_if_unchanged', guarded_set)
     monkeypatch.setattr(conversations_router.share_email, 'consume_daily_send_quota', lambda uid, n: True)
+
+    def reserve(uid, cid, emails):
+        claimed = [e for e in emails if e not in state['sent']]
+        state['sent'].extend(claimed)
+        return claimed
+
+    monkeypatch.setattr(conversations_router.conversations_db, 'reserve_share_email_recipients', reserve)
     monkeypatch.setattr(
         conversations_router.conversations_db,
-        'add_share_email_sent_recipients',
-        lambda uid, cid, emails: state['sent'].extend(emails),
+        'release_share_email_recipients',
+        lambda uid, cid, emails: [state['sent'].remove(e) for e in emails if e in state['sent']],
     )
     monkeypatch.setattr(
         conversations_router.redis_db, 'store_conversation_to_uid', lambda cid, uid: state['redis'].add(cid)
@@ -271,3 +278,40 @@ def test_quota_exhaustion_returns_429_without_dispatch(monkeypatch, _stub_data_l
     assert response.status_code == 429
     assert called == []
     assert _stub_data_layer['visibility'] == 'private'
+
+
+def test_definitive_failure_releases_reservation_for_retry(monkeypatch, _stub_data_layer):
+    attempts = []
+
+    def flaky_send(*, uid, conversation, recipient_emails):
+        attempts.append(list(recipient_emails))
+        if len(attempts) == 1:
+            raise RuntimeError('email provider rejected the send')
+        return {'sent_to': recipient_emails}
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', flaky_send)
+    first = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    second = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert first.status_code == 502
+    assert second.status_code == 200
+    assert attempts == [['sarah@acme.com'], ['sarah@acme.com']]
+
+
+def test_ambiguous_failure_keeps_reservation_and_publish(monkeypatch, _stub_data_layer):
+    from utils.conversations.share_email import AmbiguousDeliveryError
+
+    def ambiguous_send(*, uid, conversation, recipient_emails):
+        raise AmbiguousDeliveryError('email delivery status unknown')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', ambiguous_send)
+    response = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert response.status_code == 504
+    # Reservation stands: a later duplicate request dispatches nothing.
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda **kw: (_ for _ in ()).throw(AssertionError('must not dispatch')),
+    )
+    repeat = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert repeat.status_code == 200
+    assert _stub_data_layer['visibility'] == 'shared'
