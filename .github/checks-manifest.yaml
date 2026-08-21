@@ -413,6 +413,11 @@ checks:
     triggers: ["backend/**/*.py", ".github/scripts/check_oss_auth_boundary.py", ".github/scripts/auth_boundary_baseline.json", "backend/tests/unit/test_check_oss_auth_boundary.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "WP3 seal (ADR-0034/0004): utils/auth/ is the only door to Firebase Auth — no firebase_admin.auth import or attribute access outside it (initialize_app/messaging/firestore stay allowed), so the backend stays swappable (Firebase | OIDC/Keycloak). Analogue of firestore/object-store/vector boundary guards; catches a raw Firebase-auth call reintroduced by an upstream merge (ADR-0029/0030)"
+  - id: oss-store-contract-coverage
+    command: ["python3", ".github/scripts/check_oss_store_contract_coverage.py"]
+    triggers: ["backend/database/*.py", "backend/tests/contract/test_*.py", ".github/scripts/check_oss_store_contract_coverage.py", ".github/scripts/store_contract_coverage_baseline.json", "backend/tests/unit/test_check_oss_store_contract_coverage.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ADR-0060: a database/ module using a shape the ADR-0044 facade must TRANSLATE (composite filter, cursor, projection, aggregation, transaction, batch, atomic field op, collection group) while no dual-backend contract test drives it. That exact combination made every /v1/apps marketplace read 500 under our own STORAGE_BACKEND=mongo default from the day the facade landed (closed 2026-08-21, commit 2cc74d8b4e) with the whole suite green. Static inventory with a ratchet, not behavioral coverage: it proves nothing about assertions, only that the blind spot cannot grow unnoticed"
   - id: oss-release
     command: ["python3", ".github/scripts/check_oss_release.py"]
     triggers: ["deploy/onprem/omi.oss.release.env", "deploy/onprem/compose.base.yaml", "deploy/onprem/compose.selfhost.yaml", "deploy/onprem/.gitignore", "deploy/onprem/helm/omi-oss/Chart.yaml", "deploy/onprem/helm/omi-oss/values-prod.yaml", "deploy/onprem/helm/omi-oss/values-k0s.yaml", ".github/scripts/check_oss_release.py", "backend/tests/unit/test_check_oss_release.py", ".github/checks-manifest.yaml"]

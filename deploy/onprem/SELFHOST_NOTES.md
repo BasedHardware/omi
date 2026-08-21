@@ -591,7 +591,9 @@ one probed with `curl` from the mongo container, which has no `curl`.)
 
 ```bash
 # 1. Mongo (single-node replica set) — wait for the primary, give up loudly
-docker run -d --name wp2-mongo mongo:latest --replSet rs0 --bind_ip_all
+#    Same image the stack deploys (deploy/onprem/omi.oss.release.pins) — a contract proven on a
+#    different major than the one we ship proves the wrong thing.
+docker run -d --name wp2-mongo mongo:7 --replSet rs0 --bind_ip_all
 docker exec wp2-mongo mongosh --quiet --eval \
   "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
 for i in $(seq 30); do
@@ -607,18 +609,43 @@ for i in $(seq 30); do
   [ "$i" = 30 ] && { echo "emulator never started"; docker logs --tail 20 wp2-emu; exit 1; }
   sleep 2
 done
-# 3. Contract suite (same netns)
+# 3. Contract suites (same netns) — ONE PROCESS PER FILE, for the same reason as the unit sweep:
+#    each suite installs its own client into the module-level accessor.
 docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel):/repo -w /repo/backend \
   -e FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 -e MONGO_URI="mongodb://127.0.0.1:27017/?replicaSet=rs0" \
   -e FIREBASE_PROJECT_ID=demo-omi-local -e GOOGLE_CLOUD_PROJECT=demo-omi-local \
   -e ENCRYPTION_SECRET="$(openssl rand -hex 32)" -e OPENAI_API_KEY=test \
-  omi-oss-backend-test /opt/venv/bin/python -m pytest -q -o addopts="" \
-  tests/contract/test_document_store_contract.py
+  omi-oss-backend-test bash -c '
+    for f in tests/contract/test_document_store_contract.py \
+             tests/contract/test_users_people_contract.py \
+             tests/contract/test_conversations_contract.py \
+             tests/contract/test_apps_contract.py; do
+      /opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "$f" | tail -1 | sed "s|^|$f: |"
+    done'
 docker rm -f wp2-mongo wp2-emu    # cleanup
 ```
 
+Every test must run **twice** (the `bind_store` fixture is parametrized `firestore`/`mongo`). A
+per-backend `SKIPPED` means that service's env var never reached the container — the suite then proves
+half of what its name claims, which is how two of these suites sat dead for months. Check the counts.
+
 Note: gRPC (Firestore) bypasses the Python socket guard; pymongo uses Python sockets but on loopback,
 which the guard permits.
+
+**Which modules still have no dual-backend cover** (ADR-0060). The contract suites are the only lane
+that reaches an adapter, so "covered" means "some contract suite drives this module". A guard keeps the
+inventory honest and ratchets it — a `database/` module that gains a shape the facade must *translate*
+(composite filter, cursor, projection, aggregation, transaction, batch, atomic field op, collection
+group) while still uncovered fails CI:
+
+```bash
+python3 .github/scripts/check_oss_store_contract_coverage.py            # the ratchet (exit 0 = at baseline)
+python3 .github/scripts/check_oss_store_contract_coverage.py --report   # ranked worklist: module -> shapes
+```
+
+It is a static inventory, not behavioral coverage: it cannot tell whether a suite asserts the right
+thing. It exists because `database/apps.py` made every marketplace read 500 under our own
+`STORAGE_BACKEND=mongo` default from the day the facade landed, with the whole suite green.
 
 ### Object-store contract test (adapter parity)
 
