@@ -1,0 +1,45 @@
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityDestinationChip.swift
+  s_5799d664feb3c5::t_2fe6e82d6d1dd1 1-61
+desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstShell.swift
+  s_5799d664feb3c5::t_d9a9e92595bdf6 120-122,124-125,161-170,208-209,387,391-395
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_5799d664feb3c5::t_10c6c103ee827e 1374-1376
+desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
+  s_5799d664feb3c5::t_445a5449c1f983 175-184
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubDestination.swift
+  s_5799d664feb3c5::t_b22d87db7a1b27 106-120
+desktop/macos/Desktop/Sources/MainWindow/MemoryHubPage.swift
+  s_5799d664feb3c5::t_798431d52e73bc 47-49,68-72,74,117-119
+desktop/macos/Desktop/Sources/MainWindow/PageGlassLane.swift
+  s_5799d664feb3c5::t_d80f2e6051985c 54,58-64,107-109,113-115
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/ActivityHubTab.swift
+  s_5799d664feb3c5::t_8867268cb56c9c 19-23,48,76-91
+desktop/macos/Desktop/Sources/MainWindow/QueryShell/QueryResultsPanel.swift
+  s_5799d664feb3c5::t_738da2a313d6ff 79-89,216,219-237
+desktop/macos/Desktop/Sources/MainWindow/TopNavigationDestinations.swift
+  s_5799d664feb3c5::t_c281c68d0a4c83 74-80,142,166-168,170
+desktop/macos/Desktop/Tests/ChatFirstShellTests.swift
+  s_5799d664feb3c5::t_bba556a168c189 606-617
+desktop/macos/Desktop/Tests/PageGlassLaneTests.swift
+  s_5799d664feb3c5::t_7d5019430aacb0 41-69
+desktop/macos/Desktop/Tests/TopNavigationBarLayoutTests.swift
+  s_5799d664feb3c5::t_38b7fa2678615f 180-181,183-184,186-192,351
+docs/product/invariants/desktop-shell-feature-parity.md
+  s_5799d664feb3c5::t_a5c4de02e0ab17 13-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "89e306cf58f6aac552eaec786fdb36f3dab08be4",
+  "prompts": {},
+  "sessions": {
+    "s_5799d664feb3c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a560635-5b6c-4f58-8252-1717f103fd11",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
