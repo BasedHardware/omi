@@ -778,6 +778,14 @@ export interface BulkMoveConversationsResponse {
   status: string;
 }
 
+export interface ButtonEventRequest {
+  button_event: "single_tap" | "double_tap" | "long_tap";
+  device_id: string;
+  event_id: string;
+  session_id?: string | null;
+  timestamp: string;
+}
+
 export interface CalendarCaptureGap {
   coverage?: string;
   end_time: string;
@@ -4691,6 +4699,7 @@ export interface UserWebhookUrlResponse {
 
 export interface UserWebhooksStatusResponse {
   audio_bytes: boolean;
+  button_event?: boolean;
   day_summary: boolean;
   memory_created: boolean;
   realtime_transcript: boolean;
@@ -4725,7 +4734,7 @@ export interface WebSearchAssistantSettings {
   enabled?: boolean | null;
 }
 
-export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary";
+export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary" | "button_event";
 
 export interface WhatMattersNowProjection {
   evaluation_id: string;
@@ -4976,6 +4985,7 @@ export interface OmiApiSchemas {
   "BulkAssignSegmentsRequest": BulkAssignSegmentsRequest;
   "BulkMoveConversationsRequest": BulkMoveConversationsRequest;
   "BulkMoveConversationsResponse": BulkMoveConversationsResponse;
+  "ButtonEventRequest": ButtonEventRequest;
   "CalendarCaptureGap": CalendarCaptureGap;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
@@ -8827,6 +8837,16 @@ export interface OmiApiPaths {
       operationId: "record_desktop_daily_usage_v1_users_desktop_usage_daily_post";
       responses: {
         "200": DesktopDailyUsageResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/button-event": {
+    post: {
+      operationId: "post_developer_button_event_v1_users_developer_button_event_post";
+      responses: {
+        "200": UserStatusResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -16320,6 +16340,27 @@ export async function record_desktop_daily_usage_v1_users_desktop_usage_daily_po
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function post_developer_button_event_v1_users_developer_button_event_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ButtonEventRequest, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/developer/button-event`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_webhook_endpoint_v1_users_developer_webhook__wtype__get(path: { wtype: WebhookType }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserWebhookUrlResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/developer/webhook/${path.wtype}`;
@@ -18586,4 +18627,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 436 client methods generated.
+// Total: 437 client methods generated.

@@ -1279,7 +1279,7 @@
         "type": "object"
       },
       "ActionItemsResponse": {
-        "description": "List envelope; ``truncated`` is set only when the request's list-read\nbudget ended the aggregate scan early (#11831) — such pages may not be a\ncomplete prefix, so ``has_more`` is forced true as well.",
+        "description": "List envelope; ``truncated`` is set only when the request's list-read\nbudget ended the aggregate scan early (#11831) \u2014 such pages may not be a\ncomplete prefix, so ``has_more`` is forced true as well.",
         "properties": {
           "action_items": {
             "items": {
@@ -8011,7 +8011,7 @@
         "type": "object"
       },
       "ConversationProcessingState": {
-        "description": "Why a conversation's ``structured`` holds the §1.7 deterministic minimum.\n\nAbsent (``None``) on every conversation the server enriched itself, and on a\nconversation that already carries a ``client_processing`` projection.\nClients check ``client_processing`` FIRST: a projection that arrives after\nthe terminal persist is stamped by its own ingress mutation and does not\nrewrite this field, so a projected conversation may still read\n``local_pending`` and must render the projection regardless.\n\n- ``local_pending``: a capable client is expected to deliver a projection.\n  Render a spinner with a timeout, not a permanent empty state.\n- ``none``: no projection is coming. Render \"Summary unavailable on the\n  free plan\".",
+        "description": "Why a conversation's ``structured`` holds the \u00a71.7 deterministic minimum.\n\nAbsent (``None``) on every conversation the server enriched itself, and on a\nconversation that already carries a ``client_processing`` projection.\nClients check ``client_processing`` FIRST: a projection that arrives after\nthe terminal persist is stamped by its own ingress mutation and does not\nrewrite this field, so a projected conversation may still read\n``local_pending`` and must render the projection regardless.\n\n- ``local_pending``: a capable client is expected to deliver a projection.\n  Render a spinner with a timeout, not a permanent empty state.\n- ``none``: no projection is coming. Render \"Summary unavailable on the\n  free plan\".",
         "enum": [
           "local_pending",
           "none"
@@ -9087,7 +9087,7 @@
                 "type": "null"
               }
             ],
-            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only — never an input to intelligence.",
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler: a malformed projection is dropped and the conversation still lands. Display only \u2014 never an input to intelligence.",
             "title": "Client Processing"
           },
           "client_session_id": {
@@ -11439,7 +11439,7 @@
             "$ref": "#/components/schemas/CategoryEnum"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "\ud83e\udde0",
             "title": "Emoji",
             "type": "string"
           },
@@ -12862,7 +12862,7 @@
         "type": "object"
       },
       "FeedbackReason": {
-        "description": "Structured reason for a thumbs-down.\n\nThe first five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable. The remaining five\nare desktop-only reason chips for proactive-notification cards (focus,\ninsight, task, memory) — a distinct taxonomy from a chat answer's, added\nalongside the mobile five rather than folded into them so neither surface's\ncategories are diluted by the other's.",
+        "description": "Structured reason for a thumbs-down.\n\nThe first five match the values the mobile client has always sent to\n`POST /v1/users/analytics/chat_message`; keeping them identical means the\nledger and the legacy `analytics` rows stay comparable. The remaining five\nare desktop-only reason chips for proactive-notification cards (focus,\ninsight, task, memory) \u2014 a distinct taxonomy from a chat answer's, added\nalongside the mobile five rather than folded into them so neither surface's\ncategories are diluted by the other's.",
         "enum": [
           "too_verbose",
           "incorrect_or_hallucination",
@@ -16218,7 +16218,7 @@
         "type": "object"
       },
       "LearnedMemoryRef": {
-        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent —\nclients read it live from the memory so a vote on one device shows on the\nother.",
+        "description": "One memory the day actually produced, addressed by its canonical id.\n\nThis is the identity `knowledge_nuggets` never had: a client can render a\nnative review card and vote or correct through the existing memory\nendpoints. Review state (`user_review`, `edited`) is deliberately absent \u2014\nclients read it live from the memory so a vote on one device shows on the\nother.",
         "properties": {
           "captured_at": {
             "anyOf": [
@@ -20946,7 +20946,7 @@
                 "type": "null"
               }
             ],
-            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only — never an input to intelligence.",
+            "description": "Untrusted client-authored display projection. Accepted as a raw payload and validated in the handler so a malformed projection cannot 422 a finished recording. Hash-bound to the persisted transcript. Display only \u2014 never an input to intelligence.",
             "title": "Client Processing"
           }
         },
@@ -21144,7 +21144,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "\ud83e\udde0",
             "title": "Emoji",
             "type": "string"
           },
@@ -22501,7 +22501,7 @@
       },
       "ScreenFrameGround": {
         "additionalProperties": false,
-        "description": "Gradient stops derived from the canonical bytes at approval time.\n\nBoth clients render the banner from these; neither samples pixels. A\nsigned cross-origin URL cannot be read back from a canvas (no guaranteed\nCORS headers), and two independent extractions (Swift on macOS, JS on\nweb) would drift from each other anyway. Extracted once, server-side,\nfrom the canonical JPEG — see utils/screen_frames/palette.py, a port of\ndesktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift.",
+        "description": "Gradient stops derived from the canonical bytes at approval time.\n\nBoth clients render the banner from these; neither samples pixels. A\nsigned cross-origin URL cannot be read back from a canvas (no guaranteed\nCORS headers), and two independent extractions (Swift on macOS, JS on\nweb) would drift from each other anyway. Extracted once, server-side,\nfrom the canonical JPEG \u2014 see utils/screen_frames/palette.py, a port of\ndesktop/macos/Desktop/Sources/MeetingScreenshots/MeetingBannerPalette.swift.",
         "properties": {
           "is_neutral": {
             "title": "Is Neutral",
@@ -22526,7 +22526,7 @@
       },
       "ScreenFrameSettings": {
         "additionalProperties": false,
-        "description": "The account-level setting gating screen-frame egress admission\n(contract §6, setting_key=\"meeting_note_screenshots_enabled\"). Shared and\nauthoritative across every device — desktop, web, a reinstall — because\nit protects the user from themselves (accidentally leaving the feature\non), not third parties from the user; the privacy judge is what protects\npeople appearing in frames. It does not need to be tamper-proof, only\nconsistent, so it is a plain user-profile field, not a signed claim.",
+        "description": "The account-level setting gating screen-frame egress admission\n(contract \u00a76, setting_key=\"meeting_note_screenshots_enabled\"). Shared and\nauthoritative across every device \u2014 desktop, web, a reinstall \u2014 because\nit protects the user from themselves (accidentally leaving the feature\non), not third parties from the user; the privacy judge is what protects\npeople appearing in frames. It does not need to be tamper-proof, only\nconsistent, so it is a plain user-profile field, not a signed claim.",
         "properties": {
           "meeting_note_screenshots_enabled": {
             "title": "Meeting Note Screenshots Enabled",
@@ -23570,7 +23570,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "\ud83e\udde0",
             "title": "Emoji",
             "type": "string"
           },
@@ -24372,7 +24372,7 @@
             "description": "A category for this conversation"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "\ud83e\udde0",
             "description": "An emoji to represent the conversation",
             "title": "Emoji",
             "type": "string"
@@ -28663,6 +28663,11 @@
           "realtime_transcript": {
             "title": "Realtime Transcript",
             "type": "boolean"
+          },
+          "button_event": {
+            "default": false,
+            "title": "Button Event",
+            "type": "boolean"
           }
         },
         "required": [
@@ -28828,7 +28833,8 @@
           "audio_bytes_websocket",
           "realtime_transcript",
           "memory_created",
-          "day_summary"
+          "day_summary",
+          "button_event"
         ],
         "title": "WebhookType",
         "type": "string"
@@ -29729,6 +29735,57 @@
         ],
         "title": "PricingOption",
         "type": "object"
+      },
+      "ButtonEventRequest": {
+        "properties": {
+          "button_event": {
+            "enum": [
+              "single_tap",
+              "double_tap",
+              "long_tap"
+            ],
+            "title": "Button Event",
+            "type": "string"
+          },
+          "device_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Device Id",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Stable id for the physical gesture across retries",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "button_event",
+          "device_id",
+          "event_id",
+          "timestamp"
+        ],
+        "title": "ButtonEventRequest",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -30437,7 +30494,7 @@
     },
     "/v1/action-items/batch-delete": {
       "post": {
-        "description": "Delete multiple action items in one request.\n\nFirestore deletes go through chunked batched commits in the DB layer; the\nvector store delete and the FCM cancellation message both use their batch\nhelpers — no per-id loop on this hot path.",
+        "description": "Delete multiple action items in one request.\n\nFirestore deletes go through chunked batched commits in the DB layer; the\nvector store delete and the FCM cancellation message both use their batch\nhelpers \u2014 no per-id loop on this hot path.",
         "operationId": "batch_delete_action_items_v1_action_items_batch_delete_post",
         "parameters": [
           {
@@ -30525,7 +30582,7 @@
     },
     "/v1/action-items/ids": {
       "get": {
-        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads — the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket. The\n``completed`` bucket is filtered server-side; only documents in that bucket are\nstreamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``\nexclusion is still applied in Python since Firestore equality filters would drop\nundeleted rows that have no ``deleted`` field.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
+        "description": "Return the user's action-item IDs (lightweight reconciliation).\n\nWithout ``completed``: returns every ID with no field reads \u2014 the cheapest\nway for a client to know which tasks it has without paging the full list.\n\nWith ``completed``: returns only non-deleted IDs in the requested bucket. The\n``completed`` bucket is filtered server-side; only documents in that bucket are\nstreamed (a two-field ``completed``, ``deleted`` projection), and the ``deleted``\nexclusion is still applied in Python since Firestore equality filters would drop\nundeleted rows that have no ``deleted`` field.\n\nDeclared before /v1/action-items/{action_item_id} so the static path is not\ncaptured as an action item id.",
         "operationId": "list_action_item_ids_v1_action_items_ids_get",
         "parameters": [
           {
@@ -31010,7 +31067,7 @@
     },
     "/v1/action-items/shared/{token}": {
       "get": {
-        "description": "Public endpoint — get shared task preview (no auth required).",
+        "description": "Public endpoint \u2014 get shared task preview (no auth required).",
         "operationId": "get_shared_action_items_v1_action_items_shared__token__get",
         "parameters": [
           {
@@ -31675,7 +31732,7 @@
     },
     "/v1/announcements": {
       "post": {
-        "description": "Create a new announcement.\nRequires admin authentication via secret-key header.\n\nContent structure depends on type:\n- changelog: {\"title\": \"...\", \"changes\": [{\"title\": \"...\", \"description\": \"...\", \"icon\": \"🔀\"}, ...]}\n- feature: {\"title\": \"...\", \"steps\": [{\"title\": \"...\", \"description\": \"...\", \"image_url\": \"...\", \"highlight_text\": \"...\"}, ...]}\n- announcement: {\"title\": \"...\", \"body\": \"...\", \"image_url\": \"...\", \"cta\": {\"text\": \"...\", \"action\": \"...\"}}",
+        "description": "Create a new announcement.\nRequires admin authentication via secret-key header.\n\nContent structure depends on type:\n- changelog: {\"title\": \"...\", \"changes\": [{\"title\": \"...\", \"description\": \"...\", \"icon\": \"\ud83d\udd00\"}, ...]}\n- feature: {\"title\": \"...\", \"steps\": [{\"title\": \"...\", \"description\": \"...\", \"image_url\": \"...\", \"highlight_text\": \"...\"}, ...]}\n- announcement: {\"title\": \"...\", \"body\": \"...\", \"image_url\": \"...\", \"cta\": {\"text\": \"...\", \"action\": \"...\"}}",
         "operationId": "create_announcement_endpoint_v1_announcements_post",
         "parameters": [
           {
@@ -38356,7 +38413,7 @@
     },
     "/v1/conversations/from-segments": {
       "post": {
-        "description": "Create a conversation from already-transcribed segments (Firebase-authed).\n\nUsed by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need\nthe conversation persisted, processed (memories/summaries), and synced across devices — exactly\nlike a cloud-transcribed conversation, but without the live `/v4/listen` websocket.",
+        "description": "Create a conversation from already-transcribed segments (Firebase-authed).\n\nUsed by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need\nthe conversation persisted, processed (memories/summaries), and synced across devices \u2014 exactly\nlike a cloud-transcribed conversation, but without the live `/v4/listen` websocket.",
         "operationId": "create_conversation_from_segments_user_v1_conversations_from_segments_post",
         "parameters": [
           {
@@ -41736,7 +41793,7 @@
     },
     "/v1/conversations/{conversation_id}/shared/screenshots": {
       "get": {
-        "description": "Public, unauthenticated. Returns an empty set unless the conversation\nis currently shareable AND screenshot_sharing_enabled is true — never a\n404, so this route cannot be used to probe whether a conversation_id\nexists (contract §1/§9, and matches the existing\nGET /v1/conversations/{id}/shared 404-avoidance pattern for public\nconversation lookups... except this one specifically must not leak\nexistence via status code, so it always returns 200).",
+        "description": "Public, unauthenticated. Returns an empty set unless the conversation\nis currently shareable AND screenshot_sharing_enabled is true \u2014 never a\n404, so this route cannot be used to probe whether a conversation_id\nexists (contract \u00a71/\u00a79, and matches the existing\nGET /v1/conversations/{id}/shared 404-avoidance pattern for public\nconversation lookups... except this one specifically must not leak\nexistence via status code, so it always returns 200).",
         "operationId": "get_shared_conversation_screenshots_v1_conversations__conversation_id__shared_screenshots_get",
         "parameters": [
           {
@@ -48575,7 +48632,7 @@
     },
     "/v1/integrations/{app_key}": {
       "delete": {
-        "description": "Delete an integration connection.\n\nDeleting a derived integration deletes the grant it rides on — there is no\nseparate token to revoke.",
+        "description": "Delete an integration connection.\n\nDeleting a derived integration deletes the grant it rides on \u2014 there is no\nseparate token to revoke.",
         "operationId": "delete_integration_v1_integrations__app_key__delete",
         "parameters": [
           {
@@ -48656,7 +48713,7 @@
         ]
       },
       "get": {
-        "description": "Get integration connection status for the current user.\n\nGmail has no grant of its own — it rides the Google Calendar OAuth grant and is\nconnected only when that grant actually carries the Gmail scope.",
+        "description": "Get integration connection status for the current user.\n\nGmail has no grant of its own \u2014 it rides the Google Calendar OAuth grant and is\nconnected only when that grant actually carries the Gmail scope.",
         "operationId": "get_integration_v1_integrations__app_key__get",
         "parameters": [
           {
@@ -48841,7 +48898,7 @@
     },
     "/v1/integrations/{app_key}/oauth-url": {
       "get": {
-        "description": "Get OAuth authorization URL for an integration.\nFrontend opens this URL in browser to start OAuth flow.\nUses secure random state tokens to prevent CSRF attacks.\n\nA derived integration (Gmail) authorizes through the grant it rides on, so the\nwhole flow — state, provider config and callback — runs under the source key.",
+        "description": "Get OAuth authorization URL for an integration.\nFrontend opens this URL in browser to start OAuth flow.\nUses secure random state tokens to prevent CSRF attacks.\n\nA derived integration (Gmail) authorizes through the grant it rides on, so the\nwhole flow \u2014 state, provider config and callback \u2014 runs under the source key.",
         "operationId": "get_oauth_url_v1_integrations__app_key__oauth_url_get",
         "parameters": [
           {
@@ -52289,7 +52346,7 @@
     },
     "/v1/payments/overage-info": {
       "get": {
-        "description": "Explain overage billing + return the user's current accrued charge.\n\nPowers the clickable \"What happens past the limit?\" text on the plan page.\nSafe to call on any plan — non-overage plans just get a zero snapshot plus\nthe explainer copy.",
+        "description": "Explain overage billing + return the user's current accrued charge.\n\nPowers the clickable \"What happens past the limit?\" text on the plan page.\nSafe to call on any plan \u2014 non-overage plans just get a zero snapshot plus\nthe explainer copy.",
         "operationId": "get_overage_info_endpoint_v1_payments_overage_info_get",
         "parameters": [
           {
@@ -52521,7 +52578,7 @@
     },
     "/v1/payments/upgrade-subscription": {
       "post": {
-        "description": "Upgrade or change a user's subscription plan.\n\n- Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),\n  Stripe prorates automatically. User gets new features right away.\n- Same plan, different interval (e.g. monthly→annual): scheduled via SubscriptionSchedule,\n  takes effect at end of current billing period.",
+        "description": "Upgrade or change a user's subscription plan.\n\n- Cross-plan changes (e.g. Unlimited\u2192Pro): immediate swap via Subscription.modify(),\n  Stripe prorates automatically. User gets new features right away.\n- Same plan, different interval (e.g. monthly\u2192annual): scheduled via SubscriptionSchedule,\n  takes effect at end of current billing period.",
         "operationId": "upgrade_subscription_endpoint_v1_payments_upgrade_subscription_post",
         "parameters": [
           {
@@ -53611,7 +53668,7 @@
     },
     "/v1/screen-frame-egress/settings": {
       "get": {
-        "description": "Account-level, shared across every device (desktop, web, a\nreinstall) — this is the setting the adjudication route's admission\ncheck reads (contract §6). It protects the user from themselves, not\nthird parties from the user (the privacy judge does that), so it lives\nas a plain user-profile field rather than a signed claim.",
+        "description": "Account-level, shared across every device (desktop, web, a\nreinstall) \u2014 this is the setting the adjudication route's admission\ncheck reads (contract \u00a76). It protects the user from themselves, not\nthird parties from the user (the privacy judge does that), so it lives\nas a plain user-profile field rather than a signed claim.",
         "operationId": "get_screen_frame_settings_v1_screen_frame_egress_settings_get",
         "parameters": [
           {
@@ -57117,7 +57174,7 @@
         ]
       },
       "post": {
-        "description": "Generate (or return) a daily summary for a local calendar date.\n\nNo FCM token is required and no push is sent — the caller is looking at the\nscreen. A record already stored for that date is returned without spending\nLLM tokens.",
+        "description": "Generate (or return) a daily summary for a local calendar date.\n\nNo FCM token is required and no push is sent \u2014 the caller is looking at the\nscreen. A record already stored for that date is returned without spending\nLLM tokens.",
         "operationId": "create_user_daily_summary_v1_users_daily_summaries_post",
         "parameters": [
           {
@@ -57383,7 +57440,7 @@
     },
     "/v1/users/daily-summaries/{summary_id}/regenerate": {
       "post": {
-        "description": "Re-run summary generation for the date of an existing daily summary and\noverwrite the same doc in place. No push notification — the user is\nalready looking at the page.",
+        "description": "Re-run summary generation for the date of an existing daily summary and\noverwrite the same doc in place. No push notification \u2014 the user is\nalready looking at the page.",
         "operationId": "regenerate_daily_summary_v1_users_daily_summaries__summary_id__regenerate_post",
         "parameters": [
           {
@@ -59857,7 +59914,7 @@
     },
     "/v1/users/me/trial": {
       "get": {
-        "description": "Structured trial metadata for the calling user.\n\nReturns trial timing info (start, end, remaining seconds, expired flag)\nplus the list of features available during trial and the plan the user\nfalls to after trial expiry. Used by desktop clients to render countdown\nbanners and pre-expiry upgrade nudges.\n\nPaid-plan and BYOK users get `trial_expired=False` with zeroed timing\n(trial is irrelevant to them — they have full access).",
+        "description": "Structured trial metadata for the calling user.\n\nReturns trial timing info (start, end, remaining seconds, expired flag)\nplus the list of features available during trial and the plan the user\nfalls to after trial expiry. Used by desktop clients to render countdown\nbanners and pre-expiry upgrade nudges.\n\nPaid-plan and BYOK users get `trial_expired=False` with zeroed timing\n(trial is irrelevant to them \u2014 they have full access).",
         "operationId": "get_user_trial_status_v1_users_me_trial_get",
         "parameters": [
           {
@@ -62642,7 +62699,7 @@
     },
     "/v1/work-intents": {
       "post": {
-        "description": "Idempotent backend operation behind the “Work on this with Omi” affordance.",
+        "description": "Idempotent backend operation behind the \u201cWork on this with Omi\u201d affordance.",
         "operationId": "resolve_work_intent_v1_work_intents_post",
         "parameters": [
           {
@@ -65423,7 +65480,7 @@
     },
     "/v2/messages/shared/{token}": {
       "get": {
-        "description": "Public endpoint — get shared chat messages (no auth required).",
+        "description": "Public endpoint \u2014 get shared chat messages (no auth required).",
         "operationId": "get_shared_chat_messages_v2_messages_shared__token__get",
         "parameters": [
           {
@@ -65740,7 +65797,7 @@
     },
     "/v2/sync-local-files": {
       "post": {
-        "description": "Async version of sync-local-files. Saves raw files and returns 202\nimmediately, then runs the full pipeline (decode → VAD → STT → LLM) as\nan async background task. The app polls GET /v2/sync-local-files/{job_id}.",
+        "description": "Async version of sync-local-files. Saves raw files and returns 202\nimmediately, then runs the full pipeline (decode \u2192 VAD \u2192 STT \u2192 LLM) as\nan async background task. The app polls GET /v2/sync-local-files/{job_id}.",
         "operationId": "sync_local_files_v2_v2_sync_local_files_post",
         "parameters": [
           {
@@ -66615,7 +66672,7 @@
     },
     "/v3/memories/batch": {
       "delete": {
-        "description": "Delete up to MEMORIES_BATCH_MAX memories in one request.\n\nReplaces the N concurrent DELETE /v3/memories/{id} calls the web UI used to fan out\non bulk selection, which blew through the per-UID rate limiter and 429'd.\n\nAuthorization parity with DELETE /v3/memories/{memory_id}: every requested id is\nvalidated with the SAME business rules as the single-delete path. Validation is\nall-or-nothing — if any id fails, nothing is deleted, so the batch route can never\nbypass the single-delete guardrails (missing/not-owned -> 404, locked paid-plan\nmemory -> 402).",
+        "description": "Delete up to MEMORIES_BATCH_MAX memories in one request.\n\nReplaces the N concurrent DELETE /v3/memories/{id} calls the web UI used to fan out\non bulk selection, which blew through the per-UID rate limiter and 429'd.\n\nAuthorization parity with DELETE /v3/memories/{memory_id}: every requested id is\nvalidated with the SAME business rules as the single-delete path. Validation is\nall-or-nothing \u2014 if any id fails, nothing is deleted, so the batch route can never\nbypass the single-delete guardrails (missing/not-owned -> 404, locked paid-plan\nmemory -> 402).",
         "operationId": "delete_memories_batch_v3_memories_batch_delete",
         "parameters": [
           {
@@ -68430,6 +68487,94 @@
         "summary": "Get Speech Profile",
         "tags": [
           "v3"
+        ]
+      }
+    },
+    "/v1/users/developer/button-event": {
+      "post": {
+        "description": "App \u2192 backend forward of an opt-in hardware button gesture (#11719).",
+        "operationId": "post_developer_button_event_v1_users_developer_button_event_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ButtonEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Post Developer Button Event",
+        "tags": [
+          "v1"
         ]
       }
     }
