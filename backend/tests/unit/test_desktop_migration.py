@@ -9,6 +9,7 @@ Covers:
 5. Batch limit (commit triggers at BATCH_LIMIT=500)
 """
 
+import importlib.util
 import os
 import sys
 import types
@@ -174,9 +175,20 @@ endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
-_stub_module("utils.observability")
-fallback_stub = _stub_module("utils.observability.fallback")
-fallback_stub.record_fallback = MagicMock()
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    # Delegate every symbol to the real module so tests collected after this
+    # hermetic stubber still exercise the real budget seam.
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 task_intelligence_stub = _stub_package("utils.task_intelligence")
 candidate_service_stub = _stub_module("utils.task_intelligence.candidate_service")
 candidate_service_stub.create_candidate = MagicMock()

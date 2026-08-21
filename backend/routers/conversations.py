@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
@@ -73,6 +73,11 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.product_telemetry import emit_product_event
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -520,10 +525,14 @@ def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: Lis
     tags=['conversations'],
     description=(
         "List responses may omit detail-only fields such as transcript_segments. "
-        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. "
+        "Large accounts can outrun the request budget; such responses return a partial "
+        "newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831)."
     ),
 )
 def get_conversations(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
@@ -558,6 +567,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
+    # Request-scoped budget: the server-side offset is charged before the
+    # query and the page stream runs under the derived per-RPC timeout, so a
+    # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
+    budget = list_read_budget_for_request(request, route='conversations')
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -569,9 +582,13 @@ def get_conversations(
         end_date=end_date,
         folder_id=folder_id,
         starred=starred,
+        budget=budget,
     )
 
     redact_conversations_for_list(conversations)
+    if budget.truncated and response is not None:
+        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if budget.truncated else 'complete')
     return conversations
 
 
