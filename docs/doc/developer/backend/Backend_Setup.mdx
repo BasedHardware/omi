@@ -330,6 +330,9 @@ OAuth is required for user authentication. You need to configure both Google and
 
     Firebase ID tokens are verified with the issuer's public signing keys, so
     `FIREBASE_AUTH_PROJECT_ID` does not require Omi service-account credentials.
+    When it is unset, Firebase Admin uses its default project selection instead;
+    set the auth project explicitly when it differs from your data-project setup,
+    or stock mobile-build tokens will be rejected.
     Do not enable `LOCAL_DEVELOPMENT` on an internet-accessible deployment: that
     mode intentionally bypasses authentication for local harnesses.
   </Step>
@@ -500,6 +503,12 @@ Complete reference for all `.env` variables:
     | `APPLE_KEY_ID` | Apple private key ID |
     | `APPLE_PRIVATE_KEY` | Apple .p8 file contents (with BEGIN/END lines) |
     | `BASE_API_URL` | Your backend URL (e.g., Ngrok URL) |
+  </Tab>
+  <Tab title="Firebase projects" icon="fire">
+    | Variable | Description |
+    |----------|-------------|
+    | `FIREBASE_AUTH_PROJECT_ID` | Firebase project whose ID-token audience the backend accepts; set this explicitly when it differs from the data project. |
+    | `FIREBASE_PROJECT_ID` | Google Cloud/Firebase project used for the backend's Firestore and other data services. |
   </Tab>
   <Tab title="Storage" icon="database">
     | Variable | Description |
