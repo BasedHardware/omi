@@ -56,6 +56,10 @@ _stubs = [
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'utils.request_validation',
+    # routers.conversations resolves the client population for its journey
+    # metric; utils is an _AutoMockModule package here, so the real submodule
+    # is not importable and the name has to be stubbed like the rest.
+    'utils.journey_metrics_contract',
     'utils.other.endpoints',
     'utils.other.storage',
     # Names only: this file's _AutoMockModule/_register_module wrap them. Parents
@@ -133,6 +137,10 @@ for _mod_name in _stubs:
     _register_module(_mod_name, _AutoMockModule(_mod_name))
 
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+
+# A MagicMock client kind would make every downstream assertion unreadable, so the
+# resolver returns a real bounded value and the finalization test asserts it arrives.
+sys.modules['utils.journey_metrics_contract'].resolve_client_kind = lambda *_a, **_k: 'mobile_ios'
 
 # utils.other.endpoints exposes the auth dependencies used in route signatures; FastAPI needs
 # real callables to build the dependants, so provide small stand-ins.
@@ -484,6 +492,7 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         force_process=True,
         extra_updates=None,
         require_cloud_tasks=True,
+        client_kind='mobile_ios',
     )
     remove_pointer.assert_called_once_with('test-uid')
     process.assert_not_called()
