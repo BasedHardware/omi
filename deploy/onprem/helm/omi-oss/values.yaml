@@ -171,6 +171,25 @@ chat:
     imagePullPolicy: IfNotPresent
     storage: 2Gi
     resources: {}
+# Keyword search (ADR-0063). Mirrors compose's `search` profile. Two consumers, NOT symmetric: the
+# memory keyword index is written by the backend itself (so this makes it work end to end), while the
+# `conversations` collection is READ ONLY here — upstream feeds it from a pipeline that is not in the
+# codebase, so enabling this does not restore conversation search (BACKLOG L37).
+# Required by memory intake: the canonical memory outbox's "projection" IS this index, so with
+# backend.memory.enabled and no Typesense every projection_sync stays retryable_failure forever.
+# NOTE: Typesense keeps its indices in RAM; size `resources` for the expected corpus.
+search:
+  enabled: false
+  typesense:
+    # Mirrors OMI_OSS_TYPESENSE_IMAGE in deploy/onprem/omi.oss.release.pins (ADR-0055).
+    image: typesense/typesense:27.1@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455
+    imagePullPolicy: IfNotPresent
+    storage: 5Gi
+    resources: {}
+  # Shared by the Typesense server and its clients (the backend and the memory-maintenance CronJob).
+  # `openssl rand -hex 24`. Required when enabled.
+  apiKey: ""
+
 objstore:
   enabled: false
   rustfs:

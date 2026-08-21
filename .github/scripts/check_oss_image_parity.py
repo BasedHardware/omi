@@ -37,6 +37,7 @@ COMPONENTS = {
     "ntfy": ("OMI_OSS_NTFY_IMAGE", "binwiederhier/ntfy:"),
     "qdrant": ("OMI_OSS_QDRANT_IMAGE", "qdrant/qdrant"),
     "rustfs": ("OMI_OSS_RUSTFS_IMAGE", "rustfs/rustfs:"),
+    "typesense": ("OMI_OSS_TYPESENSE_IMAGE", "typesense/typesense:"),
     "postgres": ("OMI_OSS_POSTGRES_IMAGE", "postgres:"),
     "mc": ("OMI_OSS_MC_IMAGE", "minio/mc:"),
     # TLS-terminating reverse proxies: compose only (Helm terminates at the Envoy Gateway).

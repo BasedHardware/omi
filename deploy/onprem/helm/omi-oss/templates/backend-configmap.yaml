@@ -38,6 +38,14 @@ data:
   QDRANT_URL: "http://qdrant:6333"
   QDRANT_VECTOR_DIM: {{ .Values.chat.vectorDim | quote }}
   {{- end }}
+  {{- if .Values.search.enabled }}
+  # TYPESENSE_PROTOCOL matters: the client defaults to **https** (utils/conversations/search.py:155), so
+  # an in-cluster service on plain HTTP must say so or every call fails TLS. The key is in the Secret.
+  TYPESENSE_HOST: "typesense"
+  TYPESENSE_HOST_PORT: "8108"
+  TYPESENSE_PROTOCOL: "http"
+  MEMORY_TYPESENSE_COLLECTION: "canonical_memory_atoms"
+  {{- end }}
   {{- if .Values.objstore.enabled }}
   # objstore profile: on-prem S3 object store (RustFS) instead of GCS (ADR-0032). S3_PUBLIC_ENDPOINT is
   # required for public object URLs (the s3 adapter has no fallback); the credentials live in the Secret.

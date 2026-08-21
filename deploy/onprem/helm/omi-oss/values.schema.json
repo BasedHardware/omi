@@ -166,6 +166,36 @@
           }
         }
       }
+    },
+    "search": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "typesense": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "string",
+              "minLength": 1
+            },
+            "imagePullPolicy": {
+              "type": "string"
+            },
+            "storage": {
+              "type": "string",
+              "minLength": 1
+            },
+            "resources": {
+              "type": "object"
+            }
+          }
+        }
+      }
     }
   }
 }

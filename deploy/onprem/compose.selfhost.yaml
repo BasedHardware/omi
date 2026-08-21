@@ -13,8 +13,15 @@ services:
       mongo:
         condition: service_healthy
   scheduled_memory_maintenance:
+    # It is the WRITER of the keyword index, so it needs the same shared key as the backend.
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
     depends_on:
       mongo:
+        condition: service_healthy
+      # The outbox's "projection" IS the Typesense keyword index, so a tick before Typesense is ready
+      # marks the event retryable_failure and burns an attempt for nothing.
+      typesense:
         condition: service_healthy
   mongo:
     image: ${OMI_OSS_MONGO_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
@@ -53,6 +60,9 @@ services:
     environment:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-rustfsadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-rustfsadmin}
+      # Same reasoning as the S3 credentials: the Typesense server and this client must share ONE key,
+      # and backend.env cannot reach the typesense container. Set it in the deploy/onprem .env.
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
 
   # Alternate object-store backend (ADR-0032/0004). Opt-in via the `objstore` profile so the default
   # on-prem baseline stays GCS-shaped (ADR-0003). RustFS is one S3-compatible product; the S3 adapter
@@ -188,6 +198,44 @@ services:
   # it by name, no egress. The Qdrant adapter auto-creates each collection at QDRANT_VECTOR_DIM (cosine)
   # on first upsert. Enable with the `chat` profile (RAG needs it) and set in backend.env:
   #   VECTOR_STORE_BACKEND=qdrant + QDRANT_URL=http://qdrant:6333 + QDRANT_VECTOR_DIM=<embedding dim>.
+  # Keyword search (ADR-0063). Two consumers, and they are NOT symmetric:
+  #   * memory atoms  — the backend CREATES the collection and UPSERTS documents itself
+  #     (utils/memory/atom_keyword_index.py), so this service alone makes the feature work end to end.
+  #     It is also what the canonical memory outbox calls its "projection": without Typesense every
+  #     projection_sync event stays retryable_failure forever, one stuck event per memory written.
+  #   * conversations — READ ONLY here. The only reference to that collection in the whole repo is a
+  #     search(); upstream feeds it from a Firestore -> Typesense pipeline that is not in the codebase.
+  #     So this service does NOT restore conversation search: that needs an indexer of ours (BACKLOG L37).
+  # Version = the one upstream's own dev harness pins, so we run what they develop against.
+  # NOTE: Typesense keeps its indices in RAM; size the host accordingly for large accounts.
+  typesense:
+    image: ${OMI_OSS_TYPESENSE_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
+    profiles: ["search"]
+    # The key goes through the ENVIRONMENT, not `--api-key`: an argv flag shows the secret in
+    # `docker inspect` and in every process listing inside the container. Verified that Typesense reads
+    # TYPESENSE_API_KEY from the environment and enforces it (wrong key -> 401).
+    environment:
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
+    command:
+      - --data-dir=/data
+      - --enable-cors
+    volumes:
+      - typesense-data:/data
+    healthcheck:
+      # /health needs no API key. Same shape as qdrant's probe: the image ships bash but no curl/wget,
+      # and /bin/sh has no /dev/tcp, so run bash and require a 200 status line. Verified live.
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/localhost/8108; printf 'GET /health HTTP/1.0\r\n\r\n' >&3; head -n1 <&3 | grep -q 200"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks: [omi]
+    restart: unless-stopped
+
   qdrant:
     image: ${OMI_OSS_QDRANT_IMAGE:?pin missing — see omi.oss.release.pins (ADR-0055)}
     profiles: ["chat"]
@@ -468,6 +516,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  typesense-data:  # keyword index (rebuildable from the store, but a rebuild costs a full re-index)
   mongo-data:
   # Pre-provisioned inference model weights (HF cache + NLLB CTranslate2 dir). Populated
   # out-of-band before first `--profile inference` run — the internal network has no egress.

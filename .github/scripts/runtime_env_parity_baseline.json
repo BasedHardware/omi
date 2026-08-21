@@ -50,7 +50,6 @@
   "MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS": "unreviewed",
   "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED": "unreviewed",
   "MEMORY_ENABLED_USERS": "unreviewed",
-  "MEMORY_TYPESENSE_COLLECTION": "collection name for the keyword index; irrelevant until TYPESENSE_HOST is decided (L37).",
   "MEMORY_V3_CURSOR_SECRET_VERSION": "unreviewed",
   "METRICS_SECRET": "unreviewed",
   "MODULATE_API_KEY": "unreviewed",
@@ -101,9 +100,6 @@
   "TWILIO_ACCOUNT_SID": "unreviewed",
   "TWILIO_API_KEY_SID": "unreviewed",
   "TWILIO_TWIML_APP_SID": "unreviewed",
-  "TYPESENSE_API_KEY": "see TYPESENSE_HOST -- same blocker, decision pending (BACKLOG L37).",
-  "TYPESENSE_HOST": "BLOCKS memory intake (BACKLOG L37): the canonical memory outbox's projection event IS the Typesense keyword index (projection_upsert = sync_atom_keyword_index_for_item), so with no Typesense every projection_sync stays retryable_failure forever. Observed live. Note that atom_keyword_index.typesense_configured() exists with ZERO callers -- upstream wrote the 'skip when unconfigured' predicate and never wired it. Decision pending.",
-  "TYPESENSE_HOST_PORT": "see TYPESENSE_HOST -- same blocker, decision pending (BACKLOG L37).",
   "USE_VERTEX_AI": "unreviewed",
   "X_OAUTH_CLIENT_ID": "unreviewed",
   "X_OAUTH_REDIRECT_URI": "unreviewed"

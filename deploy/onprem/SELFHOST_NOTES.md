@@ -496,6 +496,63 @@ Requirements and gotchas:
   `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
   `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.
 
+## Keyword search & the memory feature (ADR-0063)
+
+`--profile search` brings up **Typesense**, and it is a prerequisite of memory intake — not an optional
+extra. What the code actually does, verified live rather than read off:
+
+**Two consumers, not symmetric.**
+- **memory atoms** — the backend CREATES the collection and UPSERTS documents itself
+  (`utils/memory/atom_keyword_index.py:204`/`:238`). Self-contained, so Typesense makes this work.
+- **conversations** — READ ONLY. The only reference to that collection in the whole repo is a
+  `search()`; upstream feeds it from a Firestore -> Typesense pipeline that is **not in the codebase**.
+  So enabling this profile does **not** restore conversation search: `/v1/conversations/search` (the
+  app's search bar AND its date-range browse) would query an empty index. That needs an indexer of ours.
+
+**Why memory needs it.** The canonical memory outbox's `projection_sync` event *is* this index:
+`projection_upsert = sync_atom_keyword_index_for_item`. With `MEMORY_ENABLED=on` and no Typesense every
+`projection_sync` stays `retryable_failure` **forever** — one permanently stuck event per memory.
+
+**The full prerequisite chain**, in the order a memory travels it:
+
+| step | needs | if missing |
+|---|---|---|
+| write | Mongo | — |
+| `vector_sync` | a vector store (`--profile chat` -> Qdrant) | `delete_canonical_memory_vectors` returns False when `is_vector_available()` is false, so delete events stay `retryable_failure` forever |
+| promotion short-term -> long-term | an **LLM endpoint** (consolidation "dreaming", lane `memory_conflict`) | `consolidation_failed`, the atom stays short-term — and only **long-term** atoms are indexable (`is_indexable_long_term_atom`), so the index stays empty |
+| `projection_sync` | Typesense | stuck forever (above) |
+| keyword hit | all of the above | vector-only retrieval; the keyword half is what catches names embeddings miss |
+
+So the runnable posture for memory is `--profile search --profile chat --profile jobs --profile jobs-memory`
+plus `MEMORY_ENABLED=on`, `MEMORY_CANONICAL_MAINTENANCE_ENABLED=true` and `MEMORY_V3_CURSOR_SECRET`.
+
+**End-to-end check** (this is the one that proves it; the queue draining alone does not):
+
+```bash
+cd deploy/onprem
+docker compose -f compose.prod.yaml --profile search --profile chat --profile jobs --profile jobs-memory up -d
+# write a memory, then force one maintenance tick (the CronJob equivalent):
+docker compose -f compose.prod.yaml --profile search --profile chat --profile jobs-memory \
+  run --rm --no-deps scheduled_memory_maintenance python -m jobs.onprem_scheduled --job memory-maintenance
+# expect: promoted_total=1, outbox_delivered>0, errors=0, exit 0
+# then the index must actually contain it:
+K=$(grep -oE '^TYPESENSE_API_KEY=.*' .env | cut -d= -f2)
+docker compose -f compose.prod.yaml exec -T typesense bash -c \
+  "exec 3<>/dev/tcp/localhost/8108; printf 'GET /collections HTTP/1.0\r\nX-TYPESENSE-API-KEY: $K\r\n\r\n' >&3; cat <&3 | tail -1"
+# expect: canonical_memory_atoms with num_documents >= 1
+```
+
+`--loop` is only for the long-running compose services; a forced tick runs once and its exit code is the
+verdict. Note that `docker compose run` needs the **profiles** on the command line too: the runner
+`depends_on: typesense`, and a dependency in an inactive profile is "no such service".
+
+**Secret hygiene.** The API key goes through the environment, never `--api-key` on the command line: an
+argv flag shows the secret in `docker inspect` and in every in-container process listing. Verified that
+Typesense reads `TYPESENSE_API_KEY` from the environment and enforces it (wrong key -> 401).
+
+**`TYPESENSE_PROTOCOL=http` is not optional.** The client defaults to **https**
+(`utils/conversations/search.py:155`), so a service reached by name over plain HTTP must say so.
+
 ## Testing the backend offline
 
 The box has only Docker (no host venv). Suites run in a **test image** = the WP0 backend image plus

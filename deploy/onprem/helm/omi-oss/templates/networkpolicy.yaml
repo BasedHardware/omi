@@ -37,5 +37,5 @@ spec:
                 # llm-gateway was missing: with this policy on, the backend could not reach the
                 # in-cluster gateway, so every chat turn came back as the canned apology. Dormant only
                 # because the policy is off by default (BACKLOG L36).
-                values: ["mongo", "valkey", "qdrant", "rustfs", "ntfy", "keycloak", "llm-gateway"]
+                values: ["mongo", "valkey", "qdrant", "rustfs", "ntfy", "keycloak", "llm-gateway", "typesense"]
 {{- end }}

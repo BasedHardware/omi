@@ -33,6 +33,9 @@ OMI_OSS_NTFY_IMAGE=binwiederhier/ntfy:v2.11.0
 OMI_OSS_QDRANT_IMAGE=qdrant/qdrant@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
 # tag@digest (verified: tag resolves to this digest)
 OMI_OSS_RUSTFS_IMAGE=rustfs/rustfs:1.0.0-beta.12@sha256:41fe89380f4120a337790c02af192c3fe7bb55c3edc2e6e9357b487b47c6ab21
+# Keyword search. Same version upstream's own dev harness pins (scripts/dev-harness/dev_harness/config.py
+# TYPESENSE_PINNED_VERSION), so we run what they develop against. tag@digest, verified by pulling.
+OMI_OSS_TYPESENSE_IMAGE=typesense/typesense:27.1@sha256:5c12af89130b8ee0be11541321ba8a3a7c7a538d7c6cd95e0409dc2d75ca6455
 
 # --- compose only ------------------------------------------------------------------------------
 # TLS-terminating reverse proxies (api-proxy, kc-proxy, ntfy-proxy). The Helm target terminates TLS at
