@@ -807,13 +807,22 @@ extension ContextBucketStore {
             break
           }
           maximumWorthiness = max(maximumWorthiness, worthiness)
+          // A user-authored question expires shortly after its compose moment:
+          // without this, any later departure evaluation of the bucket can
+          // force retrieval for a question no longer on screen and answer the
+          // wrong ask. Re-asks re-validate through the expiry-aware duplicate
+          // check above.
+          let questionExpiry: Date? =
+            applyWritePolicy && validity == .validated
+              && ContextFactWritePolicy.isUserAuthoredQuestion(statement)
+            ? now.addingTimeInterval(ContextFactWritePolicy.userQuestionFactTTLSeconds) : nil
           try db.execute(
             sql: """
               INSERT INTO bucket_facts
                 (id, bucketID, entryID, appName, statement, identifiersJson, evidenceText,
                  evidenceRefsJson, validityState, dispositionState, confidence,
-                 notifyWorthiness, workstreamTag, createdAt, updatedAt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?)
+                 notifyWorthiness, workstreamTag, expiresAt, createdAt, updatedAt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'none', ?, ?, ?, ?, ?, ?)
               """,
             arguments: [
               UUID().uuidString.lowercased(), bucketID, entryID, appName, statement,
@@ -821,7 +830,7 @@ extension ContextBucketStore {
               evidenceText,
               String(data: try evidenceEncoder.encode(evidenceRefs), encoding: .utf8) ?? "[]",
               validity.rawValue, min(max(fact.confidence, 0), 1), worthiness,
-              nil as String?, now, now,
+              nil as String?, questionExpiry, now, now,
             ])
           if validity == .validated {
             existingFactIdentities.append(

@@ -45,6 +45,14 @@ enum ContextFactWriteVerdict: Equatable, Sendable {
 enum ContextFactWritePolicy {
   static let humanEventWorthinessFloor = 0.6
 
+  /// A user-authored question is only answerable NOW: a question fact that
+  /// outlives its compose moment lets a later departure evaluation force
+  /// retrieval for a question no longer on screen and deliver the wrong
+  /// answer (seen live: a stale ask answered instead of the current one).
+  /// Ten minutes covers grace retries and slow evaluations; a re-ask
+  /// re-validates through the expiry-aware duplicate check.
+  static let userQuestionFactTTLSeconds: TimeInterval = 600
+
   /// Extraction machinery observed echoed back as statements in live data.
   ///
   /// Every pattern is anchored to the echo it was measured on. Unanchored
