@@ -304,7 +304,7 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         admission = require_step(
             errors,
             readiness_steps,
-            "Verify Release Eligibility proof is current main",
+            "Verify Release Eligibility proof is merged into current main",
             "automatic release-proof freshness validation",
         )
         validate_fail_closed_step(errors, admission, "automatic release-proof freshness validation")
@@ -341,6 +341,14 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
                 "automatic source admission must reject proof reruns",
             ),
             (
+                'git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"',
+                "automatic source admission must prove the release SHA is merged into current main",
+            ),
+            (
+                '--sha-is-ancestor-of-main "$sha_is_ancestor_of_main"',
+                "automatic source admission must verify merged-into-main ancestry",
+            ),
+            (
                 "printf 'admitted_sha=%s\\n' \"$RELEASE_SHA\" >> \"$GITHUB_OUTPUT\"",
                 "automatic source admission must publish the verified SHA",
             ),
@@ -365,7 +373,7 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
             "Google Auth for read-only Firestore inventory",
             "read-only Firestore inventory authentication",
         )
-        admission_index = named_step_index(readiness_steps, "Verify Release Eligibility proof is current main")
+        admission_index = named_step_index(readiness_steps, "Verify Release Eligibility proof is merged into current main")
         credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
         auth_index = named_step_index(readiness_steps, "Google Auth for read-only Firestore inventory")

@@ -189,7 +189,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Verify Release Eligibility proof is current main
+      - name: Verify Release Eligibility proof is merged into current main
         id: admitted_source
         env:
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -198,12 +198,22 @@ jobs:
           set -euo pipefail
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          # Ancestry is proved against the exact commit reported as current
+          # main, so re-point the guard checkout at it rather than at whatever
+          # main happened to be when this job started.
+          git checkout --quiet --detach "$main_sha"
           checkout_sha="$(git rev-parse --verify HEAD)"
+          if git merge-base --is-ancestor "$RELEASE_SHA" "$main_sha"; then
+            sha_is_ancestor_of_main=true
+          else
+            sha_is_ancestor_of_main=false
+          fi
           python3 .github/scripts/verify_auto_backend_release_admission.py \
             --sha "$RELEASE_SHA" \
             --main-sha "$main_sha" \
             --checkout-sha "$checkout_sha" \
-            --run-attempt "$RELEASE_RUN_ATTEMPT"
+            --run-attempt "$RELEASE_RUN_ATTEMPT" \
+            --sha-is-ancestor-of-main "$sha_is_ancestor_of_main"
           printf 'admitted_sha=%s\n' "$RELEASE_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Require read-only Firestore credentials

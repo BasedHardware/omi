@@ -103,12 +103,13 @@ class ReleaseAdmissionVerifierTests(unittest.TestCase):
 
 
 class AutomaticReleaseAdmissionVerifierTests(unittest.TestCase):
-    def identity(self, **overrides: str):
+    def identity(self, **overrides):
         values = {
             "sha": SHA,
             "main_sha": SHA,
             "checkout_sha": SHA,
             "run_attempt": "1",
+            "sha_is_ancestor_of_main": True,
         }
         values.update(overrides)
         return AUTO_VERIFIER.AutomaticReleaseIdentity(**values)
@@ -116,12 +117,20 @@ class AutomaticReleaseAdmissionVerifierTests(unittest.TestCase):
     def test_accepts_first_attempt_for_exact_current_main(self) -> None:
         AUTO_VERIFIER.validate(self.identity())
 
+    def test_accepts_a_merged_sha_that_main_has_moved_past(self) -> None:
+        """Tip-equality rejected merged commits whenever main moved mid-proof."""
+        AUTO_VERIFIER.validate(self.identity(main_sha="b" * 40, checkout_sha="b" * 40))
+
     def test_rejects_reruns_or_stale_current_main(self) -> None:
         for name, overrides, expected in (
             ("rerun", {"run_attempt": "2"}, "first run attempt"),
             ("noncanonical attempt", {"run_attempt": "01"}, "first run attempt"),
-            ("main advanced", {"main_sha": "b" * 40}, "still equal current main"),
-            ("guard checkout stale", {"checkout_sha": "b" * 40}, "current-main guard checkout"),
+            ("unmerged release sha", {"sha_is_ancestor_of_main": False}, "merged into current main"),
+            (
+                "guard checkout not current main",
+                {"main_sha": "b" * 40, "checkout_sha": "c" * 40},
+                "current-main checkout",
+            ),
         ):
             with self.subTest(name=name), self.assertRaisesRegex(
                 AUTO_VERIFIER.AutomaticReleaseAdmissionError, expected
@@ -406,19 +415,19 @@ class WorkflowContractTests(unittest.TestCase):
             (
                 "read-only credentials",
                 "Require read-only Firestore credentials",
-                "Verify Release Eligibility proof is current main",
+                "Verify Release Eligibility proof is merged into current main",
                 "automatic release-proof freshness validation must run before read-only credential use",
             ),
             (
                 "admitted source checkout",
                 "Checkout admitted Firestore source",
-                "Verify Release Eligibility proof is current main",
+                "Verify Release Eligibility proof is merged into current main",
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution",
             ),
             (
                 "read-only Firestore auth",
                 "Google Auth for read-only Firestore inventory",
-                "Verify Release Eligibility proof is current main",
+                "Verify Release Eligibility proof is merged into current main",
                 "automatic release-proof freshness validation must run before read-only Firestore authentication",
             ),
             (
@@ -451,13 +460,13 @@ class WorkflowContractTests(unittest.TestCase):
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
             "Require read-only Firestore credentials",
-            "Verify Release Eligibility proof is current main",
+            "Verify Release Eligibility proof is merged into current main",
         )
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
             "  firestore_readiness:\n",
-            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Verify Release Eligibility proof is current main\n        run: true\n\n  firestore_readiness:\n",
+            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Verify Release Eligibility proof is merged into current main\n        run: true\n\n  firestore_readiness:\n",
         )
         self.assertIn(
             "automatic release-proof freshness validation must run before read-only credential use",
@@ -468,8 +477,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "      - name: Verify Release Eligibility proof is current main\n        id: admitted_source\n",
-            "      - name: Verify Release Eligibility proof is current main\n        run: true\n\n      - name: Verify Release Eligibility proof is current main\n        id: admitted_source\n",
+            "      - name: Verify Release Eligibility proof is merged into current main\n        id: admitted_source\n",
+            "      - name: Verify Release Eligibility proof is merged into current main\n        run: true\n\n      - name: Verify Release Eligibility proof is merged into current main\n        id: admitted_source\n",
         )
         self.assertIn(
             "backend source admission must contain exactly one automatic release-proof freshness validation step",

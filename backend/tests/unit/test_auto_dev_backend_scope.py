@@ -164,19 +164,44 @@ def test_backend_source_or_deploy_input_change_proceeds(git_repo: Path, relative
     assert outputs == {'applies': 'true'}
 
 
-def test_stale_relevant_sha_reaches_and_fails_the_existing_admission_guard(git_repo: Path) -> None:
+def test_relevant_sha_left_behind_by_a_later_merge_is_still_admitted(git_repo: Path) -> None:
+    """A commit merging during Release Eligibility must not strand the deploy.
+
+    Requiring the proof SHA to still be main's tip rejected a merged, reviewed
+    commit whenever anything else landed while eligibility ran. That accounted
+    for 8 of the 13 automatic development deploy failures in the 25 runs before
+    this guard changed to require ancestry instead.
+    """
     relevant_sha = _commit(git_repo, 'backend/main.py')
+    later_main_sha = _commit(git_repo, 'desktop/macos/README.md')
     outputs, _summary = _run_scope(git_repo, relevant_sha)
     admission = _load_admission_script()
 
     assert outputs == {'applies': 'true'}
-    with pytest.raises(admission.AutomaticReleaseAdmissionError, match='still equal current main'):
+    admission.validate(
+        admission.AutomaticReleaseIdentity(
+            sha=relevant_sha,
+            main_sha=later_main_sha,
+            checkout_sha=later_main_sha,
+            run_attempt='1',
+            sha_is_ancestor_of_main=True,
+        )
+    )
+
+
+def test_unmerged_sha_is_still_rejected(git_repo: Path) -> None:
+    """Ancestry replaces tip-equality; it does not relax the merged requirement."""
+    relevant_sha = _commit(git_repo, 'backend/main.py')
+    admission = _load_admission_script()
+
+    with pytest.raises(admission.AutomaticReleaseAdmissionError, match='merged into current main'):
         admission.validate(
             admission.AutomaticReleaseIdentity(
                 sha=relevant_sha,
                 main_sha='a' * 40,
                 checkout_sha='a' * 40,
                 run_attempt='1',
+                sha_is_ancestor_of_main=False,
             )
         )
 

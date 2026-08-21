@@ -4,6 +4,13 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  firebase_probe_signer_service_account:
+    description: >-
+      Optional service account for signing release-probe custom tokens when the
+      Firebase auth project differs from project_id. Requires
+      roles/iam.serviceAccountTokenCreator for the deploy identity on it.
+    required: false
+    default: ''
   deploy_profile:
     description: 'manual or auto-dev orchestration profile'
     required: true
@@ -723,6 +730,12 @@ runs:
         candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
+        # A development deploy identity cannot sign a custom token for the
+        # production Firebase project this gate authenticates against, so it
+        # failed at custom_token_signing and blocked every manual development
+        # deploy. Left empty the behaviour is unchanged; set the variable to
+        # the Firebase project's signer to make this lane usable.
+        firebase_signer_service_account: ${{ inputs.firebase_probe_signer_service_account }}
 
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate
