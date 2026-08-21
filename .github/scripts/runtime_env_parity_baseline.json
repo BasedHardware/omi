@@ -51,7 +51,6 @@
   "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED": "unreviewed",
   "MEMORY_ENABLED_USERS": "unreviewed",
   "MEMORY_V3_CURSOR_SECRET_VERSION": "unreviewed",
-  "METRICS_SECRET": "unreviewed",
   "MODULATE_API_KEY": "unreviewed",
   "OMI_BACKGROUND_FLEX_CAPABLE": "unreviewed",
   "OMI_LLM_CHAT_AGENT_ROUTE": "unreviewed",

@@ -16,8 +16,13 @@ spec:
         {{- include "omi-oss.labels" . | nindent 8 }}
         app.kubernetes.io/component: backend
       annotations:
-        # Roll the pods when the plain env changes (Secret changes are picked up on next start anyway).
+        # Roll the pods when the environment changes. BOTH sources, because `envFrom` is resolved when the
+        # pod starts: without a checksum the pod spec is unchanged, nothing restarts, and `helm upgrade`
+        # reports "deployed" while the running process keeps the old value. The comment here used to say
+        # Secret changes were "picked up on next start anyway" — measured false: adding METRICS_SECRET
+        # updated the Secret and the pod went on answering 401 (BACKLOG L43). There is no next start.
         checksum/config: {{ include (print $.Template.BasePath "/backend-configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
     spec:
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:

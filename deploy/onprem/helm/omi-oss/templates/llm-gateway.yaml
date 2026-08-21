@@ -73,6 +73,10 @@ spec:
         # Checksummed from the VALUES that generate the routes, not from this template: the ConfigMap
         # lives in this same file, so including it here would recurse.
         checksum/routes: {{ toYaml .Values.chat.llmGateway | sha256sum }}
+        # And on the Secret it reads OPENAI_API_KEY / the service token / METRICS_SECRET from — same
+        # reason as the backend: envFrom-style values are bound at pod start, so a Secret-only change
+        # applies to nothing until something rolls the pod.
+        checksum/secret: {{ include (print $.Template.BasePath "/backend-secret.yaml") . | sha256sum }}
         # ALSO roll on a Secret change. Found live: the service token and OPENAI_API_KEY come from
         # backend-secret via secretKeyRef, which is read once at container start — so changing either
         # left the old pod running with the stale value, and the gateway answered 503 invalid_config
@@ -108,6 +112,14 @@ spec:
                 secretKeyRef:
                   name: backend-secret
                   key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            # The gateway has its OWN /metrics with the same bearer check, so without this its counters
+            # are unreachable (401). Optional: unset keeps the endpoint shut, which is the default.
+            - name: METRICS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secret
+                  key: METRICS_SECRET
+                  optional: true
           volumeMounts:
             - name: routes
               mountPath: /app/llm_gateway/config/generated_route_overrides.yaml

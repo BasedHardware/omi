@@ -612,11 +612,23 @@ docker compose -f compose.prod.yaml exec -e OMI_VENDOR_EGRESS=allow backend /opt
    print(len(asyncio.run(get_omi_github_releases('probe'))))"
 ```
 
-> **The fallback counter is not readable on-prem yet.** `record_fallback` writes both a log line and
-> `omi_fallback_total`, but `GET /metrics` requires `METRICS_SECRET` (`routers/metrics.py:15`) and we
-> declare it in neither compose nor Helm — so it answers **401** everywhere and every fallback we record
-> (`vendor_egress`, `vector_store`, `object_store`, …) is observable only through the log. Tracked as a
-> debt; the log line above is the channel that works today.
+> **Reading the counter** (ADR-0068). `record_fallback` writes a log line **and** increments
+> `omi_fallback_total`. The second one needs `METRICS_SECRET`, which is declared in `backend.env.base` and
+> in `llm_gateway.env` (the gateway has its own `/metrics` with the same check) — without it the endpoint
+> answers **401 to everyone**, which is how every fallback this fork records lived in the log alone until
+> 2026-08-21.
+>
+> ```bash
+> docker compose -f compose.prod.yaml exec backend sh -c \
+>   'curl -s -H "Authorization: Bearer $METRICS_SECRET" http://localhost:8080/metrics | grep vendor_egress'
+> # omi_fallback_total{component="vendor_egress",from_mode="github_releases",reason="policy",...} 1.0
+> ```
+>
+> On k8s the token comes from `backend.metricsSecret` (Secret key `METRICS_SECRET`, also passed to the
+> gateway). **A Secret-only change now rolls the pods** — it did not before, and `helm upgrade` reported
+> `deployed` while the process kept the old value, because `envFrom` is bound at pod start. Nobody scrapes
+> this yet: there is no Prometheus in the compose or the chart, so today it is manual inspection (BACKLOG
+> L43, second half).
 
 ## Scheduled work: ONE compose service, several cadences (ADR-0062/0065)
 

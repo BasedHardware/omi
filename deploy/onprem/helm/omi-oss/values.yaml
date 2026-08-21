@@ -53,6 +53,12 @@ backend:
     cursorSecret: ""
   service:
     port: 8080
+  # Bearer token for GET /metrics, on the backend AND the llm-gateway (two processes, same check).
+  # Empty = the endpoint answers 401 to everyone, which is upstream's default — and which makes
+  # `omi_fallback_total` unreachable, so every fallback this fork records (vendor_egress, vector_store,
+  # object_store, stt_selection) lives only in the log (BACKLOG L43). `openssl rand -hex 32` to read them.
+  # Scrape:  curl -H "Authorization: Bearer <this>" http://<pod>:8080/metrics
+  metricsSecret: ""
   # ENCRYPTION_SECRET lives in a Secret; the dev overlay sets a throwaway value, prod injects a real one.
   encryptionSecret: ""
   # Plain (non-secret) backend env — the Helm mirror of backend.env.base. MONGO_URI/REDIS host are
