@@ -455,7 +455,18 @@ actor ContextProactivityEngine {
     {
       let items = await retrieve(forcedQuery, authorizationSnapshot)
       if let section = ContextDirectorRetrievalHop.promptSection(query: forcedQuery, items: items) {
-        effectiveUncachedPrompt = uncachedPrompt + "\n\n" + section
+        // A direct question invalidates the anti-nagging guard by design, and
+        // in live runs the model kept reading the identical answer cards in
+        // the recent-deliveries list as "delivered repeatedly" and silencing.
+        // The forced evaluation therefore omits that list mechanically instead
+        // of asking the model to discount it.
+        let answerPrompt = ContextProactivityPromptBuilder.directorVolatilePrompt(
+          tasks: taskContext,
+          frame: currentFrame,
+          recentDeliveries: [],
+          visitCount: snapshot.visitCount,
+          environmentalSignal: envSignal)
+        effectiveUncachedPrompt = answerPrompt + "\n\n" + section
         forcedRetrievalAllowlist = Set(items.map(\.ref))
         forcedRetrievalProvenance = ContextDirectorRetrievalHop.provenance(
           query: forcedQuery, items: items, citedRefs: [], hopCompleted: true, failure: nil)
