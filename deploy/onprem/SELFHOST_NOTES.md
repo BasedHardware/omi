@@ -619,7 +619,8 @@ docker run --rm --network container:wp2-mongo -v $(git rev-parse --show-toplevel
     for f in tests/contract/test_document_store_contract.py \
              tests/contract/test_users_people_contract.py \
              tests/contract/test_conversations_contract.py \
-             tests/contract/test_apps_contract.py; do
+             tests/contract/test_apps_contract.py \
+             tests/contract/test_chat_contract.py; do
       /opt/venv/bin/python -m pytest -q -o addopts="" -p no:cacheprovider "$f" | tail -1 | sed "s|^|$f: |"
     done'
 docker rm -f wp2-mongo wp2-emu    # cleanup
