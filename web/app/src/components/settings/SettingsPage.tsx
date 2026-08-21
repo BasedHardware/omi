@@ -892,8 +892,8 @@ function UnknownPlanCard() {
         <div>
           <h3 className="text-lg font-semibold text-text-primary">Plan unavailable</h3>
           <p className="text-sm text-text-tertiary mt-1">
-            This account uses a plan that this version of Omi does not recognize yet. Plan
-            features are unavailable until the plan can be identified.
+            This account uses a plan that this version of Omi does not recognize yet.
+            Plan features are unavailable until the plan can be identified.
           </p>
         </div>
       </div>
@@ -974,7 +974,7 @@ function UsageSectionContent({
   };
 
   const planIdentity = subscription
-    ? (subscription.plan_identity ?? decodePlan(subscription.plan))
+    ? subscription.plan_identity ?? decodePlan(subscription.plan)
     : null;
   const isUnlimited = planIdentity ? planGrantsPaidCapability(planIdentity) : false;
   const isUnknownPlan = planIdentity?.kind === 'unknown';
