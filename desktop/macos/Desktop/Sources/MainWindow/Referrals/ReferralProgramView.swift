@@ -57,12 +57,12 @@ struct ReferralProgramView: View {
         .accessibilityHidden(true)
 
       VStack(spacing: OmiSpacing.sm) {
-        Text("Give a friend one free month of Omi Pro")
+        Text("Give a friend one free month of Operator")
           .scaledFont(size: OmiType.title, weight: .semibold)
           .foregroundColor(Ink.primary)
           .multilineTextAlignment(.center)
 
-        Text("Share your unique link. When a friend joins Omi, they'll get one month of Omi Pro free.")
+        Text("Share your unique link. When a friend joins Omi, they'll get one month of Operator free.")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
           .multilineTextAlignment(.center)
@@ -178,12 +178,7 @@ struct ReferralTopBarButton: View {
       .frame(height: TopNavigationPillMetrics.height)
       .background {
         Capsule(style: .continuous)
-          .fill(Ink.rowFillHover)
-          .overlay {
-            if isHovering {
-              Capsule(style: .continuous).fill(Ink.wash)
-            }
-          }
+          .fill(isHovering ? Ink.wash : Color.clear)
       }
       .overlay {
         Capsule(style: .continuous).strokeBorder(Ink.hairline, lineWidth: 1)

@@ -1,7 +1,7 @@
 version: 2
 name: referrals
 tier: manual
-description: Refer a Friend — top bar and Settings share the same unique Omi Pro referral link
+description: Refer a Friend — top bar and Settings share the same unique Operator referral link
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/DesktopTopBar.swift
@@ -15,11 +15,11 @@ preconditions:
 steps:
   - id: S1
     name: Open referral sheet from the top bar
-    do: "Click the gift icon and Refer label immediately left of the microphone control. Verify the referral sheet explains the one free month of Omi Pro and shows the unique link with Copy link."
+    do: "Click the gift icon and Refer label immediately left of the microphone control. Verify the referral sheet explains the one free month of Operator and shows the unique link with Copy link."
     expect:
       interactive_count: { min: 2 }
       text_visible:
-        - Give a friend one free month of Omi Pro
+        - Give a friend one free month of Operator
         - Copy link
 
   - id: S2
@@ -37,5 +37,5 @@ steps:
       interactive_count: { min: 2 }
       text_visible:
         - Refer a Friend
-        - Give a friend one free month of Omi Pro
+        - Give a friend one free month of Operator
         - Copy link
