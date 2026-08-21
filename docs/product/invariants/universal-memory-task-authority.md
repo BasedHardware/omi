@@ -1,6 +1,6 @@
 # INV-MEM-5: Universal memory and task authority
 
-**Status:** proposed
+**Status:** locked
 
 **Proposed on:** 2026-08-11
 
@@ -41,7 +41,8 @@ Guard names may be refined during implementation, but equivalent behavioral and 
 
 ## Path globs
 
-- deleted UID-cohort selectors and any attempted replacement
+Also binding, though not expressible as a glob: the deleted UID-cohort selectors, and any attempted replacement of them.
+
 - `backend/config/memory_rollout.py`
 - `backend/utils/memory/**`
 - `backend/database/memories.py`
@@ -79,7 +80,9 @@ Guard names may be refined during implementation, but equivalent behavioral and 
 
 ## PR rule
 
-Name `INV-MEM-5` in the PR body if you touch the path globs above while universal convergence is in progress.
+Do **not** require naming. This invariant's globs cover both desktop application
+trees, so a citation here would fire on every desktop PR and become a token people
+paste unread. The guards listed above carry the floor instead — the INV-UI-1 pattern.
 
 ## Related invariants
 

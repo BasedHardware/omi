@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -53,6 +54,7 @@ from utils.memory.canonical_consolidation import (
     run_canonical_consolidation,
 )
 from utils.memory.memory_system import MemorySystem
+from utils.memory.rejected_memory_feedback import RejectedMemoryFeedback
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 UID = "uid-canonical"
@@ -292,6 +294,55 @@ def test_gather_excludes_superseded_candidates():
     assert context.candidates_by_anchor[active.memory_id][0].sensitivity_labels == ("health",)
 
 
+def test_recent_rejection_reaches_the_volatile_prompt_even_after_vector_projection_deletion():
+    active = _item("mem-new", "The user prefers aisle seats")
+    rejected = _item("mem-rejected", "The user prefers aisle seating", tier=MemoryTier.long_term)
+    rejected.promotion = {**(rejected.promotion or {}), "reviewed": True, "user_review": False}
+    db = _FakeDb(
+        {
+            f"users/{UID}/memory_items/{active.memory_id}": active.model_dump(mode="python"),
+            f"users/{UID}/memory_items/{rejected.memory_id}": rejected.model_dump(mode="python"),
+        }
+    )
+
+    with (
+        patch(
+            "utils.memory.canonical_consolidation.query_memory_vector_candidates",
+            return_value=MagicMock(hits=[]),
+        ),
+        patch(
+            "utils.memory.canonical_consolidation.get_recent_rejected_memory_feedback",
+            return_value=(
+                RejectedMemoryFeedback(
+                    memory_id=rejected.memory_id,
+                    content=rejected.content or "",
+                    updated_at=rejected.updated_at,
+                ),
+            ),
+        ),
+    ):
+        context = gather_consolidation_candidates(UID, [active], db_client=db)
+
+    payload = json.loads(format_consolidation_llm_context(context))
+    messages = build_consolidation_llm_messages(context)
+    prefix = _llm_payload_text(messages[:1])
+    suffix = _llm_payload_text(messages[1:])
+
+    assert context.candidates_by_anchor[active.memory_id] == []
+    assert payload["owner_rejected_examples"] == [
+        {
+            "content": rejected.content,
+            "memory_id": rejected.memory_id,
+            "updated_at": rejected.updated_at.isoformat(),
+            "user_rejected": True,
+        }
+    ]
+    assert "owner-rejected" in prefix
+    assert "MUST NOT route promote" in prefix
+    assert "mem-rejected" not in prefix
+    assert '"user_rejected":true' in suffix
+
+
 def test_gather_never_sends_restricted_pending_text_to_vector_search():
     restricted = _item("mem_secret", "password-like material", sensitivity_labels=["credential"])
     db = _FakeDb(
@@ -452,7 +503,8 @@ def test_llm_prompt_exposes_candidate_sensitivity_and_promotion_safety_rules():
     blob = _llm_payload_text(prompts[0])
     assert '"sensitivity_labels":["credential"]' in blob
     assert "MUST NOT route promote" in blob
-    assert "aboutness=third_party or unclear MUST NOT route promote" in blob
+    assert "aboutness=third_party MUST NOT route promote" in blob
+    assert "aboutness=unclear is not a veto" in blob
     assert "ambient media dialogue, quoted characters" in blob
     assert "adopted user preference or commitment" in blob
     assert "requires_normalization=true" in blob
@@ -564,6 +616,18 @@ def test_batch_rejects_restricted_sensitivity_promotion(label):
     )
 
     assert error == "output_invalid:restricted_sensitivity_promotion:mem_a"
+
+
+def test_batch_never_promotes_a_pending_memory_the_owner_rejected():
+    item = _item("mem_a", "The user prefers aisle seats")
+    item.promotion = {**(item.promotion or {}), "reviewed": True, "user_review": False}
+
+    error = _validate_agent_batch(
+        _context([item]),
+        ConsolidationAgentBatch(decisions=[_promote(item)]),
+    )
+
+    assert error == "output_invalid:user_rejected_promotion:mem_a"
 
 
 def test_batch_rejects_third_party_promotion():
@@ -795,7 +859,7 @@ def test_batch_user_asserted_known_third_party_cannot_become_user():
     assert error == "output_invalid:source_subject_contradiction:mem_a"
 
 
-def test_batch_rejects_unclear_aboutness_promotion():
+def test_batch_allows_unclear_aboutness_when_other_authority_is_durable():
     item = _item("mem_a", "A")
 
     error = _validate_agent_batch(
@@ -803,7 +867,7 @@ def test_batch_rejects_unclear_aboutness_promotion():
         ConsolidationAgentBatch(decisions=[_promote(item, aboutness="unclear")]),
     )
 
-    assert error == "output_invalid:unsafe_aboutness_promotion:mem_a"
+    assert error is None
 
 
 @pytest.mark.parametrize("relationship", ["asking_about", "encountered", "unclear"])
@@ -991,42 +1055,62 @@ def test_batch_rejects_duplicate_supersede_across_decisions():
     assert error == "output_invalid:duplicate_supersede_target:mem_new_b"
 
 
-def test_clean_total_batch_routes_and_advances_watermark():
+def test_clean_total_batch_routes_advances_watermark_and_logs_text_free_decision(caplog):
     item = _item("mem_a", "Enjoys hiking")
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
     context = _context([item])
     response = ConsolidationAgentBatch(decisions=[_promote(item)])
 
-    with (
-        patch(
-            "utils.memory.canonical_consolidation.resolve_memory_system",
-            return_value=MemorySystem.CANONICAL,
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
-            return_value=[item],
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
-            return_value=context,
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.invoke_consolidation_agent",
-            return_value=response,
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.apply_consolidation_decision",
-            return_value=[item.memory_id],
-        ) as apply_route,
-    ):
-        report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
+    with caplog.at_level(logging.INFO, logger=consolidation.__name__):
+        with (
+            patch(
+                "utils.memory.canonical_consolidation.resolve_memory_system",
+                return_value=MemorySystem.CANONICAL,
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+                return_value=[item],
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+                return_value=context,
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.invoke_consolidation_agent",
+                return_value=response,
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.apply_consolidation_decision",
+                return_value=[item.memory_id],
+            ) as apply_route,
+        ):
+            report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
 
     assert report.promoted_memory_ids == [item.memory_id]
     assert report.batched_memory_ids == [item.memory_id]
     assert report.watermark_blocked is False
     assert report.last_consolidation_run_at == NOW
     apply_route.assert_called_once()
+    messages = [
+        record.getMessage() for record in caplog.records if "canonical_memory_decision_path.v1" in record.getMessage()
+    ]
+    assert len(messages) == 1
+    event = json.loads(messages[0].split("canonical_memory_decision_path.v1 ", 1)[1])
+    assert event == {
+        "aboutness": "primary_user",
+        "basis_for_memory": "explicit",
+        "confidence": "high",
+        "memory_id": item.memory_id,
+        "reason_code": "create:self:primary_user:explicit",
+        "reconciliation": "create",
+        "relationship_to_user": "self",
+        "route": "promote",
+        "stage": "promotion",
+        "status": "applied",
+        "uid": UID,
+    }
+    assert item.content not in messages[0]
 
 
 def test_one_pass_caps_llm_batches_and_leaves_overflow_for_next_pass():
@@ -1178,36 +1262,60 @@ def test_run_applies_promote_before_non_promote_pending_dependent():
     assert report.watermark_blocked is False
 
 
-def test_incomplete_output_blocks_all_mutation_and_watermark():
-    items = [_item("mem_a", "A"), _item("mem_b", "B")]
+def test_incomplete_output_blocks_all_mutation_and_logs_each_memory_without_text(caplog):
+    items = [_item("mem_a", "Private observation A"), _item("mem_b", "Private observation B")]
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{UID}/memory_state/apply_control": control.model_dump(mode="python")})
 
-    with (
-        patch(
-            "utils.memory.canonical_consolidation.resolve_memory_system",
-            return_value=MemorySystem.CANONICAL,
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.list_pending_consolidation_items",
-            return_value=items,
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.gather_consolidation_candidates",
-            return_value=_context(items),
-        ),
-        patch(
-            "utils.memory.canonical_consolidation.invoke_consolidation_agent",
-            return_value=ConsolidationAgentBatch(decisions=[_archive(items[0])]),
-        ),
-        patch("utils.memory.canonical_consolidation.apply_consolidation_decision") as apply_route,
-    ):
-        report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
+    with caplog.at_level(logging.INFO, logger=consolidation.__name__):
+        with (
+            patch(
+                "utils.memory.canonical_consolidation.resolve_memory_system",
+                return_value=MemorySystem.CANONICAL,
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.list_pending_consolidation_items",
+                return_value=items,
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.gather_consolidation_candidates",
+                return_value=_context(items),
+            ),
+            patch(
+                "utils.memory.canonical_consolidation.invoke_consolidation_agent",
+                return_value=ConsolidationAgentBatch(decisions=[_archive(items[0])]),
+            ),
+            patch("utils.memory.canonical_consolidation.apply_consolidation_decision") as apply_route,
+        ):
+            report = run_canonical_consolidation(UID, db_client=db, run_id="run-1", now=NOW)
 
     assert report.watermark_blocked is True
     assert report.batched_memory_ids == []
     assert report.last_consolidation_run_at is None
     apply_route.assert_not_called()
+    messages = [
+        record.getMessage() for record in caplog.records if "canonical_memory_decision_path.v1" in record.getMessage()
+    ]
+    events = [json.loads(message.split("canonical_memory_decision_path.v1 ", 1)[1]) for message in messages]
+    assert events == [
+        {
+            "memory_id": "mem_a",
+            "reason_code": "output_invalid:partition_mismatch",
+            "route": "archive",
+            "stage": "promotion",
+            "status": "decision_invalid",
+            "uid": UID,
+        },
+        {
+            "memory_id": "mem_b",
+            "reason_code": "output_invalid:partition_mismatch",
+            "route": "none",
+            "stage": "promotion",
+            "status": "decision_invalid",
+            "uid": UID,
+        },
+    ]
+    assert all(item.content not in " ".join(messages) for item in items)
 
 
 def test_recurrence_handoff_failure_blocks_routes_and_watermark():
