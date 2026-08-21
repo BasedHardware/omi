@@ -722,6 +722,10 @@ actor ContextProactivityEngine {
       // the settled value rather than this actor's mutable binding: the callbacks
       // below outlive the handoff, and capturing the variable makes their reads
       // race with any later write to it.
+      let answeredQuestionFactIDs = ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forcedLookup,
+        retrievalCompleted: forcedRetrievalProvenance != nil,
+        citedRetrievedRefs: retrievedRefs)
       let presentedDecision = decision
       let presentation = await MainActor.run {
         let context = FloatingBarNotificationContext(
@@ -745,7 +749,7 @@ actor ContextProactivityEngine {
                 provenanceJSON: provenanceJSON,
                 message: presentedDecision.message,
                 authorizationSnapshot: authorizationSnapshot,
-                consumeFactIDs: forcedLookup?.questionFactIDs ?? [])
+                consumeFactIDs: answeredQuestionFactIDs)
             }
           },
           onDropped: { [weak self] in

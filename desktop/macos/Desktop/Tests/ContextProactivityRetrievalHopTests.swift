@@ -436,4 +436,30 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
         message: "You should restart your computer.", items: items, question: ""),
       [])
   }
+
+  func testQuestionFactConsumptionRequiresACitedAnswer() {
+    let forced = ContextDirectorRetrievalHop.ForcedLookup(
+      query: "The user is asking: where is the newest Omi build?",
+      questionFactIDs: ["q1", "q2"])
+    // Delivered answer citing retrieved content consumes every question fact.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forced, retrievalCompleted: true, citedRetrievedRefs: ["memory:dl-1"]),
+      ["q1", "q2"])
+    // Empty/failed retrieval: the question stays armed.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forced, retrievalCompleted: false, citedRetrievedRefs: []),
+      [])
+    // An unrelated bucket-grounded delivery (no retrieved citations) sharing
+    // the bucket must not consume the still-unanswered question.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: forced, retrievalCompleted: true, citedRetrievedRefs: []),
+      [])
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.consumableQuestionFacts(
+        forced: nil, retrievalCompleted: true, citedRetrievedRefs: ["memory:dl-1"]),
+      [])
+  }
 }

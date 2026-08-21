@@ -148,6 +148,20 @@ enum ContextDirectorRetrievalHop {
       }
   }
 
+  /// A question fact is consumed only by its ANSWER: a presented delivery that
+  /// cited retrieved content from the forced lookup. An unrelated
+  /// bucket-grounded insight sharing the bucket, or an evaluation whose forced
+  /// retrieval returned nothing, must leave the still-unanswered question
+  /// armed for the next evaluation.
+  static func consumableQuestionFacts(
+    forced: ForcedLookup?,
+    retrievalCompleted: Bool,
+    citedRetrievedRefs: [String]
+  ) -> [String] {
+    guard let forced, retrievalCompleted, !citedRetrievedRefs.isEmpty else { return [] }
+    return forced.questionFactIDs
+  }
+
   /// Fact lines are assembled as "fact:<id> <statement> [evidence: ...]".
   private static func factStatement(_ line: String) -> String {
     var statement = line
