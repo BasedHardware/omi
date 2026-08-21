@@ -468,11 +468,58 @@ EOF
     return 1
 }
 
+# Which identity this bundle was signed with last time.
+#
+# **TCC binds every grant to the code requirement at the moment it was granted**, and that
+# requirement names the signing certificate. So changing a bundle's signing identity silently
+# revokes its Microphone, Screen Recording and Files permissions -- the app then re-prompts on
+# every launch and looks broken, with nothing in its own logs to explain why.
+#
+# That is easy to do by accident: an Apple Development identity that the keychain refuses in one
+# session (see the errSecInternalComponent notes) falls back to the self-signed identity, and the
+# next build silently switches the bundle over. Remembering the last identity makes the switch
+# deliberate rather than accidental, and loud when it has to happen anyway.
+signing_identity_stamp_path() {
+    [ "$IS_NAMED_BUNDLE" = true ] || return 1
+    printf '%s/Library/Application Support/Omi Dev Bundles/%s/.signing-identity\n' "$HOME" "$BUNDLE_ID"
+}
+
+remembered_signing_identity() {
+    local stamp
+    stamp="$(signing_identity_stamp_path)" || return 1
+    [ -f "$stamp" ] || return 1
+    cat "$stamp"
+}
+
+remember_signing_identity() {
+    local stamp
+    stamp="$(signing_identity_stamp_path)" || return 0
+    mkdir -p "$(dirname "$stamp")" 2>/dev/null
+    printf '%s' "$1" > "$stamp" 2>/dev/null || true
+}
+
 resolve_signing_identity() {
     if [ -n "$SIGN_IDENTITY" ]; then
         return
     fi
     local candidate
+    # An identity this bundle already wears wins over a "better" one, because switching costs the
+    # user every permission they have granted it.
+    local remembered
+    if remembered="$(remembered_signing_identity)" && [ -n "$remembered" ]; then
+        if signing_identity_usable "$remembered"; then
+            SIGN_IDENTITY="$remembered"
+            substep "Reusing this bundle's existing identity: $SIGN_IDENTITY"
+            return
+        fi
+        echo ""
+        echo "  WARNING: this bundle was last signed with \"$remembered\", which is not usable"
+        echo "           here. Signing it with anything else RESETS ITS PERMISSIONS: macOS binds"
+        echo "           Microphone, Screen Recording and Files grants to the signing certificate,"
+        echo "           so the app will prompt for all of them again on next launch."
+        echo "           The remedy is the same one printed below."
+    fi
+
     # Prefer a real Apple identity so local permissions stay stable AND the bundle carries a
     # Team ID. Each candidate is probed rather than merely found: an Apple Development identity
     # whose key the keychain will not release is worse than useless, because picking it makes
@@ -486,7 +533,29 @@ resolve_signing_identity() {
             SIGN_IDENTITY="$candidate"
             return
         fi
-        substep "Skipping unusable identity: $candidate (keychain refused the key in this session)"
+        # Authorization can be granted between one call and the next -- clicking "Allow" on the
+        # SecurityAgent dialog authorizes a single use, so a refusal is not necessarily a
+        # standing state. Probe once more before writing the identity off, or a dialog answered
+        # a moment too late silently costs the build its Team ID.
+        sleep 1
+        if signing_identity_usable "$candidate"; then
+            SIGN_IDENTITY="$candidate"
+            return
+        fi
+        echo ""
+        echo "  WARNING: $candidate is present but the keychain refused its key."
+        echo "           Falling back to a teamless identity, which is a DOWNGRADE:"
+        echo "           the bundle gets no Team ID, so it cannot share Keychain items or"
+        echo "           entitlements with the team-scoped builds (Omi Dev, beta, prod) and"
+        echo "           needs library validation relaxed to launch."
+        echo "           If a keychain dialog is appearing, answer it with \"Always Allow\"."
+        echo "           To stop it recurring, grant codesign a standing partition once:"
+        echo ""
+        echo "             security set-key-partition-list -S apple-tool:,apple:,codesign: -s \\"
+        echo "               -l \"$candidate\" ~/Library/Keychains/login.keychain-db"
+        echo ""
+        echo "           Or force it for this build: OMI_SIGN_IDENTITY=\"$candidate\" ./run.sh"
+        echo ""
     done
 
     # A stable self-signed identity keeps this bundle's own TCC grants, because its designated
@@ -779,6 +848,7 @@ sign_app_bundle() {
 
     substep "Signing app bundle"
     omi_codesign --force --options runtime --entitlements "$effective_entitlements" --sign "$SIGN_IDENTITY" "$bundle"
+    remember_signing_identity "$SIGN_IDENTITY"
 }
 
 update_app_desktop_api_url() {
