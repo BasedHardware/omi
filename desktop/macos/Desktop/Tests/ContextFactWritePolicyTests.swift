@@ -279,6 +279,16 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(
         "An email from David asks when the offsite is scheduled."))
+    // Structural catch-all (live 03:36 extraction — sixth distinct paraphrase):
+    // an artifact-subject statement quoting a literal question mark is the
+    // user's own typed question.
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "The message body includes the line: 'Quote probe David: what is the latest Omi desktop link?'"))
+    // ...but a received artifact stays excluded even with a quoted question.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "An email from David contains the line: 'when is the offsite?'"))
   }
 
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {

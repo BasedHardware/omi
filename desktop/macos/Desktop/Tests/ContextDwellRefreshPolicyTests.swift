@@ -89,6 +89,28 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
       ContextDwellRefreshPolicy.retryAnchor(now: now))
   }
 
+  func testQuestionRescueOncePerBurstAndOnlyAfterRecentTyping() {
+    let burst = Date()
+    // First silence after a fresh burst earns the rescue.
+    XCTAssertTrue(
+      ContextDwellRefreshPolicy.questionRescueGrant(
+        lastRescueBurstStamp: nil, currentBurstStamp: burst, keyboardIdleSeconds: 20))
+    // A second silence for the SAME burst does not loop.
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.questionRescueGrant(
+        lastRescueBurstStamp: burst, currentBurstStamp: burst.addingTimeInterval(1),
+        keyboardIdleSeconds: 60))
+    // New typing (a genuinely different burst) earns a fresh rescue.
+    XCTAssertTrue(
+      ContextDwellRefreshPolicy.questionRescueGrant(
+        lastRescueBurstStamp: burst, currentBurstStamp: burst.addingTimeInterval(90),
+        keyboardIdleSeconds: 15))
+    // An idle screen earns nothing regardless of history.
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.questionRescueGrant(
+        lastRescueBurstStamp: nil, currentBurstStamp: burst, keyboardIdleSeconds: 300))
+  }
+
   func testRetryAnchorReArmsShortlyWithoutDoubleFire() {
     let now = Date()
     let anchor = ContextDwellRefreshPolicy.retryAnchor(now: now)

@@ -287,6 +287,21 @@ enum ContextFactWritePolicy {
     {
       return true
     }
+    // Structural catch-all fitted after five distinct live paraphrases each
+    // needed its own pattern: an artifact-subject statement carrying a literal
+    // question mark ("The message body includes the line: 'what is the latest
+    // Omi desktop link?'") is the user's own typed question unless the
+    // statement marks the artifact as received.
+    if statement.contains("?"),
+      statement.range(
+        of: #"(?i)\b(?:draft|email|message|note|body|compose|subject)\b"#,
+        options: .regularExpression) != nil,
+      statement.range(
+        of: #"(?i)\b(?:from|received|sender|sent by|reply from|inbox)\b"#,
+        options: .regularExpression) == nil
+    {
+      return true
+    }
     let questionMarker =
       statement.contains("?")
       || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil

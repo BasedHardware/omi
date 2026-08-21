@@ -869,6 +869,13 @@ actor ContextProactivityEngine {
         decisionType: "silence",
         provenanceJSON: "{\"failure\":\"candidate_show_ceiling\"}",
         state: "suppressed")
+      // A ceiling-capped candidate consumed an evaluation that may have been
+      // owed to a typed question the extraction missed — the same rescue as a
+      // silent director evaluation applies.
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: ProactiveAssistantsPlugin.contextEvalSilentWithoutLookup, object: nil)
+      }
       return
     }
     guard
