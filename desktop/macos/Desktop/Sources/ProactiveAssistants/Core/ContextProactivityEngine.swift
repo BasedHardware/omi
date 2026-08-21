@@ -30,11 +30,23 @@ struct ContextDirectorDecision: Codable, Equatable, Sendable {
     case taskRefs = "task_refs"
   }
 
+  /// Retrieved-ref citations belong in `bucket_entry_refs`; the model
+  /// occasionally inlines them into the visible text ("... omi.me/desktop.
+  /// [memory:3fe5b70f-...]"), where they read as debris. Stripped
+  /// deterministically rather than re-prompted.
+  private static func strippingInlineRefs(_ text: String) -> String {
+    text.replacingOccurrences(
+      of: #"\s*\[(?:memory|conversation|chunk|entry|fact|task):[^\]]{1,200}\]"#,
+      with: "",
+      options: .regularExpression
+    ).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   func clamped() -> ContextDirectorDecision {
     ContextDirectorDecision(
       decision: decision,
-      title: String(title.prefix(120)),
-      message: String(message.prefix(600)),
+      title: String(Self.strippingInlineRefs(title).prefix(120)),
+      message: String(Self.strippingInlineRefs(message).prefix(600)),
       reasoning: String(reasoning.prefix(1_200)),
       bucketEntryRefs: bucketEntryRefs.prefix(20).map { String($0.prefix(200)) },
       factIDs: factIDs.prefix(20).map { String($0.prefix(200)) },

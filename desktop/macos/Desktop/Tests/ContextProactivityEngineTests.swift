@@ -1154,4 +1154,18 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
         """,
       arguments: [id, poolEpoch, "reference-\(id)", startedAt, endedAt, outcome, startedAt, startedAt])
   }
+
+  func testClampedStripsInlineRefTokensFromVisibleText() {
+    let decision = ContextDirectorDecision(
+      decision: "insight",
+      title: "Download link [memory:abc-123]",
+      message: "The link is omi.me/desktop. [memory:3fe5b70f-f445-4580-b353-7b0d2560de3f]",
+      reasoning: "r",
+      bucketEntryRefs: ["memory:abc-123"],
+      factIDs: []
+    ).clamped()
+    XCTAssertEqual(decision.title, "Download link")
+    XCTAssertEqual(decision.message, "The link is omi.me/desktop.")
+    XCTAssertEqual(decision.bucketEntryRefs, ["memory:abc-123"], "citations stay citations")
+  }
 }
