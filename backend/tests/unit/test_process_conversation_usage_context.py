@@ -402,6 +402,7 @@ def test_sub_feature_constants_exist():
     assert hasattr(usage_tracker.Features, 'CONVERSATION_ACTION_ITEMS')
     assert hasattr(usage_tracker.Features, 'CONVERSATION_FOLDER')
     assert hasattr(usage_tracker.Features, 'CONVERSATION_APPS')
+    assert hasattr(usage_tracker.Features, 'WAKE_WORD_ADJUDICATION')
     # Verify they're distinct from the umbrella
     assert usage_tracker.Features.CONVERSATION_DISCARD != usage_tracker.Features.CONVERSATION_PROCESSING
     assert usage_tracker.Features.CONVERSATION_STRUCTURE != usage_tracker.Features.CONVERSATION_PROCESSING

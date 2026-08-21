@@ -24,9 +24,14 @@ client claim or cached enablement.
   capture adapter.
 - `backend_capture.py` adapts backend payloads into that policy;
   `conversation_capture.py` owns the universal conversation
-  extraction/reconciliation boundary. Candidate capture either owns the whole
-  extracted batch or declines it explicitly so the compatibility writer cannot
-  create mixed duplicates or silent drops.
+  extraction/reconciliation boundary. For deterministically matched wake-word
+  segments it runs the independent classifier in
+  `utils/llm/wake_word_adjudication.py` and applies the classifier plus extractor
+  as a conjunction gate. A classifier verdict never creates or scores a task by
+  itself; questions and task verdicts without an intersecting extraction are
+  measured but intentionally produce nothing. Candidate capture either owns the
+  whole extracted batch or declines it explicitly so the compatibility writer
+  cannot create mixed duplicates or silent drops.
 - `candidate_service.py` owns candidate acceptance, rejection, expiry, and the
   post-commit task-integration handoff. `staged_migration.py` migrates only the
   legacy staged-task representation through that lifecycle.

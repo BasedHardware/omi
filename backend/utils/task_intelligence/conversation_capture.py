@@ -5,17 +5,40 @@ details from leaking into the already broad processing module and gives legacy t
 harnesses one stable dependency seam.
 """
 
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import datetime
+import logging
 from typing import Any
 
 import database.action_items as action_items_db
 import database.task_intelligence_control as task_control_db
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCreatePayload, TaskOwner
 from models.candidate import CandidateAction
+from utils.conversations.transcript_for_llm import (
+    conversation_action_item_speaker_labels,
+    conversation_transcript_for_action_items,
+)
 from utils.conversations.wake_word import find_wake_word_segment_ids
+from utils.llm.usage_tracker import Features, track_usage
+from utils.llm.wake_word_adjudication import (
+    WakeWordAdjudication,
+    adjudicate_wake_word_invocations,
+)
+from utils.metrics import TASK_INTELLIGENCE_ATTRIBUTION_TOTAL
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
+
+logger = logging.getLogger(__name__)
+
+WakeWordAdjudicator = Callable[..., WakeWordAdjudication]
+_ACCEPTED_EXPLICIT_VERDICTS = frozenset({'task_command', 'memory_command'})
+
+
+@dataclass(frozen=True)
+class WakeWordCaptureGate:
+    matched_segment_ids: frozenset[str]
+    adjudication: WakeWordAdjudication
 
 
 def capture_enabled(uid: str) -> bool:
@@ -38,7 +61,7 @@ def _concrete_deliverable(action_item: Any) -> bool:
 
 def _capture_signals(
     action_item: Any,
-    wake_word_segment_ids: Collection[str] = (),
+    wake_word_gate: WakeWordCaptureGate | None = None,
 ) -> BackendCaptureSignals:
     capture_kind = getattr(action_item, 'capture_kind', None)
     raw_candidate_action = getattr(action_item, 'candidate_action', None)
@@ -52,6 +75,19 @@ def _capture_signals(
         float(raw_ownership_confidence) if isinstance(raw_ownership_confidence, (int, float)) else 0.5
     )
     source_segment_ids = set(getattr(action_item, 'source_segment_ids', None) or [])
+    if wake_word_gate is not None and source_segment_ids.intersection(wake_word_gate.matched_segment_ids):
+        relevant_verdicts = [
+            invocation.verdict
+            for invocation in wake_word_gate.adjudication.invocations
+            if source_segment_ids.intersection(invocation.segment_ids)
+        ]
+        if capture_kind == 'explicit_command':
+            if not relevant_verdicts or any(
+                verdict not in _ACCEPTED_EXPLICIT_VERDICTS for verdict in relevant_verdicts
+            ):
+                capture_kind = 'direct_request'
+        elif relevant_verdicts and all(verdict == 'task_command' for verdict in relevant_verdicts):
+            capture_kind = 'explicit_command'
     return BackendCaptureSignals(
         explicit_command=capture_kind == 'explicit_command',
         clear_commitment=capture_kind == 'clear_commitment',
@@ -63,7 +99,76 @@ def _capture_signals(
         refines_task=target_task_id if candidate_action in {'update', 'complete'} else None,
         capture_confidence=capture_confidence,
         ownership_confidence=ownership_confidence,
-        direct_mention=bool(source_segment_ids.intersection(wake_word_segment_ids)),
+    )
+
+
+def _record_wake_word_adjudication_outcomes(
+    conversation_id: str,
+    action_items: Sequence[Any],
+    adjudication: WakeWordAdjudication,
+) -> None:
+    for invocation in adjudication.invocations:
+        invocation_ids = set(invocation.segment_ids)
+        if invocation.verdict == 'question':
+            TASK_INTELLIGENCE_ATTRIBUTION_TOTAL.labels(
+                event='wake_word_adjudication',
+                subject_kind='conversation',
+                code='question_descope',
+            ).inc()
+            logger.info(
+                'wake-word question verdict intentionally not routed conversation_id=%s segment_count=%d',
+                conversation_id,
+                len(invocation_ids),
+            )
+        if invocation.verdict == 'task_command' and not any(
+            invocation_ids.intersection(getattr(item, 'source_segment_ids', None) or []) for item in action_items
+        ):
+            TASK_INTELLIGENCE_ATTRIBUTION_TOTAL.labels(
+                event='wake_word_adjudication',
+                subject_kind='conversation',
+                code='task_command_without_extraction',
+            ).inc()
+            logger.info(
+                'wake-word task verdict had no intersecting extraction; no task created '
+                'conversation_id=%s segment_count=%d',
+                conversation_id,
+                len(invocation_ids),
+            )
+
+
+def prepare_wake_word_capture_gate(
+    uid: str,
+    conversation: Any,
+    people: Sequence[Any] = (),
+    *,
+    adjudicator: WakeWordAdjudicator = adjudicate_wake_word_invocations,
+) -> WakeWordCaptureGate | None:
+    """Run stage two exactly once when the deterministic matcher found an invocation."""
+
+    transcript_segments = getattr(conversation, 'transcript_segments', ()) or ()
+    matched_segment_ids = find_wake_word_segment_ids(transcript_segments)
+    if not matched_segment_ids:
+        return None
+    action_items = getattr(getattr(conversation, 'structured', None), 'action_items', ()) or ()
+    marked_transcript = conversation_transcript_for_action_items(
+        uid,
+        conversation,
+        list(people),
+        mark_wake_words=True,
+    )
+    speaker_labels = conversation_action_item_speaker_labels(uid, conversation, list(people))
+    with track_usage(uid, Features.WAKE_WORD_ADJUDICATION):
+        adjudication = adjudicator(
+            marked_transcript=marked_transcript,
+            matched_segment_ids=matched_segment_ids,
+            action_items=action_items,
+            speaker_labels=speaker_labels,
+            transcript_segments=transcript_segments,
+        )
+    _record_wake_word_adjudication_outcomes(conversation.id, action_items, adjudication)
+    return WakeWordCaptureGate(
+        matched_segment_ids=matched_segment_ids,
+        adjudication=adjudication,
     )
 
 
@@ -88,8 +193,8 @@ def _capture_decision(
     action_item: Any,
     conversation_id: str,
     transcript_segments: Sequence[Any] = (),
+    wake_word_gate: WakeWordCaptureGate | None = None,
 ):
-    wake_word_segment_ids = find_wake_word_segment_ids(transcript_segments)
     return adapt_backend_capture(
         TaskCreatePayload(
             description=action_item.description,
@@ -99,7 +204,7 @@ def _capture_decision(
         ),
         evidence_ref=_conversation_evidence_ref(action_item, conversation_id, transcript_segments),
         source_surface='conversation',
-        signals=_capture_signals(action_item, wake_word_segment_ids),
+        signals=_capture_signals(action_item, wake_word_gate),
     )
 
 
@@ -128,6 +233,7 @@ def process_before_legacy(
     conversation_id: str,
     action_items: Sequence[Any],
     transcript_segments: Sequence[Any] = (),
+    wake_word_gate: WakeWordCaptureGate | None = None,
 ) -> bool:
     """Capture proposals before the compatibility writer.
 
@@ -148,9 +254,9 @@ def process_before_legacy(
             semantic_key,
             occurrence,
             (
-                _capture_decision(action_item, conversation_id, transcript_segments)
+                _capture_decision(action_item, conversation_id, transcript_segments, wake_word_gate)
                 if transcript_segments
-                else _capture_decision(action_item, conversation_id)
+                else _capture_decision(action_item, conversation_id, wake_word_gate=wake_word_gate)
             ),
         )
         for action_item, semantic_key, occurrence in occurrences
@@ -175,12 +281,17 @@ def process_before_legacy(
     return True
 
 
-def process_conversation_before_legacy(uid: str, conversation: Any) -> bool:
+def process_conversation_before_legacy(
+    uid: str,
+    conversation: Any,
+    wake_word_gate: WakeWordCaptureGate | None = None,
+) -> bool:
     return process_before_legacy(
         uid,
         conversation.id,
         conversation.structured.action_items,
         getattr(conversation, 'transcript_segments', ()) or (),
+        wake_word_gate,
     )
 
 
@@ -264,6 +375,7 @@ def _idempotency_key(
 
 
 __all__ = [
+    'WakeWordCaptureGate',
     'canonical_fields',
     'canonical_conversation_fields',
     'capture_enabled',
@@ -271,5 +383,6 @@ __all__ = [
     'legacy_replacement_map',
     'process_before_legacy',
     'process_conversation_before_legacy',
+    'prepare_wake_word_capture_gate',
     'reconcile_after_legacy',
 ]

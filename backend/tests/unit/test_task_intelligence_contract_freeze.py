@@ -3,6 +3,7 @@ import json
 
 import pytest
 import utils.task_intelligence.contracts as contracts
+from utils.conversations.wake_word import find_wake_word_segment_ids
 
 from utils.task_intelligence.contracts import (
     REQUIRED_CONTRACT_DOMAINS,
@@ -63,36 +64,35 @@ def test_capture_fixture_freezes_cross_modality_semantics():
 
     by_id = {case['id']: case['expected'] for case in fixture['cases']}
     assert by_id['clear_commitment'] == {'outcome': 'auto_accept_silent', 'interruption': 'none'}
-    assert by_id['wake_word_direct_mention'] == {
-        'outcome': 'create_direct',
-        'interruption': 'invoking_surface_only',
-    }
     assert by_id['unaccepted_request']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_at_confidence_floors']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_below_ownership_floor']['outcome'] == 'ignore'
     assert by_id['public_channel_not_owned']['outcome'] == 'ignore'
 
 
-def test_capture_fixture_defines_paired_wake_word_extractor_evaluation():
+def test_capture_fixture_defines_realistic_three_arm_wake_word_evaluation():
     fixture = load_fixture('capture_v2.json')
 
-    cases = fixture['wake_word_extractor_cases']
+    cases = fixture['wake_word_evaluation_cases']
     assert {case['id'] for case in cases} == {
-        'heyomi_glued_command',
-        'mid_utterance_omni_command',
-        'multilingual_context_with_english_invocation',
-        'omilockets_glued_command',
-        'omni_command_with_following_payload',
-        'ordinary_extraction_survives_marked_conversation',
-        'quoted_phrase_remains_non_actionable',
-        'single_segment_entire_command',
-        'unpunctuated_lowercase_omie_command',
+        'bystander_tv_command',
+        'embedded_command_mid_meeting',
+        'mis_transcription_variants_in_context',
+        'no_wake_word_control',
+        'omi_team_dogfood_killer',
+        'paired_real_and_quoted_invocations',
     }
+    fields = ('id', 'start', 'end', 'speaker_label', 'speaker_role', 'text')
     for case in cases:
-        assert '<omi-wake-word-invocation/>' not in case['unmarked_transcript']
-        assert '<omi-wake-word-invocation/>' in case['marked_transcript']
-        assert case['expected_marked_capture_kind'] in {'explicit_command', None}
-        assert case['required_marked_source_segment_ids']
+        assert 20 <= len(case['segments']) <= 60
+        segments = [dict(zip(fields, segment)) for segment in case['segments']]
+        assert {segment['speaker_role'] for segment in segments} == {'primary_user', 'other'}
+        expected_matches = set(case['expected_command_segment_ids']) | set(case['expected_non_command_segment_ids'])
+        assert find_wake_word_segment_ids(segments) == expected_matches
+    dogfood = next(case for case in cases if case['id'] == 'omi_team_dogfood_killer')
+    assert len(dogfood['expected_command_segment_ids'] + dogfood['expected_non_command_segment_ids']) == 8
+    control = next(case for case in cases if case.get('control') is True)
+    assert control['id'] == 'no_wake_word_control'
 
 
 def test_capture_fixture_defines_paired_wake_word_discard_evaluation():
@@ -102,17 +102,15 @@ def test_capture_fixture_defines_paired_wake_word_discard_evaluation():
     assert {case['id'] for case in cases} == {
         'bare_short_command_whole_conversation',
         'mis_transcribed_omie_short_command',
-        'non_actionable_wake_word_negative_control',
+        'welded_short_command',
     }
-    negative_controls = [case for case in cases if case.get('negative_control') is True]
-    assert [case['id'] for case in negative_controls] == ['non_actionable_wake_word_negative_control']
     for case in cases:
         assert '<omi-wake-word-invocation/>' not in case['unmarked_transcript']
         assert '<omi-wake-word-invocation/>' in case['marked_transcript']
         assert case['duration_seconds'] < 120
         assert case['photos'] == []
-        assert isinstance(case['expected_unmarked_discarded'], bool)
-        assert isinstance(case['expected_marked_discarded'], bool)
+        assert case['expected_marked_discarded'] is False
+        assert 'expected_unmarked_discarded' not in case
 
 
 def test_association_and_ranking_fixtures_include_negative_and_empty_cases():

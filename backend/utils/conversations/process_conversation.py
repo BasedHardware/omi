@@ -5,7 +5,7 @@ import uuid
 import logging
 import asyncio
 from datetime import timezone, timedelta, datetime
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
@@ -1412,16 +1412,20 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _save_action_items(uid: str, conversation: Conversation):
+def _save_action_items(uid: str, conversation: Conversation, people: Sequence[Person] = ()):
     """
     Save action items from a conversation to the dedicated action_items collection.
     This runs in addition to storing them in the conversation for backward compatibility.
     """
-    if not conversation.structured or not conversation.structured.action_items:
+    if not conversation.structured:
+        return
+
+    wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
+    if not conversation.structured.action_items:
         return
 
     is_locked = conversation.is_locked
-    if conversation_capture.process_conversation_before_legacy(uid, conversation):
+    if conversation_capture.process_conversation_before_legacy(uid, conversation, wake_word_gate):
         emit_product_event(
             uid=uid,
             event='Task Extracted',
@@ -2058,7 +2062,7 @@ def process_conversation(
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
-            submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
+            submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people)
             submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
         # Create audio files from chunks if private cloud sync was enabled

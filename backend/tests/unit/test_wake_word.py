@@ -19,6 +19,13 @@ from utils.conversations.wake_word import (
 )
 from utils.llm import conversation_processing
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
+from utils.llm import wake_word_adjudication
+from utils.llm.wake_word_adjudication import (
+    WakeWordAdjudication,
+    WakeWordInvocationVerdict,
+    adjudicate_wake_word_invocations,
+    validate_wake_word_adjudication,
+)
 from utils.task_intelligence.contracts import load_fixture
 from utils.task_intelligence.fixture_runner import (
     run_live_wake_word_discard_evaluation,
@@ -190,6 +197,7 @@ def test_extractor_adds_wake_rule_only_for_structural_marker(monkeypatch):
     assert captured_instructions[1] == f'{captured_instructions[0]}\n\n{WAKE_WORD_PROMPT_RULES}'
     assert captured_instructions[2] == captured_instructions[0]
     assert 'Continue ordinary extraction unchanged for every other item' in captured_instructions[1]
+    assert "single surviving item takes the COMMAND's capture_kind" in captured_instructions[1]
 
 
 def test_spoken_marker_position_is_not_trusted():
@@ -337,45 +345,245 @@ def test_conversation_notes_adds_same_wake_rule_only_for_marked_prefix(monkeypat
     assert captured_task_instructions[1] == f'{captured_task_instructions[0]}\n\n{WAKE_WORD_PROMPT_RULES}'
 
 
-def test_live_fixture_evaluation_measures_classification_delta_and_ordinary_preservation():
+def test_adjudicator_uses_extended_reasoning_without_passing_extracted_intent_text(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeModel:
+        def bind(self, **kwargs):
+            captured['bind'] = kwargs
+            return self
+
+    class FakePrompt:
+        def __or__(self, _other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, _other):
+            return self
+
+        def invoke(self, values):
+            captured['payload'] = values['payload']
+            return WakeWordAdjudication(
+                invocations=[
+                    WakeWordInvocationVerdict(
+                        segment_ids=['wake-1'],
+                        verdict='task_command',
+                        evidence_quote='Hey Omi',
+                        payload_segment_ids=['wake-1'],
+                    )
+                ]
+            )
+
+    monkeypatch.setattr(wake_word_adjudication.ChatPromptTemplate, 'from_messages', lambda _messages: FakePrompt())
+    monkeypatch.setattr(wake_word_adjudication, 'get_llm', lambda feature: FakeModel())
+    monkeypatch.setattr(wake_word_adjudication, 'should_route_features_through_gateway', lambda: False)
+    item = SimpleNamespace(description='Anchoring description must be absent', source_segment_ids=['wake-1'])
+    segments = [{'id': 'wake-1', 'text': 'Hey Omi, send the budget.'}]
+
+    result = adjudicate_wake_word_invocations(
+        marked_transcript=f'[segment:wake-1 0.000-1.000] {WAKE_WORD_MARKER} David: Hey Omi, send the budget.',
+        matched_segment_ids={'wake-1'},
+        action_items=[item],
+        speaker_labels=[{'segment_id': 'wake-1', 'speaker_label': 'David', 'speaker_role': 'primary_user'}],
+        transcript_segments=segments,
+    )
+
+    assert result.invocations[0].verdict == 'task_command'
+    assert captured['bind'] == {'reasoning_effort': 'high'}
+    assert 'Anchoring description must be absent' not in str(captured['payload'])
+    assert '"extracted_item_refs":[{"item_index":0,"source_segment_ids":["wake-1"]}]' in str(captured['payload'])
+
+
+def test_adjudicator_uses_gateway_owned_extended_reasoning_without_client_override(monkeypatch):
+    class FakeModel:
+        def bind(self, **_kwargs):
+            pytest.fail('gateway requests must use the route-owned reasoning option')
+
+    class FakePrompt:
+        def __or__(self, _other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, _other):
+            return self
+
+        def invoke(self, _values):
+            return WakeWordAdjudication()
+
+    monkeypatch.setattr(wake_word_adjudication.ChatPromptTemplate, 'from_messages', lambda _messages: FakePrompt())
+    monkeypatch.setattr(wake_word_adjudication, 'get_llm', lambda _feature: FakeModel())
+    monkeypatch.setattr(wake_word_adjudication, 'should_route_features_through_gateway', lambda: True)
+
+    result = adjudicate_wake_word_invocations(
+        marked_transcript=f'[segment:wake-1 0.000-1.000] {WAKE_WORD_MARKER} David: Hey Omi, send the budget.',
+        matched_segment_ids={'wake-1'},
+        action_items=[],
+        speaker_labels=[{'segment_id': 'wake-1', 'speaker_label': 'David', 'speaker_role': 'primary_user'}],
+        transcript_segments=[{'id': 'wake-1', 'text': 'Hey Omi, send the budget.'}],
+    )
+
+    assert result == WakeWordAdjudication()
+
+
+def test_adjudicator_mechanically_drops_unmatched_ids_and_non_verbatim_evidence():
+    raw = WakeWordAdjudication(
+        invocations=[
+            WakeWordInvocationVerdict(
+                segment_ids=['wake-1'],
+                verdict='task_command',
+                evidence_quote='Hey Omi',
+                payload_segment_ids=['payload-1', 'invented'],
+            ),
+            WakeWordInvocationVerdict(
+                segment_ids=['invented'],
+                verdict='task_command',
+                evidence_quote='Hey Omi',
+                payload_segment_ids=[],
+            ),
+            WakeWordInvocationVerdict(
+                segment_ids=['wake-1'],
+                verdict='quoted_or_meta',
+                evidence_quote='not in transcript',
+                payload_segment_ids=[],
+            ),
+        ]
+    )
+
+    validated = validate_wake_word_adjudication(
+        raw,
+        matched_segment_ids={'wake-1'},
+        transcript_segments=[
+            {'id': 'wake-1', 'text': 'Hey Omi, send the budget.'},
+            {'id': 'payload-1', 'text': 'Use the signed version.'},
+        ],
+    )
+
+    assert len(validated.invocations) == 1
+    assert validated.invocations[0].payload_segment_ids == ['payload-1']
+
+
+def test_live_fixture_evaluation_scores_three_policy_arms_and_no_interference():
     def fake_extract(transcript, *_args, trusted_wake_word_markers=False, **_kwargs):
         ordinary = SimpleNamespace(
             description='Call the dentist',
             capture_kind='clear_commitment',
-            source_segment_ids=['ordinary-1'],
+            capture_confidence=0.95,
+            ownership_confidence=1,
+            capture_owner='user',
+            concrete_deliverable=True,
+            source_segment_ids=['ambient-1'],
         )
-        wake = SimpleNamespace(
+        command = SimpleNamespace(
             description='Send the budget',
             capture_kind='explicit_command' if trusted_wake_word_markers else 'direct_request',
+            capture_confidence=0.95,
+            ownership_confidence=1,
+            capture_owner='user',
+            concrete_deliverable=True,
             source_segment_ids=['wake-1'],
         )
-        return [ordinary, wake]
+        quoted = SimpleNamespace(
+            description='Add Hey Omi to documentation',
+            capture_kind='explicit_command' if trusted_wake_word_markers else 'direct_request',
+            capture_confidence=0.95,
+            ownership_confidence=1,
+            capture_owner='user',
+            concrete_deliverable=True,
+            source_segment_ids=['quote-1'],
+        )
+        return [ordinary, command, quoted]
+
+    def fake_adjudicate(**_kwargs):
+        return WakeWordAdjudication(
+            invocations=[
+                WakeWordInvocationVerdict(
+                    segment_ids=['wake-1'],
+                    verdict='task_command',
+                    evidence_quote='Hey Omi',
+                    payload_segment_ids=['wake-1'],
+                ),
+                WakeWordInvocationVerdict(
+                    segment_ids=['quote-1'],
+                    verdict='quoted_or_meta',
+                    evidence_quote='Hey Omi',
+                    payload_segment_ids=[],
+                ),
+            ]
+        )
 
     capture = {
-        'wake_word_extractor_cases': [
+        'wake_word_evaluation_cases': [
             {
-                'id': 'paired-case',
-                'unmarked_transcript': '[segment:wake-1 0.000-1.000] User: Hey Omi, send the budget.',
-                'marked_transcript': (
-                    f'[segment:wake-1 0.000-1.000] {WAKE_WORD_MARKER} User: Hey Omi, send the budget.'
-                ),
-                'expected_marked_capture_kind': 'explicit_command',
-                'required_marked_source_segment_ids': ['wake-1'],
-                'ordinary_source_segment_ids': ['ordinary-1'],
+                'id': 'paired',
+                'segments': [
+                    ['ambient-1', 0, 1, 'David', 'primary_user', 'I will call the dentist tomorrow.'],
+                    ['wake-1', 1, 2, 'David', 'primary_user', 'Hey Omi, send the budget.'],
+                    ['quote-1', 2, 3, 'Priya', 'other', 'The documentation says Hey Omi as an example.'],
+                ],
+                'expected_command_segment_ids': ['wake-1'],
+                'expected_non_command_segment_ids': ['quote-1'],
+                'split_assertion': {'command_segment_id': 'wake-1', 'rejection_segment_id': 'quote-1'},
             }
         ]
     }
 
-    result = run_live_wake_word_evaluation(capture, trials=2, extractor=fake_extract)
+    result = run_live_wake_word_evaluation(
+        capture,
+        trials=3,
+        extractor=fake_extract,
+        adjudicator=fake_adjudicate,
+    )
 
-    assert result['measurement'] == {
-        'paired_trials': 2,
-        'marked_expected_kind': 2,
-        'capture_kind_changed': 2,
-        'marked_provenance_complete': 2,
-        'ordinary_extraction_preserved': 2,
-        'ordinary_capture_kinds_unchanged': 2,
+    assert result['measurement']['stage2_calls'] == 3
+    assert result['measurement']['false_create_direct_count'] == {
+        'baseline': 0,
+        'marker_only': 3,
+        'marker_adjudicator': 0,
     }
+    assert result['measurement']['command_create_direct_count'] == {
+        'baseline': 0,
+        'marker_only': 3,
+        'marker_adjudicator': 3,
+    }
+    assert result['measurement']['ambient_no_interference_trials'] == 3
+    assert result['measurement']['paired_split_trials'] == 3
+    assert result['shipping_decision']['recommendation'] == 'keep_adjudicator'
+
+
+def test_live_fixture_control_never_fires_stage_two_and_all_arms_are_equal():
+    control = next(
+        case for case in load_fixture('capture_v2.json')['wake_word_evaluation_cases'] if case.get('control') is True
+    )
+    adjudicator_calls = 0
+
+    def fake_extract(*_args, **_kwargs):
+        return [
+            SimpleNamespace(
+                description='Review the case study',
+                capture_kind='clear_commitment',
+                capture_confidence=0.95,
+                ownership_confidence=1,
+                capture_owner='user',
+                concrete_deliverable=True,
+                source_segment_ids=['control-03'],
+            )
+        ]
+
+    def forbidden_adjudicator(**_kwargs):
+        nonlocal adjudicator_calls
+        adjudicator_calls += 1
+        return WakeWordAdjudication()
+
+    result = run_live_wake_word_evaluation(
+        {'wake_word_evaluation_cases': [control]},
+        trials=3,
+        extractor=fake_extract,
+        adjudicator=forbidden_adjudicator,
+    )
+
+    assert adjudicator_calls == 0
+    assert result['measurement']['stage2_calls'] == 0
+    assert result['measurement']['control_unchanged_trials'] == 3
 
 
 def test_live_fixture_evaluation_fails_closed_on_extractor_error_log():
@@ -384,24 +592,56 @@ def test_live_fixture_evaluation_fails_closed_on_extractor_error_log():
         return []
 
     capture = {
-        'wake_word_extractor_cases': [
+        'wake_word_evaluation_cases': [
             {
                 'id': 'provider-failure',
-                'unmarked_transcript': '[segment:wake-1 0.000-1.000] User: Hey Omi, send the budget.',
-                'marked_transcript': (
-                    f'[segment:wake-1 0.000-1.000] {WAKE_WORD_MARKER} User: Hey Omi, send the budget.'
-                ),
-                'expected_marked_capture_kind': 'explicit_command',
-                'required_marked_source_segment_ids': ['wake-1'],
+                'segments': [['wake-1', 0, 1, 'David', 'primary_user', 'Hey Omi, send the budget.']],
+                'expected_command_segment_ids': ['wake-1'],
+                'expected_non_command_segment_ids': [],
             }
         ]
     }
 
     with pytest.raises(RuntimeError, match='NOT_RUN'):
-        run_live_wake_word_evaluation(capture, trials=1, extractor=failed_extract)
+        run_live_wake_word_evaluation(
+            capture,
+            trials=3,
+            extractor=failed_extract,
+            adjudicator=lambda **_kwargs: WakeWordAdjudication(),
+        )
 
 
-def test_live_discard_evaluation_measures_rescues_and_preserves_negative_control():
+def test_live_fixture_evaluation_fails_closed_on_adjudicator_error_log():
+    def fake_extract(*_args, **_kwargs):
+        return []
+
+    def failed_adjudicator(**_kwargs):
+        logging.getLogger('utils.llm.wake_word_adjudication').error(
+            'Error adjudicating wake-word invocations: provider failed'
+        )
+        return WakeWordAdjudication()
+
+    capture = {
+        'wake_word_evaluation_cases': [
+            {
+                'id': 'provider-failure',
+                'segments': [['wake-1', 0, 1, 'David', 'primary_user', 'Hey Omi, send the budget.']],
+                'expected_command_segment_ids': ['wake-1'],
+                'expected_non_command_segment_ids': [],
+            }
+        ]
+    }
+
+    with pytest.raises(RuntimeError, match='NOT_RUN'):
+        run_live_wake_word_evaluation(
+            capture,
+            trials=3,
+            extractor=fake_extract,
+            adjudicator=failed_adjudicator,
+        )
+
+
+def test_live_discard_evaluation_asserts_only_that_marked_commands_are_kept():
     calls: list[dict[str, object]] = []
 
     def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
@@ -413,8 +653,6 @@ def test_live_discard_evaluation_measures_rescues_and_preserves_negative_control
                 'trusted_wake_word_markers': trusted_wake_word_markers,
             }
         )
-        if 'never mind' in transcript:
-            return True
         return not trusted_wake_word_markers
 
     capture = load_fixture('capture_v2.json')
@@ -423,15 +661,15 @@ def test_live_discard_evaluation_measures_rescues_and_preserves_negative_control
 
     assert result['measurement'] == {
         'paired_trials': 6,
-        'discard_changed': 4,
-        'marked_kept': 4,
+        'discard_changed': 6,
+        'marked_kept': 6,
+        'marked_discarded': 0,
+        'marked_all_kept': True,
         'unmarked_discarded': 6,
-        'negative_control_trials': 2,
-        'negative_control_preserved': 2,
     }
     assert len(calls) == 12
     assert all(call['photos'] == [] for call in calls)
-    assert all(call['duration_seconds'] in {4, 7} for call in calls)
+    assert all(call['duration_seconds'] in {6, 7} for call in calls)
     assert sum(call['trusted_wake_word_markers'] is True for call in calls) == 6
 
 

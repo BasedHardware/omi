@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-20 (end-of-conversation wake-word command marking)
+> Last updated: 2026-08-20 (end-of-conversation wake-word command adjudication)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -317,10 +317,19 @@ English `Hey Omi` / `Hey Omie` / `Hey Omni` forms inline, including adjacent seg
 two seconds and tokens welded to following words. The discard model still
 adjudicates whether a short marked utterance is meaningful, and the structured
 extractor still decides whether it is a concrete command; the marker never
-creates a task by itself. Extracted items whose source segment IDs intersect
-the matched invocation deterministically carry the direct-mention signal into
-the shared capture policy. This path has no realtime wake-word state or
-notification surface.
+creates a task by itself.
+
+When and only when the matcher found a phrase, a separately framed,
+extended-reasoning classifier receives the full marked transcript, matched
+segment IDs, content-free extraction references, and speaker labels. Its
+validated discrete verdict and the extractor must agree before an intersecting
+item keeps `explicit_command`; rejection demotes the item to the confidence
+floor and review path. A `task_command` verdict can promote an intersecting
+non-explicit extraction, but it never synthesizes a missing item or changes
+capture confidence. Non-intersecting ambient items are untouched. Question
+verdicts are measured but deliberately produce nothing in v1 because the task
+extractor and capture policy have no question-routing destination. This path
+has no realtime wake-word state or notification surface.
 
 ### 2.1 Durable finalization ownership
 

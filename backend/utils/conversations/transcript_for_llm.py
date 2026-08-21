@@ -21,6 +21,36 @@ class _TranscriptSource(Protocol):
     ) -> str: ...
 
 
+def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str]) -> str:
+    if segment.is_user:
+        return user_name
+    speaker_name = people_map.get(segment.person_id) if segment.person_id else None
+    return speaker_name or f'Speaker {segment.speaker_id}'
+
+
+def conversation_action_item_speaker_labels(
+    uid: str,
+    conversation: Any,
+    people: Optional[List[Person]] = None,
+) -> list[dict[str, str]]:
+    """Return the same stable labels rendered into the action-item transcript."""
+
+    user_name = get_user_name(uid, use_default=False) or 'User'
+    people_map = {person.id: person.name for person in people} if people else {}
+    labels: list[dict[str, str]] = []
+    for segment in getattr(conversation, 'transcript_segments', None) or []:
+        if not getattr(segment, 'id', None):
+            continue
+        labels.append(
+            {
+                'segment_id': str(segment.id),
+                'speaker_label': _speaker_label(segment, user_name, people_map),
+                'speaker_role': 'primary_user' if segment.is_user else 'other',
+            }
+        )
+    return labels
+
+
 def conversation_transcript_for_llm(
     uid: str,
     conversation: _TranscriptSource,
@@ -54,10 +84,7 @@ def conversation_transcript_for_action_items(
         if not segment_id:
             continue
         segment_id = str(segment_id)
-        speaker_name = user_name
-        if not segment.is_user:
-            speaker_name = people_map.get(segment.person_id) if segment.person_id else None
-            speaker_name = speaker_name or f'Speaker {segment.speaker_id}'
+        speaker_name = _speaker_label(segment, user_name, people_map)
         marker = f'{WAKE_WORD_MARKER} ' if segment_id in wake_word_segment_ids else ''
         segment_text = segment.text.strip()
         if mark_wake_words:
@@ -80,3 +107,11 @@ def conversation_transcripts_for_llm(
         conversation_transcript_for_llm(uid, conversation, people),
         conversation_transcript_for_action_items(uid, conversation, people, mark_wake_words=True),
     )
+
+
+__all__ = [
+    'conversation_action_item_speaker_labels',
+    'conversation_transcript_for_action_items',
+    'conversation_transcript_for_llm',
+    'conversation_transcripts_for_llm',
+]

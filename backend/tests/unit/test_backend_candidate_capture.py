@@ -10,10 +10,12 @@ from models.candidate import CandidateRecord, CandidateStatus
 from models.task_intelligence import TaskWorkflowControl
 from utils.conversations import process_conversation
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
+from utils.task_intelligence.capture_policy import run_capture_policy
 from utils.task_intelligence import conversation_capture
 from models.action_item import EvidenceRef, TaskCreatePayload
 from models.structured_extraction import ActionItemsExtraction
 from utils.llm import conversation_processing
+from utils.llm.wake_word_adjudication import WakeWordAdjudication, WakeWordInvocationVerdict
 
 
 def _enable_canonical(monkeypatch):
@@ -210,27 +212,120 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
     )
 
 
-def test_wake_word_provenance_sets_direct_mention_only_on_intersection():
+def _wake_word_gate(*verdicts):
+    return conversation_capture.WakeWordCaptureGate(
+        matched_segment_ids=frozenset({'wake-segment'}),
+        adjudication=WakeWordAdjudication(
+            invocations=[
+                WakeWordInvocationVerdict(
+                    segment_ids=['wake-segment'],
+                    verdict=verdict,
+                    evidence_quote='Hey Omi',
+                    payload_segment_ids=['payload-segment'],
+                )
+                for verdict in verdicts
+            ]
+        ),
+    )
+
+
+@pytest.mark.parametrize('verdict', ['task_command', 'memory_command'])
+def test_wake_word_explicit_command_requires_an_independent_accepting_verdict(verdict):
     action = _action(
         'Send the budget',
         capture_kind='explicit_command',
+        capture_owner='user',
+        concrete_deliverable=True,
         source_segment_ids=['wake-segment', 'payload-segment'],
     )
 
-    matched = conversation_capture._capture_signals(action, {'wake-segment'})
-    unrelated = conversation_capture._capture_signals(action, {'other-segment'})
+    signals = conversation_capture._capture_signals(action, _wake_word_gate(verdict))
 
-    assert matched.direct_mention is True
-    assert unrelated.direct_mention is False
+    assert signals.explicit_command is True
+    assert signals.direct_request is False
+    assert signals.direct_mention is False
 
 
-def test_wake_word_direct_mention_prevents_public_broadcast_drop():
+@pytest.mark.parametrize(
+    'verdict',
+    ['question', 'quoted_or_meta', 'not_addressed_to_omi', 'abandoned', 'unclear'],
+)
+def test_wake_word_rejection_demotes_extractor_explicit_command_to_review_path(verdict):
+    action = _action(
+        'Send the budget',
+        capture_kind='explicit_command',
+        capture_owner='user',
+        concrete_deliverable=True,
+        source_segment_ids=['wake-segment'],
+    )
+
+    signals = conversation_capture._capture_signals(action, _wake_word_gate(verdict))
+
+    assert signals.explicit_command is False
+    assert signals.direct_request is True
+    assert signals.capture_confidence == 0.95
+    assert run_capture_policy(signals.policy_signals()).outcome == 'pending_candidate'
+
+
+def test_wake_word_task_verdict_promotes_non_explicit_extraction_without_changing_confidence():
+    action = _action(
+        'Send the budget',
+        capture_kind='direct_request',
+        capture_owner='user',
+        concrete_deliverable=True,
+        capture_confidence=0.42,
+        source_segment_ids=['wake-segment'],
+    )
+
+    signals = conversation_capture._capture_signals(action, _wake_word_gate('task_command'))
+
+    assert signals.explicit_command is True
+    assert signals.direct_request is False
+    assert signals.capture_confidence == 0.42
+    assert run_capture_policy(signals.policy_signals()).outcome == 'create_direct'
+
+
+@pytest.mark.parametrize(
+    'verdicts',
+    [('memory_command',), ('task_command', 'quoted_or_meta')],
+)
+def test_wake_word_non_explicit_extraction_promotes_only_on_unambiguous_task_verdicts(verdicts):
+    action = _action(
+        'Send the budget',
+        capture_kind='direct_request',
+        capture_owner='user',
+        concrete_deliverable=True,
+        source_segment_ids=['wake-segment'],
+    )
+
+    signals = conversation_capture._capture_signals(action, _wake_word_gate(*verdicts))
+
+    assert signals.explicit_command is False
+    assert signals.direct_request is True
+
+
+def test_wake_word_gate_leaves_non_intersecting_item_completely_untouched():
+    action = _action(
+        'Call the dentist',
+        capture_kind='clear_commitment',
+        capture_owner='user',
+        concrete_deliverable=True,
+        source_segment_ids=['ambient-segment'],
+    )
+
+    gated = conversation_capture._capture_signals(action, _wake_word_gate('quoted_or_meta'))
+    ordinary = conversation_capture._capture_signals(action)
+
+    assert gated == ordinary
+
+
+def test_wake_word_no_longer_overloads_direct_mention_for_future_broadcast_policy():
     action = _action(
         'Send the budget',
         capture_kind='explicit_command',
         source_segment_ids=['wake-segment'],
     )
-    signals = conversation_capture._capture_signals(action, {'wake-segment'}).model_copy(
+    signals = conversation_capture._capture_signals(action, _wake_word_gate('task_command')).model_copy(
         update={'public_broadcast': True}
     )
 
@@ -241,7 +336,122 @@ def test_wake_word_direct_mention_prevents_public_broadcast_drop():
         signals=signals,
     )
 
-    assert decision.policy.outcome == 'create_direct'
+    assert signals.direct_mention is False
+    assert decision.policy.outcome == 'ignore'
+
+
+def test_wake_word_adjudication_is_strictly_match_triggered():
+    calls = []
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        transcript_segments=[
+            SimpleNamespace(
+                id='ordinary-1',
+                text='We should review the budget.',
+                start=0,
+                end=2,
+                is_user=True,
+            )
+        ],
+        structured=SimpleNamespace(action_items=[]),
+    )
+
+    result = conversation_capture.prepare_wake_word_capture_gate(
+        'user-1',
+        conversation,
+        adjudicator=lambda **kwargs: calls.append(kwargs) or WakeWordAdjudication(),
+    )
+
+    assert result is None
+    assert calls == []
+
+
+def test_wake_word_adjudication_logs_question_descope_and_task_omission_without_synthesis(monkeypatch):
+    metric_codes = []
+
+    class FakeCounter:
+        def labels(self, **labels):
+            metric_codes.append(labels['code'])
+            return self
+
+        def inc(self):
+            return None
+
+    segments = [
+        SimpleNamespace(
+            id='wake-task',
+            text='Hey Omi, remind me to send the budget.',
+            start=0,
+            end=2,
+            is_user=True,
+            person_id=None,
+            speaker_id=0,
+        ),
+        SimpleNamespace(
+            id='wake-question',
+            text='Hey Omi, what time is the review?',
+            start=3,
+            end=5,
+            is_user=True,
+            person_id=None,
+            speaker_id=0,
+        ),
+    ]
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        transcript_segments=segments,
+        structured=SimpleNamespace(action_items=[]),
+    )
+    adjudication = WakeWordAdjudication(
+        invocations=[
+            WakeWordInvocationVerdict(
+                segment_ids=['wake-task'],
+                verdict='task_command',
+                evidence_quote='Hey Omi',
+                payload_segment_ids=['wake-task'],
+            ),
+            WakeWordInvocationVerdict(
+                segment_ids=['wake-question'],
+                verdict='question',
+                evidence_quote='Hey Omi',
+                payload_segment_ids=['wake-question'],
+            ),
+        ]
+    )
+    calls = []
+    monkeypatch.setattr(conversation_capture, 'TASK_INTELLIGENCE_ATTRIBUTION_TOTAL', FakeCounter())
+    monkeypatch.setattr(conversation_capture, 'conversation_transcript_for_action_items', lambda *_a, **_k: 'marked')
+    monkeypatch.setattr(conversation_capture, 'conversation_action_item_speaker_labels', lambda *_a, **_k: [])
+
+    gate = conversation_capture.prepare_wake_word_capture_gate(
+        'user-1',
+        conversation,
+        adjudicator=lambda **kwargs: calls.append(kwargs) or adjudication,
+    )
+
+    assert gate is not None
+    assert len(calls) == 1
+    assert calls[0]['matched_segment_ids'] == {'wake-task', 'wake-question'}
+    assert calls[0]['action_items'] == ()
+    assert sorted(metric_codes) == ['question_descope', 'task_command_without_extraction']
+
+
+def test_save_action_items_runs_wake_adjudication_even_when_extractor_returned_no_items(monkeypatch):
+    conversation = SimpleNamespace(
+        id='conversation-1',
+        structured=SimpleNamespace(action_items=[]),
+    )
+    prepare = SimpleNamespace(calls=0)
+
+    def fake_prepare(*_args, **_kwargs):
+        prepare.calls += 1
+        return None
+
+    monkeypatch.setattr(process_conversation.conversation_capture, 'prepare_wake_word_capture_gate', fake_prepare)
+
+    process_conversation._save_action_items('user-1', conversation)
+
+    assert prepare.calls == 1
 
 
 @pytest.mark.parametrize(
@@ -396,7 +606,7 @@ def test_rejected_policy_uses_no_drop_compatibility_writer_without_candidate(mon
     monkeypatch.setattr(
         conversation_capture,
         '_capture_decision',
-        lambda action_item, conversation_id: decisions.append((action_item.description, conversation_id))
+        lambda action_item, conversation_id, **_kwargs: decisions.append((action_item.description, conversation_id))
         or _NoCandidateDecision(),
     )
     monkeypatch.setattr(
