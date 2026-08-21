@@ -2204,3 +2204,56 @@ def test_request_web_search_injection_keeps_a_constant_cached_prefix():
     assert [tool['name'] for tool in first['tools']] == ['web_search', 'search_memories', 'execute_sql']
     assert '2024-01-19' not in _stable_prefix(first)
     assert '2024-06-01' not in _stable_prefix(second)
+
+
+def test_gateway_forwardable_params_stay_within_the_gateway_allowlist():
+    """The router must never forward a key the gateway will reject.
+
+    The gateway validates the forwarded body against a strict allowlist and
+    fails the whole request with HTTP 400 on the first unknown top-level key.
+    Forwarding the client body verbatim therefore took managed desktop chat
+    down for ~19 hours. Pin the router's projection against the gateway's own
+    constants so the two cannot drift apart again.
+    """
+    from llm_gateway.gateway.validator import (
+        CONTROL_PARAMS,
+        FORWARDED_CHAT_COMPLETION_PARAMS,
+        GATEWAY_LOCAL_PARAMS,
+    )
+
+    accepted = CONTROL_PARAMS | GATEWAY_LOCAL_PARAMS | FORWARDED_CHAT_COMPLETION_PARAMS
+    unsupported = desktop_chat._GATEWAY_FORWARDABLE_PARAMS - accepted
+
+    assert not unsupported, f'router forwards keys the gateway rejects: {sorted(unsupported)}'
+
+
+def test_gateway_body_drops_client_params_the_gateway_would_reject():
+    """A real pi-mono turn must survive gateway validation.
+
+    The OpenAI JS SDK the local agent runs sets `store` on every request, and
+    `reasoning_effort` whenever a thinking level is configured. Neither is in
+    the gateway allowlist, and forwarding either one 400s the turn before a
+    lane is resolved.
+    """
+    body = {
+        'model': 'omi-sonnet',
+        'messages': [{'role': 'user', 'content': 'hello'}],
+        'store': False,
+        'reasoning_effort': 'low',
+        'parallel_tool_calls': True,
+        'temperature': 0.5,
+        'stream': True,
+        'omi_web_search': True,
+    }
+
+    result = desktop_chat._gateway_body(body)
+
+    assert 'store' not in result
+    assert 'reasoning_effort' not in result
+    assert 'parallel_tool_calls' not in result
+    assert 'omi_web_search' not in result
+    # Supported params still reach the gateway.
+    assert result['temperature'] == 0.5
+    assert result['stream'] is True
+    assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
+    assert result['messages'][0]['role'] == 'user'

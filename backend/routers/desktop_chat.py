@@ -4,12 +4,14 @@ import asyncio
 import base64
 import json
 import re
+import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 from uuid import uuid4
 
+import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.routing import APIRoute
@@ -553,6 +555,87 @@ def _gateway_user_content(content: object) -> object:
     return blocks or ''
 
 
+# Top-level request keys the gateway will accept. The gateway validates the
+# forwarded body against a strict allowlist and rejects the whole request with
+# HTTP 400 on the first unknown key, so anything the desktop client sends that
+# is not listed here must be dropped rather than passed through.
+#
+# This is not a style preference. Forwarding the client body verbatim took every
+# managed desktop chat turn down for ~19 hours: the local pi-mono agent runs the
+# OpenAI JS SDK, which sets `store` on every request (and `reasoning_effort`
+# whenever a thinking level is set). Neither is in the gateway's allowlist, so
+# each turn 400ed before a lane was ever resolved, and `_stream` reported that as
+# an in-band `502 Upstream provider error` inside an HTTP 200 — invisible to
+# status-code monitoring.
+#
+# `test_gateway_forwardable_params_stay_within_the_gateway_allowlist` pins this
+# set against the gateway's own validator so the two cannot drift apart again.
+_GATEWAY_FORWARDABLE_PARAMS = frozenset(
+    {
+        'frequency_penalty',
+        'logit_bias',
+        'logprobs',
+        'max_completion_tokens',
+        'max_tokens',
+        'metadata',
+        'n',
+        'presence_penalty',
+        'prompt_cache_key',
+        'prompt_cache_options',
+        'response_format',
+        'seed',
+        'service_tier',
+        'stop',
+        'stream',
+        'stream_options',
+        'temperature',
+        'tool_choice',
+        'tools',
+        'top_logprobs',
+        'top_p',
+        'user',
+    }
+)
+
+
+def _log_gateway_rejection(response: httpx.Response, *, lane_id: str, request_id: str) -> None:
+    """Record why the gateway refused a request.
+
+    A 4xx from the gateway carries a typed body naming the offending field
+    (`{"error": {"message": ..., "param": ...}}`), and both call sites used to
+    discard it and report a bare `502 Upstream provider error`. That left the
+    real reason recorded nowhere: during the 2026-08-20 outage the rejected
+    parameter appeared in no log line in either GCP project, so a one-request
+    diagnosis took hours of log archaeology instead.
+
+    Client-supplied content is never logged — only the gateway's own error
+    message and param, which are gateway-authored and carry no user data.
+    """
+    status_code = response.status_code
+    message = ''
+    param = ''
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+    if isinstance(payload, Mapping):
+        error = payload.get('error')
+        if isinstance(error, Mapping):
+            message = str(error.get('message') or '')[:200]
+            param = str(error.get('param') or '')[:100]
+    event = {
+        'event': 'desktop_chat_gateway_refused',
+        'message': 'desktop_chat_gateway_refused',
+        'lane_id': lane_id,
+        'status_code': status_code,
+        'param': param or 'unknown',
+        'reason': message or 'unavailable',
+        'request_id': request_id,
+        'severity': 'WARNING',
+    }
+    sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
+
+
 def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LANE_ID) -> dict[str, object]:
     messages = body.get('messages')
     if not isinstance(messages, list):
@@ -568,7 +651,7 @@ def _gateway_body(body: Mapping[str, object], lane_id: str = CHAT_AGENT_AUTO_LAN
         elif 'content' not in updated or updated.get('content') is None:
             updated['content'] = ''
         translated.append(updated)
-    gateway_body = {key: value for key, value in body.items() if key != 'omi_web_search'}
+    gateway_body = {key: value for key, value in body.items() if key in _GATEWAY_FORWARDABLE_PARAMS}
     result = {**gateway_body, 'model': lane_id, 'messages': translated}
     if lane_id == WEB_SEARCH_AUTO_LANE_ID:
         # The Perplexity web-search lane has tools: false. Public-web turns
@@ -1281,6 +1364,7 @@ async def _stream_gateway(
                     transport_failure = is_gateway_transport_failure(status_error)
                     if transport_failure:
                         gateway_circuit.record_transport_failure()
+                    _log_gateway_rejection(response, lane_id=lane_id, request_id=request_id)
                     observe_gateway_first_byte(
                         feature=_gateway_feature_for_lane(lane_id),
                         started_at=started_at,
