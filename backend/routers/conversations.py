@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
@@ -51,6 +51,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
@@ -72,6 +73,11 @@ from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.product_telemetry import emit_product_event
+from utils.other.list_budget import (
+    OMI_LIST_TRUNCATED_HEADER,
+    OMI_LIST_TRUNCATED_VALUE,
+    list_read_budget_for_request,
+)
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -519,10 +525,14 @@ def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: Lis
     tags=['conversations'],
     description=(
         "List responses may omit detail-only fields such as transcript_segments. "
-        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript. "
+        "Large accounts can outrun the request budget; such responses return a partial "
+        "newest-first array with the X-Omi-List-Truncated: true header instead of a 504 (#11831)."
     ),
 )
 def get_conversations(
+    request: Request = None,  # type: ignore[assignment]
+    response: Response = None,  # type: ignore[assignment]
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
@@ -557,6 +567,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
+    # Request-scoped budget: the server-side offset is charged before the
+    # query and the page stream runs under the derived per-RPC timeout, so a
+    # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
+    budget = list_read_budget_for_request(request, route='conversations')
     conversations = conversations_db.get_conversations_without_photos(
         uid,
         limit,
@@ -568,9 +582,13 @@ def get_conversations(
         end_date=end_date,
         folder_id=folder_id,
         starred=starred,
+        budget=budget,
     )
 
     redact_conversations_for_list(conversations)
+    if budget.truncated and response is not None:
+        response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
+    budget.observe('truncated' if budget.truncated else 'complete')
     return conversations
 
 
@@ -1325,6 +1343,148 @@ def set_conversation_visibility(
         redis_db.add_public_conversation(conversation_id)
 
     return {"status": "Ok"}
+
+
+class ShareRecipient(BaseModel):
+    name: Optional[str] = None
+    email: str
+
+
+class ShareRecipientsResponse(BaseModel):
+    recipients: List[ShareRecipient]
+
+
+class SendShareEmailRequest(BaseModel):
+    recipient_emails: List[str] = Field(min_length=1, max_length=share_email.MAX_RECIPIENTS)
+
+
+class SendShareEmailResponse(BaseModel):
+    sent_to: List[str]
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/share-recipients',
+    tags=['conversations'],
+    response_model=ShareRecipientsResponse,
+)
+def get_conversation_share_recipients(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Who the meeting summary could be sent to: calendar-detected participants minus the owner."""
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    recipients = share_email.get_share_recipients(uid, conversation)
+    return {'recipients': recipients}
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/share-email',
+    tags=['conversations'],
+    response_model=SendShareEmailResponse,
+)
+def send_conversation_share_email(
+    conversation_id: str, request: SendShareEmailRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    """One-click send of the meeting summary to detected participants.
+
+    Recipients are validated against the calendar-detected set so this can
+    never relay to arbitrary addresses. Sending makes the conversation
+    link-visible first (same contract as copying the share link) so the
+    emailed link resolves.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    detected = {recipient['email'] for recipient in share_email.get_share_recipients(uid, conversation)}
+    requested = share_email.normalized_recipient_emails(request.recipient_emails)
+    unknown = [email for email in requested if email not in detected]
+    if unknown:
+        raise HTTPException(status_code=400, detail='Recipients must be detected meeting participants')
+
+    # Idempotency under concurrency: a Firestore transaction atomically claims
+    # the not-yet-emailed recipients, so simultaneous duplicate requests can
+    # never both dispatch to the same address; repeats return success without
+    # a duplicate email.
+    to_dispatch = conversations_db.reserve_share_email_recipients(uid, conversation_id, requested)
+    if not to_dispatch:
+        return {'sent_to': requested}
+
+    if not share_email.consume_daily_send_quota(uid, len(to_dispatch)):
+        conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
+        raise HTTPException(status_code=429, detail='Daily share-email limit reached')
+
+    # Publish before dispatching (the emailed link must never race a private
+    # conversation), and roll the publish back if the send fails so a failed
+    # send cannot leave a never-shared conversation link-visible. A
+    # previously-shared conversation stays shared either way.
+    was_shared = conversation.get('visibility') in (
+        ConversationVisibility.shared,
+        ConversationVisibility.public,
+        'shared',
+        'public',
+    )
+
+    publish_token: Dict[str, Any] = {}
+
+    def _publish():
+        # An already link-visible conversation keeps its existing visibility
+        # (never downgrade `public` to `shared`); only a still-private one is
+        # flipped, atomically: the write is preconditioned on the same read
+        # that observed 'private', so a concurrent share/public change voids
+        # this publish instead of being overwritten. The CAS token comes from
+        # the publish write's own result; when nothing was published there is
+        # no token and rollback is a no-op.
+        if not was_shared:
+            published, update_time = conversations_db.publish_conversation_visibility_if_private(uid, conversation_id)
+            if published:
+                publish_token['update_time'] = update_time
+        redis_db.store_conversation_to_uid(conversation_id, uid)
+        redis_db.add_public_conversation(conversation_id)
+
+    def _unpublish():
+        if was_shared:
+            return
+        reverted = conversations_db.set_conversation_visibility_if_unchanged(
+            uid, conversation_id, ConversationVisibility.private, publish_token.get('update_time')
+        )
+        if not reverted:
+            # Ownership could not be proven (someone else wrote the doc while
+            # the provider call was in flight) — their share stands.
+            return
+        redis_db.remove_conversation_to_uid(conversation_id)
+        redis_db.remove_public_conversation(conversation_id)
+
+    def _send():
+        # The reservation above is the durable ledger entry — nothing to write
+        # after the provider accepts, so no failure after a successful dispatch
+        # can trigger the visibility rollback (a delivered email keeps a live
+        # link).
+        share_email.send_summary_email(uid=uid, conversation=conversation, recipient_emails=to_dispatch)
+        return {'sent_to': requested}
+
+    def _release_reservation_and_quota():
+        try:
+            conversations_db.release_share_email_recipients(uid, conversation_id, to_dispatch)
+        except Exception:
+            logger.exception('share email: failed to release recipient reservation')
+        share_email.refund_daily_send_quota(uid, len(to_dispatch))
+
+    try:
+        return share_email.publish_then_send(publish=_publish, unpublish=_unpublish, send=_send)
+    except share_email.AmbiguousDeliveryError as e:
+        # Delivery may have happened: reservation and quota stand (no duplicate
+        # on retry) and the link stays published.
+        raise HTTPException(status_code=504, detail=str(e))
+    except ValueError as e:
+        _release_reservation_and_quota()
+        raise HTTPException(status_code=503, detail=str(e))
+    except RuntimeError as e:
+        _release_reservation_and_quota()
+        raise HTTPException(status_code=502, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        # Any other pre-delivery failure (e.g. Redis raising inside the publish
+        # path) is definitive: nothing was dispatched, so the reservation and
+        # quota must not stay consumed or retries would falsely no-op.
+        logger.exception('share email: definitive failure before delivery')
+        _release_reservation_and_quota()
+        raise HTTPException(status_code=502, detail='share email failed before delivery')
 
 
 @router.patch(

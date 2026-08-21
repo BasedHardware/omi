@@ -87,6 +87,8 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: REFERRAL_PUBLIC_BASE_URL
+    value: "https://omi.me"
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE

@@ -283,12 +283,12 @@ function requiredControlOperationKey(
 // Map desktop model IDs (claude-*) to omi provider model IDs.
 // Covers short aliases and dated versions used by the chat provider/ChatLab.
 const MODEL_MAP: Record<string, string> = {
-  'claude-opus-4-6': 'omi-opus',
+  'claude-opus-4-6': 'omi-sonnet',
   'claude-sonnet-4-6': 'omi-sonnet',
   'claude-sonnet-4': 'omi-sonnet',
-  'claude-opus-4': 'omi-opus',
+  'claude-opus-4': 'omi-sonnet',
   'claude-sonnet-4-20250514': 'omi-sonnet',
-  'claude-opus-4-20250514': 'omi-opus'
+  'claude-opus-4-20250514': 'omi-sonnet'
 }
 
 function mapModel(model: string): string {

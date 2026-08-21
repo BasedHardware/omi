@@ -305,7 +305,7 @@ enum TopNavigationPillMetrics {
 /// One destination. **It hugs its own label** rather than taking a width from a table keyed by rail
 /// index: five pills whose widths were guessed one at a time is how a row that fitted in a mockup
 /// stops fitting once a badge appears on two of them.
-private struct TopNavigationPill: View {
+struct TopNavigationPill: View {
   let icon: String
   let title: String
   let badgeCount: Int

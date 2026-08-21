@@ -818,7 +818,7 @@ final class RewindVisibilityTests: XCTestCase {
     /// asserted is where the window is, not what is in it.
     private func presentTheTimeline() throws {
         let store = try ContextStore(url: root.appendingPathComponent("context.db"))
-        RewindWindow.present(store: store)
+        RewindWindow.present(store: store, via: .menuBarRow)
     }
 
     /// The search surface being asked for, and going away again, leaves the timeline alone.

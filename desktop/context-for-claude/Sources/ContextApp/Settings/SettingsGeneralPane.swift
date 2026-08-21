@@ -196,6 +196,9 @@ struct SettingsGeneralPane: View {
             titleVisibility: .visible
         ) {
             Button(Self.resetConfirmationAction) {
+                // On the confirmation, not on the row that opens it: the row is somebody reading
+                // what "reset" means, and this is the one that puts the install back to a first run.
+                ContextAnalytics.record(.controlUsed(.runSetupAgain))
                 Sound.effect(.click)
                 OnboardingReset.restart()
             }

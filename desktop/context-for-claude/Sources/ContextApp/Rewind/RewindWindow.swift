@@ -44,13 +44,37 @@ enum RewindWindow {
     private static var model: RewindModel?
     private static var liveRefreshTimer: Timer?
 
+    /// This window's current visit. See `DwellClock` for why the lifecycle is its own type.
+    ///
+    /// **The nil is what makes it correct, in both directions.** `dismiss()` only orders the window
+    /// out — `isReleasedWhenClosed = false`, so `current` survives — which means the *second* open is
+    /// the bring-forward branch and a stash written only on the building branch would never restart.
+    /// Written whenever nothing is stamped, so a raise of a window already up leaves the clock where
+    /// it is (the dwell is one visit, not one press) and a re-open after a close begins a new one.
+    /// Cleared on the way out, so a second `dismiss()` has nothing left to report.
+    private static var dwell = DwellClock()
+
+    /// Watches for the window closing itself, which is most of how it actually closes.
+    ///
+    /// **`dismiss()` is not the close path a user takes.** This window is `.titled` and `.closable`
+    /// on purpose — the X and ⌘W both work, and both call AppKit's own `close()`, which never
+    /// reaches `dismiss()`. Measuring dwell only there would miss the ordinary close *and* leave
+    /// `presentedAt` running: the next open takes the bring-forward branch, which deliberately does
+    /// not restart the clock, so the close after that would report one bucket spanning every minute
+    /// the window spent shut. A fabricated `hours` in the series is worse than no series.
+    private static var closeObserver: NSObjectProtocol?
+
     /// Opens the window, or brings the existing one forward with its state intact.
     ///
     /// - Parameters:
     ///   - store: the capture database. Injected rather than opened here so the app's single store
     ///     is reused; opening a second writer would be a second migration racing the first.
+    ///   - via: the route that asked for it. **The reason this parameter exists at all**: all four
+    ///     routes land on this one window, so a count without a source says the timeline was opened
+    ///     and nothing about what opened it.
     static func present(
         store: ContextStore,
+        via: AnalyticsEvent.OpenSource,
         onOpenSettings: @escaping () -> Void = {},
         onSearch: @escaping (String) -> Void = { _ in }
     ) {
@@ -72,6 +96,7 @@ enum RewindWindow {
             // longer *depends* on activation landing (see `RewindWindowFrame`), but nothing is served
             // by asking in the wrong order either.
             raise(window)
+            reportPresented(via: via)
             return
         }
 
@@ -101,6 +126,18 @@ enum RewindWindow {
         window.isMovableByWindowBackground = true
         window.minSize = minimumSize
         window.isReleasedWhenClosed = false
+        // Registered on the branch that builds the window, which runs once — `isReleasedWhenClosed`
+        // is false, so `current` outlives every close and this is never re-entered for it.
+        if closeObserver == nil {
+            closeObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.willCloseNotification, object: window, queue: .main
+            ) { _ in
+                // Delivered on `.main` by the queue above, so the isolation is real and asserted
+                // rather than hopped to: a `Task { @MainActor }` here would report the dwell after
+                // the window is already gone, and after any `present` that raced it.
+                MainActor.assumeIsolated { reportClosed() }
+            }
+        }
         window.title = RewindView.modeTitle
         // Deliberately not `.floating`: this window is worked *in*, and something always on top of
         // every other window is something to fight rather than something to read.
@@ -154,6 +191,19 @@ enum RewindWindow {
         current = window
         startLiveRefresh()
         raise(window)
+        reportPresented(via: via)
+    }
+
+    /// **The open, and the start of the dwell clock** — on both branches that really put a window on
+    /// screen, and on neither that returns without one.
+    ///
+    /// After the presentation rather than before it, which is the difference between reporting a
+    /// window and reporting an intention: the screen guard above declines on a Mac with no display,
+    /// and an emit ahead of it would have counted that as an open *and* left `presentedAt` running
+    /// against a window that never appeared — so the next `dismiss()` would report a dwell for it.
+    private static func reportPresented(via: AnalyticsEvent.OpenSource) {
+        ContextAnalytics.record(.surfaceOpened(.rewind, via: via))
+        dwell.presented()
     }
 
     /// Brings the timeline forward **and makes it the key window**, in the order that works.
@@ -210,11 +260,12 @@ enum RewindWindow {
     static func present(
         store: ContextStore,
         at instant: Double,
+        via: AnalyticsEvent.OpenSource,
         onOpenSettings: @escaping () -> Void = {},
         onSearch: @escaping (String) -> Void = { _ in }
     ) {
         // Present first, then aim. The other order would ask a model that does not exist yet.
-        present(store: store, onOpenSettings: onOpenSettings, onSearch: onSearch)
+        present(store: store, via: via, onOpenSettings: onOpenSettings, onSearch: onSearch)
         focus(instant)
     }
 
@@ -239,7 +290,20 @@ enum RewindWindow {
     /// app orders the timeline back in on its own, and the only routes back on screen are the ones a
     /// person takes on purpose — `present`, `focus`, the menu row, the chord.
     static func dismiss() {
+        reportClosed()
         current?.orderOut(nil)
+    }
+
+    /// **The dwell, reported once per visit however the window went away.**
+    ///
+    /// Both close paths funnel here — `dismiss()`, which orders out and fires no notification, and
+    /// the X / ⌘W, which close for real and fire one. Clearing the stash is what makes it once: a
+    /// close arriving down both paths, or a second dismissal racing the first, finds nothing left to
+    /// report. A window that was never up has no dwell either, and inventing a `seconds` for it
+    /// would put noise exactly where the honest answer is silence.
+    private static func reportClosed() {
+        guard let openFor = dwell.closed() else { return }
+        ContextAnalytics.record(.surfaceClosed(.rewind, openFor: openFor))
     }
 
     static var isVisible: Bool { current?.isVisible ?? false }

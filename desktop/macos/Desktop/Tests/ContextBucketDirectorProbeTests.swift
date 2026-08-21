@@ -266,14 +266,74 @@
         $0.name == "probe_context_bucket_director"
       }
       XCTAssertEqual(descriptor?.safety, "network_or_model")
-      XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("deliver notifications") }) == true)
+      XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("without it nothing is delivered") }) == true)
       XCTAssertTrue(descriptor?.sideEffects.contains(where: { $0.contains("reasoning quota") }) == true)
       XCTAssertEqual(
         descriptor?.params,
         [
           "bucket_id", "version", "header", "frozen", "tail", "validated_facts", "tasks", "app", "window",
-          "captured_at", "notify_worthiness", "visit_count",
+          "captured_at", "notify_worthiness", "visit_count", "retrieved", "lookup_query", "present",
         ])
+    }
+
+    func testReplayWithRetrievedItemsUsesSecondCallContract() async throws {
+      let recorder = CallRecorder()
+      let params: [String: String] = [
+        "bucket_id": "synthetic-bucket",
+        "version": "7",
+        "header": "Synthetic header",
+        "frozen": "frozen:entry-1\n",
+        "tail": #"["entry:tail-1"]"#,
+        "validated_facts": #"["fact:validated-1"]"#,
+        "tasks": "[]",
+        "app": "SyntheticBrowser",
+        "window": "Compose: to David",
+        "captured_at": "2026-08-20T18:00:00Z",
+        "notify_worthiness": "0.7",
+        "lookup_query": "Omi latest version download link",
+        "retrieved":
+          #"[{"ref":"memory:dl-1","title":"Memory","preview":"The download link is omi.me/desktop."}]"#,
+      ]
+      let probe = ContextBucketDirectorProbe(
+        completion: {
+          operation, prompt, uncachedPrompt, _, schema, _, _, _ in
+          await recorder.save(
+            operation: operation,
+            prompt: prompt + "\n\n" + (uncachedPrompt ?? ""),
+            imageData: nil,
+            schemaKeys: Set(schema.keys),
+            cacheKey: nil,
+            maxCompletionTokens: 0,
+            authorizationSnapshotWasPresent: false)
+          let content =
+            #"{"decision":"insight","title":"Download link","message":"omi.me/desktop","reasoning":"answers the drafted question","bucket_entry_refs":["memory:dl-1","memory:invented-2"],"fact_ids":[]}"#
+          return ProactiveLaneResult(
+            operation: operation,
+            lane: "omi:auto:desktop-proactive-reasoning",
+            providerModel: "gpt-5.6-luna",
+            usage: ProactiveLaneUsage(cachedTokens: 0, cacheWriteTokens: 0),
+            cacheWrite: false,
+            fallbackClass: "unknown",
+            content: content)
+        }, isNonProduction: true)
+
+      let result = try await probe.run(params: params)
+      let captured = await recorder.record
+      let prompt = captured?.prompt ?? ""
+      // Second-call contract: lookup instruction in the stable prompt, retrieved
+      // section in the uncached suffix, lookup-enabled schema.
+      XCTAssertTrue(prompt.contains(ContextDirectorRetrievalHop.sectionHeader))
+      XCTAssertTrue(prompt.contains("set lookup_query"))
+      XCTAssertTrue(prompt.contains("omi.me/desktop"))
+      XCTAssertEqual(result["decision"], "insight")
+      // Cited retrieved refs validate against the supplied allowlist only.
+      XCTAssertEqual(result["retrieved_ref_count"], "1")
+      XCTAssertEqual(result["bucket_entry_ref_count"], "0")
+      // The real grounding guard runs on the replayed decision: an insight with
+      // no bucket citations survives on the validated retrieved ref alone.
+      XCTAssertEqual(result["grounding_permits"], "true")
+      // present was not requested, so nothing was delivered.
+      XCTAssertNil(result["presentation"])
     }
 
     func testReplayFailsClosedOutsideNonProductionBeforeClientCall() async {
