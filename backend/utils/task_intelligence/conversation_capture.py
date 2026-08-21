@@ -121,13 +121,16 @@ def process_before_legacy(
     action_items: Sequence[Any],
     transcript_segments: Sequence[Any] = (),
 ) -> bool:
-    """Capture proposals before the compatibility writer.
+    """Capture every extracted item as a proposal the user must accept.
 
-    A rejected policy result has no Candidate representation. In that case we
-    explicitly return ``False`` before writing any other Candidate so the
-    caller runs its existing action-item writer for the complete extraction.
-    This is the no-drop fence: one ignored extraction item cannot make the
-    whole conversation disappear or create a mixed duplicate write.
+    INVARIANT I1: conversation extraction never writes an ``action_item``. Each
+    item becomes a pending Candidate and reaches the task list only through an
+    explicit "Add to Tasks" gesture.
+
+    Policy rejection is handled per item, not per conversation. An item the
+    policy ignores is simply not proposed; it no longer drags its siblings onto
+    a writer that would bypass the user. This function therefore always reports
+    that it handled the extraction.
     """
 
     control = task_control_db.get_task_workflow_control(uid)
@@ -147,23 +150,18 @@ def process_before_legacy(
         )
         for action_item, semantic_key, occurrence in occurrences
     ]
-    if any(decision.candidate is None for _, _, _, decision in decisions):
-        return False
     for _, semantic_key, occurrence, decision in decisions:
         proposal = decision.candidate
-        assert proposal is not None, "candidate policy fence must run before writes"
-        candidate = candidate_service.create_candidate(
+        if proposal is None:
+            # The policy ignored this item, or named an update target that no
+            # longer resolves. Drop this item alone and keep proposing the rest.
+            continue
+        candidate_service.create_candidate(
             uid,
             proposal,
             idempotency_key=_idempotency_key(conversation_id, semantic_key, occurrence),
             account_generation=control.account_generation,
         )
-        if decision.policy.outcome in {'auto_accept_silent', 'create_direct'}:
-            candidate_service.accept_candidate(
-                uid,
-                candidate.candidate_id,
-                account_generation=control.account_generation,
-            )
     return True
 
 

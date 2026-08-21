@@ -1367,8 +1367,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
-    // Stop recurring task scheduler
-    RecurringTaskScheduler.shared.stop()
     Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.

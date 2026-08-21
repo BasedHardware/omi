@@ -958,7 +958,15 @@ def test_action_items_skipped_on_discard():
     extract_mock.assert_not_called()
 
 
-def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
+def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch):
+    """I1: conversation extraction proposes Candidates and writes nothing else.
+
+    The old contract (legacy batch writer on postprocess_executor) died with the
+    writer. The contract that replaces it: even when the canonical capture path
+    reports itself unavailable (``process_conversation_before_legacy`` -> False,
+    e.g. rollout control unreadable), `_save_action_items` must NOT fall back to
+    writing action items — the previous bugs were all in exactly this fallback.
+    """
     action_item = MagicMock()
     action_item.description = 'Send the forecast'
     action_item.completed = False
@@ -975,32 +983,20 @@ def test_conversation_action_item_auto_sync_uses_postprocess_pool(monkeypatch):
     monkeypatch.setattr(
         process_conversation.conversation_capture, 'process_conversation_before_legacy', lambda *args: False
     )
-    monkeypatch.setattr(process_conversation.conversation_capture, 'canonical_conversation_fields', lambda *args: {})
-    monkeypatch.setattr(process_conversation.conversation_capture, 'legacy_document_ids', lambda *args: None)
-    monkeypatch.setattr(process_conversation.conversation_capture, 'reconcile_after_legacy', lambda *args: None)
-    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
-    monkeypatch.setattr(
-        process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: None
-    )
-    monkeypatch.setattr(
-        process_conversation.action_items_db,
-        'create_action_items_batch',
-        lambda *args, **kwargs: ['task-1'],
-    )
-    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
-    submitted_to = []
-    monkeypatch.setattr(
-        process_conversation,
-        'submit_with_context',
-        lambda executor, function: submitted_to.append(executor),
-    )
+    for writer in ('create_action_item', 'create_action_items_batch'):
+        # Bind `writer` per iteration; a late-bound closure would name the wrong
+        # function in the failure message for the test that pins the invariant.
+        monkeypatch.setattr(
+            process_conversation.action_items_db,
+            writer,
+            lambda *args, _writer=writer, **kwargs: pytest.fail(f'{_writer} must never be called by extraction'),
+        )
+    emitted = []
+    monkeypatch.setattr(process_conversation, 'emit_product_event', lambda **kwargs: emitted.append(kwargs))
 
     process_conversation._save_action_items('user-1', conversation)
 
-    assert submitted_to == [process_conversation.postprocess_executor], (
-        'conversation task auto-sync must run on postprocess_executor so its Firestore '
-        'children can acquire db_executor workers'
-    )
+    assert emitted and emitted[0]['properties']['persistence_path'] == 'canonical_candidate'
 
 
 def test_llm_calls_use_omi_qos_tier_system():

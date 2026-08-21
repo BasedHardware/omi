@@ -62,7 +62,13 @@ def test_capture_fixture_freezes_cross_modality_semantics():
         assert case['expected']['interruption'] != 'new_task_notification'
 
     by_id = {case['id']: case['expected'] for case in fixture['cases']}
-    assert by_id['clear_commitment'] == {'outcome': 'auto_accept_silent', 'interruption': 'none'}
+    # I1: no capture outcome may create a task. Every admitted case proposes.
+    assert by_id['clear_commitment'] == {'outcome': 'pending_candidate', 'interruption': 'none'}
+    assert by_id['explicit_create'] == {'outcome': 'pending_candidate', 'interruption': 'none'}
+    assert {case['expected']['outcome'] for case in fixture['cases']}.isdisjoint(
+        {'auto_accept_silent', 'create_direct'}
+    )
+    assert by_id['clear_commitment_low_confidence']['outcome'] == 'ignore'
     assert by_id['unaccepted_request']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_at_confidence_floors']['outcome'] == 'pending_candidate'
     assert by_id['owned_direct_request_below_ownership_floor']['outcome'] == 'ignore'
