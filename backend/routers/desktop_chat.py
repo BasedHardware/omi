@@ -256,6 +256,12 @@ _MANAGED_STRUCTURED_ALIASES = {
 }
 WEB_SEARCH_AUTO_LANE_ID = feature_auto_lane_id('web_search')
 _MAX_TOKENS = 16_384
+# Top-level automatic prompt caching. Anthropic places this breakpoint on the last
+# cacheable block (tools → system → messages). TTL=1h: the default became 5m on
+# 2026-03-06, which is shorter than typical gaps between desktop-chat turns.
+# The ~14k-token tools+system prefix only hits if those bytes stay identical
+# across requests from the same client; volatile content belongs in the user turn.
+_PROMPT_CACHE_CONTROL = {'type': 'ephemeral', 'ttl': '1h'}
 
 
 def _managed_lane_id(body: Mapping[str, object]) -> str:
@@ -698,6 +704,7 @@ def _request(
         result['tools'] = ([_WEB_SEARCH_TOOL] if inject_web_search else []) + client_tools
     if choice is not None and result.get('tools'):
         result['tool_choice'] = choice
+    result['cache_control'] = dict(_PROMPT_CACHE_CONTROL)
     return model, result
 
 
