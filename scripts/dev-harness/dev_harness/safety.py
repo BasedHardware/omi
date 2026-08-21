@@ -118,7 +118,9 @@ _OFFLINE_PROVIDER_PLACEHOLDERS = {
     "DEEPGRAM_API_KEY": "omi-local-harness-offline-deepgram-not-real",
     "GEMINI_API_KEY": "omi-local-harness-offline-gemini-not-real",
     "ANTHROPIC_API_KEY": "omi-local-harness-offline-anthropic-not-real",
-    # Filesystem fake GCS (#11703) — names match testing.e2e.fakes.storage.DEFAULT_BUCKETS.
+}
+# Filesystem fake GCS (#11703) — names match testing.e2e.fakes.storage.DEFAULT_BUCKETS.
+_OFFLINE_FAKE_GCS_ENV = {
     "OMI_USE_FAKE_GCS": "1",
     "BUCKET_SPEECH_PROFILES": "speech-profiles",
     "BUCKET_POSTPROCESSING": "postprocessing",
@@ -300,7 +302,7 @@ def build_child_env(
         }
     )
     if provider_mode == "offline":
-        child.update(offline_provider_placeholders())
+        child.update(_OFFLINE_FAKE_GCS_ENV)
 
     for key, value in (extra or {}).items():
         if key in _STRIPPED_EXACT_ENV_KEYS or key.startswith(_STRIPPED_ENV_PREFIXES):
