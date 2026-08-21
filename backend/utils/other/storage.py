@@ -67,7 +67,19 @@ def _get_storage_client() -> Any:
     if storage_client is None:
         with _storage_client_lock:
             if storage_client is None:
-                if os.environ.get('SERVICE_ACCOUNT_JSON'):
+                # Local harness / offline mode: filesystem fake GCS (#11703).
+                use_fake = os.getenv('OMI_USE_FAKE_GCS', '').strip().lower() in {
+                    '1',
+                    'true',
+                    'yes',
+                    'on',
+                } or os.getenv('PROVIDER_MODE', '').strip().lower() == 'offline'
+                if use_fake:
+                    from testing.e2e.fakes.storage import FakeStorageClient, setup_fake_storage
+
+                    setup_fake_storage()
+                    storage_client = FakeStorageClient()
+                elif os.environ.get('SERVICE_ACCOUNT_JSON'):
                     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
                     credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
                     storage_client = storage.Client(credentials=credentials)
