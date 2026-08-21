@@ -23,7 +23,9 @@ client claim or cached enablement.
 - `capture_policy.py` is the pure confidence and ownership policy used by every
   capture adapter.
 - `backend_capture.py` adapts backend payloads into that policy;
-  `conversation_capture.py` owns the universal conversation
+  `conversation_capture_policy.py` owns the database-free action-item signal
+  adapter and public policy-evaluation seam used by production and hermetic
+  fixtures. `conversation_capture.py` owns the universal conversation
   extraction/reconciliation boundary. For deterministically matched wake-word
   segments it runs the independent classifier in
   `utils/llm/wake_word_adjudication.py` and applies the classifier plus extractor

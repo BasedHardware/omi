@@ -465,7 +465,9 @@ def test_adjudicator_mechanically_drops_unmatched_ids_and_non_verbatim_evidence(
 def test_live_fixture_evaluation_scores_three_policy_arms_and_no_interference():
     def fake_extract(transcript, *_args, trusted_wake_word_markers=False, **_kwargs):
         ordinary = SimpleNamespace(
-            description='Call the dentist',
+            # Independent baseline and marker samples may phrase the same
+            # ambient policy outcome differently; wording is not interference.
+            description='Phone the dentist' if trusted_wake_word_markers else 'Call the dentist',
             capture_kind='clear_commitment',
             capture_confidence=0.95,
             ownership_confidence=1,
@@ -545,7 +547,12 @@ def test_live_fixture_evaluation_scores_three_policy_arms_and_no_interference():
         'marker_only': 3,
         'marker_adjudicator': 3,
     }
-    assert result['measurement']['ambient_no_interference_trials'] == 3
+    assert result['measurement']['adjudicator_ambient_no_interference_trials'] == 3
+    assert result['measurement']['baseline_marker_ambient_distribution_match_cases'] == 1
+    assert (
+        result['measurement']['baseline_marker_ambient_distribution_comparisons']['paired']['distributions_match']
+        is True
+    )
     assert result['measurement']['paired_split_trials'] == 3
     assert result['shipping_decision']['recommendation'] == 'keep_adjudicator'
 
@@ -555,8 +562,11 @@ def test_live_fixture_control_never_fires_stage_two_and_all_arms_are_equal():
         case for case in load_fixture('capture_v2.json')['wake_word_evaluation_cases'] if case.get('control') is True
     )
     adjudicator_calls = 0
+    extractor_calls = 0
 
     def fake_extract(*_args, **_kwargs):
+        nonlocal extractor_calls
+        extractor_calls += 1
         return [
             SimpleNamespace(
                 description='Review the case study',
@@ -582,8 +592,11 @@ def test_live_fixture_control_never_fires_stage_two_and_all_arms_are_equal():
     )
 
     assert adjudicator_calls == 0
+    assert extractor_calls == 3
     assert result['measurement']['stage2_calls'] == 0
     assert result['measurement']['control_unchanged_trials'] == 3
+    assert result['measurement']['adjudicator_ambient_no_interference_trials'] == 3
+    assert result['measurement']['baseline_marker_ambient_distribution_match_cases'] == 1
 
 
 def test_live_fixture_evaluation_fails_closed_on_extractor_error_log():

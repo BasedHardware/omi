@@ -6,7 +6,6 @@ harnesses one stable dependency seam.
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 from typing import Any
@@ -27,18 +26,15 @@ from utils.llm.wake_word_adjudication import (
 )
 from utils.metrics import TASK_INTELLIGENCE_ATTRIBUTION_TOTAL
 from utils.task_intelligence import candidate_service
-from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
+from utils.task_intelligence.backend_capture import adapt_backend_capture
+from utils.task_intelligence.conversation_capture_policy import (
+    WakeWordCaptureGate,
+    capture_signals_for_action_item,
+)
 
 logger = logging.getLogger(__name__)
 
 WakeWordAdjudicator = Callable[..., WakeWordAdjudication]
-_ACCEPTED_EXPLICIT_VERDICTS = frozenset({'task_command', 'memory_command'})
-
-
-@dataclass(frozen=True)
-class WakeWordCaptureGate:
-    matched_segment_ids: frozenset[str]
-    adjudication: WakeWordAdjudication
 
 
 def capture_enabled(uid: str) -> bool:
@@ -50,56 +46,6 @@ def capture_enabled(uid: str) -> bool:
     """
 
     return bool(uid)
-
-
-def _concrete_deliverable(action_item: Any) -> bool:
-    """Fail closed: only treat as concrete when extraction supplies an explicit True."""
-
-    raw = getattr(action_item, 'concrete_deliverable', None)
-    return raw is True
-
-
-def _capture_signals(
-    action_item: Any,
-    wake_word_gate: WakeWordCaptureGate | None = None,
-) -> BackendCaptureSignals:
-    capture_kind = getattr(action_item, 'capture_kind', None)
-    raw_candidate_action = getattr(action_item, 'candidate_action', None)
-    candidate_action = raw_candidate_action if isinstance(raw_candidate_action, str) else 'create'
-    raw_target_task_id = getattr(action_item, 'target_task_id', None)
-    target_task_id = raw_target_task_id if isinstance(raw_target_task_id, str) else None
-    raw_capture_confidence = getattr(action_item, 'capture_confidence', None)
-    capture_confidence = float(raw_capture_confidence) if isinstance(raw_capture_confidence, (int, float)) else 0.5
-    raw_ownership_confidence = getattr(action_item, 'ownership_confidence', None)
-    ownership_confidence = (
-        float(raw_ownership_confidence) if isinstance(raw_ownership_confidence, (int, float)) else 0.5
-    )
-    source_segment_ids = set(getattr(action_item, 'source_segment_ids', None) or [])
-    if wake_word_gate is not None and source_segment_ids.intersection(wake_word_gate.matched_segment_ids):
-        relevant_verdicts = [
-            invocation.verdict
-            for invocation in wake_word_gate.adjudication.invocations
-            if source_segment_ids.intersection(invocation.segment_ids)
-        ]
-        if capture_kind == 'explicit_command':
-            if not relevant_verdicts or any(
-                verdict not in _ACCEPTED_EXPLICIT_VERDICTS for verdict in relevant_verdicts
-            ):
-                capture_kind = 'direct_request'
-        elif relevant_verdicts and all(verdict == 'task_command' for verdict in relevant_verdicts):
-            capture_kind = 'explicit_command'
-    return BackendCaptureSignals(
-        explicit_command=capture_kind == 'explicit_command',
-        clear_commitment=capture_kind == 'clear_commitment',
-        direct_request=capture_kind == 'direct_request' or capture_kind is None,
-        inferred_next_step=capture_kind == 'inferred_next_step',
-        concrete_deliverable=_concrete_deliverable(action_item),
-        owner=getattr(action_item, 'capture_owner', None) or TaskOwner.unknown,
-        already_done=candidate_action == 'complete',
-        refines_task=target_task_id if candidate_action in {'update', 'complete'} else None,
-        capture_confidence=capture_confidence,
-        ownership_confidence=ownership_confidence,
-    )
 
 
 def _record_wake_word_adjudication_outcomes(
@@ -204,7 +150,7 @@ def _capture_decision(
         ),
         evidence_ref=_conversation_evidence_ref(action_item, conversation_id, transcript_segments),
         source_surface='conversation',
-        signals=_capture_signals(action_item, wake_word_gate),
+        signals=capture_signals_for_action_item(action_item, wake_word_gate),
     )
 
 
@@ -375,7 +321,6 @@ def _idempotency_key(
 
 
 __all__ = [
-    'WakeWordCaptureGate',
     'canonical_fields',
     'canonical_conversation_fields',
     'capture_enabled',

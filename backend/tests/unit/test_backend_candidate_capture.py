@@ -12,6 +12,7 @@ from utils.conversations import process_conversation
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
 from utils.task_intelligence.capture_policy import run_capture_policy
 from utils.task_intelligence import conversation_capture
+from utils.task_intelligence import conversation_capture_policy
 from models.action_item import EvidenceRef, TaskCreatePayload
 from models.structured_extraction import ActionItemsExtraction
 from utils.llm import conversation_processing
@@ -171,8 +172,10 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
 
 
 def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_explicit_true():
-    unknown = conversation_capture._capture_signals(_action('Send the budget', capture_kind='clear_commitment'))
-    explicit = conversation_capture._capture_signals(
+    unknown = conversation_capture_policy.capture_signals_for_action_item(
+        _action('Send the budget', capture_kind='clear_commitment')
+    )
+    explicit = conversation_capture_policy.capture_signals_for_action_item(
         _action('Send the budget', capture_kind='clear_commitment', concrete_deliverable=True)
     )
 
@@ -213,7 +216,7 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
 
 
 def _wake_word_gate(*verdicts):
-    return conversation_capture.WakeWordCaptureGate(
+    return conversation_capture_policy.WakeWordCaptureGate(
         matched_segment_ids=frozenset({'wake-segment'}),
         adjudication=WakeWordAdjudication(
             invocations=[
@@ -239,7 +242,7 @@ def test_wake_word_explicit_command_requires_an_independent_accepting_verdict(ve
         source_segment_ids=['wake-segment', 'payload-segment'],
     )
 
-    signals = conversation_capture._capture_signals(action, _wake_word_gate(verdict))
+    signals = conversation_capture_policy.capture_signals_for_action_item(action, _wake_word_gate(verdict))
 
     assert signals.explicit_command is True
     assert signals.direct_request is False
@@ -259,7 +262,7 @@ def test_wake_word_rejection_demotes_extractor_explicit_command_to_review_path(v
         source_segment_ids=['wake-segment'],
     )
 
-    signals = conversation_capture._capture_signals(action, _wake_word_gate(verdict))
+    signals = conversation_capture_policy.capture_signals_for_action_item(action, _wake_word_gate(verdict))
 
     assert signals.explicit_command is False
     assert signals.direct_request is True
@@ -277,7 +280,7 @@ def test_wake_word_task_verdict_promotes_non_explicit_extraction_without_changin
         source_segment_ids=['wake-segment'],
     )
 
-    signals = conversation_capture._capture_signals(action, _wake_word_gate('task_command'))
+    signals = conversation_capture_policy.capture_signals_for_action_item(action, _wake_word_gate('task_command'))
 
     assert signals.explicit_command is True
     assert signals.direct_request is False
@@ -298,7 +301,7 @@ def test_wake_word_non_explicit_extraction_promotes_only_on_unambiguous_task_ver
         source_segment_ids=['wake-segment'],
     )
 
-    signals = conversation_capture._capture_signals(action, _wake_word_gate(*verdicts))
+    signals = conversation_capture_policy.capture_signals_for_action_item(action, _wake_word_gate(*verdicts))
 
     assert signals.explicit_command is False
     assert signals.direct_request is True
@@ -313,8 +316,8 @@ def test_wake_word_gate_leaves_non_intersecting_item_completely_untouched():
         source_segment_ids=['ambient-segment'],
     )
 
-    gated = conversation_capture._capture_signals(action, _wake_word_gate('quoted_or_meta'))
-    ordinary = conversation_capture._capture_signals(action)
+    gated = conversation_capture_policy.capture_signals_for_action_item(action, _wake_word_gate('quoted_or_meta'))
+    ordinary = conversation_capture_policy.capture_signals_for_action_item(action)
 
     assert gated == ordinary
 
@@ -325,9 +328,9 @@ def test_wake_word_no_longer_overloads_direct_mention_for_future_broadcast_polic
         capture_kind='explicit_command',
         source_segment_ids=['wake-segment'],
     )
-    signals = conversation_capture._capture_signals(action, _wake_word_gate('task_command')).model_copy(
-        update={'public_broadcast': True}
-    )
+    signals = conversation_capture_policy.capture_signals_for_action_item(
+        action, _wake_word_gate('task_command')
+    ).model_copy(update={'public_broadcast': True})
 
     decision = adapt_backend_capture(
         TaskCreatePayload(description=action.description),
@@ -519,7 +522,7 @@ def test_zero_confidence_values_are_not_replaced_by_defaults():
     action.capture_confidence = 0.0
     action.ownership_confidence = 0.0
 
-    signals = conversation_capture._capture_signals(action)
+    signals = conversation_capture_policy.capture_signals_for_action_item(action)
 
     assert signals.capture_confidence == 0.0
     assert signals.ownership_confidence == 0.0

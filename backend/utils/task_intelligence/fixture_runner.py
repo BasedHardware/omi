@@ -1,7 +1,7 @@
 """Hermetic runners for versioned task-intelligence fixtures."""
 
+from collections import Counter
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
 from typing import Any, cast
@@ -11,6 +11,10 @@ from utils.conversations.wake_word import WAKE_WORD_MARKER, find_wake_word_segme
 from utils.llm.wake_word_adjudication import WakeWordAdjudication
 from utils.task_intelligence import recommendations
 from utils.task_intelligence.capture_policy import CapturePolicyResult, run_capture_policy
+from utils.task_intelligence.conversation_capture_policy import (
+    WakeWordCaptureGate,
+    evaluate_action_item_capture_policy,
+)
 
 NormalizedSignals = dict[str, Any]
 FixtureAdapter = Callable[[dict[str, Any]], NormalizedSignals]
@@ -20,12 +24,6 @@ WakeWordAdjudicator = Callable[..., WakeWordAdjudication]
 
 _EXTRACTION_LOGGER = logging.getLogger('utils.llm.conversation_processing')
 _ADJUDICATION_LOGGER = logging.getLogger('utils.llm.wake_word_adjudication')
-
-
-@dataclass(frozen=True)
-class _WakeWordGateView:
-    matched_segment_ids: frozenset[str]
-    adjudication: WakeWordAdjudication
 
 
 class _LiveEvaluationFailureCapture(logging.Handler):
@@ -303,17 +301,14 @@ def _effective_capture_kind(signals: Any) -> str | None:
     return None
 
 
-def _score_items(items: list[Any], gate: _WakeWordGateView | None) -> list[dict[str, Any]]:
-    # Keep production capture imports out of the hermetic fixture runner's
-    # default path; the live evaluator still executes the real signal gate.
-    from utils.task_intelligence.conversation_capture import _capture_signals
-
+def _score_items(items: list[Any], gate: WakeWordCaptureGate | None) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for item in items:
-        signals = _capture_signals(item, gate)
+        evaluation = evaluate_action_item_capture_policy(item, gate)
+        signals = evaluation.signals
         result = _item_result(item)
         result['policy_capture_kind'] = _effective_capture_kind(signals)
-        result['policy_outcome'] = run_capture_policy(signals.policy_signals()).outcome
+        result['policy_outcome'] = evaluation.policy.outcome
         results.append(result)
     return results
 
@@ -329,6 +324,37 @@ def _ambient_set(items: list[dict[str, Any]], matched_segment_ids: set[str]) -> 
         for item in items
         if not matched_segment_ids.intersection(item['source_segment_ids'])
     }
+
+
+def _ambient_policy_distribution(
+    case_trials: list[dict[str, Any]],
+    arm: str,
+    matched_segment_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Aggregate policy outcomes across trials without comparing sampled wording."""
+
+    counts: Counter[tuple[tuple[str, ...], str, str]] = Counter()
+    for trial in case_trials:
+        for item in trial['outputs'][arm]:
+            source_segment_ids = tuple(sorted(str(segment_id) for segment_id in item['source_segment_ids']))
+            if matched_segment_ids.intersection(source_segment_ids):
+                continue
+            counts[
+                (
+                    source_segment_ids,
+                    str(item['policy_capture_kind'] or 'none'),
+                    str(item['policy_outcome']),
+                )
+            ] += 1
+    return [
+        {
+            'source_segment_ids': list(source_segment_ids),
+            'policy_capture_kind': policy_capture_kind,
+            'policy_outcome': policy_outcome,
+            'count': count,
+        }
+        for (source_segment_ids, policy_capture_kind, policy_outcome), count in sorted(counts.items())
+    ]
 
 
 def _has_direct_outcome(items: list[dict[str, Any]], segment_id: str) -> bool:
@@ -367,7 +393,9 @@ def _evaluate_three_arms(
             arm: {segment_id: _has_direct_outcome(items, segment_id) for segment_id in command_ids}
             for arm, items in arms.items()
         },
-        'ambient_items_set_equal': len({frozenset(items) for items in ambient_sets.values()}) == 1,
+        # These arms share the same extraction sample, so an exact comparison
+        # isolates adjudicator interference instead of measuring LLM sampling noise.
+        'adjudicator_ambient_items_set_equal': (ambient_sets['marker_only'] == ambient_sets['marker_adjudicator']),
         'control_arms_set_equal': (
             len({frozenset(_ambient_set(items, set())) for items in arms.values()}) == 1
             if case.get('control') is True
@@ -394,6 +422,7 @@ def run_live_wake_word_evaluation(
         raise ValueError('live wake-word evaluation requires at least 3 trials per case')
     results: dict[str, list[dict[str, Any]]] = {}
     evaluations: list[dict[str, Any]] = []
+    ambient_distribution_comparisons: dict[str, dict[str, Any]] = {}
     stage2_calls = 0
     for case in capture.get('wake_word_evaluation_cases', []):
         segments = _case_segments(case)
@@ -411,15 +440,21 @@ def run_live_wake_word_evaluation(
                 task_intelligence_capture=True,
                 trusted_wake_word_markers=False,
             )
-            marked_items = _extract_for_live_evaluation(
-                extractor,
-                marked_transcript,
-                datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
-                'multi',
-                'UTC',
-                task_intelligence_capture=True,
-                trusted_wake_word_markers=bool(matched_segment_ids),
-            )
+            if matched_segment_ids:
+                marked_items = _extract_for_live_evaluation(
+                    extractor,
+                    marked_transcript,
+                    datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
+                    'multi',
+                    'UTC',
+                    task_intelligence_capture=True,
+                    trusted_wake_word_markers=True,
+                )
+            else:
+                # The control has identical transcripts and prompt flags. Reuse
+                # the same model sample so equality means policy equality rather
+                # than accidental agreement between nondeterministic completions.
+                marked_items = baseline_items
             adjudication = WakeWordAdjudication()
             gate = None
             if matched_segment_ids:
@@ -432,7 +467,7 @@ def run_live_wake_word_evaluation(
                     speaker_labels=_speaker_labels(segments),
                     transcript_segments=segments,
                 )
-                gate = _WakeWordGateView(frozenset(matched_segment_ids), adjudication)
+                gate = WakeWordCaptureGate(frozenset(matched_segment_ids), adjudication)
             arms = {
                 'baseline': _score_items(baseline_items, None),
                 'marker_only': _score_items(marked_items, None),
@@ -448,6 +483,13 @@ def run_live_wake_word_evaluation(
                 }
             )
         results[case['id']] = case_trials
+        baseline_distribution = _ambient_policy_distribution(case_trials, 'baseline', matched_segment_ids)
+        marker_distribution = _ambient_policy_distribution(case_trials, 'marker_only', matched_segment_ids)
+        ambient_distribution_comparisons[case['id']] = {
+            'baseline': baseline_distribution,
+            'marker_only': marker_distribution,
+            'distributions_match': baseline_distribution == marker_distribution,
+        }
 
     arms = ('baseline', 'marker_only', 'marker_adjudicator')
     false_denominator = sum(
@@ -482,8 +524,12 @@ def run_live_wake_word_evaluation(
             'command_create_direct_denominator': command_denominator,
             'command_create_direct_count': command_counts,
             'command_create_direct_rate': {arm: _rate(command_counts[arm], command_denominator) for arm in arms},
-            'ambient_no_interference_trials': sum(
-                evaluation['ambient_items_set_equal'] is True for evaluation in evaluations
+            'adjudicator_ambient_no_interference_trials': sum(
+                evaluation['adjudicator_ambient_items_set_equal'] is True for evaluation in evaluations
+            ),
+            'baseline_marker_ambient_distribution_comparisons': ambient_distribution_comparisons,
+            'baseline_marker_ambient_distribution_match_cases': sum(
+                comparison['distributions_match'] is True for comparison in ambient_distribution_comparisons.values()
             ),
             'control_unchanged_trials': sum(evaluation['control_arms_set_equal'] is True for evaluation in evaluations),
             'paired_split_trials': sum(evaluation['paired_invocations_split'] is True for evaluation in evaluations),
