@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import List, Dict, Any, Union, Optional
+from typing import List, Dict, Any, Literal, Union, Optional
 import hashlib
 import os
 import asyncio
@@ -10,7 +10,7 @@ import asyncio
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from database import (
     conversations as conversations_db,
@@ -124,7 +124,7 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
-from utils.webhooks import webhook_first_time_setup
+from utils.webhooks import button_event_webhook, webhook_first_time_setup
 from utils.byok import has_byok_keys, invalidate_byok_state_cache, peppered_fingerprint
 import logging
 
@@ -182,6 +182,7 @@ class UserWebhooksStatusResponse(BaseModel):
     memory_created: bool
     realtime_transcript: bool
     day_summary: bool
+    button_event: bool = False
 
 
 class UserWebhookUrlResponse(BaseModel):
@@ -511,6 +512,28 @@ def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get
     return {'status': 'ok'}
 
 
+class ButtonEventRequest(BaseModel):
+    button_event: Literal['single_tap', 'double_tap', 'long_tap']
+    device_id: str = Field(min_length=1, max_length=128)
+    event_id: uuid.UUID = Field(description='Stable id for the physical gesture across retries')
+    timestamp: AwareDatetime
+    session_id: Optional[str] = Field(default=None, min_length=1, max_length=128)
+
+
+@router.post('/v1/users/developer/button-event', tags=['v1'], response_model=UserStatusResponse)
+async def post_developer_button_event(body: ButtonEventRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """App → backend forward of an opt-in hardware button gesture (#11719)."""
+    await button_event_webhook(
+        uid,
+        button_event=body.button_event,
+        device_id=body.device_id,
+        event_id=str(body.event_id),
+        timestamp=body.timestamp.isoformat(),
+        session_id=body.session_id,
+    )
+    return {'status': 'ok'}
+
+
 @router.get('/v1/users/developer/webhooks/status', tags=['v1'], response_model=UserWebhooksStatusResponse)
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
@@ -526,11 +549,15 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     day_summary = user_webhook_status_db(uid, WebhookType.day_summary)
     if day_summary is None:
         day_summary = webhook_first_time_setup(uid, WebhookType.day_summary)
+    button_event = user_webhook_status_db(uid, WebhookType.button_event)
+    if button_event is None:
+        button_event = webhook_first_time_setup(uid, WebhookType.button_event)
     return {
         'audio_bytes': audio_bytes,
         'memory_created': memory_created,
         'realtime_transcript': realtime_transcript,
         'day_summary': day_summary,
+        'button_event': button_event,
     }
 
 
