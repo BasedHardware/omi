@@ -58,3 +58,19 @@ def test_the_memory_index_predicate_is_the_same_one():
     from utils.memory import atom_keyword_index
 
     assert atom_keyword_index.typesense_configured() is False
+
+
+def test_an_injected_client_counts_as_configured(monkeypatch):
+    """Regression: the gate asked the WRONG seam.
+
+    The search call goes through the module-level ``client`` object, and upstream's own search suites
+    (tests/unit/test_lock_bypass_fixes.py::TestSearchRedaction and friends) drive this function by patching
+    exactly that attribute with a fake — no env vars involved. An env-only check answered "unconfigured"
+    for a module that had a perfectly usable client, so five upstream tests started raising 503 instead of
+    searching. Whatever the gate asks, it must be the same seam the call uses.
+    """
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr(search_mod, 'client', MagicMock())
+
+    assert search_mod.typesense_configured() is True

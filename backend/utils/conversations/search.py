@@ -150,7 +150,14 @@ def typesense_configured() -> bool:
     transient failure from "everything else", and "everything else" included the not-configured case: the
     client was built with ``api_key=None``, the call raised, and the bare re-raise reached FastAPI as a
     **500**. An on-prem deployment that simply does not run Typesense is a configuration state, not a bug.
+
+    The question is "does this module have a usable client?", and the module has exactly two ways to get
+    one: the env vars, or an injected object on the legacy ``client`` seam (the one the search call itself
+    goes through, :309). Asking only about the env would answer for the wrong seam and reject a caller that
+    supplied its own client — which is how upstream's search suites drive this function.
     """
+    if not isinstance(client, _LazyTypesenseClient):
+        return True
     return bool(os.getenv('TYPESENSE_HOST') and os.getenv('TYPESENSE_API_KEY'))
 
 
