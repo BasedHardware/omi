@@ -123,6 +123,47 @@ class TestSharedCanonicalVisibilityFilter:
         assert len(visible) == 1
         assert visible[0].memory_id == "mem-st"
 
+    def test_expired_processed_short_term_stays_visible_and_reports_missing_disposition(self, caplog):
+        item = _processed_short_term_item().model_copy(
+            update={
+                'captured_at': datetime(2026, 5, 29, tzinfo=timezone.utc),
+                'updated_at': datetime(2026, 5, 29, tzinfo=timezone.utc),
+                'expires_at': datetime(2026, 5, 31, tzinfo=timezone.utc),
+            }
+        )
+        now = datetime(2026, 6, 2, tzinfo=timezone.utc)
+        caplog.set_level('WARNING', logger='utils.memory.canonical_visibility_filter')
+
+        visible = filter_canonical_default_visible_items(
+            [item],
+            policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
+            now=now,
+        )
+
+        assert [memory.memory_id for memory in visible] == ['mem-st']
+        assert 'expired_active_pending_terminal_apply count=1' in caplog.text
+        assert 'to=readable_pending_adjudication' in caplog.text
+
+    def test_expired_pending_short_term_does_not_report_read_fallback(self, caplog):
+        item = _processed_short_term_item().model_copy(
+            update={
+                'processing_state': ProcessingState.pending,
+                'captured_at': datetime(2026, 5, 29, tzinfo=timezone.utc),
+                'updated_at': datetime(2026, 5, 29, tzinfo=timezone.utc),
+                'expires_at': datetime(2026, 5, 31, tzinfo=timezone.utc),
+            }
+        )
+        caplog.set_level('WARNING', logger='utils.memory.canonical_visibility_filter')
+
+        visible = filter_canonical_default_visible_items(
+            [item],
+            policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
+            now=datetime(2026, 6, 2, tzinfo=timezone.utc),
+        )
+
+        assert visible == []
+        assert 'expired_active_pending_terminal_apply' not in caplog.text
+
 
 class TestResolveMemorySystemIgnoresRetiredFlags:
     def test_retired_memory_env_cannot_change_universal_authority(self, monkeypatch):

@@ -251,8 +251,6 @@ def _base_policy_checks(item: MemoryItem, policy: MemoryAccessPolicy, now: datet
         return AccessDecision(False, "processing_blocked")
     if item.source_state in {SourceState.tombstoned, SourceState.purged}:
         return AccessDecision(False, "source_not_active")
-    if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= now:
-        return AccessDecision(False, "short_term_expired")
     if policy.consumer == MemoryConsumer.unknown:
         return AccessDecision(False, "unknown_consumer")
     if _has_restricted_sensitivity(item):
@@ -278,6 +276,11 @@ def is_default_access_eligible(
     if policy.consumer in {MemoryConsumer.third_party, MemoryConsumer.developer_api, MemoryConsumer.mcp}:
         if not policy.app_has_default_memory_grant:
             return AccessDecision(False, "missing_default_memory_grant")
+    if item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time:
+        # Time alone is not a terminal lifecycle decision. Active Short-term
+        # rows remain readable until canonical apply records promote/archive/
+        # review/reject and moves them out of this state.
+        return AccessDecision(True, "short_term_expired_pending_adjudication")
     if item.tier in {MemoryLayer.short_term, MemoryLayer.long_term}:
         return AccessDecision(True, "default_memory_allowed")
     return AccessDecision(False, "unsupported_tier")
