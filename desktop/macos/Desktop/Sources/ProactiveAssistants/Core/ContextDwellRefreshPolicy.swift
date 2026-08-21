@@ -23,11 +23,11 @@ import Foundation
 /// cooldown, dedup, and budget gate still applies.
 ///
 /// Cost bound: the first refresh of a context needs 20s of dwell; repeats
-/// need at least 90s since the previous one; and every refresh requires
+/// need at least 40s since the previous one; and every refresh requires
 /// typing to have happened since the last one. Reading, watching, or an idle
-/// screen never buys a model call. Worst case is a continuous typist at ~40
+/// screen never buys a model call. Worst case is a continuous typist at ~90
 /// refreshes/hour — the same order as ordinary app-switch evaluations, under
-/// the same server quotas.
+/// the same server quotas and delivery-level cooldowns.
 enum ContextDwellRefreshPolicy {
   /// Dwell before the FIRST refresh of a context: long enough to type a
   /// question, short enough that its answer lands within ~30s of typing.

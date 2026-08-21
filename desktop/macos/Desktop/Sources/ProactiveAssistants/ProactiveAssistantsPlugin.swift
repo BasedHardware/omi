@@ -60,7 +60,6 @@ public class ProactiveAssistantsPlugin: NSObject {
   // the last real context switch or fired refresh, reset on real switches.
   private var dwellContextAnchor: Date?
   private var dwellRefreshCount = 0
-  private var dwellDebugLastLogAt: Date?
 
   private(set) var isMonitoring = false
   private var isStartingMonitoring = false  // Prevents race condition with async startMonitoring
@@ -910,13 +909,6 @@ public class ProactiveAssistantsPlugin: NSObject {
       // during exactly the dwells this exists to re-evaluate.
       if ContextBucketsFeature.isEnabled, !RewindSettings.shared.isAppExcluded(appForCheck) {
         let tickTime = Date()
-        if dwellDebugLastLogAt.map({ tickTime.timeIntervalSince($0) >= 15 }) ?? true {
-          dwellDebugLastLogAt = tickTime
-          let age = dwellContextAnchor.map { Int(tickTime.timeIntervalSince($0)) } ?? -1
-          log(
-            "DwellDebug: app=\(appForCheck) switched=\(switched) anchorAge=\(age) fired=\(dwellRefreshCount) kbIdle=\(Int(Self.keyboardIdleSeconds()))"
-          )
-        }
         if switched || dwellContextAnchor == nil {
           dwellContextAnchor = tickTime
           dwellRefreshCount = 0
