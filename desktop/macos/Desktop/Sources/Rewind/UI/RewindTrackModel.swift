@@ -21,6 +21,16 @@ enum RewindTimelineNavigation {
     return max(0, min(index, screenshots.count - 1))
   }
 
+  /// Player index when the loaded array changes but the viewed frame still exists at `found`.
+  /// Parked on the newest frame while new captures append (frame kept its position and the array
+  /// only grew) follows to the new newest; any other change (scrubbed-back position,
+  /// sampled-window replacement) preserves the user's position. A result different from `found`
+  /// means the player moved and the caller must load that frame.
+  static func sameFrameIndex(old: Int, new: Int, current: Int, found: Int) -> Int {
+    if current == old - 1, found == current, new > old { return new - 1 }
+    return found
+  }
+
   /// The capture nearest an absolute moment in an ascending viewport sample.
   static func nearestIndex(to instant: Double, screenshots: [Screenshot]) -> Int? {
     guard !screenshots.isEmpty else { return nil }
@@ -130,8 +140,19 @@ enum RewindTrackWindow {
     return range.lowerBound...max(range.upperBound, instant + 30)
   }
 
-  static func shouldRefreshLiveFrames(visibleRange: ClosedRange<Double>?, now: Date) -> Bool {
-    visibleRange?.contains(now.timeIntervalSince1970) == true
+  static func shouldRefreshLiveFrames(
+    visibleRange: ClosedRange<Double>?, newestLoadedTimestamp: Double?, now: Date,
+    isPlayerParkedOnNewestFrame: Bool = false
+  ) -> Bool {
+    // The player sitting on the newest loaded frame is the live edge regardless of where the
+    // track viewport is panned — the viewer wants the next capture, so keep refreshing.
+    if isPlayerParkedOnNewestFrame { return true }
+    guard let visibleRange else { return false }
+    if visibleRange.contains(now.timeIntervalSince1970) { return true }
+    // A viewport parked at the live edge always trails the clock (its end is the newest loaded
+    // frame). Keep refreshing there; only a viewport panned back into older history stops.
+    guard let newestLoadedTimestamp else { return false }
+    return visibleRange.upperBound >= newestLoadedTimestamp
   }
 }
 

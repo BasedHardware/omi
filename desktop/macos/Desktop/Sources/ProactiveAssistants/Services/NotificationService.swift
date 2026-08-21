@@ -433,8 +433,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       return
     }
 
-    // Every proactive notification belongs to one of the four user-facing categories
-    // (Focus, Task, Insight, Memory), and this shared boundary is where a category's
+    // Every proactive notification belongs to one of the five user-facing categories
+    // (Focus, Task, Insight, Memory, Integration), and this shared boundary is where a category's
     // Settings toggle binds every producer — goals and meeting action items included,
     // not just the assistants that consult their own toggle before generating.
     // Functional notices (`respectFrequency: false`) map to `.general` and stay ungated.
@@ -444,7 +444,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled)
     {
       log("NotificationService: suppressing \(assistantId) notification because its category toggle is off")
       recordInsightDeliveryOutcome(
@@ -684,17 +685,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       onDropped?()
       return .suppressed
     }
-    // The director's decisions ride the same four category toggles as the dedicated
-    // assistants. Settings promises exactly four notification types — Focus, Task,
-    // Insight, Memory — and a toggle that silences only some producers of its
-    // category would make that promise a lie.
+    // The director's decisions ride the same category toggles as the dedicated
+    // assistants. Settings promises exactly five notification types — Focus, Task,
+    // Insight, Memory, Integration — and a toggle that silences only some producers
+    // of its category would make that promise a lie.
     guard
       Self.categoryToggleAllows(
         kind: ProactiveNotificationKind.from(decisionType: decisionType),
         focusEnabled: SuggestionAssistantSettings.shared.isEnabled,
         taskEnabled: TaskAssistantSettings.shared.notificationsEnabled,
         insightEnabled: InsightAssistantSettings.shared.notificationsEnabled,
-        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled)
+        memoryEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
+        integrationEnabled: IntegrationNudgeCoordinator.isFeatureEnabled)
     else {
       onDropped?()
       return .suppressed
@@ -761,23 +763,25 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   }
 
   /// Maps every proactive notification kind to its user-facing category — Focus, Task,
-  /// Insight, or Memory — and answers whether that category's Settings toggle allows
-  /// delivery. Focus is the focus-nudge assistant alone; generic tips, resurfaced
-  /// items, and generated goals are all insights; meeting action items are tasks.
-  /// `.general` is functional system alerting outside the taxonomy and is never
-  /// category-gated.
+  /// Insight, Memory, or Integration — and answers whether that category's Settings
+  /// toggle allows delivery. Focus is the focus-nudge assistant alone; generic tips,
+  /// resurfaced items, and generated goals are all insights; meeting action items are
+  /// tasks; connect-an-app offers are integrations. `.general` is functional system
+  /// alerting outside the taxonomy and is never category-gated.
   nonisolated static func categoryToggleAllows(
     kind: ProactiveNotificationKind,
     focusEnabled: Bool,
     taskEnabled: Bool,
     insightEnabled: Bool,
-    memoryEnabled: Bool
+    memoryEnabled: Bool,
+    integrationEnabled: Bool
   ) -> Bool {
     switch kind {
     case .suggestion: return focusEnabled
     case .task, .meetingNotes: return taskEnabled
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
+    case .integration: return integrationEnabled
     case .general: return true
     }
   }
