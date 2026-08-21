@@ -22,13 +22,11 @@ from scripts.generate_plan_catalog import (
     GENERATED_PATH,
     catalog_digest,
     load_catalog,
-    price_spec_digest,
     render_generated,
     scan_embedded_stripe_ids,
     validate_catalog,
     validate_compatibility,
     validate_publishable_catalog,
-    validate_stripe_publication,
 )
 
 
@@ -210,113 +208,3 @@ def test_compatibility_guard_requires_revision_bump():
     assert 'compatibility: catalog_revision must increase when the catalog changes' in validate_compatibility(
         previous, current
     )
-
-
-def _managed_plus_publication_fixture():
-    catalog = load_catalog()
-    plus = next(plan for plan in catalog['plans'] if plan['id'] == 'plus')
-    plus['billing']['publication_state'] = 'managed'
-    price_ids = {
-        'month': 'price_1TuH6z1F8wnoWYvw7Siv61SX',
-        'year': 'price_1TuHCw1F8wnoWYvwZvKu86sI',
-    }
-    amounts = {'month': 12_345, 'year': 123_456}  # Synthetic fixture values, not product policy.
-    bindings = {'catalog_sha256': '', 'mode': 'publish', 'environment': 'prod', 'prices': []}
-    snapshot = {'prices': {}}
-    for price in plus['billing']['prices']:
-        interval = price['interval']
-        price['amount'] = {'kind': 'finite', 'value': amounts[interval]}
-        price['lookup_key'] = f'omi.subscription.plus.{interval}.v1'
-        price_id = price_ids[interval]
-        spec_digest = price_spec_digest('plus', price)
-        bindings['prices'].append(
-            {
-                'plan_id': 'plus',
-                'interval': interval,
-                'price_id': price_id,
-                'product_id': 'prod_Uu5HDt3sygCK8N',
-                'price_spec_sha256': spec_digest,
-            }
-        )
-        snapshot['prices'][price_id] = {
-            'active': True,
-            'livemode': True,
-            'currency': 'usd',
-            'interval': interval,
-            'lookup_key': price['lookup_key'],
-            'product_id': 'prod_Uu5HDt3sygCK8N',
-            'unit_amount': amounts[interval],
-            'metadata': {
-                'omi_plan_id': 'plus',
-                'omi_price_spec_sha256': spec_digest,
-            },
-        }
-    bindings['catalog_sha256'] = catalog_digest(catalog)
-    return catalog, bindings, snapshot
-
-
-def test_publication_fence_accepts_exact_managed_price_bindings():
-    catalog, bindings, snapshot = _managed_plus_publication_fixture()
-
-    assert validate_catalog(catalog) == []
-    assert validate_stripe_publication(catalog, bindings, snapshot) == []
-
-    prepared_bindings = deepcopy(bindings)
-    prepared_bindings['mode'] = 'prepare'
-    prepared_snapshot = deepcopy(snapshot)
-    for price in prepared_snapshot['prices'].values():
-        price['active'] = False
-    assert validate_stripe_publication(catalog, prepared_bindings, prepared_snapshot) == []
-
-
-def test_publication_fence_rejects_mode_environment_product_and_activation_drift():
-    catalog, bindings, snapshot = _managed_plus_publication_fixture()
-    monthly_id = bindings['prices'][0]['price_id']
-
-    invalid_mode = deepcopy(bindings)
-    invalid_mode.pop('mode')
-    assert 'publication: bindings.mode must be prepare or publish' in validate_stripe_publication(
-        catalog, invalid_mode, snapshot
-    )
-
-    wrong_environment = deepcopy(bindings)
-    wrong_environment['environment'] = 'dev'
-    errors = validate_stripe_publication(catalog, wrong_environment, snapshot)
-    assert any('must be recognized in' in error for error in errors)
-    assert any('livemode=' in error for error in errors)
-
-    wrong_product = deepcopy(bindings)
-    wrong_product['prices'][0]['product_id'] = 'prod_Uu6nrHIKWnnTWL'
-    errors = validate_stripe_publication(catalog, wrong_product, snapshot)
-    assert any('product must already be recognized' in error for error in errors)
-
-    prepared_bindings = deepcopy(bindings)
-    prepared_bindings['mode'] = 'prepare'
-    errors = validate_stripe_publication(catalog, prepared_bindings, snapshot)
-    assert any(f'Stripe {monthly_id} active=True, expected False' in error for error in errors)
-
-
-def test_publication_fence_rejects_missing_recognition_or_binding_and_stripe_drift():
-    catalog, bindings, snapshot = _managed_plus_publication_fixture()
-    monthly_id = bindings['prices'][0]['price_id']
-
-    without_recognition = deepcopy(catalog)
-    without_recognition['recognized_stripe_prices'] = [
-        entry for entry in without_recognition['recognized_stripe_prices'] if entry['price_id'] != monthly_id
-    ]
-    errors = validate_stripe_publication(without_recognition, bindings, snapshot)
-    assert any('must already be recognized' in error for error in errors)
-
-    without_binding = {
-        'catalog_sha256': bindings['catalog_sha256'],
-        'mode': 'publish',
-        'environment': 'prod',
-        'prices': bindings['prices'][1:],
-    }
-    errors = validate_stripe_publication(catalog, without_binding, snapshot)
-    assert any("managed catalog price ('plus', 'month') has no binding" in error for error in errors)
-
-    drifted_snapshot = deepcopy(snapshot)
-    drifted_snapshot['prices'][monthly_id]['unit_amount'] += 1
-    errors = validate_stripe_publication(catalog, bindings, drifted_snapshot)
-    assert any('unit_amount=' in error for error in errors)

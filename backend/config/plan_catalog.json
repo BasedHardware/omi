@@ -3,8 +3,9 @@
   "catalog_revision": 2,
   "authority": {
     "plan_identity": "catalog",
-    "price_intent": "catalog",
-    "stripe_role": "provisioned_execution_state",
+    "price_identity": "repository_ledger",
+    "price_amount": "stripe_live",
+    "stripe_role": "price_amount_authority",
     "unknown_caller_policy": "legacy_contract"
   },
   "open_decisions": {},
@@ -227,14 +228,10 @@
         }
       },
       "billing": {
-        "publication_state": "legacy_external",
         "prices": [
           {
             "interval": "month",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_UNLIMITED_MONTHLY_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_UNLIMITED_MONTHLY_PRICE_ID",
@@ -244,9 +241,6 @@
           {
             "interval": "year",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_UNLIMITED_ANNUAL_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_UNLIMITED_ANNUAL_PRICE_ID",
@@ -316,14 +310,10 @@
         }
       },
       "billing": {
-        "publication_state": "legacy_external",
         "prices": [
           {
             "interval": "month",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
@@ -333,9 +323,6 @@
           {
             "interval": "year",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_ARCHITECT_ANNUAL_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_ARCHITECT_ANNUAL_PRICE_ID",
@@ -403,14 +390,10 @@
         }
       },
       "billing": {
-        "publication_state": "legacy_external",
         "prices": [
           {
             "interval": "month",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_OPERATOR_MONTHLY_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_OPERATOR_MONTHLY_PRICE_ID"
@@ -419,9 +402,6 @@
           {
             "interval": "year",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_OPERATOR_ANNUAL_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_OPERATOR_ANNUAL_PRICE_ID"
@@ -489,14 +469,10 @@
         }
       },
       "billing": {
-        "publication_state": "legacy_external",
         "prices": [
           {
             "interval": "month",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_PLUS_MONTHLY_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_PLUS_MONTHLY_PRICE_ID"
@@ -505,9 +481,6 @@
           {
             "interval": "year",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_PLUS_ANNUAL_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_PLUS_ANNUAL_PRICE_ID"
@@ -574,14 +547,10 @@
         }
       },
       "billing": {
-        "publication_state": "legacy_external",
         "prices": [
           {
             "interval": "month",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID"
@@ -590,9 +559,6 @@
           {
             "interval": "year",
             "currency": "usd",
-            "amount": {
-              "kind": "external_import_required"
-            },
             "primary_env_var": "STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID",
             "accepted_env_vars": [
               "STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID"

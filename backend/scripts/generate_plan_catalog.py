@@ -53,7 +53,6 @@ LIFECYCLES = {'current', 'deprecated'}
 LIMIT_KINDS = {'finite', 'unlimited', 'decision_required'}
 EXHAUSTION_KINDS = {'hard_cap', 'overage', 'decision_required'}
 INTERVALS = {'month', 'year'}
-PUBLICATION_STATES = {'legacy_external', 'managed'}
 SOURCE_EXTENSIONS = {
     '.arb',
     '.cjs',
@@ -109,17 +108,6 @@ def canonical_json(value: Any) -> str:
 
 def catalog_digest(catalog: Mapping[str, Any]) -> str:
     return hashlib.sha256(canonical_json(catalog).encode('utf-8')).hexdigest()
-
-
-def price_spec_digest(plan_id: str, price: Mapping[str, Any]) -> str:
-    price_spec = {
-        'plan_id': plan_id,
-        'interval': price.get('interval'),
-        'currency': price.get('currency'),
-        'amount': price.get('amount'),
-        'lookup_key': price.get('lookup_key'),
-    }
-    return hashlib.sha256(canonical_json(price_spec).encode('utf-8')).hexdigest()
 
 
 def _unexpected_keys(value: Mapping[str, Any], expected: set[str], path: str, errors: list[str]) -> None:
@@ -295,10 +283,7 @@ def _validate_billing(billing: Any, path: str, is_paid: bool, errors: list[str])
     if not isinstance(billing, dict):
         errors.append(f'{path}: paid plans require a billing object')
         return
-    _unexpected_keys(billing, {'publication_state', 'prices'}, path, errors)
-    publication_state = billing.get('publication_state')
-    if publication_state not in PUBLICATION_STATES:
-        errors.append(f'{path}.publication_state: expected one of {sorted(PUBLICATION_STATES)}')
+    _unexpected_keys(billing, {'prices'}, path, errors)
     prices = billing.get('prices')
     if not isinstance(prices, list):
         errors.append(f'{path}.prices: expected a list')
@@ -310,7 +295,7 @@ def _validate_billing(billing: Any, path: str, is_paid: bool, errors: list[str])
         if not isinstance(price, dict):
             errors.append(f'{price_path}: expected an object')
             continue
-        required = {'interval', 'currency', 'amount', 'primary_env_var', 'accepted_env_vars'}
+        required = {'interval', 'currency', 'primary_env_var', 'accepted_env_vars'}
         allowed = required | {'lookup_key'}
         missing = sorted(required - set(price))
         extra = sorted(set(price) - allowed)
@@ -328,22 +313,6 @@ def _validate_billing(billing: Any, path: str, is_paid: bool, errors: list[str])
         currency = price.get('currency')
         if not isinstance(currency, str) or not re.fullmatch(r'[a-z]{3}', currency):
             errors.append(f'{price_path}.currency: expected a lowercase ISO currency code')
-        amount = price.get('amount')
-        if not isinstance(amount, dict) or amount.get('kind') not in {'finite', 'external_import_required'}:
-            errors.append(f'{price_path}.amount: expected finite or external_import_required')
-        elif amount.get('kind') == 'finite':
-            _unexpected_keys(amount, {'kind', 'value'}, f'{price_path}.amount', errors)
-            if (
-                not isinstance(amount.get('value'), int)
-                or isinstance(amount.get('value'), bool)
-                or amount.get('value') <= 0
-            ):
-                errors.append(f'{price_path}.amount.value: expected positive integer minor units')
-        else:
-            _unexpected_keys(amount, {'kind'}, f'{price_path}.amount', errors)
-        if publication_state == 'managed':
-            if not isinstance(amount, dict) or amount.get('kind') != 'finite':
-                errors.append(f'{price_path}: managed prices require a finite amount')
             lookup_key = price.get('lookup_key')
             if not isinstance(lookup_key, str) or not lookup_key.startswith('omi.subscription.'):
                 errors.append(f'{price_path}.lookup_key: managed prices require an omi.subscription.* lookup key')
@@ -398,10 +367,15 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
     if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
         errors.append('catalog.catalog_revision: expected a positive integer')
     authority = catalog.get('authority')
+    # The catalog owns plan identity and the price-ID -> plan mapping. It deliberately
+    # owns NO dollar amounts: those are read live from Stripe at request time
+    # (routers/payment.py), so there is no second copy of a price to drift. Stripe is
+    # the amount authority; the repository is the identity authority.
     expected_authority = {
         'plan_identity': 'catalog',
-        'price_intent': 'catalog',
-        'stripe_role': 'provisioned_execution_state',
+        'price_identity': 'repository_ledger',
+        'price_amount': 'stripe_live',
+        'stripe_role': 'price_amount_authority',
         'unknown_caller_policy': 'legacy_contract',
     }
     if authority != expected_authority:
@@ -611,19 +585,19 @@ def _plan_map(catalog: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
     }
 
 
-def _recognized_price_map(catalog: Mapping[str, Any]) -> dict[str, tuple[str, str]]:
-    return {
-        str(entry['price_id']): (str(entry['plan_id']), str(entry['interval']))
-        for entry in catalog.get('recognized_stripe_prices', [])
-        if isinstance(entry, dict) and {'price_id', 'plan_id', 'interval'}.issubset(entry)
-    }
-
-
 def _recognized_product_map(catalog: Mapping[str, Any]) -> dict[str, str]:
     return {
         str(entry['product_id']): str(entry['plan_id'])
         for entry in catalog.get('recognized_stripe_products', [])
         if isinstance(entry, dict) and {'product_id', 'plan_id'}.issubset(entry)
+    }
+
+
+def _recognized_price_map(catalog: Mapping[str, Any]) -> dict[str, tuple[str, str]]:
+    return {
+        str(entry['price_id']): (str(entry['plan_id']), str(entry['interval']))
+        for entry in catalog.get('recognized_stripe_prices', [])
+        if isinstance(entry, dict) and {'price_id', 'plan_id', 'interval'}.issubset(entry)
     }
 
 
@@ -887,142 +861,9 @@ def validate_publishable_catalog(catalog: Mapping[str, Any]) -> list[str]:
                 errors.append(
                     f'publishable: {plan_id}.{allocation_name} still requires {exhaustion.get("decision_id")}'
                 )
-        billing = plan.get('billing')
-        if not isinstance(billing, dict):
-            continue
-        if billing.get('publication_state') != 'managed':
-            errors.append(f'publishable: {plan_id} billing is not managed by the catalog')
-        for price in billing.get('prices', []):
-            if price.get('amount', {}).get('kind') != 'finite':
-                errors.append(f'publishable: {plan_id} {price.get("interval")} price has not been imported')
     for allocation_name, contract in catalog.get('measurement_contracts', {}).items():
         if not isinstance(contract, dict) or contract.get('cost_status') != 'complete':
             errors.append(f'publishable: {allocation_name} cost accounting is not complete')
-    return errors
-
-
-def validate_stripe_publication(
-    catalog: Mapping[str, Any], bindings: Mapping[str, Any], snapshot: Mapping[str, Any]
-) -> list[str]:
-    """Validate an offline Stripe snapshot before a catalog revision is exposed.
-
-    The protected publication workflow supplies both files. This function is
-    deliberately network-free so the exact acceptance contract is unit-testable.
-    """
-
-    errors: list[str] = []
-    expected_catalog_digest = catalog_digest(catalog)
-    if bindings.get('catalog_sha256') != expected_catalog_digest:
-        errors.append('publication: binding catalog_sha256 does not match the candidate catalog')
-    mode = bindings.get('mode')
-    if mode not in {'prepare', 'publish'}:
-        errors.append('publication: bindings.mode must be prepare or publish')
-    environment = bindings.get('environment')
-    if environment not in {'dev', 'prod'}:
-        errors.append('publication: bindings.environment must be dev or prod')
-    binding_entries = bindings.get('prices')
-    snapshot_prices = snapshot.get('prices')
-    if not isinstance(binding_entries, list):
-        return errors + ['publication: bindings.prices must be a list']
-    if not isinstance(snapshot_prices, dict):
-        return errors + ['publication: snapshot.prices must be an object']
-    plans = _plan_map(catalog)
-    recognized = _recognized_price_map(catalog)
-    required_slots = {
-        (plan_id, str(price['interval']))
-        for plan_id, plan in plans.items()
-        if isinstance(plan.get('billing'), dict) and plan['billing'].get('publication_state') == 'managed'
-        for price in plan['billing'].get('prices', [])
-        if isinstance(price, dict)
-    }
-    seen_slots: set[tuple[str, str]] = set()
-    seen_price_ids: set[str] = set()
-    for index, binding in enumerate(binding_entries):
-        path = f'publication.prices[{index}]'
-        if not isinstance(binding, dict):
-            errors.append(f'{path}: expected an object')
-            continue
-        _unexpected_keys(
-            binding,
-            {'plan_id', 'interval', 'price_id', 'product_id', 'price_spec_sha256'},
-            path,
-            errors,
-        )
-        plan_id = binding.get('plan_id')
-        interval = binding.get('interval')
-        price_id = binding.get('price_id')
-        product_id = binding.get('product_id')
-        if plan_id not in plans:
-            errors.append(f'{path}.plan_id: unknown plan {plan_id!r}')
-            continue
-        slot = (str(plan_id), str(interval))
-        if slot in seen_slots:
-            errors.append(f'{path}: duplicate binding for {slot}')
-        seen_slots.add(slot)
-        if isinstance(price_id, str) and price_id in seen_price_ids:
-            errors.append(f'{path}.price_id: a Stripe price cannot bind more than one catalog slot')
-        if isinstance(price_id, str):
-            seen_price_ids.add(price_id)
-        plan = plans[str(plan_id)]
-        billing = plan.get('billing')
-        price_specs = (
-            {str(price.get('interval')): price for price in billing.get('prices', [])}
-            if isinstance(billing, dict)
-            else {}
-        )
-        price_spec = price_specs.get(str(interval))
-        if price_spec is None:
-            errors.append(f'{path}.interval: {interval!r} is not a catalog price for {plan_id}')
-            continue
-        amount = price_spec.get('amount', {})
-        if billing.get('publication_state') != 'managed' or amount.get('kind') != 'finite':
-            errors.append(f'{path}: catalog price is not managed and finite')
-            continue
-        if not isinstance(price_id, str) or recognized.get(price_id) != slot:
-            errors.append(f'{path}.price_id: price must already be recognized as {slot}')
-            continue
-        recognized_price = next(
-            (
-                entry
-                for entry in catalog.get('recognized_stripe_prices', [])
-                if isinstance(entry, dict) and entry.get('price_id') == price_id
-            ),
-            None,
-        )
-        if not isinstance(recognized_price, dict) or recognized_price.get('environment') != environment:
-            errors.append(f'{path}.price_id: price must be recognized in {environment!r}')
-        recognized_product_plan = _recognized_product_map(catalog).get(str(product_id))
-        if recognized_product_plan != plan_id:
-            errors.append(f'{path}.product_id: product must already be recognized as {plan_id!r}')
-        stripe_price = snapshot_prices.get(price_id)
-        if not isinstance(stripe_price, dict):
-            errors.append(f'{path}.price_id: {price_id} is absent from the Stripe snapshot')
-            continue
-        expected_spec_digest = price_spec_digest(str(plan_id), price_spec)
-        expected_fields = {
-            'active': mode == 'publish',
-            'livemode': environment == 'prod',
-            'currency': price_spec.get('currency'),
-            'interval': interval,
-            'lookup_key': price_spec.get('lookup_key'),
-            'product_id': product_id,
-            'unit_amount': amount.get('value'),
-        }
-        for field, expected in expected_fields.items():
-            if stripe_price.get(field) != expected:
-                errors.append(f'{path}: Stripe {price_id} {field}={stripe_price.get(field)!r}, expected {expected!r}')
-        metadata = stripe_price.get('metadata')
-        if not isinstance(metadata, dict):
-            errors.append(f'{path}: Stripe {price_id} metadata is missing')
-        else:
-            if metadata.get('omi_plan_id') != plan_id:
-                errors.append(f'{path}: Stripe {price_id} metadata.omi_plan_id does not match')
-            if metadata.get('omi_price_spec_sha256') != expected_spec_digest:
-                errors.append(f'{path}: Stripe {price_id} metadata.omi_price_spec_sha256 does not match')
-        if binding.get('price_spec_sha256') != expected_spec_digest:
-            errors.append(f'{path}: binding price_spec_sha256 does not match the catalog price')
-    for missing_slot in sorted(required_slots - seen_slots):
-        errors.append(f'publication: managed catalog price {missing_slot} has no binding')
     return errors
 
 
@@ -1062,8 +903,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--require-publishable', action='store_true', help='Reject unresolved policy and legacy billing.'
     )
-    parser.add_argument('--bindings', type=Path, help='Offline catalog-to-Stripe binding JSON to validate.')
-    parser.add_argument('--stripe-snapshot', type=Path, help='Offline Stripe Price snapshot JSON to validate.')
     parser.add_argument('--skip-source-scan', action='store_true', help='Test-only escape for isolated fixture roots.')
     return parser.parse_args()
 
@@ -1085,14 +924,6 @@ def main() -> int:
         # not read a green run on an ancestor-less base as evidence the ledger was checked.
     if args.require_publishable:
         errors.extend(validate_publishable_catalog(catalog))
-    if bool(args.bindings) != bool(args.stripe_snapshot):
-        errors.append('publication: --bindings and --stripe-snapshot must be supplied together')
-    elif args.bindings and args.stripe_snapshot:
-        with args.bindings.open(encoding='utf-8') as bindings_file:
-            bindings = json.load(bindings_file)
-        with args.stripe_snapshot.open(encoding='utf-8') as snapshot_file:
-            snapshot = json.load(snapshot_file)
-        errors.extend(validate_stripe_publication(catalog, bindings, snapshot))
     if errors:
         return _print_errors(errors)
 

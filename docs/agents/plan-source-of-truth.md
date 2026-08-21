@@ -12,7 +12,7 @@ Cloud Run snapshot from the same date; they are observations, not values selecte
 
 | Question | Decision |
 |---|---|
-| Q1: price authority | The versioned repository catalog is the system of record for intended subscription price, expressed as integer minor units plus currency and interval. Stripe is provisioned execution state and must carry an attestation to the exact catalog price spec. Existing prices remain explicitly `legacy_external` until a read-only import is reviewed. |
+| Q1: price authority | **Stripe is the authority for price amounts, read live and never copied into the repository.** The catalog owns plan identity and the price-ID -> plan mapping, and deliberately stores no dollar figure. Revised by David on 2026-08-20; see below. |
 | Q2: entitlements and allocations | Plan policy lives with the plan definition. Feature modules retain meters, counters, enforcement algorithms, and emergency controls, but may not own a second per-plan value or predicate. Units remain typed; they are not coerced into a misleading common number. |
 | Q4: acceptance guard | A catalog compiler validates the whole catalog, generates projections, rejects destructive identity/price-ledger changes, inventories committed Stripe IDs, and runs behavioral matrix tests. The final guard admits only catalog readers or byte-for-byte generated projections. Pairwise source regex checks are retired. |
 | Q6: identity remap | Do not lower the `99.0.0` floors yet. First ship lossless unknown-plan decoding in every client, then publish the six-value wire schema, set real capability floors, use the existing force-upgrade mechanism for the long tail, observe, and finally delete the remap. Missing or malformed caller identity always receives the oldest safe legacy contract. |
@@ -80,65 +80,56 @@ plan_catalog.json --> catalog compiler --> binding/attestation validator
 
 The generated file is an artifact, never an eighth source. CI compares its complete bytes with compiler output.
 
-## Q1: price publication and failure atomicity
+## Q1: amounts live in Stripe, identity lives in the repository
 
-### Current import boundary
+**Revised 2026-08-20 (David).** The original answer here made the repository the system of
+record for *intended* price, with Stripe as attested execution state, a prepare/promote
+publication workflow, and a reviewed import of existing amounts. That is rejected. No dollar
+amount is stored in this repository.
 
-Every current paid-plan price is marked `legacy_external`, and each amount is
-`{"kind":"external_import_required"}`. This is intentional: no amount was inferred from UI copy, comments, or
-test fixtures. `--require-publishable` fails while any price is unimported, any product decision is open, or cost
-measurement is incomplete. Until the import work item below is reviewed, Stripe remains the historical evidence for
-existing amounts, while the catalog is authoritative that those amounts have not yet been ratified in Git.
+The reasoning is that the drift the original design guarded against only exists if there are
+two copies of a price. There is exactly one:
 
-Configured environment-variable names are catalog fields during this bridge. Their values remain effective runtime
-overlays, which is why B1 is not silently changed by this foundation. The target removes plan price/quota values from
-per-service configuration and exposes the effective catalog revision and binding from every serving plane.
+- `backend/routers/payment.py` already calls `stripe.Price.retrieve(...)` and renders
+  `unit_amount` directly. The storefront has always shown live Stripe amounts.
+- Every dollar figure previously found in the repo was display copy, a code comment, or a
+  test fixture -- an unverified duplicate that no test compared against Stripe. Those are the
+  duplicates being removed, not replaced with a better-managed duplicate.
 
-### Target price state machine
+So a price change is a Stripe dashboard action and touches no repository file. The
+115-files-to-change-a-price problem is dissolved rather than guarded: there is nothing left
+in the repo to keep in sync.
 
-Additions move in one direction:
+### What the catalog still owns, and why it cannot be live
 
-1. `legacy_external`: imported identity is recognized, but amount intent has not been ratified.
-2. `managed/prepared`: the catalog contains exact amount, currency, interval, lookup key, and spec digest. It is not a
-   checkout target.
-3. `managed/recognized`: a Stripe Price has been retrieved and attested to that spec; its ID is in the append-only
-   recognition ledger. The backend can process its webhooks, but checkout still cannot select it.
-4. `managed/purchasable`: the environment's single catalog binding points checkout at the attested Price.
-5. `managed/retained`: it is no longer sold, but its ID-to-plan and interval mapping remains forever for renewals,
-   cancellation, reconciliation, support, and historical records.
+`price_1TAfBB1F8wnoWYvw8XBFM1dX -> architect` is **our** domain knowledge. Stripe does not
+know our plan enum, so it cannot answer it. `get_plan_type_from_price_id` needs that mapping
+on every webhook and subscription resolution, and an unrecognised price id is precisely what
+caused the Apr 17-20 incident: post-revert code recognised neither price, renewals raised
+"unknown price ID", and active paying subscribers were dropped to free. Note what that
+incident was actually about -- *identity recognition*, not amounts drifting.
 
-Stripe Price objects are immutable for the commercial fields that matter here; Stripe permits `active` at creation
-and later update ([create](https://docs.stripe.com/api/prices/create),
-[update](https://docs.stripe.com/api/prices/update)). A protected preparation workflow creates the candidate
-inactive, writes metadata `omi_plan_id` and
-`omi_price_spec_sha256`, retrieves it, and emits a normalized offline snapshot plus binding. The hermetic validator
-requires exact `active`, `livemode`, Product, currency, interval, lookup key, unit amount, metadata, catalog digest,
-and a binding for every managed price slot. `prepare` mode requires `active=false`; `publish` mode requires
-`active=true`. The binding Price and Product IDs must already be in the catalog's append-only recognition ledger.
-The selected environment must match the ledger and the retrieved Price's `livemode`, so a test-mode object cannot
-satisfy a production promotion.
+The recognition ledger is therefore append-only in Git, where it gets code review, history,
+and revert-safety. It is a local dict lookup, so resolving a plan needs no network call and
+survives a Stripe outage.
 
-There is no honest distributed transaction spanning Git, a deployment, and Stripe. The design instead makes partial
-failure non-user-visible:
+Putting the plan id in Stripe price *metadata* was considered and rejected: it would move
+plan identity behind a network call on every webhook, make a metadata typo a
+subscriber-affecting bug with no code review, and leave no audit trail.
 
-- Stripe creation/retrieval fails: no binding or checkout pointer changes.
-- Catalog validation, review, merge, or deployment fails: the candidate Price is inert/unreferenced and the old
-  checkout pointer remains active.
-- Stripe activation succeeds but promotion does not: the Price is active but unreachable; this is safe garbage, not
-  a customer-visible half-launch.
-- Promotion deployment succeeds: only then can checkout return the new ID, after every deployed resolver already
-  recognizes it.
-- A later Git revert restores the former purchase pointer but cannot remove or remap the new recognition entry.
+### Consequences for the rest of this document
 
-That last rule is the Apr 17-20 acceptance case. On `origin/main`, the incident is documented directly in the old map:
-a separately created Neo product survived a code revert, and post-revert renewals became unknown
-(`backend/utils/subscription.py`, lines 497-514). Under this design the preparation PR would have added both Neo prices to
-the recognition ledger before exposure. The compatibility check rejects deleting or remapping them, so reverting
-the purchasable pointer cannot downgrade their subscribers to Free.
-
-Live Stripe access does not belong in ordinary CI. CI validates catalog structure, compatibility, and fixture-backed
-publication behavior. The protected publish workflow obtains the live snapshot with narrowly scoped credentials and
-validates the exact merged/deployed SHA before promotion.
+- The prepare -> recognize -> validate -> activate -> promote state machine is **deleted**,
+  along with `validate_stripe_publication`, `price_spec_digest`, the `publication_state`
+  field, the `--bindings` / `--stripe-snapshot` flags, and their tests.
+- Work item **P1** (import current Stripe amounts) is **withdrawn** -- there is nothing to
+  import. Work item **P2** (publication automation) is **withdrawn**.
+- `validate_stripe_price_ids()` at startup becomes the meaningful Stripe check: with amounts
+  live, the only thing that can break is a configured price id that does not resolve. It is
+  currently existence-only, non-fatal, and skipped in dev -- worth hardening, and that is now
+  the whole of the Stripe-side guard.
+- The Q4 acceptance guard loses its price-drift half by construction and reduces to
+  identity, quota, and entitlement drift, which are still real.
 
 ## Q2: policy with the plan, mechanics with the feature
 
@@ -303,25 +294,16 @@ dependencies land without changing a decision. “Judgment” means one owner mu
    no longer reports B1/B3; no environment, UI, or client value is edited in this item. This blocks D5 quota fan-out,
    but not price import or client decoder work.
 
-2. **P1 — Import current Stripe facts read-only (judgment, parallel with C1-C4; no Stripe mutation).** Inspect every
-   cataloged price/product in dev and prod. Update each `billing.prices[]` amount, currency, interval, lookup key, and
-   binding state in `backend/config/plan_catalog.json`; add any discovered billed ID to the recognition ledger. Add
-   redacted immutable fixtures under proposed path backend/tests/fixtures/plan_catalog/stripe/ containing only object IDs and
-   validated non-secret fields. Acceptance: every chart/Cloud Run ID appears exactly once with the same plan+interval;
-   the two B2 monthly IDs both resolve; active B6 IDs are not classified by age; David approves the imported customer
-   amounts. Do not activate, archive, or create anything. Depends on foundation only.
+2. **P1 — WITHDRAWN (2026-08-20).** Importing Stripe amounts into the catalog is no longer
+   part of the design: the repository stores no dollar amounts. See the revised Q1 above.
 
-3. **P2 — Build protected prepare/promote automation (judgment, risky; depends on P1).** Add the proposed files
-   backend/scripts/prepare_subscription_prices.py, backend/scripts/validate_subscription_price_promotion.py, and
-   .github/workflows/subscription_plan_price_publish.yml; extend the catalog with explicit prepared/active bindings.
-   The workflow takes an exact main SHA and environment, creates only unreachable candidate Prices, writes metadata,
-   retrieves them, and emits a binding/snapshot artifact. Promotion validates the deployed catalog SHA before changing
-   the single purchase pointer. Acceptance: hermetic fixtures prove every failure state above and the Apr 17-20
-   create→expose→revert scenario; normal CI has no Stripe credentials; production requires environment approval. No
-   live workflow run belongs in the implementation PR.
+3. **P2 — WITHDRAWN (2026-08-20).** Publication automation existed to create Stripe prices
+   from catalog amounts. With amounts owned by Stripe, prices are created in the Stripe
+   dashboard and this workflow has no purpose. Replaced by a much smaller follow-up: harden
+   `validate_stripe_price_ids()` so a configured price id that does not resolve fails loudly
+   rather than logging, and stop skipping it in dev (which is where B2 lived).
 
-4. **D2 — Generate deployment bindings and effective-config inspection (judgment; depends on P1, and D1 for Free
-   quota).** Extend `backend/scripts/generate_plan_catalog.py`; generate one deployment projection consumed by
+4. **D2 — Generate deployment bindings and effective-config inspection (judgment; depends on D1 for Free quota).** Extend `backend/scripts/generate_plan_catalog.py`; generate one deployment projection consumed by
    `backend/charts/backend-listen/{dev,prod}_omi_backend_listen_values.yaml`,
    `backend/charts/pusher/{dev,prod}_omi_pusher_values.yaml`, `backend/deploy/runtime_env/`,
    `backend/deploy/runtime_env.yaml`, and `config/deployment-setting-classification.json`. Remove hand-authored plan
@@ -411,7 +393,8 @@ single integration owner because they cross a money or compatibility boundary.
    unlimited or whether the ambiguous zero convention is retired.
 2. B3: whether Plus and Unlimited-v2 hard-cap or enter overage after their included chat allowance. The current runtime
    behavior remains hard-cap until this is answered.
-3. P1 review: approve the exact imported Stripe amounts and which of the two dev Architect monthly Prices becomes the
-   single purchasable binding. The non-selected ID remains recognized.
+3. ~~P1 review: approve imported Stripe amounts.~~ **Withdrawn** — no amounts are imported.
+   The dev Architect price-id split (B2) is still worth resolving, but it is a configuration
+   fix, not a catalog decision.
 4. Later release approval: the real client capability/force-upgrade floors and the observation window before deleting
    the remap. These values must come from shipped-build evidence, not this design.
