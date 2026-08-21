@@ -102,6 +102,7 @@ from utils.executors import (
 from utils.executors import start_background_task
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.push.selector import validate_push_configuration
+from utils.vector.factory import validate_vector_dimension
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.conversation_finalization import reconcile_meeting_receipts
 from services.conversation_finalization import reconcile_stale_processing_conversations
@@ -117,6 +118,10 @@ validate_stripe_price_ids()
 # Same idea for the push transport: a declared UnifiedPush with no internal base URL delivers nothing,
 # and used to say so only as one ERROR per endpoint on the first notification (BACKLOG L18).
 validate_push_configuration()
+
+# And for the vector store: QDRANT_VECTOR_DIM is read only when a COLLECTION IS CREATED, so a value the
+# embeddings model contradicts does nothing until some feature first touches a new namespace (BACKLOG L19).
+validate_vector_dimension()
 
 _auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
 _firebase_admin_options = firebase_admin_options()
