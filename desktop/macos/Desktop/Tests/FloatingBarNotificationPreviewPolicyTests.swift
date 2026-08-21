@@ -333,4 +333,35 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       isPersistent: true)
     XCTAssertTrue(share.isPersistent)
   }
+
+  @MainActor
+  func testSeeSummaryNavigationDrivesConversationOpenContract() {
+    final class Captured: @unchecked Sendable {
+      var navigatePayload: Int?
+      var openRequested = false
+    }
+    let conversationID = "conv-see-summary-\(UUID().uuidString)"
+    let captured = Captured()
+    let center = NotificationCenter.default
+    let navToken = center.addObserver(
+      forName: .navigateToSidebarItem, object: nil, queue: nil
+    ) { note in
+      captured.navigatePayload = note.userInfo?["rawValue"] as? Int
+    }
+    let openToken = center.addObserver(
+      forName: .desktopAutomationOpenConversationRequested, object: nil, queue: nil
+    ) { _ in captured.openRequested = true }
+    defer {
+      center.removeObserver(navToken)
+      center.removeObserver(openToken)
+    }
+
+    MeetingSummaryShareActions.postOpenSignals(conversationID: conversationID)
+
+    XCTAssertEqual(captured.navigatePayload, SidebarNavItem.conversations.rawValue)
+    XCTAssertTrue(captured.openRequested)
+    let pending = ConversationDetailAutomationState.shared.takePendingOpenRequest()
+    XCTAssertEqual(pending?.conversationId, conversationID)
+    XCTAssertEqual(pending?.showTranscript, false)
+  }
 }

@@ -16,6 +16,29 @@ enum MeetingSummaryShareActions {
     )
   }
 
+  /// Open the conversation detail for this meeting's summary: summon the main
+  /// window, land on Conversations, and drive the same pending-open request the
+  /// established conversation-open path consumes.
+  static func openSummary(conversationID: String) {
+    AppDelegate.summonWindowTarget()?.openMainAppWindow()
+    postOpenSignals(conversationID: conversationID)
+  }
+
+  /// Window-independent half of `openSummary`, separated so a hermetic test can
+  /// assert the navigation contract without AppKit window state.
+  static func postOpenSignals(conversationID: String) {
+    NotificationCenter.default.post(
+      name: .navigateToSidebarItem,
+      object: nil,
+      userInfo: ["rawValue": SidebarNavItem.conversations.rawValue]
+    )
+    ConversationDetailAutomationState.shared.requestOpen(
+      conversationId: conversationID,
+      showTranscript: false
+    )
+    NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
+  }
+
   static func sendSummary(
     conversationID: String, recipients: [ConversationShareRecipient]
   ) async throws -> [String] {

@@ -2872,7 +2872,7 @@ private struct MeetingSummaryShareCard: View {
       // Text-style link, deliberately chrome-free beside the two pills.
       Button {
         FloatingControlBarManager.shared.dismissCurrentNotification()
-        AppDelegate.summonWindowTarget()?.openMainAppChat()
+        MeetingSummaryShareActions.openSummary(conversationID: conversationID)
       } label: {
         Text("See summary")
           .scaledFont(size: 12, weight: .medium)

@@ -4087,10 +4087,13 @@ class FloatingControlBarManager {
         triggerID: triggerID
       )
       return
-    case .meetingSummaryShare:
-      // The share card's chips own Copy/Send; a body click falls through to
-      // the default open-in-chat behavior like any other proactive card.
-      break
+    case .meetingSummaryShare(let conversationID, _):
+      // The share card's chips own Copy/Send; any other click on the card
+      // opens the summary's own conversation detail — the card is not
+      // journaled, so the generic open-notification-chat fallthrough would
+      // have nothing to resolve.
+      MeetingSummaryShareActions.openSummary(conversationID: conversationID)
+      return
     case nil:
       break
     }
