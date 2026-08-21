@@ -1472,6 +1472,7 @@ import type {
   UserSubscriptionResponse,
   Person,
 } from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 
 /**
  * Get user's primary language
@@ -1697,14 +1698,14 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       '/v1/users/me/subscription',
     );
 
-    // Any paid tier counts as premium for UI gating (Manage vs Choose Plan).
-    // Plus / Unlimited arrive wired as 'unlimited'; Operator / Architect arrive
-    // as their real plan id now that web renders the full new catalog.
-    const paidPlans = ['unlimited', 'plus', 'unlimited_v2', 'operator', 'architect'];
+    const plan = decodePlan(response.subscription?.plan);
     const result: UserSubscription = {
-      plan: response.subscription?.plan || 'basic',
+      plan: plan.raw ?? '',
+      plan_identity: plan,
       status: response.subscription?.status || 'active',
-      is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
+      // Unknown plans are deliberately excluded. A future wire value must not
+      // inherit paid capability merely because it is non-empty.
+      is_unlimited: planGrantsPaidCapability(plan),
       current_period_end: response.subscription?.current_period_end,
       stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,

@@ -13,6 +13,7 @@ from typing import Any
 from google.api_core.exceptions import AlreadyExists
 
 from database._client import get_firestore_client
+from database.llm_usage import resolve_usage_plan_id
 
 ATTEMPTS_COLLECTION = 'llm_gateway_attempts'
 
@@ -32,6 +33,20 @@ def record_llm_gateway_attempt(
     client = firestore_client or get_firestore_client()
     data = dict(event)
     data['subscription_tier'] = _subscription_tier(client, data.get('user_uid'))
+    plan_id = resolve_usage_plan_id(data.get('user_uid', ''), firestore_client=client)
+    data['plan_id'] = plan_id
+    data['plan_attribution_status'] = 'complete' if plan_id is not None else 'missing'
+    payer = data.get('payer')
+    if payer == 'byok':
+        data['cost_attribution_status'] = 'excluded'
+        data['cost_exclusion'] = 'byok_provider_cost'
+    elif data.get('estimated_cost_micro_usd') is not None and data.get('cost_status') not in {'not_omi_cost'}:
+        data['cost_attribution_status'] = 'complete'
+    elif data.get('cost_status') == 'not_omi_cost':
+        data['cost_attribution_status'] = 'excluded'
+        data['cost_exclusion'] = 'provider_not_omi_cost'
+    else:
+        data['cost_attribution_status'] = 'missing'
     try:
         client.collection(ATTEMPTS_COLLECTION).document(attempt_id).create(data)
     except AlreadyExists:
