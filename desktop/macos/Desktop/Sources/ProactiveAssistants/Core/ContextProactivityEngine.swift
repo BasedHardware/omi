@@ -447,6 +447,7 @@ actor ContextProactivityEngine {
     // client can already see the question in the validated facts, asking the
     // model whether to look it up is a coin flip that costs the delivery.
     var forcedRetrievalAllowlist: Set<String> = []
+    var forcedRetrievalItems: [ContextRetrievedItem] = []
     var forcedRetrievalProvenance: [String: Any]? = nil
     var effectiveUncachedPrompt = uncachedPrompt
     if retrievalHopEnabled,
@@ -468,6 +469,7 @@ actor ContextProactivityEngine {
           environmentalSignal: envSignal)
         effectiveUncachedPrompt = answerPrompt + "\n\n" + section
         forcedRetrievalAllowlist = Set(items.map(\.ref))
+        forcedRetrievalItems = items
         forcedRetrievalProvenance = ContextDirectorRetrievalHop.provenance(
           query: forcedQuery, items: items, citedRefs: [], hopCompleted: true, failure: nil)
       }
@@ -549,8 +551,16 @@ actor ContextProactivityEngine {
       let citedRefs = ContextDirectorRetrievalHop.partitionCitedRefs(decision.bucketEntryRefs)
       let entryRefs = await store.validatedEntryRefs(
         citedRefs.bucket, bucketID: snapshot.bucketID)
-      let retrievedRefs = ContextDirectorRetrievalHop.validatedRetrievedRefs(
+      var retrievedRefs = ContextDirectorRetrievalHop.validatedRetrievedRefs(
         citedRefs.retrieved, allowed: retrievedRefAllowlist)
+      // Forced-question answers: attribute the citation the model omitted when
+      // the message provably carries retrieved content (see impliedCitations).
+      if retrievedRefs.isEmpty, !forcedRetrievalItems.isEmpty,
+        decision.decision == "insight" || decision.decision == "suggest"
+      {
+        retrievedRefs = ContextDirectorRetrievalHop.impliedCitations(
+          message: decision.message, items: forcedRetrievalItems)
+      }
       let factIDs =
         decision.decision == "silence"
         ? []

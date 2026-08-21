@@ -398,4 +398,27 @@ final class ContextProactivityRetrievalHopTests: XCTestCase {
       ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: [facts[0]]))
     XCTAssertNil(ContextDirectorRetrievalHop.forcedLookupQuery(validatedFacts: []))
   }
+
+  func testImpliedCitationsMatchOnSharedContent() {
+    let items = [
+      ContextRetrievedItem(
+        ref: "memory:dl-1", title: "Memory",
+        preview:
+          "The download link for the latest Omi desktop app (macOS) is omi.me/desktop — share this link whenever someone asks.",
+        createdAt: nil),
+      ContextRetrievedItem(
+        ref: "conversation:noise", title: "Conversation",
+        preview: "Jii and Speaker 1 troubleshoot an OpenGL rendering issue.", createdAt: nil),
+    ]
+    // A shared long token (the link) attributes the citation.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "The latest Omi desktop app download link is omi.me/desktop.", items: items),
+      ["memory:dl-1"])
+    // Content matching nothing retrieved earns no citation.
+    XCTAssertEqual(
+      ContextDirectorRetrievalHop.impliedCitations(
+        message: "You should restart your computer.", items: items),
+      [])
+  }
 }

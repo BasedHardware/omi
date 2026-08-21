@@ -72,6 +72,42 @@ enum ContextDirectorRetrievalHop {
     return nil
   }
 
+  /// Citation auto-attribution for forced-question answers. The model reliably
+  /// writes the retrieved answer into the message but only stochastically
+  /// copies the ref into bucket_entry_refs, and an uncited answer dies at the
+  /// grounding veto. When the message provably contains content from a
+  /// retrieved item — a shared long token (a link, an identifier) or a shared
+  /// three-word phrase — the item's ref IS the citation the model omitted.
+  /// Content that matches nothing retrieved earns no citation and still dies
+  /// at the veto, so hallucinated answers stay undeliverable.
+  static func impliedCitations(message: String, items: [ContextRetrievedItem]) -> [String] {
+    let normalizedMessage = message.lowercased()
+    guard !normalizedMessage.isEmpty else { return [] }
+    var cited: [String] = []
+    for item in items {
+      let preview = item.preview.lowercased()
+      let tokens = preview.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+      var matched = false
+      for token in tokens where token.count >= 10 {
+        if normalizedMessage.contains(token) {
+          matched = true
+          break
+        }
+      }
+      if !matched, tokens.count >= 3 {
+        for i in 0...(tokens.count - 3) {
+          let phrase = tokens[i...(i + 2)].joined(separator: " ")
+          if phrase.count >= 12, normalizedMessage.contains(phrase) {
+            matched = true
+            break
+          }
+        }
+      }
+      if matched { cited.append(item.ref) }
+    }
+    return cited
+  }
+
   /// Fact lines are assembled as "fact:<id> <statement> [evidence: ...]".
   private static func factStatement(_ line: String) -> String {
     var statement = line
