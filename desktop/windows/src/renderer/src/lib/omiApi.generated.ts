@@ -2921,7 +2921,7 @@ export interface RecordLlmUsageBucketRequest {
   account?: string;
   cache_read_tokens?: number;
   cache_write_tokens?: number;
-  cost_usd?: number;
+  cost_usd?: number | null;
   input_tokens?: number;
   output_tokens?: number;
   total_tokens?: number;
