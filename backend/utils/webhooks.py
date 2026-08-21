@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from weakref import WeakValueDictionary
 
 from database.redis_db import (
     get_user_webhook_db,
@@ -48,6 +49,8 @@ _SAMPLE_RATE_RE = re.compile(r'^[1-9]\d{2,5}$')
 
 _audio_bytes_send_locks: dict[str, asyncio.Lock] = {}
 _audio_bytes_send_locks_guard = asyncio.Lock()
+_button_event_send_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+_button_event_send_locks_guard = asyncio.Lock()
 
 
 async def _get_audio_bytes_send_lock(uid: str) -> asyncio.Lock:
@@ -56,6 +59,16 @@ async def _get_audio_bytes_send_lock(uid: str) -> asyncio.Lock:
         if lock is None:
             lock = asyncio.Lock()
             _audio_bytes_send_locks[uid] = lock
+        return lock
+
+
+async def _get_button_event_send_lock(uid: str, device_id: str) -> asyncio.Lock:
+    key = f'{uid}:{device_id}'
+    async with _button_event_send_locks_guard:
+        lock = _button_event_send_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _button_event_send_locks[key] = lock
         return lock
 
 
@@ -429,6 +442,87 @@ async def send_audio_bytes_developer_webhook(uid: str, sample_rate: int, data: b
             )
             await _handle_dev_webhook_disable(uid, WebhookType.audio_bytes, should_disable)
             logger.error(f"Error sending audio bytes to developer webhook: {e}")
+
+
+async def button_event_webhook(
+    uid: str,
+    *,
+    button_event: str,
+    device_id: str,
+    event_id: str,
+    timestamp: str,
+    session_id: Optional[str] = None,
+) -> None:
+    """Forward an opt-in hardware button gesture to the developer webhook (#11719)."""
+    lock = await _get_button_event_send_lock(uid, device_id)
+    async with lock:
+        await _button_event_webhook_serialized(
+            uid,
+            button_event=button_event,
+            device_id=device_id,
+            event_id=event_id,
+            timestamp=timestamp,
+            session_id=session_id,
+        )
+
+
+async def _button_event_webhook_serialized(
+    uid: str,
+    *,
+    button_event: str,
+    device_id: str,
+    event_id: str,
+    timestamp: str,
+    session_id: Optional[str] = None,
+) -> None:
+    toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.button_event)
+    if not toggled:
+        return
+    webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.button_event)
+    if not webhook_url:
+        return
+    webhook_url = _append_query_params(webhook_url, {'uid': uid})
+    cb = get_webhook_circuit_breaker(webhook_url)
+    if not cb.allow_request():
+        logger.info(f'button_event_webhook: circuit breaker open for {webhook_url[:80]}')
+        return
+    payload = {
+        'event_type': 'button_event',
+        'button_event': button_event,
+        'device_id': device_id,
+        'event_id': event_id,
+        'timestamp': timestamp,
+        'session_id': session_id,
+    }
+    try:
+        response = await _post_dev_webhook(
+            'button_event_webhook',
+            webhook_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            idempotency_key=event_id,
+        )
+        if 200 <= response.status_code < 300:
+            cb.record_success()
+            await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.button_event)
+        else:
+            cb.record_failure()
+            should_disable = await run_blocking(
+                db_executor,
+                record_dev_webhook_failure,
+                uid,
+                WebhookType.button_event,
+                response.status_code,
+                f'HTTP {response.status_code}',
+            )
+            await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+    except Exception as e:
+        cb.record_failure()
+        should_disable = await run_blocking(
+            db_executor, record_dev_webhook_failure, uid, WebhookType.button_event, 0, type(e).__name__
+        )
+        await _handle_dev_webhook_disable(uid, WebhookType.button_event, should_disable)
+        logger.error(f'Error sending button_event developer webhook: {e}')
 
 
 def webhook_first_time_setup(uid: str, wType: WebhookType) -> bool:
