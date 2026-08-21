@@ -243,13 +243,16 @@ class AssistantCoordinator {
   /// which now contains what the user typed — gets extraction, departure
   /// evaluation, and the fresh visit gets its normal entry evaluation. Every
   /// quota, cooldown, dedup, and budget gate applies unchanged.
-  @discardableResult
-  func refreshActiveContextForDwell() async -> Bool {
-    guard ContextBucketsFeature.isEnabled else { return false }
-    guard let app = lastTrackedApp, let frame = lastTrackedFrame else { return false }
-    guard !RewindSettings.shared.isAppExcluded(app) else { return false }
+  /// Returns the arriving visit's fence so the caller can capture a
+  /// post-entry frame BEFORE engaging the director: the entry evaluation only
+  /// grounds on frames captured at or after the visit began, and the
+  /// preview-skip path may not produce another full frame for a static screen.
+  func refreshActiveContextForDwell() async -> ContextVisitFence? {
+    guard ContextBucketsFeature.isEnabled else { return nil }
+    guard let app = lastTrackedApp, let frame = lastTrackedFrame else { return nil }
+    guard !RewindSettings.shared.isAppExcluded(app) else { return nil }
     let request = ContextTransitionRequest(app: app, windowTitle: lastTrackedWindowTitle)
-    guard contextTransitionQueue.begin(request) else { return false }
+    guard contextTransitionQueue.begin(request) else { return nil }
     defer { finishContextTransition(request) }
     do {
       let transition = try await ContextVisitCoordinator.shared.transition(
@@ -259,11 +262,10 @@ class AssistantCoordinator {
       if transition.departingQualified, let departingFence = transition.departingFence {
         Task { await ContextBucketRollupWriter.shared.extract(frame: frame, fence: departingFence) }
       }
-      Task { await ContextProactivityEngine.shared.contextEntered(transition.arrivingFence) }
-      return true
+      return transition.arrivingFence
     } catch {
       logError("Context buckets: content-refresh transition failed", error: error)
-      return false
+      return nil
     }
   }
 

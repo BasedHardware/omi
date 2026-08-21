@@ -635,23 +635,44 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func captureFrameThenRefreshActiveContext(
     windowID: CGWindowID, appName: String, windowTitle: String?
   ) async {
-    if #available(macOS 14.0, *) {
-      guard let screenCaptureService else { return }
+    // Capture BEFORE the transition so the departing extraction sees the typed
+    // content even when the preview-skip path starved full captures.
+    if #available(macOS 14.0, *), let screenCaptureService {
       let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
       if case .success(let image) = result {
         frameCount += 1
-        let frame = CapturedFrame(
-          cgImage: image,
-          jpegQuality: 0.8,
-          appName: appName,
-          windowTitle: windowTitle,
-          frameNumber: frameCount,
-          captureTime: Date()
-        )
-        AssistantCoordinator.shared.trackFrame(frame)
+        AssistantCoordinator.shared.trackFrame(
+          CapturedFrame(
+            cgImage: image,
+            jpegQuality: 0.8,
+            appName: appName,
+            windowTitle: windowTitle,
+            frameNumber: frameCount,
+            captureTime: Date()
+          ))
       }
     }
-    await AssistantCoordinator.shared.refreshActiveContextForDwell()
+    guard let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell()
+    else { return }
+    // Capture AGAIN after the visit opened: the entry evaluation only grounds
+    // on frames captured at or after the visit began, and a static screen may
+    // never produce another full frame through the preview-skip path.
+    if #available(macOS 14.0, *), let screenCaptureService {
+      let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
+      if case .success(let image) = result {
+        frameCount += 1
+        AssistantCoordinator.shared.trackFrame(
+          CapturedFrame(
+            cgImage: image,
+            jpegQuality: 0.8,
+            appName: appName,
+            windowTitle: windowTitle,
+            frameNumber: frameCount,
+            captureTime: Date()
+          ))
+      }
+    }
+    await ContextProactivityEngine.shared.contextEntered(arrivingFence)
   }
 
   private func handleCaptureTargetUnavailable() {
