@@ -243,13 +243,14 @@ struct ProactiveNotificationBadge: Equatable {
   static let insightSystemImage = "sparkles"
   static let suggestionSystemImage = "lightbulb"
 
-  /// The user-facing taxonomy is exactly four proactive categories — Focus, Task,
-  /// Insight, Memory — matching the four toggles in Settings → Notifications. Internal
-  /// kinds stay distinct (their raw values are persisted in chat continuity keys), but
-  /// every one of them presents as one of the four: Focus is the focus-nudge assistant
-  /// alone; generic tips, resurfaced items, and generated goals are all insights;
-  /// meeting action items are tasks. `.general` is reserved for functional system
-  /// alerts, which sit outside the proactive taxonomy.
+  /// The user-facing taxonomy is exactly five proactive categories — Focus, Task,
+  /// Insight, Memory, Integration — matching the five toggles in Settings →
+  /// Notifications. Internal kinds stay distinct (their raw values are persisted in
+  /// chat continuity keys), but every one of them presents as one of the five: Focus
+  /// is the focus-nudge assistant alone; generic tips, resurfaced items, and generated
+  /// goals are all insights; meeting action items are tasks; connect-an-app offers are
+  /// integrations. `.general` is reserved for functional system alerts, which sit
+  /// outside the proactive taxonomy.
   init(kind: ProactiveNotificationKind) {
     switch kind {
     case .suggestion:
@@ -260,6 +261,8 @@ struct ProactiveNotificationBadge: Equatable {
       (label, systemImage) = ("Task", "checkmark.circle")
     case .memory:
       (label, systemImage) = ("Memory", "brain.head.profile")
+    case .integration:
+      (label, systemImage) = ("Integration", "sparkles.rectangle.stack")
     case .general:
       (label, systemImage) = ("Notification", "bell")
     }

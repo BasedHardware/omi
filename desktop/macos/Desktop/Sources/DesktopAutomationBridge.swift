@@ -3516,49 +3516,7 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
-    register(
-      name: "settings_notifications_snapshot",
-      summary: "Return notification settings and local permission state"
-    ) { _ in
-      async let settingsTask = APIClient.shared.getNotificationSettings()
-      let settings = try await settingsTask
-      let appState = await MainActor.run { AppState.current }
-      let hasPermission = appState?.hasNotificationPermission ?? false
-      let bannersDisabled = appState?.isNotificationBannerDisabled ?? false
-      return [
-        "schema": "enabled,frequency,frequency_label,has_permission,banners_disabled",
-        "enabled": settings.enabled ? "true" : "false",
-        "frequency": "\(settings.frequency)",
-        "frequency_label": settings.frequencyDescription,
-        "has_permission": hasPermission ? "true" : "false",
-        "banners_disabled": bannersDisabled ? "true" : "false",
-      ]
-    }
-
-    register(
-      name: "set_notification_settings",
-      summary: "Update notification settings via the real API",
-      params: ["enabled", "frequency"]
-    ) { params in
-      let enabled = params["enabled"].map { boolParam($0, default: true) }
-      let frequency = params["frequency"].flatMap { Int($0) }
-      let response = try await APIClient.shared.updateNotificationSettings(
-        enabled: enabled,
-        frequency: frequency
-      )
-      UserDefaults.standard.set(
-        response.enabled,
-        forKey: NotificationService.masterEnabledDefaultsKey)
-      UserDefaults.standard.set(
-        response.frequency,
-        forKey: NotificationService.frequencyDefaultsKey)
-      return [
-        "saved": "true",
-        "enabled": response.enabled ? "true" : "false",
-        "frequency": "\(response.frequency)",
-      ]
-    }
-
+    registerNotificationActions()
     register(
       name: "rewind_settings_snapshot",
       summary: "Return Rewind settings retention and excluded-app counts"
@@ -3905,7 +3863,7 @@ final class DesktopAutomationActionRegistry {
 }
 
 /// Coerce a string param ("true"/"1"/"yes") into a Bool, falling back when absent.
-private func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
+func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
   guard let raw = raw?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else {
     return fallback
   }

@@ -407,6 +407,7 @@ struct SettingsContentView: View {
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
+    case referral = "Refer a Friend"
     case about = "About"
     /// The established page that had no door. It was only ever written by the sidebar the glass
     /// shell stopped rendering, so `PermissionsPage` kept working with nothing on screen that
@@ -650,6 +651,8 @@ struct SettingsContentView: View {
           shortcutsSection
         case .advanced:
           advancedSection
+        case .referral:
+          referralSection
         case .about:
           aboutSection
         case .permissions:

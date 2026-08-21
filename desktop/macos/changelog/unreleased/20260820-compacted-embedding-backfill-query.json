@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the screenshot embedding backfill failing to find the entries it needed to re-index"
-}

@@ -117,7 +117,7 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
             'key': 'ANTHROPIC_API_KEY',
         }
         assert 'ANTHROPIC_API_KEY' in _secret_keys(secrets)
-        for provider_secret in ('OPENROUTER_API_KEY',):
+        for provider_secret in ('OPENROUTER_API_KEY', 'PERPLEXITY_API_KEY'):
             assert env[provider_secret]['valueFrom']['secretKeyRef'] == {
                 'name': f'{environment}-omi-backend-secrets',
                 'key': provider_secret,
@@ -132,7 +132,6 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert env['LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS']['value'] == '1'
         assert env['LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES']['value'] == '1000'
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in _secret_keys(secrets)
-        assert 'PERPLEXITY_API_KEY' not in env
         probe_command = gateway['readinessProbe']['exec']['command'][-1]
         assert '/ready' in probe_command
         assert '${OMI_LLM_GATEWAY_SERVICE_TOKEN}' in probe_command

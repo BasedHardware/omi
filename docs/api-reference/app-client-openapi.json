@@ -17816,6 +17816,19 @@
         "title": "RecordLlmUsageBucketRequest",
         "type": "object"
       },
+      "ReferralLinkResponse": {
+        "properties": {
+          "referral_url": {
+            "title": "Referral Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "referral_url"
+        ],
+        "title": "ReferralLinkResponse",
+        "type": "object"
+      },
       "ReorderFoldersRequest": {
         "description": "Request model for reordering folders.",
         "properties": {
@@ -52567,6 +52580,83 @@
         "summary": "Get User Paywall Status",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/v1/users/me/referral": {
+      "get": {
+        "operationId": "get_referral_link_v1_users_me_referral_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferralLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Referral Link",
+        "tags": [
+          "referrals"
         ]
       }
     },

@@ -157,7 +157,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
       "muted in-bar preview must keep a banner surface so director delivery is visible")
   }
 
-  /// Behavioral guard for the four-type taxonomy: the director's real entry point must
+  /// Behavioral guard for the category taxonomy: the director's real entry point must
   /// refuse a delivery whose category toggle is off. A "suggest" decision is a generic
   /// tip, which the taxonomy files under Insight. Every upstream gate is pinned open
   /// (owner seeded, master on, frequency Maximum, not paywalled) and the surface is
@@ -219,7 +219,7 @@ final class FloatingBarNotificationPreviewPolicyTests: XCTestCase {
     XCTAssertEqual(droppedCount, 1)
   }
 
-  /// The four category toggles bind every proactive producer at the shared
+  /// The category toggles bind every proactive producer at the shared
   /// `sendNotification` boundary — including the dedicated producers that never
   /// consulted a toggle before generating: goals (Insight) and meeting action items
   /// (Task). Same construction as the director test: every upstream gate is pinned

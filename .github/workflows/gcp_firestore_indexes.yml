@@ -129,7 +129,18 @@ jobs:
       # indexes deletes their existing entries. Fail after monotone composite
       # repair so the unapplied saving is visible and points at the separately
       # confirmed operation without weakening create-only reconciliation.
+      #
+      # Scoped to prod for two independent reasons. `reject_nonprod_field_exemptions`
+      # refuses the apply operation in every other environment, so unscoped this step
+      # asserts a state a non-prod run is forbidden to reach and the development
+      # reconcile fails here permanently no matter how healthy it is -- which is
+      # exactly what happened once this landed. And there is only one data plane to
+      # check: dev.overlay.yaml sets data_plane_project: based-hardware, so dev/beta
+      # `screen_activity` documents live in prod. The development environment's
+      # RUNTIME_GCP_PROJECT_ID is based-hardware-dev, so a non-prod run of this check
+      # interrogates a project that holds none of the data the exemption is about.
       - name: Detect unapplied Firestore field exemptions
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') == 'prod' }}
         run: |
           python3 backend/scripts/reconcile_firestore_field_exemptions.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \

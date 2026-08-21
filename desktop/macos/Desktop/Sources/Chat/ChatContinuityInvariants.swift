@@ -9,6 +9,7 @@ enum ProactiveNotificationKind: String, Equatable {
   case goal
   case meetingNotes = "meeting_notes"
   case resurface
+  case integration
 
   static func from(decisionType: String) -> Self {
     switch decisionType {
@@ -30,6 +31,7 @@ enum ProactiveNotificationKind: String, Equatable {
     case "memory-extraction": return .memory
     case "goals": return .goal
     case "meeting-notes": return .meetingNotes
+    case "integration_connect": return .integration
     default: return .general
     }
   }

@@ -4310,14 +4310,6 @@ class FloatingControlBarManager {
     }
   }
 
-  nonisolated static func notificationJournalText(title: String, body: String) -> String {
-    let headline = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    let detail = body.trimmingCharacters(in: .whitespacesAndNewlines)
-    if headline.isEmpty { return detail }
-    if detail.isEmpty || detail == headline { return headline }
-    return "\(headline)\n\(detail)"
-  }
-
   func mainChatSurfaceReference() -> AgentSurfaceReference {
     historyChatProvider?.mainChatSurfaceReference()
       ?? .mainChat(chatId: "default")

@@ -299,7 +299,7 @@ enum RealtimeHubTools {
       "messages": messages,
       "stream": false,
       // Escalations carry no client tools, so opt in to the gateway's
-      // server-side web_search injection explicitly — voice escalations are
+      // managed Perplexity web-search lane explicitly — voice escalations are
       // exactly the "current facts" turns that need a live lookup.
       "omi_web_search": true,
     ]
