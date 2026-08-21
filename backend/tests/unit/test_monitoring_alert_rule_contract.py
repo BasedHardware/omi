@@ -353,7 +353,11 @@ def test_silent_failure_alerts_link_the_shared_runbook():
 
 
 def test_chat_traffic_zero_threshold_sits_below_the_measured_weekly_floor():
-    """18 requests was the quietest observed hour in the week before this rule."""
+    """9 requests was the quietest hour observed in the week before this rule.
+
+    Sampled at 15-minute resolution over 7 days of production: min 9, p01 15,
+    p05 23, median 55, and zero evaluations below 5.
+    """
     for export_name, rules in _all_rule_exports().items():
         rule = rules[CHAT_TRAFFIC_ZERO_RULE]
         assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [5], export_name

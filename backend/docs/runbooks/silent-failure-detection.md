@@ -117,10 +117,10 @@ dead has no alerting coverage at all until it is scraped again.
 
 `tz_chat_agent_requests_zero` — `< 5` requests in 1h, sustained 30m.
 
-The threshold is set from measurement, not intuition: over the seven days before
-this rule was written, the quietest hour on `omi:auto:chat-agent` served 18
-requests and the 5th percentile was 24. Five is comfortably below the observed
-floor.
+The threshold is set from measurement, not intuition. Sampled at 15-minute
+resolution across the seven days before this rule was written, `omi:auto:chat-agent`
+had a floor of 9 requests per hour, p01 of 15, p05 of 23, and a median of 55. Zero
+evaluations fell below 5.
 
 ## What these alerts still cannot see
 
@@ -151,3 +151,21 @@ Cloud Run and cannot arrive at all. **Delete that exemption in the same change t
 Cloud Run services a metrics ingestion path**, and add `chat_response` to the liveness
 rule at the same time. The test asserts a journey is never both exempt and covered, so
 the two cannot silently disagree.
+
+## Backtest
+
+Every rule was replayed against seven days of production data at 15-minute resolution
+before it was merged. A rule that would have been noisy in the past week is not ready
+to page anyone.
+
+| Rule | Breaching evaluations | What it caught |
+|---|---|---|
+| `omi-llm-gateway-invalid-request-rejections` | 58 / 673 (8.6%) | The desktop chat outage window, and nothing after the fix deployed. |
+| `omi-llm-gateway-lane-failure-ratio` | 100 / 21,314 (0.47%) | `omi:auto:translation` only. |
+| `omi-llm-gateway-lane-zero-success` | 350 / 21,472 (1.6%) | `omi:auto:translation` and `omi:auto:web-search`. |
+| `omi-journey-signal-dead` | 0 / 1,346 | No false positives on the two journeys that do report. |
+| `tz_chat_agent_requests_zero` | 0 / 673 | No false positives; floor was 9 against a threshold of 5. |
+
+Every breach in that table is a real defect, not noise. Re-run the backtest when changing
+a threshold — a rule that fires on healthy weeks gets muted, and a muted rule is worse
+than no rule.
