@@ -64,6 +64,7 @@ enum ContextFactWritePolicy {
     // exactly the class `floorHumanEvent` promotes to arming eligibility — so a
     // leaked example would not merely be stored, it would arm a notification.
     #"(?i)^\W*nik asked for the demo recording before tomorrow's launch video"#,
+    #"(?i)^\W*the user is asking alex@example\.com"#,
     #"(?i)^\W*the user is viewing a window with a sidebar and a chat panel"#,
     #"(?i)^\W*ambient narrative:"#,
   ]
@@ -241,10 +242,22 @@ enum ContextFactWritePolicy {
       statement.contains("?")
       || statement.range(of: #"(?i)\bquestion\b"#, options: .regularExpression) != nil
     guard questionMarker else { return false }
-    return statement.range(
+    if statement.range(
       of:
         #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is writing|is typing|is composing|is drafting)\b"#,
       options: .regularExpression) != nil
+    {
+      return true
+    }
+    // Extraction sometimes mangles the subject ("Yu is composing a new email
+    // ... What is the latest link?"): a literal question mark inside a
+    // compose/draft-frame statement is still the user's own typed question —
+    // received questions surface as speech-acts ("David asked ..."), not as
+    // compose frames.
+    return statement.contains("?")
+      && statement.range(
+        of: #"(?i)\b(?:composing|drafting|writing|typing)\b[^.]{0,60}\b(?:email|message|draft|reply)\b"#,
+        options: .regularExpression) != nil
   }
 
   /// A capitalized name immediately before a speech verb, where the name is not

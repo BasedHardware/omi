@@ -230,6 +230,16 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertTrue(
       ContextFactWritePolicy.isUserAuthoredQuestion(
         "The user is asking for a link to the latest Omi desktop to be shared with david@scalingforever.com."))
+    // A mangled subject with an embedded question mark in a compose frame
+    // still floors (live extraction: "Yu is composing a new email ...").
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "Yu is composing a new email to david@scalingforever.com with the body: What is the latest omi desktop link?"))
+    // The prompt's Good example is machinery when echoed verbatim.
+    XCTAssertEqual(
+      ContextFactWritePolicy.verdict(
+        "The user is asking alex@example.com: When is the next release shipping?"),
+      .dropMachinery)
     // Someone else's question never qualifies.
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(

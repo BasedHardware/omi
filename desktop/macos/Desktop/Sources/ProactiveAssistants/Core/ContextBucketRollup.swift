@@ -335,6 +335,7 @@ enum ContextProactivityPromptBuilder {
       A question the user is writing — in an email draft, a chat message, a document — is
       always a fact, with high notify_worthiness: record who it is addressed to and the
       question itself verbatim, phrased as "The user is asking <recipient>: <question>".
+      Good: The user is asking alex@example.com: When is the next release shipping?
       Never write a fact saying that an app, window, tab, page, sidebar, panel, or button
       is open, visible, active, or shows something. Put that in the summary instead.
       Most screens yield zero to three facts. An empty facts list is a correct answer.
