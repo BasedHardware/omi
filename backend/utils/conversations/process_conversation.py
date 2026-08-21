@@ -150,6 +150,10 @@ from utils.other.storage import (
 
 logger = logging.getLogger(__name__)
 
+# Hard-discard before the LLM discard prompt (#6154). Short captures are noise and
+# burn an LLM call; photos alone can still be meaningful so they skip this gate.
+SHORT_CONVERSATION_HARD_DISCARD_SECONDS = 30.0
+
 
 def _calendar_auto_link_enabled() -> bool:
     return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
@@ -440,6 +444,21 @@ def _get_structured(
         duration_seconds: Optional[float] = None
         if main_conv.started_at and main_conv.finished_at:
             duration_seconds = max(0, (main_conv.finished_at - main_conv.started_at).total_seconds())
+
+        # Hard-discard short noise before spending an LLM call (#6154).
+        # Wall-clock <30s, or <2min with <30s of speech. Photos skip this gate.
+        speech_seconds = deduplicated_transcribed_speech_seconds(
+            getattr(main_conv, 'transcript_segments', None) or []
+        )
+        has_photos = bool(main_conv.photos)
+        short_by_duration = (
+            duration_seconds is not None and duration_seconds < SHORT_CONVERSATION_HARD_DISCARD_SECONDS
+        )
+        short_by_speech = speech_seconds < SHORT_CONVERSATION_HARD_DISCARD_SECONDS and (
+            duration_seconds is None or duration_seconds < 120
+        )
+        if not has_photos and (short_by_duration or short_by_speech):
+            return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
         # Determine whether to discard the conversation based on its content (transcript and/or photos).
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
@@ -2180,7 +2199,11 @@ def process_conversation(
         if assigned_folder_id:
             folders_db.update_folder_conversation_count(uid, assigned_folder_id)
 
-        if not is_reprocess:
+        if not is_reprocess or (
+            getattr(conversation, 'source', None) == ConversationSource.limitless and not discarded
+        ):
+            # Limitless WAL sync often lands via is_reprocess=True (merge/revive).
+            # Still emit memory_created so developer webhooks match phone capture (#11365).
 
             def _run_webhook():
                 asyncio.run(conversation_created_webhook(uid, conversation))
