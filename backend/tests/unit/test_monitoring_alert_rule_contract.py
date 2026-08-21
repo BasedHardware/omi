@@ -271,3 +271,90 @@ def test_live_transcription_alert_is_traffic_gated_and_ignores_idle_no_data():
         assert rule["data"][2]["model"]["expression"] == "$A >= 20 && $B > 0.10"
         assert rule["annotations"]["__dashboardUid__"] == "omi-resilience-fallbacks"
         assert rule["annotations"]["__panelId__"] == "10"
+
+
+SILENT_FAILURE_RUNBOOK = "backend/docs/runbooks/silent-failure-detection.md"
+PRE_ROUTE_REJECTION_RULE = "omi-llm-gateway-invalid-request-rejections"
+PRE_ROUTE_REJECTION_EXPR = (
+    'sum(increase(llm_gateway_request_rejections_total{error_class="invalid_request"}[30m])) or vector(0)'
+)
+LANE_ZERO_SUCCESS_RULE = "omi-llm-gateway-lane-zero-success"
+LANE_ZERO_SUCCESS_EXPR = (
+    'sum by (lane_id) (increase(llm_gateway_requests_total{outcome="success"}[6h])) '
+    'or sum by (lane_id) (increase(llm_gateway_requests_total[6h])) * 0'
+)
+SIGNAL_DEAD_RULE = "omi-journey-signal-dead"
+CHAT_TRAFFIC_ZERO_RULE = "tz_chat_agent_requests_zero"
+SILENT_FAILURE_RULES = {
+    PRE_ROUTE_REJECTION_RULE,
+    "omi-llm-gateway-lane-failure-ratio",
+    LANE_ZERO_SUCCESS_RULE,
+    SIGNAL_DEAD_RULE,
+    CHAT_TRAFFIC_ZERO_RULE,
+}
+
+
+def test_pre_route_rejection_alert_watches_the_counter_lanes_cannot_see():
+    """Validation rejections never reach llm_gateway_requests_total.
+
+    During the 2026-08-19 desktop chat outage the chat lane's request counter
+    read 100% success for 19 hours, because every failing request was rejected
+    before a route was selected. The rejection counter is the only witness.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[PRE_ROUTE_REJECTION_RULE]
+        assert rule["data"][0]["model"]["expr"] == PRE_ROUTE_REJECTION_EXPR, export_name
+        assert "llm_gateway_requests_total" not in rule["data"][0]["model"]["expr"]
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [2]
+        assert rule["noDataState"] == "OK"
+        assert rule["labels"]["severity"] == "critical"
+
+
+def test_lane_zero_success_alert_zero_fills_lanes_that_never_succeeded():
+    """A lane with no success series must still be visible.
+
+    Without the ``or ... * 0`` term a lane that has never once succeeded
+    produces no ratio series at all, so total failure would be silent.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[LANE_ZERO_SUCCESS_RULE]
+        assert rule["data"][1]["model"]["expr"] == LANE_ZERO_SUCCESS_EXPR, export_name
+        assert rule["data"][2]["model"]["expression"] == "$A >= 20 && $B < 1"
+        assert rule["noDataState"] == "OK"
+
+
+def test_journey_signal_dead_alert_treats_missing_evidence_as_the_failure():
+    """Journey alerts go quiet when their counter dies; this one does not."""
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[SIGNAL_DEAD_RULE]
+        expression = rule["data"][0]["model"]["expr"]
+
+        assert "omi_journey_accepted_total" in expression, export_name
+        assert "llm_gateway_requests_total" in expression, export_name
+        assert rule["noDataState"] == "Alerting", export_name
+        assert rule["labels"]["severity"] == "critical"
+        # chat_response is emitted from Cloud Run, which Prometheus does not
+        # scrape. Including it before an ingestion path exists would page
+        # permanently and train operators to mute the rule.
+        assert "chat_response" not in expression, export_name
+
+
+def test_silent_failure_alerts_link_the_shared_runbook():
+    runbook = (REPO / SILENT_FAILURE_RUNBOOK).read_text(encoding="utf-8")
+
+    for export_name, rules in _all_rule_exports().items():
+        assert SILENT_FAILURE_RULES <= rules.keys(), export_name
+        for uid in SILENT_FAILURE_RULES:
+            assert rules[uid]["annotations"]["runbook"] == SILENT_FAILURE_RUNBOOK, f"{export_name}:{uid}"
+
+    for expression in (PRE_ROUTE_REJECTION_EXPR, LANE_ZERO_SUCCESS_EXPR):
+        assert expression in runbook
+
+
+def test_chat_traffic_zero_threshold_sits_below_the_measured_weekly_floor():
+    """18 requests was the quietest observed hour in the week before this rule."""
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[CHAT_TRAFFIC_ZERO_RULE]
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"] == [5], export_name
+        assert rule["data"][2]["model"]["conditions"][0]["evaluator"]["type"] == "lt"
+        assert 'lane_id="omi:auto:chat-agent"' in rule["data"][0]["model"]["expr"]

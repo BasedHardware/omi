@@ -1,0 +1,124 @@
+# Silent failure detection — alerts that fire when a 2xx is a lie
+
+**What these alerts mean:** a production path is failing in a way that HTTP
+status codes and request counts cannot express, or the evidence a user-path
+alert depends on has gone missing.
+
+**Owner:** platform team.
+
+## Why this runbook exists
+
+On 2026-08-19 the desktop chat path was broken for roughly 19 hours and no
+alert fired. Nothing was down in the sense any existing alert could observe:
+
+- The SSE endpoint committed `HTTP 200` and its headers *before* the generator
+  ran, then streamed an in-band error frame. Every status-code monitor read the
+  turn as a success.
+- The gateway rejected those requests during request validation, **before a
+  route was selected**. Pre-route rejections are counted by
+  `llm_gateway_request_rejections_total`, not by `llm_gateway_requests_total`.
+  For the whole outage the chat lane's request counter showed
+  **100% success**, because the failing requests never reached it.
+- `omi-journey-chat-fail` already existed and is shaped correctly, but
+  `omi_journey_accepted_total{journey="chat_response"}` is emitted by the
+  Cloud Run `backend` service, which Prometheus does not scrape. The counter
+  has been flat at zero for its whole existence, so the rule could never fire.
+- Only one client population was affected. A second, larger population on the
+  same endpoint stayed healthy and kept every aggregate ratio green.
+
+Each of these is a general failure mode, not a one-off. The rules below exist
+to make each of them observable.
+
+## The alerts
+
+### LLM Gateway — clients rejected before routing
+
+`omi-llm-gateway-invalid-request-rejections`
+
+```promql
+sum(increase(llm_gateway_request_rejections_total{error_class="invalid_request"}[30m])) or vector(0)
+```
+
+Fires at `>= 2` sustained for 30m. A well-formed client does not send parameters
+the gateway rejects. A non-zero, sustained count means some client population is
+failing **every** attempt, while lanes and status codes stay green.
+
+The threshold is deliberately low. During the 2026-08-19 outage the affected
+population produced only 2–16 rejections per 30 minutes, because it was a small
+fraction of total chat traffic. A rate-based threshold sized for the busy path
+would not have fired.
+
+**Verify:** split production request logs by client user agent. Look for a
+population whose responses are uniformly small and fast — an error frame is
+orders of magnitude smaller and faster than a real completion.
+
+**Safe next action:** identify the rejected parameter and the client that sends
+it. The gateway kill switch (`OMI_LLM_CHAT_AGENT_ROUTE=direct`) is the
+documented mitigation while the client or the forwarding allowlist is fixed.
+
+### LLM Gateway — lane failing a large share of real requests
+
+`omi-llm-gateway-lane-failure-ratio` — per lane, `$A >= 20 && $B > 0.25` over 1h.
+
+### LLM Gateway — lane has served no successful request
+
+`omi-llm-gateway-lane-zero-success` — per lane, `$A >= 20 && $B < 1` over 6h.
+
+```promql
+sum by (lane_id) (increase(llm_gateway_requests_total{outcome="success"}[6h])) or sum by (lane_id) (increase(llm_gateway_requests_total[6h])) * 0
+```
+
+The `or ... * 0` term is load-bearing. A lane that has *never* succeeded has no
+`outcome="success"` series at all, so a plain ratio produces no series and no
+alert. The zero-fill is what makes total failure visible rather than invisible.
+
+The six-hour window exists for bursty lanes. Several lanes are idle for most
+hours of the day; a one-hour gate never accumulates enough attempts on those
+lanes to evaluate. Both rules run together: the 1h rule detects quickly on busy
+lanes, the 6h rule eventually catches quiet ones.
+
+**Verify:** read the lane's `provider_rejection` and `error_class` labels before
+touching configuration.
+
+### Journey outcomes — a journey stopped reporting
+
+`omi-journey-signal-dead`
+
+```promql
+(sum by (journey) (increase(omi_journey_accepted_total{journey=~"pusher_session|capture_finalization"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100)
+```
+
+This is the alert for the alerts. Every real-traffic journey rule assumes its
+journey counter is being scraped. When that assumption breaks, the rule does not
+fail loudly — it goes quiet, which looks exactly like health.
+
+The rule fires when a journey reports **zero** accepted attempts in an hour while
+the platform is demonstrably serving traffic. `noDataState` is `Alerting`: if the
+series vanish entirely, that is the failure, not the absence of one.
+
+**Verify:** check whether the emitting service is still running *and* still
+scraped, in that order. Do not treat a missing journey signal as evidence that
+the user path is working.
+
+**Safe next action:** restore the metrics path first. A journey whose counter is
+dead has no alerting coverage at all until it is scraped again.
+
+### AI chat — agent lane traffic dropped to zero
+
+`tz_chat_agent_requests_zero` — `< 5` requests in 1h, sustained 30m.
+
+The threshold is set from measurement, not intuition: over the seven days before
+this rule was written, the quietest hour on `omi:auto:chat-agent` served 18
+requests and the 5th percentile was 24. Five is comfortably below the observed
+floor.
+
+## What these alerts still cannot see
+
+Anything emitted only by a Cloud Run service. `backend`, `desktop-backend`,
+`backend-sync`, and `backend-integration` have no application-metrics scrape
+path; Prometheus scrapes GKE pods only. `omi-journey-signal-dead` deliberately
+does **not** include `journey="chat_response"` yet, because that counter is
+emitted from Cloud Run and is expected to read zero until an ingestion path
+exists. Add it to the rule in the same change that makes those metrics arrive —
+otherwise the rule pages permanently and gets muted, which is worse than the
+gap it describes.
