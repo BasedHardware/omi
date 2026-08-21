@@ -60,6 +60,12 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
         slots = self._submission_slots
         if slots is not None and not slots.acquire(blocking=False):
+            logger.warning(
+                'executor_saturated executor=%s workers=%s queue_capacity=%s',
+                self.name,
+                self._max_workers,
+                self.max_queue_size,
+            )
             raise ExecutorSaturatedError(
                 f'{self.name} executor is saturated ({self._max_workers} workers, {self.max_queue_size} queued)'
             )
