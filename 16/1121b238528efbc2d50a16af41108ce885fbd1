@@ -1,0 +1,19 @@
+desktop/context-for-claude/Sources/ContextApp/Search/SearchResultsModel.swift
+  s_889715362e92a5::t_3f89c56c51a557 249-254,256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "161121b238528efbc2d50a16af41108ce885fbd1",
+  "prompts": {},
+  "sessions": {
+    "s_889715362e92a5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4099c3ef-6301-4e7a-8e3f-cc75e94c9318",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
