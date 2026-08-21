@@ -8,8 +8,11 @@ does not duplicate managed-GKE control-plane disables (#11093).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 import yaml
 
@@ -178,3 +181,86 @@ def test_managed_gke_exclusions_are_documented():
     inventory = _load_inventory()
     exclusions = set(inventory['managed_gke_exclusions'])
     assert exclusions == {'kubeProxy', 'kubeScheduler', 'kubeControllerManager'}
+
+
+CLOUD_RUN_SCRAPE_JOB = "cloud-run-application-metrics"
+CLOUD_RUN_NAME_REWRITE = (
+    "stackdriver_prometheus_target_prometheus_googleapis_com_"
+    "(omi_.+?)_(counter|gauge|histogram|summary|untyped|unknown)(_bucket|_sum|_count)?"
+)
+
+
+def _cloud_run_scrape_job(env: str) -> dict:
+    import yaml
+
+    values = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[3]
+            / f"backend/charts/monitoring/kube-prometheus-stack/{env}_omi_monitoring_values.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    configs = values["prometheus"]["prometheusSpec"]["additionalScrapeConfigs"]
+    return next(job for job in configs if job["job_name"] == CLOUD_RUN_SCRAPE_JOB)
+
+
+@pytest.mark.parametrize("env", ["dev", "prod"])
+def test_cloud_run_metrics_are_renamed_back_to_their_plain_prometheus_names(env):
+    """Ingested-but-unmatched is the same outage as never-ingested.
+
+    The Stackdriver exporter renames every imported series to
+    stackdriver_<resource>_<metric type>_<value type>. Without this rewrite,
+    omi_journey_accepted_total arrives from Cloud Run as
+    stackdriver_prometheus_target_prometheus_googleapis_com_omi_journey_accepted_total_counter
+    and every existing alert, recording rule, and dashboard keeps matching
+    nothing while the metrics are demonstrably flowing.
+    """
+    job = _cloud_run_scrape_job(env)
+    rewrites = [rule for rule in job.get("metric_relabel_configs", []) if rule.get("target_label") == "__name__"]
+
+    assert rewrites, f"{env}: cloud-run scrape job does not rename anything"
+    rewrite = rewrites[0]
+    assert rewrite["regex"] == CLOUD_RUN_NAME_REWRITE, env
+    assert rewrite["source_labels"] == ["__name__"], env
+    assert rewrite["replacement"] == "${1}${3}", env
+
+
+@pytest.mark.parametrize(
+    "mangled,plain",
+    [
+        (
+            "stackdriver_prometheus_target_prometheus_googleapis_com_omi_journey_accepted_total_counter",
+            "omi_journey_accepted_total",
+        ),
+        (
+            "stackdriver_prometheus_target_prometheus_googleapis_com_omi_client_journey_duration_seconds_histogram_bucket",
+            "omi_client_journey_duration_seconds_bucket",
+        ),
+        (
+            "stackdriver_prometheus_target_prometheus_googleapis_com_omi_client_journey_duration_seconds_histogram_sum",
+            "omi_client_journey_duration_seconds_sum",
+        ),
+        # A metric whose own name contains a value-type word must not be
+        # truncated at the first match.
+        (
+            "stackdriver_prometheus_target_prometheus_googleapis_com_omi_counter_edge_total_counter",
+            "omi_counter_edge_total",
+        ),
+    ],
+)
+def test_the_rewrite_regex_recovers_the_original_metric_name(mangled, plain):
+    match = re.fullmatch(CLOUD_RUN_NAME_REWRITE, mangled)
+
+    assert match is not None, mangled
+    assert match.group(1) + (match.group(3) or "") == plain
+
+
+@pytest.mark.parametrize(
+    "untouched",
+    [
+        "up",
+        "llm_gateway_requests_total",
+        "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_request_count_delta",
+    ],
+)
+def test_the_rewrite_regex_leaves_every_other_series_alone(untouched):
+    assert re.fullmatch(CLOUD_RUN_NAME_REWRITE, untouched) is None

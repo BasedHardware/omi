@@ -79,15 +79,62 @@ The exporter accepts `prometheus.googleapis.com/` prefixes and converts Cloud Mo
 
 The new release imports only `prometheus.googleapis.com/omi_*` and filters monitored resources to `cluster=__run__` with namespace `backend` or `desktop-backend`. It reuses the existing exporter Kubernetes service account, so no new Workload Identity binding is required. Prometheus scrapes it every 30 seconds. The original load-balancer exporter and its HPA-sensitive cadence are unchanged.
 
+## Metric names are rewritten back at scrape time
+
+The Stackdriver exporter renames everything it imports to
+`stackdriver_<monitored resource>_<metric type>_<value type>`. Left alone,
+`omi_journey_accepted_total` would arrive from Cloud Run as
+`stackdriver_prometheus_target_prometheus_googleapis_com_omi_journey_accepted_total_counter`,
+and every existing alert, recording rule, and dashboard would go on matching nothing while the
+metrics were demonstrably flowing.
+
+**Ingested-but-unmatched is the same outage as never-ingested.** It is what kept
+`omi-journey-chat-fail` armed and unfirable through a 19-hour incident, and importing metrics under
+names nothing queries would reproduce it in a new form.
+
+The `cloud-run-application-metrics` job therefore rewrites `__name__` back to the plain form:
+
+```yaml
+metric_relabel_configs:
+  - source_labels: [__name__]
+    regex: "stackdriver_prometheus_target_prometheus_googleapis_com_(omi_.+?)_(counter|gauge|histogram|summary|untyped|unknown)(_bucket|_sum|_count)?"
+    target_label: __name__
+    replacement: "${1}${3}"
+```
+
+Group 3 preserves the `_bucket` / `_sum` / `_count` suffixes so histograms stay queryable, and the
+non-greedy group 1 with full anchoring survives metric names that themselves contain a value-type
+word. `test_monitoring_telemetry_contract.py` pins the regex and its recovered names in both
+environments.
+
+After the rewrite, a GKE-sourced and a Cloud Run-sourced `omi_journey_accepted_total` are the same
+metric, told apart by their `service_name` label. That is deliberate: it means the existing alert
+corpus works against Cloud Run traffic with no query changes.
+
+### If the regex is wrong, you will be told
+
+The exact exporter naming cannot be confirmed until the pipeline is live, so the rewrite is a
+prediction. `omi-cloud-run-metric-names-unnormalized` fires when any un-normalized `stackdriver_*`
+`omi_` series survives on this job:
+
+```promql
+count({job="cloud-run-application-metrics", __name__=~"stackdriver_.*_omi_.*"}) or vector(0)
+```
+
+Correct the regex and re-upgrade the release. **Do not** write alerts against the mangled names —
+that hard-codes the defect into the alert corpus.
+
 ## Counter, histogram, and label semantics
 
 Every Cloud Run instance produces a distinct mandatory `instance` series. Counter queries must aggregate rates, never sum raw counters across time:
 
 ```promql
 sum by (service_name, journey, outcome) (
-  rate(stackdriver_prometheus_target_prometheus_googleapis_com_omi_client_journey_requests_total_counter[5m])
+  rate(omi_client_journey_terminal_total[5m])
 )
 ```
+
+(The name above is the rewritten one. Query the plain `omi_*` names, not the exporter's.)
 
 Confirm the exact normalized name in Prometheus before installing an alert; Stackdriver exporter builds names from `stackdriver`, monitored resource type, Cloud Monitoring metric type, and value type. It retains metric and monitored-resource labels. Cloud Monitoring distributions become Prometheus histograms; the exporter reconstructs `_sum` as distribution mean multiplied by count. Both bucket-based `histogram_quantile` and `_sum / _count` queries are available, but verify the normalized series names after deployment.
 
