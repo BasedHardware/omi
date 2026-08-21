@@ -47,7 +47,7 @@ from utils.webhooks import (
 )
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
-from utils.journey_metrics_contract import bounded_client_kind
+from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
@@ -95,7 +95,7 @@ BG_DRAIN_TIMEOUT = 30.0  # seconds
 
 
 async def _dispatch_transcript_item(
-    uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: str = 'unknown'
+    uid: str, segments: List[Dict[str, Any]], memory_id: Optional[str], client_kind: ClientKind = 'unknown'
 ) -> None:
     async def run(sink: str, call: Awaitable[Any]) -> None:
         try:
@@ -116,7 +116,7 @@ async def _websocket_util_trigger(
     client_kind: str = 'unknown',
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
-    client_kind = bounded_client_kind(client_kind)
+    resolved_client_kind = bounded_client_kind(client_kind)
 
     try:
         await websocket.accept()
@@ -384,7 +384,7 @@ async def _websocket_util_trigger(
             transcript_queue.clear()
 
             for item in batch:
-                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'], client_kind)
+                await _dispatch_transcript_item(uid, item['segments'], item['memory_id'], resolved_client_kind)
 
     async def process_audio_bytes_queue() -> None:
         """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
@@ -548,7 +548,7 @@ async def _websocket_util_trigger(
                                 byok_keys,
                                 finalization_job_id if isinstance(finalization_job_id, str) else None,
                                 dispatch_generation if isinstance(dispatch_generation, int) else None,
-                                client_kind,
+                                resolved_client_kind,
                             ),
                             name=f'pusher_finalization:{uid}:{conversation_id}',
                         )
