@@ -14,39 +14,9 @@ absent, like the sibling contract suites.
 
 from __future__ import annotations
 
-import os
 import uuid
 
 import pytest
-
-from tests.store_fakes import install_fake_db_client
-
-
-@pytest.fixture(params=["firestore", "mongo"])
-def bind_store(request, monkeypatch):
-    backend = request.param
-    if backend == "firestore":
-        if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
-            pytest.skip("FIRESTORE_EMULATOR_HOST not set")
-        from google.cloud import firestore as _fs
-
-        from database.store.adapters.firestore import FirestoreDocumentStore
-
-        # Explicit client: the adapter's default is the lazy ``db`` handle, which resolves through the
-        # accessor this fixture then points at the facade -> the facade would wrap a store that asks
-        # the facade for its client (RecursionError on the first read).
-        store = FirestoreDocumentStore(
-            client=_fs.Client(project=os.environ.get("FIREBASE_PROJECT_ID", "demo-omi-local"))
-        )
-    else:
-        uri = os.environ.get("MONGO_URI")
-        if not uri:
-            pytest.skip("MONGO_URI not set")
-        from database.store.adapters.mongo import MongoDocumentStore
-
-        store = MongoDocumentStore(uri=uri, db_name="omi_contract")
-    install_fake_db_client(monkeypatch, store=store)
-    return store
 
 
 @pytest.fixture

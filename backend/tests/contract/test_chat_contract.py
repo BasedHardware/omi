@@ -16,67 +16,17 @@ to make a concurrent mutation fail loudly. None of that had dual-backend cover: 
 chat.py through the in-memory fake, which implements the sentinels in Python and cannot disagree with
 itself, and the live E2E never counts, pages or clears a chat.
 
-Runs the real chain — chat.py -> facade -> adapter -> live backend — against a Firestore emulator and
-a real Mongo replica set, and asserts the two agree. Skips per-backend when the service env is absent,
-like the sibling contract suites; a per-backend SKIPPED means the suite proved half of what it claims.
+Runs the real chain — chat.py -> the client each posture deploys -> live backend — against a Firestore
+emulator and a real Mongo replica set, and asserts the two agree. Binding and skip rules: the shared
+``bind_store`` fixture in ``conftest.py``.
 """
 
 from __future__ import annotations
 
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
-from tests.store_fakes import install_fake_db_client
-
-
-@pytest.fixture(params=["firestore", "mongo"])
-def bind_store(request, monkeypatch):
-    """Bind ``db`` to what each posture ACTUALLY deploys, and hand back a neutral seeding store.
-
-    This differs deliberately from the sibling suites, and the difference is the point. They bind the
-    Firestore side to the *facade over* ``FirestoreDocumentStore`` — a wiring nothing deploys:
-    ``_client._build_firestore_client`` returns the raw SDK client whenever
-    ``STORAGE_BACKEND=firestore`` and only wraps the facade for the other backends (ADR-0044). Under
-    that non-production wiring a transactional read dies with
-    ``AttributeError: 'FirestoreDocumentStore' object has no attribute '_get'``, because the facade's
-    transaction reaches for a session-aware private op family that only the Mongo adapter and the
-    in-memory fake implement — so no contract suite could ever have covered a transaction on the
-    Firestore side. Binding each side to its production client fixes both problems at once: the
-    comparison becomes real-SDK-Firestore vs facade-over-Mongo, which is exactly the pair we ship.
-
-    Seeding and assertions still go through a neutral store on both sides, so a test reads the same
-    either way and cannot accidentally assert Firestore-shaped internals.
-    """
-    from database import _client
-
-    backend = request.param
-    if backend == "firestore":
-        if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
-            pytest.skip("FIRESTORE_EMULATOR_HOST not set")
-        from google.cloud import firestore as _fs
-
-        from database.store.adapters.firestore import FirestoreDocumentStore
-
-        client = _fs.Client(project=os.environ.get("FIREBASE_PROJECT_ID", "demo-omi-local"))
-        # Production shape for STORAGE_BACKEND=firestore: the raw SDK client, no facade.
-        monkeypatch.setattr(_client, "get_firestore_client", lambda: client)
-        monkeypatch.setattr(_client, "_firestore_client", client, raising=False)
-        # Explicit client on the seeding store too: its default is the lazy ``db`` handle, which now
-        # resolves through the accessor patched above.
-        return FirestoreDocumentStore(client=client)
-
-    uri = os.environ.get("MONGO_URI")
-    if not uri:
-        pytest.skip("MONGO_URI not set")
-    from database.store.adapters.mongo import MongoDocumentStore
-
-    store = MongoDocumentStore(uri=uri, db_name="omi_contract")
-    # Production shape for STORAGE_BACKEND=mongo: the neutral facade over the Mongo adapter.
-    install_fake_db_client(monkeypatch, store=store)
-    return store
 
 
 BASE = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)

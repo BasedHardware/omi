@@ -2,8 +2,9 @@
 
 The migrated people functions are thin path-based wrappers over the storage port; this runs them
 through the live Firestore emulator and a real Mongo replica set, asserting identical behavior — the
-domain-level counterpart of test_document_store_contract. Injection is via the module ``_store``
-seam (the WP2 analogue of the old ``users.db`` stub).
+domain-level counterpart of test_document_store_contract. Wiring is the shared ``bind_store`` fixture
+in ``conftest.py``, which binds ``db`` to the client each posture actually deploys (the ``_store`` seam
+this suite used to patch no longer exists: the merge adopted upstream's ``db_client`` idiom wholesale).
 
 Live services required (skipped when absent): ``FIRESTORE_EMULATOR_HOST``, ``MONGO_URI``.
 Not hermetic; lives in tests/contract/, not run by backend/test.sh.
@@ -11,52 +12,11 @@ Not hermetic; lives in tests/contract/, not run by backend/test.sh.
 
 from __future__ import annotations
 
-import os
 import uuid
 
 import pytest
 
 import database.users as users
-from tests.store_fakes import install_fake_db_client
-
-
-@pytest.fixture(params=["firestore", "mongo"])
-def bind_store(request, monkeypatch):
-    """Point database.users at each live adapter in turn via the _store seam."""
-    backend = request.param
-    if backend == "firestore":
-        if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
-            pytest.skip("FIRESTORE_EMULATOR_HOST not set")
-        from google.cloud import firestore as _fs
-
-        from database.store.adapters.firestore import FirestoreDocumentStore
-
-        # Build the adapter over an EXPLICIT client. Its default is the lazy ``db`` boundary handle,
-        # which resolves through get_firestore_client() — the very accessor this fixture then points
-        # at the facade, so the facade would wrap a store that asks the facade for its client:
-        # RecursionError on the first read. An explicit client also makes the binding independent of
-        # ambient STORAGE_BACKEND.
-        store = FirestoreDocumentStore(
-            client=_fs.Client(project=os.environ.get("FIREBASE_PROJECT_ID", "demo-omi-local"))
-        )
-    else:
-        uri = os.environ.get("MONGO_URI")
-        if not uri:
-            pytest.skip("MONGO_URI not set")
-        from database.store.adapters.mongo import MongoDocumentStore
-
-        store = MongoDocumentStore(uri=uri, db_name="omi_contract")
-    # The domain modules speak the ADR-0044 facade (``from ._client import db``), not a ``_store``
-    # seam — that seam was removed when the merge adopted upstream's db_client idiom wholesale. This
-    # fixture used to patch it anyway, so monkeypatch raised AttributeError and BOTH dual-backend
-    # contract suites errored out whenever services were configured and skipped silently otherwise:
-    # the entire domain-level Firestore-vs-Mongo parity net was inert. Binding the facade over the
-    # parametrised store instead exercises the real chain — domain code -> facade -> adapter -> live
-    # backend — which is precisely where the untranslated composite filter hid.
-    # (install_fake_db_client is named for its default fake, but takes any port-conforming store,
-    # including the real Firestore/Mongo ones used here.)
-    install_fake_db_client(monkeypatch, store=store)
-    return store
 
 
 @pytest.fixture
