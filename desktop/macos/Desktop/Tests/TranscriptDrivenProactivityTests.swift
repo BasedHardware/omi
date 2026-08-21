@@ -59,7 +59,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let result = SpeechProactivityAdmission.decides(
       flagEnabled: false,
       conversationActive: false,
-      latestUserSlice: slice("please find the meeting notes", isUser: true),
+      arrivingSlice: slice("please find the meeting notes", isUser: true),
       lastEvaluationAt: nil,
       now: Date())
     XCTAssertEqual(result, .skip(.flagDisabled))
@@ -69,7 +69,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let result = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: true,
-      latestUserSlice: slice("what does the roadmap say?", isUser: true),
+      arrivingSlice: slice("what does the roadmap say?", isUser: true),
       lastEvaluationAt: nil,
       now: Date())
     XCTAssertEqual(result, .skip(.conversationActive))
@@ -79,7 +79,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let result = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: nil,
+      arrivingSlice: nil,
       lastEvaluationAt: nil,
       now: Date())
     XCTAssertEqual(result, .skip(.noUserSpeech))
@@ -87,10 +87,62 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let otherSpeaker = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: slice("the customer also mentioned a second issue", speaker: 3),
+      arrivingSlice: slice("the customer also mentioned a second issue", speaker: 3),
       lastEvaluationAt: nil,
       now: Date())
     XCTAssertEqual(otherSpeaker, .skip(.noUserSpeech), "only the user's own speech triggers evaluation")
+  }
+
+  /// The defect this pins: admission used to read the *window's* retained user
+  /// slice, so another person speaking once the cooldown lapsed re-opened an
+  /// evaluation grounded on a user utterance from up to the retention window
+  /// ago. The user had said nothing; the director would have answered a stale
+  /// question.
+  func testOtherSpeakerAfterCooldownDoesNotRetriggerOnAStaleUserUtterance() {
+    let start = Date()
+    let userSpoke = SpeechProactivityAdmission.decides(
+      flagEnabled: true,
+      conversationActive: false,
+      arrivingSlice: slice("where does the deploy script live", isUser: true, segmentID: "seg-1"),
+      lastEvaluationAt: nil,
+      now: start)
+    XCTAssertEqual(userSpoke, .evaluate)
+
+    // 95s later — cooldown lapsed — but the arriving slice is someone else.
+    let otherSpeaker = SpeechProactivityAdmission.decides(
+      flagEnabled: true,
+      conversationActive: false,
+      arrivingSlice: slice("and then we shipped it on friday", speaker: 2, segmentID: "seg-2"),
+      lastEvaluationAt: start,
+      lastEvaluatedSegmentID: "seg-1",
+      now: start.addingTimeInterval(95))
+    XCTAssertEqual(
+      otherSpeaker, .skip(.noUserSpeech),
+      "another speaker must not re-trigger on the user's retained utterance")
+  }
+
+  /// A backend segment is re-delivered as it grows, so the same utterance
+  /// arrives repeatedly. Without segment identity it would evaluate again on
+  /// every re-delivery once the cooldown lapsed.
+  func testSameSegmentDoesNotEvaluateTwiceAfterTheCooldownLapses() {
+    let start = Date()
+    let redelivered = SpeechProactivityAdmission.decides(
+      flagEnabled: true,
+      conversationActive: false,
+      arrivingSlice: slice("where does the deploy script live", isUser: true, segmentID: "seg-1"),
+      lastEvaluationAt: start,
+      lastEvaluatedSegmentID: "seg-1",
+      now: start.addingTimeInterval(120))
+    XCTAssertEqual(redelivered, .skip(.alreadyEvaluated))
+
+    let freshUtterance = SpeechProactivityAdmission.decides(
+      flagEnabled: true,
+      conversationActive: false,
+      arrivingSlice: slice("what is open on this page", isUser: true, segmentID: "seg-2"),
+      lastEvaluationAt: start,
+      lastEvaluatedSegmentID: "seg-1",
+      now: start.addingTimeInterval(120))
+    XCTAssertEqual(freshUtterance, .evaluate, "a new segment still evaluates once the cooldown lapses")
   }
 
   func testAdmissionRequiresMinimumUtteranceLength() {
@@ -98,7 +150,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let short = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: slice("ok", isUser: true),
+      arrivingSlice: slice("ok", isUser: true),
       lastEvaluationAt: nil,
       now: now)
     XCTAssertEqual(short, .skip(.utteranceTooShort))
@@ -106,7 +158,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let threshold = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: slice("ok look it up", isUser: true),
+      arrivingSlice: slice("ok look it up", isUser: true),
       lastEvaluationAt: nil,
       now: now)
     XCTAssertEqual(threshold, .evaluate)
@@ -117,7 +169,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let beforeCooldown = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: slice("follow that thought through again", isUser: true),
+      arrivingSlice: slice("follow that thought through again", isUser: true),
       lastEvaluationAt: now.addingTimeInterval(-(SpeechProactivityAdmission.evaluationCooldownSeconds - 1)),
       now: now)
     XCTAssertEqual(beforeCooldown, .skip(.coolingDown))
@@ -125,7 +177,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let atCooldown = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: slice("follow that thought through again", isUser: true),
+      arrivingSlice: slice("follow that thought through again", isUser: true),
       lastEvaluationAt: now.addingTimeInterval(-SpeechProactivityAdmission.evaluationCooldownSeconds),
       now: now)
     XCTAssertEqual(atCooldown, .evaluate)
@@ -135,7 +187,7 @@ final class TranscriptDrivenProactivityTests: XCTestCase {
     let result = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: false,
-      latestUserSlice: slice("where does the deploy script live", isUser: true),
+      arrivingSlice: slice("where does the deploy script live", isUser: true),
       lastEvaluationAt: nil,
       now: Date())
     XCTAssertEqual(result, .evaluate)

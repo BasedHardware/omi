@@ -10,20 +10,26 @@ final class SpeechProactivityCoordinator {
 
   private var window = SpeechProactivityWindow()
   private var lastEvaluationAt: Date?
+  private var lastEvaluatedSegmentID: String?
 
   private init() {}
 
   func observe(_ slice: TranscriptSpeechSlice, now: Date = Date()) {
     guard ContextBucketsFeature.isTranscriptProactivityEnabled else { return }
     window.append(slice, seenAt: now)
+    // Decide about the slice that just arrived, not about whatever user slice
+    // the window still retains: another person speaking after the cooldown must
+    // not re-open an evaluation grounded on a stale user utterance.
     let outcome = SpeechProactivityAdmission.decides(
       flagEnabled: true,
       conversationActive: VoiceTurnCoordinator.shared.activeTurnID != nil,
-      latestUserSlice: window.latestUserSlice,
+      arrivingSlice: slice,
       lastEvaluationAt: lastEvaluationAt,
+      lastEvaluatedSegmentID: lastEvaluatedSegmentID,
       now: now)
     guard outcome == .evaluate else { return }
     lastEvaluationAt = now
+    lastEvaluatedSegmentID = slice.segmentID
     let snapshot = window.snapshot()
     Task {
       await ContextProactivityEngine.shared.evaluateFromSpeech(speech: snapshot)
