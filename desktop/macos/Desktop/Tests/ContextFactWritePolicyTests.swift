@@ -270,6 +270,15 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
     XCTAssertTrue(
       ContextFactWritePolicy.isUserAuthoredQuestion(
         "The user included a question about the latest Omi desktop link in the body of the email."))
+    // Compose-anchored artifact-subject asking (live 03:00 extraction, w=1.0
+    // yet unclassified — run6's silence).
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A message is being composed to david@scalingforever.com asking for the latest Omi desktop link."))
+    // Received mail is someone else's ask, never the user's.
+    XCTAssertFalse(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "An email from David asks when the offsite is scheduled."))
   }
 
   func testSuppliedRefsSurviveWhitespaceAndDeduplicate() {

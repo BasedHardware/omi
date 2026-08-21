@@ -266,6 +266,17 @@ enum ContextFactWritePolicy {
     {
       return true
     }
+    // Compose-anchored artifact-subject asking ("A message is being composed
+    // to david@… asking for the latest Omi desktop link" — live, w=1.0, yet
+    // unclassified). The compose anchor keeps received mail ("An email from
+    // David asks …") out of this class.
+    if statement.range(
+      of:
+        #"(?i)\b(?:draft|email|message|note)\b[^.]{0,40}\b(?:being (?:composed|drafted|written)|composed to|addressed to)\b[^.]{0,60}\b(?:asking|asks|requesting|requests)\b"#,
+      options: .regularExpression) != nil
+    {
+      return true
+    }
     // User-subject inclusion verbs ("The user included a question about the
     // latest Omi desktop link in the body of the email" — live, scored 0.9 by
     // the model yet unclassified here, so the forced lookup never armed).
