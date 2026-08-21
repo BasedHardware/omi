@@ -1474,8 +1474,13 @@ class _DesktopChatStreamOutcome:
         self.has_terminal = False
         self.has_error = False
 
-    def observe(self, item: str | bytes) -> None:
-        chunk = item.encode('utf-8') if isinstance(item, str) else bytes(item)
+    def observe(self, item: object) -> None:
+        if isinstance(item, str):
+            chunk = item.encode('utf-8')
+        elif isinstance(item, (bytes, bytearray, memoryview)):
+            chunk = bytes(item)
+        else:
+            return
         self._buffer.extend(chunk)
         normalized = bytes(self._buffer).replace(b'\r\n', b'\n').replace(b'\r', b'\n')
         self._buffer = bytearray(normalized)
@@ -1498,11 +1503,11 @@ class _DesktopChatStreamOutcome:
                 if _desktop_chat_payload_has_content(payload):
                     self.has_content = True
 
-    def failure_when(self, item: str | bytes) -> bool:
+    def failure_when(self, item: object) -> bool:
         self.observe(item)
         return self.has_error
 
-    def success_when(self, _item: str | bytes) -> bool:
+    def success_when(self, _item: object) -> bool:
         return self.has_content and self.has_terminal
 
 
