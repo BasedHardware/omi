@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime, timezone
 import logging
-from typing import Any
+from typing import Any, cast
 
 from models.task_recommendation import DeterministicFacts, FeedbackSubjectKind, RecommendationSubjectKind
 from utils.task_intelligence import recommendations
@@ -12,18 +12,23 @@ from utils.task_intelligence.capture_policy import CapturePolicyResult, run_capt
 NormalizedSignals = dict[str, Any]
 FixtureAdapter = Callable[[dict[str, Any]], NormalizedSignals]
 ActionItemExtractor = Callable[..., list[Any]]
+ConversationDiscarder = Callable[..., bool]
 
 _EXTRACTION_LOGGER = logging.getLogger('utils.llm.conversation_processing')
 
 
-class _ExtractionFailureCapture(logging.Handler):
+class _LiveEvaluationFailureCapture(logging.Handler):
     def __init__(self) -> None:
         super().__init__(level=logging.ERROR)
         self.failed = False
+        self.failed_prefix: str | None = None
 
     def emit(self, record: logging.LogRecord) -> None:
-        if record.getMessage().startswith('Error extracting action items:'):
-            self.failed = True
+        for prefix in ('Error extracting action items:', 'Error determining memory discard:'):
+            if record.getMessage().startswith(prefix):
+                self.failed = True
+                self.failed_prefix = prefix
+                return
 
 
 def _capture_stub_output(payload: dict[str, Any], *, modality: str) -> NormalizedSignals:
@@ -196,7 +201,7 @@ def _item_result(item: Any) -> dict[str, Any]:
 def _extract_for_live_evaluation(extractor: ActionItemExtractor, *args: Any, **kwargs: Any) -> list[Any]:
     """Turn the production extractor's fail-open [] into an explicit eval failure."""
 
-    capture = _ExtractionFailureCapture()
+    capture = _LiveEvaluationFailureCapture()
     previous_propagate = _EXTRACTION_LOGGER.propagate
     _EXTRACTION_LOGGER.addHandler(capture)
     _EXTRACTION_LOGGER.propagate = False
@@ -305,6 +310,80 @@ def run_live_wake_word_evaluation(
     }
 
 
+def _discard_for_live_evaluation(discarder: ConversationDiscarder, *args: Any, **kwargs: Any) -> bool:
+    """Turn the production discarder's fail-open False into an explicit eval failure."""
+
+    capture = _LiveEvaluationFailureCapture()
+    previous_propagate = _EXTRACTION_LOGGER.propagate
+    _EXTRACTION_LOGGER.addHandler(capture)
+    _EXTRACTION_LOGGER.propagate = False
+    try:
+        try:
+            # cast to ``object`` so the fail-closed isinstance guard below stays a real
+            # runtime check: the protocol declares ``-> bool``, which makes it statically dead.
+            discarded = cast(object, discarder(*args, **kwargs))
+        except Exception:
+            raise RuntimeError('live wake-word discard evaluation NOT_RUN: discarder call failed') from None
+    finally:
+        failure_prefix = capture.failed_prefix
+        _EXTRACTION_LOGGER.propagate = previous_propagate
+        _EXTRACTION_LOGGER.removeHandler(capture)
+    if failure_prefix == 'Error determining memory discard:':
+        raise RuntimeError('live wake-word discard evaluation NOT_RUN: discarder call failed')
+    if not isinstance(discarded, bool):
+        raise RuntimeError('live wake-word discard evaluation NOT_RUN: discarder returned a non-boolean result')
+    return discarded
+
+
+def run_live_wake_word_discard_evaluation(
+    capture: dict[str, Any], *, trials: int, discarder: ConversationDiscarder
+) -> dict[str, Any]:
+    """Run short paired transcripts through the supplied production discard gate."""
+
+    results: dict[str, list[dict[str, Any]]] = {}
+    evaluations: list[dict[str, Any]] = []
+    negative_control_evaluations: list[dict[str, Any]] = []
+    for case in capture.get('wake_word_discard_cases', []):
+        case_trials: list[dict[str, Any]] = []
+        for _ in range(trials):
+            pair: dict[str, dict[str, bool]] = {}
+            for treatment in ('unmarked', 'marked'):
+                discarded = _discard_for_live_evaluation(
+                    discarder,
+                    case[f'{treatment}_transcript'],
+                    case.get('photos'),
+                    case['duration_seconds'],
+                    trusted_wake_word_markers=treatment == 'marked',
+                )
+                pair[treatment] = {'discarded': discarded}
+            unmarked_discarded = pair['unmarked']['discarded']
+            marked_kept = not pair['marked']['discarded']
+            evaluation = {
+                'unmarked_discarded': unmarked_discarded,
+                'marked_kept': marked_kept,
+                'discard_changed': unmarked_discarded and marked_kept,
+            }
+            evaluations.append(evaluation)
+            if case.get('negative_control') is True:
+                negative_control_evaluations.append(evaluation)
+            case_trials.append({'outputs': pair, 'evaluation': evaluation})
+        results[case['id']] = case_trials
+    return {
+        'trials_per_case': trials,
+        'cases': results,
+        'measurement': {
+            'paired_trials': len(evaluations),
+            'discard_changed': sum(result['discard_changed'] for result in evaluations),
+            'marked_kept': sum(result['marked_kept'] for result in evaluations),
+            'unmarked_discarded': sum(result['unmarked_discarded'] for result in evaluations),
+            'negative_control_trials': len(negative_control_evaluations),
+            'negative_control_preserved': sum(
+                result['unmarked_discarded'] and not result['marked_kept'] for result in negative_control_evaluations
+            ),
+        },
+    }
+
+
 __all__ = [
     'CapturePolicyResult',
     'KNOWN_TEST_ADAPTERS',
@@ -314,6 +393,7 @@ __all__ = [
     'run_capture_case',
     'run_capture_policy',
     'run_fixture_suite',
+    'run_live_wake_word_discard_evaluation',
     'run_live_wake_word_evaluation',
     'run_recorded_association_case',
     'run_recorded_ranking_case',

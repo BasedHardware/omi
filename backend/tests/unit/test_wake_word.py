@@ -19,7 +19,11 @@ from utils.conversations.wake_word import (
 )
 from utils.llm import conversation_processing
 from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
-from utils.task_intelligence.fixture_runner import run_live_wake_word_evaluation
+from utils.task_intelligence.contracts import load_fixture
+from utils.task_intelligence.fixture_runner import (
+    run_live_wake_word_discard_evaluation,
+    run_live_wake_word_evaluation,
+)
 
 
 def _segment(
@@ -239,6 +243,46 @@ def test_discard_prompt_adds_wake_rule_only_for_trusted_structural_marker(monkey
     assert 'KEEP a marked concrete task' in captured_prompts[1]
 
 
+def test_discard_fixtures_reach_the_real_llm_adjudication_path(monkeypatch):
+    llm_invocations = 0
+
+    class FakeDiscardParser:
+        def __init__(self, **_kwargs):
+            pass
+
+        def get_format_instructions(self):
+            return 'return discard decision'
+
+    class FakePrompt:
+        def __or__(self, _other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, _other):
+            return self
+
+        def invoke(self, _values):
+            nonlocal llm_invocations
+            llm_invocations += 1
+            return conversation_processing.DiscardConversation(discard=True)
+
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda _messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'LenientDiscardParser', FakeDiscardParser)
+
+    cases = load_fixture('capture_v2.json')['wake_word_discard_cases']
+    for case in cases:
+        for treatment in ('unmarked', 'marked'):
+            invocations_before = llm_invocations
+            conversation_processing.should_discard_conversation(
+                case[f'{treatment}_transcript'],
+                case['photos'],
+                case['duration_seconds'],
+                trusted_wake_word_markers=treatment == 'marked',
+            )
+            assert llm_invocations == invocations_before + 1, f"{case['id']}:{treatment} bypassed the LLM"
+
+
 def test_conversation_notes_adds_same_wake_rule_only_for_marked_prefix(monkeypatch):
     captured_task_instructions: list[str] = []
 
@@ -355,3 +399,62 @@ def test_live_fixture_evaluation_fails_closed_on_extractor_error_log():
 
     with pytest.raises(RuntimeError, match='NOT_RUN'):
         run_live_wake_word_evaluation(capture, trials=1, extractor=failed_extract)
+
+
+def test_live_discard_evaluation_measures_rescues_and_preserves_negative_control():
+    calls: list[dict[str, object]] = []
+
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
+        calls.append(
+            {
+                'transcript': transcript,
+                'photos': photos,
+                'duration_seconds': duration_seconds,
+                'trusted_wake_word_markers': trusted_wake_word_markers,
+            }
+        )
+        if 'never mind' in transcript:
+            return True
+        return not trusted_wake_word_markers
+
+    capture = load_fixture('capture_v2.json')
+
+    result = run_live_wake_word_discard_evaluation(capture, trials=2, discarder=fake_discard)
+
+    assert result['measurement'] == {
+        'paired_trials': 6,
+        'discard_changed': 4,
+        'marked_kept': 4,
+        'unmarked_discarded': 6,
+        'negative_control_trials': 2,
+        'negative_control_preserved': 2,
+    }
+    assert len(calls) == 12
+    assert all(call['photos'] == [] for call in calls)
+    assert all(call['duration_seconds'] in {4, 7} for call in calls)
+    assert sum(call['trusted_wake_word_markers'] is True for call in calls) == 6
+
+
+def test_live_discard_evaluation_fails_closed_on_discarder_error_log():
+    def failed_discard(*_args, **_kwargs):
+        logging.getLogger('utils.llm.conversation_processing').error(
+            'Error determining memory discard: provider failed'
+        )
+        return False
+
+    capture = {
+        'wake_word_discard_cases': [
+            {
+                'id': 'provider-failure',
+                'unmarked_transcript': '[segment:wake-1 0.000-1.000] User: Hey Omi send the budget.',
+                'marked_transcript': (
+                    f'[segment:wake-1 0.000-1.000] {WAKE_WORD_MARKER} User: Hey Omi send the budget.'
+                ),
+                'photos': [],
+                'duration_seconds': 5,
+            }
+        ]
+    }
+
+    with pytest.raises(RuntimeError, match='NOT_RUN'):
+        run_live_wake_word_discard_evaluation(capture, trials=1, discarder=failed_discard)

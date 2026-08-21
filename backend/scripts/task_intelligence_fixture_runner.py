@@ -12,7 +12,11 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from utils.task_intelligence.contracts import load_fixture
-from utils.task_intelligence.fixture_runner import run_fixture_suite, run_live_wake_word_evaluation
+from utils.task_intelligence.fixture_runner import (
+    run_fixture_suite,
+    run_live_wake_word_discard_evaluation,
+    run_live_wake_word_evaluation,
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -35,7 +39,7 @@ def main() -> None:
         ranking=load_fixture('ranking_v2.json'),
     )
     if args.live_wake_word_eval:
-        from utils.llm.conversation_processing import extract_action_items
+        from utils.llm.conversation_processing import extract_action_items, should_discard_conversation
 
         gateway_enabled = os.getenv('OMI_LLM_GATEWAY_FEATURE_MODE', '').strip().casefold() in {
             '1',
@@ -47,6 +51,11 @@ def main() -> None:
             raise SystemExit(
                 'live wake-word evaluation NOT_RUN: configure OPENAI_API_KEY or the enabled Omi LLM gateway'
             )
+        result['wake_word_discard_live_evaluation'] = run_live_wake_word_discard_evaluation(
+            capture,
+            trials=max(1, args.trials),
+            discarder=should_discard_conversation,
+        )
         result['wake_word_live_evaluation'] = run_live_wake_word_evaluation(
             capture,
             trials=max(1, args.trials),

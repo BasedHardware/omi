@@ -1,6 +1,36 @@
 {
   "schema_version": 1,
   "policy_version": "capture.v2",
+  "wake_word_discard_cases": [
+    {
+      "id": "bare_short_command_whole_conversation",
+      "unmarked_transcript": "[segment:discard-wake-1 0.000-7.000] User: Hey Omi don't forget to send Sarah the budget",
+      "marked_transcript": "[segment:discard-wake-1 0.000-7.000] <omi-wake-word-invocation/> User: Hey Omi don't forget to send Sarah the budget",
+      "photos": [],
+      "duration_seconds": 7,
+      "expected_unmarked_discarded": true,
+      "expected_marked_discarded": false
+    },
+    {
+      "id": "mis_transcribed_omie_short_command",
+      "unmarked_transcript": "[segment:discard-wake-2 0.000-7.000] User: hey omie dont forget to send sarah the budget friday",
+      "marked_transcript": "[segment:discard-wake-2 0.000-7.000] <omi-wake-word-invocation/> User: hey omie dont forget to send sarah the budget friday",
+      "photos": [],
+      "duration_seconds": 7,
+      "expected_unmarked_discarded": true,
+      "expected_marked_discarded": false
+    },
+    {
+      "id": "non_actionable_wake_word_negative_control",
+      "unmarked_transcript": "[segment:discard-control-1 0.000-4.000] User: hey omni uh never mind",
+      "marked_transcript": "[segment:discard-control-1 0.000-4.000] <omi-wake-word-invocation/> User: hey omni uh never mind",
+      "photos": [],
+      "duration_seconds": 4,
+      "expected_unmarked_discarded": true,
+      "expected_marked_discarded": true,
+      "negative_control": true
+    }
+  ],
   "wake_word_extractor_cases": [
     {
       "id": "omni_command_with_following_payload",
@@ -30,6 +60,41 @@
       "marked_transcript": "[segment:quoted-1 0.000-2.000] <omi-wake-word-invocation/> User: The documentation should show the phrase Hey Omi as an example.",
       "expected_marked_capture_kind": null,
       "required_marked_source_segment_ids": ["quoted-1"]
+    },
+    {
+      "id": "unpunctuated_lowercase_omie_command",
+      "unmarked_transcript": "[segment:wake-3 0.000-5.000] User: hey omie dont forget to send sarah the budget friday",
+      "marked_transcript": "[segment:wake-3 0.000-5.000] <omi-wake-word-invocation/> User: hey omie dont forget to send sarah the budget friday",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-3"]
+    },
+    {
+      "id": "heyomi_glued_command",
+      "unmarked_transcript": "[segment:wake-4 0.000-5.000] User: heyomi dont forget to send sarah the budget friday",
+      "marked_transcript": "[segment:wake-4 0.000-5.000] <omi-wake-word-invocation/> User: heyomi dont forget to send sarah the budget friday",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-4"]
+    },
+    {
+      "id": "omilockets_glued_command",
+      "unmarked_transcript": "[segment:wake-5 0.000-5.000] User: hey omilockets dont forget to send sarah the budget friday",
+      "marked_transcript": "[segment:wake-5 0.000-5.000] <omi-wake-word-invocation/> User: hey omilockets dont forget to send sarah the budget friday",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-5"]
+    },
+    {
+      "id": "single_segment_entire_command",
+      "unmarked_transcript": "[segment:wake-6 0.000-5.000] User: Hey Omi send Sarah the budget Friday",
+      "marked_transcript": "[segment:wake-6 0.000-5.000] <omi-wake-word-invocation/> User: Hey Omi send Sarah the budget Friday",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-6"]
+    },
+    {
+      "id": "mid_utterance_omni_command",
+      "unmarked_transcript": "[segment:wake-7 0.000-7.000] User: okay before i go hey omni remind me to send sarah the budget friday",
+      "marked_transcript": "[segment:wake-7 0.000-7.000] <omi-wake-word-invocation/> User: okay before i go hey omni remind me to send sarah the budget friday",
+      "expected_marked_capture_kind": "explicit_command",
+      "required_marked_source_segment_ids": ["wake-7"]
     }
   ],
   "cases": [

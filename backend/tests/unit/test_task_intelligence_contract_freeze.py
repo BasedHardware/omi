@@ -78,16 +78,41 @@ def test_capture_fixture_defines_paired_wake_word_extractor_evaluation():
 
     cases = fixture['wake_word_extractor_cases']
     assert {case['id'] for case in cases} == {
+        'heyomi_glued_command',
+        'mid_utterance_omni_command',
         'multilingual_context_with_english_invocation',
+        'omilockets_glued_command',
         'omni_command_with_following_payload',
         'ordinary_extraction_survives_marked_conversation',
         'quoted_phrase_remains_non_actionable',
+        'single_segment_entire_command',
+        'unpunctuated_lowercase_omie_command',
     }
     for case in cases:
         assert '<omi-wake-word-invocation/>' not in case['unmarked_transcript']
         assert '<omi-wake-word-invocation/>' in case['marked_transcript']
         assert case['expected_marked_capture_kind'] in {'explicit_command', None}
         assert case['required_marked_source_segment_ids']
+
+
+def test_capture_fixture_defines_paired_wake_word_discard_evaluation():
+    fixture = load_fixture('capture_v2.json')
+
+    cases = fixture['wake_word_discard_cases']
+    assert {case['id'] for case in cases} == {
+        'bare_short_command_whole_conversation',
+        'mis_transcribed_omie_short_command',
+        'non_actionable_wake_word_negative_control',
+    }
+    negative_controls = [case for case in cases if case.get('negative_control') is True]
+    assert [case['id'] for case in negative_controls] == ['non_actionable_wake_word_negative_control']
+    for case in cases:
+        assert '<omi-wake-word-invocation/>' not in case['unmarked_transcript']
+        assert '<omi-wake-word-invocation/>' in case['marked_transcript']
+        assert case['duration_seconds'] < 120
+        assert case['photos'] == []
+        assert isinstance(case['expected_unmarked_discarded'], bool)
+        assert isinstance(case['expected_marked_discarded'], bool)
 
 
 def test_association_and_ranking_fixtures_include_negative_and_empty_cases():
