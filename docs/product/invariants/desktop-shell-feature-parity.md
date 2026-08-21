@@ -1,6 +1,6 @@
 # INV-NAV-1: Feature parity across desktop shells
 
-**Status:** proposed
+**Status:** locked
 **Statement:** Changing desktop navigation chrome must not replace an established product destination with a reduced copy; every shell routes to the same feature-complete owner for that destination.
 
 ## MUST

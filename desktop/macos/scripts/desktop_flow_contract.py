@@ -11,6 +11,7 @@ ACTION_SOURCE_RELATIVE_PATHS = (
     # flow lint must be able to see; omitting one makes its actions look unknown
     # and reports a valid flow as broken, which is what happened to
     # notifications-settings.yaml when +Notifications.swift was factored out.
+    # main fixed +Notifications independently; +ChatFirst had the same gap.
     "Desktop/Sources/DesktopAutomationBridge+Notifications.swift",
     "Desktop/Sources/DesktopAutomationBridge+ChatFirst.swift",
     "Desktop/Sources/FloatingControlBar/RealtimeHubController.swift",
