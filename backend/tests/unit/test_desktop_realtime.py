@@ -107,6 +107,31 @@ async def test_usage_clamps_negative_tokens_and_records_realtime_breakdown(monke
     assert args[2:] == (10, 5, 0, 15, 0.00044)
 
 
+def test_realtime_writer_marks_full_provider_cost_complete(monkeypatch):
+    recorded = {}
+    monkeypatch.setattr(
+        desktop_realtime.llm_usage_db,
+        'record_llm_usage_bucket',
+        lambda *args, **kwargs: recorded.update(args=args, kwargs=kwargs),
+    )
+    monkeypatch.setattr(desktop_realtime, 'get_customer_firestore_client', lambda: object())
+
+    desktop_realtime._record_usage(
+        'user-1',
+        desktop_realtime.UsageReport(provider='openai'),
+        input_tokens=10,
+        output_tokens=5,
+        cached_tokens=2,
+        total_tokens=17,
+        cost=0.25,
+    )
+
+    assert recorded['args'][0] == 'user-1'
+    assert recorded['kwargs']['cost_status'] == 'complete'
+    assert recorded['kwargs']['quota_questions'] == 1
+    assert recorded['kwargs']['cost_usd'] == 0.25
+
+
 @pytest.mark.asyncio
 async def test_usage_with_no_positive_tokens_skips_firestore(monkeypatch):
     async def fail(_executor, function, *_args):

@@ -496,8 +496,12 @@ extension APIClient {
   func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
     async throws -> CreateConversationFromSegmentsResponse
   {
+    // The backend runs the full summarization pipeline synchronously inside
+    // this request, which routinely exceeds the transport's 30s default; a
+    // short timeout here turns every slower meeting into a fail-then-retry
+    // loop that delays the post-meeting notification by minutes.
     let response: CreateConversationFromSegmentsResponse = try await post(
-      "v1/conversations/from-segments", body: request, customBaseURL: nil)
+      "v1/conversations/from-segments", body: request, customBaseURL: nil, requestTimeout: 180)
     invalidateConversationsCountCache()
     return response
   }

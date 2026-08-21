@@ -62,8 +62,92 @@ export interface UserUsageResponse {
 }
 
 // Subscription details
+export const CATALOG_PLAN_IDS = [
+  'basic',
+  'plus',
+  'unlimited',
+  'unlimited_v2',
+  'operator',
+  'architect',
+] as const;
+
+export type CatalogPlanId = (typeof CATALOG_PLAN_IDS)[number];
+
+// `pro` is the retained wire alias for the Architect catalog identity. Keep
+// the raw value on decoded plans so a round trip never silently rewrites a
+// persisted or echoed wire value.
+const WIRE_PLAN_ALIASES: Readonly<Record<string, CatalogPlanId>> = {
+  pro: 'architect',
+};
+
+export interface KnownPlanIdentity {
+  kind: 'known';
+  id: CatalogPlanId;
+  raw: string;
+}
+
+export interface UnknownPlanIdentity {
+  kind: 'unknown';
+  raw: string | null;
+}
+
+export type PlanIdentity = KnownPlanIdentity | UnknownPlanIdentity;
+
+const PAID_CATALOG_PLAN_IDS: ReadonlySet<CatalogPlanId> = new Set([
+  'plus',
+  'unlimited',
+  'unlimited_v2',
+  'operator',
+  'architect',
+]);
+
+/** Decode a plan without throwing or replacing an unrecognized value. */
+export function decodePlan(value: unknown): PlanIdentity {
+  if (typeof value !== 'string' || value.length === 0) {
+    return { kind: 'unknown', raw: null };
+  }
+
+  if ((CATALOG_PLAN_IDS as readonly string[]).includes(value)) {
+    return { kind: 'known', id: value as CatalogPlanId, raw: value };
+  }
+
+  const aliasedPlan = Object.prototype.hasOwnProperty.call(WIRE_PLAN_ALIASES, value)
+    ? WIRE_PLAN_ALIASES[value]
+    : undefined;
+  if (aliasedPlan) {
+    return { kind: 'known', id: aliasedPlan, raw: value };
+  }
+
+  return { kind: 'unknown', raw: value };
+}
+
+/** Re-encode a decoded plan, preserving aliases and future wire values. */
+export function encodePlan(plan: PlanIdentity): string | null {
+  return plan.raw;
+}
+
+/** Only catalog identities with declared paid status can grant paid UI. */
+export function planGrantsPaidCapability(plan: PlanIdentity): boolean {
+  return plan.kind === 'known' && PAID_CATALOG_PLAN_IDS.has(plan.id);
+}
+
+export function planDisplayName(plan: PlanIdentity): string {
+  if (plan.kind === 'unknown') return 'Plan unavailable';
+
+  switch (plan.id) {
+    case 'basic':
+      return 'Free';
+    case 'unlimited':
+      return 'Neo';
+    case 'unlimited_v2':
+      return 'Unlimited';
+    default:
+      return plan.id.charAt(0).toUpperCase() + plan.id.slice(1);
+  }
+}
+
 export interface Subscription {
-  plan: 'basic' | 'unlimited' | 'plus' | 'unlimited_v2' | 'operator' | 'architect';
+  plan?: string | null;
   status: 'active' | 'inactive';
   current_period_end?: number;
   stripe_subscription_id?: string;
@@ -124,7 +208,10 @@ export interface AllUsageData {
 }
 
 export interface UserSubscription {
+  // Keep the raw wire value for callers and round trips. `plan_identity` is
+  // the lossless, capability-safe interpretation of this value.
   plan: string;
+  plan_identity?: PlanIdentity;
   status: string;
   is_unlimited: boolean;
   current_period_end?: number;

@@ -1485,10 +1485,107 @@ def update_conversation_segments(
 # ***********************************
 
 
+def reserve_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> list[str]:
+    """Atomically claim not-yet-emailed recipients for this request.
+
+    A Firestore transaction reads the sent ledger and writes the claimed
+    subset in one step, so two concurrent requests can never both claim the
+    same recipient. Returns the subset this caller owns dispatching.
+    """
+    from google.cloud import firestore as gc_firestore
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    @gc_firestore.transactional
+    def _reserve(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        data = snapshot.to_dict() or {}
+        already = {e for e in (data.get('share_email_sent_to') or []) if isinstance(e, str)}
+        claimed = [e for e in emails if e not in already]
+        if claimed:
+            transaction.update(conversation_ref, {'share_email_sent_to': gc_firestore.ArrayUnion(claimed)})
+        return claimed
+
+    return run_transactional(db, _reserve)
+
+
+def release_share_email_recipients(uid: str, conversation_id: str, emails: list[str]) -> None:
+    """Release a reservation after a definitive send failure so retries work."""
+    from google.cloud import firestore as gc_firestore
+
+    if not emails:
+        return
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'share_email_sent_to': gc_firestore.ArrayRemove(emails)})
+
+
 def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'visibility': visibility})
+
+
+def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
+    """Atomically flip visibility private→shared, preserving concurrent shares.
+
+    The write carries a last_update_time precondition from the same read that
+    observed 'private', so a concurrent writer (including one setting 'public')
+    voids this publish instead of being downgraded. Returns
+    ``(published, update_time)`` where ``update_time`` is the publish write's
+    own WriteResult timestamp — the CAS token for rollback. ``(False, None)``
+    means the conversation was (or became) link-visible some other way and this
+    request must neither re-publish nor roll back.
+    """
+    from google.api_core import exceptions as gcloud_exceptions
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    for _ in range(3):
+        snapshot = conversation_ref.get()
+        data = snapshot.to_dict() or {}
+        if data.get('visibility') in ('shared', 'public'):
+            return (False, None)
+        try:
+            result = conversation_ref.update(
+                {'visibility': 'shared'},
+                option=db.write_option(last_update_time=snapshot.update_time),
+            )
+            return (True, getattr(result, 'update_time', None))
+        except gcloud_exceptions.FailedPrecondition:
+            continue
+    # Retries exhausted under contention. Only concede when another writer
+    # actually made the conversation link-visible; a still-private doc means
+    # nothing may be emailed (the link would be dead), so fail definitively.
+    final = conversation_ref.get().to_dict() or {}
+    if final.get('visibility') in ('shared', 'public'):
+        return (False, None)
+    raise RuntimeError('could not publish conversation visibility under contention')
+
+
+def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, visibility: str, last_update_time) -> bool:
+    """Write visibility only if the doc is untouched since ``last_update_time``.
+
+    Firestore's native precondition makes this an ownership check: any
+    concurrent write — even one that stored the same visibility value — bumps
+    update_time and fails the precondition, so a rollback can never clobber
+    another actor's share. Returns False when skipped.
+    """
+    from google.api_core import exceptions as gcloud_exceptions
+
+    if last_update_time is None:
+        return False
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    try:
+        conversation_ref.update(
+            {'visibility': visibility},
+            option=db.write_option(last_update_time=last_update_time),
+        )
+        return True
+    except gcloud_exceptions.FailedPrecondition:
+        return False
 
 
 def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
