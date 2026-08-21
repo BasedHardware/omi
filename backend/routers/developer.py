@@ -12,10 +12,12 @@ import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+import database.daily_summaries as daily_summaries_db
 from database._client import db
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
+from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
@@ -1179,6 +1181,83 @@ class DeveloperFolder(BaseModel):
     is_default: bool = False
     is_system: bool = False
     conversation_count: int = 0
+
+
+@router.get(
+    "/v1/dev/user/daily-summaries",
+    response_model=DailySummariesResponse,
+    tags=["Daily Summaries"],
+    operation_id="listDailySummaries",
+)
+def get_developer_daily_summaries(
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    end_date: Optional[str] = Query(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_read),
+    request: Request = None,
+):
+    """List the authenticated user's stored daily recaps.
+
+    Daily summaries are derived from conversations, so this read uses the same
+    `conversations:read` scope and aggregate read budget as conversation lists.
+    """
+    status = 500
+    returned_count = 0
+    try:
+        summaries = daily_summaries_db.get_daily_summaries(
+            auth.uid,
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        returned_count = len(summaries)
+        status = 200
+        return {'summaries': summaries}
+    finally:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='list_daily_summaries',
+            status=status,
+            limit=limit,
+            offset=offset,
+            returned_count=returned_count,
+        )
+
+
+@router.get(
+    "/v1/dev/user/daily-summaries/{summary_id}",
+    response_model=DailySummaryResponse,
+    tags=["Daily Summaries"],
+    operation_id="getDailySummary",
+)
+def get_developer_daily_summary(
+    summary_id: str,
+    auth: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
+    request: Request = None,
+):
+    """Get one stored daily recap by ID."""
+    status = 500
+    returned_count = 0
+    try:
+        summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if not summary:
+            status = 404
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+        status = 200
+        returned_count = 1
+        return summary
+    finally:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='get_daily_summary',
+            status=status,
+            returned_count=returned_count,
+            resource_id=summary_id,
+        )
 
 
 @router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")

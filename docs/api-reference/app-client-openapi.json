@@ -38168,6 +38168,159 @@
         ]
       }
     },
+    "/v1/dev/user/daily-summaries": {
+      "get": {
+        "description": "List the authenticated user's stored daily recaps.\n\nDaily summaries are derived from conversations, so this read uses the same\n`conversations:read` scope and aggregate read budget as conversation lists.",
+        "operationId": "listDailySummaries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummariesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Developer Daily Summaries",
+        "tags": [
+          "Daily Summaries"
+        ]
+      }
+    },
+    "/v1/dev/user/daily-summaries/{summary_id}": {
+      "get": {
+        "description": "Get one stored daily recap by ID.",
+        "operationId": "getDailySummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "summary_id",
+            "required": true,
+            "schema": {
+              "title": "Summary Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DailySummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Developer Daily Summary",
+        "tags": [
+          "Daily Summaries"
+        ]
+      }
+    },
     "/v1/dev/user/folders": {
       "get": {
         "description": "Get all folders for the authenticated user.\n\nThis endpoint is strictly read-only and returns an empty list if the user has no folders.\nUnlike the internal `/v1/folders` endpoint, it does NOT call `initialize_system_folders`,\nbecause doing so under a `conversations:read` scope would silently write to Firestore\n(violating the read-only contract) and opens a TOCTOU window where concurrent first\nrequests can race past the outer empty-check and create duplicate system folders.\n\nSystem folders (Work, Personal, Social) are still initialized lazily through other paths:\n- The mobile app calls the internal `GET /v1/folders` whenever the conversations screen\n  is rendered (`app/lib/pages/conversations/conversations_page.dart`), which triggers\n  `initialize_system_folders` on first access.\n- The conversation post-processing pipeline calls `initialize_system_folders` whenever\n  a new conversation is created (`backend/utils/conversations/process_conversation.py`).\n\nIn practice, any user who can issue a Developer API key has already gone through one of\nthose paths, so the empty-list case here only affects users who have never opened the\nconversations tab nor created a single conversation.",

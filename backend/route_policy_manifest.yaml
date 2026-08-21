@@ -8,6 +8,54 @@ service: backend-main
 routes:
   - route_type: http
     method: GET
+    path: /v1/dev/user/daily-summaries
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - developer_api_key
+        placement: dependency
+        scopes:
+          - conversations:read
+      byok: not_applicable
+      rate_limit:
+        policy_name: dev:conversations_read
+        key_subject: api_key
+        enforcement: fail_closed
+        placement: dependency
+      timeout_class: default_method
+      surface: developer_api
+      visibility: public_documented
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
+    path: /v1/dev/user/daily-summaries/{summary_id}
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - developer_api_key
+        placement: dependency
+        scopes:
+          - conversations:read
+      byok: not_applicable
+      rate_limit:
+        policy_name: dev:conversation_detail_read
+        key_subject: api_key
+        enforcement: fail_closed
+        placement: dependency
+      timeout_class: default_method
+      surface: developer_api
+      visibility: public_documented
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: GET
     path: /
     policy: &desktop_migration_policy
       review_status: legacy_unreviewed
