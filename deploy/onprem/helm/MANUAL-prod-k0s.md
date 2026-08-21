@@ -433,7 +433,16 @@ every turn, which reaches the user as a generic apology.
 - **Use external inference instead** (no in-cluster GPU): `--set inference.inCluster.enabled=false`, and point
   `inference.openai.baseUrl` / the speech endpoints at your own servers.
 - **Change anything:** re-run the Step 6 command with `helm upgrade` instead of `helm install` — passing the
-  **same** `--set` secrets and values each time.
+  **same** `--set` secrets and values each time. To change only one thing without re-typing every secret,
+  use **`--reset-then-reuse-values`**:
+  ```bash
+  helm upgrade omi ./omi-oss -n omi --reset-then-reuse-values --set search.enabled=true --set search.apiKey=...
+  ```
+  **Not `--reuse-values`.** That flag reuses the previous release's computed values and *drops values this
+  chart has gained since*, so an upgrade onto a chart with a new section fails with
+  `nil pointer evaluating interface {}.<section>`. Seen on this cluster with `scheduledJobs`,
+  `backend.memory` and `search`. `--reset-then-reuse-values` starts from the chart defaults, layers the
+  release's own values on top, then your `--set`.
 - **Uninstall:** `helm uninstall omi -n omi` (data volumes remain until you delete the PVCs or the cluster).
 
 ---

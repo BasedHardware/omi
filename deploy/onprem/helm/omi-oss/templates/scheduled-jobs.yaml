@@ -19,27 +19,20 @@ maintenance ops idempotent and defers a distributed lease "if overlap becomes ob
 overlapping in the first place is cheaper than relying on that.
 */}}
 {{/*
-The per-job defaults are repeated here, not just in values.yaml, because `helm upgrade --reuse-values`
-reuses the PREVIOUS release's computed values and drops new chart defaults: an operator upgrading an
-existing release that way would otherwise hit `nil pointer evaluating interface {}.notifications`.
-Found exactly that way on a live cluster. Falling back to the chart's intent keeps that upgrade working
-AND keeps it meaningful — silently rendering nothing would be the same class of quiet default this
-whole area exists to eliminate.
+Upgrade note: use `helm upgrade --reset-then-reuse-values`, NOT `--reuse-values`. The latter reuses the
+previous release's computed values and DROPS new chart defaults, so on a release predating this section
+it fails with "nil pointer evaluating interface {}.notifications". The defaults are NOT duplicated here
+to paper over that: values.yaml is the one source of truth, and a wrong flag failing loudly beats two
+places to change a default. See MANUAL-prod-k0s.md.
 */}}
-{{- $sj := .Values.scheduledJobs | default dict }}
 {{- range $job := list
       (dict "name" "scheduled-notifications"
             "arg"  "notifications"
-            "cfg"  (get $sj "notifications" | default dict)
-            "defaultEnabled" true)
+            "cfg"  $.Values.scheduledJobs.notifications)
       (dict "name" "scheduled-memory-maintenance"
             "arg"  "memory-maintenance"
-            "cfg"  (get $sj "memoryMaintenance" | default dict)
-            "defaultEnabled" false) }}
-{{- $enabled := $job.cfg.enabled }}
-{{- if kindIs "invalid" $enabled }}{{ $enabled = $job.defaultEnabled }}{{ end }}
-{{- $schedule := $job.cfg.schedule | default "0 * * * *" }}
-{{- if $enabled }}
+            "cfg"  $.Values.scheduledJobs.memoryMaintenance) }}
+{{- if $job.cfg.enabled }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -50,7 +43,7 @@ metadata:
     app.kubernetes.io/component: backend
     omi.oss.scheduled-job: {{ $job.arg }}
 spec:
-  schedule: {{ $schedule | quote }}
+  schedule: {{ $job.cfg.schedule | quote }}
   concurrencyPolicy: Forbid
   # A missed window (node down, upgrade) is skipped rather than fired late in a burst: both jobs are
   # hourly and self-catching — the notifications job buckets by local hour, the maintenance job drains

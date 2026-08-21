@@ -18,10 +18,10 @@ data:
   # is the worst shape. Writing it either way makes the choice visible in `kubectl get cm`.
   # `on` needs the memory-maintenance CronJob (scheduledJobs.memoryMaintenance) or the outbox never
   # drains and a memory never gets its projection/vector.
-  MEMORY_ENABLED: {{ ternary "on" "off" (eq (include "omi-oss.memoryEnabled" .) "true") | quote }}
+  MEMORY_ENABLED: {{ ternary "on" "off" .Values.backend.memory.enabled | quote }}
   # The maintenance work's OWN switch, defaulting to false in code: with it off the hourly job returns
   # early reporting zero users and zero errors — a green tick that drained nothing.
-  MEMORY_CANONICAL_MAINTENANCE_ENABLED: {{ include "omi-oss.memoryEnabled" . | quote }}
+  MEMORY_CANONICAL_MAINTENANCE_ENABLED: {{ .Values.backend.memory.enabled | quote }}
   {{- if and .Values.chat.enabled .Values.chat.llmGateway.enabled }}
   # chat LLM gateway (D32, ADR-0035): the backend emits omi:auto:<feature> LANE ids and ONLY the
   # gateway resolves them to a model, so this wiring is what keeps chat off the built-in cloud model
