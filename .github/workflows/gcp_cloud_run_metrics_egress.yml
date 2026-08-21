@@ -42,7 +42,7 @@ jobs:
       - name: Checkout reviewed monitoring configuration
         uses: actions/checkout@v7
         with:
-          ref: main
+          ref: ${{ github.sha }}
 
       - name: Resolve environment-specific release contract
         env:
