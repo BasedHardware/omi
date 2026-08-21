@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -120,17 +121,24 @@ def format_invariant_briefing(hits: list[dict]) -> str:
     """
     blocks: list[str] = []
     for hit in hits:
-        lines = [f"{hit['id']} — {hit['path']}"]
+        lines = [f"{hit['id']}  ({hit['path']})"]
         if hit.get("statement"):
-            lines.append(f"  {hit['statement']}")
-        for bullet in hit.get("must_not", [])[:6]:
-            lines.append(f"  MUST NOT: {bullet}")
-        remaining = len(hit.get("must_not", [])) - 6
-        if remaining > 0:
-            lines.append(f"  ... and {remaining} more MUST NOT in the doc")
-        sample = hit.get("matched_files", [])[:5]
-        if sample:
-            lines.append(f"  matched: {', '.join(sample)}")
+            lines.append(f"  Statement: {hit['statement']}")
+        must_not = hit.get("must_not", [])
+        if must_not:
+            lines.append(f"  MUST NOT ({len(must_not)}):")
+            for bullet in must_not:
+                lines.append(f"    - {bullet}")
+        by_glob = hit.get("matched_by_glob") or {}
+        if by_glob:
+            lines.append("  Why it applies:")
+            for glob in sorted(by_glob):
+                files = by_glob[glob]
+                lines.append(f"    `{glob}` matched {len(files)} changed file(s):")
+                for path in files[:10]:
+                    lines.append(f"      - {path}")
+                if len(files) > 10:
+                    lines.append(f"      … and {len(files) - 10} more")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
 
@@ -374,10 +382,37 @@ def matched_invariants(changed: list[str], invariants: list[dict]) -> list[dict]
     for inv in invariants:
         if not inv["require_naming"]:
             continue
-        matching = [p for p in changed if any(path_matches(p, g) for g in inv["globs"])]
+        by_glob: dict[str, list[str]] = {}
+        matching: list[str] = []
+        for path in changed:
+            # Attribute to every glob that caught it: when a file matches two
+            # globs, which one is "responsible" is not a question with an answer,
+            # and reporting only the first hides why a rule applies.
+            caught = [g for g in inv["globs"] if path_matches(path, g)]
+            if not caught:
+                continue
+            matching.append(path)
+            for glob in caught:
+                by_glob.setdefault(glob, []).append(path)
         if matching:
-            hits.append({**inv, "matched_files": matching})
+            hits.append({**inv, "matched_files": matching, "matched_by_glob": by_glob})
     return hits
+
+
+def glob_breadth(root: Path, globs: list[str]) -> dict[str, int]:
+    """How many tracked files each glob covers — i.e. how often it will fire.
+
+    Reported rather than enforced: breadth changes as the tree grows, and a
+    threshold that fails a PR because an unrelated directory got bigger is the
+    kind of wall-clock-shaped gate this registry is trying to get away from.
+    """
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        return {}
+    return {glob: sum(1 for f in tracked if path_matches(f, glob)) for glob in globs}
 
 
 def missing_invariant_hits(hits: list[dict], pr_body: str) -> list[dict]:
@@ -423,9 +458,14 @@ def main() -> int:
             print("No locked invariants matched changed files.")
             return 0
         for hit in hits:
-            print(f"{hit['id']}: {len(hit['matched_files'])} file(s) ({hit['path']})")
-            for f in hit["matched_files"][:20]:
-                print(f"  - {f}")
+            print(f"{hit['id']}: {len(hit['matched_files'])} changed file(s) ({hit['path']})")
+            breadth = glob_breadth(root, list((hit.get("matched_by_glob") or {}).keys()))
+            for glob, files in sorted((hit.get("matched_by_glob") or {}).items()):
+                covers = breadth.get(glob)
+                scope = f", covers {covers} tracked file(s)" if covers is not None else ""
+                print(f"  `{glob}` → {len(files)} changed{scope}")
+                for path in files[:20]:
+                    print(f"      - {path}")
         return 0
 
     still_missing = missing_invariant_hits(hits, pr_body)
@@ -441,13 +481,8 @@ def main() -> int:
     print("Add them under 'Product invariants affected' in the PR body.")
     print("Registry: docs/product/invariants/")
     for hit in still_missing:
-        print(f"\n  Missing: {hit['id']} (from {hit['path']})")
-        print("  Matched files:")
-        for f in hit["matched_files"][:15]:
-            print(f"    - {f}")
-        if len(hit["matched_files"]) > 15:
-            print(f"    … and {len(hit['matched_files']) - 15} more")
-    print("\nWhat these invariants require:")
+        print(f"  Missing: {hit['id']} — {len(hit['matched_files'])} changed file(s) under {len(hit.get('matched_by_glob') or {})} glob(s)")
+    print("\nWhat these invariants require, and why each applies:")
     print()
     print(format_invariant_briefing(still_missing))
     print("\nPaste this into the PR body (or a draft for --pr-body-file / OMI_PR_BODY_FILE):")

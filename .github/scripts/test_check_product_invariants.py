@@ -456,11 +456,63 @@ class BriefingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "example.md"
             path.write_text(LOCKED_DOC, encoding="utf-8")
-            hit = {**parse_invariant(path), "matched_files": ["backend/utils/example/a.py"]}
+            hit = {
+                **parse_invariant(path),
+                "matched_files": ["backend/utils/example/a.py"],
+                "matched_by_glob": {"backend/utils/example/**": ["backend/utils/example/a.py"]},
+            }
             text = format_invariant_briefing([hit])
             self.assertIn("Example statement.", text)
-            self.assertIn("MUST NOT: Do the bad thing.", text)
+            self.assertIn("- Do the bad thing.", text)
             self.assertIn("backend/utils/example/a.py", text)
+
+    def test_briefing_says_which_glob_made_it_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "example.md"
+            path.write_text(LOCKED_DOC, encoding="utf-8")
+            hit = {
+                **parse_invariant(path),
+                "matched_files": ["backend/utils/example/a.py"],
+                "matched_by_glob": {"backend/utils/example/**": ["backend/utils/example/a.py"]},
+            }
+            text = format_invariant_briefing([hit])
+            self.assertIn("Why it applies:", text)
+            self.assertIn("`backend/utils/example/**` matched 1 changed file(s)", text)
+
+    def test_briefing_lists_every_must_not_rather_than_a_sample(self):
+        doc = LOCKED_DOC.replace(
+            "- Do the bad thing.",
+            "\n".join(f"- Rule number {i}." for i in range(1, 10)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "example.md"
+            path.write_text(doc, encoding="utf-8")
+            hit = {**parse_invariant(path), "matched_files": [], "matched_by_glob": {}}
+            text = format_invariant_briefing([hit])
+            self.assertIn("MUST NOT (9):", text)
+            self.assertIn("- Rule number 9.", text)
+
+
+class GlobAttributionTests(unittest.TestCase):
+    def test_a_file_is_attributed_to_every_glob_that_caught_it(self):
+        inv = {
+            "id": "INV-TEST-1",
+            "globs": ["backend/**", "backend/utils/example/**"],
+            "require_naming": True,
+        }
+        hit = matched_invariants(["backend/utils/example/a.py"], [inv])[0]
+        self.assertEqual(
+            hit["matched_by_glob"],
+            {
+                "backend/**": ["backend/utils/example/a.py"],
+                "backend/utils/example/**": ["backend/utils/example/a.py"],
+            },
+        )
+
+    def test_unmatched_globs_are_absent_from_the_attribution(self):
+        inv = {"id": "INV-TEST-1", "globs": ["backend/**", "web/**"], "require_naming": True}
+        hit = matched_invariants(["backend/a.py"], [inv])[0]
+        self.assertEqual(list(hit["matched_by_glob"]), ["backend/**"])
 
 
 if __name__ == "__main__":
