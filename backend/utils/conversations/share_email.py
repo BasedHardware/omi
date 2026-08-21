@@ -98,6 +98,20 @@ def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[s
     return participants
 
 
+def _is_captured_name(name: str, email: str) -> bool:
+    """Whether `name` is a real captured name rather than a stand-in address.
+
+    Google attendees without a `displayName` reach us as `name = email`
+    (`calendar_utils.extract_attendees`), so a non-empty name alone does not
+    prove we know who the person is.
+    """
+    if not name:
+        return False
+    normalized = name.strip().casefold()
+    local_part = email.split('@', 1)[0]
+    return normalized != email and normalized != local_part
+
+
 def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[str]) -> List[Dict[str, Optional[str]]]:
     """Detected share recipients: meeting participants minus the owner.
 
@@ -123,7 +137,7 @@ def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[st
             continue
         raw_name = participant.get('name')
         name = raw_name.strip() if isinstance(raw_name, str) else ''
-        if not name:
+        if not _is_captured_name(name, email):
             continue
         seen.add(email)
         recipients.append({'name': name, 'email': email})

@@ -258,3 +258,31 @@ def test_sender_name_falls_back_to_the_address_local_part():
     assert se._sender_display_name({'display_name': 'David Zhang'}) == 'David Zhang'
     assert se._sender_display_name({'display_name': None, 'email': 'david@scalingforever.com'}) == 'david'
     assert se._sender_display_name({}) == 'Someone'
+
+
+def test_google_attendee_without_display_name_is_not_proposed():
+    """extract_attendees stores a nameless attendee as name==email; that is not a captured name."""
+    conversation = {
+        'id': 'conv-1',
+        'calendar_event': {
+            'event_id': 'evt-3',
+            'title': 'Intro call',
+            # Shape produced by utils.conversations.calendar_utils.extract_attendees
+            # when the attendee has no displayName.
+            'attendees': ['jordan@acme.com', 'Sam Rivera'],
+            'attendee_emails': ['jordan@acme.com', 'sam@acme.com'],
+        },
+    }
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == [
+        {'name': 'Sam Rivera', 'email': 'sam@acme.com'}
+    ]
+
+
+def test_local_part_stand_in_name_is_not_proposed():
+    conversation = _conversation_with_calendar_context(
+        [
+            {'name': 'Nik', 'email': 'nik@basedhardware.com'},
+            {'name': 'JORDAN', 'email': 'jordan@acme.com'},
+        ]
+    )
+    assert extract_share_recipients(conversation, ['nik@basedhardware.com']) == []
