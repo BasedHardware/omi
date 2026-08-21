@@ -17789,10 +17789,16 @@
             "type": "integer"
           },
           "cost_usd": {
-            "default": 0.0,
-            "minimum": 0.0,
-            "title": "Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
           },
           "input_tokens": {
             "default": 0,
