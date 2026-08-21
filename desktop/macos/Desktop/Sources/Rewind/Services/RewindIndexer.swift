@@ -296,12 +296,18 @@ actor RewindIndexer {
         }
       }
 
+      // Persist the JPEG we already have so the timeline can show this frame before its
+      // video chunk finalizes (video storage wins once the chunk is readable).
+      let livePath =
+        (try? await RewindStorage.shared.saveLiveScreenshot(
+          jpegData: frame.jpegData, timestamp: frame.captureTime)) ?? ""
+
       // Create database record with video reference and OCR results
       let screenshot = Screenshot(
         timestamp: frame.captureTime,
         appName: frame.appName,
         windowTitle: frame.windowTitle,
-        imagePath: "",
+        imagePath: livePath,
         videoChunkPath: encodedFrame.videoChunkPath,
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
@@ -338,6 +344,22 @@ actor RewindIndexer {
       logError("RewindIndexer: Failed to process frame", error: error)
       await RewindDatabase.shared.reportQueryError(error)
     }
+  }
+
+  /// JPEG-encode a frame and stash it as a live preview for the still-unfinalized video chunk.
+  /// Returns "" when encoding or storage is unavailable — the frame then stays hidden until its
+  /// chunk finalizes, exactly as before live previews existed.
+  private static func saveLiveJPEG(cgImage: CGImage, timestamp: Date) async -> String {
+    let data = NSMutableData()
+    guard
+      let destination = CGImageDestinationCreateWithData(data as CFMutableData, "public.jpeg" as CFString, 1, nil)
+    else { return "" }
+    CGImageDestinationAddImage(
+      destination, cgImage, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+    guard CGImageDestinationFinalize(destination) else { return "" }
+    return
+      (try? await RewindStorage.shared.saveLiveScreenshot(jpegData: data as Data, timestamp: timestamp))
+      ?? ""
   }
 
   /// Process a frame directly from a CGImage (macOS 14+ path, avoids JPEG decode round-trip)
@@ -398,11 +420,15 @@ actor RewindIndexer {
         }
       }
 
+      // Persist a JPEG so the timeline can show this frame before its video chunk finalizes
+      // (video storage wins once the chunk is readable).
+      let livePath = await Self.saveLiveJPEG(cgImage: cgImage, timestamp: captureTime)
+
       let screenshot = Screenshot(
         timestamp: captureTime,
         appName: appName,
         windowTitle: windowTitle,
-        imagePath: "",
+        imagePath: livePath,
         videoChunkPath: encodedFrame.videoChunkPath,
         frameOffset: encodedFrame.frameOffset,
         ocrText: ocrText,
