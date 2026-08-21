@@ -25,8 +25,20 @@ def _features(path: Path) -> set[str]:
 
 
 def test_onprem_override_covers_every_cloud_feature():
-    # Parity: no feature is left un-pinned on-prem (which would resolve to a cloud model and fail).
-    assert _features(_ONPREM_OVERRIDES) == _features(_CLOUD_OVERRIDES)
+    """Every feature upstream overrides, we override too — as a SUPERSET, not as equality.
+
+    Equality was the wrong invariant, and it was the reassuring kind of wrong: it reported "37 of 37
+    covered" while eight lanes were open. Upstream does not need an override entry to route a feature —
+    its QoS table already points at a provider it owns — so its file is a subset of the configured
+    features, not the list of what needs pinning. Measured 2026-08-21 on the correct base: 45 configured
+    features, 8 with no on-prem entry (translation among them, and it carries transcript text).
+
+    The full-coverage rule now lives in .github/scripts/check_oss_llm_gateway_route_coverage.py, which
+    measures against get_all_configured_features() and ratchets (ADR-0067). What stays here is the
+    direction upstream can still break: it adds an override, we must have one too.
+    """
+    missing = _features(_CLOUD_OVERRIDES) - _features(_ONPREM_OVERRIDES)
+    assert missing == set(), f'upstream overrides these and we do not: {sorted(missing)}'
 
 
 def test_onprem_override_pins_one_openai_compatible_model():

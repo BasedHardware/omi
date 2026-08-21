@@ -496,6 +496,51 @@ Requirements and gotchas:
   `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
   `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.
 
+## LLM route coverage: an omission is a vendor route (ADR-0067)
+
+`deploy/onprem/llm_gateway/generated_route_overrides.yaml` is mounted over the gateway's own copy and pins
+each feature to the model your `OPENAI_BASE_URL` serves. **What an omission means there is the thing to
+know:** the gateway synthesises a lane for *every* configured feature, and a feature with no entry keeps its
+**cloud** model and provider from the QoS table. A missing line is not "unconfigured" — it is a live route
+to a vendor through our own gateway, stopped only by the absence of that vendor's credentials.
+
+Measured here on 2026-08-21: **8 of 45** features had no entry — `app_integration`, `followup`,
+`onboarding`, `session_titles`, `translation`, `trends` (gemini), `wrapped_analysis` (openrouter),
+`web_search` (perplexity). `translation` carries transcript text. The earlier reading, "37 of 37 covered",
+compared our file against *upstream's* override file, which cannot show a lane neither file mentions.
+
+`check_oss_llm_gateway_route_coverage.py` now ratchets this against the configured-feature set and also
+checks the `provider:` of every covered entry (a coverage count means nothing if an entry can name gemini).
+`web_search` is the one written-off lane, with its reason in the guard's baseline: it is a search product,
+and a local chat model would answer it with invented results and a fabricated "Sources:" section.
+
+**Verify every lane against the live gateway** — the check the guard cannot do, because it needs the network.
+Write the probe to a file and pipe it in (the caller header is required: 403 without it):
+
+```bash
+cat > /tmp/probe_lanes.py <<'PROBE'
+import os, json, urllib.request
+from utils.llm.model_config import get_all_configured_features
+from utils.llm.clients import feature_auto_lane_id
+base, tok = os.environ['OMI_LLM_GATEWAY_URL'], os.environ['OMI_LLM_GATEWAY_SERVICE_TOKEN']
+for f in sorted(get_all_configured_features()):
+    body = json.dumps({"model": feature_auto_lane_id(f),
+                       "messages": [{"role": "user", "content": "ok"}], "max_tokens": 1}).encode()
+    req = urllib.request.Request(f'{base}/v1/chat/completions', data=body, headers={
+        'Content-Type': 'application/json', 'Authorization': f'Bearer {tok}',
+        'x-omi-service-caller': 'backend'})
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
+            print(f'{r.status} {f}')
+    except urllib.error.HTTPError as e:
+        print(f'{e.code} {f}  <-- {e.read()[:100].decode()}')
+PROBE
+docker compose -f compose.prod.yaml exec -T backend /opt/venv/bin/python - < /tmp/probe_lanes.py
+```
+
+Expected today: **44 x 200**, and `503 invalid_config` for `web_search` alone. A 200 whose body carries
+`"model": "omi:auto:<feature>"` and `fp_ollama` in `system_fingerprint` is proof the lane was served locally.
+
 ## Vendor egress: `OMI_VENDOR_EGRESS` (ADR-0057)
 
 One explicit switch for "may data leave for a third party", declared `deny` in `backend.env.base` and in
