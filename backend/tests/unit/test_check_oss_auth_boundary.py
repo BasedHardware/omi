@@ -174,3 +174,68 @@ def test_match_as_capture_of_firebase_subject_propagates_alias():
     # A capture of a NON-firebase subject must not become an alias.
     clean = "import firebase_admin as fb\nmatch other:\n    case obj:\n        obj.auth.verify(t)\n"
     assert _MODULE.count_boundary_violations(clean) == 0
+
+
+# --- the coverage boundary, measured -------------------------------------------------------------
+# The audit that produced BACKLOG L16 reported "11 of 14 bypass shapes are invisible". Measured, it was
+# the other way round: 10 of 14 were already seen, and the shape it called "the idiom the adapter itself
+# uses" (a helper returning the `auth` MODULE) was one of them. These tests pin what the guard sees AND
+# what it deliberately does not, so the next reader does not have to re-measure — or mistake a decision
+# for an oversight.
+
+
+def test_every_realistic_shape_is_seen():
+    seen = {
+        'import firebase_admin.auth': 'import firebase_admin.auth\nfirebase_admin.auth.verify_id_token(t)\n',
+        'from firebase_admin.auth import x': 'from firebase_admin.auth import verify_id_token\nverify_id_token(t)\n',
+        'from firebase_admin import auth': 'from firebase_admin import auth\nauth.verify_id_token(t)\n',
+        'package attribute': 'import firebase_admin\nfirebase_admin.auth.verify_id_token(t)\n',
+        'aliased package': 'import firebase_admin as fb\nfb.auth.verify_id_token(t)\n',
+        'lazy accessor returning the auth module': (
+            'def _auth():\n    from firebase_admin import auth\n    return auth\n_auth().verify_id_token(t)\n'
+        ),
+        'from..import auth as alias': 'from firebase_admin import auth as fa\nfa.verify_id_token(t)\n',
+        'module-level indirection': 'import firebase_admin\n_FB = firebase_admin\n_FB.auth.verify_id_token(t)\n',
+        'literal importlib': (
+            "import importlib\nimportlib.import_module('firebase_admin.auth').verify_id_token(t)\n"
+        ),
+        'walrus': 'import firebase_admin\nif (fb := firebase_admin):\n    fb.auth.verify_id_token(t)\n',
+    }
+    invisible = [name for name, source in seen.items() if _MODULE.count_boundary_violations(source) == 0]
+    assert invisible == [], f'these shapes stopped being detected: {invisible}'
+
+
+def test_handing_the_package_out_is_seen_now():
+    """The one realistic blind spot that L16 was pointing at, from the wrong end.
+
+    `def _fb(): return firebase_admin` makes every later `_fb().auth` invisible, because the attribute is
+    then on a Call and attribute tracking works on names. The codebase already uses a lazy-accessor idiom
+    (returning the auth module), so a variant returning the package is one small step away. Catching the
+    provider side is tractable; the consumer side is not.
+    """
+    source = 'import firebase_admin\ndef _fb():\n    return firebase_admin\n_fb().auth.verify_id_token(t)\n'
+    assert _MODULE.count_boundary_violations(source) == 1
+
+
+def test_returning_the_package_does_not_false_positive_on_anything_else():
+    """Returning the package has no legitimate use outside utils/auth/; returning other things does."""
+    assert _MODULE.count_boundary_violations('import firebase_admin\ndef b():\n    return {"a": 1}\n') == 0
+    assert _MODULE.count_boundary_violations('import firebase_admin\ndef b():\n    c = make()\n    return c\n') == 0
+    # messaging is explicitly allowed (push, ADR-0011) and must stay allowed.
+    messaging = 'import firebase_admin\ndef m():\n    return firebase_admin.messaging\n'
+    assert _MODULE.count_boundary_violations(messaging) == 0
+
+
+def test_the_dynamic_shapes_are_deliberately_not_detected():
+    """Recorded as a DECISION, not an oversight: nothing in the tree writes these, product code has no
+    reason to, and chasing every dynamic shape turns a precise guard into a false-positive machine. If one
+    ever appears in a merge, this test is where to change the answer."""
+    undetected = {
+        'getattr on the package': "import firebase_admin\ngetattr(firebase_admin, 'auth').verify_id_token(t)\n",
+        'sys.modules': "import sys\nsys.modules['firebase_admin'].auth.verify_id_token(t)\n",
+        'package inside a container': (
+            "import firebase_admin\nM = {'fb': firebase_admin}\nM['fb'].auth.verify_id_token(t)\n"
+        ),
+    }
+    for name, source in undetected.items():
+        assert _MODULE.count_boundary_violations(source) == 0, f'{name} is now detected — update this test'

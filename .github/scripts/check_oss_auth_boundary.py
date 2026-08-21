@@ -10,7 +10,16 @@ authentication through the neutral port (``utils.auth.get_auth_provider()`` → 
 get_user_profile / …), so the backend stays swappable (Firebase | OIDC/Keycloak).
 
 Deliberately NOT forbidden: ``firebase_admin.initialize_app`` (process bootstrap), ``firebase_admin.
-messaging`` (push, ADR-0011), ``firebase_admin.firestore`` (that's the Firestore guard's job). This is
+messaging`` (push, ADR-0011), ``firebase_admin.firestore`` (that's the Firestore guard's job).
+
+Deliberately NOT DETECTED, and the reason matters more than the list: ``getattr(firebase_admin, 'auth')``,
+``sys.modules['firebase_admin'].auth`` and a package smuggled through a container (``{'fb':
+firebase_admin}['fb'].auth``). Nothing in the tree writes them, product code has no reason to, and
+chasing every dynamic shape turns a precise guard into a false-positive machine. What IS covered is the
+one realistic escape: a module handing the package out via ``return firebase_admin`` (see ast.Return
+below), because the codebase already uses a lazy-accessor idiom one small step away from it. The
+consumer side of that shape (``someone_elses_accessor().auth``) stays undetectable by construction —
+attribute tracking works on names, not on call results. This is
 the auth analogue of the Firestore/object-store/vector boundary guards; without it an upstream merge
 could silently reintroduce a raw Firebase-auth call (ADR-0029/0030). Ratchets against a baseline (WP3
 target: empty). Companion of ADR-0034/0004.
@@ -240,6 +249,19 @@ def _scan_stmt(stmt: ast.stmt, aliases: set[str], count: _Count) -> None:
         else:
             _scan_scope(stmt.body, aliases, count)  # body opens a fresh scope seeded from this snapshot
         aliases.discard(stmt.name)  # the def/class name is a non-alias binding in this scope
+        return
+
+    if isinstance(stmt, ast.Return):
+        # Handing the firebase_admin PACKAGE out of a module outside the boundary. The lazy-accessor
+        # idiom is already in the codebase (utils/auth/adapters/firebase.py returns the `auth` MODULE,
+        # which this guard catches on its import), and a variant returning the package instead was the
+        # one realistic shape the guard could not see: `def _fb(): return firebase_admin` makes every
+        # later `_fb().auth` invisible, because the attribute is then on a Call, not on a tracked Name.
+        # Returning the package has no legitimate use outside utils/auth/, so this cannot false-positive.
+        if stmt.value is not None:
+            if isinstance(stmt.value, ast.Name) and stmt.value.id in aliases:
+                count.n += 1
+            _scan_expr(stmt.value, aliases, count)
         return
 
     if isinstance(stmt, ast.Assign):
