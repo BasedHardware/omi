@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-08-20 (durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication)
+> Last updated: 2026-08-23 (provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -47,6 +47,14 @@ Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
 utterances before longer ones.
+
+Provider speaker labels are connection-local. Before a live segment enters a
+conversation, listen stamps the actual `stt_provider` and an opaque
+`speaker_id_scope`. The scope advances whenever the provider changes and is
+new for every client reconnect. A conversation-local allocator hydrates the
+persisted IDs, then maps `(speaker_id_scope, speaker label)` to the next small
+integer `speaker_id`. Therefore Deepgram `SPEAKER_0`, Modulate `SPEAKER_00`, and
+a reconnect that restarts either provider's numbering cannot share an identity.
 
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
@@ -483,8 +491,25 @@ sequenceDiagram
         Backend->>Backend: Set is_user=True on segments via speaker_to_person_map
     else Match is known person
         Backend-->>Client: {type: "speaker_label_suggestion", person_id, distance}
+    else No enrolled voiceprint matches
+        Backend->>Firestore: Persist speaker_identity_status=no_match
     end
 ```
+
+`is_user` remains the compatibility projection, while
+`speaker_identity_status` preserves its evidence state: `user`, `not_user`,
+`no_match`, or `unknown`. A failed enrollment match is `no_match`, not a
+confident `not_user`; downstream identity-sensitive consumers must keep those
+states distinct.
+
+Parakeet embedding diarization does not use the enrollment threshold. Short
+in-session clips use a clustering cosine-distance threshold of `0.60`, while
+voiceprint verification remains `0.45`. Clustering creates at most eight
+centroids per stream. After the cap, a miss is merged into its nearest centroid
+and updates that running mean; the segment is never dropped and no overflow
+speaker ID is invented. Backend-side defaults use
+`SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
+Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 
 ## 5. Private Cloud Sync (Audio Upload)
 
@@ -522,7 +547,7 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 | Type | Format | Example |
 |------|--------|---------|
-| Transcripts | JSON array | `[{id, text, speaker, speaker_id, is_user, start, end}, ...]` |
+| Transcripts | JSON array | `[{id, text, speaker, speaker_id, speaker_id_scope, stt_provider, is_user, speaker_identity_status, start, end}, ...]` |
 | Events | JSON object | `{type: "...", ...}` |
 | Keepalive | Plain text | `"ping"` (not JSON — filter before parsing) |
 
@@ -555,7 +580,9 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 | `BG_DRAIN_TIMEOUT` | 30s | `pusher.py`, `routers/listen/contracts.py` | Grace period for background tasks to drain after disconnect before force-cancel |
 | `lifecycle_manager` poll | 5s | `routers/listen/conversations.py` | Check `finished_at` interval |
 | Pusher audio batch | 60s | pusher | GCS upload batch size |
-| Speaker match threshold | 0.45 | `routers/listen/speakers.py` | Cosine distance cutoff |
+| Speaker verification threshold | 0.45 | `utils/stt/speaker_embedding.py` | Enrolled voiceprint cosine-distance cutoff |
+| Speaker clustering threshold | 0.60 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Short-clip in-session centroid cutoff |
+| Speaker clustering cap | 8 | `utils/stt/speaker_clustering.py`, `parakeet/speaker_math.py` | Merge misses to nearest centroid after capacity |
 | `PENDING_REQUEST_TIMEOUT` | 120s | `routers/listen/conversations.py` | Timeout before retrying a pending request |
 | `MAX_RETRIES_PER_REQUEST` | 3 | `routers/listen/conversations.py` | Max retries before keeping buffered |
 | `PUSHER_MAX_RECONNECT_ATTEMPTS` | 6 | `utils/listen_pusher_session.py` | Reconnect attempts before DEGRADED |

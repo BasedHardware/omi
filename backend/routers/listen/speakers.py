@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, cast
 import av
 import numpy as np
 
+from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
@@ -36,6 +37,7 @@ class SpeakerMatcher:
         self.person_embeddings: Dict[str, Dict[str, Any]] = {}
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
+        self.segment_identity_status: Dict[str, SpeakerIdentityStatus] = {}
         self.tasks: set[asyncio.Task[Any]] = set()
 
     async def load_and_run(self) -> None:
@@ -187,9 +189,14 @@ class SpeakerMatcher:
             if best_id and best_name and best_distance < SPEAKER_MATCH_THRESHOLD:
                 self.speaker_to_person[speaker_id] = (best_id, best_name)
                 self.segment_assignments[segment['id']] = best_id
+                self.segment_identity_status[segment['id']] = (
+                    SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
+                )
                 self.host.state.speaker_map_dirty = True
                 self.host.emit_speaker_suggestion(speaker_id, best_id, best_name, segment['id'])
             else:
+                self.segment_identity_status[segment['id']] = SpeakerIdentityStatus.no_match
+                self.host.state.speaker_map_dirty = True
                 logger.info('Speaker ID no match speaker=%s best_distance=%.3f', speaker_id, best_distance)
         except Exception as error:
             logger.error('Speaker ID match failed speaker=%s type=%s', speaker_id, type(error).__name__)
@@ -202,3 +209,4 @@ class SpeakerMatcher:
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
         self.segment_assignments.clear()
+        self.segment_identity_status.clear()

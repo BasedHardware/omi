@@ -15,6 +15,8 @@ os.environ.setdefault('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://fake')  # enab
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 
 import utils.stt.streaming as st  # noqa: E402
+from utils.stt.speaker_clustering import SPEAKER_CLUSTERING_THRESHOLD  # noqa: E402
+from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD  # noqa: E402
 
 
 def _cosine_distance(a, b):
@@ -67,6 +69,11 @@ def test_clusters_two_speakers_stably(monkeypatch):
     assert got == [0, 0, 1, 0, 1]
 
 
+def test_clustering_threshold_is_separate_from_enrollment_verification():
+    assert SPEAKER_MATCH_THRESHOLD == 0.45
+    assert SPEAKER_CLUSTERING_THRESHOLD == 0.60
+
+
 def test_short_clip_inherits_last_speaker_without_embedding(monkeypatch):
     rng = np.random.default_rng(1)
     calls = _patch_embeddings(monkeypatch, [_dir_vec(1, rng)])
@@ -93,6 +100,19 @@ def test_embedding_failure_falls_back_to_last_speaker(monkeypatch):
     sock = _make_socket()
     sock._last_speaker = 2
     assert asyncio.run(sock._assign_speaker(b'\x01\x00' * 16000)) == 2  # never drops the segment
+
+
+def test_online_clustering_merges_to_nearest_after_eight_speakers(monkeypatch):
+    embeddings = [np.eye(9, dtype=np.float32)[index].reshape(1, -1) for index in range(9)]
+    _patch_embeddings(monkeypatch, embeddings)
+    sock = _make_socket()
+    long_pcm = b'\x01\x00' * 16000
+
+    assigned = [asyncio.run(sock._assign_speaker(long_pcm)) for _ in embeddings]
+
+    assert assigned[:8] == list(range(8))
+    assert assigned[8] == 0
+    assert len(sock._spk_centroids) == 8
 
 
 def test_slice_pcm_bounds():

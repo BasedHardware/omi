@@ -40,10 +40,10 @@ from utils.stt.provider_resilience import (
     fallback_socket_is_serving,
 )
 from utils.stt.speaker_embedding import (
-    SPEAKER_MATCH_THRESHOLD,
     async_extract_embedding_from_bytes,
     compare_embeddings,
 )
+from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.observability.fallback import record_fallback
 from utils.other.backoff import calculate_backoff_with_jitter
 import logging
@@ -1355,10 +1355,10 @@ class ParakeetStreamingSocket(STTSocket):
     async def _assign_speaker(self, seg_pcm: bytes) -> int:
         """Cluster a segment's voice embedding into a session-stable speaker index.
 
-        Online greedy clustering: embed the clip, match it to the nearest known speaker
-        centroid (cosine < SPEAKER_MATCH_THRESHOLD) or start a new one. Falls back to the
-        previous speaker when diarization is off, the clip is too short to embed, or the
-        embedding service errs — so a transient failure never drops or mislabels the segment.
+        Online greedy clustering uses the short-clip threshold and cluster cap from
+        speaker_clustering. Once the cap is full, the nearest centroid absorbs misses.
+        Falls back to the previous speaker when diarization is off, the clip is too short
+        to embed, or the embedding service errs, so a transient failure never drops text.
         """
         if not self._diarize:
             return 0
@@ -1373,13 +1373,8 @@ class ParakeetStreamingSocket(STTSocket):
             logger.warning(f"Parakeet diarization embed failed; reusing speaker {self._last_speaker}: {e}")
             return self._last_speaker
 
-        best_i, best_dist = -1, 1e9
-        for i, centroid in enumerate(self._spk_centroids):
-            d = compare_embeddings(emb, centroid)
-            if d < best_dist:
-                best_i, best_dist = i, d
-
-        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+        best_i, create_new, _ = select_speaker_cluster(emb, self._spk_centroids, compare_embeddings)
+        if not create_new:
             # Running-mean keeps the centroid stable as the speaker keeps talking.
             n = self._spk_counts[best_i]
             self._spk_centroids[best_i] = (self._spk_centroids[best_i] * n + emb) / (n + 1)
@@ -1389,7 +1384,7 @@ class ParakeetStreamingSocket(STTSocket):
 
         self._spk_centroids.append(emb)
         self._spk_counts.append(1)
-        self._last_speaker = len(self._spk_centroids) - 1
+        self._last_speaker = best_i
         return self._last_speaker
 
     def _slice_pcm(self, pcm: bytes, rel_start: float, rel_end: float) -> bytes:

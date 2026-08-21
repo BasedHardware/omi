@@ -543,6 +543,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
             self.end = data['end']
             self.speech_profile_processed = data['speech_profile_processed']
             self.is_user = False
+            self.speaker_id = data.get('speaker_id')
 
         def model_dump(self):
             return {'id': self.id, 'text': self.text}
@@ -597,6 +598,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
+    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op

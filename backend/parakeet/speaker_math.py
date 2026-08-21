@@ -1,4 +1,12 @@
+import os
+from typing import Callable, Sequence
+
 import numpy as np
+
+# Enrollment verification is a separate backend operation fixed at 0.45. These
+# defaults are for short, noisy in-session/batch centroid clustering only.
+SPEAKER_CLUSTERING_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_CLUSTERING_THRESHOLD", "0.60"))
+SPEAKER_CLUSTERING_MAX_SPEAKERS = max(1, int(os.getenv("PARAKEET_SPEAKER_CLUSTERING_MAX_SPEAKERS", "8")))
 
 
 def cosine_distance(a: object, b: object) -> float:
@@ -9,3 +17,30 @@ def cosine_distance(a: object, b: object) -> float:
         return 1.0
     distance = 1.0 - float(np.dot(a_vec, b_vec) / denom)
     return max(0.0, min(2.0, distance))
+
+
+def select_speaker_cluster(
+    embedding: object,
+    centroids: Sequence[object],
+    distance: Callable[[object, object], float] = cosine_distance,
+    *,
+    threshold: float = SPEAKER_CLUSTERING_THRESHOLD,
+    max_speakers: int = SPEAKER_CLUSTERING_MAX_SPEAKERS,
+) -> tuple[int, bool, float]:
+    """Choose a cluster, merging to the nearest once the configured cap is full."""
+    if not centroids:
+        return 0, True, float("inf")
+
+    best_index = 0
+    best_distance = float("inf")
+    for index, centroid in enumerate(centroids):
+        candidate_distance = distance(embedding, centroid)
+        if candidate_distance < best_distance:
+            best_index = index
+            best_distance = candidate_distance
+
+    if best_distance < threshold:
+        return best_index, False, best_distance
+    if len(centroids) < max(1, max_speakers):
+        return len(centroids), True, best_distance
+    return best_index, False, best_distance
