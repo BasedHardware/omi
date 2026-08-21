@@ -259,3 +259,68 @@ def test_migrate_owner_rejects_missing_source_token_before_any_effect(monkeypatc
 
     assert error.status_code == 403
     assert effects == []
+
+
+def test_migrate_owner_rejects_a_REVOKED_source_token(monkeypatch):
+    """A source token revoked server-side must not prove the source identity (BACKLOG L15).
+
+    This is the one caller that passes `check_revoked=True`, and until now nothing tested it: every stub
+    in this file writes `verify_token=lambda _token, check_revoked=False: ...`, i.e. it ACCEPTS the flag
+    and ignores it, so a revoked token would have sailed through every one of them.
+
+    It is written with the shared `FakeAuthProvider` rather than another ad-hoc lambda, because the fake
+    now models the real semantic: a revoked JWT still verifies, and only `check_revoked=True` rejects it.
+    So this test fails if the route ever stops asking for the check — verified by mutation, and the first
+    version of it did NOT: with `get_user` stubbed to raise, the route answered 403 for that reason
+    instead, and flipping the flag to False left the test green. Everything downstream of the revocation
+    is therefore made to SUCCEED here, so the revocation is the only thing that can produce the 403.
+    """
+    from tests.auth_fakes import FakeAuthProvider
+    from utils.auth.ports import Principal, UserProfile
+
+    effects = []
+    provider = FakeAuthProvider()
+    provider.register(
+        'source-token',
+        Principal(uid='anonymous-uid', email=None, email_verified=False, is_anonymous=True, provider='anonymous'),
+    ).register_revoked('source-token')
+
+    monkeypatch.setattr(apps_mod.auth, 'get_auth_provider', lambda: provider)
+    monkeypatch.setattr(apps_mod.auth, 'get_user', lambda uid: UserProfile(uid=uid))
+    monkeypatch.setattr(apps_mod.auth, 'enforce_account_deletion_http_access', lambda _uid: None)
+    monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', lambda *_args: effects.append('database'))
+    monkeypatch.setattr(apps_mod, 'start_background_task', lambda *_args, **_kwargs: effects.append('background'))
+
+    async def scenario():
+        with pytest.raises(HTTPException) as exc_info:
+            await apps_mod.migrate_app_owner('anonymous-uid', source_token='source-token', uid='authenticated-uid')
+        return exc_info.value
+
+    error = asyncio.run(scenario())
+
+    assert error.status_code == 403
+    assert effects == [], 'a revoked token must not migrate anything'
+
+
+def test_the_same_token_is_accepted_when_it_is_NOT_revoked(monkeypatch):
+    """The other half, so the test above cannot pass for the wrong reason (e.g. the fake rejecting every
+    token): identical setup minus the revocation, and the migration proceeds."""
+    from tests.auth_fakes import FakeAuthProvider
+    from utils.auth.ports import Principal, UserProfile
+
+    effects = []
+    provider = FakeAuthProvider()
+    provider.register(
+        'source-token',
+        Principal(uid='anonymous-uid', email=None, email_verified=False, is_anonymous=True, provider='anonymous'),
+    )
+
+    monkeypatch.setattr(apps_mod.auth, 'get_auth_provider', lambda: provider)
+    monkeypatch.setattr(apps_mod.auth, 'get_user', lambda uid: UserProfile(uid=uid))
+    monkeypatch.setattr(apps_mod.auth, 'enforce_account_deletion_http_access', lambda _uid: None)
+    monkeypatch.setattr(apps_mod, 'migrate_app_owner_id_db', lambda *_args: effects.append('database'))
+    monkeypatch.setattr(apps_mod, 'start_background_task', lambda *_args, **_kwargs: effects.append('background'))
+
+    asyncio.run(apps_mod.migrate_app_owner('anonymous-uid', source_token='source-token', uid='authenticated-uid'))
+
+    assert 'database' in effects
