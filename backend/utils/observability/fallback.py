@@ -72,6 +72,9 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
+        # Vector store (ADR-0033): an unconfigured store makes writes and deletes no-ops, and a capability
+        # silently lost is the thing this counter exists for. Without the label it buckets to 'other'.
+        'vector_store',
         'other',
     }
 )

@@ -14,6 +14,13 @@ _lock = threading.Lock()
 _instance: Optional[VectorStore] = None
 
 
+# The backends this factory can build. Exported so the availability gate in database/vector_db.py asks
+# the factory instead of keeping its own idea: it used to treat anything that was not "qdrant" as
+# pinecone, so VECTOR_STORE_BACKEND=weaviate with PINECONE_* set reported "available" and then raised
+# ValueError from here — a gate whose 24 callers degrade politely, crashing mid-request instead.
+SUPPORTED_BACKENDS = frozenset({'pinecone', 'qdrant'})
+
+
 def get_vector_store(env: Optional[Mapping[str, str]] = None) -> VectorStore:
     """Return the configured vector store (singleton, resolved on first use).
 
@@ -41,7 +48,8 @@ def get_vector_store(env: Optional[Mapping[str, str]] = None) -> VectorStore:
 
                     _instance = QdrantVectorStore()
                 else:
-                    raise ValueError(f"unknown VECTOR_STORE_BACKEND: {backend!r} (expected 'pinecone' or 'qdrant')")
+                    expected = "', '".join(sorted(SUPPORTED_BACKENDS))
+                    raise ValueError(f"unknown VECTOR_STORE_BACKEND: {backend!r} (expected '{expected}')")
     return _instance
 
 

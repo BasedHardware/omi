@@ -22,6 +22,7 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +98,19 @@ def _vector_store():
 
 def is_vector_available() -> bool:
     """Whether the configured vector backend is wired. Replaces the old module-level ``index is None``
-    guard — callers degrade gracefully (skip search/upsert) when the store is unconfigured."""
-    backend = (os.getenv('VECTOR_STORE_BACKEND') or 'pinecone').strip().lower()
+    guard — callers degrade gracefully (skip search/upsert) when the store is unconfigured.
+
+    An unsupported backend name is NOT available. It used to treat anything that was not ``qdrant`` as
+    pinecone, so ``VECTOR_STORE_BACKEND=weaviate`` with ``PINECONE_*`` set answered "available" and then
+    ``get_vector_store()`` raised ValueError — this gate exists precisely so its callers can skip rather
+    than crash, and it was handing them a crash. The supported set comes from the factory so the two
+    cannot drift apart.
+    """
+    from utils.vector.factory import SUPPORTED_BACKENDS
+
+    backend = (os.getenv('VECTOR_STORE_BACKEND') or 'pinecone').strip().lower() or 'pinecone'
+    if backend not in SUPPORTED_BACKENDS:
+        return False
     if backend == 'qdrant':
         return bool((os.getenv('QDRANT_URL') or '').strip())
     return bool((os.getenv('PINECONE_API_KEY') or '').strip() and (os.getenv('PINECONE_INDEX_NAME') or '').strip())
@@ -118,6 +130,10 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
 
 
 def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
+    # Its immediate neighbours (upsert_vector2, update_vector_metadata) have this gate and this one did
+    # not, so with no store configured it raised from the adapter instead of skipping.
+    if not is_vector_available():
+        return
     res = _vector_store().upsert("ns1", [_get_data(uid, conversation_id, vector)])
     logger.info(f'upsert_vector {res}')
 
@@ -142,6 +158,8 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, A
 
 
 def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]) -> None:
+    if not is_vector_available():  # same missing gate as upsert_vector above
+        return
     data: List[VectorRecordDoc] = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
     res = _vector_store().upsert("ns1", data)
     logger.info(f'upsert_vectors {res}')
@@ -589,8 +607,20 @@ def upsert_canonical_memory_vector(
 def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
     """Delete canonical vectors by authoritative UID metadata, including legacy bare-ID rows."""
     if not is_vector_available():
-        logger.warning('Pinecone index not initialized, skipping canonical memory vector filter delete')
-        return False
+        # TRUE, not False: with no vector store there are no vectors, so the desired absence already
+        # holds — the same reasoning delete_atom_keyword_doc uses for a missing document. False made the
+        # memory outbox read this as "delivery failed", so the event burned its five attempts and
+        # DEAD-LETTERED: five retries and a silent give-up for a state that was already correct.
+        # Recorded rather than merely logged, so an operator can see that vector deletes are a no-op.
+        record_fallback(
+            component='vector_store',
+            from_mode='vector_delete',
+            to_mode='noop',
+            reason='config_incomplete',
+            outcome='degraded',
+            log=logger,
+        )
+        return True
     delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
     _vector_store().delete_by_filter(MEMORIES_NAMESPACE, delete_filter)
     logger.info(
