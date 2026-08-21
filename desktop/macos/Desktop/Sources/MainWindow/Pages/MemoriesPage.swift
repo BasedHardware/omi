@@ -718,7 +718,7 @@ class MemoriesViewModel: ObservableObject {
       )
       currentOffset = memories.count
       rawBackendOffset = apiMemories.count
-      hasMoreMemories = ServerPaging.hasMore(received: apiMemories.count)
+      hasMoreMemories = Self.hasMoreAfterPage(page, received: apiMemories.count)
     } catch {
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
@@ -760,6 +760,13 @@ class MemoriesViewModel: ObservableObject {
     Task {
       await loadTagCountsFromDatabase()
     }
+  }
+
+  /// Whether another page is worth asking for. A truncated page is an honest
+  /// partial response with no resumable cursor, so callers must not continue.
+  private static func hasMoreAfterPage(_ page: APIClient.MemoryListPage, received: Int) -> Bool {
+    if page.truncated { return false }
+    return ServerPaging.hasMore(received: received)
   }
 
   /// Resolve specific memories by id for surfaces that cite them — today the
@@ -1140,7 +1147,7 @@ class MemoriesViewModel: ObservableObject {
         // hasMoreMemories from the filtered count would disable scrolling and
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
-        hasMoreMemories = ServerPaging.hasMore(received: fetchedMemories.count)
+        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
         log(
           "MemoriesViewModel: Showing \(visibleMemories.count) memories from authoritative API page (raw: \(fetchedMemories.count))"
         )
@@ -1155,7 +1162,7 @@ class MemoriesViewModel: ObservableObject {
         )
         currentOffset = memories.count
         rawBackendOffset = fetchedMemories.count
-        hasMoreMemories = ServerPaging.hasMore(received: fetchedMemories.count)
+        hasMoreMemories = Self.hasMoreAfterPage(page, received: fetchedMemories.count)
       }
     } catch {
       // Only show error if we don't have cached data
@@ -1199,12 +1206,18 @@ class MemoriesViewModel: ObservableObject {
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     do {
+      var truncated = false
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
           cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
+        if page.truncated {
+          truncated = true
+          log("MemoriesViewModel: Cache reconcile stopped because the server returned a truncated list")
+          break
+        }
         if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
@@ -1226,6 +1239,11 @@ class MemoriesViewModel: ObservableObject {
       // Fail closed: sync returned default-scope rows, but do not prune orphans until the
       // backend can prove this page set is complete for an explicit scope. This preserves
       // Archive rows when the default endpoint omits them by design.
+      // A truncated pull is incomplete, so do not mark reconcile as done.
+      guard !truncated else {
+        log("MemoriesViewModel: Cache reconcile did not mark completion because the list was truncated")
+        return
+      }
       UserDefaults.standard.set(true, forKey: reconcileKey)
       log("MemoriesViewModel: Cache reconcile skipped orphan pruning because backend completeness is unknown")
 
@@ -1255,12 +1273,18 @@ class MemoriesViewModel: ObservableObject {
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
     do {
+      var truncated = false
       while true {
         let page = try await APIClient.shared.getMemoriesPage(
           limit: batchSize,
           cursor: cursor,
           authorizationSnapshot: authorizationSnapshot)
         let batch = page.memories
+        if page.truncated {
+          truncated = true
+          log("MemoriesViewModel: Full sync stopped because the server returned a truncated list")
+          break
+        }
         if batch.isEmpty && page.nextCursor == nil { break }
 
         try await MemoryStorage.shared.syncServerMemories(batch)
@@ -1271,6 +1295,12 @@ class MemoriesViewModel: ObservableObject {
         cursor = nextCursor
       }
 
+      // A truncated sync is incomplete; do not mark it completed so the next
+      // launch retries the full default-scope pull.
+      guard !truncated else {
+        log("MemoriesViewModel: Full sync did not mark completion because the list was truncated")
+        return
+      }
       UserDefaults.standard.set(true, forKey: syncKey)
       log("MemoriesViewModel: Default-scope sync completed - \(totalSynced) additional memories synced")
 
@@ -1407,7 +1437,7 @@ class MemoriesViewModel: ObservableObject {
       // Advance the raw backend cursor by the raw page size so the next fetch
       // starts after all items in this page, not just the visible subset.
       rawBackendOffset += newMemories.count
-      hasMoreMemories = ServerPaging.hasMore(received: newMemories.count)
+      hasMoreMemories = Self.hasMoreAfterPage(page, received: newMemories.count)
       log(
         "MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))"
       )

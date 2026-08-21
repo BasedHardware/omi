@@ -285,3 +285,11 @@ tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_
 tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
+# Suppressed-prefix expansion round walks 500 historical stubs with status batches;
+# ~0.5s CPU before and after the list-read budget threading (structural, unchanged test).
+tests/unit/test_memory_offset_read_cost.py::test_status_lookups_are_not_repeated_across_expansion_rounds
+# 20k-row large-offset fixture intentionally crosses the legacy 10k boundary to charge
+# server-side offset() work; the in-memory doc list construction is hermetic but structural.
+tests/unit/test_list_read_budget_contract.py::test_conversations_large_offsets_are_served_and_charged[20000-19000-1000]
+# First test in the file-isolated memories router suite amortizes the module import.
+tests/unit/test_memories_archive_and_read_contracts.py::test_get_memories_forwards_include_archive

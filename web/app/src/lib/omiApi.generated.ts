@@ -162,6 +162,7 @@ export interface ActionItemUpdateRequest {
 export interface ActionItemsResponse {
   action_items: Array<ActionItemResponse>;
   has_more?: boolean;
+  truncated?: boolean;
 }
 
 export interface ActionItemsSearchResponse {
