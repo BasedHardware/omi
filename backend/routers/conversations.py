@@ -1390,23 +1390,30 @@ def send_conversation_share_email(
         'public',
     )
 
+    publish_token: Dict[str, Any] = {}
+
     def _publish():
         # An already link-visible conversation keeps its existing visibility
         # (never downgrade `public` to `shared`); only a private one is flipped.
         if not was_shared:
             conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.shared)
+            # CAS token: rollback may only reverse THIS request's write. Any
+            # concurrent write — even one storing the same 'shared' value —
+            # bumps the doc's update_time and voids the token.
+            publish_token['update_time'] = conversations_db.get_conversation_update_time(uid, conversation_id)
         redis_db.store_conversation_to_uid(conversation_id, uid)
         redis_db.add_public_conversation(conversation_id)
 
     def _unpublish():
         if was_shared:
             return
-        # Re-read before rolling back: a concurrent visibility change made
-        # while the provider call was in flight must not be overwritten.
-        current = _get_valid_conversation_by_id(uid, conversation_id)
-        if current.get('visibility') not in (ConversationVisibility.shared, 'shared'):
+        reverted = conversations_db.set_conversation_visibility_if_unchanged(
+            uid, conversation_id, ConversationVisibility.private, publish_token.get('update_time')
+        )
+        if not reverted:
+            # Ownership could not be proven (someone else wrote the doc while
+            # the provider call was in flight) — their share stands.
             return
-        conversations_db.set_conversation_visibility(uid, conversation_id, ConversationVisibility.private)
         redis_db.remove_conversation_to_uid(conversation_id)
         redis_db.remove_public_conversation(conversation_id)
 

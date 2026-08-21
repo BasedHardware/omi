@@ -61,6 +61,21 @@ def _stub_data_layer(monkeypatch):
         'set_conversation_visibility',
         lambda uid, cid, value: state.__setitem__('visibility', getattr(value, 'value', value)),
     )
+    # CAS seams: update_time token 't1'; the guarded write succeeds only while
+    # the doc token matches, mirroring Firestore's last_update_time precondition.
+    state['doc_token'] = 't1'
+
+    monkeypatch.setattr(
+        conversations_router.conversations_db, 'get_conversation_update_time', lambda uid, cid: state['doc_token']
+    )
+
+    def guarded_set(uid, cid, value, last_update_time):
+        if last_update_time != state['doc_token']:
+            return False
+        state['visibility'] = getattr(value, 'value', value)
+        return True
+
+    monkeypatch.setattr(conversations_router.conversations_db, 'set_conversation_visibility_if_unchanged', guarded_set)
     monkeypatch.setattr(
         conversations_router.redis_db, 'store_conversation_to_uid', lambda cid, uid: state['redis'].add(cid)
     )
@@ -159,7 +174,9 @@ def test_rollback_skipped_when_visibility_changed_concurrently(monkeypatch, _stu
     monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', evolving_conversation)
 
     def failing_send(*, uid, conversation, recipient_emails):
+        # Any real concurrent write moves the doc's update_time as well.
         _stub_data_layer['visibility'] = 'public'
+        _stub_data_layer['doc_token'] = 't2-user-made-public'
         raise RuntimeError('email provider rejected the send')
 
     monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', failing_send)
@@ -183,5 +200,25 @@ def test_ambiguous_delivery_returns_504_and_keeps_link_live(monkeypatch, _stub_d
         json={'recipient_emails': ['sarah@acme.com']},
     )
     assert response.status_code == 504
+    assert _stub_data_layer['visibility'] == 'shared'
+    assert CONV_ID in _stub_data_layer['redis']
+
+
+def test_rollback_skipped_when_concurrent_share_wrote_same_value(monkeypatch, _stub_data_layer):
+    """A concurrent Copy/Send stores the same 'shared' value; the CAS token is
+    voided by that write, so the failed email attempt must not revert it."""
+
+    def failing_send(*, uid, conversation, recipient_emails):
+        # Concurrent actor re-shares while the provider call is in flight:
+        # value unchanged, but the doc's update_time moves on.
+        _stub_data_layer['doc_token'] = 't2-concurrent-writer'
+        raise RuntimeError('email provider rejected the send')
+
+    monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', failing_send)
+    response = _client().post(
+        f'/v1/conversations/{CONV_ID}/share-email',
+        json={'recipient_emails': ['sarah@acme.com']},
+    )
+    assert response.status_code == 502
     assert _stub_data_layer['visibility'] == 'shared'
     assert CONV_ID in _stub_data_layer['redis']

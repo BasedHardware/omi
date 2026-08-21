@@ -1491,6 +1491,37 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
     conversation_ref.update({'visibility': visibility})
 
 
+def get_conversation_update_time(uid: str, conversation_id: str):
+    """Document update_time snapshot, used as a CAS token for visibility rollback."""
+    user_ref = db.collection('users').document(uid)
+    snapshot = user_ref.collection(conversations_collection).document(conversation_id).get()
+    return snapshot.update_time if getattr(snapshot, 'exists', False) else None
+
+
+def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, visibility: str, last_update_time) -> bool:
+    """Write visibility only if the doc is untouched since ``last_update_time``.
+
+    Firestore's native precondition makes this an ownership check: any
+    concurrent write — even one that stored the same visibility value — bumps
+    update_time and fails the precondition, so a rollback can never clobber
+    another actor's share. Returns False when skipped.
+    """
+    from google.api_core import exceptions as gcloud_exceptions
+
+    if last_update_time is None:
+        return False
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    try:
+        conversation_ref.update(
+            {'visibility': visibility},
+            option=db.write_option(last_update_time=last_update_time),
+        )
+        return True
+    except gcloud_exceptions.FailedPrecondition:
+        return False
+
+
 def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
