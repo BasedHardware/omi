@@ -628,6 +628,28 @@ public class ProactiveAssistantsPlugin: NSObject {
     CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .keyDown)
   }
 
+  /// SCShareableContent resolution inside captureWindowCGImage can stall for
+  /// tens of seconds under capture-pipeline contention; a dwell refresh that
+  /// waits that long delivers its answer a minute late. Bound the wait — a
+  /// timed-out capture aborts the refresh through the ordinary retry path
+  /// (anchor backdate, ~10s), which beats blocking the whole chain.
+  @available(macOS 14.0, *)
+  private func dwellCaptureWithTimeout(
+    windowID: CGWindowID, seconds: TimeInterval
+  ) async -> ScreenCaptureService.WindowCaptureResult? {
+    guard let service = screenCaptureService else { return nil }
+    return await withTaskGroup(of: ScreenCaptureService.WindowCaptureResult?.self) { group in
+      group.addTask { await service.captureWindowCGImage(windowID: windowID) }
+      group.addTask {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        return nil
+      }
+      let first = await group.next() ?? nil
+      group.cancelAll()
+      return first
+    }
+  }
+
   /// A dwell refresh must capture its own frame: the preview-skip path starves
   /// full captures while the user types, so the freshest tracked frame would
   /// otherwise predate the very content this refresh exists to evaluate.
@@ -639,6 +661,12 @@ public class ProactiveAssistantsPlugin: NSObject {
     // whole refresh if the user already switched away: tracking the old app's
     // frame after a switch would contaminate the new context's bucket.
     guard AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle) else {
+      // The slot must not die silently: backdate the anchor exactly like a
+      // failed capture so the next settled tick can retry, and say why. SPA
+      // titles (compose drafts) shift underneath the tick, so this guard
+      // fires in normal use, not only on real app switches.
+      dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      log("Context dwell refresh aborted: context no longer tracked; retrying shortly")
       return
     }
     // The fresh pre-transition capture is REQUIRED: transitioning without it
@@ -647,8 +675,8 @@ public class ProactiveAssistantsPlugin: NSObject {
     // which has no window-image capture path here — the anchor is backdated so
     // the refresh retries in ~10s instead of waiting out the full cooldown.
     var capturedFreshFrame = false
-    if #available(macOS 14.0, *), let screenCaptureService {
-      let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
+    if #available(macOS 14.0, *) {
+      let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
       if case .success(let image) = result,
         AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
       {
@@ -667,17 +695,22 @@ public class ProactiveAssistantsPlugin: NSObject {
     }
     guard capturedFreshFrame else {
       dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      log("Context dwell refresh aborted: fresh capture failed; retrying shortly")
       return
     }
     guard
       let arrivingFence = await AssistantCoordinator.shared.refreshActiveContextForDwell(
         expectedApp: appName, expectedWindowTitle: windowTitle)
-    else { return }
+    else {
+      dwellContextAnchor = ContextDwellRefreshPolicy.retryAnchor(now: Date())
+      log("Context dwell refresh aborted: coordinator refused the transition; retrying shortly")
+      return
+    }
     // Capture AGAIN after the visit opened: the entry evaluation only grounds
     // on frames captured at or after the visit began, and a static screen may
     // never produce another full frame through the preview-skip path.
-    if #available(macOS 14.0, *), let screenCaptureService {
-      let result = await screenCaptureService.captureWindowCGImage(windowID: windowID)
+    if #available(macOS 14.0, *) {
+      let result = await dwellCaptureWithTimeout(windowID: windowID, seconds: 5)
       if case .success(let image) = result,
         AssistantCoordinator.shared.isTracking(app: appName, windowTitle: windowTitle)
       {
