@@ -107,7 +107,7 @@ def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch)
 
     assert first == second
     assert first != other
-    assert first.startswith('https://api.omi.me/r/ref1.')
+    assert first.startswith('https://omi.me/r/ref1.')
 
 
 def test_authenticated_referrer_uses_configured_dev_public_origin(monkeypatch):
