@@ -201,7 +201,16 @@ def test_invalid_entries_are_counted_instead_of_guessed() -> None:
     }
 
 
-def test_cloud_query_is_bounded_and_truncation_fails_closed(capsys: pytest.CaptureFixture[str]) -> None:
+def test_cloud_query_is_bounded_and_truncation_fails_closed(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # --project falls back to GOOGLE_CLOUD_PROJECT before DEFAULT_PROJECT, and other
+    # suites set that variable process-wide at import time (test_working_observations_
+    # extractor.py does `os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test")`).
+    # Asserting the built-in default therefore has to own the environment, or this
+    # passes alone and fails whenever one of those files is collected first.
+    monkeypatch.delenv('GOOGLE_CLOUD_PROJECT', raising=False)
     captured: dict[str, Any] = {}
 
     def fetcher(**kwargs: Any) -> list[Any]:
