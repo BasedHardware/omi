@@ -364,3 +364,29 @@ def test_concurrent_public_change_before_publish_is_preserved(monkeypatch, _stub
     response = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
     assert response.status_code == 502
     assert _stub_data_layer['visibility'] == 'public'
+
+
+def test_publish_contention_with_private_visibility_fails_without_sending(monkeypatch, _stub_data_layer):
+    """Unrelated concurrent writes exhaust the CAS retries while visibility
+    stays private: the route must fail definitively — no email, reservation
+    and quota released — never dispatch a link to a still-private conversation."""
+    refunds = []
+    monkeypatch.setattr(conversations_router.share_email, 'refund_daily_send_quota', lambda uid, n: refunds.append(n))
+
+    def contended_publish(uid, cid):
+        raise RuntimeError('could not publish conversation visibility under contention')
+
+    monkeypatch.setattr(
+        conversations_router.conversations_db, 'publish_conversation_visibility_if_private', contended_publish
+    )
+    dispatched = []
+    monkeypatch.setattr(
+        conversations_router.share_email,
+        'send_summary_email',
+        lambda **kw: dispatched.append(1) or {'sent_to': kw['recipient_emails']},
+    )
+    response = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
+    assert response.status_code == 502
+    assert dispatched == []
+    assert refunds == [1]
+    assert _stub_data_layer['sent'] == []

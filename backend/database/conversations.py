@@ -1555,8 +1555,13 @@ def publish_conversation_visibility_if_private(uid: str, conversation_id: str):
             return (True, getattr(result, 'update_time', None))
         except gcloud_exceptions.FailedPrecondition:
             continue
-    # Persistent contention: leave visibility to the other writers.
-    return (False, None)
+    # Retries exhausted under contention. Only concede when another writer
+    # actually made the conversation link-visible; a still-private doc means
+    # nothing may be emailed (the link would be dead), so fail definitively.
+    final = conversation_ref.get().to_dict() or {}
+    if final.get('visibility') in ('shared', 'public'):
+        return (False, None)
+    raise RuntimeError('could not publish conversation visibility under contention')
 
 
 def set_conversation_visibility_if_unchanged(uid: str, conversation_id: str, visibility: str, last_update_time) -> bool:
