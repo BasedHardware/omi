@@ -235,8 +235,14 @@ actor ContextProactivityEngine {
   /// the same visit.
   func evaluateAfterDeparture(fence: ContextVisitFence, departingFrame: CapturedFrame) async {
     guard fence.bucketID != nil else { return }
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { return }
-    guard dwellAdmission.begin(visitID: fence.visitID) else { return }
+    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+      log("DepartureEvalDebug: no authorization snapshot")
+      return
+    }
+    guard dwellAdmission.begin(visitID: fence.visitID) else {
+      log("DepartureEvalDebug: dwell admission refused for visit \(fence.visitID)")
+      return
+    }
     defer { dwellAdmission.finish(visitID: fence.visitID) }
     let gate = await MainActor.run { Self.liveDeliveryGateInput() }
     let preflightReason = ContextDeliveryBudget.freeGate(input: gate)
@@ -245,12 +251,25 @@ actor ContextProactivityEngine {
       return
     }
     let freshness = await store.fenceFreshness(fence)
-    guard
-      RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
-      freshness.fresh,
-      let snapshot = await store.snapshot(for: fence)
-    else { return }
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+      log("DepartureEvalDebug: authorization changed")
+      return
+    }
+    guard freshness.fresh else {
+      log("DepartureEvalDebug: fence stale")
+      return
+    }
+    guard let snapshot = await store.snapshot(for: fence) else {
+      log("DepartureEvalDebug: no snapshot")
+      return
+    }
+    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+      log(
+        "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
+      )
+      return
+    }
+    log("DepartureEvalDebug: proceeding to evaluateAndDeliver")
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,

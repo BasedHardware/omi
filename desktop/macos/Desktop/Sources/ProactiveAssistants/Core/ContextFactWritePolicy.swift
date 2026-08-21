@@ -244,7 +244,7 @@ enum ContextFactWritePolicy {
     guard questionMarker else { return false }
     if statement.range(
       of:
-        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is writing|is typing|is composing|is drafting)\b"#,
+        #"(?i)\b(?:the user|user)\b[^.]{0,40}\b(?:is writing|is typing|is composing|is drafting|wrote|writes|typed)\b"#,
       options: .regularExpression) != nil
     {
       return true

@@ -51,6 +51,14 @@ enum ContextDwellRefreshPolicy {
     now.addingTimeInterval(-(repeatRefreshCooldownSeconds - 10))
   }
 
+  /// One grace follow-up per typing burst: after the first fired refresh the
+  /// anchor moves to the fire time, so "typed since the anchor" could never
+  /// re-trigger without NEW typing — and a refresh whose extraction returned
+  /// zero facts (nano does this) lost its question with no second chance. The
+  /// second refresh may therefore look this far past the anchor for the burst
+  /// that armed the first one. Third and later refreshes require fresh typing.
+  static let followUpTypingGraceSeconds: TimeInterval = 45
+
   static func shouldRefresh(
     secondsSinceAnchor: TimeInterval,
     firedRefreshesThisContext: Int,
@@ -59,8 +67,10 @@ enum ContextDwellRefreshPolicy {
     let required =
       firedRefreshesThisContext == 0 ? initialRefreshDwellSeconds : repeatRefreshCooldownSeconds
     guard secondsSinceAnchor >= required else { return false }
-    // Typed since the anchor: the last key-down is younger than the anchor.
-    guard keyboardIdleSeconds < secondsSinceAnchor else { return false }
+    let typingWindow =
+      firedRefreshesThisContext == 1
+      ? secondsSinceAnchor + followUpTypingGraceSeconds : secondsSinceAnchor
+    guard keyboardIdleSeconds < typingWindow else { return false }
     return keyboardIdleSeconds >= typingSettleSeconds
   }
 }

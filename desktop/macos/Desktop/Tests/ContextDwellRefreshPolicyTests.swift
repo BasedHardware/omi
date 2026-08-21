@@ -32,6 +32,21 @@ final class ContextDwellRefreshPolicyTests: XCTestCase {
       "mid-word capture wastes the evaluation on a half-typed thought")
   }
 
+  func testSecondRefreshGetsOneTypingGraceWindow() {
+    // The burst that armed refresh #1 still counts for refresh #2 (a zero-fact
+    // extraction loses the question otherwise)...
+    XCTAssertTrue(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: 40, firedRefreshesThisContext: 1, keyboardIdleSeconds: 55))
+    // ...but not beyond the grace window, and never for refresh #3+.
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: 40, firedRefreshesThisContext: 1, keyboardIdleSeconds: 90))
+    XCTAssertFalse(
+      ContextDwellRefreshPolicy.shouldRefresh(
+        secondsSinceAnchor: 40, firedRefreshesThisContext: 2, keyboardIdleSeconds: 55))
+  }
+
   func testRepeatRefreshRequiresCooldownSincePreviousRefresh() {
     // A single-page app never switches context, so repeats must stay possible —
     // but only after the refresh-to-refresh cooldown, not the initial dwell.

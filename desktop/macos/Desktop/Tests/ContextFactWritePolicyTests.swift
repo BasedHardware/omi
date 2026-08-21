@@ -240,6 +240,10 @@ final class ContextDirectorTaskRefsTests: XCTestCase {
       ContextFactWritePolicy.verdict(
         "The user is asking alex@example.com: When is the next release shipping?"),
       .dropMachinery)
+    // "A user wrote: <question>?" (live extraction phrasing) floors.
+    XCTAssertTrue(
+      ContextFactWritePolicy.isUserAuthoredQuestion(
+        "A user wrote: Yo David, link for the latest Omi desktop please?"))
     // Someone else's question never qualifies.
     XCTAssertFalse(
       ContextFactWritePolicy.isUserAuthoredQuestion(
