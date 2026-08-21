@@ -146,3 +146,20 @@ def test_module_level_app_loads_environment_before_building_cors(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers['access-control-allow-origin'] == 'https://app.example'
+
+
+def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
+    monkeypatch.setenv('METRICS_SECRET', 'test-metrics-secret')
+    client = _test_client(monkeypatch, desktop_backend._build_app())
+
+    with client:
+        unauthorized = client.get('/metrics')
+        response = client.get(
+            '/metrics',
+            headers={'Authorization': 'Bearer test-metrics-secret'},
+        )
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/plain')
+    assert 'omi_client_journey_accepted_total' in response.text
