@@ -24,7 +24,7 @@ import numpy as np
 import torch  # type: ignore[reportMissingImports]
 from langdetect import detect as langdetect_detect  # type: ignore[reportUnknownVariableType]  # langdetect ships no py.typed marker
 from langdetect.lang_detect_exception import LangDetectException
-from speaker_math import cosine_distance
+from speaker_math import cosine_distance as cosine_distance, select_speaker_cluster
 import transcribe as _transcribe_mod
 
 try:
@@ -71,7 +71,6 @@ HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
 LEFT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_LEFT_CONTEXT_S", "10.0"))
 RIGHT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_RIGHT_CONTEXT_S", "2.0"))
-SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
 
@@ -717,13 +716,8 @@ class StreamSession:
             if emb is None:
                 return f"SPEAKER_{self._last_speaker}"
 
-            best_i, best_dist = -1, 1e9
-            for i, c in enumerate(self._spk_centroids):
-                d = cosine_distance(emb, c)
-                if d < best_dist:
-                    best_i, best_dist = i, d
-
-            if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+            best_i, create_new, _ = select_speaker_cluster(emb, self._spk_centroids)
+            if not create_new:
                 n = self._spk_counts[best_i]
                 self._spk_centroids[best_i] = (self._spk_centroids[best_i] * n + emb) / (n + 1)
                 self._spk_counts[best_i] = n + 1
@@ -732,7 +726,7 @@ class StreamSession:
 
             self._spk_centroids.append(emb)
             self._spk_counts.append(1)
-            self._last_speaker = len(self._spk_centroids) - 1
+            self._last_speaker = best_i
             return f"SPEAKER_{self._last_speaker}"
 
         except Exception as e:

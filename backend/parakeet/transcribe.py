@@ -8,7 +8,7 @@ import httpx
 import numpy as np
 from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUnknownVariableType]  # langdetect ships partial type info
 from langdetect.lang_detect_exception import LangDetectException
-from speaker_math import cosine_distance
+from speaker_math import cosine_distance as cosine_distance, select_speaker_cluster
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +201,6 @@ def transcribe_file_v2(
 
 
 SPEAKER_EMBEDDING_URL: str = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
-SPEAKER_MATCH_THRESHOLD: float = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 MIN_SEGMENT_DURATION = 0.6
 
 
@@ -280,13 +279,8 @@ def _diarize_segments(file_path: str, base: Dict[str, Any]) -> Dict[str, Any]:
                 seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
                 continue
 
-            best_i, best_dist = -1, 1e9
-            for i, c in enumerate(centroids):
-                d = cosine_distance(emb, c)
-                if d < best_dist:
-                    best_i, best_dist = i, d
-
-            if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+            best_i, create_new, _ = select_speaker_cluster(emb, centroids)
+            if not create_new:
                 n = counts[best_i]
                 centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
                 counts[best_i] = n + 1
@@ -294,7 +288,7 @@ def _diarize_segments(file_path: str, base: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 centroids.append(emb)
                 counts.append(1)
-                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}"
+                seg["speaker"] = f"SPEAKER_{best_i}"
 
         except Exception as e:
             logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {e}")

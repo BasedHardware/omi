@@ -34,7 +34,8 @@ from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
-from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_clustering import select_speaker_cluster
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
@@ -971,13 +972,8 @@ def _parakeet_assign_speaker_sync(
         seg_wav = _wrap_pcm_as_wav(seg_pcm, sample_rate, 1)
         emb = extract_embedding_from_bytes(seg_wav)
 
-        best_i, best_dist = -1, 1e9
-        for i, centroid in enumerate(centroids):
-            d = compare_embeddings(emb, centroid)
-            if d < best_dist:
-                best_i, best_dist = i, d
-
-        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+        best_i, create_new, _ = select_speaker_cluster(emb, centroids, compare_embeddings)
+        if not create_new:
             n = counts[best_i]
             centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
             counts[best_i] = n + 1
@@ -985,7 +981,7 @@ def _parakeet_assign_speaker_sync(
 
         centroids.append(emb)
         counts.append(1)
-        return f'SPEAKER_{len(centroids) - 1:02d}'
+        return f'SPEAKER_{best_i:02d}'
     except Exception as e:
         logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
         return 'SPEAKER_00'

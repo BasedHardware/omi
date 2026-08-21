@@ -342,6 +342,17 @@ class TestStreamSessionSpeaker:
             result = session._assign_speaker(_make_pcm(1.0), 0.0, 1.0)
         assert result == "SPEAKER_0"
 
+    def test_clustering_merges_to_nearest_after_eight_speakers(self):
+        session = sh.StreamSession(sample_rate=16000)
+        embeddings = iter(np.eye(9, dtype=np.float32))
+
+        with patch.object(session, '_get_embedding', side_effect=lambda _wav: next(embeddings)):
+            assigned = [session._assign_speaker(_make_pcm(1.0), 0.0, 1.0) for _ in range(9)]
+
+        assert assigned[:8] == [f"SPEAKER_{index}" for index in range(8)]
+        assert assigned[8] == "SPEAKER_0"
+        assert len(session._spk_centroids) == 8
+
 
 class TestStreamSessionVADParams:
 
