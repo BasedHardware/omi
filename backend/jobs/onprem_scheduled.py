@@ -68,11 +68,25 @@ async def _run_memory_maintenance() -> None:
     Raises when the run reports errors, so a CronJob tick fails visibly instead of exiting 0 with a
     drained-nothing summary — the failure mode that makes a broken queue look healthy.
     """
-    from utils.memory.canonical_short_term_maintenance_cron import run_canonical_short_term_maintenance_cron
+    from utils.memory.canonical_short_term_maintenance_cron import (
+        canonical_maintenance_enabled,
+        run_canonical_short_term_maintenance_cron,
+    )
     from utils.task_intelligence.workstream_association import (
         drain_recurrence_inbox_for_maintenance,
         persist_recurrence_signals_for_maintenance,
     )
+
+    # MEMORY_CANONICAL_MAINTENANCE_ENABLED defaults to "false", and with it off the run returns early
+    # with user_count=0 and errors=0 -- a GREEN tick that drained nothing. Found exactly that way on a
+    # live stack: the outbox stayed at 2 pending across a tick the scheduler reported as successful.
+    # Scheduling this job and switching its work off is a misconfiguration, so say so instead of
+    # succeeding quietly; an operator who wants no maintenance disables the CronJob.
+    if not canonical_maintenance_enabled():
+        raise RuntimeError(
+            'MEMORY_CANONICAL_MAINTENANCE_ENABLED is not true, so this job would drain nothing and '
+            'still report success. Set it (alongside MEMORY_ENABLED=on) or disable the scheduled job.'
+        )
 
     summary = await run_canonical_short_term_maintenance_cron(
         recurrence_signal_persister=persist_recurrence_signals_for_maintenance,

@@ -120,3 +120,34 @@ def test_cli_runs_once_by_default(monkeypatch):
     assert seen == [('notifications', False)]
     assert onprem_scheduled.main(['--job', 'notifications', '--loop']) == 0
     assert seen[-1] == ('notifications', True)
+
+def test_memory_maintenance_refuses_to_report_success_when_its_switch_is_off(monkeypatch):
+    """A scheduled tick that drains nothing must not exit 0.
+
+    MEMORY_CANONICAL_MAINTENANCE_ENABLED defaults to "false" and the upstream run then returns early
+    with user_count=0 and errors=0. Found on a live stack: the memory outbox stayed at 2 pending across
+    a tick the scheduler reported as successful, which is how a broken queue looks healthy.
+    """
+    monkeypatch.delenv('MEMORY_CANONICAL_MAINTENANCE_ENABLED', raising=False)
+    assert onprem_scheduled.run_once('memory-maintenance') == 1
+
+
+def test_memory_maintenance_proceeds_when_its_switch_is_on(monkeypatch):
+    """The legacy-principal half: the guard must not block a correctly configured deployment."""
+    monkeypatch.setenv('MEMORY_CANONICAL_MAINTENANCE_ENABLED', 'true')
+
+    import utils.memory.canonical_short_term_maintenance_cron as cron_mod
+
+    class _Summary:
+        user_count = 1
+        outbox_delivered_total = 2
+        outbox_retryable_failures_total = 0
+        outbox_dead_letters_total = 0
+        dreamed_users = 1
+        errors: list[str] = []
+
+    async def fake_cron(**_kwargs):
+        return _Summary()
+
+    monkeypatch.setattr(cron_mod, 'run_canonical_short_term_maintenance_cron', fake_cron)
+    assert onprem_scheduled.run_once('memory-maintenance') == 0
