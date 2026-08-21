@@ -521,9 +521,7 @@ class ButtonEventRequest(BaseModel):
 
 
 @router.post('/v1/users/developer/button-event', tags=['v1'], response_model=UserStatusResponse)
-async def post_developer_button_event(
-    body: ButtonEventRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+async def post_developer_button_event(body: ButtonEventRequest, uid: str = Depends(auth.get_current_user_uid)):
     """App → backend forward of an opt-in hardware button gesture (#11719)."""
     allowed = {'single_tap', 'double_tap', 'long_tap'}
     if body.button_event not in allowed:

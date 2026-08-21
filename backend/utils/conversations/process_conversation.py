@@ -447,13 +447,9 @@ def _get_structured(
 
         # Hard-discard short noise before spending an LLM call (#6154).
         # Wall-clock <30s, or <2min with <30s of speech. Photos skip this gate.
-        speech_seconds = deduplicated_transcribed_speech_seconds(
-            getattr(main_conv, 'transcript_segments', None) or []
-        )
+        speech_seconds = deduplicated_transcribed_speech_seconds(getattr(main_conv, 'transcript_segments', None) or [])
         has_photos = bool(main_conv.photos)
-        short_by_duration = (
-            duration_seconds is not None and duration_seconds < SHORT_CONVERSATION_HARD_DISCARD_SECONDS
-        )
+        short_by_duration = duration_seconds is not None and duration_seconds < SHORT_CONVERSATION_HARD_DISCARD_SECONDS
         short_by_speech = speech_seconds < SHORT_CONVERSATION_HARD_DISCARD_SECONDS and (
             duration_seconds is None or duration_seconds < 120
         )

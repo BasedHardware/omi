@@ -68,12 +68,16 @@ def _get_storage_client() -> Any:
         with _storage_client_lock:
             if storage_client is None:
                 # Local harness / offline mode: filesystem fake GCS (#11703).
-                use_fake = os.getenv('OMI_USE_FAKE_GCS', '').strip().lower() in {
-                    '1',
-                    'true',
-                    'yes',
-                    'on',
-                } or os.getenv('PROVIDER_MODE', '').strip().lower() == 'offline'
+                use_fake = (
+                    os.getenv('OMI_USE_FAKE_GCS', '').strip().lower()
+                    in {
+                        '1',
+                        'true',
+                        'yes',
+                        'on',
+                    }
+                    or os.getenv('PROVIDER_MODE', '').strip().lower() == 'offline'
+                )
                 if use_fake:
                     from utils.other.fake_gcs import FakeStorageClient, setup_fake_storage
 
