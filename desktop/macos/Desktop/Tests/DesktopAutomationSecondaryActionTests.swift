@@ -445,12 +445,23 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     }
   }
 
+  /// The registry is split across files: actions were relocated into extensions to
+  /// satisfy the line-count ratchet, so reading only the main file reports actions
+  /// that are in fact registered as missing. Read every registry source.
   private func bridgeSource() throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
+    let sources = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/DesktopAutomationBridge.swift")
-    return try String(contentsOf: url, encoding: .utf8)
+      .appendingPathComponent("Sources")
+    let names = try FileManager.default
+      .contentsOfDirectory(atPath: sources.path)
+      .filter { $0 == "DesktopAutomationBridge.swift" || $0.hasPrefix("DesktopAutomationBridge+") }
+      .sorted()
+    XCTAssertTrue(names.contains("DesktopAutomationBridge.swift"), "bridge registry source is missing")
+    return
+      try names
+      .map { try String(contentsOf: sources.appendingPathComponent($0), encoding: .utf8) }
+      .joined(separator: "\n")
   }
 
   private func actionBody(named action: String, in source: String) throws -> String {
