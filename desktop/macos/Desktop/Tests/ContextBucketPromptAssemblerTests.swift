@@ -87,6 +87,8 @@ final class ContextBucketPromptAssemblerTests: XCTestCase {
         "always a fact, with high notify_worthiness: record who it is addressed to and the",
         "question itself verbatim, phrased as \"The user is asking <recipient>: <question>\".",
         "Good: The user is asking alex@example.com: When is the next release shipping?",
+        "Report the question currently on screen even when an earlier fact recorded a similar",
+        "or identical question — a re-asked question is a new fact, never a duplicate.",
         "Never write a fact saying that an app, window, tab, page, sidebar, panel, or button",
         "is open, visible, active, or shows something. Put that in the summary instead.",
         "Most screens yield zero to three facts. An empty facts list is a correct answer.",
