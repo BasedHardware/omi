@@ -13,6 +13,7 @@ class WebhookType(str, Enum):
     realtime_transcript = 'realtime_transcript'
     memory_created = ('memory_created',)
     day_summary = 'day_summary'
+    button_event = 'button_event'
 
 
 def webhook_url_from_setting(wtype: WebhookType | str, value: Optional[str]) -> str:

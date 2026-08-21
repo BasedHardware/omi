@@ -428,3 +428,36 @@ def record_dev_webhook_success(uid: str, wtype: object):
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
         logger.warning(f'record_dev_webhook_success redis error uid={uid} type={wtype}: {e}')
+
+
+_DLQ_TTL = 7 * 86400
+_DLQ_MAX = 100
+
+
+def enqueue_dev_webhook_dlq(
+    *,
+    webhook_name: str,
+    webhook_url: str,
+    status_code: int,
+    error: str,
+    idempotency_key: Optional[str] = None,
+    uid: Optional[str] = None,
+) -> None:
+    """Store a failed developer webhook for manual replay after retries are exhausted (#5488)."""
+    import json
+
+    try:
+        key = f'dev_webhook_dlq:{uid or "unknown"}'
+        entry = {
+            'webhook_name': webhook_name,
+            'webhook_url': webhook_url[:500],
+            'status_code': status_code,
+            'error': (error or '')[:500],
+            'idempotency_key': idempotency_key,
+            'failed_at': datetime.now(timezone.utc).isoformat(),
+        }
+        r.lpush(key, json.dumps(entry, separators=(',', ':')))
+        r.ltrim(key, 0, _DLQ_MAX - 1)
+        r.expire(key, _DLQ_TTL)
+    except Exception as e:
+        logger.warning(f'enqueue_dev_webhook_dlq failed name={webhook_name}: {e}')
