@@ -6,10 +6,7 @@ from utils import overage
 
 
 def test_overage_policy_matrix_uses_one_catalog_predicate():
-    assert {
-        plan.value: plan_uses_overage(plan)
-        for plan in PlanType
-    } == {
+    assert {plan.value: plan_uses_overage(plan) for plan in PlanType} == {
         'basic': False,
         'unlimited': True,
         'architect': True,
@@ -52,3 +49,50 @@ def test_reporting_and_admission_share_a_legacy_chat_overlay(monkeypatch):
 
     snapshot = overage.get_user_overage('uid', PlanType.operator)
     assert snapshot['included_questions'] == 750
+
+
+class TestChatLimitZeroSemantics:
+    """Pin the post-ruling meaning of a chat limit of exactly zero.
+
+    Before the catalog, ``get_chat_quota_snapshot`` guarded on ``limit_value > 0``,
+    so a computed limit of 0 left ``allowed = True`` -- i.e. 0 meant *unlimited*.
+    David's ruling retired that convention: 0 means zero. The guard is gone, so 0
+    now denies. That is intended, but it is a silent inversion at the env-overlay
+    seam (FREE/NEO/OPERATOR_CHAT_QUESTIONS_PER_MONTH,
+    ARCHITECT_CHAT_COST_USD_PER_MONTH), where an operator setting 0 under the old
+    convention meant "unlimited" and now means "deny everything".
+
+    These call the real ``get_chat_quota_snapshot`` rather than restating its
+    arithmetic: a test that copies the logic it guards would not have caught the
+    change it exists to pin.
+    """
+
+    def _snapshot(self, monkeypatch, chat_questions_limit, used_questions):
+        from models.users import PlanType, Subscription
+        from utils import subscription as sub_mod
+
+        limits = sub_mod.get_plan_limits(PlanType.basic).model_copy(
+            update={'chat_questions_per_month': chat_questions_limit, 'chat_cost_usd_per_month': None}
+        )
+
+        monkeypatch.setattr(
+            sub_mod.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.basic)
+        )
+        monkeypatch.setattr(sub_mod, 'get_plan_limits', lambda *a, **k: limits)
+        monkeypatch.setattr(sub_mod, 'is_trial_paywalled', lambda *a, **k: False)
+        monkeypatch.setattr(
+            sub_mod.user_usage_db,
+            'get_monthly_chat_usage',
+            lambda *a, **k: {'questions': used_questions, 'cost_usd': 0.0, 'reset_at': 0},
+        )
+        return sub_mod.get_chat_quota_snapshot('uid-zero-semantics', provision=False)
+
+    def test_zero_chat_limit_denies_rather_than_meaning_unlimited(self, monkeypatch):
+        snap = self._snapshot(monkeypatch, 0, 0.0)
+        assert snap['limit'] == 0
+        assert snap['allowed'] is False, "a finite chat limit of 0 must deny, not mean unlimited"
+
+    def test_none_chat_limit_still_means_unlimited(self, monkeypatch):
+        snap = self._snapshot(monkeypatch, None, 10_000.0)
+        assert snap['limit'] is None
+        assert snap['allowed'] is True, "None remains the typed representation of unlimited"

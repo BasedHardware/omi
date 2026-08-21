@@ -230,7 +230,25 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
 
     try:
         plan = get_plan_type_from_price_id(price_id)
-    except ValueError:
+    except ValueError as e:
+        # A price Stripe is actively billing that we cannot resolve. Before the
+        # catalog, a retained/configured disagreement could not arise here: the
+        # env mapping simply won. It can now raise, and this early return means
+        # the subscriber's stored row silently stops tracking Stripe. That is
+        # the Apr 17-20 failure shape, so it must be observable rather than a
+        # bare log line. See docs/agents/plan-source-of-truth.md.
+        record_fallback(
+            component='other',
+            from_mode='stripe_price_resolution',
+            to_mode='skip_subscription_write',
+            reason='unrecognized_price',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.error(
+            f"Unresolvable Stripe price {sanitize(str(price_id))} on an active subscription; "
+            f"local row will not be updated: {sanitize(str(e))}"
+        )
         return None
 
     return Subscription(

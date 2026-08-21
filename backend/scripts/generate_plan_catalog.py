@@ -1078,6 +1078,11 @@ def main() -> int:
         previous = load_catalog_from_git(args.base_ref)
         if previous is not None:
             errors.extend(validate_compatibility(previous, catalog))
+        # `previous is None` means the base predates the catalog, so there is nothing to
+        # compare and the append-only/identity guard silently does not run. That is correct
+        # for the PR that introduces the catalog, and only for that PR: from the first merge
+        # onward a None here means the base ref is wrong, not that the ledger is safe. Do
+        # not read a green run on an ancestor-less base as evidence the ledger was checked.
     if args.require_publishable:
         errors.extend(validate_publishable_catalog(catalog))
     if bool(args.bindings) != bool(args.stripe_snapshot):
