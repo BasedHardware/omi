@@ -413,7 +413,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       }
       options.dist = AppBuild.currentUpdateChannel
       // Disable automatic HTTP client error capture — the SDK creates noisy events
-      // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
+      // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts).
       // App code already handles HTTP errors and reports meaningful ones explicitly.
       options.enableCaptureFailedRequests = false
       options.maxBreadcrumbs = 100
