@@ -770,6 +770,14 @@ export interface BulkMoveConversationsResponse {
   status: string;
 }
 
+export interface ButtonEventRequest {
+  button_event: string;
+  device_id: string;
+  event_id: string;
+  session_id?: string | null;
+  timestamp: string;
+}
+
 export interface CalendarEventLink {
   attendee_emails?: Array<string>;
   attendees?: Array<string>;
@@ -3985,6 +3993,7 @@ export interface UserWebhookUrlResponse {
 
 export interface UserWebhooksStatusResponse {
   audio_bytes: boolean;
+  button_event?: boolean;
   day_summary: boolean;
   memory_created: boolean;
   realtime_transcript: boolean;
@@ -4019,7 +4028,7 @@ export interface WebSearchAssistantSettings {
   enabled?: boolean | null;
 }
 
-export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary";
+export type WebhookType = "audio_bytes" | "audio_bytes_websocket" | "realtime_transcript" | "memory_created" | "day_summary" | "button_event";
 
 export interface WhatMattersNowProjection {
   evaluation_id: string;
@@ -4259,6 +4268,7 @@ export interface OmiApiSchemas {
   "BulkAssignSegmentsRequest": BulkAssignSegmentsRequest;
   "BulkMoveConversationsRequest": BulkMoveConversationsRequest;
   "BulkMoveConversationsResponse": BulkMoveConversationsResponse;
+  "ButtonEventRequest": ButtonEventRequest;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
   "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
@@ -7739,6 +7749,16 @@ export interface OmiApiPaths {
   "/v1/users/delete-account": {
     delete: {
       operationId: "delete_account_v1_users_delete_account_delete";
+      responses: {
+        "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/button-event": {
+    post: {
+      operationId: "post_developer_button_event_v1_users_developer_button_event_post";
       responses: {
         "200": UserStatusResponse;
         "401": void;
@@ -14620,6 +14640,27 @@ export async function delete_account_v1_users_delete_account_delete(header: { au
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function post_developer_button_event_v1_users_developer_button_event_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ButtonEventRequest, init?: OmiApiClientInit): Promise<UserStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/developer/button-event`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
