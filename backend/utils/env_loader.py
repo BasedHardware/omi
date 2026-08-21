@@ -143,7 +143,15 @@ def load_backend_env(base: Path | None = None) -> list[Path]:
     """Load stage defaults then personal ``backend/.env``. Returns loaded paths.
 
     Precedence (highest first): existing shell/process env, personal ``.env``,
-    stage file defaults. Offline stage never loads provider credentials from disk.
+    stage file defaults.
+
+    On the ``offline`` stage, provider secrets in the **personal** ``.env`` are skipped
+    (``is_provider_secret_key``). The scope is worth stating exactly, because the shorter claim this
+    docstring used to make — "offline never loads provider credentials from disk" — reads as a guarantee it
+    does not give (ADR-0057): the stage file itself is applied unfiltered, and a container that receives its
+    environment from an env-file or a ConfigMap has no ``.env`` on disk at all, so nothing here is what
+    keeps a vendor credential out of the process. Data-sovereignty posture is ``OMI_VENDOR_EGRESS``
+    (``config/vendor_egress.py``); this function is a loader.
 
     When ``OMI_HARNESS_INSTANCE`` is set, the local dev harness has already
     injected a complete child environment — skip all disk loading.
