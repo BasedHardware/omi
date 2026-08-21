@@ -3,9 +3,9 @@
 Recipient detection mirrors Granola's follow-up-email rule: recipients come
 from the calendar meeting context attached to the conversation (system
 calendar / Google Calendar / on-device meeting identity), never from guessing
-at transcript content. The proposal exists only when the meeting had at least
-one participant with an email other than the owner's and no more than
-MAX_MEETING_PARTICIPANTS people total.
+at transcript content. The proposal exists only when the owner's own address
+is known (so it can be excluded), at least one other participant has both a
+name and an email, and no more than MAX_MEETING_PARTICIPANTS people attended.
 
 Sending goes through Resend from Omi's verified domain with the owner's
 address as reply-to; the recipient list a client may send to is validated
@@ -98,12 +98,31 @@ def _participants_from_conversation(conversation: Dict[str, Any]) -> List[Dict[s
     return participants
 
 
+def _is_captured_name(name: str, email: str) -> bool:
+    """Whether `name` is a real captured name rather than a stand-in address.
+
+    Google attendees without a `displayName` reach us as `name = email`
+    (`calendar_utils.extract_attendees`), so a non-empty name alone does not
+    prove we know who the person is.
+    """
+    if not name:
+        return False
+    normalized = name.strip().casefold()
+    local_part = email.split('@', 1)[0]
+    return normalized != email and normalized != local_part
+
+
 def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[str]) -> List[Dict[str, Optional[str]]]:
     """Detected share recipients: meeting participants minus the owner.
 
+    Only participants whose name *and* address the calendar actually recorded
+    are proposed. A one-click send to a half-identified attendee is a mistake
+    the user cannot take back, so an unnamed address is treated as an unknown
+    person rather than a guess.
+
     Pure so it is unit-testable; returns [] whenever the proposal should not
-    exist (no calendar identity, owner-only meeting, or a meeting too large
-    for a blanket proposal).
+    exist (no calendar identity, owner-only meeting, no fully identified
+    participant, or a meeting too large for a blanket proposal).
     """
     participants = _participants_from_conversation(conversation)
     if len(participants) > MAX_MEETING_PARTICIPANTS:
@@ -116,19 +135,55 @@ def extract_share_recipients(conversation: Dict[str, Any], owner_emails: List[st
         email = _normalized_email(participant.get('email'))
         if not email or email in owner_set or email in seen:
             continue
+        raw_name = participant.get('name')
+        name = raw_name.strip() if isinstance(raw_name, str) else ''
+        if not _is_captured_name(name, email):
+            continue
         seen.add(email)
-        name = participant.get('name')
-        recipients.append({'name': name.strip() if isinstance(name, str) and name.strip() else None, 'email': email})
+        recipients.append({'name': name, 'email': email})
         if len(recipients) >= MAX_RECIPIENTS:
             break
     return recipients
 
 
 def get_share_recipients(uid: str, conversation: Dict[str, Any]) -> List[Dict[str, Optional[str]]]:
+    """Recipients to propose, or [] when the owner cannot be identified.
+
+    Owner exclusion is what keeps the proposal from offering to mail the notes
+    back to the person who just recorded them, so an unresolved owner address
+    disqualifies the whole proposal instead of degrading it: without a known
+    owner address every attendee — including the user — looks like a valid
+    recipient (issue #12017).
+    """
     owner = get_user_from_uid(uid) or {}
-    owner_email = owner.get('email')
-    owner_emails: List[str] = [owner_email] if isinstance(owner_email, str) and owner_email else []
+    owner_emails = normalized_recipient_emails([owner.get('email') or ''])
+    if not owner_emails:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='other',
+            from_mode='share_recipients_proposed',
+            to_mode='share_recipients_suppressed',
+            reason='auth',
+            outcome='degraded',
+            log=logger,
+        )
+        return []
     return extract_share_recipients(conversation, owner_emails)
+
+
+def _sender_display_name(owner: Dict[str, Any]) -> str:
+    """Who the recipient sees the notes came from.
+
+    An account without a display name still has an address; showing its local
+    part beats an anonymous "Someone", which reads like spam to the recipient.
+    """
+    display_name = (owner.get('display_name') or '').strip()
+    if display_name:
+        return display_name
+    email = _normalized_email(owner.get('email'))
+    local_part = email.split('@', 1)[0].strip() if email else ''
+    return local_part or 'Someone'
 
 
 def build_summary_email(
@@ -259,7 +314,7 @@ def send_summary_email(
         raise ValueError('no valid recipients')
 
     owner = get_user_from_uid(uid) or {}
-    sender_name = (owner.get('display_name') or '').strip() or 'Someone'
+    sender_name = _sender_display_name(owner)
     structured = conversation.get('structured') or {}
     title = (structured.get('title') or '').strip()
     overview = (structured.get('overview') or '').strip()
