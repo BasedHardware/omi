@@ -1,8 +1,12 @@
 import { fileURLToPath } from "node:url";
 import type { ConfigEnv, ProxyOptions } from "vite";
 import {
-  assertLoopbackBackendUrl,
+  DEVELOPMENT_BACKEND_UNSUPPORTED_STATUS,
   LOCAL_PROXY_PREFIX,
+  developmentBackendUnsupportedResponse,
+  isExamplePlatformRequestSupported,
+  isExamplePlatformSelection,
+  resolveLocalBackendUrl,
   rewriteLocalProxyPath,
 } from "../react-native/src/local-proxy.ts";
 
@@ -19,9 +23,7 @@ const unavailableBackendResponse = JSON.stringify({
 export function localProxy(
   environment: LocalProxyEnvironment = process.env
 ): ProxyOptions {
-  const target = assertLoopbackBackendUrl(
-    environment.OMI_LOCAL_BACKEND_URL ?? "http://127.0.0.1:8787"
-  ).origin;
+  const target = resolveLocalBackendUrl(environment).origin;
   const token = environment.OMI_LOCAL_API_TOKEN?.trim();
   const clientId = environment.OMI_LOCAL_API_CLIENT_ID?.trim();
   if (clientId === undefined || clientId === "") {
@@ -36,6 +38,25 @@ export function localProxy(
     target,
     changeOrigin: false,
     rewrite: rewriteLocalProxyPath,
+    ...(isExamplePlatformSelection(environment)
+      ? {
+          bypass(request, response) {
+            if (
+              isExamplePlatformRequestSupported(request.method, request.url)
+            ) {
+              return;
+            }
+            if (response === undefined) {
+              return false;
+            }
+            response.writeHead(DEVELOPMENT_BACKEND_UNSUPPORTED_STATUS, {
+              "content-type": "application/json",
+            });
+            response.end(developmentBackendUnsupportedResponse);
+            return "/__omi/api-unsupported";
+          },
+        }
+      : {}),
     headers: {
       authorization: `Bearer ${token}`,
       "x-omi-client-id": clientId,

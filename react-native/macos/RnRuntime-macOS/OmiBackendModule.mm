@@ -1,6 +1,7 @@
 #import "OmiBackendModule.h"
 
 static NSString *const OmiContractVersion = @"1.0.0";
+static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
 
 static BOOL OmiIsLoopbackHost(NSString *host) {
   NSString *normalized = host.lowercaseString;
@@ -9,7 +10,15 @@ static BOOL OmiIsLoopbackHost(NSString *host) {
       [normalized isEqualToString:@"::1"];
 }
 
-static NSURL *OmiLocalBaseURL(NSString *value) {
+static NSURL *OmiLocalBaseURL(NSString *value, NSString *developmentBackend) {
+  if (developmentBackend.length > 0) {
+#if DEBUG
+    if (value.length > 0 || ![developmentBackend isEqualToString:@"example-platform"]) return nil;
+    return [NSURL URLWithString:@"http://127.0.0.1:4851"];
+#else
+    return nil;
+#endif
+  }
   NSURL *url = value.length > 0
       ? [NSURL URLWithString:value]
       : [NSURL URLWithString:@"http://127.0.0.1:8787"];
@@ -21,6 +30,23 @@ static NSURL *OmiLocalBaseURL(NSString *value) {
     return nil;
   }
   return url;
+}
+
+static BOOL OmiExamplePlatformRequestSupported(NSString *method, NSString *path) {
+  if (![method isEqualToString:@"GET"]) return NO;
+  NSURLComponents *components = [NSURLComponents componentsWithString:path];
+  NSString *route = components.path;
+  return [route isEqualToString:@"/v1/conversations"] ||
+      [route isEqualToString:@"/v1/memories"];
+}
+
+static NSDictionary *OmiDevelopmentBackendUnsupportedResponse(NSString *requestId) {
+  return @{
+    @"id": requestId,
+    @"status": @503,
+    @"body": OmiDevelopmentBackendUnsupportedBody,
+    @"retryAfterSeconds": NSNull.null,
+  };
 }
 
 @interface OmiGenerationDelegate : NSObject <NSURLSessionDataDelegate, NSURLSessionTaskDelegate>
@@ -190,6 +216,7 @@ didCompleteWithError:(NSError *)error {
 @property(nonatomic, strong) NSURL *baseURL;
 @property(nonatomic, copy) NSString *token;
 @property(nonatomic, copy) NSString *clientId;
+@property(nonatomic) BOOL examplePlatformBackend;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, OmiGenerationDelegate *> *generations;
 @end
 
@@ -205,7 +232,8 @@ RCT_EXPORT_MODULE(OmiBackend)
   self = [super init];
   if (self) {
     NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
-    _baseURL = OmiLocalBaseURL(environment[@"OMI_LOCAL_BACKEND_URL"]);
+    _baseURL = OmiLocalBaseURL(environment[@"OMI_LOCAL_BACKEND_URL"], environment[@"OMI_DEV_BACKEND"]);
+    _examplePlatformBackend = _baseURL != nil && [environment[@"OMI_DEV_BACKEND"] isEqualToString:@"example-platform"];
     _token = [environment[@"OMI_LOCAL_API_TOKEN"] copy];
     _clientId = [environment[@"OMI_LOCAL_API_CLIENT_ID"] copy];
     _generations = [NSMutableDictionary dictionary];
@@ -239,6 +267,10 @@ RCT_REMAP_METHOD(request,
   if (self.baseURL == nil || ![schemes containsObject:self.baseURL.scheme.lowercaseString] ||
       self.baseURL.host.length == 0 || self.token.length == 0 || self.clientId.length == 0) {
     reject(@"OMI_HTTP_UNCONFIGURED", @"Native HTTP configuration is unavailable", nil);
+    return;
+  }
+  if (self.examplePlatformBackend && !OmiExamplePlatformRequestSupported(method, path)) {
+    resolve(OmiDevelopmentBackendUnsupportedResponse(requestId));
     return;
   }
   NSURL *url = [NSURL URLWithString:path relativeToURL:self.baseURL].absoluteURL;
@@ -317,6 +349,10 @@ RCT_REMAP_METHOD(generationEvents,
     reject(@"OMI_HTTP_INVALID_REQUEST", @"Native generation request is invalid", nil);
     return;
   }
+  if (self.examplePlatformBackend) {
+    resolve(OmiDevelopmentBackendUnsupportedResponse(generationId));
+    return;
+  }
   NSString *path = [NSString stringWithFormat:@"/v1/chat-generations/%@/events", encoded];
   NSURL *url = [NSURL URLWithString:path relativeToURL:self.baseURL].absoluteURL;
   if (url == nil || self.baseURL == nil || self.token.length == 0 || self.clientId.length == 0) {
@@ -367,6 +403,10 @@ RCT_REMAP_METHOD(cancelGenerationEvents,
                  cancelGenerationEventsWithId:(NSString *)generationId
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.examplePlatformBackend) {
+    reject(@"OMI_DEV_BACKEND_UNSUPPORTED", @"Generation cancellation is unsupported by the selected development backend", nil);
+    return;
+  }
   OmiGenerationDelegate *delegate;
   @synchronized(self.generations) {
     delegate = self.generations[generationId];
