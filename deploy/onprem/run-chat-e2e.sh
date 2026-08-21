@@ -18,7 +18,7 @@
 #   2. backend.env has the matching gateway wiring (see backend.env.dev.example "chat LLM gateway"):
 #      OMI_LLM_GATEWAY_FEATURE_MODE=gateway, OMI_LLM_GATEWAY_URL=http://llm_gateway:9080,
 #      OMI_LLM_GATEWAY_SERVICE_TOKEN=<same as llm_gateway.env>,
-#      OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true  (OMI_ENV_STAGE=offline is prod-like),
+#      OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true  (OMI_ENV_STAGE=selfhost is a real runtime),
 #      and LOCAL_DEVELOPMENT=true + FIREBASE_AUTH_EMULATOR_HOST=firestore-emulator:9099 (this smoke test
 #      auths with `Bearer dev` -> uid 123; the uid-123 fallback fires only with Firebase in emulator mode,
 #      else `dev` raises a credentials error, not InvalidToken — see backend.env.dev.example / ADR-0052).
@@ -61,6 +61,22 @@ ANSWER="$(printf '%s' "$OUT" | grep -m1 '^done: ' | sed 's/^done: //' \
   | python3 -c 'import sys,base64,json; s=sys.stdin.read().strip(); s+="="*(-len(s)%4); print(json.loads(base64.b64decode(s))["text"])' 2>/dev/null || true)"
 [ -n "$ANSWER" ] || fail "no assistant answer in the stream"
 printf '  ANSWER: %s\n' "$ANSWER"
+
+# A non-empty answer is NOT proof of success: when the LLM call fails, chat returns a canned apology
+# through the same stream, and this script used to report PASS on it (observed: a gateway 401 from a
+# mismatched OMI_LLM_GATEWAY_SERVICE_TOKEN produced "Sorry, I encountered an error" and a green PASS).
+# An E2E that cannot fail is worse than no E2E: reject the canned reply explicitly.
+case "$ANSWER" in
+  *"Sorry, I encountered an error"* | *"I encountered an error"* | *"try again"*)
+    fail "chat returned its canned error reply, not an answer — the LLM call failed. Check:
+      * OMI_LLM_GATEWAY_SERVICE_TOKEN identical in llm_gateway.env and backend.env.dev — this script
+        runs on compose.dev.yaml, so backend.env.dev is the file that wins, NOT backend.env.prod
+        (a mismatch shows up as a gateway 401 'invalid service authentication');
+      * the operator endpoint (OPENAI_BASE_URL) is reachable from the llm_gateway container and serves
+        the lane's model;
+      * 'docker compose -f compose.prod.yaml logs llm_gateway backend' for the provider error class."
+    ;;
+esac
 
 log "answer came from the LOCAL model (no cloud): the gateway loaded $MODEL on the operator endpoint"
 curl -fsS http://127.0.0.1:11434/api/ps 2>/dev/null | grep -q "$MODEL" \
