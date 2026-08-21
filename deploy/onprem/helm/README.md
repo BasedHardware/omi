@@ -22,7 +22,7 @@ profiles add the rest; the on-prem default (prod) turns them all on:
 
 | Profile | Brings up | Notes |
 |---|---|---|
-| `chat` | Qdrant vector store | vector dim defaults to 1024 (= `bge-m3`); set `chat.vectorDim` for another model. **Vector store only** — the chart has no `llm_gateway` workload yet (compose does), so chat completion is not available on this target; an offline deployment refuses LLM features rather than calling a cloud vendor |
+| `chat` | Qdrant vector store | vector dim defaults to 1024 (= `bge-m3`); set `chat.vectorDim` for another model. **Vector store only** — the chart has no `llm_gateway` workload yet (compose does), so chat completion is not available on this target and its LLM features would reach a cloud vendor. Retrieval and embeddings work |
 | `objstore` | RustFS (S3) + bucket-init | on-prem object storage |
 | `push` | ntfy (UnifiedPush) | on-prem push |
 | `ingress` | Envoy Gateway (Gateway API) | HTTPS entry point; a LoadBalancer IP (MetalLB) in prod |

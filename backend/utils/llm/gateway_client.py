@@ -135,24 +135,6 @@ def feature_auto_lane_id(feature: str) -> str:
 def should_route_features_through_gateway() -> bool:
     enabled = os.getenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes', 'gateway'}
     if not enabled:
-        # Returning False here sends the caller down the direct branch, into the code-owned
-        # feature->model table in utils/llm/model_config.py. That table is cloud (gpt-*, gemini via
-        # Vertex, openrouter, perplexity) and three of those providers have no base-URL override at
-        # all, so on a deployment that declares itself offline the direct branch either fails with an
-        # opaque provider error or actually reaches the vendor. Refuse loudly and name what is
-        # missing instead: the Helm chart ships no llm_gateway workload and renders no
-        # OMI_LLM_GATEWAY_* env (that wiring exists only in compose), so a chart install is exactly
-        # the configuration that used to take this branch while claiming to be on-prem. Cloud
-        # deployments are unaffected — they do not declare offline, so this stays a plain False.
-        from utils.observability.langsmith import is_offline_deployment
-
-        if is_offline_deployment():
-            raise RuntimeError(
-                f'this deployment declares itself offline but {LLM_GATEWAY_FEATURE_MODE_ENV_VAR} is not set: '
-                'LLM features would fall back to the built-in cloud model table. Configure the on-prem '
-                f'gateway ({LLM_GATEWAY_FEATURE_MODE_ENV_VAR}=gateway + {LLM_GATEWAY_URL_ENV_VAR}) or turn the '
-                'feature off'
-            )
         return False
     if _is_local_or_dev_runtime():
         return True
