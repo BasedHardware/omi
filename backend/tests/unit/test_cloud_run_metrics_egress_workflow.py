@@ -37,6 +37,10 @@ def test_workflow_owns_dev_auto_deploy_and_manual_production() -> None:
     }
     environment = triggers['workflow_dispatch']['inputs']['environment']
     assert environment['options'] == ['development', 'prod']
+    assert workflow['concurrency'] == {
+        'group': "deploy-cloud-run-metrics-egress-${{ github.event.inputs.environment || 'development' }}",
+        'cancel-in-progress': 'false',
+    }
     assert workflow['jobs']['deploy']['if'] == "github.ref == 'refs/heads/main'"
     assert workflow['jobs']['deploy']['environment'] == (
         "${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}"
