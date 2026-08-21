@@ -311,12 +311,25 @@ services:
       whisper:
         condition: service_healthy
     environment:
+      # Model provisioning is an explicit STEP, never a runtime fetch (ADR-0048/0076). `torch.hub.load`
+      # in stream_handler.py clones snakers4/silero-vad from github the first time a stream needs the
+      # VAD: on this internal network that cannot succeed, and the failure means every chunk is treated
+      # as speech (no silence endpointing) — so the cache gets a home on the models volume and the
+      # HF/transformers offline flags make a cache miss immediate instead of a network timeout.
+      TORCH_HOME: /models/torch
+      HF_HOME: /models/hf
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
       PARAKEET_INFERENCE_MODE: nim
       NIM_INFERENCE_URL: http://whisper:8000   # gateway appends /v1/audio/transcriptions (no /v1 here)
       NIM_LANGUAGE: auto                        # "auto" => omit language => whisper multilingual auto-detect
       # Still REQUIRED by StreamAdmissionController.from_env even in NIM mode (parsed before the mode branch).
       PARAKEET_STREAM_CAPACITY: "1"
       PARAKEET_STREAM_ALLOCATION_PERCENT: "0"
+    volumes:
+      # Same volume the other inference services use: TORCH_HOME/HF_HOME above need somewhere that
+      # survives a recreate, and a pre-seeded cache is what makes the offline flags workable.
+      - inference-models:/models
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 10s
@@ -349,6 +362,11 @@ services:
     profiles: ["inference"]
     environment:
       HF_HOME: /models/hf
+      # `Model.from_pretrained("pyannote/embedding")` runs at MODULE level (diarizer/embedding.py), so a
+      # missing cache is a process that never starts. Offline makes that immediate and unambiguous
+      # instead of a huggingface.co timeout at import (ADR-0076).
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
     volumes:
       - inference-models:/models
     # GPU via CDI (recommended, Docker >=25, Default Runtime runc) — resolves the CDI device the
@@ -414,6 +432,10 @@ services:
     profiles: ["inference"]
     environment:
       HF_HOME: /models/hf                 # model pre-provisioned into the volume (internal network = no egress)
+      # The comment above was the only thing saying so. These make it true by construction: a cache miss
+      # fails immediately rather than waiting out a DNS timeout to huggingface.co (ADR-0076).
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
       WHISPER_MODEL: large-v3
       WHISPER_COMPUTE_TYPE: int8_float16   # ~1.5GB on GPU; CTranslate2 mode validated on sm_120
     healthcheck:

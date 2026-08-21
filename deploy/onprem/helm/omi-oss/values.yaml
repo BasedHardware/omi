@@ -346,6 +346,10 @@ inference:
         healthPath: /health
         env:
           HF_HOME: /models/hf
+          # Provisioning is the Job (inference-models-provision-job.yaml), never the runtime: offline makes
+          # a cache miss immediate and unambiguous instead of a huggingface.co timeout (ADR-0076).
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
           WHISPER_MODEL: large-v3
           WHISPER_COMPUTE_TYPE: int8_float16
       # STT gateway (NIM mode) — CPU only: keeps the Parakeet protocol the backend speaks and forwards
@@ -357,6 +361,14 @@ inference:
           tag: ""      # empty = the release (Chart.AppVersion)
         port: 8080
         env:
+          # stream_handler.py fetches the Silero VAD with `torch.hub.load` — a github clone at RUNTIME the
+          # first time a stream needs it. Give the cache a home on the models volume and declare offline:
+          # a failed load means every chunk counts as speech (no silence endpointing), and until ADR-0076
+          # that was a warning nobody saw. `parakeet_vad_unavailable_total` counts it now.
+          TORCH_HOME: /models/torch
+          HF_HOME: /models/hf
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
           PARAKEET_INFERENCE_MODE: nim
           NIM_INFERENCE_URL: http://whisper:8000
           NIM_LANGUAGE: auto
@@ -381,6 +393,10 @@ inference:
         env:
           # Use the pyannote model cached in the models volume (the repo is gated on HF — no runtime download).
           HF_HOME: /models/hf
+          # `Model.from_pretrained` runs at MODULE level here, so a missing cache is a pod that never
+          # starts. Offline makes that immediate rather than a timeout at import (ADR-0076).
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
         backendEnv:
           HOSTED_SPEAKER_EMBEDDING_API_URL: http://diarizer:8080
       # Translation (NLLB, CTranslate2) — GPU.

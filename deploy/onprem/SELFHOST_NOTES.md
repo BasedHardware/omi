@@ -495,6 +495,26 @@ Requirements and gotchas:
 - Point the backend at them in `backend.env`: `HOSTED_PARAKEET_API_URL=http://parakeet:8080`,
   `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
   `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.
+- **Model provisioning is a STEP, never a runtime fetch** (ADR-0076). The services now declare
+  `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` (and `TORCH_HOME=/models/torch` on parakeet), so a missing
+  weight fails immediately and says so instead of waiting out a DNS timeout on the internal network. Two
+  things fetched at runtime before this:
+  - `diarizer/embedding.py` calls `Model.from_pretrained("pyannote/embedding")` at **module level**, so a
+    missing cache is a container that never starts (loud, but only after a timeout);
+  - `parakeet/stream_handler.py` fetches the Silero VAD with `torch.hub.load` — a **github clone** the first
+    time a stream needs it — and swallowed the failure. A stream without the VAD treats **every chunk as
+    speech**, so silence-based endpointing is off; `parakeet_vad_unavailable_total` counts it and the log
+    now says what it costs.
+
+  Seed the caches once, with network, into the `inference-models` volume (the k8s side already does this
+  with the `inference-models-provision-job`). For the VAD specifically:
+
+  ```bash
+  docker compose -f compose.prod.yaml --profile inference run --rm --no-deps \
+    -e HF_HUB_OFFLINE=0 -e TRANSFORMERS_OFFLINE=0 parakeet \
+    python3 -c "import torch; torch.hub.load('snakers4/silero-vad', 'silero_vad', trust_repo=True)"
+  ```
+  That writes into `TORCH_HOME=/models/torch` on the volume, so every later start finds it offline.
 
 ## LLM route coverage: an omission is a vendor route (ADR-0067)
 
