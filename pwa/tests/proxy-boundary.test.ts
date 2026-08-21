@@ -4,9 +4,13 @@ import { resolve } from "node:path";
 import type { ProxyOptions } from "vite";
 import viteConfig from "../vite.config";
 import {
+  DEVELOPMENT_BACKEND_UNSUPPORTED_STATUS,
   assertLocalProxyPath,
   assertLoopbackBackendUrl,
+  developmentBackendUnsupportedResponse,
+  isExamplePlatformRequestSupported,
   localProxyRequestInit,
+  resolveLocalBackendUrl,
   rewriteLocalProxyPath,
   LOCAL_PROXY_PREFIX,
 } from "../../react-native/src/local-proxy";
@@ -131,4 +135,134 @@ test("vite backend target is loopback-only", () => {
   expect(() =>
     assertLoopbackBackendUrl("http://user:pass@127.0.0.1:8787")
   ).toThrow();
+});
+
+test("development backend selection is explicit, fixed, and off by default", () => {
+  expect(resolveLocalBackendUrl({}).origin).toBe("http://127.0.0.1:8787");
+  expect(
+    resolveLocalBackendUrl({ OMI_DEV_BACKEND: "example-platform" }).origin
+  ).toBe("http://127.0.0.1:4851");
+  expect(() => resolveLocalBackendUrl({ OMI_DEV_BACKEND: "legacy" })).toThrow(
+    "compatible allowlisted backend"
+  );
+  expect(() =>
+    resolveLocalBackendUrl({
+      NODE_ENV: "production",
+      OMI_DEV_BACKEND: "example-platform",
+    })
+  ).toThrow("unavailable in production");
+  expect(() =>
+    resolveLocalBackendUrl({
+      OMI_DEV_BACKEND: "example-platform",
+      OMI_LOCAL_BACKEND_URL: "http://127.0.0.1:9999",
+    })
+  ).toThrow("cannot be combined");
+});
+
+test("vite selects only the allowlisted example platform without browser credentials", () => {
+  const config = viteConfig({
+    command: "serve",
+    env: {
+      OMI_DEV_BACKEND: "example-platform",
+      OMI_LOCAL_API_CLIENT_ID: "operator-client",
+      OMI_LOCAL_API_TOKEN: "operator-token",
+    },
+  });
+  const proxy = config.server?.proxy as Record<string, ProxyOptions>;
+
+  expect(proxy[LOCAL_PROXY_PREFIX]?.target).toBe("http://127.0.0.1:4851");
+});
+
+test("example platform permits only candidate-compatible read routes", () => {
+  expect(
+    isExamplePlatformRequestSupported(
+      "GET",
+      "/__omi/api/v1/conversations?limit=50&offset=0"
+    )
+  ).toBe(true);
+  expect(
+    isExamplePlatformRequestSupported(
+      "GET",
+      "/__omi/api/v1/memories?limit=50&cursor=next"
+    )
+  ).toBe(true);
+  for (const [method, path] of [
+    ["GET", "/__omi/api/v1/tasks"],
+    ["GET", "/__omi/api/v1/chat-messages?limit=50"],
+    ["GET", "/__omi/api/v1/settings"],
+    ["POST", "/__omi/api/v1/chat-attachments"],
+    ["GET", "/__omi/api/v1/chat-generations/one/events"],
+    ["DELETE", "/__omi/api/v1/chat-generations/one"],
+    ["POST", "/__omi/api/v1/conversations"],
+    ["GET", "/__omi/api/v1/conversations/one"],
+  ]) {
+    expect(isExamplePlatformRequestSupported(method, path)).toBe(false);
+  }
+});
+
+test("vite refuses unsupported example platform requests with a typed error", () => {
+  const config = viteConfig({
+    command: "serve",
+    env: {
+      OMI_DEV_BACKEND: "example-platform",
+      OMI_LOCAL_API_CLIENT_ID: "operator-client",
+      OMI_LOCAL_API_TOKEN: "operator-token",
+    },
+  });
+  const proxy = config.server?.proxy as Record<string, ProxyOptions>;
+  const responseState = {
+    body: undefined as string | undefined,
+    statusCode: undefined as number | undefined,
+    end(body: string) {
+      responseState.body = body;
+    },
+    writeHead(statusCode: number) {
+      responseState.statusCode = statusCode;
+    },
+  };
+  const option = proxy[LOCAL_PROXY_PREFIX];
+  const result = option?.bypass?.(
+    { method: "POST", url: "/__omi/api/v1/chat-messages" } as Parameters<
+      NonNullable<ProxyOptions["bypass"]>
+    >[0],
+    responseState as unknown as Parameters<
+      NonNullable<ProxyOptions["bypass"]>
+    >[1],
+    option
+  );
+
+  expect(result).toBe("/__omi/api-unsupported");
+  expect(responseState.statusCode).toBe(DEVELOPMENT_BACKEND_UNSUPPORTED_STATUS);
+  expect(responseState.body).toBe(developmentBackendUnsupportedResponse);
+  expect(JSON.parse(responseState.body ?? "")).toEqual({
+    error: {
+      code: "development_backend_unsupported",
+      retryable: false,
+      action: "none",
+    },
+  });
+});
+
+test("vite forwards supported example platform reads", () => {
+  const config = viteConfig({
+    command: "serve",
+    env: {
+      OMI_DEV_BACKEND: "example-platform",
+      OMI_LOCAL_API_CLIENT_ID: "operator-client",
+      OMI_LOCAL_API_TOKEN: "operator-token",
+    },
+  });
+  const option = (config.server?.proxy as Record<string, ProxyOptions>)[
+    LOCAL_PROXY_PREFIX
+  ];
+  const result = option?.bypass?.(
+    {
+      method: "GET",
+      url: "/__omi/api/v1/memories?limit=50",
+    } as Parameters<NonNullable<ProxyOptions["bypass"]>>[0],
+    {} as Parameters<NonNullable<ProxyOptions["bypass"]>>[1],
+    option
+  );
+
+  expect(result).toBeUndefined();
 });

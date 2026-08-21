@@ -1545,7 +1545,9 @@ test('uses transparent separated macOS Home islands with a centered query lane',
     expect.arrayContaining([
       expect.objectContaining({
         backgroundColor: 'transparent',
+        borderColor: 'transparent',
         borderRadius: 22,
+        borderWidth: 0,
       }),
     ]),
   );

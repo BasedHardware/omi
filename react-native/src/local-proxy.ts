@@ -1,5 +1,21 @@
 export const LOCAL_PROXY_PREFIX = '/__omi/api';
 
+export const DEV_BACKEND_SELECTOR = 'OMI_DEV_BACKEND';
+
+const developmentBackendOrigins = {
+  'example-platform': 'http://127.0.0.1:4851',
+} as const;
+
+export const DEVELOPMENT_BACKEND_UNSUPPORTED_STATUS = 503;
+
+export const developmentBackendUnsupportedResponse = JSON.stringify({
+  error: {
+    code: 'development_backend_unsupported',
+    retryable: false,
+    action: 'none',
+  },
+});
+
 const forbiddenHeaders = new Set([
   'authorization',
   'cookie',
@@ -33,6 +49,57 @@ export function assertLoopbackBackendUrl(value: string): URL {
     );
   }
   return url;
+}
+
+export function resolveLocalBackendUrl(
+  environment: Record<string, string | undefined>,
+): URL {
+  const selection = environment[DEV_BACKEND_SELECTOR]?.trim();
+  if (selection === undefined || selection === '') {
+    return assertLoopbackBackendUrl(
+      environment.OMI_LOCAL_BACKEND_URL ?? 'http://127.0.0.1:8787',
+    );
+  }
+  if (environment.NODE_ENV === 'production') {
+    throw new Error(`${DEV_BACKEND_SELECTOR} is unavailable in production`);
+  }
+  if (environment.OMI_LOCAL_BACKEND_URL?.trim()) {
+    throw new Error(
+      `${DEV_BACKEND_SELECTOR} cannot be combined with OMI_LOCAL_BACKEND_URL`,
+    );
+  }
+  if (!(selection in developmentBackendOrigins)) {
+    throw new Error(
+      `${DEV_BACKEND_SELECTOR} must name a compatible allowlisted backend`,
+    );
+  }
+  return new URL(
+    developmentBackendOrigins[
+      selection as keyof typeof developmentBackendOrigins
+    ],
+  );
+}
+
+export function isExamplePlatformSelection(
+  environment: Record<string, string | undefined>,
+): boolean {
+  return environment[DEV_BACKEND_SELECTOR]?.trim() === 'example-platform';
+}
+
+export function isExamplePlatformRequestSupported(
+  method: string | undefined,
+  path: string | undefined,
+): boolean {
+  if (method !== 'GET' || path === undefined) {
+    return false;
+  }
+  const url = new URL(assertLocalProxyPath(path), 'http://127.0.0.1');
+  const backendPath = rewriteLocalProxyPath(`${url.pathname}${url.search}`);
+  const backendUrl = new URL(backendPath, 'http://127.0.0.1');
+  return (
+    backendUrl.pathname === '/v1/conversations' ||
+    backendUrl.pathname === '/v1/memories'
+  );
 }
 
 export function assertLocalProxyPath(path: string): string {

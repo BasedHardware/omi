@@ -3088,7 +3088,12 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
-  macPane: {backgroundColor: 'transparent', borderRadius: 22},
+  macPane: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderRadius: 22,
+    borderWidth: 0,
+  },
   macGlassPanel: {
     bottom: 0,
     left: 0,

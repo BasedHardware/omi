@@ -53,7 +53,9 @@
     return;
   }
 
-  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  // Inherit the system appearance. A hard-coded Aqua appearance makes the
+  // transparent titlebar and material disagree with Dark Mode.
+  window.appearance = nil;
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
@@ -80,9 +82,9 @@
   behavior |= NSWindowCollectionBehaviorMoveToActiveSpace | NSWindowCollectionBehaviorFullScreenAuxiliary;
   behavior &= ~NSWindowCollectionBehaviorFullScreenPrimary;
   window.collectionBehavior = behavior;
-  [window standardWindowButton:NSWindowCloseButton].hidden = YES;
-  [window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;
-  [window standardWindowButton:NSWindowZoomButton].hidden = YES;
+  [window standardWindowButton:NSWindowCloseButton].hidden = NO;
+  [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
+  [window standardWindowButton:NSWindowZoomButton].hidden = NO;
 }
 
 - (void)installOmiWindowDragMonitor

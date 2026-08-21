@@ -25,11 +25,12 @@ static const CGFloat OmiGlassScrimAlpha = 0.14;
   }
 
   self.wantsLayer = YES;
-  self.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  // Let the hosting window choose light or dark material; a panel must not
+  // pin Aqua over a transparent titlebar.
+  self.appearance = nil;
   self.layer.cornerRadius = OmiGlassCornerRadius;
   self.layer.cornerCurve = kCACornerCurveContinuous;
-  self.layer.borderWidth = 1.0;
-  self.layer.borderColor = [NSColor.labelColor colorWithAlphaComponent:0.06].CGColor;
+  self.layer.borderWidth = 0;
   self.layer.shadowColor = NSColor.blackColor.CGColor;
   self.layer.shadowRadius = 34.0;
   self.layer.shadowOpacity = 0.24;

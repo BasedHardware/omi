@@ -19,13 +19,40 @@ test('clears the React Native macOS host surface without making the window opaqu
   expect(source).toContain('window.backgroundColor = NSColor.clearColor;');
 });
 
+test('uses standard visible macOS traffic lights with native window dragging', () => {
+  const source = readNativeSource('AppDelegate.mm');
+
+  expect(source).toContain(
+    '[window standardWindowButton:NSWindowCloseButton].hidden = NO;',
+  );
+  expect(source).toContain(
+    '[window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;',
+  );
+  expect(source).toContain(
+    '[window standardWindowButton:NSWindowZoomButton].hidden = NO;',
+  );
+  expect(source).toContain('window.movableByWindowBackground = YES;');
+  expect(source).not.toContain('accessibilityLabel="Window drag handle"');
+});
+
 test('uses only the native local service configuration for macOS credentials', () => {
   const source = readNativeSource('OmiBackendModule.mm');
 
   expect(source).toContain('environment[@"OMI_LOCAL_BACKEND_URL"]');
+  expect(source).toContain('environment[@"OMI_DEV_BACKEND"]');
   expect(source).toContain('NSURL URLWithString:@"http://127.0.0.1:8787"');
+  expect(source).toContain('NSURL URLWithString:@"http://127.0.0.1:4851"');
+  expect(source).toContain('#if DEBUG');
+  expect(source).toContain(
+    '![developmentBackend isEqualToString:@"example-platform"]',
+  );
   expect(source).toContain('environment[@"OMI_LOCAL_API_TOKEN"]');
   expect(source).toContain('environment[@"OMI_LOCAL_API_CLIENT_ID"]');
+  expect(source).toContain('OmiExamplePlatformRequestSupported');
+  expect(source).toContain('OmiDevelopmentBackendUnsupportedResponse');
+  expect(source).toContain(
+    'self.examplePlatformBackend && !OmiExamplePlatformRequestSupported(method, path)',
+  );
   expect(source).not.toContain('OMI_API_TOKEN');
   expect(source).not.toContain('OMI_API_CLIENT_ID');
 });
@@ -51,9 +78,9 @@ test('keeps the shared HUD material translucent with a semantic opaque fallback'
   expect(source).toContain(
     'self.material.material = NSVisualEffectMaterialHUDWindow;',
   );
-  expect(source).toContain(
-    'self.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
-  );
+  expect(source).toContain('self.appearance = nil;');
+  expect(source).toContain('self.layer.borderWidth = 0;');
+  expect(source).not.toContain('NSAppearanceNameAqua');
   expect(source).toContain('self.sheen = [CALayer layer];');
   expect(source).toContain(
     'self.sheen.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:0.5].CGColor;',
