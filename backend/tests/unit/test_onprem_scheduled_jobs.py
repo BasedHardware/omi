@@ -203,3 +203,109 @@ def test_the_default_cadence_is_still_the_top_of_the_hour():
 def test_a_nonsense_interval_is_refused():
     with pytest.raises(SystemExit):
         onprem_scheduled.main(['--job', 'notifications', '--loop', '--interval-seconds', '0'])
+
+
+# --- one process, several cadences (the compose driver) -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    'spec,expected',
+    [
+        ('notifications=hourly', ('notifications', None)),
+        ('notifications', ('notifications', None)),
+        ('conversation-search-index=300', ('conversation-search-index', 300)),
+        ('memory-maintenance = hourly ', ('memory-maintenance', None)),
+    ],
+)
+def test_a_schedule_spec_parses(spec, expected):
+    assert onprem_scheduled.parse_schedule(spec) == expected
+
+
+@pytest.mark.parametrize('spec', ['nope=hourly', 'notifications=soon', 'notifications=0', 'notifications=-5'])
+def test_a_bad_schedule_spec_is_refused_with_the_offending_text(spec):
+    """A typo in a compose command must be a startup failure with a readable message, not a job that
+    silently never runs."""
+    with pytest.raises(ValueError, match='schedule'):
+        onprem_scheduled.parse_schedule(spec)
+
+
+def test_the_scheduler_runs_every_job_on_its_own_cadence():
+    import asyncio
+
+    ran: list[str] = []
+    slept: list[tuple[str, float]] = []
+
+    def _body(name):
+        async def run():
+            ran.append(name)
+
+        return run
+
+    monkey = pytest.MonkeyPatch()
+    for name in ('notifications', 'conversation-search-index'):
+        monkey.setitem(onprem_scheduled.JOBS, name, _body(name))
+    current = {'job': None}
+
+    async def sleeper(delay):
+        slept.append((current['job'], delay))
+
+    # Wrap _schedule_one so the fake sleeper can attribute each sleep to its job.
+    original = onprem_scheduled._schedule_one
+
+    async def traced(job, interval, **kw):
+        current['job'] = job
+        return await original(job, interval, **kw)
+
+    monkey.setattr(onprem_scheduled, '_schedule_one', traced)
+    try:
+        code = asyncio.run(
+            onprem_scheduled.run_scheduler(
+                {'notifications': None, 'conversation-search-index': 300}, sleeper=sleeper, ticks=1
+            )
+        )
+    finally:
+        monkey.undo()
+
+    assert code == 0
+    assert sorted(ran) == ['conversation-search-index', 'notifications']
+    assert 300.0 in [delay for _job, delay in slept], 'the fixed cadence was not used'
+    assert any(0 < delay <= 3600 for _job, delay in slept), 'the hourly cadence was not used'
+
+
+def test_one_failing_job_does_not_stop_the_others():
+    """Per-job isolation is the whole reason a single process is acceptable."""
+    import asyncio
+
+    ran: list[str] = []
+
+    async def boom():
+        raise RuntimeError('typesense down')
+
+    async def fine():
+        ran.append('ok')
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setitem(onprem_scheduled.JOBS, 'conversation-search-index', boom)
+    monkey.setitem(onprem_scheduled.JOBS, 'notifications', fine)
+
+    async def sleeper(_delay):
+        return None
+
+    try:
+        code = asyncio.run(
+            onprem_scheduled.run_scheduler(
+                {'conversation-search-index': 1, 'notifications': 1}, sleeper=sleeper, ticks=2
+            )
+        )
+    finally:
+        monkey.undo()
+
+    assert ran == ['ok', 'ok'], 'the healthy job stopped ticking'
+    assert code == 1, 'the failing job was not reported'
+
+
+def test_the_cli_refuses_both_or_neither():
+    with pytest.raises(SystemExit):
+        onprem_scheduled.main([])
+    with pytest.raises(SystemExit):
+        onprem_scheduled.main(['--job', 'notifications', '--schedule', 'notifications=hourly'])

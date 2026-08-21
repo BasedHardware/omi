@@ -49,7 +49,7 @@ import logging
 import sys
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable, Dict
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 logger = logging.getLogger('onprem_scheduled')
@@ -140,16 +140,21 @@ def seconds_to_next_hour(now: datetime) -> float:
     return max(1.0, (next_hour - now.astimezone(timezone.utc)).total_seconds())
 
 
-def run_once(job: str) -> int:
-    """Run one tick. Returns a process exit code; never raises."""
+async def run_once_async(job: str) -> int:
+    """Run one tick inside an existing event loop. Returns 0/1; never raises."""
     started = time.monotonic()
     try:
-        asyncio.run(JOBS[job]())
+        await JOBS[job]()
     except Exception:
         logger.exception('job=%s FAILED after %.1fs', job, time.monotonic() - started)
         return 1
     logger.info('job=%s ok in %.1fs', job, time.monotonic() - started)
     return 0
+
+
+def run_once(job: str) -> int:
+    """Run one tick as a whole process. Returns an exit code; never raises."""
+    return asyncio.run(run_once_async(job))
 
 
 def run_loop(
@@ -184,9 +189,102 @@ def run_loop(
     return 1 if failures else 0
 
 
+HOURLY = 'hourly'
+
+
+def parse_schedule(spec: str) -> Tuple[str, Optional[int]]:
+    """``name=hourly`` or ``name=<seconds>`` -> (job, interval or None for top-of-hour).
+
+    Raises ValueError with the offending text, so a typo in a compose command is a startup failure with a
+    readable message rather than a job that silently never runs.
+    """
+    name, separator, cadence = spec.partition('=')
+    name = name.strip()
+    cadence = cadence.strip() or HOURLY
+    if not separator:
+        cadence = HOURLY
+    if name not in JOBS:
+        raise ValueError(f'unknown job {name!r} in --schedule {spec!r}; known: {", ".join(sorted(JOBS))}')
+    if cadence == HOURLY:
+        return name, None
+    try:
+        seconds = int(cadence)
+    except ValueError:
+        raise ValueError(f'bad cadence {cadence!r} in --schedule {spec!r}; use "hourly" or a number of seconds')
+    if seconds < 1:
+        raise ValueError(f'cadence must be >= 1 second in --schedule {spec!r}')
+    return name, seconds
+
+
+async def _schedule_one(
+    job: str,
+    interval_seconds: Optional[int],
+    *,
+    sleeper: Any,
+    ticks: Optional[int],
+) -> int:
+    """One job's own loop. Sleeps first, so a restart does not stampede every job at once."""
+    failures = 0
+    remaining = ticks
+    while remaining is None or remaining > 0:
+        if interval_seconds is None:
+            delay: float = seconds_to_next_hour(datetime.now(timezone.utc))
+            logger.info('job=%s sleeping %.0fs until the next hour', job, delay)
+        else:
+            delay = float(interval_seconds)
+            logger.info('job=%s sleeping %.0fs (fixed interval)', job, delay)
+        await sleeper(delay)
+        failures += await run_once_async(job)
+        if remaining is not None:
+            remaining -= 1
+    return 1 if failures else 0
+
+
+async def run_scheduler(
+    schedules: Dict[str, Optional[int]],
+    *,
+    sleeper: Any = asyncio.sleep,
+    ticks: Optional[int] = None,
+) -> int:
+    """Run several jobs on their own cadences in ONE process.
+
+    Compose has no scheduler, and three containers for three jobs is three copies of the same image, the
+    same env and the same restart policy for fifteen lines of sleeping. One process with one task per job
+    is the same behaviour with a third of the surface. Kubernetes keeps a native CronJob per job instead:
+    there a scheduler exists, and per-job history and retry are worth having.
+
+    Isolation is per job: a failing tick is logged and only that job's loop continues to its next tick, so
+    one broken job never stops the others.
+    """
+    described = ', '.join(
+        f'{job}={"hourly" if interval is None else f"{interval}s"}' for job, interval in sorted(schedules.items())
+    )
+    logger.info('scheduler starting: %s', described)
+    results = await asyncio.gather(
+        *(_schedule_one(job, interval, sleeper=sleeper, ticks=ticks) for job, interval in schedules.items()),
+        return_exceptions=True,
+    )
+    failed = 0
+    for job, result in zip(schedules, results):
+        if isinstance(result, BaseException):
+            logger.error('job=%s loop crashed: %s', job, result)
+            failed = 1
+        else:
+            failed = failed or result
+    return failed
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--job', required=True, choices=sorted(JOBS), help='which scheduled job to run')
+    parser.add_argument('--job', choices=sorted(JOBS), help='run ONE job (once, or with --loop)')
+    parser.add_argument(
+        '--schedule',
+        action='append',
+        metavar='JOB=hourly|SECONDS[,JOB=...]',
+        help='run several jobs in ONE process on their own cadences (compose; k8s uses a CronJob per job). '
+        'Repeatable, and each value may be a comma-separated list — so the whole set can come from one '
+        'environment variable instead of an edited command. Mutually exclusive with --job.',
+    )
     parser.add_argument(
         '--loop',
         action='store_true',
@@ -199,6 +297,19 @@ def main(argv: list[str] | None = None) -> int:
         help='with --loop, tick every N seconds instead of at the top of the hour',
     )
     args = parser.parse_args(argv)
+    if bool(args.job) == bool(args.schedule):
+        parser.error('pass exactly one of --job or --schedule')
+    if args.schedule:
+        # Flatten comma-separated values so `--schedule "$OMI_SCHEDULED_JOBS"` works: the set of jobs is
+        # then configuration, not a compose command with lines commented in and out.
+        specs = [part.strip() for value in args.schedule for part in value.split(',') if part.strip()]
+        if not specs:
+            parser.error('--schedule was given no job (an empty value?)')
+        try:
+            schedules = dict(parse_schedule(spec) for spec in specs)
+        except ValueError as exc:
+            parser.error(str(exc))
+        return asyncio.run(run_scheduler(schedules))
     if args.interval_seconds is not None and args.interval_seconds < 1:
         parser.error('--interval-seconds must be >= 1')
     if not args.loop:

@@ -72,73 +72,45 @@ services:
     networks: [omi]
     restart: unless-stopped
 
-  # The writer for the Typesense `conversations` collection (ADR-0064) — ours, not upstream's, which
-  # fills it from a Firestore -> Typesense pipeline that is not in the codebase. Without it the index
-  # stays empty and the app's conversation search AND its date browse find nothing.
-  # Profile "search": it needs Typesense, and it is pointless without it.
-  # Every 5 minutes, not hourly: search freshness is user-visible, so waiting up to an hour is the wrong
-  # trade. The pass is a bounded full reconcile (see the module docstring for why not incremental).
-  scheduled_conversation_search_index:
-    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
-    profiles: ["search"]
-    env_file:
-      - ./backend.env.base
-    environment:
-      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:?set TYPESENSE_API_KEY in the deploy/onprem .env (openssl rand -hex 24)}
-    command:
-      - python
-      - -m
-      - jobs.onprem_scheduled
-      - --job
-      - conversation-search-index
-      - --loop
-      - --interval-seconds
-      - "300"
-    depends_on:
-      valkey:
-        condition: service_healthy
-    networks: [omi]
-    restart: unless-stopped
-
   # ---------------------------------------------------------------------------------------------
-  # Scheduled work (profile "jobs", ADR-0062). Upstream runs these two as HOURLY Cloud Run Jobs
-  # driven by Cloud Scheduler; we have neither, and without them two product surfaces are absent:
-  # the daily summary is a PERSISTED document, so /v1/users/daily-summaries stays empty forever, and
-  # the canonical memory outbox is never drained, so a written memory never gets its projection or
-  # its vector. Same image as the backend with a different command (the llm_gateway pattern) — the
-  # runner is `jobs/onprem_scheduled.py`, which calls upstream's own function bodies without the
-  # Firebase init its Cloud Run entrypoints open with.
+  # Scheduled work — ONE service, several cadences (ADR-0062/0065).
   #
-  # `--loop` because compose has no scheduler: the process sleeps to the next top of the hour, which
-  # is upstream's schedule (0 * * * *) and what the notifications job's local-hour bucketing assumes.
-  # In Kubernetes the same command runs WITHOUT --loop, once per CronJob tick.
+  # Upstream runs its two periodic jobs as HOURLY Cloud Run Jobs driven by Cloud Scheduler; compose has
+  # no scheduler at all, and before this nothing periodic ran here: the daily summary is a PERSISTED
+  # document, so /v1/users/daily-summaries stayed empty forever (a missing feature, not a missed push),
+  # the canonical memory outbox was never drained, and the Typesense conversation index stayed empty so
+  # the app's search bar and date browse found nothing.
   #
-  # Two services, not one: separate logs, independent restart, and either can be left out.
-  scheduled_notifications:
+  # Three containers for three jobs meant three copies of the same image, env and restart policy for
+  # fifteen lines of sleeping. `--schedule` runs them in one process, one task per job, each on its own
+  # cadence and isolated from the others: a failing tick is logged and only that job's loop continues.
+  # Kubernetes keeps a native CronJob PER JOB instead — there a scheduler exists, and per-job history and
+  # retry are worth having.
+  #
+  # Cadences: upstream's two are hourly (its own schedule, and the notifications job buckets users by
+  # local hour). The conversation index is every 5 minutes because search freshness is user-visible.
+  #
+  # WHICH jobs run is configuration, not an edited command: set OMI_SCHEDULED_JOBS in the deploy/onprem
+  # .env. The default is the notifications job alone, because the other two FAIL BY DESIGN without their
+  # prerequisites (MEMORY_ENABLED + MEMORY_CANONICAL_MAINTENANCE_ENABLED for memory-maintenance, Typesense
+  # for conversation-search-index) and a job that fails every tick is worse than one not running. With
+  # memory on and `--profile search` up, the full set is:
+  #   OMI_SCHEDULED_JOBS=notifications=hourly,memory-maintenance=hourly,conversation-search-index=300
+  scheduled_jobs:
     image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
     profiles: ["jobs"]
     env_file:
       - ./backend.env.base
-    command: ["python", "-m", "jobs.onprem_scheduled", "--job", "notifications", "--loop"]
-    depends_on:
-      valkey:
-        condition: service_healthy
-    networks: [omi]
-    restart: unless-stopped
-
-  # Its OWN profile, not "jobs": with MEMORY_ENABLED / MEMORY_CANONICAL_MAINTENANCE_ENABLED off this
-  # job fails by design (a tick that drains nothing must not report success), so bundling it with the
-  # notifications runner would make `--profile jobs` produce an hourly failure on every deployment that
-  # has not turned memory on. Bring it up together with memory: `--profile jobs --profile jobs-memory`.
-  scheduled_memory_maintenance:
-    image: omi-oss-backend:${OMI_OSS_RELEASE:?release not set — see omi.oss.release.env (ADR-0054)}
-    profiles: ["jobs-memory"]
-    env_file:
-      - ./backend.env.base
-    # Needs MEMORY_ENABLED=on to have anything to do, and an LLM endpoint for the consolidation step
-    # (without one it degrades with a recorded fallback rather than failing). The outbox drain and the
-    # TTL audit do not need inference.
-    command: ["python", "-m", "jobs.onprem_scheduled", "--job", "memory-maintenance", "--loop"]
+    environment:
+      # Needed only by the conversation-search-index schedule; harmless otherwise. Same shared value as
+      # the backend and the typesense service (see compose.selfhost.yaml).
+      TYPESENSE_API_KEY: ${TYPESENSE_API_KEY:-}
+    command:
+      - python
+      - -m
+      - jobs.onprem_scheduled
+      - --schedule
+      - ${OMI_SCHEDULED_JOBS:-notifications=hourly}
     depends_on:
       valkey:
         condition: service_healthy

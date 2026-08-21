@@ -496,6 +496,33 @@ Requirements and gotchas:
   `HOSTED_SPEAKER_EMBEDDING_API_URL=http://diarizer:8080`,
   `HOSTED_TRANSLATION_API_URL=http://nllb:8080` + `TRANSLATION_SERVICE_MODELS=nllb`.
 
+## Scheduled work: ONE compose service, several cadences (ADR-0062/0065)
+
+`--profile jobs` brings up a single `scheduled_jobs` container. Which jobs it ticks, and how often, is
+**configuration** — `OMI_SCHEDULED_JOBS` in the deploy/onprem `.env`:
+
+```
+OMI_SCHEDULED_JOBS=notifications=hourly,memory-maintenance=hourly,conversation-search-index=300
+```
+
+Unset, it runs `notifications=hourly` alone. The other two **fail by design** without their prerequisites
+(`MEMORY_ENABLED` + `MEMORY_CANONICAL_MAINTENANCE_ENABLED` for the first, Typesense for the second), and a
+job that fails every tick is worse than one not running — so they are opt-in alongside what they need.
+
+One process, one task per job, each isolated: a failing tick is logged and only that job's loop continues.
+**Kubernetes keeps a native CronJob per job instead** (`scheduledJobs.*` in values) — there a scheduler
+exists, and per-job history and retry are worth having.
+
+Run one job now, whatever the schedule says (the `kubectl create job --from=cronjob` equivalent):
+
+```bash
+docker compose -f compose.prod.yaml --profile jobs run --rm --no-deps scheduled_jobs \
+  python -m jobs.onprem_scheduled --job notifications
+```
+
+A bad entry is a startup failure with the offending text, not a job that silently never runs — the parser
+rejects an unknown name or a cadence that is neither `hourly` nor a positive number of seconds.
+
 ## Keyword search & the memory feature (ADR-0063)
 
 `--profile search` brings up **Typesense**, and it is a prerequisite of memory intake — not an optional
@@ -523,8 +550,9 @@ extra. What the code actually does, verified live rather than read off:
 | `projection_sync` | Typesense | stuck forever (above) |
 | keyword hit | all of the above | vector-only retrieval; the keyword half is what catches names embeddings miss |
 
-So the runnable posture for memory is `--profile search --profile chat --profile jobs --profile jobs-memory`
-plus `MEMORY_ENABLED=on`, `MEMORY_CANONICAL_MAINTENANCE_ENABLED=true` and `MEMORY_V3_CURSOR_SECRET`.
+So the runnable posture for memory is `--profile search --profile chat --profile jobs` plus
+`MEMORY_ENABLED=on`, `MEMORY_CANONICAL_MAINTENANCE_ENABLED=true`, `MEMORY_V3_CURSOR_SECRET`, and
+`memory-maintenance=hourly` in `OMI_SCHEDULED_JOBS`.
 
 **End-to-end check** (this is the one that proves it; the queue draining alone does not):
 
@@ -533,7 +561,7 @@ cd deploy/onprem
 docker compose -f compose.prod.yaml --profile search --profile chat --profile jobs --profile jobs-memory up -d
 # write a memory, then force one maintenance tick (the CronJob equivalent):
 docker compose -f compose.prod.yaml --profile search --profile chat --profile jobs-memory \
-  run --rm --no-deps scheduled_memory_maintenance python -m jobs.onprem_scheduled --job memory-maintenance
+  run --rm --no-deps scheduled_jobs python -m jobs.onprem_scheduled --job memory-maintenance
 # expect: promoted_total=1, outbox_delivered>0, errors=0, exit 0
 # then the index must actually contain it:
 K=$(grep -oE '^TYPESENSE_API_KEY=.*' .env | cut -d= -f2)
@@ -555,8 +583,8 @@ Typesense reads `TYPESENSE_API_KEY` from the environment and enforces it (wrong 
 
 ### Conversation search: we write the index (ADR-0064)
 
-`--profile search` also runs `scheduled_conversation_search_index`, **every 5 minutes** (not hourly:
-search freshness is user-visible). It is the writer upstream does not ship — their `conversations`
+The `scheduled_jobs` runner ticks it **every 5 minutes** (not hourly: search freshness is user-visible)
+when `conversation-search-index=300` is in `OMI_SCHEDULED_JOBS`. It is the writer upstream does not ship — their `conversations`
 collection is filled by a Firestore -> Typesense pipeline outside the codebase, so without this the index
 stays empty and the app's search bar and date browse find nothing.
 
@@ -570,8 +598,8 @@ Raise the cap with `CONVERSATION_SEARCH_INDEX_MAX_DOCUMENTS`.
 Force one pass and check what it did:
 
 ```bash
-docker compose -f compose.prod.yaml --profile search \
-  run --rm --no-deps scheduled_conversation_search_index \
+docker compose -f compose.prod.yaml --profile search --profile jobs \
+  run --rm --no-deps scheduled_jobs \
   python -m jobs.onprem_scheduled --job conversation-search-index
 # -> scanned=N indexed=N skipped_incomplete=0 pruned=M truncated=False errors=0
 ```
