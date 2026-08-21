@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the app quitting the moment you finished onboarding, which sent you back through onboarding on the next launch"
-}
