@@ -732,22 +732,43 @@ worse than no list, because "the FAIL set equals the known residuals" then reads
 baseline diff cannot drift, and it is what caught a regression this list would have absorbed
 (`test_city_prompt_context.py`, ours, fixed in `1a8a6edb01`).
 
-**Measured 2026-08-21 at `e88aeb2d90`** — 960 files swept, 8 failing, all present at `bb14216e52` too
-(so none introduced by the self-host work at that point):
+**Measured 2026-08-21, all eight diagnosed.** 960 files swept; the eight that failed at `e88aeb2d90`
+also failed at `bb14216e52`, which proved only that they were *older* — not that they were upstream's.
+Three of them were ours. The test that settles it is cheap and worth repeating for any new entry:
+**run the file in a worktree at the upstream side of the last merge** (`git log -1 --format=%P <merge>`
+→ second parent) and see whether it fails there too.
 
-| file | failing tests | diagnosed? |
+| file | failing tests | verdict |
 |---|---|---|
-| `testing/e2e/test_crud.py` | 5 (`TestMemoryCRUD` create/list/edit/delete/batch) | no |
-| `testing/e2e/test_failure_modes.py` | 2 (`test_crud_works_with_fake_redis`, `test_unicode_content_roundtrip`) | no |
-| `testing/e2e/test_mobile_lifecycle_compatibility.py` | 2 (bootstrap shapes, mutation compatibility) | no |
-| `testing/e2e/test_retrieval_search.py` | 1 (`test_memory_search_reindexes_updates_and_delete_removes_result`) | no |
-| `tests/unit/test_app_client_swift_generator.py` | 2 (generated DTO file, CLI UTF-8 locale) | no |
-| `tests/unit/test_app_client_ts_generator.py` | 1 (generated schema types) | no |
-| `tests/unit/test_city_prompt_context.py` | *was* 1 | ✅ fixed (`1a8a6edb01`) |
-| `tests/unit/test_sys_modules_hermeticity.py` | 1 (single-process safe subset) | ✅ see below |
+| `tests/unit/test_app_client_ts_generator.py` | 1 (generated schema types) | ✅ **ours** — fixed `ec3a195376` |
+| `tests/unit/test_app_client_swift_generator.py` | 2 (generated DTO, CLI `--check`) | ✅ **ours** — fixed `ec3a195376` |
+| `tests/unit/test_city_prompt_context.py` | 1 | ✅ **ours** — fixed `1a8a6edb01` |
+| `testing/e2e/test_crud.py` | 5 (`TestMemoryCRUD`) | upstream harness, see below |
+| `testing/e2e/test_failure_modes.py` | 2 (`fake_redis`, `unicode_roundtrip`) | upstream harness, see below |
+| `testing/e2e/test_mobile_lifecycle_compatibility.py` | 2 (bootstrap, mutation compat) | upstream harness, see below |
+| `testing/e2e/test_retrieval_search.py` | 1 (reindex/delete removes result) | upstream harness, see below |
+| `tests/unit/test_sys_modules_hermeticity.py` | 1 (single-process safe subset) | upstream env leak, see below |
 
-The five undiagnosed groups are recorded as such on purpose: calling them "upstream, unrelated"
-without evidence is exactly how a real regression hides. They are tracked in `docs/BACKLOG.md`.
+The three "ours" were invisible because the previous version of this list called them known residuals.
+The two generator ones came from adding `POST /v1/users/unifiedpush-endpoint` without regenerating the
+committed TS/Swift clients; both suites pass on the upstream tree, which is how they were caught.
+
+**The four E2E groups: memory intake is fenced off, and the fence is a 503.** All four fail identically
+on the upstream tree. Cause, traced by spying on the service call rather than guessed:
+
+    routers/memories.py POST /v3/memories -> MemoryService.create_external_memory
+      -> _canonical_write -> ensure_canonical_mutation_ready
+      -> HTTPException(503, "Memory writes are globally paused")   [memory_service.py:1378]
+
+`rollout_mode_env_value()` (`config/memory_rollout.py:114`) defaults to `off` when **neither**
+`MEMORY_ENABLED` nor `MEMORY_MODE` is set, and the router rewrites the 503 into the generic "Service
+temporarily unavailable". Upstream's E2E harness never sets either, so every memory write in it is
+fenced; the retrieval and mobile-lifecycle failures are downstream of the same fence.
+
+**This applies to a real deployment too, not only to the harness:** nothing under `deploy/onprem/`
+sets any `MEMORY_*` variable, so on this stack `/v3/memories` writes answer 503 with an opaque message
+and the on-prem live E2E never calls them, so nothing says so. Whether the on-prem posture should
+enable intake is a product decision, tracked in `docs/BACKLOG.md`.
 
 Previously documented and **now passing** (kept because the reasoning explains what the harness does
 to them, and they can come back):
