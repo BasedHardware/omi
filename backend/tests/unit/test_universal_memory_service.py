@@ -146,6 +146,16 @@ def test_memory_enabled_off_blocks_intake_like_mode_off(service_mod, monkeypatch
     assert exc_info.value.detail == "Memory writes are globally paused"
 
 
+def test_prompt_cache_invalidation_also_invalidates_owner_rejection_feedback(service_mod, monkeypatch):
+    service = service_mod.MemoryService(db_client=_Db())
+    clear_rejections = MagicMock()
+    monkeypatch.setattr(service_mod, "clear_rejected_memory_feedback_cache", clear_rejections)
+
+    service._invalidate_prompt_cache("uid-test")
+
+    clear_rejections.assert_called_once_with("uid-test")
+
+
 def test_historical_adapter_uses_injected_firestore_client(service_mod, monkeypatch):
     db = _Db()
     service = service_mod.MemoryService(db_client=db)

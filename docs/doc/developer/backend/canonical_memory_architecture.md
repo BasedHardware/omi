@@ -69,6 +69,19 @@ completes.
 Conversation extraction validates that every quote reference is grounded in a
 transcript segment before source replacement. Failure preserves previous
 state; a valid empty result retracts the previous source-owned cohort.
+The broad L1 prompt excludes unidentified non-primary speakers, self-hedging
+attribution, and generic product/company descriptions unless they express an
+owner decision, preference, constraint, plan, or commitment. Named people and
+known relationship roles remain eligible.
+
+An owner rejection becomes bounded negative feedback instead of suppression
+only. Extraction receives up to eight newest non-restricted active or
+terminally hidden rejections from active sources in the last 30 days, at
+user-message priority after the shared conversation cache breakpoint.
+Consolidation receives the same set once in volatile batch context; it does not
+depend on a rejected vector neighbor because rejected items are removed from
+vector projection. The prompt-safe set is cached in-process for five minutes
+and invalidated on memory mutation.
 
 `memory_apply_store.py` applies the UID/account/source-generation and
 idempotency fences in one Firestore transaction. It advances control/head,
@@ -95,17 +108,29 @@ first mutation.
 The dedicated `memory-maintenance-job` inventories bounded canonical pending
 work, not users from an allowlist and not an unbounded account scan. Each pass:
 
-1. drains previously committed outbox work;
-2. normalizes required submissions;
-3. settles TTL expiry;
-4. asks `canonical_consolidation.py` for an exact item-addressed partition into
+1. prioritizes UIDs with items in the final 24 hours of the Short-term TTL via
+   a lifecycle-metadata-only query, independently of the registry cursor and
+   per-user cooldown;
+2. drains previously committed outbox work;
+3. normalizes required submissions;
+4. settles TTL expiry;
+5. asks `canonical_consolidation.py` for an exact item-addressed partition into
    promote, archive, review, or reject;
-5. commits each route through canonical apply and drains new outbox work.
+6. commits each route through canonical apply and drains new outbox work.
 
 Only consolidation can issue the promotion receipt required for a new
 Short-term to Long-term transition. Invalid/partial model output mutates
 nothing. Revision-scoped attempts, leases, bounded retries, review quarantine,
 and scan cursors prevent poison-row starvation and repeated LLM cost.
+Time reaching the TTL is not itself a route: an active Short-term item remains
+default-readable until canonical apply records a terminal disposition. This
+prevents a missed maintenance pass from silently deleting memory while the
+expiry queue continues to prioritize it.
+
+The text-free `canonical_memory_decision_path.v1` log joins capture regime and
+grounded attribution to later applied or blocked routes by UID and memory ID.
+It emits only categorical decision fields and counts, never transcript, quote,
+memory, or model-rationale text.
 
 ## Search, graph, and projections
 
