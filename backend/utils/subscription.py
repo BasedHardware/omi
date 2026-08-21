@@ -817,6 +817,15 @@ def validate_stripe_price_ids():
 
 
 _BASIC_TIER_SECONDS_DEFAULT = allocation_limit(PlanType.basic, 'transcription')
+if _BASIC_TIER_SECONDS_DEFAULT is None:
+    # allocation_limit returns None for an unlimited allocation. Free is metered by
+    # design, so an unlimited basic transcription allowance is a catalog authoring
+    # mistake, not a configuration choice. Fail with a sentence that says what is
+    # wrong rather than letting `None // 60` raise TypeError at import time.
+    raise ValueError(
+        'basic.transcription must declare a finite allowance; an unlimited free tier '
+        'would make transcription spend unbounded per user'
+    )
 BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(
     os.getenv('BASIC_TIER_MINUTES_LIMIT_PER_MONTH', str(_BASIC_TIER_SECONDS_DEFAULT // 60))
 )
@@ -851,6 +860,7 @@ BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = _catalog_or_legacy_basic_limit('ins
 # against a plan cap — otherwise the gate blocks itself once the probe's own turns
 # exhaust the Free allowance and every desktop-backend deploy fails with 402.
 RELEASE_PROBE_UID = 'omi-release-probe'
+
 
 def _effective_plan_limit(plan: PlanType, allocation: str) -> Optional[int]:
     """Resolve a typed allocation from the catalog plus temporary legacy overlays."""
@@ -987,9 +997,7 @@ def get_chat_quota_snapshot(
     if chat_unit == 'usd_cent':
         unit = 'cost_usd'
         used = float(usage['cost_usd'])
-        limit_value = (
-            None if limits.chat_cost_usd_per_month is None else float(limits.chat_cost_usd_per_month)
-        )
+        limit_value = None if limits.chat_cost_usd_per_month is None else float(limits.chat_cost_usd_per_month)
     elif chat_unit == 'question':
         unit = 'questions'
         used = float(usage['questions'])
@@ -1190,9 +1198,11 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             chat_feature,
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Available on Mac, mobile, and web"
-            if plan == PlanType.operator
-            else "Desktop capture with Free-tier allowance",
+            (
+                "Available on Mac, mobile, and web"
+                if plan == PlanType.operator
+                else "Desktop capture with Free-tier allowance"
+            ),
         ]
 
     if plan == PlanType.basic:
@@ -1211,11 +1221,7 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
                 if words_limit is not None
                 else 'Unlimited words transcribed'
             ),
-            (
-                f'{insights_limit:,} insights per month'
-                if insights_limit is not None
-                else 'Unlimited insights'
-            ),
+            (f'{insights_limit:,} insights per month' if insights_limit is not None else 'Unlimited insights'),
             'Unlimited memories',
         ]
 

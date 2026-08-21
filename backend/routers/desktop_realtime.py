@@ -8,7 +8,6 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
-from google.cloud import firestore
 from pydantic import BaseModel, StrictInt, StrictStr
 
 from database._client import get_customer_firestore_client
